@@ -1,0 +1,23 @@
+[package]
+
+name = "shadowsocks-rust"
+version = "0.0.1"
+authors = ["Y. T. Chung <zonyitoo@gmail.com>"]
+
+[lib]
+
+name = "shadowsocks"
+
+[[bin]]
+
+name = "sslocal"
+path = "src/bin/local.rs"
+
+[[bin]]
+
+name = "ssserver"
+path = "src/bin/server.rs"
+
+[dependencies.rust-crypto]
+
+git = "https://github.com/DaGenix/rust-crypto.git"
