@@ -1,6 +1,6 @@
 #![crate_type="lib"]
 #![crate_name="shadowsocks"]
-#![feature(phase)]
+#![feature(phase, unsafe_destructor)]
 
 extern crate serialize;
 #[phase(plugin, link)]
@@ -12,4 +12,4 @@ pub mod config;
 pub mod relay;
 pub mod tcprelay;
 pub mod udprelay;
-pub mod crypto;
+mod crypto;

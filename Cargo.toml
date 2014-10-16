@@ -18,6 +18,6 @@ path = "src/bin/local.rs"
 name = "ssserver"
 path = "src/bin/server.rs"
 
-[dependencies.rust-crypto]
+# [dependencies.rust-crypto]
 
-git = "https://github.com/DaGenix/rust-crypto.git"
+# git = "https://github.com/DaGenix/rust-crypto.git"

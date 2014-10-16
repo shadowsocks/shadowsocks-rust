@@ -23,7 +23,6 @@ fn main() {
         optopt("p", "server-port", "server port", ""),
         optopt("l", "local-port", "local socks5 proxy port", ""),
         optopt("m", "encrypt-method", "entryption method", "aes-256-cfb"),
-        optflag("d", "debug", "print debug message"),
     ];
 
     let matches = getopts(os::args().tail(), opts).unwrap();
@@ -39,14 +38,20 @@ fn main() {
         return;
     }
 
-    let mut config: Config;
-
-    if matches.opt_present("c") {
-        config = Config::load_from_file(matches.opt_str("c")
-                                        .unwrap().as_slice())
+    let mut config = if matches.opt_present("c") {
+        Config::load_from_file(matches.opt_str("c")
+                                        .unwrap().as_slice()).unwrap()
     } else {
-        config = Config::new()
-    }
+        match Config::load_from_file("config.json") {
+            Some(c) => c,
+            None => {
+                error!("Cannot find any `config.json` under current directory");
+                println!("{}", usage(format!("Usage: {} [options]", os::args()[0]).as_slice(),
+                            opts));
+                return;
+            }
+        }
+    };
 
     if matches.opt_present("s") {
         let server_ip = matches.opt_str("s").unwrap();
@@ -79,8 +84,7 @@ fn main() {
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
-    println!("{}", config)
+    debug!("Config: {}", config)
 
-    let mut tcp_server = TcpRelayLocal::new(&config);
-    tcp_server.run();
+    TcpRelayLocal::new(&config).run();
 }

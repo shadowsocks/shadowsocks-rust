@@ -1,6 +1,6 @@
 extern crate serialize;
 
-use serialize::{Decodable, Encodable};
+use serialize::Encodable;
 use serialize::json;
 use std::io::{File, Read, Open};
 
@@ -29,56 +29,98 @@ impl Config {
             server_port: 8000,
             local_port: 8000,
             password: "".to_string(),
-            method: "aes-256-cfb".to_string(),
+            method: "aes-128-cfb".to_string(),
             timeout: None,
             fast_open: false,
         }
     }
 
-    fn parse_json_object(o: &json::JsonObject) -> Config {
+    fn parse_json_object(o: &json::JsonObject) -> Option<Config> {
         let mut config = Config::new();
 
         for (key, value) in o.iter() {
             match key.as_slice() {
                 "server" => {
-                    config.server = value.as_string().unwrap().to_string();
+                    config.server = match value.as_string() {
+                        Some(v) => v.to_string(),
+                        None => return None,
+                    };
                 },
                 "server_port" => {
-                    config.server_port = value.as_i64().unwrap() as u16;
+                    config.server_port = match value.as_i64() {
+                        Some(v) => v as u16,
+                        None => return None,
+                    };
                 },
                 "local_port" => {
-                    config.local_port = value.as_i64().unwrap() as u16;
+                    config.local_port = match value.as_i64() {
+                        Some(v) => v as u16,
+                        None => return None,
+                    };
                 },
                 "password" => {
-                    config.password = value.as_string().unwrap().to_string();
+                    config.password = match value.as_string() {
+                        Some(v) => v.to_string(),
+                        None => return None,
+                    };
                 },
                 "method" => {
-                    config.method = value.as_string().unwrap().to_string();
+                    config.method = match value.as_string() {
+                        Some(v) => v.to_string(),
+                        None => return None,
+                    };
                 },
                 "timeout" => {
-                    config.timeout = Some(value.as_i64().unwrap() as u64);
+                    config.timeout = match value.as_i64() {
+                        Some(v) => Some(v as u64),
+                        None => return None,
+                    };
                 },
                 "fast_open" => {
-                    config.fast_open = value.as_boolean().unwrap();
+                    config.fast_open = match value.as_boolean() {
+                        Some(v) => v,
+                        None => return None,
+                    }
                 },
                 _ => (),
             }
         }
 
-        config
+        Some(config)
     }
 
-    pub fn load_from_str(s: &str) -> Config {
-        let object = json::from_str(s).unwrap();
-        let json_object = object.as_object().unwrap();
+    pub fn load_from_str(s: &str) -> Option<Config> {
+        let object = match json::from_str(s) {
+            Ok(obj) => { obj },
+            Err(e) => return None,
+        };
+
+        let json_object = match object.as_object() {
+            Some(obj) => { obj },
+            None => return None,
+        };
+
         Config::parse_json_object(json_object)
     }
 
-    pub fn load_from_file(filename: &str) -> Config {
-        let reader = &mut File::open_mode(&Path::new(filename), Open, Read).unwrap();
+    pub fn load_from_file(filename: &str) -> Option<Config> {
+        let mut readeropt = File::open_mode(&Path::new(filename), Open, Read);
 
-        let object = json::from_reader(reader).unwrap();
-        let json_object = object.as_object().unwrap();
+        let mut reader = match readeropt {
+            Ok(ref mut r) => r,
+            Err(..) => return None,
+        };
+
+        let object = match json::from_reader(reader) {
+            Ok(obj) => { obj },
+            Err(..) => return None,
+        };
+
+        let json_object = match object.as_object() {
+            Some(obj) => obj,
+            None => return None,
+        };
+
         Config::parse_json_object(json_object)
     }
 }
