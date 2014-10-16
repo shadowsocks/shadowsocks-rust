@@ -2,6 +2,7 @@ extern crate libc;
 extern crate log;
 
 use crypto::cipher::Cipher;
+use crypto::cipher;
 
 use std::str;
 use std::ptr;
@@ -54,12 +55,6 @@ enum CryptoMode {
     CryptoModeEncrypt,
 }
 
-enum CipherType {
-    CipherTypeAes128Cfb,
-    CipherTypeAes192Cfb,
-    CipherTypeAes256Cfb,
-}
-
 struct OpenSSLCrypto {
     evp_ctx: EVP_CIPHER_CTX,
     block_size: uint,
@@ -67,15 +62,16 @@ struct OpenSSLCrypto {
 }
 
 impl OpenSSLCrypto {
-    pub fn new(cipher_type: CipherType, key: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
+    pub fn new(cipher_type: cipher::CipherType, key: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let (ctx, _, block_size) = unsafe {
             let (cipher, key_size, block_size) = match cipher_type {
-                CipherTypeAes128Cfb => (EVP_aes_128_cfb128(), 16, 16),
-                CipherTypeAes192Cfb => (EVP_aes_192_cfb()   , 24, 16),
-                CipherTypeAes256Cfb => (EVP_aes_256_cfb()   , 32, 16),
+                cipher::CipherTypeAes128Cfb => { (EVP_aes_128_cfb128(), 16, 16) },
+                cipher::CipherTypeAes192Cfb => { (EVP_aes_192_cfb()   , 24, 16) },
+                cipher::CipherTypeAes256Cfb => { (EVP_aes_256_cfb()   , 32, 16) },
             };
 
             let evp_ctx = EVP_CIPHER_CTX_new();
+            assert!(!evp_ctx.is_null());
 
             let mut pad_key: Vec<u8> = Vec::with_capacity(key_size);
             let mut pad_iv: Vec<u8> = Vec::with_capacity(block_size);
@@ -135,8 +131,6 @@ impl OpenSSLCrypto {
             res
         }
     }
-
-
 }
 
 
@@ -150,13 +144,13 @@ impl Drop for OpenSSLCrypto {
     }
 }
 
-struct OpenSSLCipher {
+pub struct OpenSSLCipher {
     encryptor: OpenSSLCrypto,
     decryptor: OpenSSLCrypto,
 }
 
 impl OpenSSLCipher {
-    pub fn new(cipher_type: CipherType, key: &[u8]) -> OpenSSLCipher {
+    pub fn new(cipher_type: cipher::CipherType, key: &[u8]) -> OpenSSLCipher {
         let enc = OpenSSLCrypto::new(cipher_type, key, CryptoModeEncrypt);
         let dec = OpenSSLCrypto::new(cipher_type, key, CryptoModeDecrypt);
 
@@ -182,7 +176,7 @@ fn test_aes() {
     let message = "hello world";
     let key = "passwordhaha";
 
-    let types = [CipherTypeAes128Cfb, CipherTypeAes192Cfb, CipherTypeAes256Cfb];
+    let types = [cipher::CipherTypeAes128Cfb, cipher::CipherTypeAes192Cfb, cipher::CipherTypeAes256Cfb];
 
     for t in types.iter() {
         let cipher = OpenSSLCipher::new(*t, key.as_bytes());

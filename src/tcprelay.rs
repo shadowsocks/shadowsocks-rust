@@ -16,6 +16,10 @@ use std::io::{TimedOut, EndOfFile};
 use std::str;
 use std::sync::Arc;
 
+use crypto::cipher::Cipher;
+use crypto::openssl;
+use crypto::cipher;
+
 pub struct TcpRelayLocal {
     acceptor: TcpAcceptor,
     stage: Stage,
@@ -63,10 +67,15 @@ impl Relay for TcpRelayLocal {
         let server_str_arc = Arc::new(self.config.server.clone());
         let server_port_arc = Arc::new(self.config.server_port.clone());
         let encrypt_password = Arc::new(self.config.password.clone());
+        let encrypt_method = Arc::new(self.config.method.clone());
 
         loop {
             let server_str = server_str_arc.clone();
             let server_port = server_port_arc.clone();
+            let encrypt_password_clone = encrypt_password.clone();
+
+            let cipher = openssl::OpenSSLCipher::new(cipher::CipherTypeAes128Cfb,
+                                                     encrypt_password_clone.as_slice().as_bytes());
 
             match self.acceptor.accept() {
                 Ok(mut stream) => spawn(proc() {
@@ -84,7 +93,10 @@ impl Relay for TcpRelayLocal {
                             Ok(len) => {
                                 let s = buf.slice_to(len);
 
-                                remote_stream.write(s);
+                                let encrypted_data = cipher.encrypt(s);
+
+                                debug!("Encrypted data {}", encrypted_data);
+                                remote_stream.write(encrypted_data.as_slice());
                             },
                             Err(err) => {
                                 if err.kind == EndOfFile {
@@ -111,7 +123,7 @@ impl Relay for TcpRelayLocal {
 pub struct TcpRelayServer {
     acceptor: TcpAcceptor,
     stage: Stage,
-    timeout: Option<u64>,
+    config: Config,
 }
 
 impl TcpRelayServer {
@@ -121,12 +133,19 @@ impl TcpRelayServer {
         TcpRelayServer {
             acceptor: acceptor,
             stage: StageInit,
-            timeout: c.timeout,
+            config: c.clone(),
         }
     }
 
     fn accept_loop(&mut self) {
+        let encrypt_password = Arc::new(self.config.password.clone());
+        let encrypt_method = Arc::new(self.config.method.clone());
+
         loop {
+            let encrypt_password_clone = encrypt_password.clone();
+            let cipher = openssl::OpenSSLCipher::new(cipher::CipherTypeAes128Cfb,
+                                                     encrypt_password_clone.as_slice().as_bytes());
+
             match self.acceptor.accept() {
                 Ok(mut stream) => spawn(proc() {
                     info!("Client {} connected", stream.peer_name().unwrap());
@@ -138,8 +157,15 @@ impl TcpRelayServer {
                         match stream.read(buf) {
                             Ok(len) => {
                                 let s = buf.slice_to(len);
-                                debug!("{} Received: {}", stream.peer_name().unwrap(), s);
-                                stream.write(s).unwrap()
+
+                                debug!("Password {}", encrypt_password_clone.as_slice());
+
+                                let decrypted_msg = cipher.decrypt(s);
+
+                                debug!("Decrypted Msg: {}", decrypted_msg);
+
+                                debug!("{} Received: {}", stream.peer_name().unwrap(),
+                                       str::from_utf8(decrypted_msg.as_slice()).unwrap());
                             },
                             Err(err) => {
                                 if err.kind == EndOfFile {
