@@ -9,8 +9,9 @@ use getopts::{optopt, optflag, getopts, usage};
 use std::os;
 
 use shadowsocks::config::Config;
-use shadowsocks::tcprelay::TcpRelayServer;
+use shadowsocks::relay::TcpRelayServer;
 use shadowsocks::relay::Relay;
+use shadowsocks::crypto::cipher::CIPHER_AES_128_CFB;
 
 fn main() {
     let opts = [
@@ -22,7 +23,7 @@ fn main() {
         optopt("k", "password", "password", ""),
         optopt("p", "server-port", "server port", ""),
         optopt("l", "local-port", "local socks5 proxy port", ""),
-        optopt("m", "encrypt-method", "entryption method", "aes-256-cfb"),
+        optopt("m", "encrypt-method", "entryption method", CIPHER_AES_128_CFB),
     ];
 
     let matches = getopts(os::args().tail(), opts).unwrap();
@@ -38,18 +39,19 @@ fn main() {
         return;
     }
 
-    let mut config = if matches.opt_present("c") {
-        Config::load_from_file(matches.opt_str("c")
-                                        .unwrap().as_slice()).unwrap()
-    } else {
-        match Config::load_from_file("config.json") {
-            Some(c) => c,
-            None => {
-                error!("Cannot find any `config.json` under current directory");
-                return;
+    let mut config =
+        if matches.opt_present("c") {
+            Config::load_from_file(matches.opt_str("c")
+                                            .unwrap().as_slice()).unwrap()
+        } else {
+            match Config::load_from_file("config.json") {
+                Some(c) => c,
+                None => {
+                    error!("Cannot find any `config.json` under current directory");
+                    return;
+                }
             }
-        }
-    };
+        };
 
     if matches.opt_present("s") {
         let server_ip = matches.opt_str("s").unwrap();
@@ -74,7 +76,7 @@ fn main() {
     if matches.opt_present("m") {
         let mut encrypt_meth = matches.opt_str("m").unwrap();
         if encrypt_meth.as_slice() == "" {
-            encrypt_meth = "aes-256-cfb".to_string();
+            encrypt_meth = CIPHER_AES_128_CFB.to_string();
         }
 
         config.method = encrypt_meth;
@@ -84,5 +86,5 @@ fn main() {
 
     debug!("Config: {}", config)
 
-    TcpRelayServer::new(&config).run();
+    TcpRelayServer::new(config).run();
 }

@@ -9,6 +9,8 @@ use std::fmt::{Show, Formatter, mod};
 
 use std::option::Option;
 
+use crypto::cipher::CIPHER_AES_128_CFB;
+
 #[deriving(Encodable, Clone)]
 pub struct Config {
     pub server: String,
@@ -29,7 +31,7 @@ impl Config {
             server_port: 8000,
             local_port: 8000,
             password: "".to_string(),
-            method: "aes-128-cfb".to_string(),
+            method: CIPHER_AES_128_CFB.to_string(),
             timeout: None,
             fast_open: false,
         }
@@ -92,7 +94,7 @@ impl Config {
     pub fn load_from_str(s: &str) -> Option<Config> {
         let object = match json::from_str(s) {
             Ok(obj) => { obj },
-            Err(e) => return None,
+            Err(..) => return None,
         };
 
         let json_object = match object.as_object() {
@@ -106,7 +108,7 @@ impl Config {
     pub fn load_from_file(filename: &str) -> Option<Config> {
         let mut readeropt = File::open_mode(&Path::new(filename), Open, Read);
 
-        let mut reader = match readeropt {
+        let reader = match readeropt {
             Ok(ref mut r) => r,
             Err(..) => return None,
         };

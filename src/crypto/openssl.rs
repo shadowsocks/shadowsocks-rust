@@ -4,13 +4,12 @@ extern crate log;
 use crypto::cipher::Cipher;
 use crypto::cipher;
 
-use std::str;
 use std::ptr;
 
 #[allow(non_camel_case_types)]
 type EVP_CIPHER_CTX = *const libc::c_void;
 #[allow(non_camel_case_types)]
-type EVP_CIPHER = *mut libc::c_void;
+type EVP_CIPHER = *const libc::c_void;
 #[allow(non_camel_case_types)]
 type EVP_MD = *const libc::c_void;
 
@@ -20,7 +19,6 @@ const CIPHER_MODE_DECRYPT: libc::c_int = 0;
 #[allow(dead_code)]
 #[link(name="crypto")]
 extern {
-    fn EVP_get_cipherbyname(name: *const libc::c_char) -> EVP_CIPHER;
     fn EVP_CIPHER_CTX_new() -> EVP_CIPHER_CTX;
     fn EVP_CIPHER_CTX_cleanup(ctx: EVP_CIPHER_CTX);
     fn EVP_CIPHER_CTX_free(ctx: EVP_CIPHER_CTX);
@@ -37,17 +35,23 @@ extern {
                       count: libc::c_int, key: *mut libc::c_uchar, iv: *mut libc::c_uchar) -> libc::c_int;
 
     // Ciphers
+    fn EVP_aes_128_cfb() -> EVP_CIPHER;
+    fn EVP_aes_128_cfb1() -> EVP_CIPHER;
+    fn EVP_aes_128_cfb8() -> EVP_CIPHER;
     fn EVP_aes_128_cfb128() -> EVP_CIPHER;
     fn EVP_aes_192_cfb() -> EVP_CIPHER;
+    fn EVP_aes_192_cfb1() -> EVP_CIPHER;
+    fn EVP_aes_192_cfb8() -> EVP_CIPHER;
+    fn EVP_aes_192_cfb128() -> EVP_CIPHER;
     fn EVP_aes_256_cfb() -> EVP_CIPHER;
+    fn EVP_aes_256_cfb1() -> EVP_CIPHER;
+    fn EVP_aes_256_cfb8() -> EVP_CIPHER;
+    fn EVP_aes_256_cfb128() -> EVP_CIPHER;
 
     // MD
     fn EVP_md5() -> EVP_MD;
     fn EVP_sha() -> EVP_MD;
     fn EVP_sha1() -> EVP_MD;
-
-    // Errors
-    fn ERR_print_errors_fp(fp: libc::c_int);
 }
 
 enum CryptoMode {
@@ -65,9 +69,20 @@ impl OpenSSLCrypto {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let (ctx, _, block_size) = unsafe {
             let (cipher, key_size, block_size) = match cipher_type {
-                cipher::CipherTypeAes128Cfb => { (EVP_aes_128_cfb128(), 16, 16) },
-                cipher::CipherTypeAes192Cfb => { (EVP_aes_192_cfb()   , 24, 16) },
-                cipher::CipherTypeAes256Cfb => { (EVP_aes_256_cfb()   , 32, 16) },
+                cipher::CipherTypeAes128Cfb => { (EVP_aes_128_cfb(), 16, 16) },
+                cipher::CipherTypeAes128Cfb1 => { (EVP_aes_128_cfb1(), 16, 16) },
+                cipher::CipherTypeAes128Cfb8 => { (EVP_aes_128_cfb8(), 16, 16) },
+                cipher::CipherTypeAes128Cfb128 => { (EVP_aes_128_cfb128(), 16, 16) },
+
+                cipher::CipherTypeAes192Cfb => { (EVP_aes_192_cfb(), 24, 16) },
+                cipher::CipherTypeAes192Cfb1 => { (EVP_aes_192_cfb1(), 24, 16) },
+                cipher::CipherTypeAes192Cfb8 => { (EVP_aes_192_cfb8(), 24, 16) },
+                cipher::CipherTypeAes192Cfb128 => { (EVP_aes_192_cfb128(), 24, 16) },
+
+                cipher::CipherTypeAes256Cfb => { (EVP_aes_256_cfb(), 32, 16) },
+                cipher::CipherTypeAes256Cfb1 => { (EVP_aes_256_cfb1(), 32, 16) },
+                cipher::CipherTypeAes256Cfb8 => { (EVP_aes_256_cfb8(), 32, 16) },
+                cipher::CipherTypeAes256Cfb128 => { (EVP_aes_256_cfb128(), 32, 16) },
             };
 
             let evp_ctx = EVP_CIPHER_CTX_new();
@@ -173,10 +188,27 @@ impl Cipher for OpenSSLCipher {
 
 #[test]
 fn test_aes() {
+    use std::str;
+
     let message = "hello world";
     let key = "passwordhaha";
 
-    let types = [cipher::CipherTypeAes128Cfb, cipher::CipherTypeAes192Cfb, cipher::CipherTypeAes256Cfb];
+    let types = [
+        cipher::CipherTypeAes128Cfb,
+        cipher::CipherTypeAes128Cfb1,
+        cipher::CipherTypeAes128Cfb8,
+        cipher::CipherTypeAes128Cfb128,
+
+        cipher::CipherTypeAes192Cfb,
+        cipher::CipherTypeAes192Cfb1,
+        cipher::CipherTypeAes192Cfb8,
+        cipher::CipherTypeAes192Cfb128,
+
+        cipher::CipherTypeAes256Cfb,
+        cipher::CipherTypeAes256Cfb1,
+        cipher::CipherTypeAes256Cfb8,
+        cipher::CipherTypeAes256Cfb128,
+    ];
 
     for t in types.iter() {
         let cipher = OpenSSLCipher::new(*t, key.as_bytes());
@@ -187,6 +219,6 @@ fn test_aes() {
         let decrypted_msg = cipher.decrypt(encrypted_msg.as_slice());
         debug!("DEC {}", str::from_utf8(decrypted_msg.as_slice()).unwrap());
 
-        assert!(message == str::from_utf8(decrypted_msg.as_slice()).unwrap());
+        assert!(message.as_bytes() == decrypted_msg.as_slice());
     }
 }
