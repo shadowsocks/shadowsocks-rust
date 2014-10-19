@@ -30,7 +30,7 @@ fn main() {
     let matches = getopts(os::args().tail(), opts).unwrap();
 
     if matches.opt_present("h") {
-        println!("{}", usage(format!("Usage: {} [options]", os::args()[0]).as_slice(),
+        println!("{}", usage(format!("Usage: {} [Options]", os::args()[0]).as_slice(),
                             opts));
         return;
     }
@@ -49,8 +49,7 @@ fn main() {
                 Some(c) => c,
                 None => {
                     error!("Cannot find any `config.json` under current directory");
-                    println!("{}", usage(format!("Usage: {} [options]", os::args()[0]).as_slice(),
-                                opts));
+                    error!("You have to specify a config file");
                     return;
                 }
             }

@@ -155,10 +155,16 @@ impl Relay for TcpRelayServer {
                                 Ok(len) => {
                                     let real_buf = buf.slice_to(len);
                                     let decrypted_msg = cipher.decrypt(real_buf);
-                                    remote_stream.write(decrypted_msg.as_slice());
+                                    remote_stream.write(decrypted_msg.as_slice())
+                                            .ok().expect("Error occurs while writing to remote stream");
                                 },
-                                Err(e) => {
-                                    error!("Error occurs while reading from client: {}", e);
+                                Err(err) => {
+                                    match err.kind {
+                                        EndOfFile | TimedOut => {},
+                                        _ => {
+                                            error!("Error occurs while reading from client stream: {}", err);
+                                        }
+                                    }
                                     break
                                 }
                             }

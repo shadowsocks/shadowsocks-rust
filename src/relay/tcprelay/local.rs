@@ -76,7 +76,8 @@ impl TcpRelayLocal {
                                     error!("Error occurs while writing to remote stream: {}", err);
                                 }
                             }
-                            local_stream.close_read().unwrap();
+                            local_stream.close_read()
+                                    .ok().expect("Error occurs while closing read channel of local stream");
                             break
                         }
                     }
@@ -88,7 +89,8 @@ impl TcpRelayLocal {
                             error!("Error occurs while reading from local stream: {}", err);
                         }
                     }
-                    remote_stream.close_write().unwrap();
+                    remote_stream.close_write()
+                            .ok().expect("Error occurs while closing write channel of remote stream");
                     break
                 }
             }
@@ -119,7 +121,8 @@ impl TcpRelayLocal {
                                         error!("Error occurs while writing to local stream: {}", err);
                                     }
                                 }
-                                remote_stream.close_read().unwrap();
+                                remote_stream.close_read()
+                                        .ok().expect("Error occurs while closing read channel of remote stream");
                                 break
                             }
                         }
@@ -131,7 +134,8 @@ impl TcpRelayLocal {
                                 error!("Error occurs while reading from remote stream: {}", err);
                             }
                         }
-                        local_stream.close_write().unwrap();
+                        local_stream.close_write()
+                                .ok().expect("Error occurs while closing write channel of local stream");
                         break
                     }
                 }
@@ -208,10 +212,12 @@ impl Relay for TcpRelayLocal {
 
                                 let reply = [SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED,
                                                 0x00, SOCK5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
-                                stream.write(reply).unwrap();
+                                stream.write(reply)
+                                        .ok().expect("Error occurs while writing header to local stream");
 
                                 let encrypted_header = cipher.encrypt(header_buf.slice_to(header_len));
-                                remote_stream.write(encrypted_header.as_slice()).unwrap();
+                                remote_stream.write(encrypted_header.as_slice())
+                                        .ok().expect("Error occurs while writing header to remote stream");
 
                                 TcpRelayLocal::async_handle_connect_remote_stream(stream.clone(),
                                                                                   remote_stream.clone(),

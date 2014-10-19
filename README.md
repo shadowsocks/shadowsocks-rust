@@ -6,6 +6,12 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 *Currently developing and testing with rust-0.12-dev*
 
+## Dependences
+
+* libcrypto (OpenSSL)
+* Rust >= 0.12
+* Cargo
+
 ## Usage
 
 Build with [Cargo](http://doc.crates.io):
@@ -17,41 +23,34 @@ cargo build
 Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries of
 the official shadowsocks' implementation.
 
-```
-Usage: ./target/sslocal [options]
+## Getting Started
 
-Options:
-    -v --version        print version
-    -h --help           print this message
-    -c --config config.json
-                        specify config file
-    -s --server-addr    server address
-    -b --local-addr     local address, listen only to this address if
-                        specified
-    -k --password       password
-    -p --server-port    server port
-    -l --local-port     local socks5 proxy port
-    -m --encrypt-method aes-128-cfb
-                        entryption method
+Create a shadowsocks' configuration file. Example
+
+```json
+{
+    "server": "my_server_ip",
+    "server_port": 8388,
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+    "password": "mypassword",
+    "timeout": 300,
+    "method": "aes-256-cfb",
+    "fast_open": false,
+    "workers": 1
+}
 ```
 
-```
-Usage: ./target/ssserver [options]
+Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
 
-Options:
-    -v --version        print version
-    -h --help           print this message
-    -c --config config.json
-                        specify config file
-    -s --server-addr    server address
-    -b --local-addr     local address, listen only to this address if
-                        specified
-    -k --password       password
-    -p --server-port    server port
-    -l --local-port     local socks5 proxy port
-    -m --encrypt-method aes-128-cfb
-                        entryption method
+Start local and server shadowsocks with
+
 ```
+sslocal -c config.json
+ssserver -c config.json
+```
+
+List all available arguments with `-h`.
 
 ## Notes
 
@@ -60,4 +59,4 @@ Still under developing and waiting for the final release of rust-1.0.
 Currently implementation can only be built by rust-0.12-dev. It supports the following features:
 
 * CONNECT command
-* AES-(128|256|512)-CFB crypto algorithm
+* AES-(128|192|512)-CFB crypto algorithm
