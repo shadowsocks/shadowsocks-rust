@@ -1,22 +1,19 @@
 #[phase(plugin, link)]
 extern crate log;
+// extern crate native;
 
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{EndOfFile};
-use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
-use std::vec::Vec;
-use std::string::String;
+use std::io::{EndOfFile, TimedOut};
 
 use config::Config;
-use relay::Relay;
 
+use relay::Relay;
+use relay::{parse_request_header, send_error_reply};
 use relay::{SOCK5_VERSION, SOCK5_AUTH_METHOD_NONE};
 use relay::{SOCK5_CMD_TCP_CONNECT, SOCK5_CMD_TCP_BIND, SOCK5_CMD_UDP_ASSOCIATE};
-use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED, SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED};
+use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED};
 use relay::SOCK5_REPLY_SUCCEEDED;
-use relay::{SOCK5_ADDR_TYPE_IPV4, SOCK5_ADDR_TYPE_IPV6, SOCK5_ADDR_TYPE_DOMAIN_NAME};
-use relay::{Sock5AddrType, Sock5AddrTypeIpv4, Sock5AddrTypeIpv6, Sock5AddrTypeDomainName};
 
 use crypto::cipher;
 use crypto::cipher::CipherVariant;
@@ -60,66 +57,6 @@ impl TcpRelayLocal {
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
-    fn send_error_reply(stream: &mut TcpStream, err_code: u8) {
-        let reply = [SOCK5_VERSION, err_code, 0x00];
-        stream.write(reply).ok().expect("Error occurs while sending errors");
-    }
-
-    fn parse_request_header(stream: &mut TcpStream) -> (Vec<u8>, Sock5AddrType, String, u16) {
-        let mut raw_header = Vec::new();
-
-        let atyp = stream.read_exact(1).unwrap()[0];
-        raw_header.push(atyp);
-        match atyp {
-            SOCK5_ADDR_TYPE_IPV4 => {
-                let raw_addr = stream.read_exact(4).unwrap();
-                raw_header.push_all(raw_addr.as_slice());
-                let v4addr = Ipv4Addr(raw_addr[0], raw_addr[1], raw_addr[2], raw_addr[3]);
-
-                let raw_port = stream.read_exact(2).unwrap();
-                raw_header.push_all(raw_port.as_slice());
-                let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
-
-                (raw_header, Sock5AddrTypeIpv4, v4addr.to_string(), port)
-            },
-            SOCK5_ADDR_TYPE_IPV6 => {
-                let raw_addr = stream.read_exact(16).unwrap();
-                raw_header.push_all(raw_addr.as_slice());
-                let v6addr = Ipv6Addr((raw_addr[0] as u16 << 8) | raw_addr[1] as u16,
-                                      (raw_addr[2] as u16 << 8) | raw_addr[3] as u16,
-                                      (raw_addr[4] as u16 << 8) | raw_addr[5] as u16,
-                                      (raw_addr[6] as u16 << 8) | raw_addr[7] as u16,
-                                      (raw_addr[8] as u16 << 8) | raw_addr[9] as u16,
-                                      (raw_addr[10] as u16 << 8) | raw_addr[11] as u16,
-                                      (raw_addr[12] as u16 << 8) | raw_addr[13] as u16,
-                                      (raw_addr[14] as u16 << 8) | raw_addr[15] as u16);
-
-                let raw_port = stream.read_exact(2).unwrap();
-                raw_header.push_all(raw_port.as_slice());
-                let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
-
-                (raw_header, Sock5AddrTypeIpv6, v6addr.to_string(), port)
-            },
-            SOCK5_ADDR_TYPE_DOMAIN_NAME => {
-                let addr_len = stream.read_exact(1).unwrap()[0];
-                raw_header.push(addr_len);
-                let raw_addr = stream.read_exact(addr_len as uint).unwrap();
-                raw_header.push_all(raw_addr.as_slice());
-
-                let raw_port = stream.read_exact(2).unwrap();
-                raw_header.push_all(raw_port.as_slice());
-                let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
-
-                (raw_header, Sock5AddrTypeDomainName, String::from_utf8(raw_addr).unwrap(), port)
-            },
-            _ => {
-                // Address type not supported
-                TcpRelayLocal::send_error_reply(stream, SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED);
-                fail!("Unsupported address type: {}", atyp);
-            }
-        }
-    }
-
     fn handle_connect_local_stream(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
                                    cipher: &mut CipherVariant) {
         let mut buf = [0u8, .. 0xffff];
@@ -133,17 +70,25 @@ impl TcpRelayLocal {
                     match remote_stream.write(encrypted_msg.as_slice()) {
                         Ok(..) => {},
                         Err(err) => {
-                            if err.kind != EndOfFile {
-                                error!("Error occurs in handle_local_stream while writing to remote stream: {}", err);
+                            match err.kind {
+                                EndOfFile | TimedOut => {},
+                                _ => {
+                                    error!("Error occurs while writing to remote stream: {}", err);
+                                }
                             }
+                            local_stream.close_read().unwrap();
                             break
                         }
                     }
                 },
                 Err(err) => {
-                    if err.kind != EndOfFile {
-                        debug!("Error occurs in handle_local_stream while reading from local stream: {}", err);
+                    match err.kind {
+                        EndOfFile | TimedOut => {},
+                        _ => {
+                            error!("Error occurs while reading from local stream: {}", err);
+                        }
                     }
+                    remote_stream.close_write().unwrap();
                     break
                 }
             }
@@ -168,17 +113,25 @@ impl TcpRelayLocal {
                         match local_stream.write(decrypted_msg.as_slice()) {
                             Ok(..) => {},
                             Err(err) => {
-                                if err.kind != EndOfFile {
-                                    debug!("Error occurs in handle_remote_stream while writing to local stream: {}", err);
+                                match err.kind {
+                                    EndOfFile | TimedOut => {},
+                                    _ => {
+                                        error!("Error occurs while writing to local stream: {}", err);
+                                    }
                                 }
+                                remote_stream.close_read().unwrap();
                                 break
                             }
                         }
                     },
                     Err(err) => {
-                        if err.kind != EndOfFile {
-                            error!("Error occurs in handle_remote_stream while reading from remote stream: {}", err);
+                        match err.kind {
+                            EndOfFile | TimedOut => {},
+                            _ => {
+                                error!("Error occurs while reading from remote stream: {}", err);
+                            }
                         }
+                        local_stream.close_write().unwrap();
                         break
                     }
                 }
@@ -234,11 +187,12 @@ impl Relay for TcpRelayLocal {
                             fail!("Invalid sock version {}", sock_ver);
                         }
 
-                        let (raw_header, atyp, bind_addr, bind_port)
-                                = TcpRelayLocal::parse_request_header(&mut stream);
+                        let mut header_buf = [0u8, .. 512];
+                        stream.read_at_least(1, header_buf)
+                                    .ok().expect("Error occurs while reading header");
 
-                        debug!("SockVer {}, CMD {}, atyp {}, bind_addr {}, bind_port {}",
-                               sock_ver, cmd, atyp, bind_addr, bind_port);
+                        let (header_len, addr)
+                                = parse_request_header(&mut stream, header_buf);
 
                         let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
                                                            *server_port.deref())
@@ -250,11 +204,13 @@ impl Relay for TcpRelayLocal {
 
                         match cmd {
                             SOCK5_CMD_TCP_CONNECT => {
+                                info!("CONNECT {}", addr);
+
                                 let reply = [SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED,
                                                 0x00, SOCK5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
                                 stream.write(reply).unwrap();
 
-                                let encrypted_header = cipher.encrypt(raw_header.as_slice());
+                                let encrypted_header = cipher.encrypt(header_buf.slice_to(header_len));
                                 remote_stream.write(encrypted_header.as_slice()).unwrap();
 
                                 TcpRelayLocal::async_handle_connect_remote_stream(stream.clone(),
@@ -266,14 +222,14 @@ impl Relay for TcpRelayLocal {
                                                                            &mut cipher);
                             },
                             SOCK5_CMD_TCP_BIND => {
-
+                                unimplemented!();
                             },
                             SOCK5_CMD_UDP_ASSOCIATE => {
-
+                                unimplemented!();
                             },
                             _ => {
                                 // unsupported CMD
-                                TcpRelayLocal::send_error_reply(&mut stream, SOCK5_REPLY_COMMAND_NOT_SUPPORTED);
+                                send_error_reply(&mut stream, SOCK5_REPLY_COMMAND_NOT_SUPPORTED);
                                 fail!("Unsupported command");
                             }
                         }

@@ -6,6 +6,7 @@ extern crate shadowsocks;
 extern crate log;
 
 use getopts::{optopt, optflag, getopts, usage};
+
 use std::os;
 
 use shadowsocks::config::Config;

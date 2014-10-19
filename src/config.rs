@@ -2,10 +2,11 @@ extern crate serialize;
 
 use serialize::Encodable;
 use serialize::json;
+use serialize::json::PrettyEncoder;
 use std::io::{File, Read, Open};
 
 use std::to_string::ToString;
-use std::fmt::{Show, Formatter, mod};
+use std::fmt::{Show, Formatter, WriteError, mod};
 
 use std::option::Option;
 
@@ -129,6 +130,10 @@ impl Config {
 
 impl Show for Config {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", json::encode(self))
+        let mut encoder = PrettyEncoder::new(f);
+        match self.encode(&mut encoder) {
+            Ok(..) => Ok(()),
+            Err(..) => Err(WriteError),
+        }
     }
 }
