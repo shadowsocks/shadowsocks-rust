@@ -1,6 +1,8 @@
 pub use self::tcprelay::local::TcpRelayLocal;
 pub use self::tcprelay::server::TcpRelayServer;
 
+use std::fmt::{Show, Formatter, FormatError};
+
 pub mod tcprelay;
 
 pub trait Relay {
@@ -36,5 +38,15 @@ pub enum Sock5AddrType {
     Sock5AddrTypeIpv4,
     Sock5AddrTypeIpv6,
     Sock5AddrTypeDomainName,
+}
+
+impl Show for Sock5AddrType {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), FormatError> {
+        match *self {
+            Sock5AddrTypeIpv4 => formatter.write("Sock5AddrTypeIpv4".as_bytes()),
+            Sock5AddrTypeIpv6 => formatter.write("Sock5AddrTypeIpv6".as_bytes()),
+            Sock5AddrTypeDomainName => formatter.write("Sock5AddrTypeDomainName".as_bytes())
+        }
+    }
 }
 

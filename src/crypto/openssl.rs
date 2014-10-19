@@ -5,6 +5,8 @@ use crypto::cipher::Cipher;
 use crypto::cipher;
 
 use std::ptr;
+use std::clone::Clone;
+use std::mem::swap;
 
 #[allow(non_camel_case_types)]
 type EVP_CIPHER_CTX = *const libc::c_void;
@@ -12,6 +14,8 @@ type EVP_CIPHER_CTX = *const libc::c_void;
 type EVP_CIPHER = *const libc::c_void;
 #[allow(non_camel_case_types)]
 type EVP_MD = *const libc::c_void;
+#[allow(non_camel_case_types)]
+type ENGINE = *const libc::c_void;
 
 const CIPHER_MODE_ENCRYPT: libc::c_int = 1;
 const CIPHER_MODE_DECRYPT: libc::c_int = 0;
@@ -23,7 +27,7 @@ extern {
     fn EVP_CIPHER_CTX_cleanup(ctx: EVP_CIPHER_CTX);
     fn EVP_CIPHER_CTX_free(ctx: EVP_CIPHER_CTX);
 
-    fn EVP_CipherInit(ctx: EVP_CIPHER_CTX, evp: EVP_CIPHER,
+    fn EVP_CipherInit_ex(ctx: EVP_CIPHER_CTX, evp: EVP_CIPHER, engine: ENGINE,
                       key: *const libc::c_uchar, iv: *const libc::c_uchar, mode: libc::c_int) -> libc::c_int;
     fn EVP_CipherUpdate(ctx: EVP_CIPHER_CTX,
                         outbuf: *mut libc::c_uchar, outlen: *mut libc::c_int,
@@ -63,12 +67,63 @@ struct OpenSSLCrypto {
     evp_ctx: EVP_CIPHER_CTX,
     block_size: uint,
     // key_size: uint,
+    cipher_type: cipher::CipherType,
+    key: Vec<u8>,
+    iv: Vec<u8>,
+    mode: CryptoMode,
 }
 
 impl OpenSSLCrypto {
-    pub fn new(cipher_type: cipher::CipherType, key: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
+    pub fn bytes_to_key(cipher_type: cipher::CipherType, key: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
+        let mut pad_key: Vec<u8> = Vec::from_elem(key_size, 0u8);
+        let mut pad_iv: Vec<u8> = Vec::from_elem(block_size, 0u8);
+
+        unsafe {
+            EVP_BytesToKey(cipher, EVP_md5(), ptr::null(), key.as_ptr(), key.len() as libc::c_int,
+                              1, pad_key.as_mut_ptr(), pad_iv.as_mut_ptr());
+        }
+
+        (pad_key, pad_iv)
+    }
+
+    pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let (ctx, _, block_size) = unsafe {
-            let (cipher, key_size, block_size) = match cipher_type {
+            let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
+
+            assert!(iv.len() >= block_size);
+
+            let evp_ctx = EVP_CIPHER_CTX_new();
+            assert!(!evp_ctx.is_null());
+
+            let op = match mode {
+                CryptoModeEncrypt => 1 as libc::c_int,
+                CryptoModeDecrypt => 0 as libc::c_int,
+            };
+
+            if EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
+                              iv.as_ptr(), op) != 1 as libc::c_int {
+                EVP_CIPHER_CTX_free(evp_ctx);
+                fail!("EVP_CipherInit error");
+            }
+
+            (evp_ctx, key_size, block_size)
+        };
+
+        OpenSSLCrypto {
+            evp_ctx: ctx,
+            block_size: block_size,
+            // key_size: key_size,
+            cipher_type: cipher_type,
+            key: key.to_vec(),
+            iv: iv.to_vec(),
+            mode: mode,
+        }
+    }
+
+    pub fn get_cipher(cipher_type: cipher::CipherType) -> (EVP_CIPHER, uint, uint) {
+        unsafe {
+            match cipher_type {
                 cipher::CipherTypeAes128Cfb => { (EVP_aes_128_cfb(), 16, 16) },
                 cipher::CipherTypeAes128Cfb1 => { (EVP_aes_128_cfb1(), 16, 16) },
                 cipher::CipherTypeAes128Cfb8 => { (EVP_aes_128_cfb8(), 16, 16) },
@@ -83,49 +138,22 @@ impl OpenSSLCrypto {
                 cipher::CipherTypeAes256Cfb1 => { (EVP_aes_256_cfb1(), 32, 16) },
                 cipher::CipherTypeAes256Cfb8 => { (EVP_aes_256_cfb8(), 32, 16) },
                 cipher::CipherTypeAes256Cfb128 => { (EVP_aes_256_cfb128(), 32, 16) },
-            };
-
-            let evp_ctx = EVP_CIPHER_CTX_new();
-            assert!(!evp_ctx.is_null());
-
-            let mut pad_key: Vec<u8> = Vec::with_capacity(key_size);
-            let mut pad_iv: Vec<u8> = Vec::with_capacity(block_size);
-
-            EVP_BytesToKey(cipher, EVP_md5(), ptr::null(), key.as_ptr(), key.len() as libc::c_int,
-                              1, pad_key.as_mut_ptr(), pad_iv.as_mut_ptr());
-
-            let op = match mode {
-                CryptoModeEncrypt => 1 as libc::c_int,
-                CryptoModeDecrypt => 0 as libc::c_int,
-            };
-
-            if EVP_CipherInit(evp_ctx, cipher, pad_key.as_slice().as_ptr(),
-                              pad_iv.as_slice().as_ptr(), op) != 1 as libc::c_int {
-                EVP_CIPHER_CTX_free(evp_ctx);
-                fail!("EVP_CipherInit error");
             }
-
-            (evp_ctx, key_size, block_size)
-        };
-
-        OpenSSLCrypto {
-            evp_ctx: ctx,
-            block_size: block_size,
-            // key_size: key_size,
         }
     }
 
-    pub fn cipher(&self, data: &[u8]) -> Vec<u8> {
+    pub fn update(&self, data: &[u8]) -> Vec<u8> {
+        let pdata: *const u8 = data.as_ptr();
+        let datalen: libc::c_int = data.len() as libc::c_int;
+
+        let reslen: uint = datalen as uint + self.block_size;
+        let mut res = Vec::from_elem(reslen, 0u8);
+
+        let mut len: libc::c_int = 0;
+        let pres: *mut u8 = res.as_mut_ptr();
+
+        let mut total_length: libc::c_int;
         unsafe {
-            let pdata: *const u8 = data.as_ptr();
-            let datalen: libc::c_int = data.len() as libc::c_int;
-
-            let reslen: uint = datalen as uint + self.block_size;
-            let mut res = Vec::from_elem(reslen, 0u8);
-
-            let mut len: libc::c_int = 0;
-            let pres: *mut u8 = res.as_mut_ptr();
-
             if EVP_CipherUpdate(self.evp_ctx,
                              pres, &mut len,
                              pdata, datalen) != 1 {
@@ -133,18 +161,36 @@ impl OpenSSLCrypto {
                 fail!("Failed on EVP_CipherUpdate");
             }
 
-            let mut total_length = len;
+            total_length = len;
             if EVP_CipherFinal(self.evp_ctx, pres.offset(len as int), &mut len) != 1 {
                 drop(self);
                 fail!("Failed on EVP_CipherFinal");
             }
 
             total_length += len;
-
-            res.truncate(total_length as uint);
-
-            res
         }
+
+        res.truncate(total_length as uint);
+        res
+    }
+}
+
+impl Clone for OpenSSLCrypto {
+    fn clone(&self) -> OpenSSLCrypto {
+        OpenSSLCrypto::new(self.cipher_type, self.key.as_slice(), self.iv.as_slice(), self.mode)
+    }
+
+    fn clone_from(&mut self, source: &OpenSSLCrypto) {
+        let mut new_cipher = OpenSSLCrypto::new(source.cipher_type,
+                                  source.key.as_slice(),
+                                  source.iv.as_slice(),
+                                  source.mode);
+        swap(&mut self.evp_ctx, &mut new_cipher.evp_ctx);
+        swap(&mut self.block_size, &mut new_cipher.block_size);
+        swap(&mut self.cipher_type, &mut new_cipher.cipher_type);
+        swap(&mut self.key, &mut new_cipher.key);
+        swap(&mut self.iv, &mut new_cipher.iv);
+        swap(&mut self.mode, &mut new_cipher.mode);
     }
 }
 
@@ -159,30 +205,77 @@ impl Drop for OpenSSLCrypto {
     }
 }
 
+#[deriving(Clone)]
 pub struct OpenSSLCipher {
-    encryptor: OpenSSLCrypto,
-    decryptor: OpenSSLCrypto,
+    encryptor: Option<OpenSSLCrypto>,
+    decryptor: Option<OpenSSLCrypto>,
+    key: Vec<u8>,
+    cipher_type: cipher::CipherType,
 }
 
 impl OpenSSLCipher {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8]) -> OpenSSLCipher {
-        let enc = OpenSSLCrypto::new(cipher_type, key, CryptoModeEncrypt);
-        let dec = OpenSSLCrypto::new(cipher_type, key, CryptoModeDecrypt);
+        // let enc = OpenSSLCrypto::new(cipher_type, key, CryptoModeEncrypt);
+        // let dec = OpenSSLCrypto::new(cipher_type, key, CryptoModeDecrypt);
 
         OpenSSLCipher {
-            encryptor: enc,
-            decryptor: dec,
+            encryptor: None,
+            decryptor: None,
+            key: key.to_vec(),
+            cipher_type: cipher_type,
         }
+    }
+
+    pub fn init(&mut self, key: &[u8], iv: &[u8]) {
+        let encryptor = OpenSSLCrypto::new(self.cipher_type, key, iv, CryptoModeEncrypt);
+        let decryptor = OpenSSLCrypto::new(self.cipher_type, key, iv, CryptoModeDecrypt);
+
+        self.encryptor = Some(encryptor);
+        self.decryptor = Some(decryptor);
     }
 }
 
 impl Cipher for OpenSSLCipher {
-    fn encrypt(&self, data: &[u8]) -> Vec<u8> {
-        self.encryptor.cipher(data)
+    fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
+        match self.encryptor {
+            Some(ref encryptor) => { encryptor.update(data) },
+            None => {
+                let (key, mut iv) = OpenSSLCrypto::bytes_to_key(
+                                    self.cipher_type,
+                                    self.key.as_slice()
+                                );
+
+                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(), CryptoModeEncrypt);
+                self.encryptor = Some(encryptor);
+
+                let encrypted_data = self.encryptor.as_ref().unwrap().update(data);
+                iv.push_all(encrypted_data.as_slice());
+
+                // Send the IV before encrypted data
+                iv
+            }
+        }
     }
 
-    fn decrypt(&self, data: &[u8]) -> Vec<u8> {
-        self.decryptor.cipher(data)
+    fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
+        match self.decryptor {
+            Some(ref decryptor) => { decryptor.update(data) },
+            None => {
+                let (key, iv) = OpenSSLCrypto::bytes_to_key(
+                                    self.cipher_type,
+                                    self.key.as_slice()
+                                );
+
+                // Get the begining IV from the data
+                let expected_iv_len = iv.len();
+                let (real_iv, data) = data.split_at(expected_iv_len);
+
+                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv, CryptoModeDecrypt);
+                self.decryptor = Some(decryptor);
+
+                self.decryptor.as_ref().unwrap().update(data)
+            }
+        }
     }
 }
 
@@ -211,7 +304,7 @@ fn test_aes() {
     ];
 
     for t in types.iter() {
-        let cipher = OpenSSLCipher::new(*t, key.as_bytes());
+        let mut cipher = OpenSSLCipher::new(*t, key.as_bytes());
 
         let encrypted_msg = cipher.encrypt(message.as_bytes());
         debug!("ENC {}", encrypted_msg);

@@ -2,8 +2,8 @@
 use crypto::openssl;
 
 pub trait Cipher {
-    fn encrypt(&self, data: &[u8]) -> Vec<u8>;
-    fn decrypt(&self, data: &[u8]) -> Vec<u8>;
+    fn encrypt(&mut self, data: &[u8]) -> Vec<u8>;
+    fn decrypt(&mut self, data: &[u8]) -> Vec<u8>;
 }
 
 pub const CIPHER_AES_128_CFB: &'static str = "aes-128-cfb";
@@ -21,6 +21,7 @@ pub const CIPHER_AES_256_CFB_1: &'static str = "aes-256-cfb1";
 pub const CIPHER_AES_256_CFB_8: &'static str = "aes-256-cfb8";
 pub const CIPHER_AES_256_CFB_128: &'static str = "aes-256-cfb128";
 
+#[deriving(Clone)]
 pub enum CipherType {
     CipherTypeAes128Cfb,
     CipherTypeAes128Cfb1,
@@ -36,20 +37,21 @@ pub enum CipherType {
     CipherTypeAes256Cfb128,
 }
 
+#[deriving(Clone)]
 pub enum CipherVariant {
     OpenSSLCrypto(openssl::OpenSSLCipher),
 }
 
 impl Cipher for CipherVariant {
-    fn encrypt(&self, data: &[u8]) -> Vec<u8> {
+    fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
         match *self {
-            OpenSSLCrypto(ref c) => c.encrypt(data),
+            OpenSSLCrypto(ref mut c) => c.encrypt(data),
         }
     }
 
-    fn decrypt(&self, data: &[u8]) -> Vec<u8> {
+    fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
         match *self {
-            OpenSSLCrypto(ref c) => c.decrypt(data),
+            OpenSSLCrypto(ref mut c) => c.decrypt(data),
         }
     }
 }
@@ -78,7 +80,7 @@ pub fn with_name(method: &str, key: &[u8]) -> Option<CipherVariant> {
 #[test]
 fn test_get_cipher() {
     let key = "PASSWORD";
-    let c = with_name(CIPHER_AES_128_CFB, key.as_bytes()).unwrap();
+    let mut c = with_name(CIPHER_AES_128_CFB, key.as_bytes()).unwrap();
     let message = "HELLO WORLD";
 
     let encrypted_msg = c.encrypt(message.as_bytes());
