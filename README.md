@@ -59,4 +59,4 @@ Still under developing and waiting for the final release of rust-1.0.
 Currently implementation can only be built by rust-0.12-dev. It supports the following features:
 
 * CONNECT command
-* AES-(128|192|512)-CFB crypto algorithm
+* AES-(128|192|256)-CFB crypto algorithm

@@ -30,52 +30,76 @@ impl TcpRelayServer {
     fn connect_remote(addrs: Vec<IpAddr>, port: Port) -> Option<TcpStream> {
         for addr in addrs.iter() {
             match TcpStream::connect(addr.to_string().as_slice(), port) {
-                Ok(s) => { return Some(s) },
+                Ok(s) => {
+                    return Some(s)
+                },
                 Err(..) => {}
             }
         }
         None
     }
 
-    fn async_handle_connect_remote_stream(mut local_stream: TcpStream, mut remote_stream: TcpStream,
-                                          mut cipher: CipherVariant) {
-        spawn(proc() {
-            let mut buf = [0u8, .. 0xffff];
+    fn handle_connect_remote(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
+                                          cipher: &mut CipherVariant) {
+        let mut buf = [0u8, .. 0xffff];
 
-            loop {
-                match remote_stream.read_at_least(1, buf) {
-                    Ok(len) => {
-                        let real_buf = buf.slice_to(len);
+        loop {
+            match remote_stream.read_at_least(1, buf) {
+                Ok(len) => {
+                    let real_buf = buf.slice_to(len);
 
-                        let encrypted_msg = cipher.encrypt(real_buf);
+                    let encrypted_msg = cipher.encrypt(real_buf);
 
-                        match local_stream.write(encrypted_msg.as_slice()) {
-                            Ok(..) => {},
-                            Err(err) => {
-                                match err.kind {
-                                    EndOfFile | TimedOut => {},
-                                    _ => {
-                                        error!("Error occurs while writing to local stream: {}", err);
-                                    }
+                    match local_stream.write(encrypted_msg.as_slice()) {
+                        Ok(..) => {},
+                        Err(err) => {
+                            match err.kind {
+                                EndOfFile | TimedOut => {},
+                                _ => {
+                                    error!("Error occurs while writing to local stream: {}", err);
                                 }
-                                remote_stream.close_read().unwrap();
-                                break
                             }
+                            remote_stream.close_read().unwrap();
+                            break
                         }
-                    },
-                    Err(err) => {
-                        match err.kind {
-                            EndOfFile | TimedOut => {},
-                            _ => {
-                                error!("Error occurs while reading from remote stream: {}", err);
-                            }
-                        }
-                        local_stream.close_write().unwrap();
-                        break
                     }
+                },
+                Err(err) => {
+                    match err.kind {
+                        EndOfFile | TimedOut => {},
+                        _ => {
+                            error!("Error occurs while reading from remote stream: {}", err);
+                        }
+                    }
+                    local_stream.close_write().unwrap();
+                    break
                 }
             }
-        });
+        }
+    }
+
+    fn handle_connect_local(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
+                            cipher: &mut CipherVariant) {
+        let mut buf = [0u8, .. 0xffff];
+        loop {
+            match local_stream.read(buf) {
+                Ok(len) => {
+                    let real_buf = buf.slice_to(len);
+                    let decrypted_msg = cipher.decrypt(real_buf);
+                    remote_stream.write(decrypted_msg.as_slice())
+                            .ok().expect("Error occurs while writing to remote stream");
+                },
+                Err(err) => {
+                    match err.kind {
+                        EndOfFile | TimedOut => {},
+                        _ => {
+                            error!("Error occurs while reading from client stream: {}", err);
+                        }
+                    }
+                    break
+                }
+            }
+        }
     }
 }
 
@@ -114,8 +138,8 @@ impl Relay for TcpRelayServer {
                                                        password.as_slice().as_bytes())
                                                 .expect("Unsupported cipher");
 
-                        let mut buf = [0u8, .. 0xffff];
                         let header = {
+                            let mut buf = [0u8, .. 1024];
                             let header_len = stream.read(buf).ok()
                                                     .expect("Error occurs while reading header");
                             let encrypted_header = buf.slice_to(header_len);
@@ -146,29 +170,18 @@ impl Relay for TcpRelayServer {
                             }
                         };
 
-                        TcpRelayServer::async_handle_connect_remote_stream(stream.clone(),
-                                                                           remote_stream.clone(),
-                                                                           cipher.clone());
+                        let mut remote_local_stream = stream.clone();
+                        let mut remote_remote_stream = remote_stream.clone();
+                        let mut remote_cipher = cipher.clone();
+                        spawn(proc() {
+                            TcpRelayServer::handle_connect_remote(&mut remote_local_stream,
+                                                                  &mut remote_remote_stream,
+                                                                  &mut remote_cipher);
+                        });
 
-                        loop {
-                            match stream.read(buf) {
-                                Ok(len) => {
-                                    let real_buf = buf.slice_to(len);
-                                    let decrypted_msg = cipher.decrypt(real_buf);
-                                    remote_stream.write(decrypted_msg.as_slice())
-                                            .ok().expect("Error occurs while writing to remote stream");
-                                },
-                                Err(err) => {
-                                    match err.kind {
-                                        EndOfFile | TimedOut => {},
-                                        _ => {
-                                            error!("Error occurs while reading from client stream: {}", err);
-                                        }
-                                    }
-                                    break
-                                }
-                            }
-                        }
+                        TcpRelayServer::handle_connect_local(&mut stream,
+                                                             &mut remote_stream,
+                                                             &mut cipher);
                     });
                 },
                 Err(e) => {

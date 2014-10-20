@@ -57,7 +57,7 @@ impl TcpRelayLocal {
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
-    fn handle_connect_local_stream(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
+    fn handle_connect_local(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
                                    cipher: &mut CipherVariant) {
         let mut buf = [0u8, .. 0xffff];
 
@@ -76,8 +76,12 @@ impl TcpRelayLocal {
                                     error!("Error occurs while writing to remote stream: {}", err);
                                 }
                             }
-                            local_stream.close_read()
-                                    .ok().expect("Error occurs while closing read channel of local stream");
+                            match local_stream.close_read() {
+                                Ok(..) => (),
+                                Err(err) => {
+                                    error!("Error occurs while closing local read: {}", err);
+                                }
+                            }
                             break
                         }
                     }
@@ -89,58 +93,68 @@ impl TcpRelayLocal {
                             error!("Error occurs while reading from local stream: {}", err);
                         }
                     }
-                    remote_stream.close_write()
-                            .ok().expect("Error occurs while closing write channel of remote stream");
+                    match remote_stream.close_write() {
+                        Ok(..) => (),
+                        Err(err) => {
+                            error!("Error occurs while closing remote write: {}", err);
+                        }
+                    }
                     break
                 }
             }
         }
     }
 
-    fn async_handle_connect_remote_stream(mut local_stream: TcpStream, mut remote_stream: TcpStream,
-                                          mut cipher: CipherVariant) {
+    fn handle_connect_remote(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
+                                          cipher: &mut CipherVariant) {
 
-        spawn(proc() {
-            let mut buf = [0u8, .. 0xffff];
+        let mut buf = [0u8, .. 0xffff];
 
-            loop {
-                match remote_stream.read_at_least(1, buf) {
-                    Ok(len) => {
-                        let real_buf = buf.slice_to(len);
+        loop {
+            match remote_stream.read_at_least(1, buf) {
+                Ok(len) => {
+                    let real_buf = buf.slice_to(len);
 
-                        let decrypted_msg = cipher.decrypt(real_buf);
+                    let decrypted_msg = cipher.decrypt(real_buf);
 
-                        // debug!("Recv from remote: {}", decrypted_msg);
+                    // debug!("Recv from remote: {}", decrypted_msg);
 
-                        match local_stream.write(decrypted_msg.as_slice()) {
-                            Ok(..) => {},
-                            Err(err) => {
-                                match err.kind {
-                                    EndOfFile | TimedOut => {},
-                                    _ => {
-                                        error!("Error occurs while writing to local stream: {}", err);
-                                    }
+                    match local_stream.write(decrypted_msg.as_slice()) {
+                        Ok(..) => {},
+                        Err(err) => {
+                            match err.kind {
+                                EndOfFile | TimedOut => {},
+                                _ => {
+                                    error!("Error occurs while writing to local stream: {}", err);
                                 }
-                                remote_stream.close_read()
-                                        .ok().expect("Error occurs while closing read channel of remote stream");
-                                break
                             }
-                        }
-                    },
-                    Err(err) => {
-                        match err.kind {
-                            EndOfFile | TimedOut => {},
-                            _ => {
-                                error!("Error occurs while reading from remote stream: {}", err);
+                            match remote_stream.close_read() {
+                                Ok(..) => (),
+                                Err(err) => {
+                                    error!("Error occurs while closing remote read: {}", err);
+                                }
                             }
+                            break
                         }
-                        local_stream.close_write()
-                                .ok().expect("Error occurs while closing write channel of local stream");
-                        break
                     }
+                },
+                Err(err) => {
+                    match err.kind {
+                        EndOfFile | TimedOut => {},
+                        _ => {
+                            error!("Error occurs while reading from remote stream: {}", err);
+                        }
+                    }
+                    match local_stream.close_write() {
+                        Ok(..) => (),
+                        Err(err) => {
+                            error!("Error occurs while closing remote write: {}", err);
+                        }
+                    }
+                    break
                 }
             }
-        });
+        }
     }
 }
 
@@ -191,12 +205,15 @@ impl Relay for TcpRelayLocal {
                             fail!("Invalid sock version {}", sock_ver);
                         }
 
-                        let mut header_buf = [0u8, .. 512];
-                        stream.read_at_least(1, header_buf)
-                                    .ok().expect("Error occurs while reading header");
+                        let (header, addr) = {
+                            let mut header_buf = [0u8, .. 512];
+                            stream.read_at_least(1, header_buf)
+                                        .ok().expect("Error occurs while reading header");
 
-                        let (header_len, addr)
-                                = parse_request_header(&mut stream, header_buf);
+                            let (header_len, addr)
+                                    = parse_request_header(&mut stream, header_buf);
+                            (header_buf.slice_to(header_len).to_vec(), addr)
+                        };
 
                         let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
                                                            *server_port.deref())
@@ -210,22 +227,29 @@ impl Relay for TcpRelayLocal {
                             SOCK5_CMD_TCP_CONNECT => {
                                 info!("CONNECT {}", addr);
 
-                                let reply = [SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED,
-                                                0x00, SOCK5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
-                                stream.write(reply)
-                                        .ok().expect("Error occurs while writing header to local stream");
+                                {
+                                    let reply = [SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED,
+                                                    0x00, SOCK5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
+                                    stream.write(reply)
+                                            .ok().expect("Error occurs while writing header to local stream");
 
-                                let encrypted_header = cipher.encrypt(header_buf.slice_to(header_len));
-                                remote_stream.write(encrypted_header.as_slice())
-                                        .ok().expect("Error occurs while writing header to remote stream");
+                                    let encrypted_header = cipher.encrypt(header.as_slice());
+                                    remote_stream.write(encrypted_header.as_slice())
+                                            .ok().expect("Error occurs while writing header to remote stream");
+                                }
 
-                                TcpRelayLocal::async_handle_connect_remote_stream(stream.clone(),
-                                                                                  remote_stream.clone(),
-                                                                                  cipher.clone());
+                                let mut remote_local_stream = stream.clone();
+                                let mut remote_remote_stream = remote_stream.clone();
+                                let mut remote_cipher = cipher.clone();
+                                spawn(proc() {
+                                    TcpRelayLocal::handle_connect_remote(&mut remote_local_stream,
+                                                                         &mut remote_remote_stream,
+                                                                         &mut remote_cipher);
+                                });
 
-                                TcpRelayLocal::handle_connect_local_stream(&mut stream,
-                                                                           &mut remote_stream,
-                                                                           &mut cipher);
+                                TcpRelayLocal::handle_connect_local(&mut stream,
+                                                                    &mut remote_stream,
+                                                                    &mut cipher);
                             },
                             SOCK5_CMD_TCP_BIND => {
                                 unimplemented!();
