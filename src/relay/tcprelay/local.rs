@@ -4,7 +4,7 @@ extern crate log;
 
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{EndOfFile, TimedOut};
+use std::io::{EndOfFile, TimedOut, NotConnected};
 
 use config::Config;
 
@@ -79,7 +79,9 @@ impl TcpRelayLocal {
                             match local_stream.close_read() {
                                 Ok(..) => (),
                                 Err(err) => {
-                                    error!("Error occurs while closing local read: {}", err);
+                                    if err.kind != NotConnected {
+                                        error!("Error occurs while closing local read: {}", err);
+                                    }
                                 }
                             }
                             break
@@ -96,7 +98,9 @@ impl TcpRelayLocal {
                     match remote_stream.close_write() {
                         Ok(..) => (),
                         Err(err) => {
-                            error!("Error occurs while closing remote write: {}", err);
+                            if err.kind != NotConnected {
+                                error!("Error occurs while closing remote write: {}", err);
+                            }
                         }
                     }
                     break
@@ -131,7 +135,9 @@ impl TcpRelayLocal {
                             match remote_stream.close_read() {
                                 Ok(..) => (),
                                 Err(err) => {
-                                    error!("Error occurs while closing remote read: {}", err);
+                                    if err.kind != NotConnected {
+                                        error!("Error occurs while closing remote read: {}", err);
+                                    }
                                 }
                             }
                             break
@@ -148,7 +154,9 @@ impl TcpRelayLocal {
                     match local_stream.close_write() {
                         Ok(..) => (),
                         Err(err) => {
-                            error!("Error occurs while closing remote write: {}", err);
+                            if err.kind != NotConnected {
+                                error!("Error occurs while closing remote write: {}", err);
+                            }
                         }
                     }
                     break

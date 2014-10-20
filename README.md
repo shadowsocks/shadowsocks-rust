@@ -60,3 +60,14 @@ Currently implementation can only be built by rust-0.12-dev. It supports the fol
 
 * CONNECT command
 * AES-(128|192|256)-CFB crypto algorithm
+
+## TODO
+
+* Documentation
+* UDP_ASSOCIATION command
+* BIND command
+* Sock5 authentication
+* Extend configuration format
+* Fully testing on server
+* Multiple worker
+* User management
