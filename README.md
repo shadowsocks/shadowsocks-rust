@@ -23,6 +23,12 @@ cargo build
 Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries of
 the official shadowsocks' implementation.
 
+Enable more crypto algorithms by passing the name `cipher-[name]` via command line argument `--features`
+
+```bash
+cargo build --features "cipher-aes-ctr"
+```
+
 ## Getting Started
 
 Create a shadowsocks' configuration file. Example
@@ -59,7 +65,7 @@ Still under developing and waiting for the final release of rust-1.0.
 Currently implementation can only be built by rust-0.12-dev. It supports the following features:
 
 * CONNECT command
-* AES-(128|192|256)-CFB crypto algorithm
+* Crypto algorithms defined in `Cargo.toml`
 
 ## TODO
 
