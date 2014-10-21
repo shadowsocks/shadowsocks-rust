@@ -10,7 +10,7 @@ use std::fmt::{Show, Formatter, WriteError, mod};
 
 use std::option::Option;
 
-use crypto::cipher::CIPHER_AES_128_CFB;
+use crypto::cipher::CIPHER_AES_256_CFB;
 
 #[deriving(Encodable, Clone)]
 pub struct Config {
@@ -32,7 +32,7 @@ impl Config {
             server_port: 8000,
             local_port: 8000,
             password: "".to_string(),
-            method: CIPHER_AES_128_CFB.to_string(),
+            method: CIPHER_AES_256_CFB.to_string(),
             timeout: None,
             fast_open: false,
         }

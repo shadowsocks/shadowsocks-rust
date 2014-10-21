@@ -11,7 +11,7 @@ use std::os;
 use shadowsocks::config::Config;
 use shadowsocks::relay::TcpRelayServer;
 use shadowsocks::relay::Relay;
-use shadowsocks::crypto::cipher::CIPHER_AES_128_CFB;
+use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
 
 fn main() {
     let opts = [
@@ -23,7 +23,7 @@ fn main() {
         optopt("k", "password", "password", ""),
         optopt("p", "server-port", "server port", ""),
         optopt("l", "local-port", "local socks5 proxy port", ""),
-        optopt("m", "encrypt-method", "entryption method", CIPHER_AES_128_CFB),
+        optopt("m", "encrypt-method", "entryption method", CIPHER_AES_256_CFB),
     ];
 
     let matches = getopts(os::args().tail(), opts).unwrap();
@@ -77,7 +77,7 @@ fn main() {
     if matches.opt_present("m") {
         let mut encrypt_meth = matches.opt_str("m").unwrap();
         if encrypt_meth.as_slice() == "" {
-            encrypt_meth = CIPHER_AES_128_CFB.to_string();
+            encrypt_meth = CIPHER_AES_256_CFB.to_string();
         }
 
         config.method = encrypt_meth;
