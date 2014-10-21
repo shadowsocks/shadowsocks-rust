@@ -8,6 +8,28 @@ authors = ["Y. T. Chung <zonyitoo@gmail.com>"]
 
 name = "shadowsocks"
 
+[features]
+default = [
+    "cipher-aes-cfb",
+    "cipher-aes-ofb",
+    "cipher-bf-cfb",
+    "cipher-cast5-cfb",
+    "cipher-des-cfb",
+    "cipher-rc2-cfb",
+]
+
+cipher-aes-cfb = []
+cipher-aes-ofb = []
+cipher-aes-ctr = []
+cipher-bf-cfb = []
+cipher-camellia-cfb = []
+cipher-cast5-cfb = []
+cipher-des-cfb = []
+cipher-idea-cfb = []
+cipher-rc2-cfb = []
+cipher-rc4-hmac-md5 = []
+cipher-seed-cfb = []
+
 [[bin]]
 
 name = "sslocal"

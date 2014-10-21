@@ -39,18 +39,69 @@ extern {
                       count: libc::c_int, key: *mut libc::c_uchar, iv: *mut libc::c_uchar) -> libc::c_int;
 
     // Ciphers
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_128_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_128_cfb1() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_128_cfb8() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_128_cfb128() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_192_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_192_cfb1() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_192_cfb8() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_192_cfb128() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_256_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_256_cfb1() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_256_cfb8() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-cfb")]
     fn EVP_aes_256_cfb128() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-aes-ofb")]
+    fn EVP_aes_128_ofb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-ofb")]
+    fn EVP_aes_192_ofb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-ofb")]
+    fn EVP_aes_256_ofb() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-aes-ctr")]
+    fn EVP_aes_128_ctr() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-ctr")]
+    fn EVP_aes_192_ctr() -> EVP_CIPHER;
+    #[cfg(feature="cipher-aes-ctr")]
+    fn EVP_aes_256_ctr() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-bf-cfb")]
+    fn EVP_bf_cfb() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-camellia-cfb")]
+    fn EVP_camellia_128_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-camellia-cfb")]
+    fn EVP_camellia_192_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-camellia-cfb")]
+    fn EVP_camellia_256_cfb() -> EVP_CIPHER;
+
+    #[cfg(feature="cipher-cast5-cfb")]
+    fn EVP_cast5_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-des-cfb")]
+    fn EVP_des_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-idea-cfb")]
+    fn EVP_idea_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-rc2-cfb")]
+    fn EVP_rc2_cfb() -> EVP_CIPHER;
+    #[cfg(feature="cipher-rc4-hmac-md5")]
+    fn EVP_rc4_hmac_md5() -> EVP_CIPHER;
+    #[cfg(feature="cipher-seed-cfb")]
+    fn EVP_seed_cfb() -> EVP_CIPHER;
 
     // MD
     fn EVP_md5() -> EVP_MD;
@@ -124,20 +175,71 @@ impl OpenSSLCrypto {
     pub fn get_cipher(cipher_type: cipher::CipherType) -> (EVP_CIPHER, uint, uint) {
         unsafe {
             match cipher_type {
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes128Cfb => { (EVP_aes_128_cfb(), 16, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes128Cfb1 => { (EVP_aes_128_cfb1(), 16, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes128Cfb8 => { (EVP_aes_128_cfb8(), 16, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes128Cfb128 => { (EVP_aes_128_cfb128(), 16, 16) },
 
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes192Cfb => { (EVP_aes_192_cfb(), 24, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes192Cfb1 => { (EVP_aes_192_cfb1(), 24, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes192Cfb8 => { (EVP_aes_192_cfb8(), 24, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes192Cfb128 => { (EVP_aes_192_cfb128(), 24, 16) },
 
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes256Cfb => { (EVP_aes_256_cfb(), 32, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes256Cfb1 => { (EVP_aes_256_cfb1(), 32, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes256Cfb8 => { (EVP_aes_256_cfb8(), 32, 16) },
+                #[cfg(feature="cipher-aes-cfb")]
                 cipher::CipherTypeAes256Cfb128 => { (EVP_aes_256_cfb128(), 32, 16) },
+
+                #[cfg(feature="cipher-aes-ofb")]
+                cipher::CipherTypeAes128Ofb => { (EVP_aes_128_ofb(), 16, 16) },
+                #[cfg(feature="cipher-aes-ofb")]
+                cipher::CipherTypeAes192Ofb => { (EVP_aes_192_ofb(), 24, 16) },
+                #[cfg(feature="cipher-aes-ofb")]
+                cipher::CipherTypeAes256Ofb => { (EVP_aes_256_ofb(), 32, 16) },
+
+                #[cfg(feature="cipher-aes-ctr")]
+                cipher::CipherTypeAes128Ctr => { (EVP_aes_128_ctr(), 16, 16) },
+                #[cfg(feature="cipher-aes-ctr")]
+                cipher::CipherTypeAes192Ctr => { (EVP_aes_192_ctr(), 24, 16) },
+                #[cfg(feature="cipher-aes-ctr")]
+                cipher::CipherTypeAes256Ctr => { (EVP_aes_256_ctr(), 32, 16) },
+
+                #[cfg(feature="cipher-bf-cfb")]
+                cipher::CipherTypeBfCfb => { (EVP_bf_cfb(), 16, 8) },
+
+                #[cfg(feature="cipher-camellia-cfb")]
+                cipher::CipherTypeCamellia128Cfb => { (EVP_camellia_128_cfb(), 16, 16) },
+                #[cfg(feature="cipher-camellia-cfb")]
+                cipher::CipherTypeCamellia192Cfb => { (EVP_camellia_192_cfb(), 24, 16) },
+                #[cfg(feature="cipher-camellia-cfb")]
+                cipher::CipherTypeCamellia256Cfb => { (EVP_camellia_256_cfb(), 32, 16) },
+
+                #[cfg(feature="cipher-cast5-cfb")]
+                cipher::CipherTypeCast5Cfb => { (EVP_cast5_cfb(), 16, 8) },
+                #[cfg(feature="cipher-des-cfb")]
+                cipher::CipherTypeDesCfb => { (EVP_des_cfb(), 8, 8) },
+                #[cfg(feature="cipher-idea-cfb")]
+                cipher::CipherTypeIdeaCfb => { (EVP_idea_cfb(), 16, 8) },
+                #[cfg(feature="cipher-rc2-cfb")]
+                cipher::CipherTypeRc2Cfb => { (EVP_rc2_cfb(), 16, 8) },
+                #[cfg(feature="cipher-rc4-hmac-md5")]
+                cipher::CipherTypeRc4HmacMd5 => { (EVP_rc4_hmac_md5(), 16, 0) },
+                #[cfg(feature="cipher-seed-cfb")]
+                cipher::CipherTypeSeedCfb => { (EVP_seed_cfb(), 16, 16) },
+
+                cipher::CipherTypeUnknown => { (ptr::null(), 0, 0) },
             }
         }
     }
@@ -301,6 +403,16 @@ fn test_aes() {
         cipher::CipherTypeAes256Cfb1,
         cipher::CipherTypeAes256Cfb8,
         cipher::CipherTypeAes256Cfb128,
+
+        cipher::CipherTypeAes128Ofb,
+        cipher::CipherTypeAes192Ofb,
+        cipher::CipherTypeAes256Ofb,
+
+        cipher::CipherTypeBfCfb,
+
+        cipher::CipherTypeCast5Cfb,
+        cipher::CipherTypeDesCfb,
+        cipher::CipherTypeRc2Cfb,
     ];
 
     for t in types.iter() {
