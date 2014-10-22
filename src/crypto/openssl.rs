@@ -40,8 +40,8 @@ type EVP_MD = *const libc::c_void;
 #[allow(non_camel_case_types)]
 type ENGINE = *const libc::c_void;
 
-const CIPHER_MODE_ENCRYPT: libc::c_int = 1;
-const CIPHER_MODE_DECRYPT: libc::c_int = 0;
+const CRYPTO_MODE_ENCRYPT: libc::c_int = 1;
+const CRYPTO_MODE_DECRYPT: libc::c_int = 0;
 
 #[allow(dead_code)]
 #[link(name="crypto")]
@@ -171,8 +171,8 @@ impl OpenSSLCrypto {
             assert!(!evp_ctx.is_null());
 
             let op = match mode {
-                CryptoModeEncrypt => 1 as libc::c_int,
-                CryptoModeDecrypt => 0 as libc::c_int,
+                CryptoModeEncrypt => CRYPTO_MODE_ENCRYPT,
+                CryptoModeDecrypt => CRYPTO_MODE_DECRYPT,
             };
 
             if EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
