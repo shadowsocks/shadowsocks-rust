@@ -32,6 +32,7 @@ use std::io::{EndOfFile, TimedOut};
 use config::Config;
 use relay::Relay;
 use relay::{parse_request_header, Sock5SocketAddr, Sock5DomainNameAddr};
+use relay::send_error_reply;
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -170,7 +171,13 @@ impl Relay for TcpRelayServer {
                             cipher.decrypt(encrypted_header)
                         };
 
-                        let (_, addr) = parse_request_header(&mut stream, header.as_slice());
+                        let (_, addr) = match parse_request_header(header.as_slice()) {
+                            Ok((header_len, addr)) => (header_len, addr),
+                            Err(err_code) => {
+                                send_error_reply(&mut stream, err_code);
+                                fail!("Error occurs while parsing request header");
+                            }
+                        };
                         info!("Connecting to {}", addr);
                         let mut remote_stream = match addr {
                             Sock5SocketAddr(sockaddr) => {

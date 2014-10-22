@@ -210,8 +210,13 @@ impl TcpRelayLocal {
             stream.read_at_least(1, header_buf)
                         .ok().expect("Error occurs while reading header");
 
-            let (header_len, addr)
-                    = parse_request_header(stream, header_buf);
+            let (header_len, addr) = match parse_request_header(header_buf) {
+                Ok((header_len, addr)) => (header_len, addr),
+                Err(err_code) => {
+                    send_error_reply(stream, err_code);
+                    fail!("Error occurs while parsing request header");
+                }
+            };
             (header_buf.slice_to(header_len).to_vec(), addr)
         };
 

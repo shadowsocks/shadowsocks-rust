@@ -17,6 +17,6 @@ impl UdpRelayServer {
 
 impl Relay for UdpRelayServer {
     fn run(&self) {
-
+        unimplemented!();
     }
 }

@@ -64,7 +64,7 @@ pub enum Sock5AddrType {
     Sock5DomainNameAddr(DomainNameAddr),
 }
 
-pub fn parse_request_header(stream: &mut TcpStream, buf: &[u8]) -> (uint, Sock5AddrType) {
+pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
     let atyp = buf[0];
     match atyp {
         SOCK5_ADDR_TYPE_IPV4 => {
@@ -78,7 +78,7 @@ pub fn parse_request_header(stream: &mut TcpStream, buf: &[u8]) -> (uint, Sock5A
             let raw_port = buf.slice(5, 7);
             let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
 
-            (7u, Sock5SocketAddr(SocketAddr{ip: v4addr, port: port}))
+            Ok((7u, Sock5SocketAddr(SocketAddr{ip: v4addr, port: port})))
         },
         SOCK5_ADDR_TYPE_IPV6 => {
             if buf.len() < 19 {
@@ -99,7 +99,7 @@ pub fn parse_request_header(stream: &mut TcpStream, buf: &[u8]) -> (uint, Sock5A
             // Big Endian
             let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
 
-            (19u, Sock5SocketAddr(SocketAddr{ip: v6addr, port: port}))
+            Ok((19u, Sock5SocketAddr(SocketAddr{ip: v6addr, port: port})))
         },
         SOCK5_ADDR_TYPE_DOMAIN_NAME => {
             let addr_len = buf[1] as uint;
@@ -110,15 +110,14 @@ pub fn parse_request_header(stream: &mut TcpStream, buf: &[u8]) -> (uint, Sock5A
             let raw_port = buf.slice(2 + addr_len, 4 + addr_len);
             let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
 
-            (4 + addr_len, Sock5DomainNameAddr(DomainNameAddr{
+            Ok((4 + addr_len, Sock5DomainNameAddr(DomainNameAddr{
                                                 domain_name: String::from_utf8(raw_addr.to_vec()).unwrap(),
                                                 port: port,
-                                            }))
+                                            })))
         },
         _ => {
             // Address type not supported
-            send_error_reply(stream, SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED);
-            fail!("Unsupported address type: {}", atyp);
+            Err(SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED)
         }
     }
 }
