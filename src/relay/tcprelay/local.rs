@@ -29,6 +29,7 @@ use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, NotConnected};
 use std::io::net::ip::Port;
+use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
 use config::Config;
 
@@ -36,6 +37,7 @@ use relay::Relay;
 use relay::{parse_request_header, send_error_reply};
 use relay::{SOCK5_VERSION, SOCK5_AUTH_METHOD_NONE};
 use relay::{SOCK5_CMD_TCP_CONNECT, SOCK5_CMD_TCP_BIND, SOCK5_CMD_UDP_ASSOCIATE};
+use relay::{SOCK5_ADDR_TYPE_IPV6, SOCK5_ADDR_TYPE_IPV4};
 use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED};
 use relay::SOCK5_REPLY_SUCCEEDED;
 
@@ -43,6 +45,7 @@ use crypto::cipher;
 use crypto::cipher::CipherVariant;
 use crypto::cipher::Cipher;
 
+#[deriving(Clone)]
 pub struct TcpRelayLocal {
     config: Config,
 }
@@ -243,15 +246,45 @@ impl TcpRelayLocal {
                                                          &mut remote_remote_stream,
                                                          &mut remote_cipher));
 
-                TcpRelayLocal::handle_connect_local(stream,
-                                                    &mut remote_stream,
-                                                    &mut cipher);
+                let mut local_local_stream = stream.clone();
+                spawn(proc()
+                    TcpRelayLocal::handle_connect_local(&mut local_local_stream,
+                                                        &mut remote_stream,
+                                                        &mut cipher));
             },
             SOCK5_CMD_TCP_BIND => {
                 unimplemented!();
             },
             SOCK5_CMD_UDP_ASSOCIATE => {
-                unimplemented!();
+                info!("UDP ASSOCIATE {}", addr);
+
+                let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+                let mut reply = vec![SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED, 0x00,
+                                SOCK5_CMD_UDP_ASSOCIATE];
+                match sockname.ip {
+                    Ipv4Addr(v1, v2, v3, v4) => {
+                        let ip = [v1, v2, v3, v4];
+                        reply.push(SOCK5_ADDR_TYPE_IPV4);
+                        reply.push_all(ip)
+                    },
+                    Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
+                        let ip = [(v1 >> 8) as u8, (v1 & 0xff) as u8,
+                         (v2 >> 8) as u8, (v2 & 0xff) as u8,
+                         (v3 >> 8) as u8, (v3 & 0xff) as u8,
+                         (v4 >> 8) as u8, (v4 & 0xff) as u8,
+                         (v5 >> 8) as u8, (v5 & 0xff) as u8,
+                         (v6 >> 8) as u8, (v6 & 0xff) as u8,
+                         (v7 >> 8) as u8, (v7 & 0xff) as u8,
+                         (v8 >> 8) as u8, (v8 & 0xff) as u8];
+                        reply.push(SOCK5_ADDR_TYPE_IPV6);
+                        reply.push_all(ip);
+                    }
+                }
+
+                reply.push((sockname.port >> 8) as u8);
+                reply.push((sockname.port & 0xff) as u8);
+
+                stream.write(reply.as_slice()).ok().expect("Failed to write to local stream");
             },
             _ => {
                 // unsupported CMD
@@ -259,9 +292,6 @@ impl TcpRelayLocal {
                 fail!("Unsupported command");
             }
         }
-
-        drop(stream);
-        drop(remote_stream);
     }
 }
 

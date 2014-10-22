@@ -39,6 +39,7 @@ use crypto::cipher::CipherVariant;
 
 use std::io::net::addrinfo::get_host_addresses;
 
+#[deriving(Clone)]
 pub struct TcpRelayServer {
     config: Config,
 }
@@ -200,10 +201,10 @@ impl Relay for TcpRelayServer {
                             TcpRelayServer::handle_connect_remote(&mut remote_local_stream,
                                                                   &mut remote_remote_stream,
                                                                   &mut remote_cipher));
-
-                        TcpRelayServer::handle_connect_local(&mut stream,
-                                                             &mut remote_stream,
-                                                             &mut cipher);
+                        spawn(proc()
+                            TcpRelayServer::handle_connect_local(&mut stream,
+                                                                 &mut remote_stream,
+                                                                 &mut cipher));
                     });
                 },
                 Err(e) => {

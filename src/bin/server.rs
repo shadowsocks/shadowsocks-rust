@@ -51,8 +51,7 @@ use getopts::{optopt, optflag, getopts, usage};
 use std::os;
 
 use shadowsocks::config::Config;
-use shadowsocks::relay::TcpRelayServer;
-use shadowsocks::relay::Relay;
+use shadowsocks::relay::{RelayServer, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
 
 fn main() {
@@ -129,5 +128,5 @@ fn main() {
 
     debug!("Config: {}", config)
 
-    TcpRelayServer::new(config).run();
+    RelayServer::new(config).run();
 }
