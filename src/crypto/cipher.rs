@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//!
 
 use crypto::openssl;
 
@@ -28,40 +28,68 @@ pub trait Cipher {
     fn decrypt(&mut self, data: &[u8]) -> Vec<u8>;
 }
 
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_128_CFB: &'static str = "aes-128-cfb";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_128_CFB_1: &'static str = "aes-128-cfb1";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_128_CFB_8: &'static str = "aes-128-cfb8";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_128_CFB_128: &'static str = "aes-128-cfb128";
 
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_192_CFB: &'static str = "aes-192-cfb";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_192_CFB_1: &'static str = "aes-192-cfb1";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_192_CFB_8: &'static str = "aes-192-cfb8";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_192_CFB_128: &'static str = "aes-192-cfb128";
 
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_256_CFB: &'static str = "aes-256-cfb";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_256_CFB_1: &'static str = "aes-256-cfb1";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_256_CFB_8: &'static str = "aes-256-cfb8";
+#[cfg(feature="cipher-aes-cfb")]
 pub const CIPHER_AES_256_CFB_128: &'static str = "aes-256-cfb128";
 
+#[cfg(feature="cipher-aes-ofb")]
 pub const CIPHER_AES_128_OFB: &'static str = "aes-128-ofb";
+#[cfg(feature="cipher-aes-ofb")]
 pub const CIPHER_AES_192_OFB: &'static str = "aes-192-ofb";
+#[cfg(feature="cipher-aes-ofb")]
 pub const CIPHER_AES_256_OFB: &'static str = "aes-256-ofb";
 
+#[cfg(feature="cipher-aes-ctr")]
 pub const CIPHER_AES_128_CTR: &'static str = "aes-128-ctr";
+#[cfg(feature="cipher-aes-ctr")]
 pub const CIPHER_AES_192_CTR: &'static str = "aes-192-ctr";
+#[cfg(feature="cipher-aes-ctr")]
 pub const CIPHER_AES_256_CTR: &'static str = "aes-256-ctr";
 
+#[cfg(feature="cipher-bf-cfb")]
 pub const CIPHER_BF_CFB: &'static str = "bf-cfb";
 
+#[cfg(feature="cipher-camellia-cfb")]
 pub const CIPHER_CAMELLIA_128_CFB: &'static str = "camellia-128-cfb";
+#[cfg(feature="cipher-camellia-cfb")]
 pub const CIPHER_CAMELLIA_192_CFB: &'static str = "camellia-192-cfb";
+#[cfg(feature="cipher-camellia-cfb")]
 pub const CIPHER_CAMELLIA_256_CFB: &'static str = "camellia-256-cfb";
 
+#[cfg(feature="cipher-cast5-cfb")]
 pub const CIPHER_CAST5_CFB: &'static str = "cast5-cfb";
+#[cfg(feature="cipher-des-cfb")]
 pub const CIPHER_DES_CFB: &'static str = "des-cfb";
+#[cfg(feature="cipher-idea-cfb")]
 pub const CIPHER_IDEA_CFB: &'static str = "idea-cfb";
+#[cfg(feature="cipher-rc2-cfb")]
 pub const CIPHER_RC2_CFB: &'static str = "rc2-cfb";
+#[cfg(feature="cipher-rc4-hmac-md5")]
 pub const CIPHER_RC4_HMAC_MD5: &'static str = "rc4-md5";
+#[cfg(feature="cipher-seed-cfb")]
 pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
 
 #[deriving(Clone)]
@@ -124,6 +152,19 @@ impl Cipher for CipherVariant {
     }
 }
 
+/// Get a Cipher with the provided name
+///
+/// If the cipher name `method` is not defined or enabled, this function should return `None`,
+/// otherwise, it will generate a new cipher with the provided `key`.
+///
+/// ```rust
+/// let mut cipher = match cipher::with_name("cipher-aes-256-cfb", "cipher_password".as_bytes()) {
+///     Some(cipher) => { cipher },
+///     None => { fail!("Undefined cipher!") },
+/// };
+/// ```
+///
+/// *Note: The cipher have to be mutable if you want to use it for encrypting and decrypting.*
 pub fn with_name(method: &str, key: &[u8]) -> Option<CipherVariant> {
     match method {
         #[cfg(feature="cipher-aes-cfb")]

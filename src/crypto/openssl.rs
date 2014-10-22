@@ -330,6 +330,20 @@ impl Drop for OpenSSLCrypto {
     }
 }
 
+/// The Cipher binding for OpenSSL's `libcrypto`.
+///
+/// It should be noticed that the decipher needs to read the iv (initialization vector)
+/// from the first call of `decrypt`. So the cipher will have to insert the iv into
+/// the front of the encrypted data.
+///
+/// *Note: This behavior works just the same as the official version of shadowsocks.*
+///
+/// ```rust
+/// let mut cipher = OpenSSLCipher::new(cipher::CipherTypeAes128Cfb, "password".as_bytes());
+/// let message = "hello world";
+/// let encrypted_message = cipher.encrypt(message.as_bytes());
+/// let decrypted_message = cipher.decrypt(encrypted_message.as_slice());
+/// ```
 #[deriving(Clone)]
 pub struct OpenSSLCipher {
     encryptor: Option<OpenSSLCrypto>,
@@ -340,23 +354,12 @@ pub struct OpenSSLCipher {
 
 impl OpenSSLCipher {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8]) -> OpenSSLCipher {
-        // let enc = OpenSSLCrypto::new(cipher_type, key, CryptoModeEncrypt);
-        // let dec = OpenSSLCrypto::new(cipher_type, key, CryptoModeDecrypt);
-
         OpenSSLCipher {
             encryptor: None,
             decryptor: None,
             key: key.to_vec(),
             cipher_type: cipher_type,
         }
-    }
-
-    pub fn init(&mut self, key: &[u8], iv: &[u8]) {
-        let encryptor = OpenSSLCrypto::new(self.cipher_type, key, iv, CryptoModeEncrypt);
-        let decryptor = OpenSSLCrypto::new(self.cipher_type, key, iv, CryptoModeDecrypt);
-
-        self.encryptor = Some(encryptor);
-        self.decryptor = Some(decryptor);
     }
 }
 
