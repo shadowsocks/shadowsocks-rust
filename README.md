@@ -43,13 +43,12 @@ Create a shadowsocks' configuration file. Example
     "timeout": 300,
     "method": "aes-256-cfb",
     "fast_open": false,
-    "workers": 1
 }
 ```
 
 Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
 
-In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one server.
+In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one server:
 
 ```json
 {
@@ -68,11 +67,13 @@ In shadowsocks-rust, we also have a extended configuration file format, which is
             "method": "aes-128-cfb"
         }
     ],
-    "local_port":8388,
+    "local_port": 8388,
     "local_address":"127.0.0.1",
-    "fast_open":false
+    "fast_open": false
 }
 ```
+
+The `sslocal` will use a load balancing algorithm to dispatch packages to all servers.
 
 Start local and server shadowsocks with
 
@@ -91,6 +92,7 @@ Currently implementation can only be built by rust-0.12-dev. It supports the fol
 
 * CONNECT command
 * Crypto algorithms defined in `Cargo.toml`
+* **Load balancing**
 
 ## TODO
 
