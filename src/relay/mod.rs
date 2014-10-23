@@ -33,7 +33,7 @@ pub mod tcprelay;
 // pub mod udprelay;
 pub mod local;
 pub mod server;
-mod loadbalancer;
+mod loadbalancing;
 
 pub trait Relay {
     fn run(&self);

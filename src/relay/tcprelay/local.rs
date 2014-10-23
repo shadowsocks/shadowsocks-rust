@@ -40,7 +40,7 @@ use relay::{SOCK5_CMD_TCP_CONNECT, SOCK5_CMD_TCP_BIND, SOCK5_CMD_UDP_ASSOCIATE};
 use relay::{SOCK5_ADDR_TYPE_IPV6, SOCK5_ADDR_TYPE_IPV4};
 use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED};
 use relay::SOCK5_REPLY_SUCCEEDED;
-use relay::loadbalancer::{ServerLoadBalancer, RoundRobinServerLoadBalancer};
+use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use crypto::cipher;
 use crypto::cipher::CipherVariant;
@@ -306,7 +306,7 @@ impl TcpRelayLocal {
 
 impl Relay for TcpRelayLocal {
     fn run(&self) {
-        let mut server_load_balancer = Arc::new(RoundRobinServerLoadBalancer::new(self.config.clone()));
+        let mut server_load_balancer = Arc::new(RoundRobin::new(self.config.clone()));
 
         let local_conf = self.config.local.unwrap();
 
