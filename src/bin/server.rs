@@ -19,28 +19,28 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! This is a binary running in the server environment
-//!
-//! Before start this program, you have to put a `config.json` under current working
-//! Directory, or you have to specify the path to the configuration file.
-//!
-//! The configuration file is in JSON format. It should at least contains following
-//! attributes:
-//!
-//! ```json
-//! {
-//!     "server": "my_server_ip",
-//!     "server_port": 8388,
-//!     "local_address": "127.0.0.1",
-//!     "local_port": 1080,
-//!     "password": "mypassword",
-//!     "timeout": 300,
-//!     "method": "aes-256-cfb",
-//! }
-//! ```
-//!
-
 #![feature(phase)]
+
+/// This is a binary running in the server environment
+///
+/// Before start this program, you have to put a `config.json` under current working
+/// Directory, or you have to specify the path to the configuration file.
+///
+/// The configuration file is in JSON format. It should at least contains following
+/// attributes:
+///
+/// ```json
+/// {
+///     "server": "my_server_ip",
+///     "server_port": 8388,
+///     "local_address": "127.0.0.1",
+///     "local_port": 1080,
+///     "password": "mypassword",
+///     "timeout": 300,
+///     "method": "aes-256-cfb",
+/// }
+/// ```
+///
 
 extern crate getopts;
 extern crate shadowsocks;
