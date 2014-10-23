@@ -100,7 +100,7 @@ Currently implementation can only be built by rust-0.12-dev. It supports the fol
 * UDP_ASSOCIATION command
 * BIND command
 * Sock5 authentication
-* Extend configuration format
+* <del>Extend configuration format</del>
 * Fully testing on server
 * Multiple worker
 * User management

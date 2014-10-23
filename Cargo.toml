@@ -1,7 +1,7 @@
 [package]
 
 name = "shadowsocks-rust"
-version = "0.0.1"
+version = "0.9.0"
 authors = ["Y. T. Chung <zonyitoo@gmail.com>"]
 
 [lib]
@@ -39,7 +39,3 @@ path = "src/bin/local.rs"
 
 name = "ssserver"
 path = "src/bin/server.rs"
-
-# [dependencies.rust-crypto]
-
-# git = "https://github.com/DaGenix/rust-crypto.git"

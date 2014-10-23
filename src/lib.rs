@@ -31,7 +31,7 @@ extern crate log;
 
 extern crate native;
 
-pub const VERSION: &'static str = "0.0.1";
+pub const VERSION: &'static str = "0.9.0";
 
 pub mod config;
 pub mod relay;
