@@ -67,20 +67,17 @@
 
 extern crate serialize;
 
-use serialize::{Encodable, Encoder};
 use serialize::json;
-use serialize::json::PrettyEncoder;
 use std::io::{File, Read, Open};
 use std::io::net::ip::{Port, SocketAddr};
 
 use std::to_string::ToString;
-use std::fmt::{Show, Formatter, WriteError, mod};
 
 use std::option::Option;
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
-#[deriving(Encodable, Clone)]
+#[deriving(Clone, Show)]
 pub struct ServerConfig {
     pub address: String,
     pub port: Port,
@@ -89,28 +86,16 @@ pub struct ServerConfig {
     pub timeout: Option<u64>,
 }
 
-#[deriving(Encodable, Clone)]
+#[deriving(Clone, Show)]
 pub enum ServerConfigVariant {
     SingleServer(ServerConfig),
     MultipleServer(Vec<ServerConfig>),
 }
 
-#[deriving(Clone)]
-pub struct ClientConfig(pub SocketAddr);
-impl<E, S:Encoder<E>> Encodable<S, E> for ClientConfig {
-    fn encode(&self, s: &mut S) -> Result<(), E> {
-        s.emit_str(self.to_string().as_slice())
-    }
-}
+#[deriving(Clone, Show)]
+pub type ClientConfig = SocketAddr;
 
-impl Show for ClientConfig {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let &ClientConfig(sa) = self;
-        sa.fmt(f)
-    }
-}
-
-#[deriving(Encodable, Clone)]
+#[deriving(Clone, Show)]
 pub struct Config {
     pub server: Option<ServerConfigVariant>,
     pub local: Option<ClientConfig>,
@@ -192,12 +177,12 @@ impl Config {
         if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {
             config.local = match o.find(&"local_address".to_string()) {
                 Some(local_addr) => {
-                    Some(ClientConfig(SocketAddr {
+                    Some(SocketAddr {
                         ip: from_str(local_addr.as_string().expect("`local_address` should be a string"))
                             .expect("`local_address` is not a valid IP address"),
                         port: o.find(&"local_port".to_string()).unwrap()
                             .as_u64().expect("`local_port` should be an integer") as Port,
-                    }))
+                    })
                 },
                 None => None,
             };
@@ -248,15 +233,5 @@ impl Config {
         };
 
         Config::parse_json_object(json_object)
-    }
-}
-
-impl Show for Config {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let mut encoder = PrettyEncoder::new(f);
-        match self.encode(&mut encoder) {
-            Ok(..) => Ok(()),
-            Err(..) => Err(WriteError),
-        }
     }
 }

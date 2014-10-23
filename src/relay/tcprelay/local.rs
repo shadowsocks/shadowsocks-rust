@@ -31,7 +31,7 @@ use std::io::{EndOfFile, TimedOut, NotConnected};
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
-use config::{Config, ClientConfig};
+use config::Config;
 
 use relay::Relay;
 use relay::{parse_request_header, send_error_reply};
@@ -308,7 +308,7 @@ impl Relay for TcpRelayLocal {
     fn run(&self) {
         let mut server_load_balancer = Arc::new(RoundRobinServerLoadBalancer::new(self.config.clone()));
 
-        let ClientConfig(local_conf) = self.config.local.unwrap();
+        let local_conf = self.config.local.unwrap();
 
         let mut acceptor = match TcpListener::bind(local_conf.ip.to_string().as_slice(), local_conf.port).listen() {
             Ok(acpt) => acpt,

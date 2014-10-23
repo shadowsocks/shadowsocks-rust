@@ -36,7 +36,6 @@ extern crate log;
 use getopts::{optopt, optflag, getopts, usage};
 
 use std::os;
-use std::io::net::ip::SocketAddr;
 
 use shadowsocks::config::{Config, ServerConfig, ClientConfig, SingleServer, MultipleServer};
 use shadowsocks::relay::{RelayLocal, Relay};
@@ -105,10 +104,10 @@ fn main() {
     }
 
     if matches.opt_present("b") && matches.opt_present("l") {
-        let local = ClientConfig(SocketAddr {
+        let local = ClientConfig {
             ip: from_str(matches.opt_str("b").unwrap().as_slice()).expect("`local` is not a valid IP address"),
             port: from_str(matches.opt_str("l").unwrap().as_slice()).expect("`local_port` should be an integer"),
-        });
+        };
         config.local = Some(local)
     }
 
