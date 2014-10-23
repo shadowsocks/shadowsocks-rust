@@ -26,5 +26,13 @@ extern crate log;
 
 extern crate native;
 
+use std::io::TcpStream;
+use relay::SOCKS5_VERSION;
+
 pub mod local;
 pub mod server;
+
+pub fn send_error_reply(stream: &mut TcpStream, err_code: u8) {
+    let reply = [SOCKS5_VERSION, err_code, 0x00];
+    stream.write(reply).ok().expect("Error occurs while sending errors");
+}

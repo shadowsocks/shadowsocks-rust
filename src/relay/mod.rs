@@ -26,8 +26,7 @@ pub use self::server::RelayServer;
 
 use std::fmt::{Show, Formatter, FormatError};
 use std::io::net::ip::{SocketAddr, Port};
-use std::io::TcpStream;
-use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
+    use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
 pub mod tcprelay;
 // pub mod udprelay;
@@ -144,9 +143,4 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
             Err(SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED)
         }
     }
-}
-
-pub fn send_error_reply(stream: &mut TcpStream, err_code: u8) {
-    let reply = [SOCKS5_VERSION, err_code, 0x00];
-    stream.write(reply).ok().expect("Error occurs while sending errors");
 }

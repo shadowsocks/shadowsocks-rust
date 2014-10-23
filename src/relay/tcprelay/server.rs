@@ -32,7 +32,8 @@ use std::io::{EndOfFile, TimedOut};
 use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
 use relay::{parse_request_header, Sock5SocketAddr, Sock5DomainNameAddr};
-use relay::send_error_reply;
+use relay::tcprelay::send_error_reply;
+use relay::{SOCKS5_REPLY_HOST_UNREACHABLE};
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -194,23 +195,35 @@ impl Relay for TcpRelayServer {
                         info!("Connecting to {}", addr);
                         let mut remote_stream = match addr {
                             Sock5SocketAddr(sockaddr) => {
-                                TcpStream::connect(sockaddr.ip.to_string().as_slice(), sockaddr.port)
-                                        .ok().expect("Unable to connect to remote")
+                                match TcpStream::connect(sockaddr.ip.to_string().as_slice(), sockaddr.port) {
+                                    Ok(s) => s,
+                                    Err(err) => {
+                                        send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                                        fail!("Unable to connect {}: {}", sockaddr, err)
+                                    }
+                                }
                             },
                             Sock5DomainNameAddr(domainaddr) => {
                                 let addrs = match get_host_addresses(domainaddr.domain_name.as_slice()) {
                                     Ok(ipaddrs) => ipaddrs,
                                     Err(e) => {
+                                        send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
                                         fail!("Error occurs while get_host_addresses: {}", e);
                                     }
                                 };
 
                                 if addrs.len() == 0 {
+                                    send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
                                     fail!("Cannot resolve host {}, empty host list", domainaddr.domain_name);
                                 }
 
-                                TcpRelayServer::connect_remote(addrs, domainaddr.port)
-                                        .expect(format!("Unable to resolve {}", domainaddr.domain_name).as_slice())
+                                match TcpRelayServer::connect_remote(addrs, domainaddr.port) {
+                                    Some(s) => s,
+                                    None => {
+                                        send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                                        fail!("Unable to resolve host {}", domainaddr)
+                                    }
+                                }
                             }
                         };
 

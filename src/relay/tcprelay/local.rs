@@ -27,18 +27,20 @@ extern crate log;
 
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{EndOfFile, TimedOut, NotConnected};
+use std::io::{EndOfFile, TimedOut, NotConnected,
+    ConnectionFailed, ConnectionRefused, ConnectionReset, ConnectionAborted};
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
 use config::Config;
 
 use relay::Relay;
-use relay::{parse_request_header, send_error_reply};
+use relay::parse_request_header;
+use relay::tcprelay::send_error_reply;
 use relay::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
 use relay::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
 use relay::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
-use relay::{SOCKS5_REPLY_COMMAND_NOT_SUPPORTED};
+use relay::{SOCKS5_REPLY_COMMAND_NOT_SUPPORTED, SOCKS5_REPLY_HOST_UNREACHABLE, SOCKS5_REPLY_NETWORK_UNREACHABLE};
 use relay::SOCKS5_REPLY_SUCCEEDED;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
@@ -224,9 +226,21 @@ impl TcpRelayLocal {
             (header_buf.slice_to(header_len).to_vec(), addr)
         };
 
-        let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
-                                           server_port)
-                        .ok().expect("Error occurs while connecting to remote server");
+        let mut remote_stream = match TcpStream::connect(server_addr.as_slice(),
+                                           server_port) {
+            Ok(s) => s,
+            Err(err) => {
+                match err.kind {
+                    ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
+                        send_error_reply(stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                    },
+                    _ => {
+                        send_error_reply(stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
+                    }
+                }
+                fail!("Failed to connect remote server: {}", err);
+            }
+        };
 
         let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                        password.as_slice().as_bytes())
@@ -262,6 +276,7 @@ impl TcpRelayLocal {
                                                         &mut cipher));
             },
             SOCKS5_CMD_TCP_BIND => {
+                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
                 unimplemented!();
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
