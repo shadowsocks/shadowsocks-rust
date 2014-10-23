@@ -19,14 +19,59 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//! This is a mod for storing and parsing configuration
+//!
+//! According to shadowsocks' official documentation, the standard configuration
+//! file should be in JSON format:
+//!
+//! ```ignore
+//! {
+//!     "server": "127.0.0.1",
+//!     "server_port": 1080,
+//!     "local_port": 8388,
+//!     "password": "the-password",
+//!     "timeout": 300,
+//!     "method": "aes-256-cfb",
+//!     "local_address": "127.0.0.1",
+//!     "fast_open": false
+//! }
+//! ```
+//!
+//! But this configuration is not for using multiple shadowsocks server, so we
+//! introduce an extended configuration file format:
+//!
+//! ```ignore
+//! {
+//!     "servers": [
+//!         {
+//!             "address": "127.0.0.1",
+//!             "port": 1080,
+//!             "password": "hellofuck",
+//!             "method": "bf-cfb"
+//!         },
+//!         {
+//!             "address": "127.0.0.1",
+//!             "port": 1081,
+//!             "password": "hellofuck",
+//!             "method": "aes-128-cfb"
+//!         }
+//!     ],
+//!     "local_port": 8388,
+//!     "local_address": "127.0.0.1",
+//!     "fast_open": false
+//! }
+//! ```
+//!
+//! These defined server will be used with a load balancing algorithm.
+//!
 
 extern crate serialize;
 
-use serialize::Encodable;
+use serialize::{Encodable, Encoder};
 use serialize::json;
 use serialize::json::PrettyEncoder;
 use std::io::{File, Read, Open};
+use std::io::net::ip::{Port, SocketAddr};
 
 use std::to_string::ToString;
 use std::fmt::{Show, Formatter, WriteError, mod};
@@ -36,27 +81,47 @@ use std::option::Option;
 use crypto::cipher::CIPHER_AES_256_CFB;
 
 #[deriving(Encodable, Clone)]
-pub struct Config {
-    pub server: String,
-    pub local: String,
-    pub server_port: u16,
-    pub local_port: u16,
+pub struct ServerConfig {
+    pub address: String,
+    pub port: Port,
     pub password: String,
     pub method: String,
     pub timeout: Option<u64>,
+}
+
+#[deriving(Encodable, Clone)]
+pub enum ServerConfigVariant {
+    SingleServer(ServerConfig),
+    MultipleServer(Vec<ServerConfig>),
+}
+
+#[deriving(Clone)]
+pub struct ClientConfig(pub SocketAddr);
+impl<E, S:Encoder<E>> Encodable<S, E> for ClientConfig {
+    fn encode(&self, s: &mut S) -> Result<(), E> {
+        s.emit_str(self.to_string().as_slice())
+    }
+}
+
+impl Show for ClientConfig {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let &ClientConfig(sa) = self;
+        sa.fmt(f)
+    }
+}
+
+#[deriving(Encodable, Clone)]
+pub struct Config {
+    pub server: Option<ServerConfigVariant>,
+    pub local: Option<ClientConfig>,
     pub fast_open: bool,
 }
 
 impl Config {
     pub fn new() -> Config {
-        Config{
-            server: "127.0.0.1".to_string(),
-            local: "127.0.0.1".to_string(),
-            server_port: 8000,
-            local_port: 8000,
-            password: "".to_string(),
-            method: CIPHER_AES_256_CFB.to_string(),
-            timeout: None,
+        Config {
+            server: None,
+            local: None,
             fast_open: false,
         }
     }
@@ -64,53 +129,88 @@ impl Config {
     fn parse_json_object(o: &json::JsonObject) -> Option<Config> {
         let mut config = Config::new();
 
-        for (key, value) in o.iter() {
-            match key.as_slice() {
-                "server" => {
-                    config.server = match value.as_string() {
-                        Some(v) => v.to_string(),
-                        None => return None,
-                    };
-                },
-                "server_port" => {
-                    config.server_port = match value.as_i64() {
-                        Some(v) => v as u16,
-                        None => return None,
-                    };
-                },
-                "local_port" => {
-                    config.local_port = match value.as_i64() {
-                        Some(v) => v as u16,
-                        None => return None,
-                    };
-                },
-                "password" => {
-                    config.password = match value.as_string() {
-                        Some(v) => v.to_string(),
-                        None => return None,
-                    };
-                },
-                "method" => {
-                    config.method = match value.as_string() {
-                        Some(v) => v.to_string(),
-                        None => return None,
-                    };
-                },
-                "timeout" => {
-                    config.timeout = match value.as_i64() {
-                        Some(v) => Some(v as u64),
-                        None => return None,
-                    };
-                },
-                "fast_open" => {
-                    config.fast_open = match value.as_boolean() {
-                        Some(v) => v,
-                        None => return None,
-                    }
-                },
-                _ => (),
+        if o.contains_key(&"servers".to_string()) {
+            let server_list = o.find(&"servers".to_string()).unwrap()
+                .as_list().expect("servers should be a list");
+
+            let mut servers = Vec::new();
+            for server in server_list.iter() {
+                let mut method = server.find(&"method".to_string()).expect("You need to specify a method")
+                                        .as_string().expect("method should be a string");
+                if method == "" {
+                    method = CIPHER_AES_256_CFB;
+                }
+
+                let server_cfg = ServerConfig {
+                    address: server.find(&"address".to_string()).expect("You need to specify a server address")
+                                        .as_string().expect("address should be a string").to_string(),
+                    port: server.find(&"port".to_string()).expect("You need to specify a server port")
+                                        .as_u64().expect("port should be an integer") as Port,
+                    password: server.find(&"password".to_string()).expect("You need to specify a password")
+                                        .as_string().expect("password should be a string").to_string(),
+                    method: method.to_string(),
+                    timeout: match server.find(&"timeout".to_string()) {
+                        Some(t) => Some(t.as_u64().expect("timeout should be an integer") * 1000),
+                        None => None,
+                    },
+                };
+                servers.push(server_cfg);
             }
+
+            config.server = Some(MultipleServer(servers));
+
+        } else if o.contains_key(&"server".to_string())
+                && o.contains_key(&"server_port".to_string())
+                && o.contains_key(&"password".to_string())
+                && o.contains_key(&"method".to_string()) {
+            // Traditional configuration file
+            let timeout = match o.find(&"timeout".to_string()) {
+                Some(t) => Some(t.as_u64().expect("timeout should be an integer") * 1000),
+                None => None,
+            };
+
+            let mut method = o.find(&"method".to_string()).unwrap()
+                    .as_string().expect("method should be a string");
+            if method == "" {
+                method = CIPHER_AES_256_CFB;
+            }
+
+            let single_server = SingleServer(ServerConfig {
+                address: o.find(&"server".to_string()).unwrap()
+                    .as_string().expect("server should be a string").to_string(),
+                port: o.find(&"server_port".to_string()).unwrap()
+                    .as_u64().expect("server_port should be an integer") as Port,
+                password: o.find(&"password".to_string()).unwrap()
+                    .as_string().expect("password should be a string").to_string(),
+                method: method.to_string(),
+                timeout: timeout,
+            });
+
+            config.server = Some(single_server);
         }
+
+        if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {
+            config.local = match o.find(&"local_address".to_string()) {
+                Some(local_addr) => {
+                    Some(ClientConfig(SocketAddr {
+                        ip: from_str(local_addr.as_string().expect("`local_address` should be a string"))
+                            .expect("`local_address` is not a valid IP address"),
+                        port: o.find(&"local_port".to_string()).unwrap()
+                            .as_u64().expect("`local_port` should be an integer") as Port,
+                    }))
+                },
+                None => None,
+            };
+        } else if !o.contains_key(&"local_address".to_string()) && !o.contains_key(&"local_port".to_string()) {
+            // Do nothing
+        } else {
+            fail!("You have to provide `local_address` and `local_port` together");
+        }
+
+        config.fast_open = match o.find(&"fast_open".to_string()) {
+            Some(fo) => fo.as_boolean().expect("fast_open should be an boolean value"),
+            None => false,
+        };
 
         Some(config)
     }

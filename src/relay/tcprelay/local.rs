@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//! TcpRelay server that running on local environment
 
 #[phase(plugin, link)]
 extern crate log;
@@ -31,7 +31,7 @@ use std::io::{EndOfFile, TimedOut, NotConnected};
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
-use config::Config;
+use config::{Config, ClientConfig};
 
 use relay::Relay;
 use relay::{parse_request_header, send_error_reply};
@@ -40,6 +40,7 @@ use relay::{SOCK5_CMD_TCP_CONNECT, SOCK5_CMD_TCP_BIND, SOCK5_CMD_UDP_ASSOCIATE};
 use relay::{SOCK5_ADDR_TYPE_IPV6, SOCK5_ADDR_TYPE_IPV4};
 use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED};
 use relay::SOCK5_REPLY_SUCCEEDED;
+use relay::loadbalancer::{ServerLoadBalancer, RoundRobinServerLoadBalancer};
 
 use crypto::cipher;
 use crypto::cipher::CipherVariant;
@@ -52,6 +53,9 @@ pub struct TcpRelayLocal {
 
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
+        if c.server.is_none() || c.local.is_none() {
+            fail!("You have to provide configuration for server and local");
+        }
         TcpRelayLocal {
             config: c,
         }
@@ -193,8 +197,8 @@ impl TcpRelayLocal {
     }
 
     fn handle_client(stream: &mut TcpStream,
-                     server_addr: Arc<String>, server_port: Arc<Port>,
-                     password: Arc<String>, encrypt_method: Arc<String>) {
+                     server_addr: String, server_port: Port,
+                     password: String, encrypt_method: String) {
         TcpRelayLocal::do_handshake(stream);
 
         let raw_header_part1 = stream.read_exact(3)
@@ -221,7 +225,7 @@ impl TcpRelayLocal {
         };
 
         let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
-                                           *server_port.deref())
+                                           server_port)
                         .ok().expect("Error occurs while connecting to remote server");
 
         let mut cipher = cipher::with_name(encrypt_method.as_slice(),
@@ -302,39 +306,27 @@ impl TcpRelayLocal {
 
 impl Relay for TcpRelayLocal {
     fn run(&self) {
-        let local_addr = self.config.local.as_slice();
-        let local_port = self.config.local_port;
+        let mut server_load_balancer = Arc::new(RoundRobinServerLoadBalancer::new(self.config.clone()));
 
-        let server_addr = Arc::new(self.config.server.clone());
-        let server_port = Arc::new(self.config.server_port);
+        let ClientConfig(local_conf) = self.config.local.unwrap();
 
-        let password = Arc::new(self.config.password.clone());
-        let encrypt_method = Arc::new(self.config.method.clone());
-
-        let timeout = match self.config.timeout {
-            Some(timeout) => Some(timeout * 1000),
-            None => None
-        };
-
-        let mut acceptor = match TcpListener::bind(local_addr, local_port).listen() {
+        let mut acceptor = match TcpListener::bind(local_conf.ip.to_string().as_slice(), local_conf.port).listen() {
             Ok(acpt) => acpt,
             Err(e) => {
                 fail!("Error occurs while listening local address: {}", e.to_string());
             }
         };
 
-        info!("Shadowsocks listening on {}:{}", local_addr, local_port);
+        info!("Shadowsocks listening on {}", local_conf);
 
         loop {
             match acceptor.accept() {
                 Ok(mut stream) => {
-                    stream.set_timeout(timeout);
-
-                    let server_addr = server_addr.clone();
-                    let server_port = server_port.clone();
-
-                    let password = password.clone();
-                    let encrypt_method = encrypt_method.clone();
+                    let (server_addr, server_port, password, encrypt_method) = {
+                        let slb = server_load_balancer.make_unique();
+                        let ref s = slb.pick_server();
+                        (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
+                    };
 
                     spawn(proc()
                         TcpRelayLocal::handle_client(&mut stream,

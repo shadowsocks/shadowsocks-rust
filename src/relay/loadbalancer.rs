@@ -20,34 +20,37 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /* code */
-use relay::Relay;
-use relay::tcprelay::local::TcpRelayLocal;
-// use relay::udprelay::local::UdpRelayLocal;
-use config::Config;
 
-#[deriving(Clone)]
-pub struct RelayLocal {
-    tcprelay: TcpRelayLocal,
-    // udprelay: UdpRelayLocal,
+use config::{Config, ServerConfigVariant, SingleServer, MultipleServer, ServerConfig};
+
+pub trait ServerLoadBalancer {
+    fn pick_server<'a>(&'a mut self) -> &'a ServerConfig;
 }
 
-impl RelayLocal {
-    pub fn new(config: Config) -> RelayLocal {
-        let tcprelay = TcpRelayLocal::new(config.clone());
-        // let udprelay = UdpRelayLocal::new(config.clone());
-        RelayLocal {
-            tcprelay: tcprelay,
-            // udprelay: udprelay,
+#[deriving(Clone)]
+pub struct RoundRobinServerLoadBalancer {
+    server: ServerConfigVariant,
+    index: uint,
+}
+
+impl RoundRobinServerLoadBalancer {
+    pub fn new(config: Config) -> RoundRobinServerLoadBalancer {
+        RoundRobinServerLoadBalancer {
+            server: config.server.expect("server should not be None"),
+            index: 0u,
         }
     }
 }
 
-impl Relay for RelayLocal {
-    fn run(&self) {
-        let tcprelay = self.tcprelay.clone();
-        spawn(proc() tcprelay.run());
-
-        // let udprelay = self.udprelay.clone();
-        // spawn(proc() udprelay.run());
+impl ServerLoadBalancer for RoundRobinServerLoadBalancer {
+    fn pick_server<'a>(&'a mut self) -> &'a ServerConfig {
+        match self.server {
+            SingleServer(ref s) => s,
+            MultipleServer(ref slist) => {
+                let ref s = slist[self.index];
+                self.index = (self.index + 1) % slist.len();
+                s
+            }
+        }
     }
 }

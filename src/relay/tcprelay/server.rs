@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//! TcpRelay server that running on the server side
 
 #[phase(plugin, link)]
 extern crate log;
@@ -29,7 +29,7 @@ use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::net::ip::{Port, IpAddr};
 use std::io::{EndOfFile, TimedOut};
 
-use config::Config;
+use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
 use relay::{parse_request_header, Sock5SocketAddr, Sock5DomainNameAddr};
 use relay::send_error_reply;
@@ -47,6 +47,18 @@ pub struct TcpRelayServer {
 
 impl TcpRelayServer {
     pub fn new(c: Config) -> TcpRelayServer {
+        if c.server.is_none() {
+            fail!("You have to provide a server configuration");
+        } else {
+            match c.server.clone().unwrap() {
+                SingleServer(..) => (),
+                MultipleServer(slist) => {
+                    if slist.len() != 1 {
+                        fail!("You have to provide exact 1 server configuration");
+                    }
+                }
+            }
+        }
         TcpRelayServer {
             config: c,
         }
@@ -130,18 +142,19 @@ impl TcpRelayServer {
 
 impl Relay for TcpRelayServer {
     fn run(&self) {
-        let server_addr = self.config.server.as_slice();
-        let server_port = self.config.server_port;
+        let (server_addr, server_port, password, encrypt_method, timeout) = {
+                let s = match self.config.clone().server.unwrap() {
+                    SingleServer(ref s) => {
+                        s.clone()
+                    },
+                    MultipleServer(slist) => {
+                        slist[0].clone()
+                    }
+                };
+                (s.address.to_string(), s.port, Arc::new(s.password.clone()), Arc::new(s.method.clone()), s.timeout)
+            };
 
-        let password = Arc::new(self.config.password.clone());
-        let encrypt_method = Arc::new(self.config.method.clone());
-
-        let timeout = match self.config.timeout {
-            Some(timeout) => Some(timeout * 1000),
-            None => None
-        };
-
-        let mut acceptor = match TcpListener::bind(server_addr, server_port).listen() {
+        let mut acceptor = match TcpListener::bind(server_addr.as_slice(), server_port).listen() {
             Ok(acpt) => acpt,
             Err(e) => {
                 fail!("Error occurs while listening server address: {}", e.to_string());

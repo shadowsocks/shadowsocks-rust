@@ -49,6 +49,31 @@ Create a shadowsocks' configuration file. Example
 
 Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
 
+In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one server.
+
+```json
+{
+    "servers": [
+        {
+            "address": "127.0.0.1",
+            "port": 1080,
+            "password": "hellofuck",
+            "method": "bf-cfb",
+            "timeout": 300,
+        },
+        {
+            "address": "127.0.0.1",
+            "port": 1081,
+            "password": "hellofuck",
+            "method": "aes-128-cfb"
+        }
+    ],
+    "local_port":8388,
+    "local_address":"127.0.0.1",
+    "fast_open":false
+}
+```
+
 Start local and server shadowsocks with
 
 ```

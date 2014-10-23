@@ -19,28 +19,16 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![feature(phase)]
+//! This is a binary running in the server environment
+//!
+//! You have to provide all needed configuration attributes via command line parameters,
+//! or you could specify a configuration file. The format of configuration file is defined
+//! in mod `config`.
+//!
+//! *It should be notice that the extented configuration file is not suitable for the server
+//! side.*
 
-/// This is a binary running in the server environment
-///
-/// Before start this program, you have to put a `config.json` under current working
-/// Directory, or you have to specify the path to the configuration file.
-///
-/// The configuration file is in JSON format. It should at least contains following
-/// attributes:
-///
-/// ```json
-/// {
-///     "server": "my_server_ip",
-///     "server_port": 8388,
-///     "local_address": "127.0.0.1",
-///     "local_port": 1080,
-///     "password": "mypassword",
-///     "timeout": 300,
-///     "method": "aes-256-cfb",
-/// }
-/// ```
-///
+#![feature(phase)]
 
 extern crate getopts;
 extern crate shadowsocks;
@@ -49,8 +37,9 @@ extern crate log;
 
 use getopts::{optopt, optflag, getopts, usage};
 use std::os;
+use std::io::net::ip::SocketAddr;
 
-use shadowsocks::config::Config;
+use shadowsocks::config::{Config, ServerConfig, ClientConfig, SingleServer, MultipleServer};
 use shadowsocks::relay::{RelayServer, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
 
@@ -85,43 +74,43 @@ fn main() {
             Config::load_from_file(matches.opt_str("c")
                                             .unwrap().as_slice()).unwrap()
         } else {
-            match Config::load_from_file("config.json") {
-                Some(c) => c,
-                None => {
-                    error!("Cannot find any `config.json` under current directory");
-                    error!("You have to specify a config file");
-                    return;
-                }
-            }
+            Config::new()
         };
 
-    if matches.opt_present("s") {
-        let server_ip = matches.opt_str("s").unwrap();
-        config.server = server_ip;
-    }
-    if matches.opt_present("b") {
-        let local_ip = matches.opt_str("b").unwrap();
-        config.local = local_ip;
-    }
-    if matches.opt_present("k") {
-        let passwd = matches.opt_str("k").unwrap();
-        config.password = passwd;
-    }
-    if matches.opt_present("p") {
-        let server_port = matches.opt_str("p").unwrap();
-        config.server_port = from_str(server_port.as_slice()).unwrap();
-    }
-    if matches.opt_present("l") {
-        let local_port = matches.opt_str("l").unwrap();
-        config.local_port = from_str(local_port.as_slice()).unwrap();
-    }
-    if matches.opt_present("m") {
-        let mut encrypt_meth = matches.opt_str("m").unwrap();
-        if encrypt_meth.as_slice() == "" {
-            encrypt_meth = CIPHER_AES_256_CFB.to_string();
+    if matches.opt_present("s") && matches.opt_present("p") && matches.opt_present("k") && matches.opt_present("m") {
+        let sc = ServerConfig {
+            address: matches.opt_str("s").unwrap(),
+            port: from_str(matches.opt_str("p").unwrap().as_slice()).expect("`port` should be an integer"),
+            password: matches.opt_str("k").unwrap(),
+            method: matches.opt_str("m").unwrap(),
+            timeout: None,
+        };
+        match config.server {
+            Some(ref mut server) => {
+                match *server {
+                    SingleServer(..) => {
+                        *server = SingleServer(sc)
+                    },
+                    MultipleServer(ref mut server_list) => {
+                        server_list.push(sc)
+                    }
+                }
+            },
+            None => { config.server = Some(SingleServer(sc)) },
         }
+    } else if !matches.opt_present("s") && !matches.opt_present("b")
+            && !matches.opt_present("k") && !matches.opt_present("m") {
+        // Do nothing
+    } else {
+        fail!("`server`, `server_port`, `method` and `password` should be provided together");
+    }
 
-        config.method = encrypt_meth;
+    if matches.opt_present("b") && matches.opt_present("l") {
+        let local = ClientConfig(SocketAddr {
+            ip: from_str(matches.opt_str("b").unwrap().as_slice()).expect("`local` is not a valid IP address"),
+            port: from_str(matches.opt_str("l").unwrap().as_slice()).expect("`local_port` should be an integer"),
+        });
+        config.local = Some(local)
     }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
