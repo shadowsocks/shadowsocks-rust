@@ -2,7 +2,7 @@ language: rust
 
 before_install:
     - sudo apt-get update -qq
-    - sudo apt-get install -qq libssl-dev
+    - sudo apt-get install -qq libssl-dev libcrypto1.0.0-udeb
 
 script:
     - cargo build -v
