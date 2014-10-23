@@ -320,7 +320,7 @@ impl TcpRelayLocal {
             _ => {
                 // unsupported CMD
                 send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
-                fail!("Unsupported command");
+                warn!("Unsupported command {}", cmd);
             }
         }
     }
