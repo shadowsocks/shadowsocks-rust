@@ -39,30 +39,30 @@ pub trait Relay {
     fn run(&self);
 }
 
-pub const SOCK5_VERSION : u8 = 0x05;
+pub const SOCKS5_VERSION : u8 = 0x05;
 
-pub const SOCK5_AUTH_METHOD_NONE            : u8 = 0x00;
-pub const SOCK5_AUTH_METHOD_GSSAPI          : u8 = 0x01;
-pub const SOCK5_AUTH_METHOD_PASSWORD        : u8 = 0x02;
-pub const SOCK5_AUTH_METHOD_NOT_ACCEPTABLE  : u8 = 0xff;
+pub const SOCKS5_AUTH_METHOD_NONE            : u8 = 0x00;
+pub const SOCKS5_AUTH_METHOD_GSSAPI          : u8 = 0x01;
+pub const SOCKS5_AUTH_METHOD_PASSWORD        : u8 = 0x02;
+pub const SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE  : u8 = 0xff;
 
-pub const SOCK5_CMD_TCP_CONNECT   : u8 = 0x01;
-pub const SOCK5_CMD_TCP_BIND      : u8 = 0x02;
-pub const SOCK5_CMD_UDP_ASSOCIATE : u8 = 0x03;
+pub const SOCKS5_CMD_TCP_CONNECT   : u8 = 0x01;
+pub const SOCKS5_CMD_TCP_BIND      : u8 = 0x02;
+pub const SOCKS5_CMD_UDP_ASSOCIATE : u8 = 0x03;
 
-pub const SOCK5_ADDR_TYPE_IPV4        : u8 = 0x01;
-pub const SOCK5_ADDR_TYPE_DOMAIN_NAME : u8 = 0x03;
-pub const SOCK5_ADDR_TYPE_IPV6        : u8 = 0x04;
+pub const SOCKS5_ADDR_TYPE_IPV4        : u8 = 0x01;
+pub const SOCKS5_ADDR_TYPE_DOMAIN_NAME : u8 = 0x03;
+pub const SOCKS5_ADDR_TYPE_IPV6        : u8 = 0x04;
 
-pub const SOCK5_REPLY_SUCCEEDED                     : u8 = 0x00;
-pub const SOCK5_REPLY_GENERAL_FAILURE               : u8 = 0x01;
-pub const SOCK5_REPLY_CONNECTION_NOT_ALLOWED        : u8 = 0x02;
-pub const SOCK5_REPLY_NETWORK_UNREACHABLE           : u8 = 0x03;
-pub const SOCK5_REPLY_HOST_UNREACHABLE              : u8 = 0x04;
-pub const SOCK5_REPLY_CONNECTION_REFUSED            : u8 = 0x05;
-pub const SOCK5_REPLY_TTL_EXPIRED                   : u8 = 0x06;
-pub const SOCK5_REPLY_COMMAND_NOT_SUPPORTED         : u8 = 0x07;
-pub const SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED    : u8 = 0x08;
+pub const SOCKS5_REPLY_SUCCEEDED                     : u8 = 0x00;
+pub const SOCKS5_REPLY_GENERAL_FAILURE               : u8 = 0x01;
+pub const SOCKS5_REPLY_CONNECTION_NOT_ALLOWED        : u8 = 0x02;
+pub const SOCKS5_REPLY_NETWORK_UNREACHABLE           : u8 = 0x03;
+pub const SOCKS5_REPLY_HOST_UNREACHABLE              : u8 = 0x04;
+pub const SOCKS5_REPLY_CONNECTION_REFUSED            : u8 = 0x05;
+pub const SOCKS5_REPLY_TTL_EXPIRED                   : u8 = 0x06;
+pub const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED         : u8 = 0x07;
+pub const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED    : u8 = 0x08;
 
 #[deriving(Show)]
 pub enum Sock5CmdType {
@@ -91,7 +91,7 @@ pub enum Sock5AddrType {
 pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
     let atyp = buf[0];
     match atyp {
-        SOCK5_ADDR_TYPE_IPV4 => {
+        SOCKS5_ADDR_TYPE_IPV4 => {
             if buf.len() < 7 {
                 fail!("Invalid header");
             }
@@ -104,7 +104,7 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
 
             Ok((7u, Sock5SocketAddr(SocketAddr{ip: v4addr, port: port})))
         },
-        SOCK5_ADDR_TYPE_IPV6 => {
+        SOCKS5_ADDR_TYPE_IPV6 => {
             if buf.len() < 19 {
                 fail!("Invalid header");
             }
@@ -125,7 +125,7 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
 
             Ok((19u, Sock5SocketAddr(SocketAddr{ip: v6addr, port: port})))
         },
-        SOCK5_ADDR_TYPE_DOMAIN_NAME => {
+        SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
             let addr_len = buf[1] as uint;
             if buf.len() < 4 + addr_len {
                 fail!("Invalid header");
@@ -141,12 +141,12 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, Sock5AddrType), u8> {
         },
         _ => {
             // Address type not supported
-            Err(SOCK5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED)
+            Err(SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED)
         }
     }
 }
 
 pub fn send_error_reply(stream: &mut TcpStream, err_code: u8) {
-    let reply = [SOCK5_VERSION, err_code, 0x00];
+    let reply = [SOCKS5_VERSION, err_code, 0x00];
     stream.write(reply).ok().expect("Error occurs while sending errors");
 }

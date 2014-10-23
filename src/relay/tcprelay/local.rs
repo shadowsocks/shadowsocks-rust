@@ -35,11 +35,11 @@ use config::Config;
 
 use relay::Relay;
 use relay::{parse_request_header, send_error_reply};
-use relay::{SOCK5_VERSION, SOCK5_AUTH_METHOD_NONE};
-use relay::{SOCK5_CMD_TCP_CONNECT, SOCK5_CMD_TCP_BIND, SOCK5_CMD_UDP_ASSOCIATE};
-use relay::{SOCK5_ADDR_TYPE_IPV6, SOCK5_ADDR_TYPE_IPV4};
-use relay::{SOCK5_REPLY_COMMAND_NOT_SUPPORTED};
-use relay::SOCK5_REPLY_SUCCEEDED;
+use relay::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
+use relay::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
+use relay::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
+use relay::{SOCKS5_REPLY_COMMAND_NOT_SUPPORTED};
+use relay::SOCKS5_REPLY_SUCCEEDED;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use crypto::cipher;
@@ -71,7 +71,7 @@ impl TcpRelayLocal {
         let handshake_header = stream.read_exact(2).ok().expect("Error occurs while receiving handshake header");
         let (sock_ver, nmethods) = (handshake_header[0], handshake_header[1]);
 
-        if sock_ver != SOCK5_VERSION {
+        if sock_ver != SOCKS5_VERSION {
             fail!("Invalid sock version {}", sock_ver);
         }
 
@@ -84,7 +84,7 @@ impl TcpRelayLocal {
         // +----+--------+
         // | 1  |   1    |
         // +----+--------+
-        let data_to_send: &[u8] = [SOCK5_VERSION, SOCK5_AUTH_METHOD_NONE];
+        let data_to_send: &[u8] = [SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE];
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
@@ -205,7 +205,7 @@ impl TcpRelayLocal {
                                         .ok().expect("Error occurs while reading request header");
         let (sock_ver, cmd) = (raw_header_part1[0], raw_header_part1[1]);
 
-        if sock_ver != SOCK5_VERSION {
+        if sock_ver != SOCKS5_VERSION {
             fail!("Invalid sock version {}", sock_ver);
         }
 
@@ -233,12 +233,12 @@ impl TcpRelayLocal {
                                 .expect("Unsupported cipher");
 
         match cmd {
-            SOCK5_CMD_TCP_CONNECT => {
+            SOCKS5_CMD_TCP_CONNECT => {
                 info!("CONNECT {}", addr);
 
                 {
-                    let reply = [SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED,
-                                    0x00, SOCK5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
+                    let reply = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED,
+                                    0x00, SOCKS5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
                     stream.write(reply)
                             .ok().expect("Error occurs while writing header to local stream");
 
@@ -261,19 +261,19 @@ impl TcpRelayLocal {
                                                         &mut remote_stream,
                                                         &mut cipher));
             },
-            SOCK5_CMD_TCP_BIND => {
+            SOCKS5_CMD_TCP_BIND => {
                 unimplemented!();
             },
-            SOCK5_CMD_UDP_ASSOCIATE => {
+            SOCKS5_CMD_UDP_ASSOCIATE => {
                 info!("UDP ASSOCIATE {}", addr);
 
                 let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-                let mut reply = vec![SOCK5_VERSION, SOCK5_REPLY_SUCCEEDED, 0x00,
-                                SOCK5_CMD_UDP_ASSOCIATE];
+                let mut reply = vec![SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00,
+                                SOCKS5_CMD_UDP_ASSOCIATE];
                 match sockname.ip {
                     Ipv4Addr(v1, v2, v3, v4) => {
                         let ip = [v1, v2, v3, v4];
-                        reply.push(SOCK5_ADDR_TYPE_IPV4);
+                        reply.push(SOCKS5_ADDR_TYPE_IPV4);
                         reply.push_all(ip)
                     },
                     Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
@@ -285,7 +285,7 @@ impl TcpRelayLocal {
                          (v6 >> 8) as u8, (v6 & 0xff) as u8,
                          (v7 >> 8) as u8, (v7 & 0xff) as u8,
                          (v8 >> 8) as u8, (v8 & 0xff) as u8];
-                        reply.push(SOCK5_ADDR_TYPE_IPV6);
+                        reply.push(SOCKS5_ADDR_TYPE_IPV6);
                         reply.push_all(ip);
                     }
                 }
@@ -297,7 +297,7 @@ impl TcpRelayLocal {
             },
             _ => {
                 // unsupported CMD
-                send_error_reply(stream, SOCK5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
                 fail!("Unsupported command");
             }
         }
