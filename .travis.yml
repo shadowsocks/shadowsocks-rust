@@ -1,8 +1,12 @@
 language: rust
 
 before_install:
-    - sudo apt-get update -qq
-    - sudo apt-get install -qq libssl-dev libcrypto1.0.0-udeb
+    - wget https://www.openssl.org/source/openssl-1.0.1j.tar.gz
+    - tar xf openssl-1.0.1j.tar.gz
+    - cd openssl-1.0.1j
+    - ./config --prefix=/usr -shared
+    - make
+    - sudo make install
 
 script:
     - cargo build -v
