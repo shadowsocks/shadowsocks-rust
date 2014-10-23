@@ -132,6 +132,7 @@ extern {
     fn EVP_sha1() -> EVP_MD;
 }
 
+/// This two modes will be converted into the last parameter of `EVP_CipherInit_ex`.
 enum CryptoMode {
     CryptoModeDecrypt,
     CryptoModeEncrypt,
@@ -339,10 +340,16 @@ impl Drop for OpenSSLCrypto {
 /// *Note: This behavior works just the same as the official version of shadowsocks.*
 ///
 /// ```rust
+/// use shadowsocks::crypto::cipher;
+/// use shadowsocks::crypto::openssl::OpenSSLCipher;
+/// use shadowsocks::crypto::cipher::Cipher;
+///
 /// let mut cipher = OpenSSLCipher::new(cipher::CipherTypeAes128Cfb, "password".as_bytes());
 /// let message = "hello world";
 /// let encrypted_message = cipher.encrypt(message.as_bytes());
 /// let decrypted_message = cipher.decrypt(encrypted_message.as_slice());
+///
+/// assert!(decrypted_message.as_slice() == message.as_bytes());
 /// ```
 #[deriving(Clone)]
 pub struct OpenSSLCipher {

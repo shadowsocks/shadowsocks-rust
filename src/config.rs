@@ -77,6 +77,7 @@ use std::option::Option;
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
+/// Configuration for a server
 #[deriving(Clone, Show)]
 pub struct ServerConfig {
     pub address: String,

@@ -1,5 +1,7 @@
 # shadowsocks-rust
 
+[![Build Status](https://travis-ci.org/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
+
 This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.

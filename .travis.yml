@@ -1,0 +1,5 @@
+language: rust
+
+script:
+    - cargo build -v
+    - cargo test -v

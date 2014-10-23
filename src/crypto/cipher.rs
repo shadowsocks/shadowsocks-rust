@@ -23,6 +23,7 @@
 
 use crypto::openssl;
 
+/// The trait for basic cipher methods
 pub trait Cipher {
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8>;
     fn decrypt(&mut self, data: &[u8]) -> Vec<u8>;
@@ -158,10 +159,19 @@ impl Cipher for CipherVariant {
 /// otherwise, it will generate a new cipher with the provided `key`.
 ///
 /// ```rust
-/// let mut cipher = match cipher::with_name("cipher-aes-256-cfb", "cipher_password".as_bytes()) {
+/// use shadowsocks::crypto::cipher;
+/// use shadowsocks::crypto::cipher::Cipher;
+///
+/// let mut cipher = match cipher::with_name("aes-256-cfb", "cipher_password".as_bytes()) {
 ///     Some(cipher) => { cipher },
 ///     None => { fail!("Undefined cipher!") },
 /// };
+///
+/// let message = "test message".as_bytes();
+/// let encrypted_message = cipher.encrypt(message);
+/// let decrypted_message = cipher.decrypt(encrypted_message.as_slice());
+///
+/// assert!(decrypted_message.as_slice() == message);
 /// ```
 ///
 /// *Note: The cipher have to be mutable if you want to use it for encrypting and decrypting.*
