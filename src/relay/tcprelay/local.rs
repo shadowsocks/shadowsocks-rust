@@ -198,6 +198,37 @@ impl TcpRelayLocal {
         }
     }
 
+    #[allow(dead_code)]
+    fn handle_udp_associate_local(stream: &mut TcpStream) {
+        let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+        let mut reply = vec![SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00,
+                        SOCKS5_CMD_UDP_ASSOCIATE];
+        match sockname.ip {
+            Ipv4Addr(v1, v2, v3, v4) => {
+                let ip = [v1, v2, v3, v4];
+                reply.push(SOCKS5_ADDR_TYPE_IPV4);
+                reply.push_all(ip)
+            },
+            Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
+                let ip = [(v1 >> 8) as u8, (v1 & 0xff) as u8,
+                 (v2 >> 8) as u8, (v2 & 0xff) as u8,
+                 (v3 >> 8) as u8, (v3 & 0xff) as u8,
+                 (v4 >> 8) as u8, (v4 & 0xff) as u8,
+                 (v5 >> 8) as u8, (v5 & 0xff) as u8,
+                 (v6 >> 8) as u8, (v6 & 0xff) as u8,
+                 (v7 >> 8) as u8, (v7 & 0xff) as u8,
+                 (v8 >> 8) as u8, (v8 & 0xff) as u8];
+                reply.push(SOCKS5_ADDR_TYPE_IPV6);
+                reply.push_all(ip);
+            }
+        }
+
+        reply.push((sockname.port >> 8) as u8);
+        reply.push((sockname.port & 0xff) as u8);
+
+        stream.write(reply.as_slice()).ok().expect("Failed to write to local stream");
+    }
+
     fn handle_client(stream: &mut TcpStream,
                      server_addr: String, server_port: Port,
                      password: String, encrypt_method: String) {
@@ -276,39 +307,15 @@ impl TcpRelayLocal {
                                                         &mut cipher));
             },
             SOCKS5_CMD_TCP_BIND => {
+                warn!("BIND is not supported");
                 send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
-                unimplemented!();
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
                 info!("UDP ASSOCIATE {}", addr);
+                warn!("UDP ASSOCIATE is not supported");
+                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
 
-                let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-                let mut reply = vec![SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00,
-                                SOCKS5_CMD_UDP_ASSOCIATE];
-                match sockname.ip {
-                    Ipv4Addr(v1, v2, v3, v4) => {
-                        let ip = [v1, v2, v3, v4];
-                        reply.push(SOCKS5_ADDR_TYPE_IPV4);
-                        reply.push_all(ip)
-                    },
-                    Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
-                        let ip = [(v1 >> 8) as u8, (v1 & 0xff) as u8,
-                         (v2 >> 8) as u8, (v2 & 0xff) as u8,
-                         (v3 >> 8) as u8, (v3 & 0xff) as u8,
-                         (v4 >> 8) as u8, (v4 & 0xff) as u8,
-                         (v5 >> 8) as u8, (v5 & 0xff) as u8,
-                         (v6 >> 8) as u8, (v6 & 0xff) as u8,
-                         (v7 >> 8) as u8, (v7 & 0xff) as u8,
-                         (v8 >> 8) as u8, (v8 & 0xff) as u8];
-                        reply.push(SOCKS5_ADDR_TYPE_IPV6);
-                        reply.push_all(ip);
-                    }
-                }
-
-                reply.push((sockname.port >> 8) as u8);
-                reply.push((sockname.port & 0xff) as u8);
-
-                stream.write(reply.as_slice()).ok().expect("Failed to write to local stream");
+                // TcpRelayLocal::handle_udp_associate_local(stream);
             },
             _ => {
                 // unsupported CMD
