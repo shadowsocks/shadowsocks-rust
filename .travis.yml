@@ -1,18 +1,17 @@
 language: rust
 
 before_install:
-    - wget https://www.openssl.org/source/openssl-1.0.1j.tar.gz
-    - tar xf openssl-1.0.1j.tar.gz
-    - cd openssl-1.0.1j
-    - ./config -shared
-    - echo $PWD
-    - make
+    # - wget https://www.openssl.org/source/openssl-1.0.1j.tar.gz
+    # - tar xf openssl-1.0.1j.tar.gz
+    # - cd openssl-1.0.1j
+    # - ./config -shared
+    # - make
+    - sudo apt-get update -qq
+    - sudo apt-get install libssl-dev
 
 env:
-    - LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
+    # - LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
 
 script:
-    - export LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
-    - echo $LD_LIBRARY_PATH
     - cargo build -v
     - cargo test -v
