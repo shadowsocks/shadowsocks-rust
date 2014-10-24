@@ -28,7 +28,7 @@ use std::fmt::{Show, Formatter, FormatError};
 use std::io::net::ip::{SocketAddr, Port};
     use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
-pub mod tcprelay;
+mod tcprelay;
 // pub mod udprelay;
 pub mod local;
 pub mod server;

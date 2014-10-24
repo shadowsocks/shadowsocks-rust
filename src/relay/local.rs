@@ -19,12 +19,36 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//! Local side
+
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
 // use relay::udprelay::local::UdpRelayLocal;
 use config::Config;
 
+/// Relay server running under local environment.
+///
+/// UDP Associate and Bind commands are not supported currently.
+///
+/// ```
+/// use shadowsocks::relay::Relay;
+/// use shadowsocks::relay::RelayLocal;
+/// use shadowsocks::config::{Config, ClientConfig, SingleServer, ServerConfig};
+///
+/// let mut config = Config::new();
+/// config.local = Some(ClientConfig {
+///     ip: from_str("127.0.0.1").unwrap(),
+///     port: 1080
+/// });
+/// config.server = Some(SingleServer(ServerConfig {
+///     address: "127.0.0.1".to_string(),
+///     port: 8388,
+///     password: "server-password".to_string(),
+///     method: "aes-256-cfb".to_string(),
+///     timeout: None,
+/// }));
+/// RelayLocal::new(config).run();
+/// ```
 #[deriving(Clone)]
 pub struct RelayLocal {
     tcprelay: TcpRelayLocal,

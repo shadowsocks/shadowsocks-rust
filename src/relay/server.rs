@@ -19,12 +19,35 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+//! Server side
+
 // use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
 use relay::Relay;
 use config::Config;
 
+/// Relay server running on server side.
+///
+/// UDP Associate and Bind commands are not supported currently.
+///
+/// ```
+/// use shadowsocks::relay::Relay;
+/// use shadowsocks::relay::RelayServer;
+/// use shadowsocks::config::{Config, SingleServer, ServerConfig};
+///
+/// let mut config = Config::new();
+/// config.server = Some(SingleServer(ServerConfig {
+///     address: "127.0.0.1".to_string(),
+///     port: 8388,
+///     password: "server-password".to_string(),
+///     method: "aes-256-cfb".to_string(),
+///     timeout: None,
+/// }));
+/// RelayServer::new(config).run();
+/// ```
+///
+/// It should be noticed that `config.server` has to be `Some(SingleServer)` here.
+#[deriving(Clone)]
 pub struct RelayServer {
     tcprelay: TcpRelayServer,
     // udprelay: UdpRelayServer,
