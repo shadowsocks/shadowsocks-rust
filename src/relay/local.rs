@@ -30,7 +30,7 @@ use config::Config;
 ///
 /// UDP Associate and Bind commands are not supported currently.
 ///
-/// ```
+/// ```no_run
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayLocal;
 /// use shadowsocks::config::{Config, ClientConfig, SingleServer, ServerConfig};
