@@ -6,12 +6,12 @@ This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
-*Currently developing and testing with rust-0.12-dev*
+*Currently developing and testing with rust-nightly*
 
 ## Dependences
 
 * libcrypto (OpenSSL)
-* Rust >= 0.12
+* Rust nightly
 * Cargo
 
 ## Usage
