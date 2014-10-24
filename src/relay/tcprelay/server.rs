@@ -27,7 +27,7 @@ extern crate log;
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::net::ip::{Port, IpAddr};
-use std::io::{EndOfFile, TimedOut};
+use std::io::{EndOfFile, TimedOut, BrokenPipe};
 
 use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
@@ -90,7 +90,7 @@ impl TcpRelayServer {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind {
-                                EndOfFile | TimedOut => {},
+                                EndOfFile | TimedOut | BrokenPipe => {},
                                 _ => {
                                     error!("Error occurs while writing to local stream: {}", err);
                                 }
@@ -102,7 +102,7 @@ impl TcpRelayServer {
                 },
                 Err(err) => {
                     match err.kind {
-                        EndOfFile | TimedOut => {},
+                        EndOfFile | TimedOut | BrokenPipe => {},
                         _ => {
                             error!("Error occurs while reading from remote stream: {}", err);
                         }
@@ -127,7 +127,7 @@ impl TcpRelayServer {
                 },
                 Err(err) => {
                     match err.kind {
-                        EndOfFile | TimedOut => {},
+                        EndOfFile | TimedOut | BrokenPipe => {},
                         _ => {
                             error!("Error occurs while reading from client stream: {}", err);
                         }
@@ -185,8 +185,9 @@ impl Relay for TcpRelayServer {
 
                         let (_, addr) = match parse_request_header(header.as_slice()) {
                             Ok((header_len, addr)) => (header_len, addr),
-                            Err(err_code) => {
-                                fail!("Error occurs while parsing request header: {}", err_code);
+                            Err(..) => {
+                                fail!("Error occurs while parsing request header, \
+                                            maybe wrong crypto method or password");
                             }
                         };
                         info!("Connecting to {}", addr);

@@ -86,6 +86,9 @@ ssserver -c config.json
 
 List all available arguments with `-h`.
 
+Default log level is `error`, override it by setting environment variable `RUST_LOG`. Please refer
+to [log crate](http://doc.rust-lang.org/log/index.html) for more detail.
+
 ## Notes
 
 Still under developing and waiting for the final release of rust-1.0.

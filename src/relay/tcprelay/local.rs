@@ -28,7 +28,7 @@ extern crate log;
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, NotConnected,
-    ConnectionFailed, ConnectionRefused, ConnectionReset, ConnectionAborted};
+    ConnectionFailed, ConnectionRefused, ConnectionReset, ConnectionAborted, BrokenPipe};
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
@@ -104,7 +104,7 @@ impl TcpRelayLocal {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind {
-                                EndOfFile | TimedOut => {},
+                                EndOfFile | TimedOut | BrokenPipe => {},
                                 _ => {
                                     error!("Error occurs while writing to remote stream: {}", err);
                                 }
@@ -123,7 +123,7 @@ impl TcpRelayLocal {
                 },
                 Err(err) => {
                     match err.kind {
-                        EndOfFile | TimedOut => {},
+                        EndOfFile | TimedOut | BrokenPipe => {},
                         _ => {
                             error!("Error occurs while reading from local stream: {}", err);
                         }
@@ -160,7 +160,7 @@ impl TcpRelayLocal {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind {
-                                EndOfFile | TimedOut => {},
+                                EndOfFile | TimedOut | BrokenPipe => {},
                                 _ => {
                                     error!("Error occurs while writing to local stream: {}", err);
                                 }
@@ -179,7 +179,7 @@ impl TcpRelayLocal {
                 },
                 Err(err) => {
                     match err.kind {
-                        EndOfFile | TimedOut => {},
+                        EndOfFile | TimedOut | BrokenPipe => {},
                         _ => {
                             error!("Error occurs while reading from remote stream: {}", err);
                         }
