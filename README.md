@@ -50,7 +50,7 @@ Create a shadowsocks' configuration file. Example
 
 Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
 
-In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one server:
+In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one servers:
 
 ```json
 {
@@ -58,14 +58,14 @@ In shadowsocks-rust, we also have a extended configuration file format, which is
         {
             "address": "127.0.0.1",
             "port": 1080,
-            "password": "hellofuck",
+            "password": "hello-world",
             "method": "bf-cfb",
             "timeout": 300,
         },
         {
             "address": "127.0.0.1",
             "port": 1081,
-            "password": "hellofuck",
+            "password": "hello-kitty",
             "method": "aes-128-cfb"
         }
     ],
@@ -93,7 +93,7 @@ to [log crate](http://doc.rust-lang.org/log/index.html) for more detail.
 
 Still under developing and waiting for the final release of rust-1.0.
 
-Currently implementation can only be built by rust-0.12-dev. It supports the following features:
+It supports the following features:
 
 * CONNECT command
 * Crypto algorithms defined in `Cargo.toml`
@@ -102,13 +102,16 @@ Currently implementation can only be built by rust-0.12-dev. It supports the fol
 ## TODO
 
 * Documentation
-* UDP_ASSOCIATION command
-* BIND command
-* Sock5 authentication
+* `UDP_ASSOCIATION` and `BIND` command
+* Socks5 authentication
 * <del>Extend configuration format</del>
-* Fully testing on server
-* Multiple worker
+* Fully testing on servers
+* Performance testing and improvement
+* Multiple workers
 * User management
+* PAC
+* Improved logging format (waiting for the new official log crate)
+* Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 
 ## License
 
