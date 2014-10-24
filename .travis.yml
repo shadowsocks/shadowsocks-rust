@@ -5,11 +5,14 @@ before_install:
     - tar xf openssl-1.0.1j.tar.gz
     - cd openssl-1.0.1j
     - ./config -shared
+    - echo $PWD
     - make
 
 env:
     - LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
 
 script:
+    - export LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
+    - echo $LD_LIBRARY_PATH
     - cargo build -v
     - cargo test -v
