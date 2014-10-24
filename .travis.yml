@@ -4,9 +4,11 @@ before_install:
     - wget https://www.openssl.org/source/openssl-1.0.1j.tar.gz
     - tar xf openssl-1.0.1j.tar.gz
     - cd openssl-1.0.1j
-    - ./config --prefix=/usr -shared
+    - ./config -shared
     - make
-    - sudo make install
+
+env:
+    - LD_LIBRARY_PATH=$TRAVIS_BUILD_DIR/openssl-1.0.1j:$LD_LIBRARY_PATH
 
 script:
     - cargo build -v
