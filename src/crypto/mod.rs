@@ -22,6 +22,7 @@
 //! Crypto methods for shadowsocks
 
 extern crate libc;
+extern crate test;
 
 pub mod cipher;
 pub mod openssl;

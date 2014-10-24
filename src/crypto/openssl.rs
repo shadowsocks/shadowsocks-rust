@@ -23,6 +23,7 @@
 
 extern crate libc;
 extern crate log;
+extern crate test;
 
 use crypto::cipher::Cipher;
 use crypto::cipher;
@@ -409,7 +410,7 @@ impl Cipher for OpenSSLCipher {
 }
 
 #[test]
-fn test_aes() {
+fn test_default_ciphers() {
     use std::str;
 
     let message = "hello world";
@@ -453,4 +454,49 @@ fn test_aes() {
 
         assert!(message.as_bytes() == decrypted_msg.as_slice());
     }
+}
+
+#[bench]
+fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
+    use std::rand::random;
+
+    let msg_size: uint = 0xffff;
+
+    let mut test_data = Vec::new();
+    for _ in range::<uint>(0, 100) {
+        let msg = Vec::from_fn(msg_size, |_| random::<u8>());
+        let key = Vec::from_fn(1 + random::<uint>() % 63, |_| random::<u8>());
+
+        test_data.push((msg, key));
+    }
+
+    b.iter(|| {
+        let (ref msg, ref key) = test_data[random::<uint>() % test_data.len()];
+
+        let mut cipher = OpenSSLCipher::new(cipher::CipherTypeAes256Cfb, key.as_slice());
+        cipher.encrypt(msg.as_slice());
+    });
+    b.bytes = msg_size as u64;
+}
+
+#[bench]
+fn bench_openssl_default_cipher_decrypt(b: &mut test::Bencher) {
+    use std::rand::random;
+
+    let msg_size: uint = 0xffff;
+    let mut test_data = Vec::new();
+    for _ in range::<uint>(0, 100) {
+        let msg = Vec::from_fn(msg_size, |_| random::<u8>());
+        let key = Vec::from_fn(1 + random::<uint>() % 63, |_| random::<u8>());
+        let mut cipher = OpenSSLCipher::new(cipher::CipherTypeAes256Cfb, key.as_slice());
+        let encrypted_msg = cipher.encrypt(msg.as_slice());
+        test_data.push((key, encrypted_msg));
+    }
+
+    b.iter(|| {
+        let (ref key, ref encrypted_msg) = test_data[random::<uint>() % test_data.len()];
+        let mut cipher = OpenSSLCipher::new(cipher::CipherTypeAes256Cfb, key.as_slice());
+        cipher.decrypt(encrypted_msg.as_slice());
+    });
+    b.bytes = msg_size as u64;
 }
