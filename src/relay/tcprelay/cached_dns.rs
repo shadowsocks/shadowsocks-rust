@@ -26,16 +26,14 @@ use std::io::net::addrinfo::get_host_addresses;
 use std::collections::lru_cache::LruCache;
 use std::io::net::ip::IpAddr;
 
-const DNS_CACHE_CAPACITY: uint = 200;
-
 pub struct CachedDns {
     lru_cache: LruCache<String, IpAddr>,
 }
 
 impl CachedDns {
-    pub fn new() -> CachedDns {
+    pub fn new(cache_capacity: uint) -> CachedDns {
         CachedDns {
-            lru_cache: LruCache::new(DNS_CACHE_CAPACITY),
+            lru_cache: LruCache::new(cache_capacity),
         }
     }
 

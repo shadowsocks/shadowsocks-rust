@@ -127,7 +127,7 @@ impl TcpRelayServer {
 
 impl Relay for TcpRelayServer {
     fn run(&self) {
-        let (server_addr, server_port, password, encrypt_method, timeout) = {
+        let (server_addr, server_port, password, encrypt_method, timeout, dns_cache_capacity) = {
                 let s = match self.config.clone().server.unwrap() {
                     SingleServer(ref s) => {
                         s.clone()
@@ -136,7 +136,9 @@ impl Relay for TcpRelayServer {
                         slist[0].clone()
                     }
                 };
-                (s.address.to_string(), s.port, Arc::new(s.password.clone()), Arc::new(s.method.clone()), s.timeout)
+                (s.address.to_string(), s.port,
+                 Arc::new(s.password.clone()), Arc::new(s.method.clone()),
+                 s.timeout, s.dns_cache_capacity)
             };
 
         let mut acceptor = match TcpListener::bind(server_addr.as_slice(), server_port).listen() {
@@ -148,7 +150,7 @@ impl Relay for TcpRelayServer {
 
         info!("Shadowsocks listening on {}:{}", server_addr, server_port);
 
-        let dnscache_arc = Arc::new(Mutex::new(CachedDns::new()));
+        let dnscache_arc = Arc::new(Mutex::new(CachedDns::new(dns_cache_capacity)));
 
         loop {
             match acceptor.accept() {

@@ -39,6 +39,7 @@ use getopts::{optopt, optflag, getopts, usage};
 use std::os;
 
 use shadowsocks::config::{Config, ServerConfig, ClientConfig, SingleServer, MultipleServer};
+use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayServer, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
 
@@ -83,6 +84,7 @@ fn main() {
             password: matches.opt_str("k").unwrap(),
             method: matches.opt_str("m").unwrap(),
             timeout: None,
+            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
         match config.server {
             Some(ref mut server) => {

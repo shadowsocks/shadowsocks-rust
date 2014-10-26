@@ -34,6 +34,7 @@
 //!     "method": "aes-256-cfb",
 //!     "local_address": "127.0.0.1",
 //!     "fast_open": false
+//!     "dns_cache_capacity": 65536,
 //! }
 //! ```
 //!
@@ -48,6 +49,7 @@
 //!             "port": 1080,
 //!             "password": "hellofuck",
 //!             "method": "bf-cfb"
+//!             "dns_cache_capacity": 65536,
 //!         },
 //!         {
 //!             "address": "127.0.0.1",
@@ -77,6 +79,8 @@ use std::option::Option;
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
+pub const DEFAULT_DNS_CACHE_CAPACITY: uint = 65536;
+
 /// Configuration for a server
 #[deriving(Clone, Show)]
 pub struct ServerConfig {
@@ -85,6 +89,7 @@ pub struct ServerConfig {
     pub password: String,
     pub method: String,
     pub timeout: Option<u64>,
+    pub dns_cache_capacity: uint,
 }
 
 #[deriving(Clone, Show)]
@@ -139,6 +144,10 @@ impl Config {
                         Some(t) => Some(t.as_u64().expect("timeout should be an integer") * 1000),
                         None => None,
                     },
+                    dns_cache_capacity: match server.find(&"dns_cache_capacity".to_string()) {
+                        Some(t) => t.as_u64().expect("dns_cache_capacity should be an integer") as uint,
+                        None => DEFAULT_DNS_CACHE_CAPACITY,
+                    },
                 };
                 servers.push(server_cfg);
             }
@@ -170,6 +179,10 @@ impl Config {
                     .as_string().expect("password should be a string").to_string(),
                 method: method.to_string(),
                 timeout: timeout,
+                dns_cache_capacity: match o.find(&"dns_cache_capacity".to_string()) {
+                    Some(t) => t.as_u64().expect("cache_capacity should be an integer") as uint,
+                    None => DEFAULT_DNS_CACHE_CAPACITY,
+                },
             });
 
             config.server = Some(single_server);
