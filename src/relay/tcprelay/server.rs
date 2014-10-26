@@ -192,14 +192,15 @@ impl Relay for TcpRelayServer {
                                 }
                             },
                             DomainNameAddress(ref domainaddr) => {
-                                let ipaddr = match dnscache.lock().resolve(domainaddr.domain_name.as_slice()) {
-                                    Some(addr) => addr,
-                                    None => {
-                                        fail!("Failed to resolve host {}", domainaddr)
-                                    }
+                                let ipaddr = {
+                                    // Cannot fail inside, which will cause other tasks fail, too.
+                                    let mut cache = dnscache.lock();
+                                    cache.resolve(domainaddr.domain_name.as_slice())
                                 };
 
-                                TcpStream::connect(ipaddr.to_string().as_slice(), domainaddr.port)
+                                TcpStream::connect(ipaddr.expect(
+                                                            format!("Unable to resolve {}", domainaddr).as_slice())
+                                                        .to_string().as_slice(), domainaddr.port)
                                     .ok().expect(format!("Unable to connect host {}", domainaddr).as_slice())
                             }
                         };
