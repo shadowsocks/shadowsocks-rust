@@ -31,7 +31,7 @@ use std::io::{EndOfFile, TimedOut, BrokenPipe};
 use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
 use relay::socks5::{parse_request_header, SocketAddress, DomainNameAddress};
-use relay::tcprelay::dnscache::DnsCache;
+use relay::tcprelay::cached_dns::CachedDns;
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -148,7 +148,7 @@ impl Relay for TcpRelayServer {
 
         info!("Shadowsocks listening on {}:{}", server_addr, server_port);
 
-        let dnscache_arc = Arc::new(Mutex::new(DnsCache::new()));
+        let dnscache_arc = Arc::new(Mutex::new(CachedDns::new()));
 
         loop {
             match acceptor.accept() {
@@ -190,7 +190,7 @@ impl Relay for TcpRelayServer {
                                 }
                             },
                             DomainNameAddress(ref domainaddr) => {
-                                let ipaddr = match dnscache.lock().get(domainaddr.domain_name.as_slice()) {
+                                let ipaddr = match dnscache.lock().resolve(domainaddr.domain_name.as_slice()) {
                                     Some(addr) => addr,
                                     None => {
                                         fail!("Failed to resolve host {}", domainaddr)

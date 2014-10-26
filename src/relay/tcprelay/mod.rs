@@ -29,7 +29,7 @@ extern crate native;
 use std::io::TcpStream;
 use relay::socks5::SOCKS5_VERSION;
 
-mod dnscache;
+mod cached_dns;
 pub mod local;
 pub mod server;
 
