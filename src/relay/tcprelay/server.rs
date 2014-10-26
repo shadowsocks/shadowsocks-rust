@@ -27,6 +27,8 @@ extern crate log;
 use std::sync::{Arc, Mutex};
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, BrokenPipe};
+use std::io::net::ip::SocketAddr;
+use std::time::duration::Duration;
 
 use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
@@ -108,8 +110,13 @@ impl TcpRelayServer {
                 Ok(len) => {
                     let real_buf = buf.slice_to(len);
                     let decrypted_msg = cipher.decrypt(real_buf);
-                    remote_stream.write(decrypted_msg.as_slice())
-                            .ok().expect("Error occurs while writing to remote stream");
+                    match remote_stream.write(decrypted_msg.as_slice()) {
+                        Ok(..) => {},
+                        Err(err) => {
+                            error!("Error occurs while writing to remote stream: {}", err);
+                            local_stream.close_read().unwrap();
+                        }
+                    }
                 },
                 Err(err) => {
                     match err.kind {
@@ -118,6 +125,7 @@ impl TcpRelayServer {
                             error!("Error occurs while reading from client stream: {}", err);
                         }
                     }
+                    remote_stream.close_write().unwrap();
                     break
                 }
             }
@@ -184,7 +192,7 @@ impl Relay for TcpRelayServer {
                         info!("Connecting to {}", addr);
                         let mut remote_stream = match addr {
                             SocketAddress(sockaddr) => {
-                                match TcpStream::connect(sockaddr.ip.to_string().as_slice(), sockaddr.port) {
+                                match TcpStream::connect_timeout(sockaddr, Duration::seconds(30)) {
                                     Ok(s) => s,
                                     Err(err) => {
                                         fail!("Unable to connect {}: {}", sockaddr, err)
@@ -202,8 +210,8 @@ impl Relay for TcpRelayServer {
                                     Some(ipaddrs) => {
                                         let connect_host = || {
                                             for ipaddr in ipaddrs.iter() {
-                                                match TcpStream::connect(ipaddr.to_string().as_slice(),
-                                                                         domainaddr.port) {
+                                                match TcpStream::connect_timeout(SocketAddr {ip: *ipaddr,
+                                                        port: domainaddr.port}, Duration::seconds(30)) {
                                                     Ok(stream) => return stream,
                                                     Err(err) => {
                                                         debug!("Connecting {}: {} failed", ipaddr, err);

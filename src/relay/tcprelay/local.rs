@@ -43,7 +43,8 @@ use relay::socks5::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
 use relay::socks5::{
     SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
     SOCKS5_REPLY_HOST_UNREACHABLE,
-    SOCKS5_REPLY_NETWORK_UNREACHABLE
+    SOCKS5_REPLY_NETWORK_UNREACHABLE,
+    SOCKS5_REPLY_GENERAL_FAILURE
 };
 use relay::socks5::SOCKS5_REPLY_SUCCEEDED;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
@@ -78,7 +79,9 @@ impl TcpRelayLocal {
         let (sock_ver, nmethods) = (handshake_header[0], handshake_header[1]);
 
         if sock_ver != SOCKS5_VERSION {
-            fail!("Invalid sock version {}", sock_ver);
+            // FIXME: Sometimes Chrome would send a header with version 0x50
+            send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
+            fail!("Invalid socks version \"{:x}\" in handshake", sock_ver);
         }
 
         let _ = stream.read_exact(nmethods as uint).ok().expect("Error occurs while receiving methods");
@@ -243,13 +246,20 @@ impl TcpRelayLocal {
         let (sock_ver, cmd) = (raw_header_part1[0], raw_header_part1[1]);
 
         if sock_ver != SOCKS5_VERSION {
-            fail!("Invalid sock version {}", sock_ver);
+            // FIXME: Sometimes Chrome would send a header with version 0x50
+            send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
+            fail!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
         let (header, addr) = {
             let mut header_buf = [0u8, .. 512];
-            stream.read_at_least(1, header_buf)
-                        .ok().expect("Error occurs while reading header");
+            match stream.read_at_least(1, header_buf) {
+                Ok(..) => {},
+                Err(err) => {
+                    send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
+                    fail!("Error occurs while reading header: {}", err);
+                }
+            }
 
             let (header_len, addr) = match parse_request_header(header_buf) {
                 Ok((header_len, addr)) => (header_len, addr),
