@@ -105,6 +105,7 @@ It supports the following features:
 * `UDP_ASSOCIATION` and `BIND` command
 * Socks5 authentication
 * <del>Extend configuration format</del>
+* <del>DNS cache</del>
 * Fully testing on servers
 * Performance testing and improvement
 * Multiple workers

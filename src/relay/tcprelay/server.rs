@@ -24,20 +24,18 @@
 #[phase(plugin, link)]
 extern crate log;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::net::ip::{Port, IpAddr};
 use std::io::{EndOfFile, TimedOut, BrokenPipe};
 
 use config::{Config, SingleServer, MultipleServer};
 use relay::Relay;
-use relay::{parse_request_header, Sock5SocketAddr, Sock5DomainNameAddr};
+use relay::socks5::{parse_request_header, SocketAddress, DomainNameAddress};
+use relay::tcprelay::dnscache::DnsCache;
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
 use crypto::cipher::CipherVariant;
-
-use std::io::net::addrinfo::get_host_addresses;
 
 #[deriving(Clone)]
 pub struct TcpRelayServer {
@@ -61,18 +59,6 @@ impl TcpRelayServer {
         TcpRelayServer {
             config: c,
         }
-    }
-
-    fn connect_remote(addrs: Vec<IpAddr>, port: Port) -> Option<TcpStream> {
-        for addr in addrs.iter() {
-            match TcpStream::connect(addr.to_string().as_slice(), port) {
-                Ok(s) => {
-                    return Some(s)
-                },
-                Err(..) => {}
-            }
-        }
-        None
     }
 
     fn handle_connect_remote(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
@@ -162,6 +148,8 @@ impl Relay for TcpRelayServer {
 
         info!("Shadowsocks listening on {}:{}", server_addr, server_port);
 
+        let dnscache_arc = Arc::new(Mutex::new(DnsCache::new()));
+
         loop {
             match acceptor.accept() {
                 Ok(mut stream) => {
@@ -169,6 +157,7 @@ impl Relay for TcpRelayServer {
 
                     let password = password.clone();
                     let encrypt_method = encrypt_method.clone();
+                    let dnscache = dnscache_arc.clone();
 
                     spawn(proc() {
                         let mut cipher = cipher::with_name(encrypt_method.as_slice(),
@@ -192,7 +181,7 @@ impl Relay for TcpRelayServer {
                         };
                         info!("Connecting to {}", addr);
                         let mut remote_stream = match addr {
-                            Sock5SocketAddr(sockaddr) => {
+                            SocketAddress(sockaddr) => {
                                 match TcpStream::connect(sockaddr.ip.to_string().as_slice(), sockaddr.port) {
                                     Ok(s) => s,
                                     Err(err) => {
@@ -200,24 +189,16 @@ impl Relay for TcpRelayServer {
                                     }
                                 }
                             },
-                            Sock5DomainNameAddr(domainaddr) => {
-                                let addrs = match get_host_addresses(domainaddr.domain_name.as_slice()) {
-                                    Ok(ipaddrs) => ipaddrs,
-                                    Err(e) => {
-                                        fail!("Error occurs while get_host_addresses: {}", e);
+                            DomainNameAddress(ref domainaddr) => {
+                                let ipaddr = match dnscache.lock().get(domainaddr.domain_name.as_slice()) {
+                                    Some(addr) => addr,
+                                    None => {
+                                        fail!("Failed to resolve host {}", domainaddr)
                                     }
                                 };
 
-                                if addrs.len() == 0 {
-                                    fail!("Cannot resolve host {}, empty host list", domainaddr.domain_name);
-                                }
-
-                                match TcpRelayServer::connect_remote(addrs, domainaddr.port) {
-                                    Some(s) => s,
-                                    None => {
-                                        fail!("Unable to resolve host {}", domainaddr)
-                                    }
-                                }
+                                TcpStream::connect(ipaddr.to_string().as_slice(), domainaddr.port)
+                                    .ok().expect(format!("Unable to connect host {}", domainaddr).as_slice())
                             }
                         };
 

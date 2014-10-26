@@ -19,18 +19,44 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! Relay server in local and server side implementations.
+#[phase(plugin, link)]
+extern crate log;
 
-pub use self::local::RelayLocal;
-pub use self::server::RelayServer;
+use std::io::net::addrinfo::get_host_addresses;
+use std::collections::lru_cache::LruCache;
+use std::io::net::ip::IpAddr;
 
-mod tcprelay;
-// pub mod udprelay;
-pub mod local;
-pub mod server;
-mod loadbalancing;
-mod socks5;
+const DNS_CACHE_CAPACITY: uint = 200;
 
-pub trait Relay {
-    fn run(&self);
+pub struct DnsCache {
+    lru_cache: LruCache<String, IpAddr>,
+}
+
+impl DnsCache {
+    pub fn new() -> DnsCache {
+        DnsCache {
+            lru_cache: LruCache::new(DNS_CACHE_CAPACITY),
+        }
+    }
+
+    pub fn get<'a>(&mut self, addr: &str) -> Option<IpAddr> {
+        match self.lru_cache.get(&addr.to_string()).map(|x| *x) {
+            Some(a) => {
+                Some(a.clone())
+            },
+            None => {
+                let ipaddr = match get_host_addresses(addr) {
+                    Ok(addr_list) => {
+                        addr_list[0]
+                    },
+                    Err(err) => {
+                        error!("Error while resolving {}: {}", addr, err);
+                        return None
+                    }
+                };
+                self.lru_cache.put(addr.to_string(), ipaddr);
+                Some(ipaddr)
+            }
+        }
+    }
 }

@@ -27,8 +27,9 @@ extern crate log;
 extern crate native;
 
 use std::io::TcpStream;
-use relay::SOCKS5_VERSION;
+use relay::socks5::SOCKS5_VERSION;
 
+mod dnscache;
 pub mod local;
 pub mod server;
 

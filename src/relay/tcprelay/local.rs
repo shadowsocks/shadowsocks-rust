@@ -35,13 +35,17 @@ use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use config::Config;
 
 use relay::Relay;
-use relay::parse_request_header;
+use relay::socks5::parse_request_header;
 use relay::tcprelay::send_error_reply;
-use relay::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
-use relay::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
-use relay::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
-use relay::{SOCKS5_REPLY_COMMAND_NOT_SUPPORTED, SOCKS5_REPLY_HOST_UNREACHABLE, SOCKS5_REPLY_NETWORK_UNREACHABLE};
-use relay::SOCKS5_REPLY_SUCCEEDED;
+use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
+use relay::socks5::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
+use relay::socks5::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
+use relay::socks5::{
+    SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+    SOCKS5_REPLY_HOST_UNREACHABLE,
+    SOCKS5_REPLY_NETWORK_UNREACHABLE
+};
+use relay::socks5::SOCKS5_REPLY_SUCCEEDED;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use crypto::cipher;
