@@ -27,7 +27,7 @@ use std::collections::lru_cache::LruCache;
 use std::io::net::ip::IpAddr;
 
 pub struct CachedDns {
-    lru_cache: LruCache<String, IpAddr>,
+    lru_cache: LruCache<String, Vec<IpAddr>>,
 }
 
 impl CachedDns {
@@ -37,23 +37,20 @@ impl CachedDns {
         }
     }
 
-    pub fn resolve(&mut self, addr: &str) -> Option<IpAddr> {
-        match self.lru_cache.get(&addr.to_string()).map(|x| *x) {
-            Some(a) => {
-                Some(a.clone())
-            },
+    pub fn resolve(&mut self, addr: &str) -> Option<Vec<IpAddr>> {
+        let addr_string = addr.to_string();
+        match self.lru_cache.get(&addr_string).map(|x| x.clone()) {
+            Some(addrs) => Some(addrs),
             None => {
-                let ipaddr = match get_host_addresses(addr) {
-                    Ok(addr_list) => {
-                        addr_list[0]
-                    },
+                let addrs = match get_host_addresses(addr) {
+                    Ok(addrs) => addrs,
                     Err(err) => {
-                        error!("Error while resolving {}: {}", addr, err);
-                        return None
+                        error!("Failed to resolve {}: {}", addr, err);
+                        return None;
                     }
                 };
-                self.lru_cache.put(addr.to_string(), ipaddr);
-                Some(ipaddr)
+                self.lru_cache.put(addr_string, addrs.clone());
+                Some(addrs)
             }
         }
     }

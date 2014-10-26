@@ -192,16 +192,33 @@ impl Relay for TcpRelayServer {
                                 }
                             },
                             DomainNameAddress(ref domainaddr) => {
-                                let ipaddr = {
+                                let ipaddrs = {
                                     // Cannot fail inside, which will cause other tasks fail, too.
                                     let mut cache = dnscache.lock();
                                     cache.resolve(domainaddr.domain_name.as_slice())
                                 };
 
-                                TcpStream::connect(ipaddr.expect(
-                                                            format!("Unable to resolve {}", domainaddr).as_slice())
-                                                        .to_string().as_slice(), domainaddr.port)
-                                    .ok().expect(format!("Unable to connect host {}", domainaddr).as_slice())
+                                match ipaddrs {
+                                    Some(ipaddrs) => {
+                                        let connect_host = || {
+                                            for ipaddr in ipaddrs.iter() {
+                                                match TcpStream::connect(ipaddr.to_string().as_slice(),
+                                                                         domainaddr.port) {
+                                                    Ok(stream) => return stream,
+                                                    Err(err) => {
+                                                        debug!("Connecting {}: {} failed", ipaddr, err);
+                                                    },
+                                                }
+                                            }
+                                            fail!("Unable to connect {}", domainaddr);
+                                        };
+                                        connect_host()
+                                    },
+
+                                    None => {
+                                        fail!("Failed to resolve {}", domainaddr);
+                                    }
+                                }
                             }
                         };
 
