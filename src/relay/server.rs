@@ -42,6 +42,7 @@ use config::Config;
 ///     password: "server-password".to_string(),
 ///     method: "aes-256-cfb".to_string(),
 ///     timeout: None,
+///     dns_cache_capacity: 1024,
 /// }));
 /// RelayServer::new(config).run();
 /// ```
