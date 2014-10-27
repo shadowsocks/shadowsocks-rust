@@ -116,8 +116,6 @@ extern {
     fn EVP_idea_cfb64() -> EVP_CIPHER;
     #[cfg(feature="cipher-rc2-cfb")]
     fn EVP_rc2_cfb64() -> EVP_CIPHER;
-    #[cfg(feature="cipher-rc4-hmac-md5")]
-    fn EVP_rc4_hmac_md5() -> EVP_CIPHER;
     #[cfg(feature="cipher-seed-cfb")]
     fn EVP_seed_cfb128() -> EVP_CIPHER;
 
@@ -253,8 +251,6 @@ impl OpenSSLCrypto {
                 cipher::CipherTypeIdeaCfb => { (EVP_idea_cfb64(), 16, 8) },
                 #[cfg(feature="cipher-rc2-cfb")]
                 cipher::CipherTypeRc2Cfb => { (EVP_rc2_cfb64(), 16, 8) },
-                #[cfg(feature="cipher-rc4-hmac-md5")]
-                cipher::CipherTypeRc4HmacMd5 => { (EVP_rc4_hmac_md5(), 16, 0) },
                 #[cfg(feature="cipher-seed-cfb")]
                 cipher::CipherTypeSeedCfb => { (EVP_seed_cfb128(), 16, 16) },
 

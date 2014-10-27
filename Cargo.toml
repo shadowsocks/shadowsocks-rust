@@ -27,7 +27,6 @@ cipher-cast5-cfb = []
 cipher-des-cfb = []
 cipher-idea-cfb = []
 cipher-rc2-cfb = []
-cipher-rc4-hmac-md5 = []
 cipher-seed-cfb = []
 
 [[bin]]
@@ -39,3 +38,6 @@ path = "src/bin/local.rs"
 
 name = "ssserver"
 path = "src/bin/server.rs"
+
+[dependencies.rust-crypto]
+git = "https://github.com/DaGenix/rust-crypto.git"

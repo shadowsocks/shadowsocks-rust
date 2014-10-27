@@ -23,6 +23,8 @@
 
 extern crate libc;
 extern crate test;
+extern crate "rust-crypto" as rust_crypto;
 
 pub mod cipher;
 pub mod openssl;
+pub mod rust;
