@@ -28,6 +28,9 @@ extern crate test;
 use crypto::cipher::Cipher;
 use crypto::cipher;
 
+use crypto::digest::Digest;
+use crypto::digest;
+
 use std::ptr;
 use std::clone::Clone;
 use std::mem::swap;
@@ -36,6 +39,8 @@ use std::mem::swap;
 type EVP_CIPHER_CTX = *const libc::c_void;
 #[allow(non_camel_case_types)]
 type EVP_CIPHER = *const libc::c_void;
+#[allow(non_camel_case_types)]
+type EVP_MD_CTX = *mut libc::c_void;
 #[allow(non_camel_case_types)]
 type EVP_MD = *const libc::c_void;
 #[allow(non_camel_case_types)]
@@ -118,11 +123,123 @@ extern {
     fn EVP_rc2_cfb64() -> EVP_CIPHER;
     #[cfg(feature="cipher-seed-cfb")]
     fn EVP_seed_cfb128() -> EVP_CIPHER;
+    #[cfg(any(feature="cipher-rc4", feature="cipher-rc4-md5"))]
+    fn EVP_rc4() -> EVP_CIPHER;
 
     // MD
+    fn EVP_MD_CTX_create() -> EVP_MD_CTX;
+    fn EVP_MD_CTX_init(ctx: EVP_MD_CTX);
+    fn EVP_MD_CTX_cleanup(ctx: EVP_MD_CTX);
+    fn EVP_MD_CTX_destroy(ctx: EVP_MD_CTX);
+    fn EVP_MD_CTX_copy_ex(out: EVP_MD_CTX, ctx_in: EVP_MD_CTX) -> libc::c_int;
+    fn EVP_DigestInit_ex(ctx: EVP_MD_CTX, md_type: EVP_MD, engine: ENGINE) -> libc::c_int;
+    fn EVP_DigestUpdate(ctx: EVP_MD_CTX, d: *const libc::c_void, cnt: libc::size_t) -> libc::c_int;
+    fn EVP_DigestFinal_ex(ctx: EVP_MD_CTX, md: *mut libc::c_uchar, s: *mut libc::c_uint);
+
     fn EVP_md5() -> EVP_MD;
     fn EVP_sha() -> EVP_MD;
     fn EVP_sha1() -> EVP_MD;
+}
+
+struct OpenSSLDigest {
+    md_ctx: EVP_MD_CTX,
+    digest_len: uint,
+}
+
+impl OpenSSLDigest {
+    pub fn new(t: digest::DigestType) -> OpenSSLDigest {
+        let ctx = unsafe {
+            let md_ctx = EVP_MD_CTX_create();
+            assert!(!md_ctx.is_null());
+            EVP_MD_CTX_init(md_ctx);
+            md_ctx
+        };
+
+        let dlen = unsafe {
+            let (md, len) = OpenSSLDigest::get_md(t);
+            EVP_DigestInit_ex(ctx, md, ptr::null());
+            len
+        };
+
+        OpenSSLDigest {
+            md_ctx: ctx,
+            digest_len: dlen,
+        }
+    }
+
+    pub fn get_md(t: digest::DigestType) -> (EVP_MD, uint) {
+        unsafe {
+            match t {
+                digest::Md5 => { (EVP_md5(), 16u) },
+                digest::Sha => { (EVP_sha(), 20u) },
+                digest::Sha1 => { (EVP_sha1(), 20u) },
+
+                digest::UnknownDigest => { (ptr::null(), 0u) },
+            }
+        }
+    }
+}
+
+impl Digest for OpenSSLDigest {
+    fn update(&mut self, data: &[u8]) {
+        unsafe {
+            if EVP_DigestUpdate(self.md_ctx, data.as_ptr() as *const libc::c_void, data.len() as libc::size_t)
+                    != 1 as libc::c_int {
+                fail!("Failed to call EVP_DigestUpdate");
+            }
+        }
+    }
+
+    fn digest(&mut self) -> Vec<u8> {
+        let mut dig = Vec::from_elem(self.digest_len, 0u8);
+        unsafe {
+            EVP_DigestFinal_ex(self.md_ctx, dig.as_mut_ptr(), ptr::null_mut());
+        }
+        dig
+    }
+}
+
+impl Clone for OpenSSLDigest {
+    fn clone(&self) -> OpenSSLDigest {
+        let ctx = unsafe {
+            let md_ctx = EVP_MD_CTX_create();
+            assert!(!md_ctx.is_null());
+            if EVP_MD_CTX_copy_ex(md_ctx, self.md_ctx) != 1 as libc::c_int {
+                EVP_MD_CTX_destroy(md_ctx);
+                fail!("Failed to call EVP_MD_CTX_copy_ex");
+            }
+            md_ctx
+        };
+        OpenSSLDigest {
+            md_ctx: ctx,
+            digest_len: self.digest_len,
+        }
+    }
+
+    fn clone_from(&mut self, source: &OpenSSLDigest) {
+        self.md_ctx = unsafe {
+            let md_ctx = EVP_MD_CTX_create();
+            assert!(!md_ctx.is_null());
+            if EVP_MD_CTX_copy_ex(md_ctx, source.md_ctx) != 1 as libc::c_int {
+                EVP_MD_CTX_destroy(md_ctx);
+                fail!("Failed to call EVP_MD_CTX_copy_ex");
+            }
+            EVP_MD_CTX_cleanup(self.md_ctx);
+            EVP_MD_CTX_destroy(self.md_ctx);
+            md_ctx
+        };
+        self.digest_len = source.digest_len;
+    }
+}
+
+#[unsafe_destructor]
+impl Drop for OpenSSLDigest {
+    fn drop(&mut self) {
+        unsafe {
+            EVP_MD_CTX_cleanup(self.md_ctx);
+            EVP_MD_CTX_destroy(self.md_ctx);
+        }
+    }
 }
 
 /// This two modes will be converted into the last parameter of `EVP_CipherInit_ex`.
@@ -159,7 +276,7 @@ impl OpenSSLCrypto {
         let (ctx, _, block_size) = unsafe {
             let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
 
-            assert!(iv.len() >= block_size);
+            // assert!(iv.len() >= block_size);
 
             let evp_ctx = EVP_CIPHER_CTX_new();
             assert!(!evp_ctx.is_null());
@@ -253,6 +370,10 @@ impl OpenSSLCrypto {
                 cipher::CipherTypeRc2Cfb => { (EVP_rc2_cfb64(), 16, 8) },
                 #[cfg(feature="cipher-seed-cfb")]
                 cipher::CipherTypeSeedCfb => { (EVP_seed_cfb128(), 16, 16) },
+                #[cfg(feature="cipher-rc4")]
+                cipher::CipherTypeRc4 => { (EVP_rc4(), 16, 16) },
+                #[cfg(feature="cipher-rc4-md5")]
+                cipher::CipherTypeRc4Md5 => { (EVP_rc4(), 16, 16) },
 
                 cipher::CipherTypeUnknown => { (ptr::null(), 0, 0) },
             }
@@ -366,10 +487,24 @@ impl Cipher for OpenSSLCipher {
         match self.encryptor {
             Some(ref encryptor) => { encryptor.update(data) },
             None => {
-                let (key, mut iv) = OpenSSLCrypto::bytes_to_key(
+                let (key, mut iv) = {
+                    let (key, iv) = OpenSSLCrypto::bytes_to_key(
                                     self.cipher_type,
                                     self.key.as_slice()
                                 );
+
+                    match self.cipher_type {
+                        cipher::CipherTypeRc4Md5 => {
+                            let mut md5_digest = OpenSSLDigest::new(digest::Md5);
+                            md5_digest.update(key.as_slice());
+                            md5_digest.update(iv.as_slice());
+                            (md5_digest.digest(), iv)
+                        },
+                        _ => {
+                            (key, iv)
+                        }
+                    }
+                };
 
                 let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(), CryptoModeEncrypt);
                 self.encryptor = Some(encryptor);
@@ -387,14 +522,26 @@ impl Cipher for OpenSSLCipher {
         match self.decryptor {
             Some(ref decryptor) => { decryptor.update(data) },
             None => {
-                let (key, iv) = OpenSSLCrypto::bytes_to_key(
+                let (_, _, expected_iv_len) = OpenSSLCrypto::get_cipher(self.cipher_type);
+                let (pad_key, _) = OpenSSLCrypto::bytes_to_key(
                                     self.cipher_type,
                                     self.key.as_slice()
                                 );
 
                 // Get the begining IV from the data
-                let expected_iv_len = iv.len();
                 let (real_iv, data) = data.split_at(expected_iv_len);
+
+                let key = match self.cipher_type {
+                    cipher::CipherTypeRc4Md5 => {
+                        let mut md5_digest = OpenSSLDigest::new(digest::Md5);
+                        md5_digest.update(pad_key.as_slice());
+                        md5_digest.update(real_iv.as_slice());
+                        md5_digest.digest()
+                    },
+                    _ => {
+                        pad_key
+                    }
+                };
 
                 let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv, CryptoModeDecrypt);
                 self.decryptor = Some(decryptor);

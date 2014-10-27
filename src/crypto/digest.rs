@@ -19,18 +19,17 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/* code */
+pub trait Digest {
+    fn update(&mut self, data: &[u8]);
+    fn digest(&mut self) -> Vec<u8>;
+}
 
-#![crate_type="lib"]
-#![crate_name="shadowsocks"]
-#![feature(phase, unsafe_destructor)]
+#[deriving(Clone)]
+pub enum DigestType {
+    Md5,
+    Sha1,
+    Sha,
+    UnknownDigest,
+}
 
-extern crate serialize;
-#[phase(plugin, link)]
-extern crate log;
 
-pub const VERSION: &'static str = "0.9.0";
-
-pub mod config;
-pub mod relay;
-pub mod crypto;
