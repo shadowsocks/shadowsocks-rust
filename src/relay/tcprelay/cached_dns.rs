@@ -22,36 +22,52 @@
 #[phase(plugin, link)]
 extern crate log;
 
+use std::sync::{Arc, Mutex};
+// use std::sync::atomic::{AtomicOption, SeqCst};
 use std::io::net::addrinfo::get_host_addresses;
 use std::collections::lru_cache::LruCache;
 use std::io::net::ip::IpAddr;
 
 pub struct CachedDns {
-    lru_cache: LruCache<String, Vec<IpAddr>>,
+    lru_cache: Arc<Mutex<LruCache<String, Vec<IpAddr>>>>,
 }
 
 impl CachedDns {
     pub fn new(cache_capacity: uint) -> CachedDns {
         CachedDns {
-            lru_cache: LruCache::new(cache_capacity),
+            lru_cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
         }
     }
 
-    pub fn resolve(&mut self, addr: &str) -> Option<Vec<IpAddr>> {
+    pub fn resolve(&self, addr: &str) -> Option<Vec<IpAddr>> {
         let addr_string = addr.to_string();
-        match self.lru_cache.get(&addr_string).map(|x| x.clone()) {
-            Some(addrs) => Some(addrs),
-            None => {
-                let addrs = match get_host_addresses(addr) {
-                    Ok(addrs) => addrs,
-                    Err(err) => {
-                        error!("Failed to resolve {}: {}", addr, err);
-                        return None;
-                    }
-                };
-                self.lru_cache.put(addr_string, addrs.clone());
-                Some(addrs)
+
+        {
+            let mut cache = self.lru_cache.lock();
+            match cache.get(&addr_string).map(|x| x.clone()) {
+                Some(addrs) => {
+                    debug!("DNS cache matched!: {}", addr_string);
+                    return Some(addrs)
+                },
+                None => {}
             }
         }
+
+        debug!("DNS cache missed!: {}", addr_string);
+        let addrs = match get_host_addresses(addr) {
+            Ok(addrs) => addrs,
+            Err(err) => {
+                error!("Failed to resolve {}: {}", addr, err);
+                return None;
+            }
+        };
+
+        let cloned_mutex = self.lru_cache.clone();
+        let cloned_addr = addrs.clone();
+        spawn(proc() {
+            let mut cache = cloned_mutex.lock();
+            cache.put(addr_string, cloned_addr);
+        });
+        Some(addrs)
     }
 }

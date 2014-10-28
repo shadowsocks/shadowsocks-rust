@@ -24,7 +24,7 @@
 #[phase(plugin, link)]
 extern crate log;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, BrokenPipe};
 use std::io::net::ip::SocketAddr;
@@ -158,7 +158,7 @@ impl Relay for TcpRelayServer {
 
         info!("Shadowsocks listening on {}:{}", server_addr, server_port);
 
-        let dnscache_arc = Arc::new(Mutex::new(CachedDns::new(dns_cache_capacity)));
+        let dnscache_arc = Arc::new(CachedDns::new(dns_cache_capacity));
 
         loop {
             match acceptor.accept() {
@@ -202,8 +202,7 @@ impl Relay for TcpRelayServer {
                             DomainNameAddress(ref domainaddr) => {
                                 let ipaddrs = {
                                     // Cannot fail inside, which will cause other tasks fail, too.
-                                    let mut cache = dnscache.lock();
-                                    cache.resolve(domainaddr.domain_name.as_slice())
+                                    dnscache.resolve(domainaddr.domain_name.as_slice())
                                 };
 
                                 match ipaddrs {
