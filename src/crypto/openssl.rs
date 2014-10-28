@@ -21,6 +21,8 @@
 
 //! Cipher defined with Rust binding for libcrypto (OpenSSL)
 
+#![allow(dead_code)]
+
 extern crate libc;
 extern crate log;
 extern crate test;
@@ -123,7 +125,7 @@ extern {
     fn EVP_rc2_cfb64() -> EVP_CIPHER;
     #[cfg(feature="cipher-seed-cfb")]
     fn EVP_seed_cfb128() -> EVP_CIPHER;
-    #[cfg(any(feature="cipher-rc4", feature="cipher-rc4-md5"))]
+    #[cfg(any(feature="cipher-rc4"))]
     fn EVP_rc4() -> EVP_CIPHER;
 
     // MD
@@ -372,7 +374,7 @@ impl OpenSSLCrypto {
                 cipher::SeedCfb => { (EVP_seed_cfb128(), 16, 16) },
                 #[cfg(feature="cipher-rc4")]
                 cipher::Rc4 => { (EVP_rc4(), 16, 16) },
-                #[cfg(feature="cipher-rc4-md5")]
+                #[cfg(feature="cipher-rc4")]
                 cipher::Rc4Md5 => { (EVP_rc4(), 16, 16) },
 
                 cipher::Unknown => { (ptr::null(), 0, 0) },
@@ -494,6 +496,7 @@ impl Cipher for OpenSSLCipher {
                                 );
 
                     match self.cipher_type {
+                        #[cfg(feature="cipher-rc4")]
                         cipher::Rc4Md5 => {
                             let mut md5_digest = OpenSSLDigest::new(digest::Md5);
                             md5_digest.update(key.as_slice());
@@ -532,6 +535,7 @@ impl Cipher for OpenSSLCipher {
                 let (real_iv, data) = data.split_at(expected_iv_len);
 
                 let key = match self.cipher_type {
+                    #[cfg(feature="cipher-rc4")]
                     cipher::Rc4Md5 => {
                         let mut md5_digest = OpenSSLDigest::new(digest::Md5);
                         md5_digest.update(pad_key.as_slice());

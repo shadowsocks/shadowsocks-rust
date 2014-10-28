@@ -17,7 +17,6 @@ default = [
     "cipher-des-cfb",
     "cipher-rc2-cfb",
     "cipher-rc4",
-    "cipher-rc4-md5",
 ]
 
 cipher-aes-cfb = []
@@ -30,7 +29,6 @@ cipher-des-cfb = []
 cipher-idea-cfb = []
 cipher-rc2-cfb = []
 cipher-rc4 = []
-cipher-rc4-md5 = []
 cipher-seed-cfb = []
 
 [[bin]]

@@ -90,7 +90,7 @@ pub const CIPHER_IDEA_CFB: &'static str = "idea-cfb";
 pub const CIPHER_RC2_CFB: &'static str = "rc2-cfb";
 #[cfg(feature="cipher-rc4")]
 pub const CIPHER_RC4: &'static str = "rc4";
-#[cfg(feature="cipher-rc4-md5")]
+#[cfg(feature="cipher-rc4")]
 pub const CIPHER_RC4_MD5: &'static str = "rc4-md5";
 #[cfg(feature="cipher-seed-cfb")]
 pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
@@ -133,7 +133,7 @@ pub enum CipherType {
     #[cfg(feature="cipher-idea-cfb")]     IdeaCfb,
     #[cfg(feature="cipher-rc2-cfb")]      Rc2Cfb,
     #[cfg(feature="cipher-rc4")]          Rc4,
-    #[cfg(feature="cipher-rc4-md5")]      Rc4Md5,
+    #[cfg(feature="cipher-rc4")]          Rc4Md5,
     #[cfg(feature="cipher-seed-cfb")]     SeedCfb,
 }
 
@@ -241,7 +241,7 @@ pub fn with_name(method: &str, key: &[u8]) -> Option<CipherVariant> {
         CIPHER_RC2_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc2Cfb, key))),
         #[cfg(feature="cipher-rc4")]
         CIPHER_RC4 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc4, key))),
-        #[cfg(feature="cipher-rc4-md5")]
+        #[cfg(feature="cipher-rc4")]
         CIPHER_RC4_MD5 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc4Md5, key))),
         #[cfg(feature="cipher-seed-cfb")]
         CIPHER_SEED_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(SeedCfb, key))),
