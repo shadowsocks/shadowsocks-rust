@@ -97,44 +97,44 @@ pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
 
 #[deriving(Clone, Show)]
 pub enum CipherType {
-    CipherTypeUnknown,
+    Unknown,
 
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes128Cfb,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes128Cfb1,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes128Cfb8,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes128Cfb128,
+    #[cfg(feature="cipher-aes-cfb")]      Aes128Cfb,
+    #[cfg(feature="cipher-aes-cfb")]      Aes128Cfb1,
+    #[cfg(feature="cipher-aes-cfb")]      Aes128Cfb8,
+    #[cfg(feature="cipher-aes-cfb")]      Aes128Cfb128,
 
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes192Cfb,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes192Cfb1,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes192Cfb8,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes192Cfb128,
+    #[cfg(feature="cipher-aes-cfb")]      Aes192Cfb,
+    #[cfg(feature="cipher-aes-cfb")]      Aes192Cfb1,
+    #[cfg(feature="cipher-aes-cfb")]      Aes192Cfb8,
+    #[cfg(feature="cipher-aes-cfb")]      Aes192Cfb128,
 
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes256Cfb,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes256Cfb1,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes256Cfb8,
-    #[cfg(feature="cipher-aes-cfb")]      CipherTypeAes256Cfb128,
+    #[cfg(feature="cipher-aes-cfb")]      Aes256Cfb,
+    #[cfg(feature="cipher-aes-cfb")]      Aes256Cfb1,
+    #[cfg(feature="cipher-aes-cfb")]      Aes256Cfb8,
+    #[cfg(feature="cipher-aes-cfb")]      Aes256Cfb128,
 
-    #[cfg(feature="cipher-aes-ofb")]      CipherTypeAes128Ofb,
-    #[cfg(feature="cipher-aes-ofb")]      CipherTypeAes192Ofb,
-    #[cfg(feature="cipher-aes-ofb")]      CipherTypeAes256Ofb,
+    #[cfg(feature="cipher-aes-ofb")]      Aes128Ofb,
+    #[cfg(feature="cipher-aes-ofb")]      Aes192Ofb,
+    #[cfg(feature="cipher-aes-ofb")]      Aes256Ofb,
 
-    #[cfg(feature="cipher-aes-ctr")]      CipherTypeAes128Ctr,
-    #[cfg(feature="cipher-aes-ctr")]      CipherTypeAes192Ctr,
-    #[cfg(feature="cipher-aes-ctr")]      CipherTypeAes256Ctr,
+    #[cfg(feature="cipher-aes-ctr")]      Aes128Ctr,
+    #[cfg(feature="cipher-aes-ctr")]      Aes192Ctr,
+    #[cfg(feature="cipher-aes-ctr")]      Aes256Ctr,
 
-    #[cfg(feature="cipher-bf-cfb")]       CipherTypeBfCfb,
+    #[cfg(feature="cipher-bf-cfb")]       BfCfb,
 
-    #[cfg(feature="cipher-camellia-cfb")] CipherTypeCamellia128Cfb,
-    #[cfg(feature="cipher-camellia-cfb")] CipherTypeCamellia192Cfb,
-    #[cfg(feature="cipher-camellia-cfb")] CipherTypeCamellia256Cfb,
+    #[cfg(feature="cipher-camellia-cfb")] Camellia128Cfb,
+    #[cfg(feature="cipher-camellia-cfb")] Camellia192Cfb,
+    #[cfg(feature="cipher-camellia-cfb")] Camellia256Cfb,
 
-    #[cfg(feature="cipher-cast5-cfb")]    CipherTypeCast5Cfb,
-    #[cfg(feature="cipher-des-cfb")]      CipherTypeDesCfb,
-    #[cfg(feature="cipher-idea-cfb")]     CipherTypeIdeaCfb,
-    #[cfg(feature="cipher-rc2-cfb")]      CipherTypeRc2Cfb,
-    #[cfg(feature="cipher-rc4")]          CipherTypeRc4,
-    #[cfg(feature="cipher-rc4-md5")]      CipherTypeRc4Md5,
-    #[cfg(feature="cipher-seed-cfb")]     CipherTypeSeedCfb,
+    #[cfg(feature="cipher-cast5-cfb")]    Cast5Cfb,
+    #[cfg(feature="cipher-des-cfb")]      DesCfb,
+    #[cfg(feature="cipher-idea-cfb")]     IdeaCfb,
+    #[cfg(feature="cipher-rc2-cfb")]      Rc2Cfb,
+    #[cfg(feature="cipher-rc4")]          Rc4,
+    #[cfg(feature="cipher-rc4-md5")]      Rc4Md5,
+    #[cfg(feature="cipher-seed-cfb")]     SeedCfb,
 }
 
 #[deriving(Clone)]
@@ -181,70 +181,70 @@ impl Cipher for CipherVariant {
 pub fn with_name(method: &str, key: &[u8]) -> Option<CipherVariant> {
     match method {
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_128_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Cfb, key))),
+        CIPHER_AES_128_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Cfb, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_128_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Cfb1, key))),
+        CIPHER_AES_128_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Cfb1, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_128_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Cfb8, key))),
+        CIPHER_AES_128_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Cfb8, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_128_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Cfb128, key))),
+        CIPHER_AES_128_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Cfb128, key))),
 
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_192_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Cfb, key))),
+        CIPHER_AES_192_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Cfb, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_192_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Cfb1, key))),
+        CIPHER_AES_192_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Cfb1, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_192_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Cfb8, key))),
+        CIPHER_AES_192_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Cfb8, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_192_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Cfb128, key))),
+        CIPHER_AES_192_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Cfb128, key))),
 
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_256_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Cfb, key))),
+        CIPHER_AES_256_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Cfb, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_256_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Cfb1, key))),
+        CIPHER_AES_256_CFB_1 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Cfb1, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_256_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Cfb8, key))),
+        CIPHER_AES_256_CFB_8 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Cfb8, key))),
         #[cfg(feature="cipher-aes-cfb")]
-        CIPHER_AES_256_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Cfb128, key))),
+        CIPHER_AES_256_CFB_128 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Cfb128, key))),
 
         #[cfg(feature="cipher-aes-ofb")]
-        CIPHER_AES_128_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Ofb, key))),
+        CIPHER_AES_128_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Ofb, key))),
         #[cfg(feature="cipher-aes-ofb")]
-        CIPHER_AES_192_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Ofb, key))),
+        CIPHER_AES_192_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Ofb, key))),
         #[cfg(feature="cipher-aes-ofb")]
-        CIPHER_AES_256_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Ofb, key))),
+        CIPHER_AES_256_OFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Ofb, key))),
 
         #[cfg(feature="cipher-aes-ctr")]
-        CIPHER_AES_128_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes128Ctr, key))),
+        CIPHER_AES_128_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Ctr, key))),
         #[cfg(feature="cipher-aes-ctr")]
-        CIPHER_AES_192_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes192Ctr, key))),
+        CIPHER_AES_192_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes192Ctr, key))),
         #[cfg(feature="cipher-aes-ctr")]
-        CIPHER_AES_256_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeAes256Ctr, key))),
+        CIPHER_AES_256_CTR => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes256Ctr, key))),
 
         #[cfg(feature="cipher-bf-cfb")]
-        CIPHER_BF_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeBfCfb, key))),
+        CIPHER_BF_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(BfCfb, key))),
 
         #[cfg(feature="cipher-camellia-cfb")]
-        CIPHER_CAMELLIA_128_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeCamellia128Cfb, key))),
+        CIPHER_CAMELLIA_128_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Camellia128Cfb, key))),
         #[cfg(feature="cipher-camellia-cfb")]
-        CIPHER_CAMELLIA_192_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeCamellia192Cfb, key))),
+        CIPHER_CAMELLIA_192_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Camellia192Cfb, key))),
         #[cfg(feature="cipher-camellia-cfb")]
-        CIPHER_CAMELLIA_256_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeCamellia256Cfb, key))),
+        CIPHER_CAMELLIA_256_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Camellia256Cfb, key))),
 
         #[cfg(feature="cipher-cast5-cfb")]
-        CIPHER_CAST5_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeCast5Cfb, key))),
+        CIPHER_CAST5_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Cast5Cfb, key))),
         #[cfg(feature="cipher-des-cfb")]
-        CIPHER_DES_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeDesCfb, key))),
+        CIPHER_DES_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(DesCfb, key))),
         #[cfg(feature="cipher-idea-cfb")]
-        CIPHER_IDEA_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeIdeaCfb, key))),
+        CIPHER_IDEA_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(IdeaCfb, key))),
         #[cfg(feature="cipher-rc2-cfb")]
-        CIPHER_RC2_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeRc2Cfb, key))),
+        CIPHER_RC2_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc2Cfb, key))),
         #[cfg(feature="cipher-rc4")]
-        CIPHER_RC4 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeRc4, key))),
+        CIPHER_RC4 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc4, key))),
         #[cfg(feature="cipher-rc4-md5")]
-        CIPHER_RC4_MD5 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeRc4Md5, key))),
+        CIPHER_RC4_MD5 => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Rc4Md5, key))),
         #[cfg(feature="cipher-seed-cfb")]
-        CIPHER_SEED_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(CipherTypeSeedCfb, key))),
+        CIPHER_SEED_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(SeedCfb, key))),
 
         _ => None
     }
