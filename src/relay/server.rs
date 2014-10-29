@@ -21,6 +21,8 @@
 
 //! Server side
 
+use std::task::try_future;
+
 // use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
 use relay::Relay;
@@ -70,7 +72,9 @@ impl Relay for RelayServer {
         let tcprelay = self.tcprelay.clone();
         // let udprelay = self.udprelay.clone();
 
-        spawn(proc() tcprelay.run());
+        let tcp_future = try_future(proc() tcprelay.run());
         // spawn(proc() udprelay.run());
+
+        drop(tcp_future.unwrap());
     }
 }

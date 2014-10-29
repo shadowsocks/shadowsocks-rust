@@ -21,6 +21,8 @@
 
 //! Local side
 
+use std::task::try_future;
+
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
 // use relay::udprelay::local::UdpRelayLocal;
@@ -70,9 +72,11 @@ impl RelayLocal {
 impl Relay for RelayLocal {
     fn run(&self) {
         let tcprelay = self.tcprelay.clone();
-        spawn(proc() tcprelay.run());
+        let tcp_future = try_future(proc() tcprelay.run());
 
         // let udprelay = self.udprelay.clone();
         // spawn(proc() udprelay.run());
+
+        drop(tcp_future.unwrap());
     }
 }
