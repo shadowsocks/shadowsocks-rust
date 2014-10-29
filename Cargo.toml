@@ -40,3 +40,9 @@ path = "src/bin/local.rs"
 
 name = "ssserver"
 path = "src/bin/server.rs"
+
+[dependencies.green]
+git = "https://github.com/alexcrichton/green-rs.git"
+
+[dependencies.rustuv]
+git = "https://github.com/alexcrichton/green-rs.git"

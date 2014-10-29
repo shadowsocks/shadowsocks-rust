@@ -33,6 +33,9 @@ extern crate shadowsocks;
 #[phase(plugin, link)]
 extern crate log;
 
+extern crate green;
+extern crate rustuv;
+
 use getopts::{optopt, optflag, getopts, usage};
 
 use std::os;
@@ -41,6 +44,15 @@ use shadowsocks::config::{Config, ServerConfig, ClientConfig, SingleServer, Mult
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
+
+fn event_loop() -> Box<green::EventLoop + Send> {
+    box rustuv::EventLoop::new().unwrap() as Box<green::EventLoop + Send>
+}
+
+#[start]
+fn start(argc: int, argv: *const *const u8) -> int {
+    green::start(argc, argv, event_loop, main)
+}
 
 fn main() {
     let opts = [
