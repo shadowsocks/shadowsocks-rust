@@ -28,14 +28,24 @@ use std::io::net::addrinfo::get_host_addresses;
 use std::collections::lru_cache::LruCache;
 use std::io::net::ip::IpAddr;
 
+struct DnsLruCache {
+    cache: LruCache<String, Vec<IpAddr>>,
+    totally_matched: uint,
+    totally_missed: uint,
+}
+
 pub struct CachedDns {
-    lru_cache: Arc<Mutex<LruCache<String, Vec<IpAddr>>>>,
+    lru_cache: Arc<Mutex<DnsLruCache>>,
 }
 
 impl CachedDns {
     pub fn new(cache_capacity: uint) -> CachedDns {
         CachedDns {
-            lru_cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
+            lru_cache: Arc::new(Mutex::new(DnsLruCache {
+                cache: LruCache::new(cache_capacity),
+                totally_missed: 0,
+                totally_matched: 0,
+            })),
         }
     }
 
@@ -44,16 +54,21 @@ impl CachedDns {
 
         {
             let mut cache = self.lru_cache.lock();
-            match cache.get(&addr_string).map(|x| x.clone()) {
+            match cache.cache.get(&addr_string).map(|x| x.clone()) {
                 Some(addrs) => {
+                    cache.totally_matched += 1;
                     debug!("DNS cache matched!: {}", addr_string);
+                    debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
                     return Some(addrs)
                 },
-                None => {}
+                None => {
+                    cache.totally_missed += 1;
+                    debug!("DNS cache missed!: {}", addr_string);
+                    debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
+                }
             }
         }
 
-        debug!("DNS cache missed!: {}", addr_string);
         let addrs = match get_host_addresses(addr) {
             Ok(addrs) => addrs,
             Err(err) => {
@@ -66,7 +81,7 @@ impl CachedDns {
         let cloned_addr = addrs.clone();
         spawn(proc() {
             let mut cache = cloned_mutex.lock();
-            cache.put(addr_string, cloned_addr);
+            cache.cache.put(addr_string, cloned_addr);
         });
         Some(addrs)
     }

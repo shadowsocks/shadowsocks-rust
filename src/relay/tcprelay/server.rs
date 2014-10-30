@@ -21,9 +21,6 @@
 
 //! TcpRelay server that running on the server side
 
-#[phase(plugin, link)]
-extern crate log;
-
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, BrokenPipe};

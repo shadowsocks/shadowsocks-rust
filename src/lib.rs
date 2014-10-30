@@ -21,6 +21,7 @@
 
 /* code */
 
+#![experimental]
 #![crate_type="lib"]
 #![crate_name="shadowsocks"]
 #![feature(phase, unsafe_destructor)]

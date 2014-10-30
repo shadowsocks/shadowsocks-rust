@@ -21,10 +21,6 @@
 
 //! TcpRelay server that running on local environment
 
-#[phase(plugin, link)]
-extern crate log;
-// extern crate native;
-
 use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, NotConnected,
