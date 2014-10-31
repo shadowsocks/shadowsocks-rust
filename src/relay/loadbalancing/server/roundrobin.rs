@@ -20,7 +20,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use relay::loadbalancing::server::LoadBalancer;
-use config::{Config, MultipleServer, SingleServer, ServerConfig, ServerConfigVariant};
+use config::{MultipleServer, SingleServer, ServerConfig, ServerConfigVariant};
 
 #[deriving(Clone)]
 pub struct RoundRobin {
