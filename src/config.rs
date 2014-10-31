@@ -70,12 +70,12 @@
 extern crate serialize;
 
 use serialize::json;
+
 use std::io::{File, Read, Open};
 use std::io::net::ip::{Port, SocketAddr};
-
 use std::to_string::ToString;
-
 use std::option::Option;
+use std::default::Default;
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
@@ -106,6 +106,12 @@ pub struct Config {
     pub server: Option<ServerConfigVariant>,
     pub local: Option<ClientConfig>,
     pub fast_open: bool,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config::new()
+    }
 }
 
 impl Config {
