@@ -21,7 +21,7 @@
 
 //! TcpRelay server that running on local environment
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, NotConnected,
     ConnectionFailed, ConnectionRefused, ConnectionReset, ConnectionAborted, BrokenPipe};
@@ -338,7 +338,10 @@ impl TcpRelayLocal {
 
 impl Relay for TcpRelayLocal {
     fn run(&self) {
-        let mut server_load_balancer = Arc::new(RoundRobin::new(self.config.clone()));
+        let server_load_balancer = Arc::new(
+                                        Mutex::new(
+                                            RoundRobin::new(
+                                                self.config.server.clone().expect("`server` should not be None"))));
 
         let local_conf = self.config.local.unwrap();
 
@@ -355,7 +358,7 @@ impl Relay for TcpRelayLocal {
             match acceptor.accept() {
                 Ok(mut stream) => {
                     let (server_addr, server_port, password, encrypt_method) = {
-                        let slb = server_load_balancer.make_unique();
+                        let mut slb = server_load_balancer.lock();
                         let ref s = slb.pick_server();
                         (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
                     };
