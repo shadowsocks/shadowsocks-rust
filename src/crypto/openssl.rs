@@ -143,7 +143,7 @@ extern {
     fn EVP_sha1() -> EVP_MD;
 }
 
-struct OpenSSLDigest {
+pub struct OpenSSLDigest {
     md_ctx: EVP_MD_CTX,
     digest_len: uint,
 }
@@ -169,14 +169,12 @@ impl OpenSSLDigest {
         }
     }
 
-    pub fn get_md(t: digest::DigestType) -> (EVP_MD, uint) {
+    fn get_md(t: digest::DigestType) -> (EVP_MD, uint) {
         unsafe {
             match t {
                 digest::Md5 => { (EVP_md5(), 16u) },
                 digest::Sha => { (EVP_sha(), 20u) },
                 digest::Sha1 => { (EVP_sha1(), 20u) },
-
-                digest::UnknownDigest => { (ptr::null(), 0u) },
             }
         }
     }
@@ -377,7 +375,7 @@ impl OpenSSLCrypto {
                 #[cfg(feature = "cipher-rc4")]
                 cipher::Rc4Md5 => { (EVP_rc4(), 16, 16) },
 
-                cipher::Unknown => { (ptr::null(), 0, 0) },
+                _ => { panic!("Unsupported cipher type of OpenSSL") },
             }
         }
     }

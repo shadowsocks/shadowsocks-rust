@@ -19,6 +19,8 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use crypto::openssl;
+
 pub trait Digest {
     fn update(&mut self, data: &[u8]);
     fn digest(&mut self) -> Vec<u8>;
@@ -29,7 +31,28 @@ pub enum DigestType {
     Md5,
     Sha1,
     Sha,
-    UnknownDigest,
 }
 
+pub enum DigestVariant {
+    OpenSSLDigest(openssl::OpenSSLDigest)
+}
 
+impl Digest for DigestVariant {
+    fn update(&mut self, data: &[u8]) {
+        match *self {
+            OpenSSLDigest(ref mut d) => d.update(data),
+        }
+    }
+
+    fn digest(&mut self) -> Vec<u8> {
+        match *self {
+            OpenSSLDigest(ref mut d) => d.digest()
+        }
+    }
+}
+
+pub fn with_type(t: DigestType) -> DigestVariant {
+    match t {
+        Md5 | Sha1 | Sha => OpenSSLDigest(openssl::OpenSSLDigest::new(t)),
+    }
+}

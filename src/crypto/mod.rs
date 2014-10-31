@@ -27,3 +27,4 @@ extern crate test;
 pub mod cipher;
 pub mod openssl;
 pub mod digest;
+pub mod table;
