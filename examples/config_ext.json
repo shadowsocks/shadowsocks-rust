@@ -1,0 +1,28 @@
+{
+    "servers": [
+        {
+            "address": "127.0.0.1",
+            "port": 1080,
+            "password": "hellofuck",
+            "method": "bf-cfb"
+        },
+        {
+            "address": "127.0.0.1",
+            "port": 1081,
+            "password": "hellofuck",
+            "method": "aes-128-cfb"
+        },
+        {
+            "address": "127.0.0.1",
+            "port": 1082,
+            "password": "fffffuckyou",
+            "method": "rc4-md5"
+        }
+    ],
+    "local_port":8388,
+    "password":"helloworld_fuck",
+    "timeout":300,
+    "method":"aes-256-cfb",
+    "local_address":"127.0.0.1",
+    "fast_open":false
+}
