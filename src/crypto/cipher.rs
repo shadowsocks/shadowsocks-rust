@@ -22,6 +22,7 @@
 //! Ciphers
 
 use crypto::openssl;
+use crypto::table;
 
 /// The trait for basic cipher methods
 pub trait Cipher {
@@ -95,9 +96,11 @@ pub const CIPHER_RC4_MD5: &'static str = "rc4-md5";
 #[cfg(feature = "cipher-seed-cfb")]
 pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
 
+pub const CIPHER_TABLE: &'static str = "table";
+
 #[deriving(Clone, Show)]
 pub enum CipherType {
-    Unknown,
+    Table,
 
     #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb,
     #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb1,
@@ -140,18 +143,21 @@ pub enum CipherType {
 #[deriving(Clone)]
 pub enum CipherVariant {
     OpenSSLCrypto(openssl::OpenSSLCipher),
+    TableCrypto(table::TableCipher),
 }
 
 impl Cipher for CipherVariant {
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
         match *self {
             OpenSSLCrypto(ref mut c) => c.encrypt(data),
+            TableCrypto(ref mut c) => c.encrypt(data),
         }
     }
 
     fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
         match *self {
             OpenSSLCrypto(ref mut c) => c.decrypt(data),
+            TableCrypto(ref mut c) => c.decrypt(data),
         }
     }
 }
@@ -180,6 +186,9 @@ impl Cipher for CipherVariant {
 /// *Note: The cipher have to be mutable if you want to use it for encrypting and decrypting.*
 pub fn with_name(method: &str, key: &[u8]) -> Option<CipherVariant> {
     match method {
+        // Default cipher
+        CIPHER_TABLE | "" => Some(TableCrypto(table::TableCipher::new(key))),
+
         #[cfg(feature = "cipher-aes-cfb")]
         CIPHER_AES_128_CFB => Some(OpenSSLCrypto(openssl::OpenSSLCipher::new(Aes128Cfb, key))),
         #[cfg(feature = "cipher-aes-cfb")]
