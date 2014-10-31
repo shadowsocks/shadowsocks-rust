@@ -259,9 +259,9 @@ impl TcpRelayLocal {
 
             let (header_len, addr) = match parse_request_header(header_buf) {
                 Ok((header_len, addr)) => (header_len, addr),
-                Err(err_code) => {
-                    send_error_reply(stream, err_code);
-                    panic!("Error occurs while parsing request header");
+                Err(err) => {
+                    send_error_reply(stream, err.code);
+                    panic!("Error occurs while parsing request header: {}", err.message);
                 }
             };
             (header_buf.slice_to(header_len).to_vec(), addr)
