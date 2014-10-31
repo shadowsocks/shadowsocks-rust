@@ -57,7 +57,7 @@ pub struct TcpRelayLocal {
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
         if c.server.is_none() || c.local.is_none() {
-            fail!("You have to provide configuration for server and local");
+            panic!("You have to provide configuration for server and local");
         }
         TcpRelayLocal {
             config: c,
@@ -77,7 +77,7 @@ impl TcpRelayLocal {
         if sock_ver != SOCKS5_VERSION {
             // FIXME: Sometimes Chrome would send a header with version 0x50
             send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
-            fail!("Invalid socks version \"{:x}\" in handshake", sock_ver);
+            panic!("Invalid socks version \"{:x}\" in handshake", sock_ver);
         }
 
         let _ = stream.read_exact(nmethods as uint).ok().expect("Error occurs while receiving methods");
@@ -244,7 +244,7 @@ impl TcpRelayLocal {
         if sock_ver != SOCKS5_VERSION {
             // FIXME: Sometimes Chrome would send a header with version 0x50
             send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
-            fail!("Invalid socks version \"{:x}\" in header", sock_ver);
+            panic!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
         let (header, addr) = {
@@ -253,7 +253,7 @@ impl TcpRelayLocal {
                 Ok(..) => {},
                 Err(err) => {
                     send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
-                    fail!("Error occurs while reading header: {}", err);
+                    panic!("Error occurs while reading header: {}", err);
                 }
             }
 
@@ -261,7 +261,7 @@ impl TcpRelayLocal {
                 Ok((header_len, addr)) => (header_len, addr),
                 Err(err_code) => {
                     send_error_reply(stream, err_code);
-                    fail!("Error occurs while parsing request header");
+                    panic!("Error occurs while parsing request header");
                 }
             };
             (header_buf.slice_to(header_len).to_vec(), addr)
@@ -279,7 +279,7 @@ impl TcpRelayLocal {
                         send_error_reply(stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
                     }
                 }
-                fail!("Failed to connect remote server: {}", err);
+                panic!("Failed to connect remote server: {}", err);
             }
         };
 
@@ -345,7 +345,7 @@ impl Relay for TcpRelayLocal {
         let mut acceptor = match TcpListener::bind(local_conf.ip.to_string().as_slice(), local_conf.port).listen() {
             Ok(acpt) => acpt,
             Err(e) => {
-                fail!("Error occurs while listening local address: {}", e.to_string());
+                panic!("Error occurs while listening local address: {}", e.to_string());
             }
         };
 
@@ -366,7 +366,7 @@ impl Relay for TcpRelayLocal {
                                                      password, encrypt_method));
                 },
                 Err(e) => {
-                    fail!("Error occurs while accepting: {}", e.to_string());
+                    panic!("Error occurs while accepting: {}", e.to_string());
                 }
             }
         }

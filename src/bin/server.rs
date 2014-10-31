@@ -103,7 +103,7 @@ fn main() {
             && !matches.opt_present("k") && !matches.opt_present("m") {
         // Do nothing
     } else {
-        fail!("`server`, `server_port`, `method` and `password` should be provided together");
+        panic!("`server`, `server_port`, `method` and `password` should be provided together");
     }
 
     if matches.opt_present("b") && matches.opt_present("l") {

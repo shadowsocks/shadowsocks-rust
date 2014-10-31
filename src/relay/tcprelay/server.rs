@@ -22,16 +22,16 @@
 //! TcpRelay server that running on the server side
 
 use std::sync::Arc;
+use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, TimedOut, BrokenPipe};
 use std::io::net::ip::SocketAddr;
 use std::time::duration::Duration;
 
-use config::{Config, SingleServer, MultipleServer};
+use config::{Config, SingleServer, MultipleServer, ServerConfig};
 use relay::Relay;
 use relay::socks5::{parse_request_header, SocketAddress, DomainNameAddress};
 use relay::tcprelay::cached_dns::CachedDns;
-
 use crypto::cipher;
 use crypto::cipher::Cipher;
 use crypto::cipher::CipherVariant;
@@ -44,16 +44,7 @@ pub struct TcpRelayServer {
 impl TcpRelayServer {
     pub fn new(c: Config) -> TcpRelayServer {
         if c.server.is_none() {
-            fail!("You have to provide a server configuration");
-        } else {
-            match c.server.clone().unwrap() {
-                SingleServer(..) => (),
-                MultipleServer(slist) => {
-                    if slist.len() != 1 {
-                        fail!("You have to provide exact 1 server configuration");
-                    }
-                }
-            }
+            panic!("You have to provide a server configuration");
         }
         TcpRelayServer {
             config: c,
@@ -128,28 +119,20 @@ impl TcpRelayServer {
             }
         }
     }
-}
 
-impl Relay for TcpRelayServer {
-    fn run(&self) {
-        let (server_addr, server_port, password, encrypt_method, timeout, dns_cache_capacity) = {
-                let s = match self.config.clone().server.unwrap() {
-                    SingleServer(ref s) => {
-                        s.clone()
-                    },
-                    MultipleServer(slist) => {
-                        slist[0].clone()
-                    }
-                };
-                (s.address.to_string(), s.port,
-                 Arc::new(s.password.clone()), Arc::new(s.method.clone()),
-                 s.timeout, s.dns_cache_capacity)
-            };
+    fn accept_loop(s: &ServerConfig) {
+        let (server_addr, server_port, password, encrypt_method, timeout, dns_cache_capacity) =
+                (s.address.to_string(),
+                 s.port,
+                 Arc::new(s.password.clone()),
+                 Arc::new(s.method.clone()),
+                 s.timeout,
+                 s.dns_cache_capacity);
 
         let mut acceptor = match TcpListener::bind(server_addr.as_slice(), server_port).listen() {
             Ok(acpt) => acpt,
             Err(e) => {
-                fail!("Error occurs while listening server address: {}", e.to_string());
+                panic!("Binding server address: {}", e.to_string());
             }
         };
 
@@ -182,7 +165,7 @@ impl Relay for TcpRelayServer {
                         let (_, addr) = match parse_request_header(header.as_slice()) {
                             Ok((header_len, addr)) => (header_len, addr),
                             Err(..) => {
-                                fail!("Error occurs while parsing request header, \
+                                panic!("Error occurs while parsing request header, \
                                             maybe wrong crypto method or password");
                             }
                         };
@@ -192,7 +175,7 @@ impl Relay for TcpRelayServer {
                                 match TcpStream::connect_timeout(sockaddr, Duration::seconds(30)) {
                                     Ok(s) => s,
                                     Err(err) => {
-                                        fail!("Unable to connect {}: {}", sockaddr, err)
+                                        panic!("Unable to connect {}: {}", sockaddr, err)
                                     }
                                 }
                             },
@@ -214,13 +197,13 @@ impl Relay for TcpRelayServer {
                                                     },
                                                 }
                                             }
-                                            fail!("Unable to connect {}", domainaddr);
+                                            panic!("Unable to connect {}", domainaddr);
                                         };
                                         connect_host()
                                     },
 
                                     None => {
-                                        fail!("Failed to resolve {}", domainaddr);
+                                        panic!("Failed to resolve {}", domainaddr);
                                     }
                                 }
                             }
@@ -240,9 +223,36 @@ impl Relay for TcpRelayServer {
                     });
                 },
                 Err(e) => {
-                    fail!("Error occurs while accepting: {}", e.to_string());
+                    panic!("Error occurs while accepting: {}", e.to_string());
                 }
             }
+        }
+    }
+}
+
+impl Relay for TcpRelayServer {
+    fn run(&self) {
+        let mut futures = Vec::new();
+        match self.config.server.clone().unwrap() {
+            SingleServer(s) => {
+                let fut = try_future(proc() {
+                    TcpRelayServer::accept_loop(&s);
+                });
+                futures.push(fut);
+            },
+            MultipleServer(slist) => {
+                for ref_s in slist.iter() {
+                    let s = ref_s.clone();
+                    let fut = try_future(proc() {
+                        TcpRelayServer::accept_loop(&s);
+                    });
+                    futures.push(fut);
+                }
+            }
+        }
+
+        for fut in futures.into_iter() {
+            drop(fut);
         }
     }
 }

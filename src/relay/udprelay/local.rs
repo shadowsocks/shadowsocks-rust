@@ -130,7 +130,7 @@ impl UdpRelayLocal {
                     decrypted_msg
                 },
                 Err(err) => {
-                    fail!("Error occurs while receiving from remote udp server: {}", err)
+                    panic!("Error occurs while receiving from remote udp server: {}", err)
                 }
             }
         };

@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! This is a binary running in the local environment
+//! This is a binary runing in the local environment
 //!
 //! You have to provide all needed configuration attributes via command line parameters,
 //! or you could specify a configuration file. The format of configuration file is defined
@@ -102,7 +102,7 @@ fn main() {
             && !matches.opt_present("k") && !matches.opt_present("m") {
         // Do nothing
     } else {
-        fail!("`server`, `server_port`, `method` and `password` should be provided together");
+        panic!("`server`, `server_port`, `method` and `password` should be provided together");
     }
 
     if matches.opt_present("b") && matches.opt_present("l") {

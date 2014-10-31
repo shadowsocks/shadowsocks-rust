@@ -167,7 +167,7 @@ impl Cipher for CipherVariant {
 ///
 /// let mut cipher = match cipher::with_name("aes-256-cfb", "cipher_password".as_bytes()) {
 ///     Some(cipher) => { cipher },
-///     None => { fail!("Undefined cipher!") },
+///     None => { panic!("Undefined cipher!") },
 /// };
 ///
 /// let message = "test message".as_bytes();

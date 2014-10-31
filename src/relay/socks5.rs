@@ -88,7 +88,8 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, AddressType), u8> {
     match atyp {
         SOCKS5_ADDR_TYPE_IPV4 => {
             if buf.len() < 7 {
-                fail!("Invalid header");
+                error!("Invalid IPv4 header");
+                return Err(SOCKS5_REPLY_GENERAL_FAILURE);
             }
 
             let raw_addr = buf.slice(1, 5);
@@ -101,7 +102,8 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, AddressType), u8> {
         },
         SOCKS5_ADDR_TYPE_IPV6 => {
             if buf.len() < 19 {
-                fail!("Invalid header");
+                error!("Invalid IPv6 header");
+                return Err(SOCKS5_REPLY_GENERAL_FAILURE);
             }
 
             let raw_addr = buf.slice(1, 17);
@@ -123,7 +125,8 @@ pub fn parse_request_header(buf: &[u8]) -> Result<(uint, AddressType), u8> {
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
             let addr_len = buf[1] as uint;
             if buf.len() < 4 + addr_len {
-                fail!("Invalid header");
+                error!("Invalid domain name header");
+                return Err(SOCKS5_REPLY_GENERAL_FAILURE);
             }
             let raw_addr = buf.slice(2, 2 + addr_len);
             let raw_port = buf.slice(2 + addr_len, 4 + addr_len);

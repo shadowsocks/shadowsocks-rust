@@ -203,7 +203,7 @@ impl Config {
         } else if !o.contains_key(&"local_address".to_string()) && !o.contains_key(&"local_port".to_string()) {
             // Do nothing
         } else {
-            fail!("You have to provide `local_address` and `local_port` together");
+            panic!("You have to provide `local_address` and `local_port` together");
         }
 
         config.fast_open = match o.find(&"fast_open".to_string()) {

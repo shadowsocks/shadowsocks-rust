@@ -187,7 +187,7 @@ impl Digest for OpenSSLDigest {
         unsafe {
             if EVP_DigestUpdate(self.md_ctx, data.as_ptr() as *const libc::c_void, data.len() as libc::size_t)
                     != 1 as libc::c_int {
-                fail!("Failed to call EVP_DigestUpdate");
+                panic!("Failed to call EVP_DigestUpdate");
             }
         }
     }
@@ -208,7 +208,7 @@ impl Clone for OpenSSLDigest {
             assert!(!md_ctx.is_null());
             if EVP_MD_CTX_copy_ex(md_ctx, self.md_ctx) != 1 as libc::c_int {
                 EVP_MD_CTX_destroy(md_ctx);
-                fail!("Failed to call EVP_MD_CTX_copy_ex");
+                panic!("Failed to call EVP_MD_CTX_copy_ex");
             }
             md_ctx
         };
@@ -224,7 +224,7 @@ impl Clone for OpenSSLDigest {
             assert!(!md_ctx.is_null());
             if EVP_MD_CTX_copy_ex(md_ctx, source.md_ctx) != 1 as libc::c_int {
                 EVP_MD_CTX_destroy(md_ctx);
-                fail!("Failed to call EVP_MD_CTX_copy_ex");
+                panic!("Failed to call EVP_MD_CTX_copy_ex");
             }
             EVP_MD_CTX_cleanup(self.md_ctx);
             EVP_MD_CTX_destroy(self.md_ctx);
@@ -291,7 +291,7 @@ impl OpenSSLCrypto {
             if EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
                               iv.as_ptr(), op) != 1 as libc::c_int {
                 EVP_CIPHER_CTX_free(evp_ctx);
-                fail!("EVP_CipherInit error");
+                panic!("EVP_CipherInit error");
             }
 
             (evp_ctx, key_size, block_size)
@@ -398,13 +398,13 @@ impl OpenSSLCrypto {
                              pres, &mut len,
                              pdata, datalen) != 1 {
                 drop(self);
-                fail!("Failed on EVP_CipherUpdate");
+                panic!("Failed on EVP_CipherUpdate");
             }
 
             total_length = len;
             if EVP_CipherFinal(self.evp_ctx, pres.offset(len as int), &mut len) != 1 {
                 drop(self);
-                fail!("Failed on EVP_CipherFinal");
+                panic!("Failed on EVP_CipherFinal");
             }
 
             total_length += len;
