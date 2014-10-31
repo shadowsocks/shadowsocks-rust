@@ -23,7 +23,7 @@
 
 use std::vec::Vec;
 use std::io::BufReader;
-use std::cmp::{Less, Equal, Greater};
+use std::cmp::PartialOrd;
 
 use crypto::cipher::Cipher;
 use crypto::digest;
@@ -52,9 +52,7 @@ impl TableCipher {
             table.as_mut_slice().sort_by(|x, y| {
                 let sub = (a % (x + i) - a % (y + i)) as i64;
 
-                if sub < 0 { Less }
-                else if sub == 0 { Equal }
-                else { Greater }
+                sub.partial_cmp(&0i64).unwrap()
             })
         }
 
