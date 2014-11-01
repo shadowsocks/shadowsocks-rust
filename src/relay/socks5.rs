@@ -58,6 +58,7 @@ pub enum CommandType {
     UdpAssociate,
 }
 
+#[deriving(Show, Clone)]
 pub struct Error {
     pub code: u8,
     pub message: String,
@@ -72,6 +73,7 @@ impl Error {
     }
 }
 
+#[deriving(Clone)]
 pub struct DomainNameAddr {
     pub domain_name: String,
     pub port: Port,
@@ -83,6 +85,7 @@ impl Show for DomainNameAddr {
     }
 }
 
+#[deriving(Clone)]
 pub enum AddressType {
     SocketAddress(SocketAddr),
     DomainNameAddress(DomainNameAddr),

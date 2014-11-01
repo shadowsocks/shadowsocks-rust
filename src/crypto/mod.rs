@@ -28,3 +28,8 @@ pub mod cipher;
 pub mod openssl;
 pub mod digest;
 pub mod table;
+
+pub enum CryptoMode {
+    Encrypt,
+    Decrypt
+}

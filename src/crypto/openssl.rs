@@ -33,6 +33,8 @@ use crypto::cipher;
 use crypto::digest::Digest;
 use crypto::digest;
 
+use crypto::{CryptoMode, Encrypt, Decrypt};
+
 use std::ptr;
 use std::clone::Clone;
 use std::mem::swap;
@@ -242,12 +244,6 @@ impl Drop for OpenSSLDigest {
     }
 }
 
-/// This two modes will be converted into the last parameter of `EVP_CipherInit_ex`.
-enum CryptoMode {
-    CryptoModeDecrypt,
-    CryptoModeEncrypt,
-}
-
 struct OpenSSLCrypto {
     evp_ctx: EVP_CIPHER_CTX,
     block_size: uint,
@@ -282,8 +278,8 @@ impl OpenSSLCrypto {
             assert!(!evp_ctx.is_null());
 
             let op = match mode {
-                CryptoModeEncrypt => CRYPTO_MODE_ENCRYPT,
-                CryptoModeDecrypt => CRYPTO_MODE_DECRYPT,
+                Encrypt => CRYPTO_MODE_ENCRYPT,
+                Decrypt => CRYPTO_MODE_DECRYPT,
             };
 
             if EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
@@ -507,7 +503,7 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(), CryptoModeEncrypt);
+                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(), Encrypt);
                 self.encryptor = Some(encryptor);
 
                 let encrypted_data = self.encryptor.as_ref().unwrap().update(data);
@@ -545,7 +541,7 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv, CryptoModeDecrypt);
+                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv, Decrypt);
                 self.decryptor = Some(decryptor);
 
                 self.decryptor.as_ref().unwrap().update(data)

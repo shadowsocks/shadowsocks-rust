@@ -26,7 +26,8 @@ extern crate log;
 
 extern crate native;
 
-use std::io::TcpStream;
+use std::io::{IoResult, TcpStream};
+
 use relay::socks5::SOCKS5_VERSION;
 
 mod cached_dns;
@@ -36,4 +37,14 @@ pub mod server;
 pub fn send_error_reply(stream: &mut TcpStream, err_code: u8) {
     let reply = [SOCKS5_VERSION, err_code, 0x00];
     stream.write(reply).ok().expect("Error occurs while sending errors");
+}
+
+pub fn relay_and_map(from: &mut TcpStream, to: &mut TcpStream, mapper: |&[u8]| -> Vec<u8>)
+        -> IoResult<()> {
+    let mut buf = [0u8, .. 0xffff];
+    loop {
+        let len = try!(from.read_at_least(1, buf));
+        let msg = mapper(buf.slice_to(len));
+        try!(to.write(msg.as_slice()));
+    }
 }

@@ -2,23 +2,23 @@
     "servers": [
         {
             "address": "127.0.0.1",
-            "port": 1080,
+            "port": 8388,
             "password": "password-svr1",
             "method": "bf-cfb"
         },
         {
             "address": "127.0.0.1",
-            "port": 1081,
+            "port": 8384,
             "password": "password-svr2",
             "method": "aes-256-cfb"
         },
         {
             "address": "127.0.0.1",
-            "port": 1082,
+            "port": 8385,
             "password": "password-svr3",
             "method": "rc4-md5"
         }
     ],
-    "local_port":8388,
-    "local_address":"127.0.0.1"
+    "local_port": 1080,
+    "local_address": "127.0.0.1"
 }

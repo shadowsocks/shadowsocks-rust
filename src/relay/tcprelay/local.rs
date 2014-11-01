@@ -23,8 +23,14 @@
 
 use std::sync::{Arc, Mutex};
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{EndOfFile, TimedOut, NotConnected,
-    ConnectionFailed, ConnectionRefused, ConnectionReset, ConnectionAborted, BrokenPipe};
+use std::io::{
+    EndOfFile,
+    ConnectionFailed,
+    ConnectionRefused,
+    ConnectionReset,
+    ConnectionAborted,
+    BrokenPipe
+};
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 
@@ -32,7 +38,7 @@ use config::Config;
 
 use relay::Relay;
 use relay::socks5::parse_request_header;
-use relay::tcprelay::send_error_reply;
+use relay::tcprelay::{send_error_reply, relay_and_map};
 use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
 use relay::socks5::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
 use relay::socks5::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
@@ -46,7 +52,6 @@ use relay::socks5::SOCKS5_REPLY_SUCCEEDED;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use crypto::cipher;
-use crypto::cipher::CipherVariant;
 use crypto::cipher::Cipher;
 
 #[deriving(Clone)]
@@ -93,114 +98,6 @@ impl TcpRelayLocal {
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
-    fn handle_connect_local(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
-                                   cipher: &mut CipherVariant) {
-        let mut buf = [0u8, .. 0xffff];
-
-        loop {
-            match local_stream.read_at_least(1, buf) {
-                Ok(len) => {
-                    let real_buf = buf.slice_to(len);
-
-                    let encrypted_msg = cipher.encrypt(real_buf);
-                    match remote_stream.write(encrypted_msg.as_slice()) {
-                        Ok(..) => {},
-                        Err(err) => {
-                            match err.kind {
-                                EndOfFile | TimedOut | BrokenPipe => {},
-                                _ => {
-                                    error!("Error occurs while writing to remote stream: {}", err);
-                                }
-                            }
-                            match local_stream.close_read() {
-                                Ok(..) => (),
-                                Err(err) => {
-                                    if err.kind != NotConnected {
-                                        error!("Error occurs while closing local read: {}", err);
-                                    }
-                                }
-                            }
-                            break
-                        }
-                    }
-                },
-                Err(err) => {
-                    match err.kind {
-                        EndOfFile | TimedOut | BrokenPipe => {},
-                        _ => {
-                            error!("Error occurs while reading from local stream: {}", err);
-                        }
-                    }
-                    match remote_stream.close_write() {
-                        Ok(..) => (),
-                        Err(err) => {
-                            if err.kind != NotConnected {
-                                error!("Error occurs while closing remote write: {}", err);
-                            }
-                        }
-                    }
-                    break
-                }
-            }
-        }
-    }
-
-    fn handle_connect_remote(local_stream: &mut TcpStream, remote_stream: &mut TcpStream,
-                                          cipher: &mut CipherVariant) {
-
-        let mut buf = [0u8, .. 0xffff];
-
-        loop {
-            match remote_stream.read_at_least(1, buf) {
-                Ok(len) => {
-                    let real_buf = buf.slice_to(len);
-
-                    let decrypted_msg = cipher.decrypt(real_buf);
-
-                    // debug!("Recv from remote: {}", decrypted_msg);
-
-                    match local_stream.write(decrypted_msg.as_slice()) {
-                        Ok(..) => {},
-                        Err(err) => {
-                            match err.kind {
-                                EndOfFile | TimedOut | BrokenPipe => {},
-                                _ => {
-                                    error!("Error occurs while writing to local stream: {}", err);
-                                }
-                            }
-                            match remote_stream.close_read() {
-                                Ok(..) => (),
-                                Err(err) => {
-                                    if err.kind != NotConnected {
-                                        error!("Error occurs while closing remote read: {}", err);
-                                    }
-                                }
-                            }
-                            break
-                        }
-                    }
-                },
-                Err(err) => {
-                    match err.kind {
-                        EndOfFile | TimedOut | BrokenPipe => {},
-                        _ => {
-                            error!("Error occurs while reading from remote stream: {}", err);
-                        }
-                    }
-                    match local_stream.close_write() {
-                        Ok(..) => (),
-                        Err(err) => {
-                            if err.kind != NotConnected {
-                                error!("Error occurs while closing remote write: {}", err);
-                            }
-                        }
-                    }
-                    break
-                }
-            }
-        }
-    }
-
     #[allow(dead_code)]
     fn handle_udp_associate_local(stream: &mut TcpStream) {
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
@@ -232,56 +129,46 @@ impl TcpRelayLocal {
         stream.write(reply.as_slice()).ok().expect("Failed to write to local stream");
     }
 
-    fn handle_client(stream: &mut TcpStream,
+    fn handle_client(mut stream: TcpStream,
                      server_addr: String, server_port: Port,
                      password: String, encrypt_method: String) {
-        TcpRelayLocal::do_handshake(stream);
+        TcpRelayLocal::do_handshake(&mut stream);
 
-        let raw_header_part1 = stream.read_exact(3)
-                                        .ok().expect("Error occurs while reading request header");
+        let raw_header_part1 = stream.read_exact(3).ok().expect("Failed to read header");
         let (sock_ver, cmd) = (raw_header_part1[0], raw_header_part1[1]);
 
         if sock_ver != SOCKS5_VERSION {
             // FIXME: Sometimes Chrome would send a header with version 0x50
-            send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
+            send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
             panic!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
         let (header, addr) = {
             let mut header_buf = [0u8, .. 512];
-            match stream.read_at_least(1, header_buf) {
-                Ok(..) => {},
-                Err(err) => {
-                    send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
-                    panic!("Error occurs while reading header: {}", err);
-                }
-            }
+            stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
+                send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
+                panic!("Error occurs while reading header: {}", err);
+            });
 
-            let (header_len, addr) = match parse_request_header(header_buf) {
-                Ok((header_len, addr)) => (header_len, addr),
-                Err(err) => {
-                    send_error_reply(stream, err.code);
-                    panic!("Error occurs while parsing request header: {}", err.message);
-                }
-            };
+            let (header_len, addr) = parse_request_header(header_buf).unwrap_or_else(|err| {
+                send_error_reply(&mut stream, err.code);
+                panic!("Error occurs while parsing request header: {}", err);
+            });
             (header_buf.slice_to(header_len).to_vec(), addr)
         };
 
-        let mut remote_stream = match TcpStream::connect(server_addr.as_slice(),
-                                           server_port) {
-            Ok(s) => s,
-            Err(err) => {
-                match err.kind {
-                    ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                        send_error_reply(stream, SOCKS5_REPLY_HOST_UNREACHABLE);
-                    },
-                    _ => {
-                        send_error_reply(stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
-                    }
+        let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
+                                           server_port).unwrap_or_else(|err| {
+            match err.kind {
+                ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
+                    send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                },
+                _ => {
+                    send_error_reply(&mut stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
                 }
-                panic!("Failed to connect remote server: {}", err);
             }
-        };
+            panic!("Failed to connect remote server: {}", err);
+        });
 
         let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                        password.as_slice().as_bytes())
@@ -305,31 +192,54 @@ impl TcpRelayLocal {
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();
-                spawn(proc()
-                    TcpRelayLocal::handle_connect_remote(&mut remote_local_stream,
-                                                         &mut remote_remote_stream,
-                                                         &mut remote_cipher));
+                let remote_addr_clone = addr.clone();
+                spawn(proc() {
+                    relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
+                                  |msg| remote_cipher.decrypt(msg))
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    warn!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                },
+                                _ => {
+                                    error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                }
+                            }
+                            remote_local_stream.close_write().or(Ok(())).unwrap();
+                            remote_remote_stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
 
-                let mut local_local_stream = stream.clone();
-                spawn(proc()
-                    TcpRelayLocal::handle_connect_local(&mut local_local_stream,
-                                                        &mut remote_stream,
-                                                        &mut cipher));
+                spawn(proc() {
+                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    warn!("{} relay from local to remote stream: {}", addr, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr, err)
+                                }
+                            }
+                            remote_stream.close_write().or(Ok(())).unwrap();
+                            stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
             },
             SOCKS5_CMD_TCP_BIND => {
                 warn!("BIND is not supported");
-                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
                 info!("UDP ASSOCIATE {}", addr);
                 warn!("UDP ASSOCIATE is not supported");
-                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
 
                 // TcpRelayLocal::handle_udp_associate_local(stream);
             },
             _ => {
                 // unsupported CMD
-                send_error_reply(stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
                 warn!("Unsupported command {}", cmd);
             }
         }
@@ -356,7 +266,7 @@ impl Relay for TcpRelayLocal {
 
         loop {
             match acceptor.accept() {
-                Ok(mut stream) => {
+                Ok(stream) => {
                     let (server_addr, server_port, password, encrypt_method) = {
                         let mut slb = server_load_balancer.lock();
                         let ref s = slb.pick_server();
@@ -364,7 +274,7 @@ impl Relay for TcpRelayLocal {
                     };
 
                     spawn(proc()
-                        TcpRelayLocal::handle_client(&mut stream,
+                        TcpRelayLocal::handle_client(stream,
                                                      server_addr, server_port,
                                                      password, encrypt_method));
                 },
