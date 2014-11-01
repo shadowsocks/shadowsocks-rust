@@ -33,14 +33,18 @@ use config::Config;
 /// UDP Associate and Bind commands are not supported currently.
 ///
 /// ```no_run
+/// use std::io::net::ip::SocketAddr;
+///
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayServer;
 /// use shadowsocks::config::{Config, SingleServer, ServerConfig};
 ///
 /// let mut config = Config::new();
 /// config.server = Some(SingleServer(ServerConfig {
-///     address: "127.0.0.1".to_string(),
-///     port: 8388,
+///     addr: SocketAddr {
+///         ip: from_str("127.0.0.1").unwrap(),
+///         port: 8388,
+///     },
 ///     password: "server-password".to_string(),
 ///     method: "aes-256-cfb".to_string(),
 ///     timeout: None,
