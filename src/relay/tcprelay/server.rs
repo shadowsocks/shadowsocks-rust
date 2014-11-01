@@ -136,7 +136,7 @@ impl TcpRelayServer {
                                 .unwrap_or_else(|err| {
                                     match err.kind {
                                         EndOfFile | BrokenPipe => {
-                                            warn!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                            debug!("{} relay from remote to local stream: {}", remote_addr_clone, err)
                                         },
                                         _ => {
                                             error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
@@ -151,7 +151,7 @@ impl TcpRelayServer {
                                 .unwrap_or_else(|err| {
                                     match err.kind {
                                         EndOfFile | BrokenPipe => {
-                                            warn!("{} relay from local to remote stream: {}", addr, err)
+                                            debug!("{} relay from local to remote stream: {}", addr, err)
                                         },
                                         _ => {
                                             error!("{} relay from local to remote stream: {}", addr, err)
