@@ -84,7 +84,10 @@ impl UdpRelayLocal {
         }
     }
 
-    fn handle_request(socket: UdpSocket, request_message: Vec<u8>, client_addr: SocketAddr, config: &ServerConfig) {
+    fn handle_request(socket: UdpSocket,
+                      request_message: Vec<u8>,
+                      client_addr: SocketAddr,
+                      config: &ServerConfig) {
         // According to RFC 1928
         //
         // Implementation of fragmentation is optional; an implementation that
@@ -116,32 +119,7 @@ impl UdpRelayLocal {
                             .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
         let encrypted_data = cipher.encrypt(data);
 
-        let remote_addr = SocketAddr {
-            ip: from_str(config.address.as_slice()).expect("Invalid server ip address"),
-            port: config.port
-        };
-
-        let mut cloned_socket = socket.clone();
-        let data_to_reply = {
-            let mut remote_socket = socket.connect(remote_addr);
-            remote_socket.write(encrypted_data.as_slice())
-                .ok().expect("Error occurs while sending data to remote udp server");
-
-            let mut buf = [0u8, .. 0xffff];
-            match remote_socket.read_at_least(3, buf) {
-                Ok(len) => {
-                    let recv_msg = buf.slice_to(len);
-                    let decrypted_msg = cipher.decrypt(recv_msg);
-
-                    decrypted_msg
-                },
-                Err(err) => {
-                    panic!("Error occurs while receiving from remote udp server: {}", err)
-                }
-            }
-        };
-        cloned_socket.send_to(data_to_reply.as_slice(), client_addr)
-            .ok().expect("Error occurs while sending data to local udp client");
+        let remote_addr = config.addr;
     }
 }
 
@@ -155,11 +133,11 @@ impl Relay for UdpRelayLocal {
         let mut server_set = HashSet::new();
         match self.config.server.clone().unwrap() {
             SingleServer(s) => {
-                server_set.insert((s.address, s.port));
+                server_set.insert(s.addr);
             },
             MultipleServer(ref slist) => {
                 for s in slist.iter() {
-                    server_set.insert((s.address.to_string(), s.port));
+                    server_set.insert(s.addr);
                 }
             }
         }

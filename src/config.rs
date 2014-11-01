@@ -71,6 +71,7 @@ use serialize::json;
 
 use std::io::{File, Read, Open};
 use std::io::net::ip::{Port, SocketAddr};
+use std::io::net::addrinfo::get_host_addresses;
 use std::to_string::ToString;
 use std::option::Option;
 use std::default::Default;
@@ -82,8 +83,7 @@ pub const DEFAULT_DNS_CACHE_CAPACITY: uint = 65536;
 /// Configuration for a server
 #[deriving(Clone, Show)]
 pub struct ServerConfig {
-    pub address: String,
-    pub port: Port,
+    pub addr: SocketAddr,
     pub password: String,
     pub method: String,
     pub timeout: Option<u64>,
@@ -136,11 +136,16 @@ impl Config {
                     method = CIPHER_AES_256_CFB;
                 }
 
+                let addr_str = server.find(&"address".to_string()).expect("You need to specify a server address")
+                                        .as_string().expect("address should be a string");
+
                 let server_cfg = ServerConfig {
-                    address: server.find(&"address".to_string()).expect("You need to specify a server address")
-                                        .as_string().expect("address should be a string").to_string(),
-                    port: server.find(&"port".to_string()).expect("You need to specify a server port")
-                                        .as_u64().expect("port should be an integer") as Port,
+                    addr: SocketAddr {
+                        ip: get_host_addresses(addr_str).unwrap().head()
+                            .expect(format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
+                        port: server.find(&"port".to_string()).expect("You need to specify a server port")
+                                            .as_u64().expect("port should be an integer") as Port,
+                    },
                     password: server.find(&"password".to_string()).expect("You need to specify a password")
                                         .as_string().expect("password should be a string").to_string(),
                     method: method.to_string(),
@@ -174,11 +179,16 @@ impl Config {
                 method = CIPHER_AES_256_CFB;
             }
 
+            let addr_str = o.find(&"server".to_string()).unwrap()
+                    .as_string().expect("server should be a string");
+
             let single_server = SingleServer(ServerConfig {
-                address: o.find(&"server".to_string()).unwrap()
-                    .as_string().expect("server should be a string").to_string(),
-                port: o.find(&"server_port".to_string()).unwrap()
-                    .as_u64().expect("server_port should be an integer") as Port,
+                addr: SocketAddr {
+                    ip: get_host_addresses(addr_str).unwrap().head()
+                        .expect(format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
+                    port: o.find(&"server_port".to_string()).unwrap()
+                        .as_u64().expect("server_port should be an integer") as Port,
+                },
                 password: o.find(&"password".to_string()).unwrap()
                     .as_string().expect("password should be a string").to_string(),
                 method: method.to_string(),

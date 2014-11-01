@@ -21,7 +21,6 @@
 
 //! TcpRelay server that running on local environment
 
-use std::sync::{Arc, Mutex};
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{
     EndOfFile,
@@ -31,7 +30,7 @@ use std::io::{
     ConnectionAborted,
     BrokenPipe
 };
-use std::io::net::ip::Port;
+use std::io::net::ip::SocketAddr;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::BufReader;
 
@@ -129,7 +128,7 @@ impl TcpRelayLocal {
     }
 
     fn handle_client(mut stream: TcpStream,
-                     server_addr: String, server_port: Port,
+                     server_addr: SocketAddr,
                      password: String, encrypt_method: String) {
         TcpRelayLocal::do_handshake(&mut stream);
 
@@ -156,8 +155,8 @@ impl TcpRelayLocal {
             (header_buf.slice_to(header_len), addr)
         };
 
-        let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
-                                           server_port).unwrap_or_else(|err| {
+        let mut remote_stream = TcpStream::connect(server_addr.ip.to_string().as_slice(),
+                                           server_addr.port).unwrap_or_else(|err| {
             match err.kind {
                 ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
                     send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
@@ -190,6 +189,7 @@ impl TcpRelayLocal {
                             stream.write(ip).unwrap();
                         },
                         Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
+                            stream.write([SOCKS5_ADDR_TYPE_IPV6]).unwrap();
                             stream.write_be_u16(v1).unwrap();
                             stream.write_be_u16(v2).unwrap();
                             stream.write_be_u16(v3).unwrap();
@@ -291,14 +291,14 @@ impl Relay for TcpRelayLocal {
         for s in acceptor.incoming() {
             let stream = s.unwrap();
 
-            let (server_addr, server_port, password, encrypt_method) = {
+            let (server_addr, password, encrypt_method) = {
                 let ref s = server_load_balancer.pick_server();
-                (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
+                (s.addr.clone(), s.password.clone(), s.method.clone())
             };
 
             spawn(proc()
                 TcpRelayLocal::handle_client(stream,
-                                             server_addr, server_port,
+                                             server_addr,
                                              password, encrypt_method));
         }
     }

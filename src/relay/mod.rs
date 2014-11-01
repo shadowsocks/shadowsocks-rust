@@ -25,6 +25,7 @@ pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
 
 mod tcprelay;
+#[cfg(feature = "enable-udp")]
 pub mod udprelay;
 pub mod local;
 pub mod server;

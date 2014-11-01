@@ -25,6 +25,7 @@ use std::task::try_future;
 
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
+#[cfg(feature = "enable-udp")]
 use relay::udprelay::local::UdpRelayLocal;
 use config::Config;
 

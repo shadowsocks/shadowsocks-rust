@@ -53,17 +53,17 @@ impl TcpRelayServer {
     }
 
     fn accept_loop(s: &ServerConfig) {
-        let (server_addr, server_port, password, encrypt_method, timeout, dns_cache_capacity) =
-                (s.address.to_string(),
-                 s.port,
+        let (server_addr, password, encrypt_method, timeout, dns_cache_capacity) =
+                (s.addr,
                  Arc::new(s.password.clone()),
                  Arc::new(s.method.clone()),
                  s.timeout,
                  s.dns_cache_capacity);
 
-        let mut acceptor = TcpListener::bind(server_addr.as_slice(), server_port).listen().unwrap();
+        let mut acceptor = TcpListener::bind(server_addr.ip.to_string().as_slice(),
+                                             server_addr.port).listen().unwrap();
 
-        info!("Shadowsocks listening on {}:{}", server_addr, server_port);
+        info!("Shadowsocks listening on {}", server_addr);
 
         let dnscache_arc = Arc::new(CachedDns::new(dns_cache_capacity));
 
