@@ -131,6 +131,15 @@ impl TcpRelayServer {
                     }
                 };
 
+                // Fixed issue #3
+                match bufr.read_to_end() {
+                    Ok(ref first_package) => {
+                        remote_stream.write(first_package.as_slice())
+                            .ok().expect("Error occurs while relaying the first package to remote");
+                    },
+                    Err(_) => ()
+                }
+
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();

@@ -148,19 +148,18 @@ impl TcpRelayLocal {
             panic!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
-        let (header, addr) = {
-            let mut header_buf = [0u8, .. 512];
-            let len = stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
+        let mut header_buf = [0u8, .. 512];
+        let len = stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
                 send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
                 panic!("Error occurs while reading header: {}", err);
             });
-
-            let mut bufr = BufReader::new(header_buf.slice_to(len));
+        let mut bufr = BufReader::new(header_buf.slice_to(len));
+        let (header, addr) = {
             let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
                 send_error_reply(&mut stream, err.code);
                 panic!("Error occurs while parsing request header: {}", err);
             });
-            (header_buf.slice_to(header_len).to_vec(), addr)
+            (header_buf.slice_to(header_len), addr)
         };
 
         let mut remote_stream = TcpStream::connect(server_addr.as_slice(),
@@ -212,6 +211,15 @@ impl TcpRelayLocal {
                     let encrypted_header = cipher.encrypt(header.as_slice());
                     remote_stream.write(encrypted_header.as_slice())
                             .ok().expect("Error occurs while writing header to remote stream");
+                }
+
+                // Fixed issue #3
+                match bufr.read_to_end() {
+                    Ok(ref first_package) => {
+                        remote_stream.write(cipher.encrypt(first_package.as_slice()).as_slice())
+                            .ok().expect("Error occurs while writing first package to remote stream");
+                    },
+                    Err(..) => ()
                 }
 
                 let mut remote_local_stream = stream.clone();
