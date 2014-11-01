@@ -57,16 +57,18 @@
 #[phase(plugin, link)]
 extern crate log;
 
+use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
-use std::sync::Arc;
-use std::collections::LruCache;
+use std::io::BufReader;
+use std::collections::{LruCache, HashSet};
 
-use config::Config;
+use config::{Config, ServerConfig, SingleServer, MultipleServer};
 use relay::Relay;
-use relay::parse_request_header;
 use crypto::cipher;
 use crypto::cipher::Cipher;
+use relay::socks5::{AddressType, parse_request_header};
+use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 const UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY: uint = 100;
 
@@ -82,7 +84,7 @@ impl UdpRelayLocal {
         }
     }
 
-    fn handle_request(socket: UdpSocket, request_message: Vec<u8>, client_addr: SocketAddr, config: &Config) {
+    fn handle_request(socket: UdpSocket, request_message: Vec<u8>, client_addr: SocketAddr, config: &ServerConfig) {
         // According to RFC 1928
         //
         // Implementation of fragmentation is optional; an implementation that
@@ -95,24 +97,28 @@ impl UdpRelayLocal {
         }
 
         let data = request_message.as_slice().slice_from(3);
+        let mut bufr = BufReader::new(data);
 
-        let (_, addr) = match parse_request_header(data) {
-            Ok(result) => result,
-            Err(..) => {
-                error!("Error while parsing request header");
-                return;
-            }
+        let (_, addr) = {
+            let (header_len, addr) = match parse_request_header(&mut bufr) {
+                Ok(result) => result,
+                Err(..) => {
+                    error!("Error while parsing request header");
+                    return;
+                }
+            };
+            (data.slice_to(header_len), addr)
         };
 
-        info!("UDP_ASSOCIATE {}", addr);
+        info!("UDP ASSOCIATE {}", addr);
 
         let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
                             .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
         let encrypted_data = cipher.encrypt(data);
 
         let remote_addr = SocketAddr {
-            ip: from_str(config.server.as_slice()).expect("Invalid server ip address"),
-            port: config.server_port
+            ip: from_str(config.address.as_slice()).expect("Invalid server ip address"),
+            port: config.port
         };
 
         let mut cloned_socket = socket.clone();
@@ -141,11 +147,26 @@ impl UdpRelayLocal {
 
 impl Relay for UdpRelayLocal {
     fn run(&self) {
-        let ref local_addr = self.config.local;
-        let ref local_port = self.config.local_port;
+        let addr = self.config.local.expect("Local configuration should not be None");
 
-        let addr = SocketAddr {ip: from_str(local_addr.as_slice()).expect("Invalid local ip address"),
-                               port: *local_port};
+        let mut server_load_balancer = RoundRobin::new(
+                                        self.config.server.clone().expect("`server` should not be None"));
+
+        let mut server_set = HashSet::new();
+        match self.config.server.clone().unwrap() {
+            SingleServer(s) => {
+                server_set.insert((s.address, s.port));
+            },
+            MultipleServer(ref slist) => {
+                for s in slist.iter() {
+                    server_set.insert((s.address.to_string(), s.port));
+                }
+            }
+        }
+
+        let client_map_arc = Arc::new(Mutex::new(
+                    LruCache::<AddressType, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
+
         let mut socket = UdpSocket::bind(addr).ok().expect("Failed to bind udp socket");
 
         let config_arc = Arc::new(self.config.clone());
@@ -162,8 +183,16 @@ impl Relay for UdpRelayLocal {
                     let request_message = buf.slice_to(len).to_vec();
                     let config = config_arc.clone();
                     let move_socket = socket.clone();
+                    let client_map = client_map_arc.clone();
+
+                    let s = server_load_balancer.pick_server().clone();
+
                     spawn(proc()
-                            UdpRelayLocal::handle_request(move_socket, request_message, source_addr, config.deref()));
+                        UdpRelayLocal::handle_request(move_socket,
+                                                      request_message,
+                                                      source_addr,
+                                                      &s));
+
                 },
                 Err(err) => {
                     error!("Failed in UDP recv_from: {}", err);

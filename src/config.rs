@@ -33,7 +33,6 @@
 //!     "timeout": 300,
 //!     "method": "aes-256-cfb",
 //!     "local_address": "127.0.0.1",
-//!     "fast_open": false
 //!     "dns_cache_capacity": 65536,
 //! }
 //! ```
@@ -60,7 +59,6 @@
 //!     ],
 //!     "local_port": 8388,
 //!     "local_address": "127.0.0.1",
-//!     "fast_open": false
 //! }
 //! ```
 //!
@@ -105,7 +103,7 @@ pub type ClientConfig = SocketAddr;
 pub struct Config {
     pub server: Option<ServerConfigVariant>,
     pub local: Option<ClientConfig>,
-    pub fast_open: bool,
+    pub enable_udp: bool,
 }
 
 impl Default for Config {
@@ -119,7 +117,7 @@ impl Config {
         Config {
             server: None,
             local: None,
-            fast_open: false,
+            enable_udp: false,
         }
     }
 
@@ -211,11 +209,6 @@ impl Config {
         } else {
             panic!("You have to provide `local_address` and `local_port` together");
         }
-
-        config.fast_open = match o.find(&"fast_open".to_string()) {
-            Some(fo) => fo.as_boolean().expect("fast_open should be an boolean value"),
-            None => false,
-        };
 
         Some(config)
     }

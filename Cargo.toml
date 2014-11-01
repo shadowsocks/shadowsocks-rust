@@ -31,6 +31,8 @@ cipher-rc2-cfb = []
 cipher-rc4 = []
 cipher-seed-cfb = []
 
+enable-udp = []
+
 [[bin]]
 
 name = "sslocal"

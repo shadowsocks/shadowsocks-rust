@@ -74,7 +74,7 @@ impl Error {
     }
 }
 
-#[deriving(Clone)]
+#[deriving(Clone, PartialEq, Eq, Hash)]
 pub struct DomainNameAddr {
     pub domain_name: String,
     pub port: Port,
@@ -86,7 +86,7 @@ impl Show for DomainNameAddr {
     }
 }
 
-#[deriving(Clone)]
+#[deriving(Clone, PartialEq, Eq, Hash)]
 pub enum AddressType {
     SocketAddress(SocketAddr),
     DomainNameAddress(DomainNameAddr),

@@ -25,7 +25,7 @@ use std::task::try_future;
 
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
-// use relay::udprelay::local::UdpRelayLocal;
+use relay::udprelay::local::UdpRelayLocal;
 use config::Config;
 
 /// Relay server running under local environment.
@@ -55,28 +55,47 @@ use config::Config;
 #[deriving(Clone)]
 pub struct RelayLocal {
     tcprelay: TcpRelayLocal,
-    // udprelay: UdpRelayLocal,
+    #[cfg(feature = "enable-udp")]
+    udprelay: UdpRelayLocal,
 }
 
 impl RelayLocal {
+    #[cfg(feature = "enable-udp")]
     pub fn new(config: Config) -> RelayLocal {
         let tcprelay = TcpRelayLocal::new(config.clone());
-        // let udprelay = UdpRelayLocal::new(config.clone());
+        let udprelay = UdpRelayLocal::new(config.clone());
         RelayLocal {
             tcprelay: tcprelay,
-            // udprelay: udprelay,
+            udprelay: udprelay,
+        }
+    }
+
+    #[cfg(not(feature = "enable-udp"))]
+    pub fn new(config: Config) -> RelayLocal {
+        let tcprelay = TcpRelayLocal::new(config.clone());
+        RelayLocal {
+            tcprelay: tcprelay,
         }
     }
 }
 
 impl Relay for RelayLocal {
+    #[cfg(not(feature = "enable-udp"))]
+    fn run(&self) {
+        let tcprelay = self.tcprelay.clone();
+        let tcp_future = try_future(proc() tcprelay.run());
+        drop(tcp_future);
+    }
+
+    #[cfg(feature = "enable-udp")]
     fn run(&self) {
         let tcprelay = self.tcprelay.clone();
         let tcp_future = try_future(proc() tcprelay.run());
 
-        // let udprelay = self.udprelay.clone();
-        // spawn(proc() udprelay.run());
+        let udprelay = self.udprelay.clone();
+        let udp_future = try_future(proc() udprelay.run());
 
-        drop(tcp_future.unwrap());
+        drop(tcp_future);
+        drop(udp_future);
     }
 }

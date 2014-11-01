@@ -25,7 +25,7 @@ pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
 
 mod tcprelay;
-// pub mod udprelay;
+pub mod udprelay;
 pub mod local;
 pub mod server;
 mod loadbalancing;

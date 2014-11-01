@@ -103,35 +103,29 @@ impl TcpRelayLocal {
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
-    #[allow(dead_code)]
     fn handle_udp_associate_local(stream: &mut TcpStream) {
+        let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00];
+        stream.write(reply_header)
+                .ok().expect("Error occurs while writing header to local stream");
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-        let mut reply = vec![SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00,
-                        SOCKS5_CMD_UDP_ASSOCIATE];
         match sockname.ip {
             Ipv4Addr(v1, v2, v3, v4) => {
                 let ip = [v1, v2, v3, v4];
-                reply.push(SOCKS5_ADDR_TYPE_IPV4);
-                reply.push_all(ip)
+                stream.write([SOCKS5_ADDR_TYPE_IPV4]).unwrap();
+                stream.write(ip).unwrap();
             },
             Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
-                let ip = [(v1 >> 8) as u8, (v1 & 0xff) as u8,
-                 (v2 >> 8) as u8, (v2 & 0xff) as u8,
-                 (v3 >> 8) as u8, (v3 & 0xff) as u8,
-                 (v4 >> 8) as u8, (v4 & 0xff) as u8,
-                 (v5 >> 8) as u8, (v5 & 0xff) as u8,
-                 (v6 >> 8) as u8, (v6 & 0xff) as u8,
-                 (v7 >> 8) as u8, (v7 & 0xff) as u8,
-                 (v8 >> 8) as u8, (v8 & 0xff) as u8];
-                reply.push(SOCKS5_ADDR_TYPE_IPV6);
-                reply.push_all(ip);
+                stream.write_be_u16(v1).unwrap();
+                stream.write_be_u16(v2).unwrap();
+                stream.write_be_u16(v3).unwrap();
+                stream.write_be_u16(v4).unwrap();
+                stream.write_be_u16(v5).unwrap();
+                stream.write_be_u16(v6).unwrap();
+                stream.write_be_u16(v7).unwrap();
+                stream.write_be_u16(v8).unwrap();
             }
         }
-
-        reply.push((sockname.port >> 8) as u8);
-        reply.push((sockname.port & 0xff) as u8);
-
-        stream.write(reply.as_slice()).ok().expect("Failed to write to local stream");
+        stream.write_be_u16(sockname.port).unwrap();
     }
 
     fn handle_client(mut stream: TcpStream,
@@ -243,32 +237,31 @@ impl TcpRelayLocal {
                         })
                 });
 
-                spawn(proc() {
-                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
-                        .unwrap_or_else(|err| {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr, err)
-                                }
+                relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
+                    .unwrap_or_else(|err| {
+                        match err.kind {
+                            EndOfFile | BrokenPipe => {
+                                debug!("{} relay from local to remote stream: {}", addr, err)
+                            },
+                            _ => {
+                                error!("{} relay from local to remote stream: {}", addr, err)
                             }
-                            remote_stream.close_write().or(Ok(())).unwrap();
-                            stream.close_read().or(Ok(())).unwrap();
-                        })
-                });
+                        }
+                        remote_stream.close_write().or(Ok(())).unwrap();
+                        stream.close_read().or(Ok(())).unwrap();
+                    })
             },
             SOCKS5_CMD_TCP_BIND => {
                 warn!("BIND is not supported");
                 send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
-                info!("UDP ASSOCIATE {}", addr);
-                warn!("UDP ASSOCIATE is not supported");
-                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
-
-                // TcpRelayLocal::handle_udp_associate_local(stream);
+                if cfg!(feature = "enable-udp") {
+                    TcpRelayLocal::handle_udp_associate_local(&mut stream);
+                } else {
+                    warn!("UDP ASSOCIATE is not supported");
+                    send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                }
             },
             _ => {
                 // unsupported CMD
@@ -281,10 +274,8 @@ impl TcpRelayLocal {
 
 impl Relay for TcpRelayLocal {
     fn run(&self) {
-        let server_load_balancer = Arc::new(
-                                        Mutex::new(
-                                            RoundRobin::new(
-                                                self.config.server.clone().expect("`server` should not be None"))));
+        let mut server_load_balancer = RoundRobin::new(
+                                        self.config.server.clone().expect("`server` should not be None"));
 
         let local_conf = self.config.local.unwrap();
 
@@ -301,8 +292,7 @@ impl Relay for TcpRelayLocal {
             let stream = s.unwrap();
 
             let (server_addr, server_port, password, encrypt_method) = {
-                let mut slb = server_load_balancer.lock();
-                let ref s = slb.pick_server();
+                let ref s = server_load_balancer.pick_server();
                 (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
             };
 
