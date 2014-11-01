@@ -24,6 +24,7 @@
 use std::fmt::{Show, Formatter, FormatError};
 use std::io::net::ip::{SocketAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
+use std::io::Reader;
 
 pub const SOCKS5_VERSION : u8 = 0x05;
 
@@ -100,59 +101,68 @@ impl Show for AddressType {
     }
 }
 
-pub fn parse_request_header(buf: &[u8]) -> Result<(uint, AddressType), Error> {
-    let atyp = buf[0];
+pub fn parse_request_header(stream: &mut Reader) -> Result<(uint, AddressType), Error> {
+    let atyp = match stream.read_byte() {
+        Ok(atyp) => atyp,
+        Err(_) => return Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Error while reading address type"))
+    };
+
     match atyp {
         SOCKS5_ADDR_TYPE_IPV4 => {
-            if buf.len() < 7 {
-                error!("Invalid IPv4 header");
-                return Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Invalid IPv4 header"));
+            let wrapper = || {
+                let v4addr = Ipv4Addr(try!(stream.read_byte()),
+                                      try!(stream.read_byte()),
+                                      try!(stream.read_byte()),
+                                      try!(stream.read_byte()));
+                let port = try!(stream.read_be_u16());
+                Ok((v4addr, port))
+            };
+            match wrapper() {
+                Ok((v4addr, port)) => Ok((7u, SocketAddress(SocketAddr{ip: v4addr, port: port}))),
+                Err(_) =>
+                    Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Error while parsing IPv4 address"))
             }
-
-            let raw_addr = buf.slice(1, 5);
-            let v4addr = Ipv4Addr(raw_addr[0], raw_addr[1], raw_addr[2], raw_addr[3]);
-
-            let raw_port = buf.slice(5, 7);
-            let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
-
-            Ok((7u, SocketAddress(SocketAddr{ip: v4addr, port: port})))
         },
         SOCKS5_ADDR_TYPE_IPV6 => {
-            if buf.len() < 19 {
-                error!("Invalid IPv6 header");
-                return Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Invalid IPv6 header"));
+            let wrapper = || {
+                let v6addr = Ipv6Addr(try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()),
+                                      try!(stream.read_be_u16()));
+                let port = try!(stream.read_be_u16());
+                Ok((v6addr, port))
+            };
+
+            match wrapper() {
+                Ok((v6addr, port)) =>
+                    Ok((19u, SocketAddress(SocketAddr{ip: v6addr, port: port}))),
+                Err(_) =>
+                    Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Error while parsing IPv6 address"))
             }
-
-            let raw_addr = buf.slice(1, 17);
-            let v6addr = Ipv6Addr((raw_addr[0] as u16 << 8) | raw_addr[1] as u16,
-                                  (raw_addr[2] as u16 << 8) | raw_addr[3] as u16,
-                                  (raw_addr[4] as u16 << 8) | raw_addr[5] as u16,
-                                  (raw_addr[6] as u16 << 8) | raw_addr[7] as u16,
-                                  (raw_addr[8] as u16 << 8) | raw_addr[9] as u16,
-                                  (raw_addr[10] as u16 << 8) | raw_addr[11] as u16,
-                                  (raw_addr[12] as u16 << 8) | raw_addr[13] as u16,
-                                  (raw_addr[14] as u16 << 8) | raw_addr[15] as u16);
-
-            let raw_port = buf.slice(17, 19);
-            // Big Endian
-            let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
-
-            Ok((19u, SocketAddress(SocketAddr{ip: v6addr, port: port})))
         },
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-            let addr_len = buf[1] as uint;
-            if buf.len() < 4 + addr_len {
-                error!("Invalid domain name header");
-                return Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Invalid domain name header"));
-            }
-            let raw_addr = buf.slice(2, 2 + addr_len);
-            let raw_port = buf.slice(2 + addr_len, 4 + addr_len);
-            let port = (raw_port[0] as u16 << 8) | raw_port[1] as u16;
+            let wrapper = || {
+                let addr_len = try!(stream.read_byte()) as uint;
+                let raw_addr = try!(stream.read_exact(addr_len));
+                let port = try!(stream.read_be_u16());
 
-            Ok((4 + addr_len, DomainNameAddress(DomainNameAddr{
-                                                domain_name: String::from_utf8(raw_addr.to_vec()).unwrap(),
-                                                port: port,
-                                            })))
+                Ok((addr_len, raw_addr, port))
+            };
+
+            match wrapper() {
+                Ok((addr_len, raw_addr, port)) =>
+                    Ok((4 + addr_len, DomainNameAddress(DomainNameAddr{
+                                                            domain_name: String::from_utf8(raw_addr).unwrap(),
+                                                            port: port,
+                                                        }))),
+                Err(_) => {
+                    Err(Error::new(SOCKS5_REPLY_GENERAL_FAILURE, "Error while parsing domain name"))
+                }
+            }
         },
         _ => {
             // Address type not supported

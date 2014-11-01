@@ -26,6 +26,7 @@ use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
 use std::io::net::ip::SocketAddr;
+use std::io::BufReader;
 use std::time::duration::Duration;
 
 use config::{Config, SingleServer, MultipleServer, ServerConfig};
@@ -66,107 +67,105 @@ impl TcpRelayServer {
 
         let dnscache_arc = Arc::new(CachedDns::new(dns_cache_capacity));
 
-        loop {
-            match acceptor.accept() {
-                Ok(mut stream) => {
-                    stream.set_timeout(timeout);
+        for s in acceptor.incoming() {
+            let mut stream = s.unwrap();
+            stream.set_timeout(timeout);
 
-                    let password = password.clone();
-                    let encrypt_method = encrypt_method.clone();
-                    let dnscache = dnscache_arc.clone();
+            let password = password.clone();
+            let encrypt_method = encrypt_method.clone();
+            let dnscache = dnscache_arc.clone();
 
-                    spawn(proc() {
-                        let mut cipher = cipher::with_name(encrypt_method.as_slice(),
-                                                       password.as_slice().as_bytes())
-                                                .expect("Unsupported cipher");
+            spawn(proc() {
+                let mut cipher = cipher::with_name(encrypt_method.as_slice(),
+                                               password.as_slice().as_bytes())
+                                        .expect("Unsupported cipher");
 
-                        let header = {
-                            let mut buf = [0u8, .. 1024];
-                            let header_len = stream.read(buf).unwrap_or_else(|err| {
-                                panic!("Error occurs while reading header: {}", err);
-                            });
-                            cipher.decrypt(buf.slice_to(header_len))
-                        };
-
-                        let (_, addr) = parse_request_header(header.as_slice()).unwrap_or_else(|_| {
-                            panic!("Error occurs while parsing request header, \
-                                        maybe wrong crypto method or password");
-                        });
-                        info!("Connecting to {}", addr);
-                        let mut remote_stream = match addr {
-                            SocketAddress(sockaddr) => {
-                                TcpStream::connect_timeout(sockaddr, Duration::seconds(30)).unwrap_or_else(|err| {
-                                    panic!("{} unable to connect {}: {}", addr, sockaddr, err)
-                                })
-                            },
-                            DomainNameAddress(ref domainaddr) => {
-                                let ipaddrs = {
-                                    // Cannot fail inside, which will cause other tasks fail, too.
-                                    dnscache.resolve(domainaddr.domain_name.as_slice())
-                                }.expect(format!("Failed to resolve {}", domainaddr).as_slice());
-
-                                let connector = || {
-                                    for ipaddr in ipaddrs.iter() {
-                                        let result = TcpStream::connect_timeout(SocketAddr {
-                                                                        ip: *ipaddr,
-                                                                        port: domainaddr.port
-                                                                    },
-                                                                    Duration::seconds(30));
-                                        match result {
-                                            Err(err) => debug!("{} trying {}: {}", addr, ipaddr, err),
-                                            Ok(host) => {
-                                                debug!("{} trying {}: succeed", addr, ipaddr);
-                                                return host;
-                                            }
-                                        }
-                                    }
-                                    panic!("{} unable to connect {}", addr, domainaddr);
-                                };
-                                connector()
-                            }
-                        };
-
-                        let mut remote_local_stream = stream.clone();
-                        let mut remote_remote_stream = remote_stream.clone();
-                        let mut remote_cipher = cipher.clone();
-                        let remote_addr_clone = addr.clone();
-                        spawn(proc() {
-                            relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
-                                          |msg| remote_cipher.encrypt(msg))
-                                .unwrap_or_else(|err| {
-                                    match err.kind {
-                                        EndOfFile | BrokenPipe => {
-                                            debug!("{} relay from remote to local stream: {}", remote_addr_clone, err)
-                                        },
-                                        _ => {
-                                            error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
-                                        }
-                                    }
-                                    remote_local_stream.close_write().or(Ok(())).unwrap();
-                                    remote_remote_stream.close_read().or(Ok(())).unwrap();
-                                })
-                        });
-                        spawn(proc() {
-                            relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
-                                .unwrap_or_else(|err| {
-                                    match err.kind {
-                                        EndOfFile | BrokenPipe => {
-                                            debug!("{} relay from local to remote stream: {}", addr, err)
-                                        },
-                                        _ => {
-                                            error!("{} relay from local to remote stream: {}", addr, err)
-                                        }
-                                    }
-                                    remote_stream.close_write().or(Ok(())).unwrap();
-                                    stream.close_read().or(Ok(())).unwrap();
-                                })
-                        });
+                let header = {
+                    let mut buf = [0u8, .. 1024];
+                    let header_len = stream.read(buf).unwrap_or_else(|err| {
+                        panic!("Error occurs while reading header: {}", err);
                     });
-                },
-                Err(e) => {
-                    panic!("Error occurs while accepting: {}", e);
-                }
-            }
+                    debug!("Header len: {}", header_len);
+                    cipher.decrypt(buf.slice_to(header_len))
+                };
+
+                let mut bufr = BufReader::new(header.as_slice());
+                let (_, addr) = parse_request_header(&mut bufr).unwrap_or_else(|_| {
+                    panic!("Error occurs while parsing request header, \
+                                maybe wrong crypto method or password");
+                });
+                info!("Connecting to {}", addr);
+                let mut remote_stream = match addr {
+                    SocketAddress(sockaddr) => {
+                        TcpStream::connect_timeout(sockaddr, Duration::seconds(30)).unwrap_or_else(|err| {
+                            panic!("{} unable to connect {}: {}", addr, sockaddr, err)
+                        })
+                    },
+                    DomainNameAddress(ref domainaddr) => {
+                        let ipaddrs = {
+                            // Cannot fail inside, which will cause other tasks fail, too.
+                            dnscache.resolve(domainaddr.domain_name.as_slice())
+                        }.expect(format!("Failed to resolve {}", domainaddr).as_slice());
+
+                        let connector = || {
+                            for ipaddr in ipaddrs.iter() {
+                                let result = TcpStream::connect_timeout(SocketAddr {
+                                                                ip: *ipaddr,
+                                                                port: domainaddr.port
+                                                            },
+                                                            Duration::seconds(30));
+                                match result {
+                                    Err(err) => debug!("{} trying {}: {}", addr, ipaddr, err),
+                                    Ok(host) => {
+                                        debug!("{} trying {}: succeed", addr, ipaddr);
+                                        return host;
+                                    }
+                                }
+                            }
+                            panic!("{} unable to connect {}", addr, domainaddr);
+                        };
+                        connector()
+
+                        // TcpStream::connect(domainaddr.domain_name.as_slice(), domainaddr.port)
+                        //     .ok().expect(format!("Unable to connect {}", domainaddr).as_slice())
+                    }
+                };
+
+                let mut remote_local_stream = stream.clone();
+                let mut remote_remote_stream = remote_stream.clone();
+                let mut remote_cipher = cipher.clone();
+                let remote_addr_clone = addr.clone();
+                spawn(proc() {
+                    relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
+                                  |msg| remote_cipher.encrypt(msg))
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    debug!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                },
+                                _ => {
+                                    error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                }
+                            }
+                            remote_local_stream.close_write().or(Ok(())).unwrap();
+                            remote_remote_stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
+
+                relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
+                    .unwrap_or_else(|err| {
+                        match err.kind {
+                            EndOfFile | BrokenPipe => {
+                                debug!("{} relay from local to remote stream: {}", addr, err)
+                            },
+                            _ => {
+                                error!("{} relay from local to remote stream: {}", addr, err)
+                            }
+                        }
+                        remote_stream.close_write().or(Ok(())).unwrap();
+                        stream.close_read().or(Ok(())).unwrap();
+                    });
+            });
         }
     }
 }

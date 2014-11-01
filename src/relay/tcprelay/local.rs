@@ -33,13 +33,14 @@ use std::io::{
 };
 use std::io::net::ip::Port;
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
+use std::io::BufReader;
 
 use config::Config;
 
 use relay::Relay;
 use relay::socks5::parse_request_header;
 use relay::tcprelay::{send_error_reply, relay_and_map};
-use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE};
+use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
 use relay::socks5::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
 use relay::socks5::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
 use relay::socks5::{
@@ -85,8 +86,12 @@ impl TcpRelayLocal {
             panic!("Invalid socks version \"{:x}\" in handshake", sock_ver);
         }
 
-        let _ = stream.read_exact(nmethods as uint).ok().expect("Error occurs while receiving methods");
-        // TODO: validating methods
+        let methods = stream.read_exact(nmethods as uint).ok().expect("Error occurs while receiving methods");
+
+        if !methods.contains(&SOCKS5_AUTH_METHOD_NONE) {
+            stream.write([SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE]).unwrap();
+            panic!("Currently shadowsocks-rust does not support authentication");
+        }
 
         // Reply to client
         // +----+--------+
@@ -145,12 +150,13 @@ impl TcpRelayLocal {
 
         let (header, addr) = {
             let mut header_buf = [0u8, .. 512];
-            stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
+            let len = stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
                 send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
                 panic!("Error occurs while reading header: {}", err);
             });
 
-            let (header_len, addr) = parse_request_header(header_buf).unwrap_or_else(|err| {
+            let mut bufr = BufReader::new(header_buf.slice_to(len));
+            let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
                 send_error_reply(&mut stream, err.code);
                 panic!("Error occurs while parsing request header: {}", err);
             });
@@ -179,10 +185,29 @@ impl TcpRelayLocal {
                 info!("CONNECT {}", addr);
 
                 {
-                    let reply = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED,
-                                    0x00, SOCKS5_CMD_TCP_CONNECT, 0x00, 0x00, 0x00, 0x00, 0x10, 0x10];
-                    stream.write(reply)
+                    let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED,
+                                    0x00];
+                    stream.write(reply_header)
                             .ok().expect("Error occurs while writing header to local stream");
+                    let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+                    match sockname.ip {
+                        Ipv4Addr(v1, v2, v3, v4) => {
+                            let ip = [v1, v2, v3, v4];
+                            stream.write([SOCKS5_ADDR_TYPE_IPV4]).unwrap();
+                            stream.write(ip).unwrap();
+                        },
+                        Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
+                            stream.write_be_u16(v1).unwrap();
+                            stream.write_be_u16(v2).unwrap();
+                            stream.write_be_u16(v3).unwrap();
+                            stream.write_be_u16(v4).unwrap();
+                            stream.write_be_u16(v5).unwrap();
+                            stream.write_be_u16(v6).unwrap();
+                            stream.write_be_u16(v7).unwrap();
+                            stream.write_be_u16(v8).unwrap();
+                        }
+                    }
+                    stream.write_be_u16(sockname.port).unwrap();
 
                     let encrypted_header = cipher.encrypt(header.as_slice());
                     remote_stream.write(encrypted_header.as_slice())
@@ -264,24 +289,19 @@ impl Relay for TcpRelayLocal {
 
         info!("Shadowsocks listening on {}", local_conf);
 
-        loop {
-            match acceptor.accept() {
-                Ok(stream) => {
-                    let (server_addr, server_port, password, encrypt_method) = {
-                        let mut slb = server_load_balancer.lock();
-                        let ref s = slb.pick_server();
-                        (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
-                    };
+        for s in acceptor.incoming() {
+            let stream = s.unwrap();
 
-                    spawn(proc()
-                        TcpRelayLocal::handle_client(stream,
-                                                     server_addr, server_port,
-                                                     password, encrypt_method));
-                },
-                Err(e) => {
-                    panic!("Error occurs while accepting: {}", e.to_string());
-                }
-            }
+            let (server_addr, server_port, password, encrypt_method) = {
+                let mut slb = server_load_balancer.lock();
+                let ref s = slb.pick_server();
+                (s.address.clone(), s.port.clone(), s.password.clone(), s.method.clone())
+            };
+
+            spawn(proc()
+                TcpRelayLocal::handle_client(stream,
+                                             server_addr, server_port,
+                                             password, encrypt_method));
         }
     }
 }

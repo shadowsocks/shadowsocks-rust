@@ -43,7 +43,7 @@ pub fn relay_and_map(from: &mut TcpStream, to: &mut TcpStream, mapper: |&[u8]| -
         -> IoResult<()> {
     let mut buf = [0u8, .. 0xffff];
     loop {
-        let len = try!(from.read_at_least(1, buf));
+        let len = try!(from.read(buf));
         let msg = mapper(buf.slice_to(len));
         try!(to.write(msg.as_slice()));
     }
