@@ -99,6 +99,8 @@ It supports the following features:
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
 
+**The `socks5_cli.rs` under the root directory is a Socks5 client for testing.**
+
 ## TODO
 
 * Documentation
