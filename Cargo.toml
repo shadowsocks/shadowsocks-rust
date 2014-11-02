@@ -17,6 +17,8 @@ default = [
     "cipher-des-cfb",
     "cipher-rc2-cfb",
     "cipher-rc4",
+
+    "enable-udp",
 ]
 
 cipher-aes-cfb = []

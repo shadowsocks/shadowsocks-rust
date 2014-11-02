@@ -23,7 +23,8 @@
 
 use std::task::try_future;
 
-// use relay::udprelay::server::UdpRelayServer;
+#[cfg(feature = "enable-udp")]
+use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
 use relay::Relay;
 use config::Config;
@@ -57,27 +58,48 @@ use config::Config;
 #[deriving(Clone)]
 pub struct RelayServer {
     tcprelay: TcpRelayServer,
-    // udprelay: UdpRelayServer,
+    #[cfg(feature = "enable-udp")]
+    udprelay: UdpRelayServer,
 }
 
 impl RelayServer {
+    #[cfg(feature = "enable-udp")]
     pub fn new(config: Config) -> RelayServer {
         let tcprelay = TcpRelayServer::new(config.clone());
-        // let udprelay = UdpRelayServer::new(config.clone());
+        let udprelay = UdpRelayServer::new(config.clone());
         RelayServer {
             tcprelay: tcprelay,
-            // udprelay: udprelay,
+            udprelay: udprelay,
+        }
+    }
+
+    #[cfg(not(feature = "enable-udp"))]
+    pub fn new(config: Config) -> RelayServer {
+        let tcprelay = TcpRelayServer::new(config.clone());
+        RelayServer {
+            tcprelay: tcprelay,
         }
     }
 }
 
 impl Relay for RelayServer {
+    #[cfg(feature = "enable-udp")]
     fn run(&self) {
         let tcprelay = self.tcprelay.clone();
-        // let udprelay = self.udprelay.clone();
+        let udprelay = self.udprelay.clone();
 
         let tcp_future = try_future(proc() tcprelay.run());
-        // spawn(proc() udprelay.run());
+        let udp_future = try_future(proc() udprelay.run());
+
+        drop(tcp_future.unwrap());
+        drop(udp_future.unwrap());
+    }
+
+    #[cfg(not(feature = "enable-udp"))]
+    fn run(&self) {
+        let tcprelay = self.tcprelay.clone();
+
+        let tcp_future = try_future(proc() tcprelay.run());
 
         drop(tcp_future.unwrap());
     }

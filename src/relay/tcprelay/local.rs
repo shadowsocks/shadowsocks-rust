@@ -31,17 +31,15 @@ use std::io::{
     BrokenPipe
 };
 use std::io::net::ip::SocketAddr;
-use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::BufReader;
 
 use config::Config;
 
 use relay::Relay;
-use relay::socks5::parse_request_header;
+use relay::socks5::{parse_request_header, write_addr, SocketAddress};
 use relay::tcprelay::{send_error_reply, relay_and_map};
 use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
 use relay::socks5::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
-use relay::socks5::{SOCKS5_ADDR_TYPE_IPV6, SOCKS5_ADDR_TYPE_IPV4};
 use relay::socks5::{
     SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
     SOCKS5_REPLY_HOST_UNREACHABLE,
@@ -107,24 +105,8 @@ impl TcpRelayLocal {
         stream.write(reply_header)
                 .ok().expect("Error occurs while writing header to local stream");
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-        match sockname.ip {
-            Ipv4Addr(v1, v2, v3, v4) => {
-                let ip = [v1, v2, v3, v4];
-                stream.write([SOCKS5_ADDR_TYPE_IPV4]).unwrap();
-                stream.write(ip).unwrap();
-            },
-            Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
-                stream.write_be_u16(v1).unwrap();
-                stream.write_be_u16(v2).unwrap();
-                stream.write_be_u16(v3).unwrap();
-                stream.write_be_u16(v4).unwrap();
-                stream.write_be_u16(v5).unwrap();
-                stream.write_be_u16(v6).unwrap();
-                stream.write_be_u16(v7).unwrap();
-                stream.write_be_u16(v8).unwrap();
-            }
-        }
-        stream.write_be_u16(sockname.port).unwrap();
+
+        write_addr(&SocketAddress(sockname), stream).unwrap();
     }
 
     fn handle_client(mut stream: TcpStream,
@@ -177,30 +159,11 @@ impl TcpRelayLocal {
                 info!("CONNECT {}", addr);
 
                 {
-                    let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED,
-                                    0x00];
+                    let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00];
                     stream.write(reply_header)
                             .ok().expect("Error occurs while writing header to local stream");
                     let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-                    match sockname.ip {
-                        Ipv4Addr(v1, v2, v3, v4) => {
-                            let ip = [v1, v2, v3, v4];
-                            stream.write([SOCKS5_ADDR_TYPE_IPV4]).unwrap();
-                            stream.write(ip).unwrap();
-                        },
-                        Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
-                            stream.write([SOCKS5_ADDR_TYPE_IPV6]).unwrap();
-                            stream.write_be_u16(v1).unwrap();
-                            stream.write_be_u16(v2).unwrap();
-                            stream.write_be_u16(v3).unwrap();
-                            stream.write_be_u16(v4).unwrap();
-                            stream.write_be_u16(v5).unwrap();
-                            stream.write_be_u16(v6).unwrap();
-                            stream.write_be_u16(v7).unwrap();
-                            stream.write_be_u16(v8).unwrap();
-                        }
-                    }
-                    stream.write_be_u16(sockname.port).unwrap();
+                    write_addr(&SocketAddress(sockname), &mut stream).unwrap();
 
                     let encrypted_header = cipher.encrypt(header.as_slice());
                     remote_stream.write(encrypted_header.as_slice())
@@ -256,6 +219,8 @@ impl TcpRelayLocal {
                 send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
+                let sockname = stream.peer_name().unwrap();
+                info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") {
                     TcpRelayLocal::handle_udp_associate_local(&mut stream);
                 } else {

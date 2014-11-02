@@ -89,7 +89,7 @@ impl Relay for RelayLocal {
     fn run(&self) {
         let tcprelay = self.tcprelay.clone();
         let tcp_future = try_future(proc() tcprelay.run());
-        drop(tcp_future);
+        drop(tcp_future.unwrap());
     }
 
     #[cfg(feature = "enable-udp")]
@@ -100,7 +100,7 @@ impl Relay for RelayLocal {
         let udprelay = self.udprelay.clone();
         let udp_future = try_future(proc() udprelay.run());
 
-        drop(tcp_future);
-        drop(udp_future);
+        drop(tcp_future.unwrap());
+        drop(udp_future.unwrap());
     }
 }

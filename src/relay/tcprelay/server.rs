@@ -85,7 +85,6 @@ impl TcpRelayServer {
                     let header_len = stream.read(buf).unwrap_or_else(|err| {
                         panic!("Error occurs while reading header: {}", err);
                     });
-                    debug!("Header len: {}", header_len);
                     cipher.decrypt(buf.slice_to(header_len))
                 };
 
@@ -182,14 +181,15 @@ impl TcpRelayServer {
 impl Relay for TcpRelayServer {
     fn run(&self) {
         let mut futures = Vec::new();
-        match self.config.server.clone().unwrap() {
-            SingleServer(s) => {
+        match self.config.server.as_ref().unwrap() {
+            &SingleServer(ref sref) => {
+                let s = sref.clone();
                 let fut = try_future(proc() {
                     TcpRelayServer::accept_loop(&s);
                 });
                 futures.push(fut);
             },
-            MultipleServer(slist) => {
+            &MultipleServer(ref slist) => {
                 for ref_s in slist.iter() {
                     let s = ref_s.clone();
                     let fut = try_future(proc() {
@@ -201,7 +201,7 @@ impl Relay for TcpRelayServer {
         }
 
         for fut in futures.into_iter() {
-            drop(fut);
+            drop(fut.unwrap());
         }
     }
 }

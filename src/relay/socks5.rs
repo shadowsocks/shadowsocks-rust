@@ -24,7 +24,7 @@
 use std::fmt::{Show, Formatter, FormatError};
 use std::io::net::ip::{SocketAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
-use std::io::Reader;
+use std::io::{Reader, IoResult};
 
 pub const SOCKS5_VERSION : u8 = 0x05;
 
@@ -169,4 +169,36 @@ pub fn parse_request_header(stream: &mut Reader) -> Result<(uint, AddressType), 
             Err(Error::new(SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED, "Not supported address type"))
         }
     }
+}
+
+pub fn write_addr(addr: &AddressType, buf: &mut Writer) -> IoResult<()> {
+    match addr {
+        &SocketAddress(ref sockaddr) => {
+            match sockaddr.ip {
+                Ipv4Addr(v1, v2, v3, v4) => {
+                    try!(buf.write([SOCKS5_ADDR_TYPE_IPV4,
+                                        v1, v2, v3, v4]));
+                },
+                Ipv6Addr(v1, v2, v3, v4, v5, v6, v7, v8) => {
+                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6));
+                    try!(buf.write_be_u16(v1));
+                    try!(buf.write_be_u16(v2));
+                    try!(buf.write_be_u16(v3));
+                    try!(buf.write_be_u16(v4));
+                    try!(buf.write_be_u16(v5));
+                    try!(buf.write_be_u16(v6));
+                    try!(buf.write_be_u16(v7));
+                    try!(buf.write_be_u16(v8));
+                }
+            }
+            try!(buf.write_be_u16(sockaddr.port));
+        },
+        &DomainNameAddress(ref dnaddr) => {
+            try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
+            try!(buf.write_str(dnaddr.domain_name.as_slice()));
+            try!(buf.write_be_u16(dnaddr.port));
+        }
+    }
+
+    Ok(())
 }

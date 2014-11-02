@@ -24,3 +24,6 @@ extern crate log;
 
 pub mod local;
 pub mod server;
+
+const UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY: uint = 1024;
+const UDP_RELAY_SERVER_LRU_CACHE_CAPACITY: uint = 10240;
