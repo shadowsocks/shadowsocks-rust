@@ -31,6 +31,8 @@ Enable more crypto algorithms by passing the name `cipher-[name]` via command li
 cargo build --features "cipher-aes-ctr"
 ```
 
+Read `Cargo.toml` for more details.
+
 ## Getting Started
 
 Create a shadowsocks' configuration file. Example
@@ -44,7 +46,6 @@ Create a shadowsocks' configuration file. Example
     "password": "mypassword",
     "timeout": 300,
     "method": "aes-256-cfb",
-    "fast_open": false,
 }
 ```
 
@@ -70,8 +71,7 @@ In shadowsocks-rust, we also have a extended configuration file format, which is
         }
     ],
     "local_port": 8388,
-    "local_address":"127.0.0.1",
-    "fast_open": false
+    "local_address": "127.0.0.1",
 }
 ```
 
@@ -95,20 +95,18 @@ Still under developing and waiting for the final release of rust-1.0.
 
 It supports the following features:
 
-* CONNECT command
+* CONNECT, UDP ASSOCIATE commands
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
 
 ## TODO
 
 * Documentation
-* `UDP_ASSOCIATION` and `BIND` command
+* `BIND` command (Maybe no one will use it)
 * Socks5 authentication
 * <del>Extend configuration format</del>
-* <del>DNS cache</del>
 * Fully testing on servers
 * Performance testing and improvement
-* Multiple workers
 * User management
 * PAC
 * Improved logging format (waiting for the new official log crate)
