@@ -137,26 +137,26 @@ impl TcpRelayLocal {
             (header_buf.slice_to(header_len), addr)
         };
 
-        let mut remote_stream = TcpStream::connect(server_addr.ip.to_string().as_slice(),
-                                           server_addr.port).unwrap_or_else(|err| {
-            match err.kind {
-                ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                    send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
-                },
-                _ => {
-                    send_error_reply(&mut stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
-                }
-            }
-            panic!("Failed to connect remote server: {}", err);
-        });
-
-        let mut cipher = cipher::with_name(encrypt_method.as_slice(),
-                                       password.as_slice().as_bytes())
-                                .expect("Unsupported cipher");
-
         match cmd {
             SOCKS5_CMD_TCP_CONNECT => {
                 info!("CONNECT {}", addr);
+
+                let mut remote_stream = TcpStream::connect(server_addr.ip.to_string().as_slice(),
+                                           server_addr.port).unwrap_or_else(|err| {
+                    match err.kind {
+                        ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
+                            send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                        },
+                        _ => {
+                            send_error_reply(&mut stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
+                        }
+                    }
+                    panic!("Failed to connect remote server: {}", err);
+                });
+
+                let mut cipher = cipher::with_name(encrypt_method.as_slice(),
+                                               password.as_slice().as_bytes())
+                                        .expect("Unsupported cipher");
 
                 {
                     let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00];

@@ -59,11 +59,6 @@ impl UdpRelayServer {
         loop {
             match socket.recv_from(buf) {
                 Ok((len, src)) => {
-                    if len < 4 {
-                        error!("UDP request is too short");
-                        continue;
-                    }
-
                     let data = buf.slice_to(len).to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();

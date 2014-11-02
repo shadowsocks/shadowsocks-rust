@@ -185,7 +185,7 @@ fn handle_request(mut socket: UdpSocket,
         (data.slice_to(header_len), addr)
     };
 
-    info!("UDP ASSOCIATE {}", from_addr);
+    info!("UDP ASSOCIATE {}", addr);
     debug!("UDP associate {} <-> {}", addr, from_addr);
 
     client_map.lock().put(addr, from_addr);
