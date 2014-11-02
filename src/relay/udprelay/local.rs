@@ -60,7 +60,7 @@ extern crate log;
 use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
-use std::collections::{LruCache, HashMap, Map};
+use std::collections::{LruCache, HashMap};
 use std::io::BufReader;
 
 use crypto::cipher;
