@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2014 Y. T. CHUNG
+// Copyright (c) 2014 Y. T. CHUNG <zonyitoo@gmail.com>
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -33,7 +33,7 @@
 //!     "timeout": 300,
 //!     "method": "aes-256-cfb",
 //!     "local_address": "127.0.0.1",
-//!     "dns_cache_capacity": 65536,
+//!     "dns_cache_capacity": 65536
 //! }
 //! ```
 //!
@@ -58,7 +58,7 @@
 //!         }
 //!     ],
 //!     "local_port": 8388,
-//!     "local_address": "127.0.0.1",
+//!     "local_address": "127.0.0.1"
 //! }
 //! ```
 //!

@@ -1,14 +1,15 @@
 [package]
 
 name = "shadowsocks-rust"
-version = "0.9.1"
-authors = ["Y. T. Chung <zonyitoo@gmail.com>"]
+version = "0.9.2"
+authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 
 [lib]
 
 name = "shadowsocks"
 
 [features]
+
 default = [
     "cipher-aes-cfb",
     "cipher-aes-ofb",
