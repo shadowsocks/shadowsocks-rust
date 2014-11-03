@@ -238,7 +238,10 @@ impl Config {
         }
 
         if require_local_info {
-            if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {
+            let has_local_address = o.contains_key(&"local_address".to_string());
+            let has_local_port = o.contains_key(&"local_port".to_string());
+
+            if has_local_address && has_local_port {
                 config.local = match o.find(&"local_address".to_string()) {
                     Some(local_addr) => {
                         Some(SocketAddr {
@@ -251,7 +254,7 @@ impl Config {
                     },
                     None => None,
                 };
-            } else {
+            } else if has_local_address ^ has_local_port {
                 panic!("You have to provide `local_address` and `local_port` together");
             }
         }
