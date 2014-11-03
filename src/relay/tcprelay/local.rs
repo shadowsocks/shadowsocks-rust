@@ -266,12 +266,13 @@ impl Relay for TcpRelayLocal {
                 (s.addr.clone(), s.password.clone(), s.method.clone())
             };
 
+            let enable_udp = self.config.enable_udp;
             spawn(proc()
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
                                              password,
                                              encrypt_method,
-                                             self.config.enable_udp));
+                                             enable_udp));
         }
     }
 }
