@@ -195,6 +195,7 @@ pub fn write_addr(addr: &AddressType, buf: &mut Writer) -> IoResult<()> {
         },
         &DomainNameAddress(ref dnaddr) => {
             try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
+            try!(buf.write_u8(dnaddr.domain_name.len() as u8));
             try!(buf.write_str(dnaddr.domain_name.as_slice()));
             try!(buf.write_be_u16(dnaddr.port));
         }

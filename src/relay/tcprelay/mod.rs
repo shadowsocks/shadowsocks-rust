@@ -26,7 +26,7 @@ extern crate log;
 
 extern crate native;
 
-use std::io::{IoResult, TcpStream};
+use std::io::{IoResult, Reader, Writer};
 
 use relay::socks5::SOCKS5_VERSION;
 

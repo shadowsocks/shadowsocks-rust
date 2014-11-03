@@ -89,9 +89,9 @@ impl TcpRelayServer {
                 };
 
                 let mut bufr = BufReader::new(header.as_slice());
-                let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|_| {
+                let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
                     panic!("Error occurs while parsing request header, \
-                                maybe wrong crypto method or password");
+                                maybe wrong crypto method or password: {}", err.message);
                 });
                 info!("Connecting to {}", addr);
                 let mut remote_stream = match addr {
@@ -155,19 +155,21 @@ impl TcpRelayServer {
                         })
                 });
 
-                relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
-                    .unwrap_or_else(|err| {
-                        match err.kind {
-                            EndOfFile | BrokenPipe => {
-                                debug!("{} relay from local to remote stream: {}", addr, err)
-                            },
-                            _ => {
-                                error!("{} relay from local to remote stream: {}", addr, err)
+                spawn(proc() {
+                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr, err)
+                                }
                             }
-                        }
-                        remote_stream.close_write().or(Ok(())).unwrap();
-                        stream.close_read().or(Ok(())).unwrap();
-                    });
+                            remote_stream.close_write().or(Ok(())).unwrap();
+                            stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
             });
         }
     }

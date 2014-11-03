@@ -31,7 +31,7 @@ use std::io::{
     BrokenPipe
 };
 use std::io::net::ip::SocketAddr;
-use std::io::{BufReader, BufferedStream};
+use std::io::{MemWriter, BufferedStream};
 
 use config::Config;
 
@@ -129,19 +129,10 @@ impl TcpRelayLocal {
             panic!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
-        let mut header_buf = [0u8, .. 512];
-        let len = stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
-                send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE).unwrap();
-                panic!("Error occurs while reading header: {}", err);
-            });
-        let mut bufr = BufReader::new(header_buf.slice_to(len));
-        let (header, addr) = {
-            let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
-                send_error_reply(&mut stream, err.code).unwrap();
-                panic!("Error occurs while parsing request header: {}", err);
-            });
-            (header_buf.slice_to(header_len), addr)
-        };
+        let (_, addr) = parse_request_header(&mut stream).unwrap_or_else(|err| {
+            send_error_reply(&mut stream, err.code).unwrap();
+            panic!("Error occurs while parsing request header: {}", err);
+        });
 
         match cmd {
             SOCKS5_CMD_TCP_CONNECT => {
@@ -174,20 +165,14 @@ impl TcpRelayLocal {
                     write_addr(&SocketAddress(sockname), &mut buffered_stream).unwrap();
                     buffered_stream.flush().unwrap();
 
-                    let encrypted_header = cipher.encrypt(header.as_slice());
+                    let mut header_buf = MemWriter::new();
+                    write_addr(&addr, &mut header_buf).unwrap();
+
+                    let encrypted_header = cipher.encrypt(header_buf.unwrap().as_slice());
                     remote_stream.write(encrypted_header.as_slice())
                             .ok().expect("Error occurs while writing header to remote stream");
                     buffered_stream.unwrap()
                 };
-
-                // Fixed issue #3
-                match bufr.read_to_end() {
-                    Ok(ref first_package) => {
-                        remote_stream.write(cipher.encrypt(first_package.as_slice()).as_slice())
-                            .ok().expect("Error occurs while writing first package to remote stream");
-                    },
-                    Err(..) => ()
-                }
 
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();
@@ -210,19 +195,21 @@ impl TcpRelayLocal {
                         })
                 });
 
-                relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
-                    .unwrap_or_else(|err| {
-                        match err.kind {
-                            EndOfFile | BrokenPipe => {
-                                debug!("{} relay from local to remote stream: {}", addr, err)
-                            },
-                            _ => {
-                                error!("{} relay from local to remote stream: {}", addr, err)
+                spawn(proc() {
+                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr, err)
+                                }
                             }
-                        }
-                        remote_stream.close_write().or(Ok(())).unwrap();
-                        stream.close_read().or(Ok(())).unwrap();
-                    })
+                            remote_stream.close_write().or(Ok(())).unwrap();
+                            stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
             },
             SOCKS5_CMD_TCP_BIND => {
                 warn!("BIND is not supported");
