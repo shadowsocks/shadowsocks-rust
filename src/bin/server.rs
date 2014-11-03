@@ -49,6 +49,7 @@ fn main() {
     let opts = [
         optflag("v", "version", "print version"),
         optflag("h", "help", "print this message"),
+        optflag("u", "enable-udp", "enable UDP relay"),
         optopt("c", "config", "specify config file", "config.json"),
         optopt("s", "server-addr", "server address", ""),
         optopt("b", "local-addr", "local address, listen only to this address if specified", ""),
@@ -118,6 +119,13 @@ fn main() {
             port: from_str(matches.opt_str("l").unwrap().as_slice()).expect("`local_port` should be an integer"),
         };
         config.local = Some(local)
+    }
+
+    config.enable_udp = matches.opt_present("u");
+
+    if !cfg!(feature = "enable-udp") && config.enable_udp {
+        error!("Please compile shadowsocks with --cfg feature=\"enable-udp\"");
+        panic!("UDP relay is disabled");
     }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);

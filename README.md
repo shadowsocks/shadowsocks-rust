@@ -45,7 +45,7 @@ Create a shadowsocks' configuration file. Example
     "local_port": 1080,
     "password": "mypassword",
     "timeout": 300,
-    "method": "aes-256-cfb",
+    "method": "aes-256-cfb"
 }
 ```
 
@@ -71,7 +71,7 @@ In shadowsocks-rust, we also have a extended configuration file format, which is
         }
     ],
     "local_port": 8388,
-    "local_address": "127.0.0.1",
+    "local_address": "127.0.0.1"
 }
 ```
 

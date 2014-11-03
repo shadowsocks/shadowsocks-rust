@@ -107,11 +107,16 @@ impl TcpRelayLocal {
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
 
         write_addr(&SocketAddress(sockname), stream).unwrap();
+
+        // TODO: record this client's information for udprelay local server to validate
+        //       whether the client has already authenticated
     }
 
     fn handle_client(mut stream: TcpStream,
                      server_addr: SocketAddr,
-                     password: String, encrypt_method: String) {
+                     password: String,
+                     encrypt_method: String,
+                     enable_udp: bool) {
         TcpRelayLocal::do_handshake(&mut stream);
 
         let raw_header_part1 = stream.read_exact(3).ok().expect("Failed to read header");
@@ -221,10 +226,10 @@ impl TcpRelayLocal {
             SOCKS5_CMD_UDP_ASSOCIATE => {
                 let sockname = stream.peer_name().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
-                if cfg!(feature = "enable-udp") {
+                if cfg!(feature = "enable-udp") && enable_udp {
                     TcpRelayLocal::handle_udp_associate_local(&mut stream);
                 } else {
-                    warn!("UDP ASSOCIATE is not supported");
+                    warn!("UDP ASSOCIATE is disabled");
                     send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
                 }
             },
@@ -264,7 +269,9 @@ impl Relay for TcpRelayLocal {
             spawn(proc()
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
-                                             password, encrypt_method));
+                                             password,
+                                             encrypt_method,
+                                             self.config.enable_udp));
         }
     }
 }

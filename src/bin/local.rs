@@ -48,6 +48,7 @@ fn main() {
     let opts = [
         optflag("v", "version", "print version"),
         optflag("h", "help", "print this message"),
+        optflag("u", "enable-udp", "enable UDP relay"),
         optopt("c", "config", "specify config file", "config.json"),
         optopt("s", "server-addr", "server address", ""),
         optopt("b", "local-addr", "local address, listen only to this address if specified", ""),
@@ -118,6 +119,8 @@ fn main() {
         };
         config.local = Some(local)
     }
+
+    config.enable_udp = matches.opt_present("u");
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 

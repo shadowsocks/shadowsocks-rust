@@ -59,6 +59,7 @@ use config::Config;
 /// ```
 #[deriving(Clone)]
 pub struct RelayLocal {
+    enable_udp: bool,
     tcprelay: TcpRelayLocal,
     #[cfg(feature = "enable-udp")]
     udprelay: UdpRelayLocal,
@@ -72,6 +73,7 @@ impl RelayLocal {
         RelayLocal {
             tcprelay: tcprelay,
             udprelay: udprelay,
+            enable_udp: config.enable_udp,
         }
     }
 
@@ -87,20 +89,34 @@ impl RelayLocal {
 impl Relay for RelayLocal {
     #[cfg(not(feature = "enable-udp"))]
     fn run(&self) {
+        if self.enable_udp {
+            warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
+        }
         let tcprelay = self.tcprelay.clone();
         let tcp_future = try_future(proc() tcprelay.run());
+        info!("Enabled TCP relay");
+
         drop(tcp_future.unwrap());
     }
 
     #[cfg(feature = "enable-udp")]
     fn run(&self) {
+        let mut futures = Vec::with_capacity(2);
+
         let tcprelay = self.tcprelay.clone();
         let tcp_future = try_future(proc() tcprelay.run());
+        futures.push(tcp_future);
+        info!("Enabled TCP relay");
 
-        let udprelay = self.udprelay.clone();
-        let udp_future = try_future(proc() udprelay.run());
+        if self.enable_udp {
+            let udprelay = self.udprelay.clone();
+            let udp_future = try_future(proc() udprelay.run());
+            futures.push(udp_future);
+            info!("Enabled UDP relay");
+        }
 
-        drop(tcp_future.unwrap());
-        drop(udp_future.unwrap());
+        for fut in futures.into_iter() {
+            drop(fut.unwrap());
+        }
     }
 }
