@@ -89,7 +89,7 @@ impl TcpRelayServer {
                 };
 
                 let mut bufr = BufReader::new(header.as_slice());
-                let (_, addr) = parse_request_header(&mut bufr).unwrap_or_else(|_| {
+                let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|_| {
                     panic!("Error occurs while parsing request header, \
                                 maybe wrong crypto method or password");
                 });
@@ -131,13 +131,8 @@ impl TcpRelayServer {
                 };
 
                 // Fixed issue #3
-                match bufr.read_to_end() {
-                    Ok(ref first_package) => {
-                        remote_stream.write(first_package.as_slice())
+                remote_stream.write(header.slice_from(header_len))
                             .ok().expect("Error occurs while relaying the first package to remote");
-                    },
-                    Err(_) => ()
-                }
 
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();

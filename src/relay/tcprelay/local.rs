@@ -31,12 +31,12 @@ use std::io::{
     BrokenPipe
 };
 use std::io::net::ip::SocketAddr;
-use std::io::BufReader;
+use std::io::{BufReader, BufferedStream};
 
 use config::Config;
 
 use relay::Relay;
-use relay::socks5::{parse_request_header, write_addr, SocketAddress};
+use relay::socks5::{parse_request_header, write_addr, SocketAddress, AddressType};
 use relay::tcprelay::{send_error_reply, relay_and_map};
 use relay::socks5::{SOCKS5_VERSION, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
 use relay::socks5::{SOCKS5_CMD_TCP_CONNECT, SOCKS5_CMD_TCP_BIND, SOCKS5_CMD_UDP_ASSOCIATE};
@@ -62,6 +62,7 @@ impl TcpRelayLocal {
         if c.server.is_none() || c.local.is_none() {
             panic!("You have to provide configuration for server and local");
         }
+
         TcpRelayLocal {
             config: c,
         }
@@ -79,7 +80,7 @@ impl TcpRelayLocal {
 
         if sock_ver != SOCKS5_VERSION {
             // FIXME: Sometimes Chrome would send a header with version 0x50
-            send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE);
+            send_error_reply(stream, SOCKS5_REPLY_GENERAL_FAILURE).unwrap();
             panic!("Invalid socks version \"{:x}\" in handshake", sock_ver);
         }
 
@@ -100,7 +101,7 @@ impl TcpRelayLocal {
         stream.write(data_to_send).ok().expect("Error occurs while sending handshake reply");
     }
 
-    fn handle_udp_associate_local(stream: &mut TcpStream) {
+    fn handle_udp_associate_local(stream: &mut TcpStream, _: &AddressType) {
         let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00];
         stream.write(reply_header)
                 .ok().expect("Error occurs while writing header to local stream");
@@ -124,19 +125,19 @@ impl TcpRelayLocal {
 
         if sock_ver != SOCKS5_VERSION {
             // FIXME: Sometimes Chrome would send a header with version 0x50
-            send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
+            send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE).unwrap();
             panic!("Invalid socks version \"{:x}\" in header", sock_ver);
         }
 
         let mut header_buf = [0u8, .. 512];
         let len = stream.read_at_least(1, header_buf).unwrap_or_else(|err| {
-                send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE);
+                send_error_reply(&mut stream, SOCKS5_REPLY_GENERAL_FAILURE).unwrap();
                 panic!("Error occurs while reading header: {}", err);
             });
         let mut bufr = BufReader::new(header_buf.slice_to(len));
         let (header, addr) = {
             let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
-                send_error_reply(&mut stream, err.code);
+                send_error_reply(&mut stream, err.code).unwrap();
                 panic!("Error occurs while parsing request header: {}", err);
             });
             (header_buf.slice_to(header_len), addr)
@@ -150,10 +151,10 @@ impl TcpRelayLocal {
                                            server_addr.port).unwrap_or_else(|err| {
                     match err.kind {
                         ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                            send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE);
+                            send_error_reply(&mut stream, SOCKS5_REPLY_HOST_UNREACHABLE).unwrap();
                         },
                         _ => {
-                            send_error_reply(&mut stream, SOCKS5_REPLY_NETWORK_UNREACHABLE);
+                            send_error_reply(&mut stream, SOCKS5_REPLY_NETWORK_UNREACHABLE).unwrap();
                         }
                     }
                     panic!("Failed to connect remote server: {}", err);
@@ -163,17 +164,21 @@ impl TcpRelayLocal {
                                                password.as_slice().as_bytes())
                                         .expect("Unsupported cipher");
 
-                {
+                let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+
+                stream = {
+                    let mut buffered_stream = BufferedStream::new(stream);
                     let reply_header = [SOCKS5_VERSION, SOCKS5_REPLY_SUCCEEDED, 0x00];
-                    stream.write(reply_header)
+                    buffered_stream.write(reply_header)
                             .ok().expect("Error occurs while writing header to local stream");
-                    let sockname = stream.socket_name().ok().expect("Failed to get socket name");
-                    write_addr(&SocketAddress(sockname), &mut stream).unwrap();
+                    write_addr(&SocketAddress(sockname), &mut buffered_stream).unwrap();
+                    buffered_stream.flush().unwrap();
 
                     let encrypted_header = cipher.encrypt(header.as_slice());
                     remote_stream.write(encrypted_header.as_slice())
                             .ok().expect("Error occurs while writing header to remote stream");
-                }
+                    buffered_stream.unwrap()
+                };
 
                 // Fixed issue #3
                 match bufr.read_to_end() {
@@ -221,21 +226,21 @@ impl TcpRelayLocal {
             },
             SOCKS5_CMD_TCP_BIND => {
                 warn!("BIND is not supported");
-                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED).unwrap();
             },
             SOCKS5_CMD_UDP_ASSOCIATE => {
                 let sockname = stream.peer_name().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
-                    TcpRelayLocal::handle_udp_associate_local(&mut stream);
+                    TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr);
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
-                    send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                    send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED).unwrap();
                 }
             },
             _ => {
                 // unsupported CMD
-                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED);
+                send_error_reply(&mut stream, SOCKS5_REPLY_COMMAND_NOT_SUPPORTED).unwrap();
                 warn!("Unsupported command {}", cmd);
             }
         }
