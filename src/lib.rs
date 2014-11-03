@@ -24,7 +24,9 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 #![desc = "Shadowsocks is a fast tunnel proxy that helps you bypass firewalls"]
+
 #![feature(phase, unsafe_destructor)]
+#![feature(macro_rules)]
 
 extern crate serialize;
 #[phase(plugin, link)]

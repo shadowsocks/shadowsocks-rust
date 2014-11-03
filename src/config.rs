@@ -75,6 +75,7 @@ use std::io::net::addrinfo::get_host_addresses;
 use std::to_string::ToString;
 use std::option::Option;
 use std::default::Default;
+use std::fmt::{Show, Formatter, mod};
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
@@ -93,6 +94,11 @@ pub struct ServerConfig {
 #[deriving(Clone, Show)]
 pub type ClientConfig = SocketAddr;
 
+pub enum ConfigType {
+    Local,
+    Server
+}
+
 #[deriving(Clone, Show)]
 pub struct Config {
     pub server: Option<Vec<ServerConfig>>,
@@ -106,6 +112,33 @@ impl Default for Config {
     }
 }
 
+pub struct Error {
+    pub message: String,
+}
+
+impl Error {
+    pub fn new(msg: &str) -> Error {
+        Error {
+            message: msg.to_string(),
+        }
+    }
+}
+
+impl Show for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+macro_rules! try_config(
+    ($inp:expr, $errmsg:expr) => (
+        match $inp {
+            Some(s) => { s },
+            None => { return Err(Error::new($errmsg)); },
+        }
+    );
+)
+
 impl Config {
     pub fn new() -> Config {
         Config {
@@ -115,40 +148,48 @@ impl Config {
         }
     }
 
-    fn parse_json_object(o: &json::JsonObject) -> Option<Config> {
+    fn parse_json_object(o: &json::JsonObject, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
 
         if o.contains_key(&"servers".to_string()) {
-            let server_list = o.find(&"servers".to_string()).unwrap()
-                .as_list().expect("servers should be a list");
+            let server_list = try_config!(o.find(&"servers".to_string()).unwrap()
+                .as_list(), "servers should be a list");
 
             let mut servers = Vec::new();
             for server in server_list.iter() {
-                let mut method = server.find(&"method".to_string()).expect("You need to specify a method")
-                                        .as_string().expect("method should be a string");
+                let mut method = try_config!(
+                                        try_config!(server.find(&"method".to_string()),
+                                                    "You need to specify a method").as_string(),
+                                        "method should be a string");
                 if method == "" {
                     method = CIPHER_AES_256_CFB;
                 }
 
-                let addr_str = server.find(&"address".to_string()).expect("You need to specify a server address")
-                                        .as_string().expect("address should be a string");
+                let addr_str = try_config!(
+                                    try_config!(server.find(&"address".to_string()),
+                                                "You need to specify a server address").as_string(),
+                                    "address should be a string");
 
                 let server_cfg = ServerConfig {
                     addr: SocketAddr {
-                        ip: get_host_addresses(addr_str).unwrap().head()
-                            .expect(format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
-                        port: server.find(&"port".to_string()).expect("You need to specify a server port")
-                                            .as_u64().expect("port should be an integer") as Port,
+                        ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
+                                        format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
+                        port: try_config!(
+                                    try_config!(server.find(&"port".to_string()),
+                                                "You need to specify a server port").as_u64(),
+                                    "port should be an integer") as Port,
                     },
-                    password: server.find(&"password".to_string()).expect("You need to specify a password")
-                                        .as_string().expect("password should be a string").to_string(),
+                    password: try_config!(
+                                    try_config!(server.find(&"password".to_string()),
+                                                "You need to specify a password").as_string(),
+                                    "password should be a string").to_string(),
                     method: method.to_string(),
                     timeout: match server.find(&"timeout".to_string()) {
-                        Some(t) => Some(t.as_u64().expect("timeout should be an integer") * 1000),
+                        Some(t) => Some(try_config!(t.as_u64(), "timeout should be an integer") * 1000),
                         None => None,
                     },
                     dns_cache_capacity: match server.find(&"dns_cache_capacity".to_string()) {
-                        Some(t) => t.as_u64().expect("dns_cache_capacity should be an integer") as uint,
+                        Some(t) => try_config!(t.as_u64(), "dns_cache_capacity should be an integer") as uint,
                         None => DEFAULT_DNS_CACHE_CAPACITY,
                     },
                 };
@@ -163,32 +204,32 @@ impl Config {
                 && o.contains_key(&"method".to_string()) {
             // Traditional configuration file
             let timeout = match o.find(&"timeout".to_string()) {
-                Some(t) => Some(t.as_u64().expect("timeout should be an integer") * 1000),
+                Some(t) => Some(try_config!(t.as_u64(), "timeout should be an integer") * 1000),
                 None => None,
             };
 
-            let mut method = o.find(&"method".to_string()).unwrap()
-                    .as_string().expect("method should be a string");
+            let mut method = try_config!(o.find(&"method".to_string()).unwrap().as_string(),
+                                         "method should be a string");
             if method == "" {
                 method = CIPHER_AES_256_CFB;
             }
 
-            let addr_str = o.find(&"server".to_string()).unwrap()
-                    .as_string().expect("server should be a string");
+            let addr_str = try_config!(o.find(&"server".to_string()).unwrap().as_string(),
+                                       "server should be a string");
 
             let single_server = ServerConfig {
                 addr: SocketAddr {
-                    ip: get_host_addresses(addr_str).unwrap().head()
-                        .expect(format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
-                    port: o.find(&"server_port".to_string()).unwrap()
-                        .as_u64().expect("server_port should be an integer") as Port,
+                    ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
+                                    format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
+                    port: try_config!(o.find(&"server_port".to_string()).unwrap().as_u64(),
+                                      "server_port should be an integer") as Port,
                 },
-                password: o.find(&"password".to_string()).unwrap()
-                    .as_string().expect("password should be a string").to_string(),
+                password: try_config!(o.find(&"password".to_string()).unwrap().as_string(),
+                                      "password should be a string").to_string(),
                 method: method.to_string(),
                 timeout: timeout,
                 dns_cache_capacity: match o.find(&"dns_cache_capacity".to_string()) {
-                    Some(t) => t.as_u64().expect("cache_capacity should be an integer") as uint,
+                    Some(t) => try_config!(t.as_u64(), "cache_capacity should be an integer") as uint,
                     None => DEFAULT_DNS_CACHE_CAPACITY,
                 },
             };
@@ -196,59 +237,60 @@ impl Config {
             config.server = Some(vec![single_server]);
         }
 
-        if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {
-            config.local = match o.find(&"local_address".to_string()) {
-                Some(local_addr) => {
-                    Some(SocketAddr {
-                        ip: from_str(local_addr.as_string().expect("`local_address` should be a string"))
-                            .expect("`local_address` is not a valid IP address"),
-                        port: o.find(&"local_port".to_string()).unwrap()
-                            .as_u64().expect("`local_port` should be an integer") as Port,
-                    })
-                },
-                None => None,
-            };
-        } else if !o.contains_key(&"local_address".to_string()) && !o.contains_key(&"local_port".to_string()) {
-            // Do nothing
-        } else {
-            panic!("You have to provide `local_address` and `local_port` together");
+        if require_local_info {
+            if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {
+                config.local = match o.find(&"local_address".to_string()) {
+                    Some(local_addr) => {
+                        Some(SocketAddr {
+                            ip: try_config!(from_str(try_config!(local_addr.as_string(),
+                                                                 "`local_address` should be a string")),
+                                            "`local_address` is not a valid IP address"),
+                            port: try_config!(o.find(&"local_port".to_string()).unwrap().as_u64(),
+                                              "`local_port` should be an integer") as Port,
+                        })
+                    },
+                    None => None,
+                };
+            } else {
+                panic!("You have to provide `local_address` and `local_port` together");
+            }
         }
 
-        Some(config)
+        Ok(config)
     }
 
-    pub fn load_from_str(s: &str) -> Option<Config> {
+    pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let object = match json::from_str(s) {
             Ok(obj) => { obj },
-            Err(..) => return None,
+            Err(err) => return Err(Error::new(err.to_string().as_slice())),
         };
 
         let json_object = match object.as_object() {
             Some(obj) => { obj },
-            None => return None,
+            None => return Err(Error::new("Root is not a JsonObject")),
         };
 
-        Config::parse_json_object(json_object)
+        Config::parse_json_object(json_object, match config_type {Local => true, Server => false})
     }
 
-    pub fn load_from_file(filename: &str) -> Option<Config> {
+    pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let mut readeropt = File::open_mode(&Path::new(filename), Open, Read);
 
         let reader = match readeropt {
             Ok(ref mut r) => r,
-            Err(..) => return None,
+            Err(err) => return Err(Error::new(err.to_string().as_slice())),
         };
 
         let object = match json::from_reader(reader) {
             Ok(obj) => { obj },
-            Err(..) => return None,
+            Err(err) => return Err(Error::new(err.to_string().as_slice())),
         };
 
         let json_object = match object.as_object() {
             Some(obj) => obj,
-            None => return None,
+            None => return Err(Error::new("Root is not a JsonObject")),
         };
 
-        Config::parse_json_object(json_object)
+        Config::parse_json_object(json_object, match config_type {Local => true, Server => false})
     }
 }
