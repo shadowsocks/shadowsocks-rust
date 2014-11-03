@@ -20,16 +20,16 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use relay::loadbalancing::server::LoadBalancer;
-use config::{MultipleServer, SingleServer, ServerConfig, ServerConfigVariant};
+use config::ServerConfig;
 
 #[deriving(Clone)]
 pub struct RoundRobin {
-    server: ServerConfigVariant,
+    server: Vec<ServerConfig>,
     index: uint,
 }
 
 impl RoundRobin {
-    pub fn new(config: ServerConfigVariant) -> RoundRobin {
+    pub fn new(config: Vec<ServerConfig>) -> RoundRobin {
         RoundRobin {
             server: config,
             index: 0u,
@@ -39,11 +39,11 @@ impl RoundRobin {
 
 impl LoadBalancer for RoundRobin {
     fn pick_server<'a>(&'a mut self) -> &'a ServerConfig {
-        match self.server {
-            SingleServer(ref s) => s,
-            MultipleServer(ref slist) => {
-                let ref s = slist[self.index];
-                self.index = (self.index + 1) % slist.len();
+        match self.server.as_slice() {
+            [ref s] => s,
+            _ => {
+                let ref s = self.server[self.index];
+                self.index = (self.index + 1) % self.server.len();
                 s
             }
         }

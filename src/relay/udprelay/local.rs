@@ -65,7 +65,7 @@ use std::io::BufReader;
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
-use config::{Config, ServerConfig, SingleServer, MultipleServer};
+use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5::{AddressType, parse_request_header};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
@@ -93,15 +93,8 @@ impl Relay for UdpRelayLocal {
 
         let server_set = {
             let mut server_set = HashMap::new();
-            match self.config.server.clone().unwrap() {
-                SingleServer(s) => {
-                    server_set.insert(s.addr, s);
-                },
-                MultipleServer(ref slist) => {
-                    for s in slist.iter() {
-                        server_set.insert(s.addr, s.clone());
-                    }
-                }
+            for s in self.config.server.as_ref().unwrap().iter() {
+                server_set.insert(s.addr, s.clone());
             }
             server_set
         };

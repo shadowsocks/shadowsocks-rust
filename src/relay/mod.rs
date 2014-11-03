@@ -26,7 +26,7 @@ pub use self::server::RelayServer;
 
 mod tcprelay;
 #[cfg(feature = "enable-udp")]
-pub mod udprelay;
+mod udprelay;
 pub mod local;
 pub mod server;
 mod loadbalancing;

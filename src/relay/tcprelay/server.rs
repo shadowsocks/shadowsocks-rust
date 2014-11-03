@@ -29,7 +29,7 @@ use std::io::net::ip::SocketAddr;
 use std::io::BufReader;
 use std::time::duration::Duration;
 
-use config::{Config, SingleServer, MultipleServer, ServerConfig};
+use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5::{parse_request_header, SocketAddress, DomainNameAddress};
 use relay::tcprelay::cached_dns::CachedDns;
@@ -178,23 +178,12 @@ impl TcpRelayServer {
 impl Relay for TcpRelayServer {
     fn run(&self) {
         let mut futures = Vec::new();
-        match self.config.server.as_ref().unwrap() {
-            &SingleServer(ref sref) => {
-                let s = sref.clone();
-                let fut = try_future(proc() {
-                    TcpRelayServer::accept_loop(&s);
-                });
-                futures.push(fut);
-            },
-            &MultipleServer(ref slist) => {
-                for ref_s in slist.iter() {
-                    let s = ref_s.clone();
-                    let fut = try_future(proc() {
-                        TcpRelayServer::accept_loop(&s);
-                    });
-                    futures.push(fut);
-                }
-            }
+        for ref_s in self.config.server.as_ref().unwrap().iter() {
+            let s = ref_s.clone();
+            let fut = try_future(proc() {
+                TcpRelayServer::accept_loop(&s);
+            });
+            futures.push(fut);
         }
 
         for fut in futures.into_iter() {

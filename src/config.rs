@@ -91,17 +91,11 @@ pub struct ServerConfig {
 }
 
 #[deriving(Clone, Show)]
-pub enum ServerConfigVariant {
-    SingleServer(ServerConfig),
-    MultipleServer(Vec<ServerConfig>),
-}
-
-#[deriving(Clone, Show)]
 pub type ClientConfig = SocketAddr;
 
 #[deriving(Clone, Show)]
 pub struct Config {
-    pub server: Option<ServerConfigVariant>,
+    pub server: Option<Vec<ServerConfig>>,
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
 }
@@ -161,7 +155,7 @@ impl Config {
                 servers.push(server_cfg);
             }
 
-            config.server = Some(MultipleServer(servers));
+            config.server = Some(servers);
 
         } else if o.contains_key(&"server".to_string())
                 && o.contains_key(&"server_port".to_string())
@@ -182,7 +176,7 @@ impl Config {
             let addr_str = o.find(&"server".to_string()).unwrap()
                     .as_string().expect("server should be a string");
 
-            let single_server = SingleServer(ServerConfig {
+            let single_server = ServerConfig {
                 addr: SocketAddr {
                     ip: get_host_addresses(addr_str).unwrap().head()
                         .expect(format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
@@ -197,9 +191,9 @@ impl Config {
                     Some(t) => t.as_u64().expect("cache_capacity should be an integer") as uint,
                     None => DEFAULT_DNS_CACHE_CAPACITY,
                 },
-            });
+            };
 
-            config.server = Some(single_server);
+            config.server = Some(vec![single_server]);
         }
 
         if o.contains_key(&"local_address".to_string()) && o.contains_key(&"local_port".to_string()) {

@@ -40,7 +40,7 @@ use std::os;
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 
-use shadowsocks::config::{Config, ServerConfig, ClientConfig, SingleServer, MultipleServer};
+use shadowsocks::config::{Config, ServerConfig, ClientConfig};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayServer, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
@@ -95,16 +95,9 @@ fn main() {
         };
         match config.server {
             Some(ref mut server) => {
-                match *server {
-                    SingleServer(..) => {
-                        *server = SingleServer(sc)
-                    },
-                    MultipleServer(ref mut server_list) => {
-                        server_list.push(sc)
-                    }
-                }
+                server.push(sc)
             },
-            None => { config.server = Some(SingleServer(sc)) },
+            None => { config.server = Some(vec![sc]) },
         }
     } else if !matches.opt_present("s") && !matches.opt_present("b")
             && !matches.opt_present("k") && !matches.opt_present("m") {

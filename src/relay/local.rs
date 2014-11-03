@@ -38,14 +38,14 @@ use config::Config;
 ///
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayLocal;
-/// use shadowsocks::config::{Config, ClientConfig, SingleServer, ServerConfig};
+/// use shadowsocks::config::{Config, ClientConfig, ServerConfig};
 ///
 /// let mut config = Config::new();
 /// config.local = Some(ClientConfig {
 ///     ip: from_str("127.0.0.1").unwrap(),
 ///     port: 1080
 /// });
-/// config.server = Some(SingleServer(ServerConfig {
+/// config.server = Some(vec![ServerConfig {
 ///     addr: SocketAddr {
 ///         ip: from_str("127.0.0.1").unwrap(),
 ///         port: 8388,
@@ -54,7 +54,7 @@ use config::Config;
 ///     method: "aes-256-cfb".to_string(),
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// }));
+/// }]);
 /// RelayLocal::new(config).run();
 /// ```
 #[deriving(Clone)]

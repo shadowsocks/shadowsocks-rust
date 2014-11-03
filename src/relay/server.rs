@@ -38,10 +38,10 @@ use config::Config;
 ///
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayServer;
-/// use shadowsocks::config::{Config, SingleServer, ServerConfig};
+/// use shadowsocks::config::{Config, ServerConfig};
 ///
 /// let mut config = Config::new();
-/// config.server = Some(SingleServer(ServerConfig {
+/// config.server = Some(vec![ServerConfig {
 ///     addr: SocketAddr {
 ///         ip: from_str("127.0.0.1").unwrap(),
 ///         port: 8388,
@@ -50,7 +50,7 @@ use config::Config;
 ///     method: "aes-256-cfb".to_string(),
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// }));
+/// }]);
 /// RelayServer::new(config).run();
 /// ```
 ///

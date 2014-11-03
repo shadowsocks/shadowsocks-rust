@@ -27,7 +27,7 @@ use std::io::net::addrinfo::get_host_addresses;
 use std::io::{MemWriter, BufReader};
 use std::collections::LruCache;
 
-use config::{Config, ServerConfig, SingleServer, MultipleServer};
+use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5::{AddressType, SocketAddress, DomainNameAddress, write_addr, parse_request_header};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
@@ -152,20 +152,10 @@ impl UdpRelayServer {
 impl Relay for UdpRelayServer {
     fn run(&self) {
         let mut futures = Vec::new();
-
-        match self.config.server.as_ref().expect("server should not be None") {
-            &SingleServer(ref sref) => {
-                let s = sref.clone();
-                let fut = try_future(proc() UdpRelayServer::accept_loop(&s));
-                futures.push(fut);
-            },
-            &MultipleServer(ref slist) => {
-                for sref in slist.iter() {
-                    let s = sref.clone();
-                    let fut = try_future(proc() UdpRelayServer::accept_loop(&s));
-                    futures.push(fut);
-                }
-            }
+        for sref in self.config.server.as_ref().unwrap().iter() {
+            let s = sref.clone();
+            let fut = try_future(proc() UdpRelayServer::accept_loop(&s));
+            futures.push(fut);
         }
 
         for fut in futures.into_iter() {
