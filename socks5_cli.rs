@@ -251,10 +251,12 @@ fn do_udp(matches: &Matches, svr_addr: &AddressType, proxy_addr: &SocketAddr) {
 }
 
 fn do_tcp(_: &Matches, svr_addr: &AddressType, proxy_addr: &SocketAddr) {
-    let mut stream = TcpStream::connect(proxy_addr.ip.to_string().as_slice(), proxy_addr.port).unwrap();
+    let mut stream = BufferedStream::new(
+                        TcpStream::connect(proxy_addr.ip.to_string().as_slice(), proxy_addr.port).unwrap());
     let mut buf = [0u8, ..0xffff];
 
     stream.write([SOCKS5_VERSION, 0x01, 0x00]).unwrap();
+    stream.flush().unwrap();
     stream.read(buf).unwrap();
     if buf[1] != SOCKS5_AUTH_METHOD_NONE {
         panic!("Proxy server needs authentication");
@@ -265,6 +267,7 @@ fn do_tcp(_: &Matches, svr_addr: &AddressType, proxy_addr: &SocketAddr) {
 
     let inputs = stdin().read_to_end().unwrap();
     stream.write(inputs.as_slice()).unwrap();
+    stream.flush().unwrap();
 
     let mut output = stdout();
 
