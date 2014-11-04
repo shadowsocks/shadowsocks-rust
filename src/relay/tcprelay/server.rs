@@ -26,7 +26,7 @@ use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
 use std::io::net::ip::SocketAddr;
-use std::io::BufReader;
+use std::io::{BufReader, mod};
 use std::time::duration::Duration;
 
 use config::{Config, ServerConfig};
@@ -132,8 +132,7 @@ impl TcpRelayServer {
                 };
 
                 // Fixed issue #3
-                remote_stream.write(header.slice_from(addr.len()))
-                            .ok().expect("Error occurs while relaying the first package to remote");
+                io::util::copy(&mut bufr, &mut remote_stream);
 
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();

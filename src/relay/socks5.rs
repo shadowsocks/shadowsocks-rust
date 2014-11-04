@@ -393,12 +393,12 @@ fn get_addr_len(atyp: &Address) -> uint {
     match atyp {
         &SocketAddress(ref sockaddr) => {
             match sockaddr.ip {
-                Ipv4Addr(_, _, _, _) => 1 + 6,
-                Ipv6Addr(_, _, _, _, _, _, _, _) => 1 + 16 + 2
+                Ipv4Addr(_, _, _, _) => 1 + 4 + 2,
+                Ipv6Addr(_, _, _, _, _, _, _, _) => 1 + 8 * 2 + 2
             }
         },
         &DomainNameAddress(ref dmname) => {
-            1 + dmname.domain_name.len() + 2
+            1 + 1 + dmname.domain_name.len() + 2
         },
     }
 }

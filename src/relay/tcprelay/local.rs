@@ -31,7 +31,7 @@ use std::io::{
     BrokenPipe
 };
 use std::io::net::ip::SocketAddr;
-use std::io::{MemWriter, BufferedStream};
+use std::io::{MemWriter, BufferedStream, mod};
 
 use config::Config;
 
