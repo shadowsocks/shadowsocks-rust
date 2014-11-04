@@ -84,11 +84,14 @@ fn do_udp(matches: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
     let mut udp_socket = UdpSocket::bind(local_addr).unwrap();
 
     let proxy_real_addr = match udp_proxy_addr {
-        SocketAddress(sa) => sa,
-        DomainNameAddress(dm) => {
+        SocketAddress(ip, port) => SocketAddr {
+            ip: ip,
+            port: port,
+        },
+        DomainNameAddress(dm, port) => {
             SocketAddr {
-                ip: get_host_addresses(dm.domain_name.as_slice()).unwrap().head().unwrap().clone(),
-                port: dm.port,
+                ip: get_host_addresses(dm.as_slice()).unwrap().head().unwrap().clone(),
+                port: port,
             }
         }
     };
@@ -144,10 +147,8 @@ fn main() {
 
     let svr_port: Port = from_str(matches.opt_str("p").expect("Require server port").as_slice()).unwrap();
     let svr_addr = match from_str::<IpAddr>(matches.opt_str("s").expect("Require server address").as_slice()) {
-        Some(ip) => SocketAddress(SocketAddr {ip: ip, port: svr_port}),
-        None => DomainNameAddress(DomainNameAddr {
-                                                domain_name: matches.opt_str("s").unwrap(),
-                                                port: svr_port}),
+        Some(ip) => SocketAddress(ip, svr_port),
+        None => DomainNameAddress(matches.opt_str("s").unwrap(), svr_port),
     };
 
     if is_tcp {
