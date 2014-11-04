@@ -111,20 +111,20 @@ impl UdpRelayServer {
                         debug!("UDP request {} -> {}", src, header.address);
 
                         let sockaddr = match &header.address {
-                            &SocketAddress(ref sockaddr) => {
+                            &SocketAddress(ip, port) => {
                                 client_map.lock().put(header.address.clone(), src);
-                                remote_map.lock().put(sockaddr.clone(), header.address.clone());
-                                sockaddr.clone()
+                                remote_map.lock().put(SocketAddr {ip: ip, port: port}, header.address.clone());
+                                SocketAddr {ip: ip, port: port}
                             },
-                            &DomainNameAddress(ref dnaddr) => {
-                                let ref ipaddrs = get_host_addresses(dnaddr.domain_name.as_slice())
+                            &DomainNameAddress(ref dnaddr, port) => {
+                                let ref ipaddrs = get_host_addresses(dnaddr.as_slice())
                                     .unwrap_or_else(|err| {
                                         panic!("Unable to resolve {}: {}", dnaddr, err);
                                     });
 
                                 let remote_addr = SocketAddr {
                                                       ip: ipaddrs.head().unwrap().clone(),
-                                                      port: dnaddr.port,
+                                                      port: port,
                                                   };
                                 client_map.lock().put(header.address.clone(), src);
                                 remote_map.lock().put(remote_addr, header.address.clone());

@@ -31,7 +31,7 @@ use std::io::{
     BrokenPipe
 };
 use std::io::net::ip::SocketAddr;
-use std::io::{MemWriter, BufferedStream, mod};
+use std::io::{MemWriter, BufferedStream};
 
 use config::Config;
 
@@ -77,7 +77,8 @@ impl TcpRelayLocal {
     fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) {
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
 
-        let reply = socks5::TcpResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname));
+        let reply = socks5::TcpResponseHeader::new(socks5::Succeeded,
+                                                   socks5::SocketAddress(sockname.ip, sockname.port));
         reply.write_to(stream).unwrap();
 
         // TODO: record this client's information for udprelay local server to validate
@@ -94,7 +95,8 @@ impl TcpRelayLocal {
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
 
         let header = socks5::TcpRequestHeader::read_from(&mut stream).unwrap_or_else(|err| {
-            socks5::TcpResponseHeader::new(err.reply, socks5::SocketAddress(sockname));
+            socks5::TcpResponseHeader::new(err.reply,
+                                           socks5::SocketAddress(sockname.ip, sockname.port));
             panic!("Failed to read request header: {}", err);
         });
 
@@ -126,7 +128,8 @@ impl TcpRelayLocal {
                 stream = {
                     let mut buffered_stream = BufferedStream::new(stream);
 
-                    socks5::TcpResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname))
+                    socks5::TcpResponseHeader::new(socks5::Succeeded,
+                                                   socks5::SocketAddress(sockname.ip, sockname.port))
                         .write_to(&mut buffered_stream).unwrap_or_else(|err| {
                             panic!("Error occurs while writing header to local stream: {}", err);
                         });

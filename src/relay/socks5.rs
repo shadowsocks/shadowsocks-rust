@@ -22,7 +22,7 @@
 #![allow(dead_code)]
 
 use std::fmt::{Show, Formatter, FormatError};
-use std::io::net::ip::{SocketAddr, Port};
+use std::io::net::ip::{IpAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::{Reader, IoResult, IoError, OtherIoError};
 
@@ -147,21 +147,9 @@ impl Show for Error {
 }
 
 #[deriving(Clone, PartialEq, Eq, Hash)]
-pub struct DomainNameAddr {
-    pub domain_name: String,
-    pub port: Port,
-}
-
-impl Show for DomainNameAddr {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FormatError> {
-        write!(f, "{}:{}", self.domain_name, self.port)
-    }
-}
-
-#[deriving(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
-    SocketAddress(SocketAddr),
-    DomainNameAddress(DomainNameAddr),
+    SocketAddress(IpAddr, Port),
+    DomainNameAddress(String, Port),
 }
 
 impl Address {
@@ -184,8 +172,8 @@ impl Address {
 impl Show for Address {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FormatError> {
         match *self {
-            SocketAddress(ref addr) => addr.fmt(f),
-            DomainNameAddress(ref addr) => addr.fmt(f),
+            SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
+            DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
         }
     }
 }
@@ -298,7 +286,7 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
                 Ok((v4addr, port))
             };
             match wrapper() {
-                Ok((v4addr, port)) => Ok((7u, SocketAddress(SocketAddr{ip: v4addr, port: port}))),
+                Ok((v4addr, port)) => Ok((7u, SocketAddress(v4addr, port))),
                 Err(_) =>
                     Err(Error::new(GeneralFailure, "Error while parsing IPv4 address"))
             }
@@ -319,7 +307,7 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
 
             match wrapper() {
                 Ok((v6addr, port)) =>
-                    Ok((19u, SocketAddress(SocketAddr{ip: v6addr, port: port}))),
+                    Ok((19u, SocketAddress(v6addr, port))),
                 Err(_) =>
                     Err(Error::new(GeneralFailure, "Error while parsing IPv6 address"))
             }
@@ -335,10 +323,9 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
 
             match wrapper() {
                 Ok((addr_len, raw_addr, port)) =>
-                    Ok((4 + addr_len, DomainNameAddress(DomainNameAddr{
-                                                            domain_name: String::from_utf8(raw_addr).unwrap(),
-                                                            port: port,
-                                                        }))),
+                    Ok((4 + addr_len, DomainNameAddress(String::from_utf8(raw_addr).unwrap(),
+                                                        port,
+                                                        ))),
                 Err(_) => {
                     Err(Error::new(GeneralFailure, "Error while parsing domain name"))
                 }
@@ -353,8 +340,8 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
 
 fn write_addr(addr: &Address, buf: &mut Writer) -> IoResult<()> {
     match addr {
-        &SocketAddress(ref sockaddr) => {
-            match sockaddr.ip {
+        &SocketAddress(ip, port) => {
+            match ip {
                 Ipv4Addr(v1, v2, v3, v4) => {
                     try!(buf.write([SOCKS5_ADDR_TYPE_IPV4,
                                         v1, v2, v3, v4]));
@@ -371,13 +358,13 @@ fn write_addr(addr: &Address, buf: &mut Writer) -> IoResult<()> {
                     try!(buf.write_be_u16(v8));
                 }
             }
-            try!(buf.write_be_u16(sockaddr.port));
+            try!(buf.write_be_u16(port));
         },
-        &DomainNameAddress(ref dnaddr) => {
+        &DomainNameAddress(ref dnaddr, port) => {
             try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
-            try!(buf.write_u8(dnaddr.domain_name.len() as u8));
-            try!(buf.write_str(dnaddr.domain_name.as_slice()));
-            try!(buf.write_be_u16(dnaddr.port));
+            try!(buf.write_u8(dnaddr.len() as u8));
+            try!(buf.write_str(dnaddr.as_slice()));
+            try!(buf.write_be_u16(port));
         }
     }
 
@@ -386,14 +373,14 @@ fn write_addr(addr: &Address, buf: &mut Writer) -> IoResult<()> {
 
 fn get_addr_len(atyp: &Address) -> uint {
     match atyp {
-        &SocketAddress(ref sockaddr) => {
-            match sockaddr.ip {
+        &SocketAddress(ip, _) => {
+            match ip {
                 Ipv4Addr(_, _, _, _) => 1 + 4 + 2,
                 Ipv6Addr(_, _, _, _, _, _, _, _) => 1 + 8 * 2 + 2
             }
         },
-        &DomainNameAddress(ref dmname) => {
-            1 + 1 + dmname.domain_name.len() + 2
+        &DomainNameAddress(ref dmname, _) => {
+            1 + 1 + dmname.len() + 2
         },
     }
 }
@@ -462,6 +449,10 @@ impl HandshakeResponse {
         let mut buf = [0, ..2];
         try!(stream.read(buf));
         let [ver, met] = buf;
+
+        if ver != SOCKS5_VERSION {
+            return Err(IoError {kind: OtherIoError, desc: "Invalid Socks5 version", detail: None});
+        }
 
         Ok(HandshakeResponse {
             chosen_method: met,

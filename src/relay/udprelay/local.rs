@@ -180,7 +180,7 @@ fn handle_request(mut socket: UdpSocket,
 
     let mut wbuf = MemWriter::new();
     request.write_to(&mut wbuf).unwrap();
-    io::util::copy(&mut bufr, &mut wbuf);
+    io::util::copy(&mut bufr, &mut wbuf).unwrap();
 
     let encrypted_data = cipher.encrypt(wbuf.unwrap().as_slice());
 
@@ -214,7 +214,7 @@ fn handle_response(mut socket: UdpSocket,
     let mut bufw = MemWriter::new();
     socks5::UdpAssociateHeader::new(0, addr)
         .write_to(&mut bufw).unwrap();
-    io::util::copy(&mut bufr, &mut bufw);
+    io::util::copy(&mut bufr, &mut bufw).unwrap();
 
     socket.send_to(bufw.unwrap().as_slice(), client_addr)
         .ok().expect("Error occurs while sending to local");

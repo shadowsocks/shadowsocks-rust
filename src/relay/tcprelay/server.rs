@@ -96,22 +96,23 @@ impl TcpRelayServer {
 
                 info!("Connecting to {}", addr);
                 let mut remote_stream = match addr {
-                    SocketAddress(sockaddr) => {
-                        TcpStream::connect_timeout(sockaddr, Duration::seconds(30)).unwrap_or_else(|err| {
-                            panic!("{} unable to connect {}: {}", addr, sockaddr, err)
+                    SocketAddress(ip, port) => {
+                        TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30))
+                                .unwrap_or_else(|err| {
+                            panic!("Unable to connect {}: {}", addr, err)
                         })
                     },
-                    DomainNameAddress(ref domainaddr) => {
+                    DomainNameAddress(ref name, ref port) => {
                         let ipaddrs = {
                             // Cannot fail inside, which will cause other tasks fail, too.
-                            dnscache.resolve(domainaddr.domain_name.as_slice())
-                        }.expect(format!("Failed to resolve {}", domainaddr).as_slice());
+                            dnscache.resolve(name.as_slice())
+                        }.expect(format!("Failed to resolve {}", addr).as_slice());
 
                         let connector = || {
                             for ipaddr in ipaddrs.iter() {
                                 let result = TcpStream::connect_timeout(SocketAddr {
                                                                 ip: *ipaddr,
-                                                                port: domainaddr.port
+                                                                port: *port
                                                             },
                                                             Duration::seconds(30));
                                 match result {
@@ -122,7 +123,7 @@ impl TcpRelayServer {
                                     }
                                 }
                             }
-                            panic!("{} unable to connect {}", addr, domainaddr);
+                            panic!("Unable to connect {}", addr);
                         };
                         connector()
 
@@ -132,7 +133,7 @@ impl TcpRelayServer {
                 };
 
                 // Fixed issue #3
-                io::util::copy(&mut bufr, &mut remote_stream);
+                io::util::copy(&mut bufr, &mut remote_stream).unwrap();
 
                 let mut remote_local_stream = stream.clone();
                 let mut remote_remote_stream = remote_stream.clone();
