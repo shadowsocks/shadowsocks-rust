@@ -171,23 +171,6 @@ pub fn parse_request_header(stream: &mut Reader) -> Result<(uint, AddressType), 
     }
 }
 
-fn get_addr_len(response: &[u8]) -> uint {
-    match response[0] {
-        SOCKS5_ADDR_TYPE_IPV4 => {
-            1 + 6
-        },
-        SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-            1 + response[1] as uint + 2
-        },
-        SOCKS5_ADDR_TYPE_IPV6 => {
-            1 + 16 + 2
-        }
-        _ => {
-            panic!("Invalid addr type {}", response[0]);
-        }
-    }
-}
-
 fn do_udp(matches: &Matches, svr_addr: &AddressType, proxy_addr: &SocketAddr) {
     let udp_proxy_addr = {
         let mut stream = BufferedStream::new(

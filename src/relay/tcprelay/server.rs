@@ -31,7 +31,7 @@ use std::time::duration::Duration;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{parse_request_header, SocketAddress, DomainNameAddress};
+use relay::socks5::{SocketAddress, DomainNameAddress, mod};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::relay_and_map;
 use crypto::cipher;
@@ -89,10 +89,11 @@ impl TcpRelayServer {
                 };
 
                 let mut bufr = BufReader::new(header.as_slice());
-                let (header_len, addr) = parse_request_header(&mut bufr).unwrap_or_else(|err| {
-                    panic!("Error occurs while parsing request header, \
+                let addr = socks5::Address::read_from(&mut bufr).unwrap_or_else(|err| {
+                     panic!("Error occurs while parsing request header, \
                                 maybe wrong crypto method or password: {}", err.message);
                 });
+
                 info!("Connecting to {}", addr);
                 let mut remote_stream = match addr {
                     SocketAddress(sockaddr) => {
@@ -131,7 +132,7 @@ impl TcpRelayServer {
                 };
 
                 // Fixed issue #3
-                remote_stream.write(header.slice_from(header_len))
+                remote_stream.write(header.slice_from(addr.len()))
                             .ok().expect("Error occurs while relaying the first package to remote");
 
                 let mut remote_local_stream = stream.clone();

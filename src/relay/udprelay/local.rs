@@ -61,13 +61,13 @@ use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
 use std::collections::{LruCache, HashMap};
-use std::io::BufReader;
+use std::io::{BufReader, MemWriter, mod};
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{AddressType, parse_request_header};
+use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::udprelay::UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY;
 
@@ -100,7 +100,7 @@ impl Relay for UdpRelayLocal {
         };
 
         let client_map_arc = Arc::new(Mutex::new(
-                    LruCache::<AddressType, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
+                    LruCache::<socks5::Address, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
 
         let mut socket = UdpSocket::bind(addr).ok().expect("Failed to bind udp socket");
 
@@ -152,7 +152,7 @@ fn handle_request(mut socket: UdpSocket,
                   request_message: &[u8],
                   from_addr: SocketAddr,
                   config: &ServerConfig,
-                  client_map: Arc<Mutex<LruCache<AddressType, SocketAddr>>>) {
+                  client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
     // According to RFC 1928
     //
     // Implementation of fragmentation is optional; an implementation that
@@ -164,19 +164,11 @@ fn handle_request(mut socket: UdpSocket,
         return;
     }
 
-    let data = request_message.slice_from(3);
-    let mut bufr = BufReader::new(data);
 
-    let (_, addr) = {
-        let (header_len, addr) = match parse_request_header(&mut bufr) {
-            Ok(result) => result,
-            Err(..) => {
-                error!("Error while parsing request header");
-                return;
-            }
-        };
-        (data.slice_to(header_len), addr)
-    };
+    let mut bufr = BufReader::new(request_message);
+    let request = socks5::UdpAssociateHeader::read_from(&mut bufr).unwrap();
+
+    let addr = request.address.clone();
 
     info!("UDP ASSOCIATE {}", addr);
     debug!("UDP associate {} <-> {}", addr, from_addr);
@@ -185,7 +177,12 @@ fn handle_request(mut socket: UdpSocket,
 
     let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
                         .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
-    let encrypted_data = cipher.encrypt(data);
+
+    let mut wbuf = MemWriter::new();
+    request.write_to(&mut wbuf).unwrap();
+    io::util::copy(&mut bufr, &mut wbuf);
+
+    let encrypted_data = cipher.encrypt(wbuf.unwrap().as_slice());
 
     socket.send_to(encrypted_data.as_slice(), config.addr)
         .ok().expect("Error occurs while sending to remote");
@@ -195,23 +192,14 @@ fn handle_response(mut socket: UdpSocket,
                    response_messge: &[u8],
                    from_addr: SocketAddr,
                    config: &ServerConfig,
-                   client_map: Arc<Mutex<LruCache<AddressType, SocketAddr>>>) {
+                   client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
     let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
                         .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
     let decrypted_data = cipher.decrypt(response_messge);
 
     let mut bufr = BufReader::new(decrypted_data.as_slice());
 
-    let (_, addr) = {
-        let (header_len, addr) = match parse_request_header(&mut bufr) {
-            Ok(result) => result,
-            Err(..) => {
-                error!("Error while parsing request header");
-                return;
-            }
-        };
-        (decrypted_data.as_slice().slice_from(header_len), addr)
-    };
+    let addr = socks5::Address::read_from(&mut bufr).unwrap();
 
     let client_addr = {
         let mut cmap = client_map.lock();
@@ -223,9 +211,11 @@ fn handle_response(mut socket: UdpSocket,
 
     debug!("UDP response {} -> {}", from_addr, client_addr);
 
-    let mut response = vec![0x00, 0x00, 0x00];
-    response.push_all(decrypted_data.as_slice());
+    let mut bufw = MemWriter::new();
+    socks5::UdpAssociateHeader::new(0, addr)
+        .write_to(&mut bufw).unwrap();
+    io::util::copy(&mut bufr, &mut bufw);
 
-    socket.send_to(response.as_slice(), client_addr)
+    socket.send_to(bufw.unwrap().as_slice(), client_addr)
         .ok().expect("Error occurs while sending to local");
 }

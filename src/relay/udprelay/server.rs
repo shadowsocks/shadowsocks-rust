@@ -29,7 +29,7 @@ use std::collections::LruCache;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{AddressType, SocketAddress, DomainNameAddress, write_addr, parse_request_header};
+use relay::socks5::{Address, SocketAddress, DomainNameAddress, mod};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -51,9 +51,9 @@ impl UdpRelayServer {
         debug!("UDP server is binding {}", svr_config.addr);
 
         let client_map_arc = Arc::new(Mutex::new(
-                            LruCache::<AddressType, SocketAddr>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
+                            LruCache::<Address, SocketAddr>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
         let remote_map_arc = Arc::new(Mutex::new(
-                            LruCache::<SocketAddr, AddressType>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
+                            LruCache::<SocketAddr, Address>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
 
         let mut buf = [0u8, ..0xffff];
         loop {
@@ -76,8 +76,7 @@ impl UdpRelayServer {
 
                                         // Make a header
                                         let mut response_buf = MemWriter::new();
-                                        // response_buf.write([0x00, 0x00, 0x00]).unwrap();
-                                        write_addr(remote_addr, &mut response_buf).unwrap();
+                                        remote_addr.write_to(&mut response_buf).unwrap();
 
                                         response_buf.write(data.as_slice()).unwrap();
                                         let encrypted_data = cipher.encrypt(response_buf.unwrap().as_slice());
@@ -99,27 +98,22 @@ impl UdpRelayServer {
                         // Maybe data from a relay client
                         // Decrypt it and see what's inside
                         let decrypted_data = cipher.decrypt(data.as_slice());
+                        let mut bufr = BufReader::new(decrypted_data.as_slice());
 
-                        if decrypted_data.len() < 3 || decrypted_data[2] != 0x00 {
-                            // drop it
+                        let header = socks5::UdpAssociateHeader::read_from(&mut bufr).unwrap();
+
+                        if header.frag != 0 {
+                            // Drop it
                             return;
                         }
 
-                        let (data, addr) = {
-                            let mut bufr = BufReader::new(decrypted_data.as_slice());
-                            let (header_len, addr) = parse_request_header(&mut bufr)
-                                .ok()
-                                .expect("Error while parsing request header");
-                            (decrypted_data.as_slice().slice_from(header_len), addr)
-                        };
+                        info!("UDP ASSOCIATE {}", header.address);
+                        debug!("UDP request {} -> {}", src, header.address);
 
-                        info!("UDP ASSOCIATE {}", addr);
-                        debug!("UDP request {} -> {}", src, addr);
-
-                        let sockaddr = match &addr {
+                        let sockaddr = match &header.address {
                             &SocketAddress(ref sockaddr) => {
-                                client_map.lock().put(addr.clone(), src);
-                                remote_map.lock().put(sockaddr.clone(), addr.clone());
+                                client_map.lock().put(header.address.clone(), src);
+                                remote_map.lock().put(sockaddr.clone(), header.address.clone());
                                 sockaddr.clone()
                             },
                             &DomainNameAddress(ref dnaddr) => {
@@ -132,12 +126,12 @@ impl UdpRelayServer {
                                                       ip: ipaddrs.head().unwrap().clone(),
                                                       port: dnaddr.port,
                                                   };
-                                client_map.lock().put(addr.clone(), src);
-                                remote_map.lock().put(remote_addr, addr.clone());
+                                client_map.lock().put(header.address.clone(), src);
+                                remote_map.lock().put(remote_addr, header.address.clone());
                                 remote_addr
                             }
                         };
-                        captured_socket.send_to(data, sockaddr).unwrap();
+                        captured_socket.send_to(decrypted_data.as_slice().slice_from(header.len()), sockaddr).unwrap();
                     });
                 },
                 Err(err) => {

@@ -28,18 +28,10 @@ extern crate native;
 
 use std::io::{IoResult, Reader, Writer};
 
-use relay::socks5::SOCKS5_VERSION;
-
 mod cached_dns;
 pub mod local;
 pub mod server;
 
-pub fn send_error_reply(stream: &mut Writer, err_code: u8) -> IoResult<()> {
-    let reply = [SOCKS5_VERSION, err_code, 0x00];
-    try!(stream.write(reply));
-    try!(stream.flush());
-    Ok(())
-}
 
 pub fn relay_and_map(from: &mut Reader, to: &mut Writer, mapper: |&[u8]| -> Vec<u8>)
         -> IoResult<()> {
