@@ -30,7 +30,7 @@ mod udprelay;
 pub mod local;
 pub mod server;
 mod loadbalancing;
-mod socks5;
+pub mod socks5;
 
 pub trait Relay {
     fn run(&self);

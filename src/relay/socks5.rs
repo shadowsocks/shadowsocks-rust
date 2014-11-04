@@ -191,20 +191,20 @@ impl Show for Address {
 }
 
 #[deriving(Clone, Show)]
-pub struct ConnectRequestHeader {
+pub struct TcpRequestHeader {
     pub command: Command,
     pub address: Address,
 }
 
-impl ConnectRequestHeader {
-    pub fn new(cmd: Command, addr: Address) -> ConnectRequestHeader {
-        ConnectRequestHeader {
+impl TcpRequestHeader {
+    pub fn new(cmd: Command, addr: Address) -> TcpRequestHeader {
+        TcpRequestHeader {
             command: cmd,
             address: addr,
         }
     }
 
-    pub fn read_from(stream: &mut Reader) -> Result<ConnectRequestHeader, Error> {
+    pub fn read_from(stream: &mut Reader) -> Result<TcpRequestHeader, Error> {
         let mut buf = [0u8, ..3];
         match stream.read(buf) {
             Ok(_) => (),
@@ -216,7 +216,7 @@ impl ConnectRequestHeader {
             return Err(Error::new(ConnectionRefused, "Unsupported Socks version"));
         }
 
-        Ok(ConnectRequestHeader {
+        Ok(TcpRequestHeader {
             command: match Command::from_code(cmd) {
                 Some(c) => c,
                 None => return Err(Error::new(CommandNotSupported, "Unsupported command")),
@@ -238,37 +238,32 @@ impl ConnectRequestHeader {
 }
 
 #[deriving(Clone, Show)]
-pub struct ConnectResponseHeader {
+pub struct TcpResponseHeader {
     pub reply: Reply,
     pub address: Address,
 }
 
-impl ConnectResponseHeader {
-    pub fn new(reply: Reply, address: Address) -> ConnectResponseHeader {
-        ConnectResponseHeader {
+impl TcpResponseHeader {
+    pub fn new(reply: Reply, address: Address) -> TcpResponseHeader {
+        TcpResponseHeader {
             reply: reply,
             address: address,
         }
     }
 
-    pub fn read_from(stream: &mut Reader) -> Result<ConnectResponseHeader, Error> {
+    pub fn read_from(stream: &mut Reader) -> Result<TcpResponseHeader, Error> {
         let mut buf = [0u8, ..3];
         match stream.read(buf) {
             Ok(_) => (),
             Err(err) => return Err(Error::new(GeneralFailure, err.to_string().as_slice()))
         }
-        let [ver, cmd, _] = buf;
+        let [ver, reply_code, _] = buf;
 
         if ver != SOCKS5_VERSION {
             return Err(Error::new(ConnectionRefused, "Unsupported Socks version"));
         }
 
-        let reply_code = match stream.read_u8() {
-                Ok(c) => c,
-                Err(err) => return Err(Error::new(GeneralFailure, err.to_string().as_slice()))
-            };
-
-        Ok(ConnectResponseHeader {
+        Ok(TcpResponseHeader {
             reply: Reply::from_code(reply_code),
             address: try!(Address::read_from(stream)),
         })

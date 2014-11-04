@@ -77,7 +77,7 @@ impl TcpRelayLocal {
     fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) {
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
 
-        let reply = socks5::ConnectResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname));
+        let reply = socks5::TcpResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname));
         reply.write_to(stream).unwrap();
 
         // TODO: record this client's information for udprelay local server to validate
@@ -93,8 +93,8 @@ impl TcpRelayLocal {
 
         let sockname = stream.socket_name().ok().expect("Failed to get socket name");
 
-        let header = socks5::ConnectRequestHeader::read_from(&mut stream).unwrap_or_else(|err| {
-            socks5::ConnectResponseHeader::new(err.reply, socks5::SocketAddress(sockname));
+        let header = socks5::TcpRequestHeader::read_from(&mut stream).unwrap_or_else(|err| {
+            socks5::TcpResponseHeader::new(err.reply, socks5::SocketAddress(sockname));
             panic!("Failed to read request header: {}", err);
         });
 
@@ -108,11 +108,11 @@ impl TcpRelayLocal {
                                            server_addr.port).unwrap_or_else(|err| {
                     match err.kind {
                         ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                            socks5::ConnectResponseHeader::new(socks5::HostUnreachable, addr.clone())
+                            socks5::TcpResponseHeader::new(socks5::HostUnreachable, addr.clone())
                                 .write_to(&mut stream).unwrap();
                         },
                         _ => {
-                            socks5::ConnectResponseHeader::new(socks5::NetworkUnreachable, addr.clone())
+                            socks5::TcpResponseHeader::new(socks5::NetworkUnreachable, addr.clone())
                                 .write_to(&mut stream).unwrap();
                         }
                     }
@@ -126,7 +126,7 @@ impl TcpRelayLocal {
                 stream = {
                     let mut buffered_stream = BufferedStream::new(stream);
 
-                    socks5::ConnectResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname))
+                    socks5::TcpResponseHeader::new(socks5::Succeeded, socks5::SocketAddress(sockname))
                         .write_to(&mut buffered_stream).unwrap_or_else(|err| {
                             panic!("Error occurs while writing header to local stream: {}", err);
                         });
@@ -180,7 +180,7 @@ impl TcpRelayLocal {
             },
             socks5::TcpBind => {
                 warn!("BIND is not supported");
-                socks5::ConnectResponseHeader::new(socks5::CommandNotSupported, addr)
+                socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
                     .write_to(&mut stream).unwrap();
             },
             socks5::UdpAssociate => {
@@ -190,7 +190,7 @@ impl TcpRelayLocal {
                     TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr);
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
-                    socks5::ConnectResponseHeader::new(socks5::CommandNotSupported, addr)
+                    socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
                         .write_to(&mut stream).unwrap();
                 }
             }
