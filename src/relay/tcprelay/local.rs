@@ -23,12 +23,15 @@
 
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{
+    IoResult,
+    IoError,
     EndOfFile,
     ConnectionFailed,
     ConnectionRefused,
     ConnectionReset,
     ConnectionAborted,
-    BrokenPipe
+    BrokenPipe,
+    OtherIoError,
 };
 use std::io::net::ip::SocketAddr;
 use std::io::{MemWriter, BufferedStream};
@@ -48,6 +51,50 @@ pub struct TcpRelayLocal {
     config: Config,
 }
 
+#[inline]
+fn make_io_error(desc: &'static str, detail: Option<String>) -> IoError {
+    IoError {
+        kind: OtherIoError,
+        desc: desc,
+        detail: detail,
+    }
+}
+
+macro_rules! try_result(
+    ($res:expr) => ({
+        let res = $res;
+        match res {
+            Ok(r) => { r },
+            Err(err) => {
+                error!("{}", err);
+                return;
+            }
+        }
+    });
+    ($res:expr, prefix: $prefix:expr) => ({
+        let res = $res;
+        let prefix = $prefix;
+        match res {
+            Ok(r) => { r },
+            Err(err) => {
+                error!("{} {}", prefix, err);
+                return;
+            }
+        }
+    });
+    ($res:expr, message: $message:expr) => ({
+        let res = $res;
+        let message = $message;
+        match res {
+            Ok(r) => { r },
+            Err(..) => {
+                error!("{}", message);
+                return;
+            }
+        }
+    });
+)
+
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
         if c.server.is_none() || c.local.is_none() {
@@ -59,30 +106,34 @@ impl TcpRelayLocal {
         }
     }
 
-    fn do_handshake(stream: &mut TcpStream) {
+    fn do_handshake(stream: &mut TcpStream) -> IoResult<()> {
         // Read the handshake header
-        let req = socks5::HandshakeRequest::read_from(stream).unwrap();
+        let req = try!(socks5::HandshakeRequest::read_from(stream));
 
         if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
             let resp = socks5::HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-            resp.write_to(stream).unwrap();
-            panic!("Currently shadowsocks-rust does not support authentication");
+            try!(resp.write_to(stream));
+            warn!("Currently shadowsocks-rust does not support authentication");
+            return Err(make_io_error("Currently shadowsocks-rust does not support authentication", None));
         }
 
         // Reply to client
         let resp = socks5::HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
-        resp.write_to(stream).ok().expect("Error occurs while sending handshake reply");
+        try!(resp.write_to(stream));
+        Ok(())
     }
 
-    fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) {
-        let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+    fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) -> IoResult<()> {
+        let sockname = try!(stream.socket_name());
 
         let reply = socks5::TcpResponseHeader::new(socks5::Succeeded,
                                                    socks5::SocketAddress(sockname.ip, sockname.port));
-        reply.write_to(stream).unwrap();
+        try!(reply.write_to(stream));
 
         // TODO: record this client's information for udprelay local server to validate
         //       whether the client has already authenticated
+
+        Ok(())
     }
 
     fn handle_client(mut stream: TcpStream,
@@ -90,15 +141,19 @@ impl TcpRelayLocal {
                      password: String,
                      encrypt_method: String,
                      enable_udp: bool) {
-        TcpRelayLocal::do_handshake(&mut stream);
+        try_result!(TcpRelayLocal::do_handshake(&mut stream), prefix: "Error occurs while doing handshake:");
 
-        let sockname = stream.socket_name().ok().expect("Failed to get socket name");
+        let sockname = try_result!(stream.socket_name(), prefix: "Failed to get socket name:");
 
-        let header = socks5::TcpRequestHeader::read_from(&mut stream).unwrap_or_else(|err| {
-            socks5::TcpResponseHeader::new(err.reply,
-                                           socks5::SocketAddress(sockname.ip, sockname.port));
-            panic!("Failed to read request header: {}", err);
-        });
+        let header = match socks5::TcpRequestHeader::read_from(&mut stream) {
+            Ok(h) => { h },
+            Err(err) => {
+                socks5::TcpResponseHeader::new(err.reply,
+                                               socks5::SocketAddress(sockname.ip, sockname.port));
+                error!("Failed to read request header: {}", err);
+                return;
+            }
+        };
 
         let addr = header.address;
 
@@ -106,9 +161,9 @@ impl TcpRelayLocal {
             socks5::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let mut remote_stream = TcpStream::connect(
-                            format!("{}:{}", server_addr.ip, server_addr.port).as_slice())
-                    .unwrap_or_else(|err| {
+                let mut remote_stream = match TcpStream::connect(
+                            format!("{}:{}", server_addr.ip, server_addr.port).as_slice()) {
+                    Err(err) => {
                         match err.kind {
                             ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
                                 socks5::TcpResponseHeader::new(socks5::HostUnreachable, addr.clone())
@@ -119,8 +174,11 @@ impl TcpRelayLocal {
                                     .write_to(&mut stream).unwrap();
                             }
                         }
-                        panic!("Failed to connect remote server: {}", err);
-                    });
+                        error!("Failed to connect remote server: {}", err);
+                        return;
+                    },
+                    Ok(s) => { s },
+                };
 
                 let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                                password.as_slice().as_bytes())
@@ -129,19 +187,19 @@ impl TcpRelayLocal {
                 stream = {
                     let mut buffered_stream = BufferedStream::new(stream);
 
-                    socks5::TcpResponseHeader::new(socks5::Succeeded,
-                                                   socks5::SocketAddress(sockname.ip, sockname.port))
-                        .write_to(&mut buffered_stream).unwrap_or_else(|err| {
-                            panic!("Error occurs while writing header to local stream: {}", err);
-                        });
-                    buffered_stream.flush().unwrap();
+                    try_result!(socks5::TcpResponseHeader::new(
+                                                    socks5::Succeeded,
+                                                    socks5::SocketAddress(sockname.ip, sockname.port))
+                                .write_to(&mut buffered_stream),
+                        prefix: "Error occurs while writing header to local stream:");
+                    try_result!(buffered_stream.flush());
 
                     let mut header_buf = MemWriter::new();
-                    addr.write_to(&mut header_buf).unwrap();
+                    try_result!(addr.write_to(&mut header_buf));
 
                     let encrypted_header = cipher.encrypt(header_buf.unwrap().as_slice());
-                    remote_stream.write(encrypted_header.as_slice())
-                            .ok().expect("Error occurs while writing header to remote stream");
+                    try_result!(remote_stream.write(encrypted_header.as_slice()),
+                                prefix: "Error occurs while writing header to remote stream:");
                     buffered_stream.unwrap()
                 };
 
@@ -184,18 +242,21 @@ impl TcpRelayLocal {
             },
             socks5::TcpBind => {
                 warn!("BIND is not supported");
-                socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
-                    .write_to(&mut stream).unwrap();
+                try_result!(socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
+                    .write_to(&mut stream),
+                    prefix: "Failed to write BIND response:");
             },
             socks5::UdpAssociate => {
                 let sockname = stream.peer_name().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
-                    TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr);
+                    try_result!(TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr),
+                                prefix: "Failed to write UDP ASSOCIATE response:");
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
-                    socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
-                        .write_to(&mut stream).unwrap();
+                    try_result!(socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
+                        .write_to(&mut stream),
+                        prefix: "Failed to write UDP ASSOCIATE response:");
                 }
             }
         }

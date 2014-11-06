@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
-use std::io::net::ip::SocketAddr;
+use std::io::net::ip::{IpAddr, SocketAddr};
 use std::io::{BufReader, mod};
 use std::time::duration::Duration;
 
@@ -36,6 +36,41 @@ use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::relay_and_map;
 use crypto::cipher;
 use crypto::cipher::Cipher;
+
+macro_rules! try_result(
+    ($res:expr) => ({
+        let res = $res;
+        match res {
+            Ok(r) => { r },
+            Err(err) => {
+                error!("{}", err);
+                return;
+            }
+        }
+    });
+    ($res:expr, prefix: $prefix:expr) => ({
+        let res = $res;
+        let prefix = $prefix;
+        match res {
+            Ok(r) => { r },
+            Err(err) => {
+                error!("{} {}", prefix, err);
+                return;
+            }
+        }
+    });
+    ($res:expr, message: $message:expr) => ({
+        let res = $res;
+        let message = $message;
+        match res {
+            Ok(r) => { r },
+            Err(..) => {
+                error!("{}", message);
+                return;
+            }
+        }
+    });
+)
 
 #[deriving(Clone)]
 pub struct TcpRelayServer {
@@ -60,8 +95,9 @@ impl TcpRelayServer {
                  s.timeout,
                  s.dns_cache_capacity);
 
-        let mut acceptor = TcpListener::bind(format!("{}:{}", server_addr.ip,
-                                             server_addr.port).as_slice()).listen().unwrap();
+        let mut acceptor = try_result!(TcpListener::bind(format!("{}:{}", server_addr.ip,
+                                                         server_addr.port).as_slice()).listen(),
+                                       prefix: "Failed to bind: ");
 
         info!("Shadowsocks listening on {}", server_addr);
 
@@ -82,31 +118,33 @@ impl TcpRelayServer {
 
                 let header = {
                     let mut buf = [0u8, .. 1024];
-                    let header_len = stream.read(buf).unwrap_or_else(|err| {
-                        panic!("Error occurs while reading header: {}", err);
-                    });
+                    let header_len = try_result!(stream.read(buf), prefix: "Error occurs while reading header: ");
                     cipher.decrypt(buf.slice_to(header_len))
                 };
 
                 let mut bufr = BufReader::new(header.as_slice());
-                let addr = socks5::Address::read_from(&mut bufr).unwrap_or_else(|err| {
-                     panic!("Error occurs while parsing request header, \
-                                maybe wrong crypto method or password: {}", err.message);
-                });
+                let addr = try_result!(socks5::Address::read_from(&mut bufr),
+                     prefix: "Error occurs while parsing request header, maybe wrong crypto method or password: "
+                );
 
                 info!("Connecting to {}", addr);
                 let mut remote_stream = match addr {
                     SocketAddress(ip, port) => {
-                        TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30))
-                                .unwrap_or_else(|err| {
-                            panic!("Unable to connect {}: {}", addr, err)
-                        })
+                        try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
+                                prefix: format!("Unable to connect {}:", addr)
+                        )
                     },
                     DomainNameAddress(ref name, ref port) => {
                         let ipaddrs = {
                             // Cannot fail inside, which will cause other tasks fail, too.
-                            dnscache.resolve(name.as_slice())
-                        }.expect(format!("Failed to resolve {}", addr).as_slice());
+                            match dnscache.resolve(name.as_slice()) {
+                                Some(v) => { v },
+                                None => {
+                                    error!("Unable to resolve {}:{}", name, port);
+                                    return;
+                                }
+                            }
+                        };
 
                         let connector = || {
                             for ipaddr in ipaddrs.iter() {
