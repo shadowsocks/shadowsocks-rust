@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
-use std::io::net::ip::{IpAddr, SocketAddr};
+use std::io::net::ip::SocketAddr;
 use std::io::{BufReader, mod};
 use std::time::duration::Duration;
 
