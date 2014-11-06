@@ -50,7 +50,7 @@ impl TableCipher {
 
         for i in range(1, 1024) {
             table.as_mut_slice().sort_by(|x, y| {
-                let sub = (a % (x + i) - a % (y + i)) as i64;
+                let sub = (a % (*x + i) - a % (*y + i)) as i64;
 
                 sub.partial_cmp(&0i64).unwrap()
             })

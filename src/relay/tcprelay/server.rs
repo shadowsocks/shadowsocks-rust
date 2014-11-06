@@ -60,8 +60,8 @@ impl TcpRelayServer {
                  s.timeout,
                  s.dns_cache_capacity);
 
-        let mut acceptor = TcpListener::bind(server_addr.ip.to_string().as_slice(),
-                                             server_addr.port).listen().unwrap();
+        let mut acceptor = TcpListener::bind(format!("{}:{}", server_addr.ip,
+                                             server_addr.port).as_slice()).listen().unwrap();
 
         info!("Shadowsocks listening on {}", server_addr);
 

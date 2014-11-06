@@ -106,20 +106,21 @@ impl TcpRelayLocal {
             socks5::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let mut remote_stream = TcpStream::connect(server_addr.ip.to_string().as_slice(),
-                                           server_addr.port).unwrap_or_else(|err| {
-                    match err.kind {
-                        ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                            socks5::TcpResponseHeader::new(socks5::HostUnreachable, addr.clone())
-                                .write_to(&mut stream).unwrap();
-                        },
-                        _ => {
-                            socks5::TcpResponseHeader::new(socks5::NetworkUnreachable, addr.clone())
-                                .write_to(&mut stream).unwrap();
+                let mut remote_stream = TcpStream::connect(
+                            format!("{}:{}", server_addr.ip, server_addr.port).as_slice())
+                    .unwrap_or_else(|err| {
+                        match err.kind {
+                            ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
+                                socks5::TcpResponseHeader::new(socks5::HostUnreachable, addr.clone())
+                                    .write_to(&mut stream).unwrap();
+                            },
+                            _ => {
+                                socks5::TcpResponseHeader::new(socks5::NetworkUnreachable, addr.clone())
+                                    .write_to(&mut stream).unwrap();
+                            }
                         }
-                    }
-                    panic!("Failed to connect remote server: {}", err);
-                });
+                        panic!("Failed to connect remote server: {}", err);
+                    });
 
                 let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                                password.as_slice().as_bytes())
@@ -208,7 +209,8 @@ impl Relay for TcpRelayLocal {
 
         let local_conf = self.config.local.unwrap();
 
-        let mut acceptor = match TcpListener::bind(local_conf.ip.to_string().as_slice(), local_conf.port).listen() {
+        let mut acceptor = match TcpListener::bind(
+                format!("{}:{}", local_conf.ip, local_conf.port).as_slice()).listen() {
             Ok(acpt) => acpt,
             Err(e) => {
                 panic!("Error occurs while listening local address: {}", e.to_string());
