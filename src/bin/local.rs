@@ -33,6 +33,11 @@ extern crate shadowsocks;
 #[phase(plugin, link)]
 extern crate log;
 
+#[cfg(feature = "enable-green")]
+extern crate green;
+#[cfg(feature = "enable-green")]
+extern crate rustuv;
+
 use getopts::{optopt, optflag, getopts, usage};
 
 use std::os;
@@ -43,6 +48,17 @@ use shadowsocks::config::{Config, ServerConfig, ClientConfig, mod};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
+
+#[cfg(feature = "enable-green")]
+#[warn(unstable)]
+#[start]
+fn start(argc: int, argv: *const *const u8) -> int {
+    use rustuv::EventLoop;
+    fn event_loop() -> Box<green::EventLoop + Send> {
+        box EventLoop::new().unwrap() as Box<green::EventLoop + Send>
+    }
+    green::start(argc, argv, event_loop, main)
+}
 
 fn main() {
     let opts = [

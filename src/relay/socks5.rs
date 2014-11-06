@@ -146,6 +146,39 @@ impl Show for Error {
     }
 }
 
+macro_rules! try_io(
+    ($do_io:expr, $errtype:expr, $message:expr) => ( {
+        let io_result = $do_io;
+        let errtype = $errtype;
+        let message = $message;
+        match io_result {
+            Ok(ret) => { ret },
+            Err(err) => {
+                return Err(Error::new(errtype, message));
+            }
+        }
+    });
+    ($do_io:expr, $errtype:expr) => ( {
+        let io_result = $do_io;
+        let errtype = $errtype;
+        match io_result {
+            Ok(ret) => { ret },
+            Err(err) => {
+                return Err(Error::new(errtype, err.desc));
+            }
+        }
+    });
+    ($do_io:expr) => ( {
+        let io_result = $do_io;
+        match io_result {
+            Ok(ret) => { ret },
+            Err(err) => {
+                return Err(Error::new(GeneralFailure, err.desc));
+            }
+        }
+    });
+)
+
 #[deriving(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
     SocketAddress(IpAddr, Port),
@@ -277,59 +310,34 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
 
     match atyp {
         SOCKS5_ADDR_TYPE_IPV4 => {
-            let wrapper = || {
-                let v4addr = Ipv4Addr(try!(stream.read_byte()),
-                                      try!(stream.read_byte()),
-                                      try!(stream.read_byte()),
-                                      try!(stream.read_byte()));
-                let port = try!(stream.read_be_u16());
-                Ok((v4addr, port))
-            };
-            match wrapper() {
-                Ok((v4addr, port)) => Ok((7u, SocketAddress(v4addr, port))),
-                Err(_) =>
-                    Err(Error::new(GeneralFailure, "Error while parsing IPv4 address"))
-            }
+            let v4addr = Ipv4Addr(try_io!(stream.read_byte(), GeneralFailure),
+                                  try_io!(stream.read_byte(), GeneralFailure),
+                                  try_io!(stream.read_byte(), GeneralFailure),
+                                  try_io!(stream.read_byte(), GeneralFailure));
+            let port = try_io!(stream.read_be_u16(), GeneralFailure);
+            Ok((7u, SocketAddress(v4addr, port)))
         },
         SOCKS5_ADDR_TYPE_IPV6 => {
-            let wrapper = || {
-                let v6addr = Ipv6Addr(try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()),
-                                      try!(stream.read_be_u16()));
-                let port = try!(stream.read_be_u16());
-                Ok((v6addr, port))
-            };
+            let v6addr = Ipv6Addr(try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()),
+                                  try_io!(stream.read_be_u16()));
+            let port = try_io!(stream.read_be_u16());
 
-            match wrapper() {
-                Ok((v6addr, port)) =>
-                    Ok((19u, SocketAddress(v6addr, port))),
-                Err(_) =>
-                    Err(Error::new(GeneralFailure, "Error while parsing IPv6 address"))
-            }
+            Ok((19u, SocketAddress(v6addr, port)))
         },
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-            let wrapper = || {
-                let addr_len = try!(stream.read_byte()) as uint;
-                let raw_addr = try!(stream.read_exact(addr_len));
-                let port = try!(stream.read_be_u16());
+            let addr_len = try_io!(stream.read_byte()) as uint;
+            let raw_addr = try_io!(stream.read_exact(addr_len));
+            let port = try_io!(stream.read_be_u16());
 
-                Ok((addr_len, raw_addr, port))
-            };
-
-            match wrapper() {
-                Ok((addr_len, raw_addr, port)) =>
-                    Ok((4 + addr_len, DomainNameAddress(String::from_utf8(raw_addr).unwrap(),
-                                                        port,
-                                                        ))),
-                Err(_) => {
-                    Err(Error::new(GeneralFailure, "Error while parsing domain name"))
-                }
-            }
+            Ok((4 + addr_len, DomainNameAddress(String::from_utf8(raw_addr).unwrap(),
+                                                port,
+                                                )))
         },
         _ => {
             // Address type not supported

@@ -158,7 +158,7 @@ impl Config {
             let mut servers = Vec::new();
             for server in server_list.iter() {
                 let mut method = try_config!(
-                                        try_config!(server.find(&"method".to_string()),
+                                        try_config!(server.find("method"),
                                                     "You need to specify a method").as_string(),
                                         "method should be a string");
                 if method == "" {
@@ -166,7 +166,7 @@ impl Config {
                 }
 
                 let addr_str = try_config!(
-                                    try_config!(server.find(&"address".to_string()),
+                                    try_config!(server.find("address"),
                                                 "You need to specify a server address").as_string(),
                                     "address should be a string");
 
@@ -175,20 +175,20 @@ impl Config {
                         ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
                                         format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
                         port: try_config!(
-                                    try_config!(server.find(&"port".to_string()),
+                                    try_config!(server.find("port"),
                                                 "You need to specify a server port").as_u64(),
                                     "port should be an integer") as Port,
                     },
                     password: try_config!(
-                                    try_config!(server.find(&"password".to_string()),
+                                    try_config!(server.find("password"),
                                                 "You need to specify a password").as_string(),
                                     "password should be a string").to_string(),
                     method: method.to_string(),
-                    timeout: match server.find(&"timeout".to_string()) {
+                    timeout: match server.find("timeout") {
                         Some(t) => Some(try_config!(t.as_u64(), "timeout should be an integer") * 1000),
                         None => None,
                     },
-                    dns_cache_capacity: match server.find(&"dns_cache_capacity".to_string()) {
+                    dns_cache_capacity: match server.find("dns_cache_capacity") {
                         Some(t) => try_config!(t.as_u64(), "dns_cache_capacity should be an integer") as uint,
                         None => DEFAULT_DNS_CACHE_CAPACITY,
                     },
