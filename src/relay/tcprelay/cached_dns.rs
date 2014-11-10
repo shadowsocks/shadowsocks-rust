@@ -81,7 +81,7 @@ impl CachedDns {
         let cloned_addr = addrs.clone();
         spawn(proc() {
             let mut cache = cloned_mutex.lock();
-            cache.cache.put(addr_string, cloned_addr);
+            cache.cache.insert(addr_string, cloned_addr);
         });
         Some(addrs)
     }

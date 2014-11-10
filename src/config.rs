@@ -152,7 +152,7 @@ impl Config {
         let mut config = Config::new();
 
         if o.contains_key(&"servers".to_string()) {
-            let server_list = try_config!(o.find(&"servers".to_string()).unwrap()
+            let server_list = try_config!(o.get(&"servers".to_string()).unwrap()
                 .as_list(), "servers should be a list");
 
             let mut servers = Vec::new();
@@ -203,32 +203,32 @@ impl Config {
                 && o.contains_key(&"password".to_string())
                 && o.contains_key(&"method".to_string()) {
             // Traditional configuration file
-            let timeout = match o.find(&"timeout".to_string()) {
+            let timeout = match o.get(&"timeout".to_string()) {
                 Some(t) => Some(try_config!(t.as_u64(), "timeout should be an integer") * 1000),
                 None => None,
             };
 
-            let mut method = try_config!(o.find(&"method".to_string()).unwrap().as_string(),
+            let mut method = try_config!(o.get(&"method".to_string()).unwrap().as_string(),
                                          "method should be a string");
             if method == "" {
                 method = CIPHER_AES_256_CFB;
             }
 
-            let addr_str = try_config!(o.find(&"server".to_string()).unwrap().as_string(),
+            let addr_str = try_config!(o.get(&"server".to_string()).unwrap().as_string(),
                                        "server should be a string");
 
             let single_server = ServerConfig {
                 addr: SocketAddr {
                     ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
                                     format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
-                    port: try_config!(o.find(&"server_port".to_string()).unwrap().as_u64(),
+                    port: try_config!(o.get(&"server_port".to_string()).unwrap().as_u64(),
                                       "server_port should be an integer") as Port,
                 },
-                password: try_config!(o.find(&"password".to_string()).unwrap().as_string(),
+                password: try_config!(o.get(&"password".to_string()).unwrap().as_string(),
                                       "password should be a string").to_string(),
                 method: method.to_string(),
                 timeout: timeout,
-                dns_cache_capacity: match o.find(&"dns_cache_capacity".to_string()) {
+                dns_cache_capacity: match o.get(&"dns_cache_capacity".to_string()) {
                     Some(t) => try_config!(t.as_u64(), "cache_capacity should be an integer") as uint,
                     None => DEFAULT_DNS_CACHE_CAPACITY,
                 },
@@ -242,13 +242,13 @@ impl Config {
             let has_local_port = o.contains_key(&"local_port".to_string());
 
             if has_local_address && has_local_port {
-                config.local = match o.find(&"local_address".to_string()) {
+                config.local = match o.get(&"local_address".to_string()) {
                     Some(local_addr) => {
                         Some(SocketAddr {
                             ip: try_config!(from_str(try_config!(local_addr.as_string(),
                                                                  "`local_address` should be a string")),
                                             "`local_address` is not a valid IP address"),
-                            port: try_config!(o.find(&"local_port".to_string()).unwrap().as_u64(),
+                            port: try_config!(o.get(&"local_port".to_string()).unwrap().as_u64(),
                                               "`local_port` should be an integer") as Port,
                         })
                     },

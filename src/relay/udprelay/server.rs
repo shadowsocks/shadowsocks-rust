@@ -112,8 +112,8 @@ impl UdpRelayServer {
 
                         let sockaddr = match &header.address {
                             &SocketAddress(ip, port) => {
-                                client_map.lock().put(header.address.clone(), src);
-                                remote_map.lock().put(SocketAddr {ip: ip, port: port}, header.address.clone());
+                                client_map.lock().insert(header.address.clone(), src);
+                                remote_map.lock().insert(SocketAddr {ip: ip, port: port}, header.address.clone());
                                 SocketAddr {ip: ip, port: port}
                             },
                             &DomainNameAddress(ref dnaddr, port) => {
@@ -126,8 +126,8 @@ impl UdpRelayServer {
                                                       ip: ipaddrs.head().unwrap().clone(),
                                                       port: port,
                                                   };
-                                client_map.lock().put(header.address.clone(), src);
-                                remote_map.lock().put(remote_addr, header.address.clone());
+                                client_map.lock().insert(header.address.clone(), src);
+                                remote_map.lock().insert(remote_addr, header.address.clone());
                                 remote_addr
                             }
                         };

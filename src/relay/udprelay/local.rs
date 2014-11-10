@@ -117,7 +117,7 @@ impl Relay for UdpRelayLocal {
                     let move_socket = socket.clone();
                     let client_map = client_map_arc.clone();
 
-                    match server_set.find(&source_addr) {
+                    match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
                             spawn(proc()
@@ -173,7 +173,7 @@ fn handle_request(mut socket: UdpSocket,
     info!("UDP ASSOCIATE {}", addr);
     debug!("UDP associate {} <-> {}", addr, from_addr);
 
-    client_map.lock().put(addr, from_addr);
+    client_map.lock().insert(addr, from_addr);
 
     let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
                         .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
