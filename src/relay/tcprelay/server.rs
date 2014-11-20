@@ -31,7 +31,7 @@ use std::time::duration::Duration;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{SocketAddress, DomainNameAddress, mod};
+use relay::socks5::{Address, mod};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::relay_and_map;
 use crypto::cipher;
@@ -118,7 +118,7 @@ impl TcpRelayServer {
 
                 let header = {
                     let mut buf = [0u8, .. 1024];
-                    let header_len = try_result!(stream.read(buf), prefix: "Error occurs while reading header: ");
+                    let header_len = try_result!(stream.read(&mut buf), prefix: "Error occurs while reading header: ");
                     cipher.decrypt(buf.slice_to(header_len))
                 };
 
@@ -129,12 +129,12 @@ impl TcpRelayServer {
 
                 info!("Connecting to {}", addr);
                 let mut remote_stream = match addr {
-                    SocketAddress(ip, port) => {
+                    Address::SocketAddress(ip, port) => {
                         try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
                                 prefix: format!("Unable to connect {}:", addr)
                         )
                     },
-                    DomainNameAddress(ref name, ref port) => {
+                    Address::DomainNameAddress(ref name, ref port) => {
                         let ipaddrs = {
                             // Cannot fail inside, which will cause other tasks fail, too.
                             match dnscache.resolve(name.as_slice()) {

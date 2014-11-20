@@ -74,11 +74,11 @@ fn main() {
         optopt("m", "encrypt-method", "entryption method", CIPHER_AES_256_CFB),
     ];
 
-    let matches = getopts(os::args().tail(), opts).unwrap();
+    let matches = getopts(os::args().tail(), &opts).unwrap();
 
     if matches.opt_present("h") {
         println!("{}", usage(format!("Usage: {} [Options]", os::args()[0]).as_slice(),
-                            opts));
+                            &opts));
         return;
     }
 

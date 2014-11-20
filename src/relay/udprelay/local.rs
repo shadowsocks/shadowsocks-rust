@@ -106,7 +106,7 @@ impl Relay for UdpRelayLocal {
 
         let mut buf = [0u8, .. 0xffff];
         loop {
-            match socket.recv_from(buf) {
+            match socket.recv_from(&mut buf) {
                 Ok((len, source_addr)) => {
                     if len < 4 {
                         error!("UDP request is too short");

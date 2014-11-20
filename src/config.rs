@@ -72,7 +72,7 @@ use serialize::json;
 use std::io::{File, Read, Open};
 use std::io::net::ip::{Port, SocketAddr};
 use std::io::net::addrinfo::get_host_addresses;
-use std::to_string::ToString;
+use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
 use std::fmt::{Show, Formatter, mod};
@@ -273,7 +273,10 @@ impl Config {
             None => return Err(Error::new("Root is not a JsonObject")),
         };
 
-        Config::parse_json_object(json_object, match config_type {Local => true, Server => false})
+        Config::parse_json_object(json_object, match config_type {
+            ConfigType::Local => true,
+            ConfigType::Server => false
+        })
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
@@ -294,6 +297,9 @@ impl Config {
             None => return Err(Error::new("Root is not a JsonObject")),
         };
 
-        Config::parse_json_object(json_object, match config_type {Local => true, Server => false})
+        Config::parse_json_object(json_object, match config_type {
+            ConfigType::Local => true,
+            ConfigType::Server => false
+        })
     }
 }

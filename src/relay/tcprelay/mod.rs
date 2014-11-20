@@ -37,7 +37,7 @@ pub fn relay_and_map(from: &mut Reader, to: &mut Writer, mapper: |&[u8]| -> Vec<
         -> IoResult<()> {
     let mut buf = [0u8, .. 0xffff];
     loop {
-        let len = try!(from.read(buf));
+        let len = try!(from.read(&mut buf));
         let msg = mapper(buf.slice_to(len));
         try!(to.write(msg.as_slice()));
         try!(to.flush());

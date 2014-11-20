@@ -29,7 +29,7 @@ use std::collections::LruCache;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{Address, SocketAddress, DomainNameAddress, mod};
+use relay::socks5::{Address, mod};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -57,7 +57,7 @@ impl UdpRelayServer {
 
         let mut buf = [0u8, ..0xffff];
         loop {
-            match socket.recv_from(buf) {
+            match socket.recv_from(&mut buf) {
                 Ok((len, src)) => {
                     let data = buf.slice_to(len).to_vec();
                     let client_map = client_map_arc.clone();
@@ -111,12 +111,12 @@ impl UdpRelayServer {
                         debug!("UDP request {} -> {}", src, header.address);
 
                         let sockaddr = match &header.address {
-                            &SocketAddress(ip, port) => {
+                            &Address::SocketAddress(ip, port) => {
                                 client_map.lock().insert(header.address.clone(), src);
                                 remote_map.lock().insert(SocketAddr {ip: ip, port: port}, header.address.clone());
                                 SocketAddr {ip: ip, port: port}
                             },
-                            &DomainNameAddress(ref dnaddr, port) => {
+                            &Address::DomainNameAddress(ref dnaddr, port) => {
                                 let ref ipaddrs = get_host_addresses(dnaddr.as_slice())
                                     .unwrap_or_else(|err| {
                                         panic!("Unable to resolve {}: {}", dnaddr, err);

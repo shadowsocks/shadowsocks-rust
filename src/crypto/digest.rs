@@ -42,19 +42,20 @@ pub enum DigestVariant {
 impl Digest for DigestVariant {
     fn update(&mut self, data: &[u8]) {
         match *self {
-            OpenSSLDigest(ref mut d) => d.update(data),
+            DigestVariant::OpenSSLDigest(ref mut d) => d.update(data),
         }
     }
 
     fn digest(&mut self) -> Vec<u8> {
         match *self {
-            OpenSSLDigest(ref mut d) => d.digest()
+            DigestVariant::OpenSSLDigest(ref mut d) => d.digest()
         }
     }
 }
 
 pub fn with_type(t: DigestType) -> DigestVariant {
     match t {
-        Md5 | Sha1 | Sha => OpenSSLDigest(openssl::OpenSSLDigest::new(t)),
+        DigestType::Md5 | DigestType::Sha1 | DigestType::Sha =>
+            DigestVariant::OpenSSLDigest(openssl::OpenSSLDigest::new(t)),
     }
 }

@@ -126,8 +126,8 @@ impl TcpRelayLocal {
     fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) -> IoResult<()> {
         let sockname = try!(stream.socket_name());
 
-        let reply = socks5::TcpResponseHeader::new(socks5::Succeeded,
-                                                   socks5::SocketAddress(sockname.ip, sockname.port));
+        let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                   socks5::Address::SocketAddress(sockname.ip, sockname.port));
         try!(reply.write_to(stream));
 
         // TODO: record this client's information for udprelay local server to validate
@@ -149,7 +149,7 @@ impl TcpRelayLocal {
             Ok(h) => { h },
             Err(err) => {
                 socks5::TcpResponseHeader::new(err.reply,
-                                               socks5::SocketAddress(sockname.ip, sockname.port));
+                                               socks5::Address::SocketAddress(sockname.ip, sockname.port));
                 error!("Failed to read request header: {}", err);
                 return;
             }
@@ -158,7 +158,7 @@ impl TcpRelayLocal {
         let addr = header.address;
 
         match header.command {
-            socks5::TcpConnect => {
+            socks5::Command::TcpConnect => {
                 info!("CONNECT {}", addr);
 
                 let mut remote_stream = match TcpStream::connect(
@@ -166,11 +166,11 @@ impl TcpRelayLocal {
                     Err(err) => {
                         match err.kind {
                             ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
-                                socks5::TcpResponseHeader::new(socks5::HostUnreachable, addr.clone())
+                                socks5::TcpResponseHeader::new(socks5::Reply::HostUnreachable, addr.clone())
                                     .write_to(&mut stream).unwrap();
                             },
                             _ => {
-                                socks5::TcpResponseHeader::new(socks5::NetworkUnreachable, addr.clone())
+                                socks5::TcpResponseHeader::new(socks5::Reply::NetworkUnreachable, addr.clone())
                                     .write_to(&mut stream).unwrap();
                             }
                         }
@@ -188,8 +188,8 @@ impl TcpRelayLocal {
                     let mut buffered_stream = BufferedStream::new(stream);
 
                     try_result!(socks5::TcpResponseHeader::new(
-                                                    socks5::Succeeded,
-                                                    socks5::SocketAddress(sockname.ip, sockname.port))
+                                                    socks5::Reply::Succeeded,
+                                                    socks5::Address::SocketAddress(sockname.ip, sockname.port))
                                 .write_to(&mut buffered_stream),
                         prefix: "Error occurs while writing header to local stream:");
                     try_result!(buffered_stream.flush());
@@ -240,13 +240,13 @@ impl TcpRelayLocal {
                         })
                 });
             },
-            socks5::TcpBind => {
+            socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
-                try_result!(socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
+                try_result!(socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                     .write_to(&mut stream),
                     prefix: "Failed to write BIND response:");
             },
-            socks5::UdpAssociate => {
+            socks5::Command::UdpAssociate => {
                 let sockname = stream.peer_name().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
@@ -254,7 +254,7 @@ impl TcpRelayLocal {
                                 prefix: "Failed to write UDP ASSOCIATE response:");
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
-                    try_result!(socks5::TcpResponseHeader::new(socks5::CommandNotSupported, addr)
+                    try_result!(socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                         .write_to(&mut stream),
                         prefix: "Failed to write UDP ASSOCIATE response:");
                 }

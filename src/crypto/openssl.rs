@@ -32,8 +32,7 @@ use crypto::cipher;
 
 use crypto::digest::Digest;
 use crypto::digest;
-
-use crypto::{CryptoMode, Encrypt, Decrypt};
+use crypto::CryptoMode;
 
 use std::ptr;
 use std::clone::Clone;
@@ -174,9 +173,9 @@ impl OpenSSLDigest {
     fn get_md(t: digest::DigestType) -> (EVP_MD, uint) {
         unsafe {
             match t {
-                digest::Md5 => { (EVP_md5(), 16u) },
-                digest::Sha => { (EVP_sha(), 20u) },
-                digest::Sha1 => { (EVP_sha1(), 20u) },
+                digest::DigestType::Md5 => { (EVP_md5(), 16u) },
+                digest::DigestType::Sha => { (EVP_sha(), 20u) },
+                digest::DigestType::Sha1 => { (EVP_sha1(), 20u) },
             }
         }
     }
@@ -278,8 +277,8 @@ impl OpenSSLCrypto {
             assert!(!evp_ctx.is_null());
 
             let op = match mode {
-                Encrypt => CRYPTO_MODE_ENCRYPT,
-                Decrypt => CRYPTO_MODE_DECRYPT,
+                CryptoMode::Encrypt => CRYPTO_MODE_ENCRYPT,
+                CryptoMode::Decrypt => CRYPTO_MODE_DECRYPT,
             };
 
             if EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
@@ -306,70 +305,70 @@ impl OpenSSLCrypto {
         unsafe {
             match cipher_type {
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes128Cfb => { (EVP_aes_128_cfb128(), 16, 16) },
+                cipher::CipherType::Aes128Cfb => { (EVP_aes_128_cfb128(), 16, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes128Cfb1 => { (EVP_aes_128_cfb1(), 16, 16) },
+                cipher::CipherType::Aes128Cfb1 => { (EVP_aes_128_cfb1(), 16, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes128Cfb8 => { (EVP_aes_128_cfb8(), 16, 16) },
+                cipher::CipherType::Aes128Cfb8 => { (EVP_aes_128_cfb8(), 16, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes128Cfb128 => { (EVP_aes_128_cfb128(), 16, 16) },
+                cipher::CipherType::Aes128Cfb128 => { (EVP_aes_128_cfb128(), 16, 16) },
 
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes192Cfb => { (EVP_aes_192_cfb128(), 24, 16) },
+                cipher::CipherType::Aes192Cfb => { (EVP_aes_192_cfb128(), 24, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes192Cfb1 => { (EVP_aes_192_cfb1(), 24, 16) },
+                cipher::CipherType::Aes192Cfb1 => { (EVP_aes_192_cfb1(), 24, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes192Cfb8 => { (EVP_aes_192_cfb8(), 24, 16) },
+                cipher::CipherType::Aes192Cfb8 => { (EVP_aes_192_cfb8(), 24, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes192Cfb128 => { (EVP_aes_192_cfb128(), 24, 16) },
+                cipher::CipherType::Aes192Cfb128 => { (EVP_aes_192_cfb128(), 24, 16) },
 
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes256Cfb => { (EVP_aes_256_cfb128(), 32, 16) },
+                cipher::CipherType::Aes256Cfb => { (EVP_aes_256_cfb128(), 32, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes256Cfb1 => { (EVP_aes_256_cfb1(), 32, 16) },
+                cipher::CipherType::Aes256Cfb1 => { (EVP_aes_256_cfb1(), 32, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes256Cfb8 => { (EVP_aes_256_cfb8(), 32, 16) },
+                cipher::CipherType::Aes256Cfb8 => { (EVP_aes_256_cfb8(), 32, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
-                cipher::Aes256Cfb128 => { (EVP_aes_256_cfb128(), 32, 16) },
+                cipher::CipherType::Aes256Cfb128 => { (EVP_aes_256_cfb128(), 32, 16) },
 
                 #[cfg(feature = "cipher-aes-ofb")]
-                cipher::Aes128Ofb => { (EVP_aes_128_ofb(), 16, 16) },
+                cipher::CipherType::Aes128Ofb => { (EVP_aes_128_ofb(), 16, 16) },
                 #[cfg(feature = "cipher-aes-ofb")]
-                cipher::Aes192Ofb => { (EVP_aes_192_ofb(), 24, 16) },
+                cipher::CipherType::Aes192Ofb => { (EVP_aes_192_ofb(), 24, 16) },
                 #[cfg(feature = "cipher-aes-ofb")]
-                cipher::Aes256Ofb => { (EVP_aes_256_ofb(), 32, 16) },
+                cipher::CipherType::Aes256Ofb => { (EVP_aes_256_ofb(), 32, 16) },
 
                 #[cfg(feature = "cipher-aes-ctr")]
-                cipher::Aes128Ctr => { (EVP_aes_128_ctr(), 16, 16) },
+                cipher::CipherType::Aes128Ctr => { (EVP_aes_128_ctr(), 16, 16) },
                 #[cfg(feature = "cipher-aes-ctr")]
-                cipher::Aes192Ctr => { (EVP_aes_192_ctr(), 24, 16) },
+                cipher::CipherType::Aes192Ctr => { (EVP_aes_192_ctr(), 24, 16) },
                 #[cfg(feature = "cipher-aes-ctr")]
-                cipher::Aes256Ctr => { (EVP_aes_256_ctr(), 32, 16) },
+                cipher::CipherType::Aes256Ctr => { (EVP_aes_256_ctr(), 32, 16) },
 
                 #[cfg(feature = "cipher-bf-cfb")]
-                cipher::BfCfb => { (EVP_bf_cfb64(), 16, 8) },
+                cipher::CipherType::BfCfb => { (EVP_bf_cfb64(), 16, 8) },
 
                 #[cfg(feature = "cipher-camellia-cfb")]
-                cipher::Camellia128Cfb => { (EVP_camellia_128_cfb128(), 16, 16) },
+                cipher::CipherType::Camellia128Cfb => { (EVP_camellia_128_cfb128(), 16, 16) },
                 #[cfg(feature = "cipher-camellia-cfb")]
-                cipher::Camellia192Cfb => { (EVP_camellia_192_cfb128(), 24, 16) },
+                cipher::CipherType::Camellia192Cfb => { (EVP_camellia_192_cfb128(), 24, 16) },
                 #[cfg(feature = "cipher-camellia-cfb")]
-                cipher::Camellia256Cfb => { (EVP_camellia_256_cfb128(), 32, 16) },
+                cipher::CipherType::Camellia256Cfb => { (EVP_camellia_256_cfb128(), 32, 16) },
 
                 #[cfg(feature = "cipher-cast5-cfb")]
-                cipher::Cast5Cfb => { (EVP_cast5_cfb64(), 16, 8) },
+                cipher::CipherType::Cast5Cfb => { (EVP_cast5_cfb64(), 16, 8) },
                 #[cfg(feature = "cipher-des-cfb")]
-                cipher::DesCfb => { (EVP_des_cfb64(), 8, 8) },
+                cipher::CipherType::DesCfb => { (EVP_des_cfb64(), 8, 8) },
                 #[cfg(feature = "cipher-idea-cfb")]
-                cipher::IdeaCfb => { (EVP_idea_cfb64(), 16, 8) },
+                cipher::CipherType::IdeaCfb => { (EVP_idea_cfb64(), 16, 8) },
                 #[cfg(feature = "cipher-rc2-cfb")]
-                cipher::Rc2Cfb => { (EVP_rc2_cfb64(), 16, 8) },
+                cipher::CipherType::Rc2Cfb => { (EVP_rc2_cfb64(), 16, 8) },
                 #[cfg(feature = "cipher-seed-cfb")]
-                cipher::SeedCfb => { (EVP_seed_cfb128(), 16, 16) },
+                cipher::CipherType::SeedCfb => { (EVP_seed_cfb128(), 16, 16) },
                 #[cfg(feature = "cipher-rc4")]
-                cipher::Rc4 => { (EVP_rc4(), 16, 16) },
+                cipher::CipherType::Rc4 => { (EVP_rc4(), 16, 16) },
                 #[cfg(feature = "cipher-rc4")]
-                cipher::Rc4Md5 => { (EVP_rc4(), 16, 16) },
+                cipher::CipherType::Rc4Md5 => { (EVP_rc4(), 16, 16) },
 
                 _ => { panic!("Unsupported cipher type of OpenSSL") },
             }
@@ -491,8 +490,8 @@ impl Cipher for OpenSSLCipher {
 
                     match self.cipher_type {
                         #[cfg(feature = "cipher-rc4")]
-                        cipher::Rc4Md5 => {
-                            let mut md5_digest = OpenSSLDigest::new(digest::Md5);
+                        cipher::CipherType::Rc4Md5 => {
+                            let mut md5_digest = OpenSSLDigest::new(digest::DigestType::Md5);
                             md5_digest.update(key.as_slice());
                             md5_digest.update(iv.as_slice());
                             (md5_digest.digest(), iv)
@@ -503,7 +502,8 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(), Encrypt);
+                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(),
+                                                   CryptoMode::Encrypt);
                 self.encryptor = Some(encryptor);
 
                 let encrypted_data = self.encryptor.as_ref().unwrap().update(data);
@@ -530,8 +530,8 @@ impl Cipher for OpenSSLCipher {
 
                 let key = match self.cipher_type {
                     #[cfg(feature = "cipher-rc4")]
-                    cipher::Rc4Md5 => {
-                        let mut md5_digest = OpenSSLDigest::new(digest::Md5);
+                    cipher::CipherType::Rc4Md5 => {
+                        let mut md5_digest = OpenSSLDigest::new(digest::DigestType::Md5);
                         md5_digest.update(pad_key.as_slice());
                         md5_digest.update(real_iv.as_slice());
                         md5_digest.digest()
@@ -541,7 +541,8 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv, Decrypt);
+                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv,
+                                                   CryptoMode::Decrypt);
                 self.decryptor = Some(decryptor);
 
                 self.decryptor.as_ref().unwrap().update(data)
@@ -558,30 +559,30 @@ fn test_default_ciphers() {
     let key = "passwordhaha";
 
     let types = [
-        cipher::Aes128Cfb,
-        cipher::Aes128Cfb1,
-        cipher::Aes128Cfb8,
-        cipher::Aes128Cfb128,
+        cipher::CipherType::Aes128Cfb,
+        cipher::CipherType::Aes128Cfb1,
+        cipher::CipherType::Aes128Cfb8,
+        cipher::CipherType::Aes128Cfb128,
 
-        cipher::Aes192Cfb,
-        cipher::Aes192Cfb1,
-        cipher::Aes192Cfb8,
-        cipher::Aes192Cfb128,
+        cipher::CipherType::Aes192Cfb,
+        cipher::CipherType::Aes192Cfb1,
+        cipher::CipherType::Aes192Cfb8,
+        cipher::CipherType::Aes192Cfb128,
 
-        cipher::Aes256Cfb,
-        cipher::Aes256Cfb1,
-        cipher::Aes256Cfb8,
-        cipher::Aes256Cfb128,
+        cipher::CipherType::Aes256Cfb,
+        cipher::CipherType::Aes256Cfb1,
+        cipher::CipherType::Aes256Cfb8,
+        cipher::CipherType::Aes256Cfb128,
 
-        cipher::Aes128Ofb,
-        cipher::Aes192Ofb,
-        cipher::Aes256Ofb,
+        cipher::CipherType::Aes128Ofb,
+        cipher::CipherType::Aes192Ofb,
+        cipher::CipherType::Aes256Ofb,
 
-        cipher::BfCfb,
+        cipher::CipherType::BfCfb,
 
-        cipher::Cast5Cfb,
-        cipher::DesCfb,
-        cipher::Rc2Cfb,
+        cipher::CipherType::Cast5Cfb,
+        cipher::CipherType::DesCfb,
+        cipher::CipherType::Rc2Cfb,
     ];
 
     for t in types.iter() {
@@ -614,7 +615,7 @@ fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
     b.iter(|| {
         let (ref msg, ref key) = test_data[random::<uint>() % test_data.len()];
 
-        let mut cipher = OpenSSLCipher::new(cipher::Aes256Cfb, key.as_slice());
+        let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         cipher.encrypt(msg.as_slice());
     });
     b.bytes = msg_size as u64;
@@ -629,14 +630,14 @@ fn bench_openssl_default_cipher_decrypt(b: &mut test::Bencher) {
     for _ in range::<uint>(0, 100) {
         let msg = Vec::from_fn(msg_size, |_| random::<u8>());
         let key = Vec::from_fn(1 + random::<uint>() % 63, |_| random::<u8>());
-        let mut cipher = OpenSSLCipher::new(cipher::Aes256Cfb, key.as_slice());
+        let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         let encrypted_msg = cipher.encrypt(msg.as_slice());
         test_data.push((key, encrypted_msg));
     }
 
     b.iter(|| {
         let (ref key, ref encrypted_msg) = test_data[random::<uint>() % test_data.len()];
-        let mut cipher = OpenSSLCipher::new(cipher::Aes256Cfb, key.as_slice());
+        let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         cipher.decrypt(encrypted_msg.as_slice());
     });
     b.bytes = msg_size as u64;

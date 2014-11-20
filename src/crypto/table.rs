@@ -28,7 +28,7 @@ use std::cmp::PartialOrd;
 use crypto::cipher::Cipher;
 use crypto::digest;
 use crypto::digest::Digest;
-use crypto::digest::Md5;
+use crypto::digest::DigestType;
 
 const TABLE_SIZE: uint = 256u;
 
@@ -40,7 +40,7 @@ pub struct TableCipher {
 
 impl TableCipher {
     pub fn new(key: &[u8]) -> TableCipher {
-        let mut md5_digest = digest::with_type(Md5);
+        let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
         let key_digest = md5_digest.digest();
 
