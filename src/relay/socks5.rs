@@ -21,7 +21,7 @@
 
 #![allow(dead_code)]
 
-use std::fmt::{Show, Formatter, FormatError};
+use std::fmt::{mod, Show, Formatter};
 use std::io::net::ip::{IpAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::{Reader, IoResult, IoError, OtherIoError};
@@ -141,7 +141,7 @@ impl Error {
 }
 
 impl Show for Error {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FormatError> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.message)
     }
 }
@@ -203,7 +203,7 @@ impl Address {
 }
 
 impl Show for Address {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), FormatError> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
             Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),

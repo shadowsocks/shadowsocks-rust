@@ -91,7 +91,6 @@ pub struct ServerConfig {
     pub dns_cache_capacity: uint,
 }
 
-#[deriving(Clone, Show)]
 pub type ClientConfig = SocketAddr;
 
 pub enum ConfigType {
@@ -153,7 +152,7 @@ impl Config {
 
         if o.contains_key(&"servers".to_string()) {
             let server_list = try_config!(o.get(&"servers".to_string()).unwrap()
-                .as_list(), "servers should be a list");
+                .as_array(), "servers should be a list");
 
             let mut servers = Vec::new();
             for server in server_list.iter() {
