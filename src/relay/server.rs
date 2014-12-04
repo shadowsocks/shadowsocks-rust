@@ -100,7 +100,7 @@ impl Relay for RelayServer {
         }
 
         for fut in futures.into_iter() {
-            drop(fut.unwrap());
+            drop(fut.into_inner());
         }
     }
 
@@ -114,6 +114,6 @@ impl Relay for RelayServer {
         let tcp_future = try_future(proc() tcprelay.run());
         info!("Enabled TCP relay");
 
-        drop(tcp_future.unwrap());
+        drop(tcp_future.into_inner());
     }
 }

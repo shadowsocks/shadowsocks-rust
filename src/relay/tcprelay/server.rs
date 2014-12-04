@@ -226,7 +226,7 @@ impl Relay for TcpRelayServer {
         }
 
         for fut in futures.into_iter() {
-            drop(fut.unwrap());
+            drop(fut.into_inner());
         }
     }
 }

@@ -92,7 +92,7 @@ fn main() {
         if matches.opt_present("c") {
             Config::load_from_file(matches.opt_str("c")
                                             .unwrap().as_slice(),
-                                   config::Server).unwrap()
+                                   config::ConfigType::Server).unwrap()
         } else {
             Config::new()
         };

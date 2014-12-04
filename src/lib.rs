@@ -20,10 +20,8 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #![experimental]
-#![license = "MIT"]
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
-#![desc = "Shadowsocks is a fast tunnel proxy that helps you bypass firewalls"]
 
 #![feature(phase, unsafe_destructor)]
 #![feature(macro_rules)]

@@ -182,7 +182,7 @@ fn handle_request(mut socket: UdpSocket,
     request.write_to(&mut wbuf).unwrap();
     io::util::copy(&mut bufr, &mut wbuf).unwrap();
 
-    let encrypted_data = cipher.encrypt(wbuf.unwrap().as_slice());
+    let encrypted_data = cipher.encrypt(wbuf.into_inner().as_slice());
 
     socket.send_to(encrypted_data.as_slice(), config.addr)
         .ok().expect("Error occurs while sending to remote");
@@ -216,6 +216,6 @@ fn handle_response(mut socket: UdpSocket,
         .write_to(&mut bufw).unwrap();
     io::util::copy(&mut bufr, &mut bufw).unwrap();
 
-    socket.send_to(bufw.unwrap().as_slice(), client_addr)
+    socket.send_to(bufw.into_inner().as_slice(), client_addr)
         .ok().expect("Error occurs while sending to local");
 }

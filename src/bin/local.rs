@@ -91,7 +91,7 @@ fn main() {
         if matches.opt_present("c") {
             Config::load_from_file(matches.opt_str("c")
                                             .unwrap().as_slice(),
-                                   config::Local).unwrap()
+                                   config::ConfigType::Local).unwrap()
         } else {
             Config::new()
         };

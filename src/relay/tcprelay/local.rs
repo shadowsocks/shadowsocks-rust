@@ -197,10 +197,10 @@ impl TcpRelayLocal {
                     let mut header_buf = MemWriter::new();
                     try_result!(addr.write_to(&mut header_buf));
 
-                    let encrypted_header = cipher.encrypt(header_buf.unwrap().as_slice());
+                    let encrypted_header = cipher.encrypt(header_buf.into_inner().as_slice());
                     try_result!(remote_stream.write(encrypted_header.as_slice()),
                                 prefix: "Error occurs while writing header to remote stream:");
-                    buffered_stream.unwrap()
+                    buffered_stream.into_inner()
                 };
 
                 let mut remote_local_stream = stream.clone();

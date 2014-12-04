@@ -147,7 +147,7 @@ impl Config {
         }
     }
 
-    fn parse_json_object(o: &json::JsonObject, require_local_info: bool) -> Result<Config, Error> {
+    fn parse_json_object(o: &json::Object, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
 
         if o.contains_key(&"servers".to_string()) {

@@ -451,7 +451,7 @@ impl Drop for OpenSSLCrypto {
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
 /// use shadowsocks::crypto::cipher::Cipher;
 ///
-/// let mut cipher = OpenSSLCipher::new(cipher::Aes128Cfb, "password".as_bytes());
+/// let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, "password".as_bytes());
 /// let message = "hello world";
 /// let encrypted_message = cipher.encrypt(message.as_bytes());
 /// let decrypted_message = cipher.decrypt(encrypted_message.as_slice());

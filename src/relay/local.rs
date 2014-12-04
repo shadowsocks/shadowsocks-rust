@@ -116,7 +116,7 @@ impl Relay for RelayLocal {
         }
 
         for fut in futures.into_iter() {
-            drop(fut.unwrap());
+            drop(fut.into_inner());
         }
     }
 }

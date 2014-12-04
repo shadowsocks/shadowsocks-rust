@@ -79,7 +79,7 @@ impl UdpRelayServer {
                                         remote_addr.write_to(&mut response_buf).unwrap();
 
                                         response_buf.write(data.as_slice()).unwrap();
-                                        let encrypted_data = cipher.encrypt(response_buf.unwrap().as_slice());
+                                        let encrypted_data = cipher.encrypt(response_buf.into_inner().as_slice());
 
                                         captured_socket
                                             .send_to(encrypted_data.as_slice(), client_addr.clone())
@@ -153,7 +153,7 @@ impl Relay for UdpRelayServer {
         }
 
         for fut in futures.into_iter() {
-            drop(fut.unwrap());
+            drop(fut.into_inner());
         }
     }
 }
