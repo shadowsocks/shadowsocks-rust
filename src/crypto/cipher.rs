@@ -98,7 +98,7 @@ pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
 
 pub const CIPHER_TABLE: &'static str = "table";
 
-#[deriving(Clone, Show)]
+#[deriving(Clone, Show, Copy)]
 pub enum CipherType {
     Table,
 

@@ -33,6 +33,7 @@ extern crate log;
 use std::fmt::{Show, Formatter, mod};
 
 /// VersionCode(major, minor, patch)
+#[deriving(Copy)]
 pub struct VersionCode(uint, uint, uint);
 
 impl Show for VersionCode {

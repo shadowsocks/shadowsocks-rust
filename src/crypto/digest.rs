@@ -28,7 +28,7 @@ pub trait Digest {
     fn digest(&mut self) -> Vec<u8>;
 }
 
-#[deriving(Clone)]
+#[deriving(Clone, Copy)]
 pub enum DigestType {
     Md5,
     Sha1,

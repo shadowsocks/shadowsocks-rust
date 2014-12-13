@@ -254,7 +254,7 @@ struct OpenSSLCrypto {
 }
 
 impl OpenSSLCrypto {
-    pub fn bytes_to_key(cipher_type: cipher::CipherType, key: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    pub fn bytes_to_key(cipher_type: &cipher::CipherType, key: &[u8]) -> (Vec<u8>, Vec<u8>) {
         let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
         let mut pad_key: Vec<u8> = Vec::from_elem(key_size, 0u8);
         let mut pad_iv: Vec<u8> = Vec::from_elem(block_size, 0u8);
@@ -269,7 +269,7 @@ impl OpenSSLCrypto {
 
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let (ctx, _, block_size) = unsafe {
-            let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
+            let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(&cipher_type);
 
             // assert!(iv.len() >= block_size);
 
@@ -301,9 +301,9 @@ impl OpenSSLCrypto {
         }
     }
 
-    pub fn get_cipher(cipher_type: cipher::CipherType) -> (EVP_CIPHER, uint, uint) {
+    pub fn get_cipher(cipher_type: &cipher::CipherType) -> (EVP_CIPHER, uint, uint) {
         unsafe {
-            match cipher_type {
+            match *cipher_type {
                 #[cfg(feature = "cipher-aes-cfb")]
                 cipher::CipherType::Aes128Cfb => { (EVP_aes_128_cfb128(), 16, 16) },
                 #[cfg(feature = "cipher-aes-cfb")]
@@ -410,14 +410,14 @@ impl OpenSSLCrypto {
 
 impl Clone for OpenSSLCrypto {
     fn clone(&self) -> OpenSSLCrypto {
-        OpenSSLCrypto::new(self.cipher_type, self.key.as_slice(), self.iv.as_slice(), self.mode)
+        OpenSSLCrypto::new(self.cipher_type.clone(), self.key.as_slice(), self.iv.as_slice(), self.mode.clone())
     }
 
     fn clone_from(&mut self, source: &OpenSSLCrypto) {
-        let mut new_cipher = OpenSSLCrypto::new(source.cipher_type,
+        let mut new_cipher = OpenSSLCrypto::new(source.cipher_type.clone(),
                                   source.key.as_slice(),
                                   source.iv.as_slice(),
-                                  source.mode);
+                                  source.mode.clone());
         swap(&mut self.evp_ctx, &mut new_cipher.evp_ctx);
         swap(&mut self.block_size, &mut new_cipher.block_size);
         swap(&mut self.cipher_type, &mut new_cipher.cipher_type);
@@ -484,7 +484,7 @@ impl Cipher for OpenSSLCipher {
             None => {
                 let (key, mut iv) = {
                     let (key, iv) = OpenSSLCrypto::bytes_to_key(
-                                    self.cipher_type,
+                                    &self.cipher_type,
                                     self.key.as_slice()
                                 );
 
@@ -502,7 +502,7 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let encryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), iv.as_slice(),
+                let encryptor = OpenSSLCrypto::new(self.cipher_type.clone(), key.as_slice(), iv.as_slice(),
                                                    CryptoMode::Encrypt);
                 self.encryptor = Some(encryptor);
 
@@ -519,9 +519,9 @@ impl Cipher for OpenSSLCipher {
         match self.decryptor {
             Some(ref decryptor) => { decryptor.update(data) },
             None => {
-                let (_, _, expected_iv_len) = OpenSSLCrypto::get_cipher(self.cipher_type);
+                let (_, _, expected_iv_len) = OpenSSLCrypto::get_cipher(&self.cipher_type);
                 let (pad_key, _) = OpenSSLCrypto::bytes_to_key(
-                                    self.cipher_type,
+                                    &self.cipher_type,
                                     self.key.as_slice()
                                 );
 
@@ -541,7 +541,7 @@ impl Cipher for OpenSSLCipher {
                     }
                 };
 
-                let decryptor = OpenSSLCrypto::new(self.cipher_type, key.as_slice(), real_iv,
+                let decryptor = OpenSSLCrypto::new(self.cipher_type.clone(), key.as_slice(), real_iv,
                                                    CryptoMode::Decrypt);
                 self.decryptor = Some(decryptor);
 

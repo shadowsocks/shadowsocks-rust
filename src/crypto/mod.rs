@@ -29,6 +29,7 @@ pub mod openssl;
 pub mod digest;
 pub mod table;
 
+#[deriving(Clone, Copy)]
 pub enum CryptoMode {
     Encrypt,
     Decrypt

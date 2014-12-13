@@ -441,7 +441,7 @@ impl HandshakeRequest {
 // +----+--------+
 // | 1  |   1    |
 // +----+--------+
-#[deriving(Clone, Show)]
+#[deriving(Clone, Show, Copy)]
 pub struct HandshakeResponse {
     pub chosen_method: u8,
 }

@@ -93,6 +93,7 @@ pub struct ServerConfig {
 
 pub type ClientConfig = SocketAddr;
 
+#[deriving(Clone, Copy)]
 pub enum ConfigType {
     Local,
     Server
