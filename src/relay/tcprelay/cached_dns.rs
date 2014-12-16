@@ -79,7 +79,7 @@ impl CachedDns {
 
         let cloned_mutex = self.lru_cache.clone();
         let cloned_addr = addrs.clone();
-        spawn(proc() {
+        spawn(move || {
             let mut cache = cloned_mutex.lock();
             cache.cache.insert(addr_string, cloned_addr);
         });

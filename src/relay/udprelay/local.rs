@@ -120,7 +120,7 @@ impl Relay for UdpRelayLocal {
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
-                            spawn(proc()
+                            spawn(move ||
                                 handle_response(move_socket,
                                                request_message.as_slice(),
                                                source_addr,
@@ -130,7 +130,7 @@ impl Relay for UdpRelayLocal {
                         None => {
                             let s = server_load_balancer.pick_server().clone();
 
-                            spawn(proc()
+                            spawn(move ||
                                 handle_request(move_socket,
                                               request_message.as_slice(),
                                               source_addr,

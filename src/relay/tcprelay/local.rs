@@ -207,7 +207,7 @@ impl TcpRelayLocal {
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();
                 let remote_addr_clone = addr.clone();
-                spawn(proc() {
+                spawn(move || {
                     relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
                                   |msg| remote_cipher.decrypt(msg))
                         .unwrap_or_else(|err| {
@@ -224,7 +224,7 @@ impl TcpRelayLocal {
                         })
                 });
 
-                spawn(proc() {
+                spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
                         .unwrap_or_else(|err| {
                             match err.kind {
@@ -289,7 +289,7 @@ impl Relay for TcpRelayLocal {
             };
 
             let enable_udp = self.config.enable_udp;
-            spawn(proc()
+            spawn(move ||
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
                                              password,

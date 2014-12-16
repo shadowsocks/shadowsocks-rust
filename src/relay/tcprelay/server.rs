@@ -111,7 +111,7 @@ impl TcpRelayServer {
             let encrypt_method = encrypt_method.clone();
             let dnscache = dnscache_arc.clone();
 
-            spawn(proc() {
+            spawn(move || {
                 let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                                password.as_slice().as_bytes())
                                         .expect("Unsupported cipher");
@@ -177,7 +177,7 @@ impl TcpRelayServer {
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();
                 let remote_addr_clone = addr.clone();
-                spawn(proc() {
+                spawn(move || {
                     relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
                                   |msg| remote_cipher.encrypt(msg))
                         .unwrap_or_else(|err| {
@@ -194,7 +194,7 @@ impl TcpRelayServer {
                         })
                 });
 
-                spawn(proc() {
+                spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
                         .unwrap_or_else(|err| {
                             match err.kind {
@@ -219,7 +219,7 @@ impl Relay for TcpRelayServer {
         let mut futures = Vec::new();
         for ref_s in self.config.server.as_ref().unwrap().iter() {
             let s = ref_s.clone();
-            let fut = try_future(proc() {
+            let fut = try_future(move || {
                 TcpRelayServer::accept_loop(&s);
             });
             futures.push(fut);

@@ -67,7 +67,7 @@ impl UdpRelayServer {
                                             .expect("Unsupported cipher");
                     let mut captured_socket = socket.clone();
 
-                    spawn(proc() {
+                    spawn(move || {
                         match remote_map.lock().get(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().get(remote_addr) {
@@ -148,7 +148,7 @@ impl Relay for UdpRelayServer {
         let mut futures = Vec::new();
         for sref in self.config.server.as_ref().unwrap().iter() {
             let s = sref.clone();
-            let fut = try_future(proc() UdpRelayServer::accept_loop(&s));
+            let fut = try_future(move || UdpRelayServer::accept_loop(&s));
             futures.push(fut);
         }
 

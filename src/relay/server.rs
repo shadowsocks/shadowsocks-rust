@@ -89,12 +89,12 @@ impl Relay for RelayServer {
         let mut futures = Vec::with_capacity(2);
 
         let tcprelay = self.tcprelay.clone();
-        futures.push(try_future(proc() tcprelay.run()));
+        futures.push(try_future(move || tcprelay.run()));
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_future = try_future(proc() udprelay.run());
+            let udp_future = try_future(move || udprelay.run());
             futures.push(udp_future);
             info!("Enabled UDP relay");
         }
@@ -111,7 +111,7 @@ impl Relay for RelayServer {
         }
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_future = try_future(proc() tcprelay.run());
+        let tcp_future = try_future(move || tcprelay.run());
         info!("Enabled TCP relay");
 
         drop(tcp_future.into_inner());
