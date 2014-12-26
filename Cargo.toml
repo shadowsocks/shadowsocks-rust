@@ -1,7 +1,7 @@
 [package]
 
 name = "shadowsocks-rust"
-version = "0.9.3"
+version = "0.9.4"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 
 [lib]
@@ -54,3 +54,9 @@ git = "https://github.com/alexcrichton/green-rs.git"
 [dependencies.rustuv]
 optional = true
 git = "https://github.com/alexcrichton/green-rs.git"
+
+[dependencies.collect]
+git = "https://github.com/Gankro/collect-rs.git"
+
+#[dependencies.log]
+#log = "0.1.4"

@@ -146,7 +146,7 @@ impl Show for Error {
     }
 }
 
-macro_rules! try_io(
+macro_rules! try_io{
     ($do_io:expr, $errtype:expr, $message:expr) => ( {
         let io_result = $do_io;
         let errtype = $errtype;
@@ -177,7 +177,7 @@ macro_rules! try_io(
             }
         }
     });
-)
+}
 
 #[deriving(Clone, PartialEq, Eq, Hash)]
 pub enum Address {

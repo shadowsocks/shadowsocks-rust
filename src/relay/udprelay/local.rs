@@ -60,8 +60,11 @@ extern crate log;
 use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
-use std::collections::{LruCache, HashMap};
+use std::collections::HashMap;
 use std::io::{BufReader, MemWriter, mod};
+use std::thread::Thread;
+
+use collect::LruCache;
 
 use crypto::cipher;
 use crypto::cipher::Cipher;
@@ -120,22 +123,22 @@ impl Relay for UdpRelayLocal {
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
-                            spawn(move ||
+                            Thread::spawn(move ||
                                 handle_response(move_socket,
                                                request_message.as_slice(),
                                                source_addr,
                                                &s,
-                                               client_map));
+                                               client_map)).detach();
                         }
                         None => {
                             let s = server_load_balancer.pick_server().clone();
 
-                            spawn(move ||
+                            Thread::spawn(move ||
                                 handle_request(move_socket,
                                               request_message.as_slice(),
                                               source_addr,
                                               &s,
-                                              client_map));
+                                              client_map)).detach();
                         }
                     }
                 },

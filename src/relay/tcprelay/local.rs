@@ -35,6 +35,7 @@ use std::io::{
 };
 use std::io::net::ip::SocketAddr;
 use std::io::{MemWriter, BufferedStream};
+use std::thread::Thread;
 
 use config::Config;
 
@@ -60,7 +61,7 @@ fn make_io_error(desc: &'static str, detail: Option<String>) -> IoError {
     }
 }
 
-macro_rules! try_result(
+macro_rules! try_result{
     ($res:expr) => ({
         let res = $res;
         match res {
@@ -93,7 +94,7 @@ macro_rules! try_result(
             }
         }
     });
-)
+}
 
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
@@ -207,7 +208,7 @@ impl TcpRelayLocal {
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();
                 let remote_addr_clone = addr.clone();
-                spawn(move || {
+                Thread::spawn(move || {
                     relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
                                   |msg| remote_cipher.decrypt(msg))
                         .unwrap_or_else(|err| {
@@ -222,9 +223,9 @@ impl TcpRelayLocal {
                             remote_local_stream.close_write().or(Ok(())).unwrap();
                             remote_remote_stream.close_read().or(Ok(())).unwrap();
                         })
-                });
+                }).detach();
 
-                spawn(move || {
+                Thread::spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
                         .unwrap_or_else(|err| {
                             match err.kind {
@@ -238,7 +239,7 @@ impl TcpRelayLocal {
                             remote_stream.close_write().or(Ok(())).unwrap();
                             stream.close_read().or(Ok(())).unwrap();
                         })
-                });
+                }).detach();
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
@@ -289,12 +290,12 @@ impl Relay for TcpRelayLocal {
             };
 
             let enable_udp = self.config.enable_udp;
-            spawn(move ||
+            Thread::spawn(move ||
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
                                              password,
                                              encrypt_method,
-                                             enable_udp));
+                                             enable_udp)).detach();
         }
     }
 }

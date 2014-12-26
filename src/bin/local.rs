@@ -102,7 +102,7 @@ fn main() {
             addr: SocketAddr {
                 ip: get_host_addresses(addr_str.as_slice()).unwrap()
                     .head().expect(format!("Unable to resolve {}", addr_str).as_slice()).clone(),
-                port: from_str(matches.opt_str("p").unwrap().as_slice()).expect("`port` should be an integer"),
+                port: matches.opt_str("p").unwrap().as_slice().parse().expect("`port` should be an integer"),
             },
             password: matches.opt_str("k").unwrap(),
             method: matches.opt_str("m").unwrap(),
@@ -124,8 +124,8 @@ fn main() {
 
     if matches.opt_present("b") && matches.opt_present("l") {
         let local = ClientConfig {
-            ip: from_str(matches.opt_str("b").unwrap().as_slice()).expect("`local` is not a valid IP address"),
-            port: from_str(matches.opt_str("l").unwrap().as_slice()).expect("`local_port` should be an integer"),
+            ip: matches.opt_str("b").unwrap().as_slice().parse().expect("`local` is not a valid IP address"),
+            port: matches.opt_str("l").unwrap().as_slice().parse().expect("`local_port` should be an integer"),
         };
         config.local = Some(local)
     }
@@ -134,7 +134,7 @@ fn main() {
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
-    debug!("Config: {}", config)
+    debug!("Config: {}", config);
 
     RelayLocal::new(config).run();
 }

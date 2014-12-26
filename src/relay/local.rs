@@ -21,7 +21,7 @@
 
 //! Local side
 
-use std::task::try_future;
+use std::thread::Thread;
 
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
@@ -42,12 +42,12 @@ use config::Config;
 ///
 /// let mut config = Config::new();
 /// config.local = Some(ClientConfig {
-///     ip: from_str("127.0.0.1").unwrap(),
+///     ip: "127.0.0.1".parse().unwrap(),
 ///     port: 1080
 /// });
 /// config.server = Some(vec![ServerConfig {
 ///     addr: SocketAddr {
-///         ip: from_str("127.0.0.1").unwrap(),
+///         ip: "127.0.0.1".parse().unwrap(),
 ///         port: 8388,
 ///     },
 ///     password: "server-password".to_string(),
@@ -93,30 +93,30 @@ impl Relay for RelayLocal {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
         let tcprelay = self.tcprelay.clone();
-        let tcp_future = try_future(move || tcprelay.run());
+        let tcp_thread = Thread::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        drop(tcp_future.unwrap());
+        tcp_thread.join();
     }
 
     #[cfg(feature = "enable-udp")]
     fn run(&self) {
-        let mut futures = Vec::with_capacity(2);
+        let mut threads = Vec::with_capacity(2);
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_future = try_future(move || tcprelay.run());
-        futures.push(tcp_future);
+        let tcp_thread = Thread::spawn(move || tcprelay.run());
+        threads.push(tcp_thread);
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_future = try_future(move || udprelay.run());
-            futures.push(udp_future);
+            let udp_thread = Thread::spawn(move || udprelay.run());
+            threads.push(udp_thread);
             info!("Enabled UDP relay");
         }
 
-        for fut in futures.into_iter() {
-            drop(fut.into_inner());
+        for fut in threads.into_iter() {
+            fut.join().ok().expect("A thread failed and exited");
         }
     }
 }

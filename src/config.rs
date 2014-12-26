@@ -130,14 +130,14 @@ impl Show for Error {
     }
 }
 
-macro_rules! try_config(
+macro_rules! try_config{
     ($inp:expr, $errmsg:expr) => (
         match $inp {
             Some(s) => { s },
             None => { return Err(Error::new($errmsg)); },
         }
     );
-)
+}
 
 impl Config {
     pub fn new() -> Config {
@@ -245,8 +245,8 @@ impl Config {
                 config.local = match o.get(&"local_address".to_string()) {
                     Some(local_addr) => {
                         Some(SocketAddr {
-                            ip: try_config!(from_str(try_config!(local_addr.as_string(),
-                                                                 "`local_address` should be a string")),
+                            ip: try_config!(try_config!(local_addr.as_string(),
+                                                                 "`local_address` should be a string").parse(),
                                             "`local_address` is not a valid IP address"),
                             port: try_config!(o.get(&"local_port".to_string()).unwrap().as_u64(),
                                               "`local_port` should be an integer") as Port,

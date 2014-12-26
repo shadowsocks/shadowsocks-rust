@@ -19,13 +19,14 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::task::try_future;
 use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::{MemWriter, BufReader};
-use std::collections::LruCache;
+use std::thread::Thread;
+
+use collect::LruCache;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
@@ -67,7 +68,7 @@ impl UdpRelayServer {
                                             .expect("Unsupported cipher");
                     let mut captured_socket = socket.clone();
 
-                    spawn(move || {
+                    Thread::spawn(move || {
                         match remote_map.lock().get(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().get(remote_addr) {
@@ -132,7 +133,7 @@ impl UdpRelayServer {
                             }
                         };
                         captured_socket.send_to(decrypted_data.as_slice().slice_from(header.len()), sockaddr).unwrap();
-                    });
+                    }).detach();
                 },
                 Err(err) => {
                     error!("Error occurs while calling recv_from: {}", err);
@@ -145,15 +146,15 @@ impl UdpRelayServer {
 
 impl Relay for UdpRelayServer {
     fn run(&self) {
-        let mut futures = Vec::new();
+        let mut threads = Vec::new();
         for sref in self.config.server.as_ref().unwrap().iter() {
             let s = sref.clone();
-            let fut = try_future(move || UdpRelayServer::accept_loop(&s));
-            futures.push(fut);
+            let fut = Thread::spawn(move || UdpRelayServer::accept_loop(&s));
+            threads.push(fut);
         }
 
-        for fut in futures.into_iter() {
-            drop(fut.into_inner());
+        for fut in threads.into_iter() {
+            fut.join().ok().expect("A thread failed and exited");
         }
     }
 }

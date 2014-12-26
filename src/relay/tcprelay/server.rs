@@ -22,12 +22,12 @@
 //! TcpRelay server that running on the server side
 
 use std::sync::Arc;
-use std::task::try_future;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
 use std::io::net::ip::SocketAddr;
 use std::io::{BufReader, mod};
 use std::time::duration::Duration;
+use std::thread::Thread;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
@@ -37,7 +37,7 @@ use relay::tcprelay::relay_and_map;
 use crypto::cipher;
 use crypto::cipher::Cipher;
 
-macro_rules! try_result(
+macro_rules! try_result{
     ($res:expr) => ({
         let res = $res;
         match res {
@@ -70,7 +70,7 @@ macro_rules! try_result(
             }
         }
     });
-)
+}
 
 #[deriving(Clone)]
 pub struct TcpRelayServer {
@@ -111,7 +111,7 @@ impl TcpRelayServer {
             let encrypt_method = encrypt_method.clone();
             let dnscache = dnscache_arc.clone();
 
-            spawn(move || {
+            Thread::spawn(move || {
                 let mut cipher = cipher::with_name(encrypt_method.as_slice(),
                                                password.as_slice().as_bytes())
                                         .expect("Unsupported cipher");
@@ -177,7 +177,7 @@ impl TcpRelayServer {
                 let mut remote_remote_stream = remote_stream.clone();
                 let mut remote_cipher = cipher.clone();
                 let remote_addr_clone = addr.clone();
-                spawn(move || {
+                Thread::spawn(move || {
                     relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
                                   |msg| remote_cipher.encrypt(msg))
                         .unwrap_or_else(|err| {
@@ -192,9 +192,9 @@ impl TcpRelayServer {
                             remote_local_stream.close_write().or(Ok(())).unwrap();
                             remote_remote_stream.close_read().or(Ok(())).unwrap();
                         })
-                });
+                }).detach();
 
-                spawn(move || {
+                Thread::spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
                         .unwrap_or_else(|err| {
                             match err.kind {
@@ -208,25 +208,25 @@ impl TcpRelayServer {
                             remote_stream.close_write().or(Ok(())).unwrap();
                             stream.close_read().or(Ok(())).unwrap();
                         })
-                });
-            });
+                }).detach();
+            }).detach();
         }
     }
 }
 
 impl Relay for TcpRelayServer {
     fn run(&self) {
-        let mut futures = Vec::new();
+        let mut threads = Vec::new();
         for ref_s in self.config.server.as_ref().unwrap().iter() {
             let s = ref_s.clone();
-            let fut = try_future(move || {
+            let fut = Thread::spawn(move || {
                 TcpRelayServer::accept_loop(&s);
             });
-            futures.push(fut);
+            threads.push(fut);
         }
 
-        for fut in futures.into_iter() {
-            drop(fut.into_inner());
+        for fut in threads.into_iter() {
+            fut.join().ok().expect("A thread failed and exited");
         }
     }
 }

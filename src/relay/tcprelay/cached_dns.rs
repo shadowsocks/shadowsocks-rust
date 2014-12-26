@@ -23,10 +23,12 @@
 extern crate log;
 
 use std::sync::{Arc, Mutex};
+use std::thread::Thread;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::io::net::addrinfo::get_host_addresses;
-use std::collections::lru_cache::LruCache;
 use std::io::net::ip::IpAddr;
+
+use collect::LruCache;
 
 struct DnsLruCache {
     cache: LruCache<String, Vec<IpAddr>>,
@@ -79,10 +81,10 @@ impl CachedDns {
 
         let cloned_mutex = self.lru_cache.clone();
         let cloned_addr = addrs.clone();
-        spawn(move || {
+        Thread::spawn(move || {
             let mut cache = cloned_mutex.lock();
             cache.cache.insert(addr_string, cloned_addr);
-        });
+        }).detach();
         Some(addrs)
     }
 }
