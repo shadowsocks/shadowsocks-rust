@@ -102,7 +102,7 @@ fn main() {
         let sc = ServerConfig {
             addr: SocketAddr {
                 ip: get_host_addresses(addr_str.as_slice()).unwrap()
-                    .head().expect(format!("Unable to resolve {}", addr_str).as_slice()).clone(),
+                    .first().expect(format!("Unable to resolve {}", addr_str).as_slice()).clone(),
                 port: matches.opt_str("p").unwrap().as_slice().parse().expect("`port` should be an integer"),
             },
             password: matches.opt_str("k").unwrap(),

@@ -24,6 +24,7 @@
 use std::vec::Vec;
 use std::io::BufReader;
 use std::cmp::PartialOrd;
+use std::iter::repeat;
 
 use crypto::cipher::Cipher;
 use crypto::digest;
@@ -46,7 +47,7 @@ impl TableCipher {
 
         let mut bufr = BufReader::new(key_digest.as_slice());
         let a = bufr.read_le_u64().unwrap();
-        let mut table = Vec::<u64>::from_fn(TABLE_SIZE, |idx| idx as u64);
+        let mut table = range(0, TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
 
         for i in range(1, 1024) {
             table.as_mut_slice().sort_by(|x, y| {
@@ -56,8 +57,8 @@ impl TableCipher {
             })
         }
 
-        let enc = Vec::from_fn(table.len(), |idx| table[idx] as u8);
-        let mut dec = Vec::from_elem(enc.len(), 0u8);
+        let enc = range(0, TABLE_SIZE).map(|idx| table[idx] as u8).collect::<Vec<u8>>();
+        let mut dec = repeat(0u8).take(enc.len()).collect::<Vec<u8>>();
 
         for idx in range(0, enc.len()) {
             dec[enc[idx] as uint] = idx as u8;

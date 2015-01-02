@@ -172,7 +172,7 @@ impl Config {
 
                 let server_cfg = ServerConfig {
                     addr: SocketAddr {
-                        ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
+                        ip: try_config!(get_host_addresses(addr_str).unwrap().first(),
                                         format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
                         port: try_config!(
                                     try_config!(server.find("port"),
@@ -219,7 +219,7 @@ impl Config {
 
             let single_server = ServerConfig {
                 addr: SocketAddr {
-                    ip: try_config!(get_host_addresses(addr_str).unwrap().head(),
+                    ip: try_config!(get_host_addresses(addr_str).unwrap().first(),
                                     format!("Unable to resolve server {}", addr_str).as_slice()).clone(),
                     port: try_config!(o.get(&"server_port".to_string()).unwrap().as_u64(),
                                       "server_port should be an integer") as Port,

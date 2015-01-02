@@ -176,7 +176,7 @@ fn handle_request(mut socket: UdpSocket,
     info!("UDP ASSOCIATE {}", addr);
     debug!("UDP associate {} <-> {}", addr, from_addr);
 
-    client_map.lock().insert(addr, from_addr);
+    client_map.lock().unwrap().insert(addr, from_addr);
 
     let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
                         .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
@@ -205,7 +205,7 @@ fn handle_response(mut socket: UdpSocket,
     let addr = socks5::Address::read_from(&mut bufr).unwrap();
 
     let client_addr = {
-        let mut cmap = client_map.lock();
+        let mut cmap = client_map.lock().unwrap();
         match cmap.get(&addr) {
             Some(a) => a.clone(),
             None => return

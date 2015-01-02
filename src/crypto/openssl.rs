@@ -37,6 +37,7 @@ use crypto::CryptoMode;
 use std::ptr;
 use std::clone::Clone;
 use std::mem::swap;
+use std::iter::repeat;
 
 #[allow(non_camel_case_types)]
 type EVP_CIPHER_CTX = *const libc::c_void;
@@ -192,7 +193,7 @@ impl Digest for OpenSSLDigest {
     }
 
     fn digest(&mut self) -> Vec<u8> {
-        let mut dig = Vec::from_elem(self.digest_len, 0u8);
+        let mut dig = repeat(0u8).take(self.digest_len).collect::<Vec<u8>>();
         unsafe {
             EVP_DigestFinal_ex(self.md_ctx, dig.as_mut_ptr(), ptr::null_mut());
         }
@@ -256,8 +257,8 @@ struct OpenSSLCrypto {
 impl OpenSSLCrypto {
     pub fn bytes_to_key(cipher_type: &cipher::CipherType, key: &[u8]) -> (Vec<u8>, Vec<u8>) {
         let (cipher, key_size, block_size) = OpenSSLCrypto::get_cipher(cipher_type);
-        let mut pad_key: Vec<u8> = Vec::from_elem(key_size, 0u8);
-        let mut pad_iv: Vec<u8> = Vec::from_elem(block_size, 0u8);
+        let mut pad_key: Vec<u8> = repeat(0u8).take(key_size).collect();
+        let mut pad_iv: Vec<u8> = repeat(0u8).take(block_size).collect();
 
         unsafe {
             EVP_BytesToKey(cipher, EVP_md5(), ptr::null(), key.as_ptr(), key.len() as libc::c_int,
@@ -380,7 +381,7 @@ impl OpenSSLCrypto {
         let datalen: libc::c_int = data.len() as libc::c_int;
 
         let reslen: uint = datalen as uint + self.block_size;
-        let mut res = Vec::from_elem(reslen, 0u8);
+        let mut res = repeat(0u8).take(reslen).collect::<Vec<u8>>();
 
         let mut len: libc::c_int = 0;
         let pres: *mut u8 = res.as_mut_ptr();
@@ -550,6 +551,8 @@ impl Cipher for OpenSSLCipher {
         }
     }
 }
+
+unsafe impl Send for OpenSSLCipher {}
 
 #[test]
 fn test_default_ciphers() {

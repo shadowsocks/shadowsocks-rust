@@ -1,7 +1,7 @@
 [package]
 
 name = "shadowsocks-rust"
-version = "0.9.4"
+version = "0.9.5"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 
 [lib]

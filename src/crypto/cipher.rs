@@ -25,7 +25,7 @@ use crypto::openssl;
 use crypto::table;
 
 /// The trait for basic cipher methods
-pub trait Cipher {
+pub trait Cipher: Send {
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8>;
     fn decrypt(&mut self, data: &[u8]) -> Vec<u8>;
 }
@@ -161,6 +161,8 @@ impl Cipher for CipherVariant {
         }
     }
 }
+
+unsafe impl Send for CipherVariant {}
 
 /// Get a Cipher with the provided name
 ///

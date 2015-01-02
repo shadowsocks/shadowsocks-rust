@@ -69,9 +69,9 @@ impl UdpRelayServer {
                     let mut captured_socket = socket.clone();
 
                     Thread::spawn(move || {
-                        match remote_map.lock().get(&src) {
+                        match remote_map.lock().unwrap().get(&src) {
                             Some(remote_addr) => {
-                                match client_map.lock().get(remote_addr) {
+                                match client_map.lock().unwrap().get(remote_addr) {
                                     Some(client_addr) => {
                                         debug!("UDP response {} -> {}", remote_addr, client_addr);
 
@@ -113,8 +113,12 @@ impl UdpRelayServer {
 
                         let sockaddr = match &header.address {
                             &Address::SocketAddress(ip, port) => {
-                                client_map.lock().insert(header.address.clone(), src);
-                                remote_map.lock().insert(SocketAddr {ip: ip, port: port}, header.address.clone());
+                                client_map.lock()
+                                          .unwrap()
+                                          .insert(header.address.clone(), src);
+                                remote_map.lock()
+                                          .unwrap()
+                                          .insert(SocketAddr {ip: ip, port: port}, header.address.clone());
                                 SocketAddr {ip: ip, port: port}
                             },
                             &Address::DomainNameAddress(ref dnaddr, port) => {
@@ -124,11 +128,15 @@ impl UdpRelayServer {
                                     });
 
                                 let remote_addr = SocketAddr {
-                                                      ip: ipaddrs.head().unwrap().clone(),
+                                                      ip: ipaddrs.first().unwrap().clone(),
                                                       port: port,
                                                   };
-                                client_map.lock().insert(header.address.clone(), src);
-                                remote_map.lock().insert(remote_addr, header.address.clone());
+                                client_map.lock()
+                                          .unwrap()
+                                          .insert(header.address.clone(), src);
+                                remote_map.lock()
+                                          .unwrap()
+                                          .insert(remote_addr, header.address.clone());
                                 remote_addr
                             }
                         };

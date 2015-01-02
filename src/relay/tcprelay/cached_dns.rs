@@ -55,7 +55,7 @@ impl CachedDns {
         let addr_string = addr.to_string();
 
         {
-            let mut cache = self.lru_cache.lock();
+            let mut cache = self.lru_cache.lock().unwrap();
             match cache.cache.get(&addr_string).map(|x| x.clone()) {
                 Some(addrs) => {
                     cache.totally_matched += 1;
@@ -82,9 +82,11 @@ impl CachedDns {
         let cloned_mutex = self.lru_cache.clone();
         let cloned_addr = addrs.clone();
         Thread::spawn(move || {
-            let mut cache = cloned_mutex.lock();
+            let mut cache = cloned_mutex.lock().unwrap();
             cache.cache.insert(addr_string, cloned_addr);
         }).detach();
         Some(addrs)
     }
 }
+
+unsafe impl Send for CachedDns {}
