@@ -33,7 +33,7 @@ use crypto::digest::DigestType;
 
 const TABLE_SIZE: uint = 256u;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct TableCipher {
     enc: Vec<u8>,
     dec: Vec<u8>,

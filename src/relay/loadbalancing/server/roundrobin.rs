@@ -22,7 +22,7 @@
 use relay::loadbalancing::server::LoadBalancer;
 use config::ServerConfig;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct RoundRobin {
     server: Vec<ServerConfig>,
     index: uint,

@@ -54,7 +54,7 @@ use config::Config;
 /// RelayServer::new(config).run();
 /// ```
 ///
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct RelayServer {
     enable_udp: bool,
     tcprelay: TcpRelayServer,

@@ -32,10 +32,10 @@ extern crate log;
 
 extern crate collect;
 
-use std::fmt::{Show, Formatter, mod};
+use std::fmt::{Show, Formatter, self};
 
 /// VersionCode(major, minor, patch)
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct VersionCode(uint, uint, uint);
 
 impl Show for VersionCode {

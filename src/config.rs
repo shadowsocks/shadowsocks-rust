@@ -75,14 +75,14 @@ use std::io::net::addrinfo::get_host_addresses;
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
-use std::fmt::{Show, Formatter, mod};
+use std::fmt::{Show, Formatter, self};
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
 pub const DEFAULT_DNS_CACHE_CAPACITY: uint = 65536;
 
 /// Configuration for a server
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct ServerConfig {
     pub addr: SocketAddr,
     pub password: String,
@@ -93,13 +93,13 @@ pub struct ServerConfig {
 
 pub type ClientConfig = SocketAddr;
 
-#[deriving(Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum ConfigType {
     Local,
     Server
 }
 
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct Config {
     pub server: Option<Vec<ServerConfig>>,
     pub local: Option<ClientConfig>,

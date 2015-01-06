@@ -33,7 +33,7 @@ pub mod server;
 
 pub fn relay_and_map(from: &mut Reader, to: &mut Writer, mapper: |&[u8]| -> Vec<u8>)
         -> IoResult<()> {
-    let mut buf = [0u8, .. 0xffff];
+    let mut buf = [0u8; 0xffff];
     loop {
         let len = try!(from.read(&mut buf));
         let msg = mapper(buf.slice_to(len));

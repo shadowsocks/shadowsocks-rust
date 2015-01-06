@@ -47,7 +47,7 @@ use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use crypto::cipher;
 use crypto::cipher::Cipher;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct TcpRelayLocal {
     config: Config,
 }

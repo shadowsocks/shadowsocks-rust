@@ -98,7 +98,7 @@ pub const CIPHER_SEED_CFB: &'static str = "seed-cfb";
 
 pub const CIPHER_TABLE: &'static str = "table";
 
-#[deriving(Clone, Show, Copy)]
+#[derive(Clone, Show, Copy)]
 pub enum CipherType {
     Table,
 
@@ -140,7 +140,7 @@ pub enum CipherType {
     #[cfg(feature = "cipher-seed-cfb")] SeedCfb,
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub enum CipherVariant {
     OpenSSLCrypto(openssl::OpenSSLCipher),
     TableCrypto(table::TableCipher),

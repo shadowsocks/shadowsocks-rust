@@ -459,7 +459,7 @@ impl Drop for OpenSSLCrypto {
 ///
 /// assert!(decrypted_message.as_slice() == message.as_bytes());
 /// ```
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct OpenSSLCipher {
     encryptor: Option<OpenSSLCrypto>,
     decryptor: Option<OpenSSLCrypto>,
@@ -609,8 +609,8 @@ fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
 
     let mut test_data = Vec::new();
     for _ in range::<uint>(0, 100) {
-        let msg = Vec::from_fn(msg_size, |_| random::<u8>());
-        let key = Vec::from_fn(1 + random::<uint>() % 63, |_| random::<u8>());
+        let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let key = range(1, random::<uint>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
 
         test_data.push((msg, key));
     }
@@ -631,8 +631,8 @@ fn bench_openssl_default_cipher_decrypt(b: &mut test::Bencher) {
     let msg_size: uint = 0xffff;
     let mut test_data = Vec::new();
     for _ in range::<uint>(0, 100) {
-        let msg = Vec::from_fn(msg_size, |_| random::<u8>());
-        let key = Vec::from_fn(1 + random::<uint>() % 63, |_| random::<u8>());
+        let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let key = range(1, random::<uint>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
         let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         let encrypted_msg = cipher.encrypt(msg.as_slice());
         test_data.push((key, encrypted_msg));

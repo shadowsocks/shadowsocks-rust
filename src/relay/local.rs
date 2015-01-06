@@ -57,7 +57,7 @@ use config::Config;
 /// }]);
 /// RelayLocal::new(config).run();
 /// ```
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct RelayLocal {
     enable_udp: bool,
     tcprelay: TcpRelayLocal,

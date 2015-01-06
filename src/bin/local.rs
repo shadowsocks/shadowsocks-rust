@@ -44,7 +44,7 @@ use std::os;
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::SocketAddr;
 
-use shadowsocks::config::{Config, ServerConfig, ClientConfig, mod};
+use shadowsocks::config::{Config, ServerConfig, ClientConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
 use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;

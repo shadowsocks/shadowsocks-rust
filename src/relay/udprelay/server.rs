@@ -30,12 +30,12 @@ use collect::LruCache;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{Address, mod};
+use relay::socks5::{Address, self};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::cipher;
 use crypto::cipher::Cipher;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct UdpRelayServer {
     config: Config
 }
@@ -56,7 +56,7 @@ impl UdpRelayServer {
         let remote_map_arc = Arc::new(Mutex::new(
                             LruCache::<SocketAddr, Address>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
 
-        let mut buf = [0u8, ..0xffff];
+        let mut buf = [0u8; 0xffff];
         loop {
             match socket.recv_from(&mut buf) {
                 Ok((len, src)) => {

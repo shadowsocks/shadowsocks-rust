@@ -21,7 +21,7 @@
 
 #![allow(dead_code)]
 
-use std::fmt::{mod, Show, Formatter};
+use std::fmt::{self, Show, Formatter};
 use std::io::net::ip::{IpAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::{Reader, IoResult, IoError, OtherIoError};
@@ -52,7 +52,7 @@ const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED         : u8 = 0x07;
 const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED    : u8 = 0x08;
 
 #[allow(dead_code)]
-#[deriving(Clone, Show, Copy)]
+#[derive(Clone, Show, Copy)]
 pub enum Command {
     TcpConnect,
     TcpBind,
@@ -78,7 +78,7 @@ impl Command {
     }
 }
 
-#[deriving(Clone, Show, Copy)]
+#[derive(Clone, Show, Copy)]
 pub enum Reply {
     Succeeded,
     GeneralFailure,
@@ -125,7 +125,7 @@ impl Reply {
     }
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct Error {
     pub reply: Reply,
     pub message: String,
@@ -179,7 +179,7 @@ macro_rules! try_io{
     });
 }
 
-#[deriving(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
     SocketAddress(IpAddr, Port),
     DomainNameAddress(String, Port),
@@ -211,7 +211,7 @@ impl Show for Address {
     }
 }
 
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct TcpRequestHeader {
     pub command: Command,
     pub address: Address,
@@ -226,7 +226,7 @@ impl TcpRequestHeader {
     }
 
     pub fn read_from(stream: &mut Reader) -> Result<TcpRequestHeader, Error> {
-        let mut buf = [0u8, ..3];
+        let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
             Err(err) => return Err(Error::new(Reply::GeneralFailure, err.to_string().as_slice()))
@@ -258,7 +258,7 @@ impl TcpRequestHeader {
     }
 }
 
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct TcpResponseHeader {
     pub reply: Reply,
     pub address: Address,
@@ -273,7 +273,7 @@ impl TcpResponseHeader {
     }
 
     pub fn read_from(stream: &mut Reader) -> Result<TcpResponseHeader, Error> {
-        let mut buf = [0u8, ..3];
+        let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
             Err(err) => return Err(Error::new(Reply::GeneralFailure, err.to_string().as_slice()))
@@ -398,7 +398,7 @@ fn get_addr_len(atyp: &Address) -> uint {
 // +----+----------+----------+
 // | 5  |    1     | 1 to 255 |
 // +----+----------+----------|
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct HandshakeRequest {
     pub methods: Vec<u8>,
 }
@@ -411,7 +411,7 @@ impl HandshakeRequest {
     }
 
     pub fn read_from(stream: &mut Reader) -> IoResult<HandshakeRequest> {
-        let mut buf = [0, ..2];
+        let mut buf = [0; 2];
         try!(stream.read(&mut buf));
         let [ver, nmet] = buf;
 
@@ -441,7 +441,7 @@ impl HandshakeRequest {
 // +----+--------+
 // | 1  |   1    |
 // +----+--------+
-#[deriving(Clone, Show, Copy)]
+#[derive(Clone, Show, Copy)]
 pub struct HandshakeResponse {
     pub chosen_method: u8,
 }
@@ -454,7 +454,7 @@ impl HandshakeResponse {
     }
 
     pub fn read_from(stream: &mut Reader) -> IoResult<HandshakeResponse> {
-        let mut buf = [0, ..2];
+        let mut buf = [0; 2];
         try!(stream.read(&mut buf));
         let [ver, met] = buf;
 
@@ -474,7 +474,7 @@ impl HandshakeResponse {
     }
 }
 
-#[deriving(Clone, Show)]
+#[derive(Clone, Show)]
 pub struct UdpAssociateHeader {
     pub frag: u8,
     pub address: Address,
@@ -489,7 +489,7 @@ impl UdpAssociateHeader {
     }
 
     pub fn read_from(reader: &mut Reader) -> Result<UdpAssociateHeader, Error> {
-        let mut buf = [0u8, ..3];
+        let mut buf = [0u8; 3];
         match reader.read(&mut buf) {
             Ok(_) => (),
             Err(err) => {

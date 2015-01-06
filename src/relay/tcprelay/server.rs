@@ -25,13 +25,13 @@ use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
 use std::io::net::ip::SocketAddr;
-use std::io::{BufReader, mod};
+use std::io::{BufReader, self};
 use std::time::duration::Duration;
 use std::thread::Thread;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{Address, mod};
+use relay::socks5::{Address, self};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::relay_and_map;
 use crypto::cipher;
@@ -72,7 +72,7 @@ macro_rules! try_result{
     });
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct TcpRelayServer {
     config: Config,
 }
@@ -117,7 +117,7 @@ impl TcpRelayServer {
                                         .expect("Unsupported cipher");
 
                 let header = {
-                    let mut buf = [0u8, .. 1024];
+                    let mut buf = [0u8; 1024];
                     let header_len = try_result!(stream.read(&mut buf), prefix: "Error occurs while reading header: ");
                     cipher.decrypt(buf.slice_to(header_len))
                 };

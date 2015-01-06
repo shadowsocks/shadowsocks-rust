@@ -61,7 +61,7 @@ use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
 use std::collections::HashMap;
-use std::io::{BufReader, MemWriter, mod};
+use std::io::{BufReader, MemWriter, self};
 use std::thread::Thread;
 
 use collect::LruCache;
@@ -74,7 +74,7 @@ use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::udprelay::UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY;
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct UdpRelayLocal {
     config: Config,
 }
@@ -107,7 +107,7 @@ impl Relay for UdpRelayLocal {
 
         let mut socket = UdpSocket::bind(addr).ok().expect("Failed to bind udp socket");
 
-        let mut buf = [0u8, .. 0xffff];
+        let mut buf = [0u8; 0xffff];
         loop {
             match socket.recv_from(&mut buf) {
                 Ok((len, source_addr)) => {
