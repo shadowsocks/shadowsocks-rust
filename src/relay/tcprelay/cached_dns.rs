@@ -19,9 +19,6 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#[phase(plugin, link)]
-extern crate log;
-
 use std::sync::{Arc, Mutex};
 use std::thread::Thread;
 // use std::sync::atomic::{AtomicOption, SeqCst};

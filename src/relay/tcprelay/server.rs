@@ -146,7 +146,7 @@ impl TcpRelayServer {
                             }
                         };
 
-                        let connector = || {
+                        let connector = |&:| {
                             for ipaddr in ipaddrs.iter() {
                                 let result = TcpStream::connect_timeout(SocketAddr {
                                                                 ip: *ipaddr,

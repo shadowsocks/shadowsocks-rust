@@ -54,9 +54,6 @@
 // | Fixed |   Variable   |
 // +-------+--------------+
 
-#[phase(plugin, link)]
-extern crate log;
-
 use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;

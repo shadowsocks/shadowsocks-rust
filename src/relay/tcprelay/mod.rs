@@ -21,9 +21,6 @@
 
 //! TcpRelay implementation
 
-#[phase(plugin, link)]
-extern crate log;
-
 use std::io::{IoResult, Reader, Writer};
 
 mod cached_dns;
@@ -31,7 +28,7 @@ pub mod local;
 pub mod server;
 
 
-pub fn relay_and_map(from: &mut Reader, to: &mut Writer, mapper: |&[u8]| -> Vec<u8>)
+pub fn relay_and_map<F: FnMut(&[u8]) -> Vec<u8>>(from: &mut Reader, to: &mut Writer, mut mapper: F)
         -> IoResult<()> {
     let mut buf = [0u8; 0xffff];
     loop {

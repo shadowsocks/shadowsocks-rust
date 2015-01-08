@@ -24,10 +24,9 @@
 #![crate_name = "shadowsocks"]
 
 #![feature(phase, unsafe_destructor)]
-#![feature(macro_rules)]
 
 extern crate serialize;
-#[phase(plugin, link)]
+#[macro_use]
 extern crate log;
 
 extern crate collect;

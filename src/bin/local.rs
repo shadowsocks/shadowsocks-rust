@@ -30,7 +30,7 @@
 
 extern crate getopts;
 extern crate shadowsocks;
-#[phase(plugin, link)]
+#[macro_use]
 extern crate log;
 
 #[cfg(feature = "enable-green")]
