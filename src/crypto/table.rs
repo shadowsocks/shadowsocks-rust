@@ -31,7 +31,7 @@ use crypto::digest;
 use crypto::digest::Digest;
 use crypto::digest::DigestType;
 
-const TABLE_SIZE: uint = 256u;
+const TABLE_SIZE: usize = 256us;
 
 #[derive(Clone)]
 pub struct TableCipher {
@@ -61,7 +61,7 @@ impl TableCipher {
         let mut dec = repeat(0u8).take(enc.len()).collect::<Vec<u8>>();
 
         for idx in range(0, enc.len()) {
-            dec[enc[idx] as uint] = idx as u8;
+            dec[enc[idx] as usize] = idx as u8;
         }
 
         TableCipher {
@@ -75,7 +75,7 @@ impl Cipher for TableCipher {
     fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
         let mut result = Vec::with_capacity(data.len());
         for d in data.iter() {
-            result.push(self.enc[*d as uint]);
+            result.push(self.enc[*d as usize]);
         }
         result
     }
@@ -83,7 +83,7 @@ impl Cipher for TableCipher {
     fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
         let mut result = Vec::with_capacity(data.len());
         for d in data.iter() {
-            result.push(self.dec[*d as uint]);
+            result.push(self.dec[*d as usize]);
         }
         result
     }

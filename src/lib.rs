@@ -23,9 +23,9 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(phase, unsafe_destructor)]
+#![feature(unsafe_destructor)]
 
-extern crate serialize;
+extern crate "rustc-serialize" as serialize;
 #[macro_use]
 extern crate log;
 
@@ -35,7 +35,7 @@ use std::fmt::{Show, Formatter, self};
 
 /// VersionCode(major, minor, patch)
 #[derive(Copy)]
-pub struct VersionCode(uint, uint, uint);
+pub struct VersionCode(u32, u32, u32);
 
 impl Show for VersionCode {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {

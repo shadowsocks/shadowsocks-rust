@@ -28,8 +28,6 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-#![feature(phase)]
-
 extern crate getopts;
 extern crate shadowsocks;
 #[macro_use]
@@ -84,7 +82,7 @@ fn main() {
     }
 
     if matches.opt_present("v") {
-        println!("{}", shadowsocks::VERSION);
+        println!("{:?}", shadowsocks::VERSION);
         return;
     }
 
@@ -138,9 +136,9 @@ fn main() {
         panic!("UDP relay is disabled");
     }
 
-    info!("ShadowSocks {}", shadowsocks::VERSION);
+    info!("ShadowSocks {:?}", shadowsocks::VERSION);
 
-    debug!("Config: {}", config);
+    debug!("Config: {:?}", config);
 
     RelayServer::new(config).run();
 }

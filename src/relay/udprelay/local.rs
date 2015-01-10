@@ -125,7 +125,7 @@ impl Relay for UdpRelayLocal {
                                                request_message.as_slice(),
                                                source_addr,
                                                &s,
-                                               client_map)).detach();
+                                               client_map));
                         }
                         None => {
                             let s = server_load_balancer.pick_server().clone();
@@ -135,7 +135,7 @@ impl Relay for UdpRelayLocal {
                                               request_message.as_slice(),
                                               source_addr,
                                               &s,
-                                              client_map)).detach();
+                                              client_map));
                         }
                     }
                 },

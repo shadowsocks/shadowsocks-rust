@@ -223,7 +223,7 @@ impl TcpRelayLocal {
                             remote_local_stream.close_write().or(Ok(())).unwrap();
                             remote_remote_stream.close_read().or(Ok(())).unwrap();
                         })
-                }).detach();
+                });
 
                 Thread::spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
@@ -239,7 +239,7 @@ impl TcpRelayLocal {
                             remote_stream.close_write().or(Ok(())).unwrap();
                             stream.close_read().or(Ok(())).unwrap();
                         })
-                }).detach();
+                });
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
@@ -295,7 +295,7 @@ impl Relay for TcpRelayLocal {
                                              server_addr,
                                              password,
                                              encrypt_method,
-                                             enable_udp)).detach();
+                                             enable_udp));
         }
     }
 }

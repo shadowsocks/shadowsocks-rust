@@ -25,14 +25,14 @@ use config::ServerConfig;
 #[derive(Clone)]
 pub struct RoundRobin {
     server: Vec<ServerConfig>,
-    index: uint,
+    index: usize,
 }
 
 impl RoundRobin {
     pub fn new(config: Vec<ServerConfig>) -> RoundRobin {
         RoundRobin {
             server: config,
-            index: 0u,
+            index: 0us,
         }
     }
 }

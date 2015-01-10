@@ -138,7 +138,7 @@ extern {
     fn EVP_MD_CTX_copy_ex(out: EVP_MD_CTX, ctx_in: EVP_MD_CTX) -> libc::c_int;
     fn EVP_DigestInit_ex(ctx: EVP_MD_CTX, md_type: EVP_MD, engine: ENGINE) -> libc::c_int;
     fn EVP_DigestUpdate(ctx: EVP_MD_CTX, d: *const libc::c_void, cnt: libc::size_t) -> libc::c_int;
-    fn EVP_DigestFinal_ex(ctx: EVP_MD_CTX, md: *mut libc::c_uchar, s: *mut libc::c_uint);
+    fn EVP_DigestFinal_ex(ctx: EVP_MD_CTX, md: *mut libc::c_uchar, s: *mut libc::size_t);
 
     fn EVP_md5() -> EVP_MD;
     fn EVP_sha() -> EVP_MD;
@@ -147,7 +147,7 @@ extern {
 
 pub struct OpenSSLDigest {
     md_ctx: EVP_MD_CTX,
-    digest_len: uint,
+    digest_len: usize,
 }
 
 impl OpenSSLDigest {
@@ -171,12 +171,12 @@ impl OpenSSLDigest {
         }
     }
 
-    fn get_md(t: digest::DigestType) -> (EVP_MD, uint) {
+    fn get_md(t: digest::DigestType) -> (EVP_MD, usize) {
         unsafe {
             match t {
-                digest::DigestType::Md5 => { (EVP_md5(), 16u) },
-                digest::DigestType::Sha => { (EVP_sha(), 20u) },
-                digest::DigestType::Sha1 => { (EVP_sha1(), 20u) },
+                digest::DigestType::Md5 => { (EVP_md5(), 16us) },
+                digest::DigestType::Sha => { (EVP_sha(), 20us) },
+                digest::DigestType::Sha1 => { (EVP_sha1(), 20us) },
             }
         }
     }
@@ -246,8 +246,8 @@ impl Drop for OpenSSLDigest {
 
 struct OpenSSLCrypto {
     evp_ctx: EVP_CIPHER_CTX,
-    block_size: uint,
-    // key_size: uint,
+    block_size: usize,
+    // key_size: usize,
     cipher_type: cipher::CipherType,
     key: Vec<u8>,
     iv: Vec<u8>,
@@ -302,7 +302,7 @@ impl OpenSSLCrypto {
         }
     }
 
-    pub fn get_cipher(cipher_type: &cipher::CipherType) -> (EVP_CIPHER, uint, uint) {
+    pub fn get_cipher(cipher_type: &cipher::CipherType) -> (EVP_CIPHER, usize, usize) {
         unsafe {
             match *cipher_type {
                 #[cfg(feature = "cipher-aes-cfb")]
@@ -380,7 +380,7 @@ impl OpenSSLCrypto {
         let pdata: *const u8 = data.as_ptr();
         let datalen: libc::c_int = data.len() as libc::c_int;
 
-        let reslen: uint = datalen as uint + self.block_size;
+        let reslen: usize = datalen as usize + self.block_size;
         let mut res = repeat(0u8).take(reslen).collect::<Vec<u8>>();
 
         let mut len: libc::c_int = 0;
@@ -396,7 +396,7 @@ impl OpenSSLCrypto {
             }
 
             total_length = len;
-            if EVP_CipherFinal(self.evp_ctx, pres.offset(len as int), &mut len) != 1 {
+            if EVP_CipherFinal(self.evp_ctx, pres.offset(len as isize), &mut len) != 1 {
                 drop(self);
                 panic!("Failed on EVP_CipherFinal");
             }
@@ -404,7 +404,7 @@ impl OpenSSLCrypto {
             total_length += len;
         }
 
-        res.truncate(total_length as uint);
+        res.truncate(total_length as usize);
         res
     }
 }
@@ -605,18 +605,18 @@ fn test_default_ciphers() {
 fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
     use std::rand::random;
 
-    let msg_size: uint = 0xffff;
+    let msg_size: usize = 0xffff;
 
     let mut test_data = Vec::new();
-    for _ in range::<uint>(0, 100) {
+    for _ in range::<usize>(0, 100) {
         let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
-        let key = range(1, random::<uint>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
 
         test_data.push((msg, key));
     }
 
     b.iter(|| {
-        let (ref msg, ref key) = test_data[random::<uint>() % test_data.len()];
+        let (ref msg, ref key) = test_data[random::<usize>() % test_data.len()];
 
         let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         cipher.encrypt(msg.as_slice());
@@ -628,18 +628,18 @@ fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
 fn bench_openssl_default_cipher_decrypt(b: &mut test::Bencher) {
     use std::rand::random;
 
-    let msg_size: uint = 0xffff;
+    let msg_size: usize = 0xffff;
     let mut test_data = Vec::new();
-    for _ in range::<uint>(0, 100) {
+    for _ in range::<usize>(0, 100) {
         let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
-        let key = range(1, random::<uint>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
         let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         let encrypted_msg = cipher.encrypt(msg.as_slice());
         test_data.push((key, encrypted_msg));
     }
 
     b.iter(|| {
-        let (ref key, ref encrypted_msg) = test_data[random::<uint>() % test_data.len()];
+        let (ref key, ref encrypted_msg) = test_data[random::<usize>() % test_data.len()];
         let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb, key.as_slice());
         cipher.decrypt(encrypted_msg.as_slice());
     });

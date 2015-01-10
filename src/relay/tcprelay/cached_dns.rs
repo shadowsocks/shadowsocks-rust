@@ -29,8 +29,8 @@ use collect::LruCache;
 
 struct DnsLruCache {
     cache: LruCache<String, Vec<IpAddr>>,
-    totally_matched: uint,
-    totally_missed: uint,
+    totally_matched: usize,
+    totally_missed: usize,
 }
 
 pub struct CachedDns {
@@ -38,7 +38,7 @@ pub struct CachedDns {
 }
 
 impl CachedDns {
-    pub fn new(cache_capacity: uint) -> CachedDns {
+    pub fn new(cache_capacity: usize) -> CachedDns {
         CachedDns {
             lru_cache: Arc::new(Mutex::new(DnsLruCache {
                 cache: LruCache::new(cache_capacity),
@@ -81,7 +81,7 @@ impl CachedDns {
         Thread::spawn(move || {
             let mut cache = cloned_mutex.lock().unwrap();
             cache.cache.insert(addr_string, cloned_addr);
-        }).detach();
+        });
         Some(addrs)
     }
 }

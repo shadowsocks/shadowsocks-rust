@@ -146,6 +146,12 @@ impl Show for Error {
     }
 }
 
+impl fmt::String for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
 macro_rules! try_io{
     ($do_io:expr, $errtype:expr, $message:expr) => ( {
         let io_result = $do_io;
@@ -197,12 +203,21 @@ impl Address {
         write_addr(self, writer)
     }
 
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         get_addr_len(self)
     }
 }
 
 impl Show for Address {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+        }
+    }
+}
+
+impl fmt::String for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
@@ -253,7 +268,7 @@ impl TcpRequestHeader {
         Ok(())
     }
 
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         self.address.len() + 3
     }
 }
@@ -297,12 +312,12 @@ impl TcpResponseHeader {
         Ok(())
     }
 
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         self.address.len() + 3
     }
 }
 
-fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
+fn parse_request_header(stream: &mut Reader) -> Result<(usize, Address), Error> {
     let atyp = match stream.read_byte() {
         Ok(atyp) => atyp,
         Err(_) => return Err(Error::new(Reply::GeneralFailure, "Error while reading address type"))
@@ -315,7 +330,7 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
                                   try_io!(stream.read_byte(), Reply::GeneralFailure),
                                   try_io!(stream.read_byte(), Reply::GeneralFailure));
             let port = try_io!(stream.read_be_u16(), Reply::GeneralFailure);
-            Ok((7u, Address::SocketAddress(v4addr, port)))
+            Ok((7us, Address::SocketAddress(v4addr, port)))
         },
         SOCKS5_ADDR_TYPE_IPV6 => {
             let v6addr = Ipv6Addr(try_io!(stream.read_be_u16()),
@@ -328,10 +343,10 @@ fn parse_request_header(stream: &mut Reader) -> Result<(uint, Address), Error> {
                                   try_io!(stream.read_be_u16()));
             let port = try_io!(stream.read_be_u16());
 
-            Ok((19u, Address::SocketAddress(v6addr, port)))
+            Ok((19us, Address::SocketAddress(v6addr, port)))
         },
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-            let addr_len = try_io!(stream.read_byte()) as uint;
+            let addr_len = try_io!(stream.read_byte()) as usize;
             let raw_addr = try_io!(stream.read_exact(addr_len));
             let port = try_io!(stream.read_be_u16());
 
@@ -379,7 +394,7 @@ fn write_addr(addr: &Address, buf: &mut Writer) -> IoResult<()> {
     Ok(())
 }
 
-fn get_addr_len(atyp: &Address) -> uint {
+fn get_addr_len(atyp: &Address) -> usize {
     match atyp {
         &Address::SocketAddress(ip, _) => {
             match ip {
@@ -424,7 +439,7 @@ impl HandshakeRequest {
         }
 
         Ok(HandshakeRequest {
-            methods: try!(stream.read_exact(nmet as uint)),
+            methods: try!(stream.read_exact(nmet as usize)),
         })
     }
 
@@ -509,7 +524,7 @@ impl UdpAssociateHeader {
         Ok(())
     }
 
-    pub fn len(&self) -> uint {
+    pub fn len(&self) -> usize {
         3 + self.address.len()
     }
 }

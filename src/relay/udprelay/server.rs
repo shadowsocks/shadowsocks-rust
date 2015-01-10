@@ -141,7 +141,7 @@ impl UdpRelayServer {
                             }
                         };
                         captured_socket.send_to(decrypted_data.as_slice().slice_from(header.len()), sockaddr).unwrap();
-                    }).detach();
+                    });
                 },
                 Err(err) => {
                     error!("Error occurs while calling recv_from: {}", err);
@@ -157,7 +157,7 @@ impl Relay for UdpRelayServer {
         let mut threads = Vec::new();
         for sref in self.config.server.as_ref().unwrap().iter() {
             let s = sref.clone();
-            let fut = Thread::spawn(move || UdpRelayServer::accept_loop(&s));
+            let fut = Thread::scoped(move || UdpRelayServer::accept_loop(&s));
             threads.push(fut);
         }
 

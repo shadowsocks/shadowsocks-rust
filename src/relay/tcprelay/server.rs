@@ -192,7 +192,7 @@ impl TcpRelayServer {
                             remote_local_stream.close_write().or(Ok(())).unwrap();
                             remote_remote_stream.close_read().or(Ok(())).unwrap();
                         })
-                }).detach();
+                });
 
                 Thread::spawn(move || {
                     relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
@@ -208,8 +208,8 @@ impl TcpRelayServer {
                             remote_stream.close_write().or(Ok(())).unwrap();
                             stream.close_read().or(Ok(())).unwrap();
                         })
-                }).detach();
-            }).detach();
+                });
+            });
         }
     }
 }
@@ -219,7 +219,7 @@ impl Relay for TcpRelayServer {
         let mut threads = Vec::new();
         for ref_s in self.config.server.as_ref().unwrap().iter() {
             let s = ref_s.clone();
-            let fut = Thread::spawn(move || {
+            let fut = Thread::scoped(move || {
                 TcpRelayServer::accept_loop(&s);
             });
             threads.push(fut);

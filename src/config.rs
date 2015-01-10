@@ -65,8 +65,6 @@
 //! These defined server will be used with a load balancing algorithm.
 //!
 
-extern crate serialize;
-
 use serialize::json;
 
 use std::io::{File, Read, Open};
@@ -79,7 +77,7 @@ use std::fmt::{Show, Formatter, self};
 
 use crypto::cipher::CIPHER_AES_256_CFB;
 
-pub const DEFAULT_DNS_CACHE_CAPACITY: uint = 65536;
+pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 
 /// Configuration for a server
 #[derive(Clone, Show)]
@@ -88,7 +86,7 @@ pub struct ServerConfig {
     pub password: String,
     pub method: String,
     pub timeout: Option<u64>,
-    pub dns_cache_capacity: uint,
+    pub dns_cache_capacity: usize,
 }
 
 pub type ClientConfig = SocketAddr;
@@ -189,7 +187,7 @@ impl Config {
                         None => None,
                     },
                     dns_cache_capacity: match server.find("dns_cache_capacity") {
-                        Some(t) => try_config!(t.as_u64(), "dns_cache_capacity should be an integer") as uint,
+                        Some(t) => try_config!(t.as_u64(), "dns_cache_capacity should be an integer") as usize,
                         None => DEFAULT_DNS_CACHE_CAPACITY,
                     },
                 };
@@ -229,7 +227,7 @@ impl Config {
                 method: method.to_string(),
                 timeout: timeout,
                 dns_cache_capacity: match o.get(&"dns_cache_capacity".to_string()) {
-                    Some(t) => try_config!(t.as_u64(), "cache_capacity should be an integer") as uint,
+                    Some(t) => try_config!(t.as_u64(), "cache_capacity should be an integer") as usize,
                     None => DEFAULT_DNS_CACHE_CAPACITY,
                 },
             };
@@ -263,9 +261,11 @@ impl Config {
     }
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let object = match json::from_str(s) {
+        let object = match json::Json::from_str(s) {
             Ok(obj) => { obj },
-            Err(err) => return Err(Error::new(err.to_string().as_slice())),
+            Err(err) => {
+                return Err(Error::new(format!("{:?}", err).as_slice()));
+            }
         };
 
         let json_object = match object.as_object() {
@@ -287,9 +287,11 @@ impl Config {
             Err(err) => return Err(Error::new(err.to_string().as_slice())),
         };
 
-        let object = match json::from_reader(reader) {
+        let object = match json::Json::from_reader(reader) {
             Ok(obj) => { obj },
-            Err(err) => return Err(Error::new(err.to_string().as_slice())),
+            Err(err) => {
+                return Err(Error::new(format!("{:?}", err).as_slice()));
+            }
         };
 
         let json_object = match object.as_object() {

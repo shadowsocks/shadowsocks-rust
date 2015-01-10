@@ -26,8 +26,6 @@
 //! in mod `config`.
 //!
 
-#![feature(phase)]
-
 extern crate getopts;
 extern crate shadowsocks;
 #[macro_use]
@@ -77,13 +75,13 @@ fn main() {
     let matches = getopts(os::args().tail(), &opts).unwrap();
 
     if matches.opt_present("h") {
-        println!("{}", usage(format!("Usage: {} [Options]", os::args()[0]).as_slice(),
+        println!("{:?}", usage(format!("Usage: {} [Options]", os::args()[0]).as_slice(),
                             &opts));
         return;
     }
 
     if matches.opt_present("v") {
-        println!("{}", shadowsocks::VERSION);
+        println!("{:?}", shadowsocks::VERSION);
         return;
     }
 
@@ -132,9 +130,9 @@ fn main() {
 
     config.enable_udp = matches.opt_present("u");
 
-    info!("ShadowSocks {}", shadowsocks::VERSION);
+    info!("ShadowSocks {:?}", shadowsocks::VERSION);
 
-    debug!("Config: {}", config);
+    debug!("Config: {:?}", config);
 
     RelayLocal::new(config).run();
 }
