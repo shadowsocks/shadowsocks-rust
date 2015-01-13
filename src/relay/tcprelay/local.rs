@@ -34,18 +34,19 @@ use std::io::{
     OtherIoError,
 };
 use std::io::net::ip::SocketAddr;
-use std::io::{MemWriter, BufferedStream};
+use std::io::{self, BufferedStream};
 use std::thread::Thread;
 
 use config::Config;
 
 use relay::Relay;
 use relay::socks5;
-use relay::tcprelay::relay_and_map;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
+use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 
 use crypto::cipher;
-use crypto::cipher::Cipher;
+use crypto::cipher::CipherType;
+use crypto::CryptoMode;
 
 #[derive(Clone)]
 pub struct TcpRelayLocal {
@@ -140,7 +141,7 @@ impl TcpRelayLocal {
     fn handle_client(mut stream: TcpStream,
                      server_addr: SocketAddr,
                      password: String,
-                     encrypt_method: String,
+                     encrypt_method: CipherType,
                      enable_udp: bool) {
         try_result!(TcpRelayLocal::do_handshake(&mut stream), prefix: "Error occurs while doing handshake:");
 
@@ -162,7 +163,7 @@ impl TcpRelayLocal {
             socks5::Command::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let mut remote_stream = match TcpStream::connect(
+                let remote_stream = match TcpStream::connect(
                             format!("{}:{}", server_addr.ip, server_addr.port).as_slice()) {
                     Err(err) => {
                         match err.kind {
@@ -181,52 +182,48 @@ impl TcpRelayLocal {
                     Ok(s) => { s },
                 };
 
-                let mut cipher = cipher::with_name(encrypt_method.as_slice(),
-                                               password.as_slice().as_bytes())
-                                        .expect("Unsupported cipher");
+                let mut buffered_local_stream = BufferedStream::new(stream.clone());
 
-                stream = {
-                    let mut buffered_stream = BufferedStream::new(stream);
+                let encryptor = cipher::with_type(encrypt_method,
+                                                  password.as_slice().as_bytes(),
+                                                  CryptoMode::Encrypt);
+                let mut encrypt_stream = EncryptedWriter::new(remote_stream.clone(), encryptor);
 
+                {
                     try_result!(socks5::TcpResponseHeader::new(
                                                     socks5::Reply::Succeeded,
                                                     socks5::Address::SocketAddress(sockname.ip, sockname.port))
-                                .write_to(&mut buffered_stream),
+                                .write_to(&mut buffered_local_stream),
                         prefix: "Error occurs while writing header to local stream:");
-                    try_result!(buffered_stream.flush());
+                    try_result!(buffered_local_stream.flush());
+                    try_result!(addr.write_to(&mut encrypt_stream));
+                    try_result!(encrypt_stream.flush());
+                }
 
-                    let mut header_buf = MemWriter::new();
-                    try_result!(addr.write_to(&mut header_buf));
-
-                    let encrypted_header = cipher.encrypt(header_buf.into_inner().as_slice());
-                    try_result!(remote_stream.write(encrypted_header.as_slice()),
-                                prefix: "Error occurs while writing header to remote stream:");
-                    buffered_stream.into_inner()
-                };
-
-                let mut remote_local_stream = stream.clone();
-                let mut remote_remote_stream = remote_stream.clone();
-                let mut remote_cipher = cipher.clone();
-                let remote_addr_clone = addr.clone();
+                let addr_cloned = addr.clone();
                 Thread::spawn(move || {
-                    relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
-                                  |msg| remote_cipher.decrypt(msg))
+                    io::util::copy(&mut buffered_local_stream.into_inner(), &mut encrypt_stream)
                         .unwrap_or_else(|err| {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 },
                                 _ => {
-                                    error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            remote_local_stream.close_write().or(Ok(())).unwrap();
-                            remote_remote_stream.close_read().or(Ok(())).unwrap();
+                            // remote_stream.close_write().or(Ok(())).unwrap();
+                            // stream.close_read().or(Ok(())).unwrap();
                         })
                 });
 
+                let decryptor = cipher::with_type(encrypt_method,
+                                                      password.as_slice().as_bytes(),
+                                                      CryptoMode::Decrypt);
+                let mut decrypt_stream = DecryptedReader::new(remote_stream.clone(), decryptor);
+
                 Thread::spawn(move || {
-                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.encrypt(msg))
+                    io::util::copy(&mut decrypt_stream, &mut stream)
                         .unwrap_or_else(|err| {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
@@ -236,10 +233,12 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr, err)
                                 }
                             }
-                            remote_stream.close_write().or(Ok(())).unwrap();
-                            stream.close_read().or(Ok(())).unwrap();
+                            // remote_stream.close_write().or(Ok(())).unwrap();
+                            // stream.close_read().or(Ok(())).unwrap();
                         })
                 });
+
+
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");

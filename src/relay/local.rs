@@ -39,6 +39,7 @@ use config::Config;
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayLocal;
 /// use shadowsocks::config::{Config, ClientConfig, ServerConfig};
+/// use shadowsocks::crypto::cipher::CipherType;
 ///
 /// let mut config = Config::new();
 /// config.local = Some(ClientConfig {
@@ -51,7 +52,7 @@ use config::Config;
 ///         port: 8388,
 ///     },
 ///     password: "server-password".to_string(),
-///     method: "aes-256-cfb".to_string(),
+///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
 /// }]);
@@ -82,6 +83,7 @@ impl RelayLocal {
         let tcprelay = TcpRelayLocal::new(config.clone());
         RelayLocal {
             tcprelay: tcprelay,
+            enable_udp: config.enable_udp,
         }
     }
 }
@@ -96,7 +98,7 @@ impl Relay for RelayLocal {
         let tcp_thread = Thread::scoped(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join();
+        tcp_thread.join().ok().expect("A thread failed and exited");
     }
 
     #[cfg(feature = "enable-udp")]

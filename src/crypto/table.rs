@@ -21,26 +21,23 @@
 
 //! This module implements the `table` cipher for fallback compatibility
 
-use std::vec::Vec;
 use std::io::BufReader;
-use std::cmp::PartialOrd;
-use std::iter::repeat;
 
-use crypto::cipher::Cipher;
+use crypto::cipher::{Cipher, CipherResult};
 use crypto::digest;
 use crypto::digest::Digest;
 use crypto::digest::DigestType;
+use crypto::CryptoMode;
 
 const TABLE_SIZE: usize = 256us;
 
 #[derive(Clone)]
 pub struct TableCipher {
-    enc: Vec<u8>,
-    dec: Vec<u8>,
+    table: Vec<u8>,
 }
 
 impl TableCipher {
-    pub fn new(key: &[u8]) -> TableCipher {
+    pub fn new(key: &[u8], mode: CryptoMode) -> TableCipher {
         let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
         let key_digest = md5_digest.digest();
@@ -51,41 +48,45 @@ impl TableCipher {
 
         for i in range(1, 1024) {
             table.as_mut_slice().sort_by(|x, y| {
-                let sub = (a % (*x + i) - a % (*y + i)) as i64;
-
-                sub.partial_cmp(&0i64).unwrap()
+                (a % (*x + i)).cmp(&(a % (*y + i)))
             })
         }
 
-        let enc = range(0, TABLE_SIZE).map(|idx| table[idx] as u8).collect::<Vec<u8>>();
-        let mut dec = repeat(0u8).take(enc.len()).collect::<Vec<u8>>();
+        // let enc = range(0, TABLE_SIZE).map(|idx| table[idx] as u8).collect::<Vec<u8>>();
+        // let mut dec = repeat(0u8).take(enc.len()).collect::<Vec<u8>>();
 
-        for idx in range(0, enc.len()) {
-            dec[enc[idx] as usize] = idx as u8;
-        }
+        // for idx in range(0, enc.len()) {
+        //     dec[enc[idx] as usize] = idx as u8;
+        // }
 
         TableCipher {
-            enc: enc,
-            dec: dec,
+            table: match mode {
+                CryptoMode::Encrypt => table.into_iter().map(|x| x as u8).collect(),
+                CryptoMode::Decrypt => {
+                    let mut t = Vec::with_capacity(table.len());
+                    unsafe { t.set_len(table.len()); }
+                    for idx in range(0, table.len()) {
+                        t[table[idx] as usize] = idx as u8;
+                    }
+                    t
+                }
+            },
         }
+    }
+
+    fn process(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
+        let r = data.iter().map(|d| self.table[*d as usize]).collect();
+        Ok(r)
     }
 }
 
 impl Cipher for TableCipher {
-    fn encrypt(&mut self, data: &[u8]) -> Vec<u8> {
-        let mut result = Vec::with_capacity(data.len());
-        for d in data.iter() {
-            result.push(self.enc[*d as usize]);
-        }
-        result
+    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
+        self.process(data)
     }
 
-    fn decrypt(&mut self, data: &[u8]) -> Vec<u8> {
-        let mut result = Vec::with_capacity(data.len());
-        for d in data.iter() {
-            result.push(self.dec[*d as usize]);
-        }
-        result
+    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
+        Ok(Vec::new())
     }
 }
 
@@ -94,9 +95,10 @@ fn test_table_cipher() {
     let message = "hello world";
     let key = "keykeykk";
 
-    let mut cipher = TableCipher::new(key.as_bytes());
-    let encrypted_msg = cipher.encrypt(message.as_bytes());
-    let decrypted_msg = cipher.decrypt(encrypted_msg.as_slice());
+    let mut enc = TableCipher::new(key.as_bytes(), CryptoMode::Encrypt);
+    let mut dec = TableCipher::new(key.as_bytes(), CryptoMode::Decrypt);
+    let encrypted_msg = enc.update(message.as_bytes()).unwrap();
+    let decrypted_msg = dec.update(encrypted_msg.as_slice()).unwrap();
 
     assert_eq!(decrypted_msg.as_slice(), message.as_bytes());
 }

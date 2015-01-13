@@ -35,7 +35,6 @@ cipher-rc4 = []
 cipher-seed-cfb = []
 
 enable-udp = []
-enable-green = ["green", "rustuv"]
 
 [[bin]]
 
@@ -47,19 +46,7 @@ path = "src/bin/local.rs"
 name = "ssserver"
 path = "src/bin/server.rs"
 
-[dependencies.green]
-optional = true
-git = "https://github.com/alexcrichton/green-rs.git"
-
-[dependencies.rustuv]
-optional = true
-git = "https://github.com/alexcrichton/green-rs.git"
-
-[dependencies.collect]
-git = "https://github.com/Gankro/collect-rs.git"
-
-[dependencies.rustc-serialize]
-rustc-serialize = "0.2.7"
-
-[dependencies.log]
-log = "0.1.9"
+[dependencies]
+collect = "*"
+rustc-serialize = "*"
+log = "*"

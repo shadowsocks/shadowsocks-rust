@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
 use std::io::net::addrinfo::get_host_addresses;
-use std::io::{MemWriter, BufReader};
+use std::io::BufReader;
 use std::thread::Thread;
 
 use collect::LruCache;
@@ -32,7 +32,7 @@ use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5::{Address, self};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
-use crypto::cipher;
+use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
 
 #[derive(Clone)]
@@ -63,10 +63,10 @@ impl UdpRelayServer {
                     let data = buf.slice_to(len).to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();
-                    let mut cipher = cipher::with_name(svr_config.method.as_slice(),
-                                                       svr_config.password.as_slice().as_bytes())
-                                            .expect("Unsupported cipher");
                     let mut captured_socket = socket.clone();
+
+                    let method = svr_config.method;
+                    let password = svr_config.password.clone();
 
                     Thread::spawn(move || {
                         match remote_map.lock().unwrap().get(&src) {
@@ -76,11 +76,17 @@ impl UdpRelayServer {
                                         debug!("UDP response {} -> {}", remote_addr, client_addr);
 
                                         // Make a header
-                                        let mut response_buf = MemWriter::new();
+                                        let mut response_buf = Vec::new();
                                         remote_addr.write_to(&mut response_buf).unwrap();
-
                                         response_buf.write(data.as_slice()).unwrap();
-                                        let encrypted_data = cipher.encrypt(response_buf.into_inner().as_slice());
+
+                                        let mut encryptor =
+                                            cipher::with_type(method,
+                                                              password.as_slice().as_bytes(),
+                                                              CryptoMode::Encrypt);
+                                        let mut encrypted_data =
+                                            encryptor.update(response_buf.as_slice()).unwrap();
+                                        encrypted_data.push_all(encryptor.finalize().unwrap().as_slice());
 
                                         captured_socket
                                             .send_to(encrypted_data.as_slice(), client_addr.clone())
@@ -98,7 +104,12 @@ impl UdpRelayServer {
 
                         // Maybe data from a relay client
                         // Decrypt it and see what's inside
-                        let decrypted_data = cipher.decrypt(data.as_slice());
+                        let mut decryptor =
+                            cipher::with_type(method,
+                                              password.as_slice().as_bytes(),
+                                              CryptoMode::Decrypt);
+                        let mut decrypted_data = decryptor.update(data.as_slice()).unwrap();
+                        decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
                         let mut bufr = BufReader::new(decrypted_data.as_slice());
 
                         let header = socks5::UdpAssociateHeader::read_from(&mut bufr).unwrap();

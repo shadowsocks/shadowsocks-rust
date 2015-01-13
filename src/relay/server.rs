@@ -39,6 +39,7 @@ use config::Config;
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayServer;
 /// use shadowsocks::config::{Config, ServerConfig};
+/// use shadowsocks::crypto::cipher::CipherType;
 ///
 /// let mut config = Config::new();
 /// config.server = Some(vec![ServerConfig {
@@ -47,7 +48,7 @@ use config::Config;
 ///         port: 8388,
 ///     },
 ///     password: "server-password".to_string(),
-///     method: "aes-256-cfb".to_string(),
+///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
 /// }]);
@@ -79,6 +80,7 @@ impl RelayServer {
         let tcprelay = TcpRelayServer::new(config.clone());
         RelayServer {
             tcprelay: tcprelay,
+            enable_udp: config.enable_udp,
         }
     }
 }

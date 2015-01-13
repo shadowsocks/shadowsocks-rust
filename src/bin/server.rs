@@ -28,15 +28,12 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
+#![allow(unstable)]
+
 extern crate getopts;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
-
-#[cfg(feature = "enable-green")]
-extern crate green;
-#[cfg(feature = "enable-green")]
-extern crate rustuv;
 
 use getopts::{optopt, optflag, getopts, usage};
 use std::os;
@@ -46,18 +43,6 @@ use std::io::net::ip::SocketAddr;
 use shadowsocks::config::{Config, ServerConfig, ClientConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayServer, Relay};
-use shadowsocks::crypto::cipher::CIPHER_AES_256_CFB;
-
-#[cfg(feature = "enable-green")]
-#[warn(unstable)]
-#[start]
-fn start(argc: int, argv: *const *const u8) -> int {
-    use rustuv::EventLoop;
-    fn event_loop() -> Box<green::EventLoop + Send> {
-        box EventLoop::new().unwrap() as Box<green::EventLoop + Send>
-    }
-    green::start(argc, argv, event_loop, main)
-}
 
 fn main() {
     let opts = [
@@ -70,7 +55,7 @@ fn main() {
         optopt("k", "password", "password", ""),
         optopt("p", "server-port", "server port", ""),
         optopt("l", "local-port", "local socks5 proxy port", ""),
-        optopt("m", "encrypt-method", "entryption method", CIPHER_AES_256_CFB),
+        optopt("m", "encrypt-method", "entryption method", "aes-256-cfb"),
     ];
 
     let matches = getopts(os::args().tail(), &opts).unwrap();
@@ -104,7 +89,15 @@ fn main() {
                 port: matches.opt_str("p").unwrap().as_slice().parse().expect("`port` should be an integer"),
             },
             password: matches.opt_str("k").unwrap(),
-            method: matches.opt_str("m").unwrap(),
+            method: match matches.opt_str("m") {
+                Some(method_s) => {
+                    match method_s.parse() {
+                        Some(m) => m,
+                        None => panic!("`{}` is not a supported method", method_s),
+                    }
+                },
+                None => panic!("failed to get method string"),
+            },
             timeout: None,
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };

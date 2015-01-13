@@ -75,7 +75,7 @@ use std::option::Option;
 use std::default::Default;
 use std::fmt::{Show, Formatter, self};
 
-use crypto::cipher::CIPHER_AES_256_CFB;
+use crypto::cipher::CipherType;
 
 pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 
@@ -84,7 +84,7 @@ pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 pub struct ServerConfig {
     pub addr: SocketAddr,
     pub password: String,
-    pub method: String,
+    pub method: CipherType,
     pub timeout: Option<u64>,
     pub dns_cache_capacity: usize,
 }
@@ -155,13 +155,13 @@ impl Config {
 
             let mut servers = Vec::new();
             for server in server_list.iter() {
-                let mut method = try_config!(
+                let method_str = try_config!(
                                         try_config!(server.find("method"),
                                                     "You need to specify a method").as_string(),
                                         "method should be a string");
-                if method == "" {
-                    method = CIPHER_AES_256_CFB;
-                }
+
+                let method = try_config!(method_str.parse::<CipherType>(),
+                                         format!("`{}` is not a supported method", method_str).as_slice());
 
                 let addr_str = try_config!(
                                     try_config!(server.find("address"),
@@ -181,7 +181,7 @@ impl Config {
                                     try_config!(server.find("password"),
                                                 "You need to specify a password").as_string(),
                                     "password should be a string").to_string(),
-                    method: method.to_string(),
+                    method: method,
                     timeout: match server.find("timeout") {
                         Some(t) => Some(try_config!(t.as_u64(), "timeout should be an integer") * 1000),
                         None => None,
@@ -206,11 +206,10 @@ impl Config {
                 None => None,
             };
 
-            let mut method = try_config!(o.get(&"method".to_string()).unwrap().as_string(),
-                                         "method should be a string");
-            if method == "" {
-                method = CIPHER_AES_256_CFB;
-            }
+            let method_str = try_config!(o.get(&"method".to_string()).unwrap().as_string(),
+                                             "method should be a string");
+            let method = try_config!(method_str.parse::<CipherType>(),
+                                     format!("`{}` is not a supported method", method_str).as_slice());
 
             let addr_str = try_config!(o.get(&"server".to_string()).unwrap().as_string(),
                                        "server should be a string");
@@ -224,7 +223,7 @@ impl Config {
                 },
                 password: try_config!(o.get(&"password".to_string()).unwrap().as_string(),
                                       "password should be a string").to_string(),
-                method: method.to_string(),
+                method: method,
                 timeout: timeout,
                 dns_cache_capacity: match o.get(&"dns_cache_capacity".to_string()) {
                     Some(t) => try_config!(t.as_u64(), "cache_capacity should be an integer") as usize,

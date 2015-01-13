@@ -63,7 +63,7 @@ use std::thread::Thread;
 
 use collect::LruCache;
 
-use crypto::cipher;
+use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
 use config::{Config, ServerConfig};
 use relay::Relay;
@@ -175,14 +175,16 @@ fn handle_request(mut socket: UdpSocket,
 
     client_map.lock().unwrap().insert(addr, from_addr);
 
-    let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
-                        .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
+    let mut encryptor = cipher::with_type(config.method,
+                                          config.password.as_slice().as_bytes(),
+                                          CryptoMode::Encrypt);
 
     let mut wbuf = MemWriter::new();
     request.write_to(&mut wbuf).unwrap();
     io::util::copy(&mut bufr, &mut wbuf).unwrap();
 
-    let encrypted_data = cipher.encrypt(wbuf.into_inner().as_slice());
+    let mut encrypted_data = encryptor.update(wbuf.into_inner().as_slice()).unwrap();
+    encrypted_data.push_all(encryptor.finalize().unwrap().as_slice());
 
     socket.send_to(encrypted_data.as_slice(), config.addr)
         .ok().expect("Error occurs while sending to remote");
@@ -193,9 +195,11 @@ fn handle_response(mut socket: UdpSocket,
                    from_addr: SocketAddr,
                    config: &ServerConfig,
                    client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
-    let mut cipher = cipher::with_name(config.method.as_slice(), config.password.as_slice().as_bytes())
-                        .expect(format!("Unsupported cipher {}", config.method.as_slice()).as_slice());
-    let decrypted_data = cipher.decrypt(response_messge);
+    let mut decryptor = cipher::with_type(config.method,
+                                          config.password.as_slice().as_bytes(),
+                                          CryptoMode::Decrypt);
+    let mut decrypted_data = decryptor.update(response_messge).unwrap();
+    decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
 
     let mut bufr = BufReader::new(decrypted_data.as_slice());
 

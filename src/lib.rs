@@ -23,12 +23,14 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
+#![allow(unstable)]
+
 #![feature(unsafe_destructor)]
+#![feature(box_syntax)]
 
 extern crate "rustc-serialize" as serialize;
 #[macro_use]
 extern crate log;
-
 extern crate collect;
 
 use std::fmt::{Show, Formatter, self};

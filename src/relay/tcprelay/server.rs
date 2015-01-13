@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::io::{Listener, TcpListener, Acceptor, TcpStream};
 use std::io::{EndOfFile, BrokenPipe};
 use std::io::net::ip::SocketAddr;
-use std::io::{BufReader, self};
+use std::io::{BufferedStream, self};
 use std::time::duration::Duration;
 use std::thread::Thread;
 
@@ -33,9 +33,9 @@ use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5::{Address, self};
 use relay::tcprelay::cached_dns::CachedDns;
-use relay::tcprelay::relay_and_map;
+use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
-use crypto::cipher::Cipher;
+use crypto::CryptoMode;
 
 macro_rules! try_result{
     ($res:expr) => ({
@@ -91,7 +91,7 @@ impl TcpRelayServer {
         let (server_addr, password, encrypt_method, timeout, dns_cache_capacity) =
                 (s.addr,
                  Arc::new(s.password.clone()),
-                 Arc::new(s.method.clone()),
+                 s.method,
                  s.timeout,
                  s.dns_cache_capacity);
 
@@ -112,23 +112,26 @@ impl TcpRelayServer {
             let dnscache = dnscache_arc.clone();
 
             Thread::spawn(move || {
-                let mut cipher = cipher::with_name(encrypt_method.as_slice(),
-                                               password.as_slice().as_bytes())
-                                        .expect("Unsupported cipher");
+                let decryptor = cipher::with_type(encrypt_method,
+                                                      password.as_slice().as_bytes(),
+                                                      CryptoMode::Decrypt);
 
-                let header = {
-                    let mut buf = [0u8; 1024];
-                    let header_len = try_result!(stream.read(&mut buf), prefix: "Error occurs while reading header: ");
-                    cipher.decrypt(buf.slice_to(header_len))
-                };
+                let buffered_client_stream = BufferedStream::new(stream.clone());
+                let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
-                let mut bufr = BufReader::new(header.as_slice());
-                let addr = try_result!(socks5::Address::read_from(&mut bufr),
+                // let header = {
+                //     let mut buf = [0u8; 1024];
+                //     let header_len = try_result!(stream.read(&mut buf), prefix: "Error occurs while reading header: ");
+                //     cipher.decrypt(buf.slice_to(header_len))
+                // };
+
+                // let mut bufr = BufReader::new(header.as_slice());
+                let addr = try_result!(socks5::Address::read_from(&mut decrypt_stream),
                      prefix: "Error occurs while parsing request header, maybe wrong crypto method or password: "
                 );
 
                 info!("Connecting to {}", addr);
-                let mut remote_stream = match addr {
+                let remote_stream = match addr {
                     Address::SocketAddress(ip, port) => {
                         try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
                                 prefix: format!("Unable to connect {}:", addr)
@@ -170,45 +173,52 @@ impl TcpRelayServer {
                     }
                 };
 
+                let mut remote_stream_cloned = remote_stream.clone();
+                let addr_cloned = addr.clone();
+                Thread::spawn(move || {
+                    io::util::copy(&mut decrypt_stream, &mut remote_stream_cloned)
+                        .unwrap_or_else(|err| {
+                            match err.kind {
+                                EndOfFile | BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                }
+                            }
+                            // remote_stream.close_write().or(Ok(())).unwrap();
+                            // stream.close_read().or(Ok(())).unwrap();
+                        })
+                });
+
                 // Fixed issue #3
-                io::util::copy(&mut bufr, &mut remote_stream).unwrap();
+                // io::util::copy(&mut bufr, &mut remote_stream).unwrap();
 
-                let mut remote_local_stream = stream.clone();
-                let mut remote_remote_stream = remote_stream.clone();
-                let mut remote_cipher = cipher.clone();
-                let remote_addr_clone = addr.clone();
+                let encryptor = cipher::with_type(encrypt_method,
+                                                      password.as_slice().as_bytes(),
+                                                      CryptoMode::Encrypt);
+
+                let mut buffered_remote_stream = BufferedStream::new(remote_stream.clone());
+                let mut encrypt_stream = EncryptedWriter::new(stream.clone(), encryptor);
+                // let mut remote_cipher = cipher.clone();
+                // let remote_addr_clone = addr.clone();
                 Thread::spawn(move || {
-                    relay_and_map(&mut remote_remote_stream, &mut remote_local_stream,
-                                  |msg| remote_cipher.encrypt(msg))
+                    io::util::copy(&mut buffered_remote_stream, &mut encrypt_stream)
                         .unwrap_or_else(|err| {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                    debug!("{} relay from remote to local stream: {}", addr, err)
                                 },
                                 _ => {
-                                    error!("{} relay from remote to local stream: {}", remote_addr_clone, err)
+                                    error!("{} relay from remote to local stream: {}", addr, err)
                                 }
                             }
-                            remote_local_stream.close_write().or(Ok(())).unwrap();
-                            remote_remote_stream.close_read().or(Ok(())).unwrap();
+                            // stream.close_write().or(Ok(())).unwrap();
+                            // remote_stream.close_read().or(Ok(())).unwrap();
                         })
                 });
 
-                Thread::spawn(move || {
-                    relay_and_map(&mut stream, &mut remote_stream, |msg| cipher.decrypt(msg))
-                        .unwrap_or_else(|err| {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr, err)
-                                }
-                            }
-                            remote_stream.close_write().or(Ok(())).unwrap();
-                            stream.close_read().or(Ok(())).unwrap();
-                        })
-                });
+
             });
         }
     }
