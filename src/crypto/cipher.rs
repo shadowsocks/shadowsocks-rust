@@ -23,6 +23,7 @@
 
 use std::str::FromStr;
 use std::fmt::{Show, self};
+use std::rand::{self, Rng};
 
 use crypto::openssl;
 use crypto::table;
@@ -30,6 +31,8 @@ use crypto::table;
 use crypto::sodium;
 use crypto::CryptoMode;
 use crypto::rc4_md5;
+
+use crypto::digest::{self, DigestType};
 
 /// The trait for basic cipher methods
 // pub trait Cipher {
@@ -275,6 +278,40 @@ impl CipherType {
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
         }
     }
+
+    pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
+        let iv_len = self.block_size();
+        let key_len = self.key_size();
+
+        let mut m: Vec<Vec<u8>> = Vec::with_capacity((key_len + iv_len) / DigestType::Md5.digest_len() + 1);
+        let mut i = 0;
+        while m.len() * DigestType::Md5.digest_len() < (key_len + iv_len) {
+            let mut md5 = digest::with_type(DigestType::Md5);
+            if i > 0 {
+                let mut vkey = m[i - 1].clone();
+                vkey.push_all(key);
+                md5.update(vkey.as_slice());
+            } else {
+                md5.update(key);
+            }
+
+            m.push(md5.digest());
+            i += 1
+        }
+
+        let whole = m.into_iter().fold(Vec::new(), |mut a, b| { a.push_all(b.as_slice()); a });
+        let key = whole[0..key_len].to_vec();
+        key
+    }
+
+    pub fn gen_init_vec(&self) -> Vec<u8> {
+        let iv_len = self.block_size();
+        let mut iv = Vec::with_capacity(iv_len);
+        unsafe { iv.set_len(iv_len); }
+        rand::thread_rng().fill_bytes(iv.as_mut_slice());
+
+        iv
+    }
 }
 
 impl FromStr for CipherType {
@@ -409,13 +446,13 @@ pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box<
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::util::bytes_to_key;
     use crypto::cipher::{Cipher, CipherType, with_type};
     use crypto::CryptoMode;
 
     #[test]
     fn test_get_cipher() {
-        let (key, iv) = bytes_to_key(CipherType::Aes128Cfb, b"PassWORD");
+        let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
+        let iv = CipherType::Aes128Cfb.gen_init_vec();
         let mut encryptor = with_type(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
         let mut decryptor = with_type(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
         let message = "HELLO WORLD";

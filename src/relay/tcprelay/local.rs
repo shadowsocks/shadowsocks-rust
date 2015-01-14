@@ -47,7 +47,6 @@ use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 use crypto::cipher;
 use crypto::cipher::CipherType;
 use crypto::CryptoMode;
-use crypto::util::{self, bytes_to_key};
 
 #[derive(Clone)]
 pub struct TcpRelayLocal {
@@ -100,7 +99,7 @@ macro_rules! try_result{
 
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
-        if c.server.is_none() || c.local.is_none() {
+        if c.server.is_empty() || c.local.is_none() {
             panic!("You have to provide configuration for server and local");
         }
 
@@ -141,7 +140,7 @@ impl TcpRelayLocal {
 
     fn handle_client(mut stream: TcpStream,
                      server_addr: SocketAddr,
-                     password: String,
+                     password: Vec<u8>,
                      encrypt_method: CipherType,
                      enable_udp: bool) {
         try_result!(TcpRelayLocal::do_handshake(&mut stream), prefix: "Error occurs while doing handshake:");
@@ -185,9 +184,9 @@ impl TcpRelayLocal {
 
                 let mut buffered_local_stream = BufferedStream::new(stream.clone());
 
-                let (pwd, iv) = bytes_to_key(encrypt_method, password.as_bytes());
+                let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
-                                                  pwd.as_slice(),
+                                                  password.as_slice(),
                                                   iv.as_slice(),
                                                   CryptoMode::Encrypt);
                 try_result!(remote_stream.write(iv.as_slice()));
@@ -223,7 +222,7 @@ impl TcpRelayLocal {
 
                 let remote_iv = try_result!(remote_stream.read_exact(encrypt_method.block_size()));
                 let decryptor = cipher::with_type(encrypt_method,
-                                                  pwd.as_slice(),
+                                                  password.as_slice(),
                                                   remote_iv.as_slice(),
                                                   CryptoMode::Decrypt);
                 let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
@@ -271,8 +270,7 @@ impl TcpRelayLocal {
 
 impl Relay for TcpRelayLocal {
     fn run(&self) {
-        let mut server_load_balancer = RoundRobin::new(
-                                        self.config.server.clone().expect("`server` should not be None"));
+        let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
         let local_conf = self.config.local.unwrap();
 
@@ -295,10 +293,11 @@ impl Relay for TcpRelayLocal {
             };
 
             let enable_udp = self.config.enable_udp;
+            let pwd = encrypt_method.bytes_to_key(password.as_bytes());
             Thread::spawn(move ||
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
-                                             password,
+                                             pwd,
                                              encrypt_method,
                                              enable_udp));
         }

@@ -110,9 +110,24 @@ impl Cipher for SodiumCipher {
 
 #[cfg(test)]
 mod test_sodium {
+    use crypto::cipher::{Cipher, CipherType};
+    use crypto::sodium::SodiumCipher;
+
     #[test]
     fn test_sodium_cipher() {
-        let key = b"PassWORD";
+        let ct = CipherType::ChaCha20;
+
+        let key = ct.bytes_to_key(b"PassWORD");
         let message = b"message";
+
+        let iv = ct.gen_init_vec();
+
+        let mut enc = SodiumCipher::new(ct, key.as_slice(), iv.as_slice());
+        let encrypted_msg = enc.update(message).unwrap();
+
+        let mut dec = SodiumCipher::new(ct, key.as_slice(), iv.as_slice());
+        let decrypted_msg = dec.update(&encrypted_msg[0..]).unwrap();
+
+        assert_eq!(message, decrypted_msg.as_slice());
     }
 }

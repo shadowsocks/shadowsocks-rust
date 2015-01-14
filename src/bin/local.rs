@@ -100,12 +100,7 @@ fn main() {
             timeout: None,
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
-        match config.server {
-            Some(ref mut server) => {
-                server.push(sc)
-            },
-            None => { config.server = Some(vec![sc]) },
-        }
+        config.server.push(sc);
     } else if !matches.opt_present("s") && !matches.opt_present("b")
             && !matches.opt_present("k") && !matches.opt_present("m") {
         // Do nothing

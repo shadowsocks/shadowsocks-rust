@@ -46,7 +46,7 @@ use config::Config;
 ///     ip: "127.0.0.1".parse().unwrap(),
 ///     port: 1080
 /// });
-/// config.server = Some(vec![ServerConfig {
+/// config.server = vec![ServerConfig {
 ///     addr: SocketAddr {
 ///         ip: "127.0.0.1".parse().unwrap(),
 ///         port: 8388,
@@ -55,7 +55,7 @@ use config::Config;
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// }]);
+/// }];
 /// RelayLocal::new(config).run();
 /// ```
 #[derive(Clone)]

@@ -35,7 +35,6 @@ use crypto::CryptoMode;
 use std::ptr;
 use std::clone::Clone;
 use std::mem::swap;
-use std::iter::repeat;
 
 #[allow(non_camel_case_types)]
 type EVP_CIPHER_CTX = *const libc::c_void;
@@ -442,9 +441,9 @@ impl Drop for OpenSSLCrypto {
 /// use shadowsocks::crypto::cipher;
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
 /// use shadowsocks::crypto::cipher::Cipher;
-/// use shadowsocks::crypto::util::bytes_to_key;
 ///
-/// let (key, iv) = bytes_to_key(cipher::CipherType::Aes128Cfb, b"password");
+/// let key = cipher::CipherType::Aes128Cfb.bytes_to_key(b"password");
+/// let iv = cipher::CipherType::Aes128Cfb.gen_init_vec();
 ///
 /// let mut enc = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
 /// let mut dec = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
@@ -567,7 +566,6 @@ mod test_openssl {
     use crypto::cipher::{self, Cipher};
     use crypto::openssl::OpenSSLCipher;
     use crypto::CryptoMode;
-    use crypto::util::bytes_to_key;
 
     #[test]
     fn test_default_ciphers() {
@@ -605,20 +603,21 @@ mod test_openssl {
         ];
 
         for t in types.iter() {
-            let (k, iv) = bytes_to_key(*t, key.as_bytes());
+            let k = t.bytes_to_key(key.as_bytes());
+            let iv = t.gen_init_vec();
 
-            let mut enc = OpenSSLCipher::new(*t, key.as_bytes(), iv.as_slice(), CryptoMode::Encrypt);
+            let mut enc = OpenSSLCipher::new(*t, k.as_slice(), iv.as_slice(), CryptoMode::Encrypt);
 
             let mut encrypted_msg = enc.update(message.as_bytes()).unwrap();
             encrypted_msg.push_all(enc.finalize().unwrap().as_slice());
             println!("ENC {:?}", encrypted_msg);
 
-            let mut dec = OpenSSLCipher::new(*t, key.as_bytes(), iv.as_slice(), CryptoMode::Decrypt);
+            let mut dec = OpenSSLCipher::new(*t, k.as_slice(), iv.as_slice(), CryptoMode::Decrypt);
             let mut decrypted_msg = dec.update(encrypted_msg.as_slice()).unwrap();
             decrypted_msg.push_all(dec.finalize().unwrap().as_slice());
             println!("DEC {:?}", decrypted_msg.as_slice());
 
-            assert!(message.as_bytes() == decrypted_msg.as_slice());
+            assert_eq!(message.as_bytes(), decrypted_msg.as_slice());
         }
     }
 
@@ -632,7 +631,8 @@ mod test_openssl {
         for _ in range::<usize>(0, 100) {
             let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let (k, v) = bytes_to_key(cipher::CipherType::Aes256Cfb, key.as_slice());
+            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(key.as_slice());
+            let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
 
             test_data.push((msg, k, v));
         }
@@ -656,7 +656,8 @@ mod test_openssl {
         for _ in range::<usize>(0, 100) {
             let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let (k, v) = bytes_to_key(cipher::CipherType::Aes256Cfb, key.as_slice());
+            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(key.as_slice());
+            let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
             let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
                                                 k.as_slice(), v.as_slice(), CryptoMode::Encrypt);
             let encrypted_msg = cipher.update(msg.as_slice()).unwrap();

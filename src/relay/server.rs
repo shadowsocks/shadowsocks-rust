@@ -42,7 +42,7 @@ use config::Config;
 /// use shadowsocks::crypto::cipher::CipherType;
 ///
 /// let mut config = Config::new();
-/// config.server = Some(vec![ServerConfig {
+/// config.server = vec![ServerConfig {
 ///     addr: SocketAddr {
 ///         ip: "127.0.0.1".parse().unwrap(),
 ///         port: 8388,
@@ -51,7 +51,7 @@ use config::Config;
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// }]);
+/// }];
 /// RelayServer::new(config).run();
 /// ```
 ///

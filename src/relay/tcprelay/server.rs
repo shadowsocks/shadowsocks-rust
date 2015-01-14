@@ -34,9 +34,8 @@ use relay::Relay;
 use relay::socks5::{Address, self};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
-use crypto::cipher::{self, CipherType};
+use crypto::cipher;
 use crypto::CryptoMode;
-use crypto::util::{self, bytes_to_key};
 
 macro_rules! try_result{
     ($res:expr) => ({
@@ -80,7 +79,7 @@ pub struct TcpRelayServer {
 
 impl TcpRelayServer {
     pub fn new(c: Config) -> TcpRelayServer {
-        if c.server.is_none() {
+        if c.server.is_empty() {
             panic!("You have to provide a server configuration");
         }
         TcpRelayServer {
@@ -88,32 +87,26 @@ impl TcpRelayServer {
         }
     }
 
-    fn accept_loop(s: &ServerConfig) {
-        let (server_addr, password, encrypt_method, timeout, dns_cache_capacity) =
-                (s.addr,
-                 Arc::new(s.password.clone()),
-                 s.method,
-                 s.timeout,
-                 s.dns_cache_capacity);
-
-        let mut acceptor = try_result!(TcpListener::bind(format!("{}:{}", server_addr.ip,
-                                                         server_addr.port).as_slice()).listen(),
+    fn accept_loop(s: ServerConfig) {
+        let mut acceptor = try_result!(TcpListener::bind(s.addr.to_string().as_slice()).listen(),
                                        prefix: "Failed to bind: ");
 
-        info!("Shadowsocks listening on {}", server_addr);
+        info!("Shadowsocks listening on {}", s.addr);
 
-        let dnscache_arc = Arc::new(CachedDns::new(dns_cache_capacity));
+        let dnscache_arc = Arc::new(CachedDns::new(s.dns_cache_capacity));
 
+        let pwd = s.method.bytes_to_key(s.password.as_bytes());
+        let timeout = s.timeout;
+        let method = s.method;
         for s in acceptor.incoming() {
             let mut stream = s.unwrap();
             stream.set_timeout(timeout);
 
-            let password = password.clone();
-            let encrypt_method = encrypt_method.clone();
+            let pwd = pwd.clone();
+            let encrypt_method = method;
             let dnscache = dnscache_arc.clone();
 
             Thread::spawn(move || {
-                let (pwd, iv) = bytes_to_key(encrypt_method, password.as_bytes());
                 let remote_iv = try_result!(stream.read_exact(encrypt_method.block_size()));
                 let decryptor = cipher::with_type(encrypt_method,
                                                   pwd.as_slice(),
@@ -198,6 +191,7 @@ impl TcpRelayServer {
                 // Fixed issue #3
                 // io::util::copy(&mut bufr, &mut remote_stream).unwrap();
 
+                let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
                                                   pwd.as_slice(),
                                                   iv.as_slice(),
@@ -232,10 +226,10 @@ impl TcpRelayServer {
 impl Relay for TcpRelayServer {
     fn run(&self) {
         let mut threads = Vec::new();
-        for ref_s in self.config.server.as_ref().unwrap().iter() {
-            let s = ref_s.clone();
+        for s in self.config.server.iter() {
+            let s = s.clone();
             let fut = Thread::scoped(move || {
-                TcpRelayServer::accept_loop(&s);
+                TcpRelayServer::accept_loop(s);
             });
             threads.push(fut);
         }

@@ -34,7 +34,6 @@ use relay::socks5::{Address, self};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
-use crypto::util::bytes_to_key;
 
 #[derive(Clone)]
 pub struct UdpRelayServer {
@@ -48,7 +47,7 @@ impl UdpRelayServer {
         }
     }
 
-    fn accept_loop(svr_config: &ServerConfig) {
+    fn accept_loop(svr_config: ServerConfig) {
         let mut socket = UdpSocket::bind(svr_config.addr).ok().expect("Unable to bind UDP socket");
         debug!("UDP server is binding {}", svr_config.addr);
 
@@ -81,7 +80,8 @@ impl UdpRelayServer {
                                         remote_addr.write_to(&mut response_buf).unwrap();
                                         response_buf.write(data.as_slice()).unwrap();
 
-                                        let (key, mut iv) = bytes_to_key(method, password.as_bytes());
+                                        let key = method.bytes_to_key(password.as_bytes());
+                                        let mut iv = method.gen_init_vec();
                                         let mut encryptor =
                                             cipher::with_type(method,
                                                               key.as_slice(),
@@ -106,7 +106,7 @@ impl UdpRelayServer {
 
                         // Maybe data from a relay client
                         // Decrypt it and see what's inside
-                        let (key, _) = bytes_to_key(method, password.as_bytes());
+                        let key = method.bytes_to_key(password.as_bytes());
                         let mut decryptor =
                             cipher::with_type(method,
                                               key.as_slice(),
@@ -170,9 +170,9 @@ impl UdpRelayServer {
 impl Relay for UdpRelayServer {
     fn run(&self) {
         let mut threads = Vec::new();
-        for sref in self.config.server.as_ref().unwrap().iter() {
-            let s = sref.clone();
-            let fut = Thread::scoped(move || UdpRelayServer::accept_loop(&s));
+        for s in self.config.server.iter() {
+            let s = s.clone();
+            let fut = Thread::scoped(move || UdpRelayServer::accept_loop(s));
             threads.push(fut);
         }
 

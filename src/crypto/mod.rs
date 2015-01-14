@@ -32,8 +32,6 @@ pub mod rc4_md5;
 #[cfg(feature = "enable-sodium")]
 pub mod sodium;
 
-pub mod util;
-
 #[derive(Clone, Copy)]
 pub enum CryptoMode {
     Encrypt,

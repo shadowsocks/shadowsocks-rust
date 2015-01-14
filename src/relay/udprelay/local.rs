@@ -65,7 +65,6 @@ use collect::LruCache;
 
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
-use crypto::util::bytes_to_key;
 use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5;
@@ -89,12 +88,11 @@ impl Relay for UdpRelayLocal {
     fn run(&self) {
         let addr = self.config.local.expect("Local configuration should not be None");
 
-        let mut server_load_balancer = RoundRobin::new(
-                                        self.config.server.clone().expect("`server` should not be None"));
+        let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
         let server_set = {
             let mut server_set = HashMap::new();
-            for s in self.config.server.as_ref().unwrap().iter() {
+            for s in self.config.server.iter() {
                 server_set.insert(s.addr, s.clone());
             }
             server_set
@@ -176,7 +174,8 @@ fn handle_request(mut socket: UdpSocket,
 
     client_map.lock().unwrap().insert(addr, from_addr);
 
-    let (key, mut iv) = bytes_to_key(config.method, config.password.as_bytes());
+    let key = config.method.bytes_to_key(config.password.as_bytes());
+    let mut iv = config.method.gen_init_vec();
     let mut encryptor = cipher::with_type(config.method,
                                           key.as_slice(),
                                           iv.as_slice(),
@@ -198,7 +197,7 @@ fn handle_response(mut socket: UdpSocket,
                    from_addr: SocketAddr,
                    config: &ServerConfig,
                    client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
-    let (key, _) = bytes_to_key(config.method, config.password.as_bytes());
+    let key = config.method.bytes_to_key(config.password.as_bytes());
 
     let mut decryptor = cipher::with_type(config.method,
                                           key.as_slice(),
