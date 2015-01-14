@@ -294,10 +294,14 @@ impl Relay for TcpRelayLocal {
                 let ref s = server_load_balancer.pick_server();
                 let addrs = match cached_dns.resolve(s.addr.as_slice()) {
                     Some(addr) => addr,
-                    None => continue,
+                    None => {
+                        error!("cannot resolve proxy server `{}`", s.addr);
+                        continue;
+                    }
                 };
 
                 if addrs.is_empty() {
+                    error!("cannot resolve proxy server `{}`", s.addr);
                     continue;
                 }
 
@@ -310,11 +314,11 @@ impl Relay for TcpRelayLocal {
                 let enable_udp = self.config.enable_udp;
 
                 Thread::spawn(move ||
-                TcpRelayLocal::handle_client(stream,
-                                             server_addr,
-                                             pwd,
-                                             encrypt_method,
-                                             enable_udp));
+                    TcpRelayLocal::handle_client(stream,
+                                                 server_addr,
+                                                 pwd,
+                                                 encrypt_method,
+                                                 enable_udp));
                 succeed = true;
                 break;
             }
