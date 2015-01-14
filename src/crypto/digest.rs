@@ -23,7 +23,7 @@
 
 use crypto::openssl;
 
-pub trait Digest {
+pub trait Digest: Send {
     fn update(&mut self, data: &[u8]);
     fn digest(&mut self) -> Vec<u8>;
 }
@@ -35,27 +35,19 @@ pub enum DigestType {
     Sha,
 }
 
-pub enum DigestVariant {
-    OpenSSLDigest(openssl::OpenSSLDigest)
-}
-
-impl Digest for DigestVariant {
-    fn update(&mut self, data: &[u8]) {
+impl DigestType {
+    pub fn digest_len(&self) -> usize {
         match *self {
-            DigestVariant::OpenSSLDigest(ref mut d) => d.update(data),
-        }
-    }
-
-    fn digest(&mut self) -> Vec<u8> {
-        match *self {
-            DigestVariant::OpenSSLDigest(ref mut d) => d.digest()
+            DigestType::Md5 => 16,
+            DigestType::Sha1 => 20,
+            DigestType::Sha => 20,
         }
     }
 }
 
-pub fn with_type(t: DigestType) -> DigestVariant {
+pub fn with_type(t: DigestType) -> Box<Digest + Send> {
     match t {
         DigestType::Md5 | DigestType::Sha1 | DigestType::Sha =>
-            DigestVariant::OpenSSLDigest(openssl::OpenSSLDigest::new(t)),
+            box openssl::OpenSSLDigest::new(t) as Box<Digest + Send>,
     }
 }

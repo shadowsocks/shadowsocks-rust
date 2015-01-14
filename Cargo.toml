@@ -19,6 +19,9 @@ default = [
     "cipher-rc2-cfb",
     "cipher-rc4",
 
+    "cipher-chacha20",
+    "cipher-salsa20",
+
     "enable-udp",
 ]
 
@@ -33,8 +36,11 @@ cipher-idea-cfb = []
 cipher-rc2-cfb = []
 cipher-rc4 = []
 cipher-seed-cfb = []
+cipher-chacha20 = ["enable-sodium"]
+cipher-salsa20 = ["enable-sodium"]
 
 enable-udp = []
+enable-sodium = []
 
 [[bin]]
 

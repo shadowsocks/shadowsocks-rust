@@ -1,0 +1,118 @@
+// The MIT License (MIT)
+
+// Copyright (c) 2015 Y. T. Chung
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+extern crate libc;
+
+use std::iter::repeat;
+
+use crypto::cipher::{Cipher, CipherType, CipherResult};
+
+const BLOCK_SIZE: usize = 64; // Just for Salsa20 and Chacha20
+
+#[allow(dead_code)]
+#[link(name = "sodium")]
+extern {
+    fn crypto_stream_salsa20_xor_ic(c: *mut libc::c_uchar, m: *const libc::c_uchar,
+                                    mlen: libc::c_ulonglong, n: *const libc::c_uchar,
+                                    ic: libc::uint64_t, k: *const libc::c_uchar) -> libc::c_int;
+
+    fn crypto_stream_chacha20_xor_ic(c: *mut libc::c_uchar, m: *const libc::c_uchar,
+                                     mlen: libc::c_ulonglong, n: *const libc::c_uchar,
+                                     ic: libc::uint64_t, k: *const libc::c_uchar) -> libc::c_int;
+}
+
+pub struct SodiumCipher {
+    cipher_type: CipherType,
+    key: Vec<u8>,
+    iv: Vec<u8>,
+    counter: usize,
+    buf: Vec<u8>,
+}
+
+impl SodiumCipher {
+    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> SodiumCipher {
+        match t {
+            CipherType::Salsa20 | CipherType::ChaCha20 => (),
+            _ => panic!("Sodium does not support {:?} cipher", t),
+        }
+
+        SodiumCipher {
+            cipher_type: t,
+            key: key.to_vec(),
+            iv: iv.to_vec(),
+            counter: 0,
+            buf: Vec::new(),
+        }
+    }
+}
+
+impl Cipher for SodiumCipher {
+    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
+        let padding_len = self.counter % BLOCK_SIZE;
+        let mut pad;
+        let padded_data =
+            if padding_len == 0 {
+                data
+            } else {
+                pad = Some(repeat(0u8).take(padding_len).chain(data.iter().map(|&x| x)).collect::<Vec<u8>>());
+                pad.as_ref().unwrap().as_slice()
+            };
+
+        if self.buf.len() < padding_len + data.len() {
+            self.buf.resize(padding_len + data.len(), 0u8);
+        }
+
+        match self.cipher_type {
+            CipherType::ChaCha20 => unsafe {
+                crypto_stream_chacha20_xor_ic(self.buf.as_mut_ptr(), padded_data.as_ptr(),
+                                              (padding_len + data.len()) as libc::c_ulonglong,
+                                              self.iv.as_ptr(),
+                                              (self.counter / BLOCK_SIZE) as libc::uint64_t,
+                                              self.key.as_ptr());
+            },
+            CipherType::Salsa20 => unsafe {
+                crypto_stream_salsa20_xor_ic(self.buf.as_mut_ptr(), padded_data.as_ptr(),
+                                            (padding_len + data.len()) as libc::c_ulonglong,
+                                            self.iv.as_ptr(),
+                                            (self.counter / BLOCK_SIZE) as libc::uint64_t,
+                                            self.key.as_ptr());
+            },
+            _ => unreachable!(),
+        }
+
+        self.counter += data.len();
+
+        Ok(self.buf[padding_len..padding_len + data.len()].to_vec())
+    }
+
+    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(test)]
+mod test_sodium {
+    #[test]
+    fn test_sodium_cipher() {
+        let key = b"PassWORD";
+        let message = b"message";
+    }
+}

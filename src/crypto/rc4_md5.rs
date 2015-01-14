@@ -1,6 +1,6 @@
 // The MIT License (MIT)
 
-// Copyright (c) 2014 Y. T. CHUNG <zonyitoo@gmail.com>
+// Copyright (c) 2014 Y. T. Chung
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
@@ -19,23 +19,36 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! Crypto methods for shadowsocks
+use crypto::openssl::{OpenSSLCrypto, OpenSSLDigest};
+use crypto::cipher::{Cipher, CipherType, CipherResult};
+use crypto::digest::{Digest, DigestType};
+use crypto::CryptoMode;
 
-extern crate libc;
-extern crate test;
-
-pub mod cipher;
-pub mod openssl;
-pub mod digest;
-pub mod table;
-pub mod rc4_md5;
-#[cfg(feature = "enable-sodium")]
-pub mod sodium;
-
-pub mod util;
-
-#[derive(Clone, Copy)]
-pub enum CryptoMode {
-    Encrypt,
-    Decrypt
+pub struct Rc4Md5Cipher {
+    crypto: OpenSSLCrypto,
 }
+
+impl Rc4Md5Cipher {
+    pub fn new(key: &[u8], iv: &[u8], mode: CryptoMode) -> Rc4Md5Cipher {
+        let mut md5_digest = OpenSSLDigest::new(DigestType::Md5);
+        md5_digest.update(key);
+        md5_digest.update(iv);
+        let key = md5_digest.digest();
+
+        Rc4Md5Cipher {
+            crypto: OpenSSLCrypto::new(CipherType::Rc4, key.as_slice(), b"", mode)
+        }
+    }
+}
+
+impl Cipher for Rc4Md5Cipher {
+    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
+        self.crypto.update(data)
+    }
+
+    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
+        self.crypto.finalize()
+    }
+}
+
+unsafe impl Send for Rc4Md5Cipher {}

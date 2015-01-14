@@ -34,6 +34,7 @@ use relay::socks5::{Address, self};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
+use crypto::util::bytes_to_key;
 
 #[derive(Clone)]
 pub struct UdpRelayServer {
@@ -80,16 +81,17 @@ impl UdpRelayServer {
                                         remote_addr.write_to(&mut response_buf).unwrap();
                                         response_buf.write(data.as_slice()).unwrap();
 
+                                        let (key, mut iv) = bytes_to_key(method, password.as_bytes());
                                         let mut encryptor =
                                             cipher::with_type(method,
-                                                              password.as_slice().as_bytes(),
+                                                              key.as_slice(),
+                                                              iv.as_slice(),
                                                               CryptoMode::Encrypt);
-                                        let mut encrypted_data =
-                                            encryptor.update(response_buf.as_slice()).unwrap();
-                                        encrypted_data.push_all(encryptor.finalize().unwrap().as_slice());
+                                        iv.push_all(encryptor.update(response_buf.as_slice()).unwrap().as_slice());
+                                        iv.push_all(encryptor.finalize().unwrap().as_slice());
 
                                         captured_socket
-                                            .send_to(encrypted_data.as_slice(), client_addr.clone())
+                                            .send_to(iv.as_slice(), client_addr.clone())
                                             .unwrap();
                                     },
                                     None => {
@@ -104,11 +106,13 @@ impl UdpRelayServer {
 
                         // Maybe data from a relay client
                         // Decrypt it and see what's inside
+                        let (key, _) = bytes_to_key(method, password.as_bytes());
                         let mut decryptor =
                             cipher::with_type(method,
-                                              password.as_slice().as_bytes(),
+                                              key.as_slice(),
+                                              &data[0..method.block_size()],
                                               CryptoMode::Decrypt);
-                        let mut decrypted_data = decryptor.update(data.as_slice()).unwrap();
+                        let mut decrypted_data = decryptor.update(&data[method.block_size()..]).unwrap();
                         decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
                         let mut bufr = BufReader::new(decrypted_data.as_slice());
 

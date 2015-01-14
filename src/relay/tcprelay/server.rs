@@ -34,8 +34,9 @@ use relay::Relay;
 use relay::socks5::{Address, self};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
-use crypto::cipher;
+use crypto::cipher::{self, CipherType};
 use crypto::CryptoMode;
+use crypto::util::{self, bytes_to_key};
 
 macro_rules! try_result{
     ($res:expr) => ({
@@ -112,9 +113,12 @@ impl TcpRelayServer {
             let dnscache = dnscache_arc.clone();
 
             Thread::spawn(move || {
+                let (pwd, iv) = bytes_to_key(encrypt_method, password.as_bytes());
+                let remote_iv = try_result!(stream.read_exact(encrypt_method.block_size()));
                 let decryptor = cipher::with_type(encrypt_method,
-                                                      password.as_slice().as_bytes(),
-                                                      CryptoMode::Decrypt);
+                                                  pwd.as_slice(),
+                                                  remote_iv.as_slice(),
+                                                  CryptoMode::Decrypt);
 
                 let buffered_client_stream = BufferedStream::new(stream.clone());
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
@@ -195,9 +199,10 @@ impl TcpRelayServer {
                 // io::util::copy(&mut bufr, &mut remote_stream).unwrap();
 
                 let encryptor = cipher::with_type(encrypt_method,
-                                                      password.as_slice().as_bytes(),
-                                                      CryptoMode::Encrypt);
-
+                                                  pwd.as_slice(),
+                                                  iv.as_slice(),
+                                                  CryptoMode::Encrypt);
+                try_result!(stream.write(iv.as_slice()));
                 let mut buffered_remote_stream = BufferedStream::new(remote_stream.clone());
                 let mut encrypt_stream = EncryptedWriter::new(stream.clone(), encryptor);
                 // let mut remote_cipher = cipher.clone();

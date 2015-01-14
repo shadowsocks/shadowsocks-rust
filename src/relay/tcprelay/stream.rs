@@ -158,9 +158,9 @@ impl<W: Writer> Writer for EncryptedWriter<W> {
         }
     }
 
-    fn flush(&mut self) -> IoResult<()> {
-        self.finalize()
-    }
+    // fn flush(&mut self) -> IoResult<()> {
+    //     self.finalize()
+    // }
 }
 
 #[unsafe_destructor]

@@ -47,6 +47,7 @@ use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 use crypto::cipher;
 use crypto::cipher::CipherType;
 use crypto::CryptoMode;
+use crypto::util::{self, bytes_to_key};
 
 #[derive(Clone)]
 pub struct TcpRelayLocal {
@@ -163,7 +164,7 @@ impl TcpRelayLocal {
             socks5::Command::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let remote_stream = match TcpStream::connect(
+                let mut remote_stream = match TcpStream::connect(
                             format!("{}:{}", server_addr.ip, server_addr.port).as_slice()) {
                     Err(err) => {
                         match err.kind {
@@ -184,9 +185,12 @@ impl TcpRelayLocal {
 
                 let mut buffered_local_stream = BufferedStream::new(stream.clone());
 
+                let (pwd, iv) = bytes_to_key(encrypt_method, password.as_bytes());
                 let encryptor = cipher::with_type(encrypt_method,
-                                                  password.as_slice().as_bytes(),
+                                                  pwd.as_slice(),
+                                                  iv.as_slice(),
                                                   CryptoMode::Encrypt);
+                try_result!(remote_stream.write(iv.as_slice()));
                 let mut encrypt_stream = EncryptedWriter::new(remote_stream.clone(), encryptor);
 
                 {
@@ -197,12 +201,12 @@ impl TcpRelayLocal {
                         prefix: "Error occurs while writing header to local stream:");
                     try_result!(buffered_local_stream.flush());
                     try_result!(addr.write_to(&mut encrypt_stream));
-                    try_result!(encrypt_stream.flush());
+                    // try_result!(encrypt_stream.flush());
                 }
 
                 let addr_cloned = addr.clone();
                 Thread::spawn(move || {
-                    io::util::copy(&mut buffered_local_stream.into_inner(), &mut encrypt_stream)
+                    io::util::copy(&mut buffered_local_stream, &mut encrypt_stream)
                         .unwrap_or_else(|err| {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
@@ -217,10 +221,12 @@ impl TcpRelayLocal {
                         })
                 });
 
+                let remote_iv = try_result!(remote_stream.read_exact(encrypt_method.block_size()));
                 let decryptor = cipher::with_type(encrypt_method,
-                                                      password.as_slice().as_bytes(),
-                                                      CryptoMode::Decrypt);
-                let mut decrypt_stream = DecryptedReader::new(remote_stream.clone(), decryptor);
+                                                  pwd.as_slice(),
+                                                  remote_iv.as_slice(),
+                                                  CryptoMode::Decrypt);
+                let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
 
                 Thread::spawn(move || {
                     io::util::copy(&mut decrypt_stream, &mut stream)

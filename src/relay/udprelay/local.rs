@@ -65,6 +65,7 @@ use collect::LruCache;
 
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
+use crypto::util::bytes_to_key;
 use config::{Config, ServerConfig};
 use relay::Relay;
 use relay::socks5;
@@ -175,30 +176,35 @@ fn handle_request(mut socket: UdpSocket,
 
     client_map.lock().unwrap().insert(addr, from_addr);
 
+    let (key, mut iv) = bytes_to_key(config.method, config.password.as_bytes());
     let mut encryptor = cipher::with_type(config.method,
-                                          config.password.as_slice().as_bytes(),
+                                          key.as_slice(),
+                                          iv.as_slice(),
                                           CryptoMode::Encrypt);
 
-    let mut wbuf = MemWriter::new();
+    let mut wbuf = Vec::new();
     request.write_to(&mut wbuf).unwrap();
     io::util::copy(&mut bufr, &mut wbuf).unwrap();
 
-    let mut encrypted_data = encryptor.update(wbuf.into_inner().as_slice()).unwrap();
-    encrypted_data.push_all(encryptor.finalize().unwrap().as_slice());
+    iv.push_all(encryptor.update(wbuf.as_slice()).unwrap().as_slice());
+    iv.push_all(encryptor.finalize().unwrap().as_slice());
 
-    socket.send_to(encrypted_data.as_slice(), config.addr)
+    socket.send_to(iv.as_slice(), config.addr)
         .ok().expect("Error occurs while sending to remote");
 }
 
 fn handle_response(mut socket: UdpSocket,
-                   response_messge: &[u8],
+                   response_message: &[u8],
                    from_addr: SocketAddr,
                    config: &ServerConfig,
                    client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
+    let (key, _) = bytes_to_key(config.method, config.password.as_bytes());
+
     let mut decryptor = cipher::with_type(config.method,
-                                          config.password.as_slice().as_bytes(),
+                                          key.as_slice(),
+                                          &response_message[0..config.method.block_size()],
                                           CryptoMode::Decrypt);
-    let mut decrypted_data = decryptor.update(response_messge).unwrap();
+    let mut decrypted_data = decryptor.update(&response_message[config.method.block_size()..]).unwrap();
     decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
 
     let mut bufr = BufReader::new(decrypted_data.as_slice());
