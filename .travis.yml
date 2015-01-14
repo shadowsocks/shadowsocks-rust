@@ -6,7 +6,10 @@ before_install:
     - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.1.tar.gz -O libsodium.tar.gz
     - tar -xf libsodium.tar.gz
     - cd libsodium-1.0.1
-    - ./configure && make && sudo make install
+    - ./autogen.sh
+    - ./configure
+    - sudo make install
+    - sudo ldconfig
 
 script:
     - cargo build -v
