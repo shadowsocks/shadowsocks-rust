@@ -57,6 +57,7 @@
 use std::sync::{Arc, Mutex};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::SocketAddr;
+use std::io::net::addrinfo::get_host_addresses;
 use std::collections::HashMap;
 use std::io::{BufReader, MemWriter, self};
 use std::thread::Thread;
@@ -90,12 +91,26 @@ impl Relay for UdpRelayLocal {
 
         let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
-        let server_set = {
+        let (server_set, server_addr) = {
             let mut server_set = HashMap::new();
+            let mut server_addr = HashMap::new();
             for s in self.config.server.iter() {
-                server_set.insert(s.addr, s.clone());
+                let addrs = match get_host_addresses(s.addr.as_slice()) {
+                    Ok(addr) => addr,
+                    Err(..) => continue,
+                };
+
+                if !addrs.is_empty() {
+                    let addr = SocketAddr {
+                        ip: addrs.first().unwrap().clone(),
+                        port: s.port,
+                    };
+
+                    server_set.insert(addr, s.clone());
+                    server_addr.insert(s.addr.clone(), addr);
+                }
             }
-            server_set
+            (server_set, server_addr)
         };
 
         let client_map_arc = Arc::new(Mutex::new(
@@ -129,12 +144,19 @@ impl Relay for UdpRelayLocal {
                         None => {
                             let s = server_load_balancer.pick_server().clone();
 
-                            Thread::spawn(move ||
-                                handle_request(move_socket,
-                                              request_message.as_slice(),
-                                              source_addr,
-                                              &s,
-                                              client_map));
+                            match server_addr.get(&s.addr) {
+                                Some(saddr) => {
+                                    let saddr = saddr.clone();
+                                    Thread::spawn(move ||
+                                        handle_request(move_socket,
+                                                      request_message.as_slice(),
+                                                      source_addr,
+                                                      saddr,
+                                                      &s,
+                                                      client_map));
+                                },
+                                None => {}
+                            }
                         }
                     }
                 },
@@ -150,6 +172,7 @@ impl Relay for UdpRelayLocal {
 fn handle_request(mut socket: UdpSocket,
                   request_message: &[u8],
                   from_addr: SocketAddr,
+                  server_addr: SocketAddr,
                   config: &ServerConfig,
                   client_map: Arc<Mutex<LruCache<socks5::Address, SocketAddr>>>) {
     // According to RFC 1928
@@ -188,7 +211,7 @@ fn handle_request(mut socket: UdpSocket,
     iv.push_all(encryptor.update(wbuf.as_slice()).unwrap().as_slice());
     iv.push_all(encryptor.finalize().unwrap().as_slice());
 
-    socket.send_to(iv.as_slice(), config.addr)
+    socket.send_to(iv.as_slice(), server_addr)
         .ok().expect("Error occurs while sending to remote");
 }
 

@@ -88,12 +88,12 @@ impl TcpRelayServer {
     }
 
     fn accept_loop(s: ServerConfig) {
-        let mut acceptor = try_result!(TcpListener::bind(s.addr.to_string().as_slice()).listen(),
+        let mut acceptor = try_result!(TcpListener::bind((s.addr.as_slice(), s.port)).listen(),
                                        prefix: "Failed to bind: ");
 
         info!("Shadowsocks listening on {}", s.addr);
 
-        let dnscache_arc = Arc::new(CachedDns::new(s.dns_cache_capacity));
+        let dnscache_arc = Arc::new(CachedDns::with_capacity(s.dns_cache_capacity));
 
         let pwd = s.method.bytes_to_key(s.password.as_bytes());
         let timeout = s.timeout;
@@ -116,13 +116,6 @@ impl TcpRelayServer {
                 let buffered_client_stream = BufferedStream::new(stream.clone());
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
-                // let header = {
-                //     let mut buf = [0u8; 1024];
-                //     let header_len = try_result!(stream.read(&mut buf), prefix: "Error occurs while reading header: ");
-                //     cipher.decrypt(buf.slice_to(header_len))
-                // };
-
-                // let mut bufr = BufReader::new(header.as_slice());
                 let addr = try_result!(socks5::Address::read_from(&mut decrypt_stream),
                      prefix: "Error occurs while parsing request header, maybe wrong crypto method or password: "
                 );

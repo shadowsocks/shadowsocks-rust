@@ -69,7 +69,6 @@ use serialize::json;
 
 use std::io::{File, Read, Open};
 use std::io::net::ip::{Port, SocketAddr};
-use std::io::net::addrinfo::get_host_addresses;
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
@@ -82,7 +81,8 @@ pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 /// Configuration for a server
 #[derive(Clone, Show)]
 pub struct ServerConfig {
-    pub addr: SocketAddr,
+    pub addr: String,
+    pub port: Port,
     pub password: String,
     pub method: CipherType,
     pub timeout: Option<u64>,
@@ -144,15 +144,6 @@ impl Show for Error {
     }
 }
 
-// macro_rules! try_config (
-//     ($inp:expr, $errmsg:expr) => (
-//         match $inp {
-//             Some(s) => { s },
-//             None => { return Err(Error::new($errmsg)); },
-//         }
-//     );
-// );
-
 macro_rules! try_config(
     ($inp:expr, $kind:expr, $desc:expr) => (
         match $inp {
@@ -202,20 +193,13 @@ impl Config {
                                            ErrorKind::Malformed, "`address` should be a string");
 
                 let cfg = ServerConfig {
-                        addr: SocketAddr {
-                            ip: match get_host_addresses(addr_str).unwrap().first() {
-                            Some(ip) => *ip,
-                            None => return Err(Error::new(ErrorKind::Invalid,
-                                                         "unable to resolve server",
-                                                         Some(format!("{}", addr_str)))),
-                        },
-                        port: try_config!(
-                                    try_config!(server.find("port"),
-                                                ErrorKind::MissingField,
-                                                "need to specify a server port").as_u64(),
-                                    ErrorKind::Malformed,
-                                    "`port` should be an integer") as Port,
-                    },
+                    addr: addr_str.to_string(),
+                    port: try_config!(
+                                try_config!(server.find("port"),
+                                            ErrorKind::MissingField,
+                                            "need to specify a server port").as_u64(),
+                                ErrorKind::Malformed,
+                                "`port` should be an integer") as Port,
                     password: try_config!(
                                     try_config!(server.find("password"),
                                                 ErrorKind::MissingField,
@@ -263,20 +247,13 @@ impl Config {
                                        "`server` should be a string");
 
             let single_server = ServerConfig {
-                addr: SocketAddr {
-                    ip: match get_host_addresses(addr_str).unwrap().first() {
-                        Some(ip) => *ip,
-                        None => return Err(Error::new(ErrorKind::Invalid,
-                                                     "unable to resolve server",
-                                                     Some(format!("{}", addr_str)))),
-                    },
-                    port: try_config!(
-                                try_config!(o.get("port"),
-                                            ErrorKind::MissingField,
-                                            "need to specify a server port").as_u64(),
-                                ErrorKind::Malformed,
-                                "`port` should be an integer") as Port,
-                },
+                addr: addr_str.to_string(),
+                port: try_config!(
+                            try_config!(o.get("port"),
+                                        ErrorKind::MissingField,
+                                        "need to specify a server port").as_u64(),
+                            ErrorKind::Malformed,
+                            "`port` should be an integer") as Port,
                 password: try_config!(
                                 try_config!(o.get("password"),
                                             ErrorKind::MissingField,

@@ -27,6 +27,8 @@ use std::io::net::ip::IpAddr;
 
 use collect::LruCache;
 
+use config::DEFAULT_DNS_CACHE_CAPACITY;
+
 struct DnsLruCache {
     cache: LruCache<String, Vec<IpAddr>>,
     totally_matched: usize,
@@ -38,7 +40,17 @@ pub struct CachedDns {
 }
 
 impl CachedDns {
-    pub fn new(cache_capacity: usize) -> CachedDns {
+    pub fn new() -> CachedDns {
+        CachedDns {
+            lru_cache: Arc::new(Mutex::new(DnsLruCache {
+                cache: LruCache::new(DEFAULT_DNS_CACHE_CAPACITY),
+                totally_missed: 0,
+                totally_matched: 0,
+            })),
+        }
+    }
+
+    pub fn with_capacity(cache_capacity: usize) -> CachedDns {
         CachedDns {
             lru_cache: Arc::new(Mutex::new(DnsLruCache {
                 cache: LruCache::new(cache_capacity),

@@ -34,12 +34,10 @@ use crypto::rc4_md5;
 
 use crypto::digest::{self, DigestType};
 
-/// The trait for basic cipher methods
-// pub trait Cipher {
-//     fn encrypt(&mut self, data: &[u8]) -> Vec<u8>;
-//     fn decrypt(&mut self, data: &[u8]) -> Vec<u8>;
-// }
-
+/// Basic operation of Cipher, which is a Symmetric Cipher.
+///
+/// The `update` method could be called multiple times, and the `finalize` method will
+/// encrypt the last block
 pub trait Cipher {
     fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>>;
     fn finalize(&mut self) -> CipherResult<Vec<u8>>;
@@ -425,6 +423,7 @@ impl FromStr for CipherType {
     }
 }
 
+/// Generate a specific Cipher with key and initialize vector
 pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box<Cipher + Send> {
     match t {
         CipherType::Table => box table::TableCipher::new(key, mode) as Box<Cipher + Send>,

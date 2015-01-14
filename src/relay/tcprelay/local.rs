@@ -43,6 +43,7 @@ use relay::Relay;
 use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
+use relay::tcprelay::cached_dns::CachedDns;
 
 use crypto::cipher;
 use crypto::cipher::CipherType;
@@ -163,8 +164,7 @@ impl TcpRelayLocal {
             socks5::Command::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let mut remote_stream = match TcpStream::connect(
-                            format!("{}:{}", server_addr.ip, server_addr.port).as_slice()) {
+                let mut remote_stream = match TcpStream::connect((server_addr.ip, server_addr.port)) {
                     Err(err) => {
                         match err.kind {
                             ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
@@ -284,22 +284,43 @@ impl Relay for TcpRelayLocal {
 
         info!("Shadowsocks listening on {}", local_conf);
 
+        let cached_dns = CachedDns::new();
+
         for s in acceptor.incoming() {
             let stream = s.unwrap();
 
-            let (server_addr, password, encrypt_method) = {
+            let mut succeed = false;
+            for _ in range(0, server_load_balancer.total()) {
                 let ref s = server_load_balancer.pick_server();
-                (s.addr.clone(), s.password.clone(), s.method.clone())
-            };
+                let addrs = match cached_dns.resolve(s.addr.as_slice()) {
+                    Some(addr) => addr,
+                    None => continue,
+                };
 
-            let enable_udp = self.config.enable_udp;
-            let pwd = encrypt_method.bytes_to_key(password.as_bytes());
-            Thread::spawn(move ||
+                if addrs.is_empty() {
+                    continue;
+                }
+
+                let server_addr = SocketAddr {
+                    ip: addrs.first().unwrap().clone(),
+                    port: s.port,
+                };
+                let encrypt_method = s.method.clone();
+                let pwd = encrypt_method.bytes_to_key(s.password.as_bytes());
+                let enable_udp = self.config.enable_udp;
+
+                Thread::spawn(move ||
                 TcpRelayLocal::handle_client(stream,
                                              server_addr,
                                              pwd,
                                              encrypt_method,
                                              enable_udp));
+                succeed = true;
+                break;
+            }
+            if !succeed {
+                panic!("All proxy servers are failed!");
+            }
         }
     }
 }

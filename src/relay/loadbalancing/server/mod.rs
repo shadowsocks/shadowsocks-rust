@@ -27,4 +27,5 @@ pub mod roundrobin;
 
 pub trait LoadBalancer {
     fn pick_server<'a>(&'a mut self) -> &'a ServerConfig;
+    fn total(&self) -> usize;
 }

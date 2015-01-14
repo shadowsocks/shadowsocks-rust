@@ -36,8 +36,6 @@ extern crate log;
 use getopts::{optopt, optflag, getopts, usage};
 
 use std::os;
-use std::io::net::addrinfo::get_host_addresses;
-use std::io::net::ip::SocketAddr;
 
 use shadowsocks::config::{Config, ServerConfig, ClientConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -87,11 +85,8 @@ fn main() {
     if matches.opt_present("s") && matches.opt_present("p") && matches.opt_present("k") && matches.opt_present("m") {
         let addr_str = matches.opt_str("s").unwrap();
         let sc = ServerConfig {
-            addr: SocketAddr {
-                ip: get_host_addresses(addr_str.as_slice()).unwrap()
-                    .first().expect(format!("Unable to resolve {}", addr_str).as_slice()).clone(),
-                port: matches.opt_str("p").unwrap().as_slice().parse().expect("`port` should be an integer"),
-            },
+            addr: addr_str,
+            port: matches.opt_str("p").unwrap().as_slice().parse().expect("`port` should be an integer"),
             password: matches.opt_str("k").unwrap(),
             method: match matches.opt_str("m") {
                 Some(method_s) => {

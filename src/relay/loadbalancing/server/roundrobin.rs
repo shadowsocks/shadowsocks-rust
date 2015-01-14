@@ -48,4 +48,8 @@ impl LoadBalancer for RoundRobin {
             }
         }
     }
+
+    fn total(&self) -> usize {
+        self.server.len()
+    }
 }

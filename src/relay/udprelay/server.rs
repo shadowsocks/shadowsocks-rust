@@ -48,7 +48,8 @@ impl UdpRelayServer {
     }
 
     fn accept_loop(svr_config: ServerConfig) {
-        let mut socket = UdpSocket::bind(svr_config.addr).ok().expect("Unable to bind UDP socket");
+        let mut socket = UdpSocket::bind((svr_config.addr.as_slice(), svr_config.port))
+            .ok().expect("Unable to bind UDP socket");
         debug!("UDP server is binding {}", svr_config.addr);
 
         let client_map_arc = Arc::new(Mutex::new(

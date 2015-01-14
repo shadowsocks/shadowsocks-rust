@@ -43,10 +43,8 @@ use config::Config;
 ///
 /// let mut config = Config::new();
 /// config.server = vec![ServerConfig {
-///     addr: SocketAddr {
-///         ip: "127.0.0.1".parse().unwrap(),
-///         port: 8388,
-///     },
+///     addr: "127.0.0.1",
+///     port: 8388,
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
