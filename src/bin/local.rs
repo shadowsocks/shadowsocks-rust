@@ -72,9 +72,14 @@ fn main() {
 
     let mut config =
         if matches.opt_present("c") {
-            Config::load_from_file(matches.opt_str("c")
-                                            .unwrap().as_slice(),
-                                   config::ConfigType::Local).unwrap()
+            let cfile = matches.opt_str("c").unwrap();
+            match Config::load_from_file(cfile.as_slice(), config::ConfigType::Local) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    error!("{:?}", err);
+                    return;
+                }
+            }
         } else {
             Config::new()
         };
