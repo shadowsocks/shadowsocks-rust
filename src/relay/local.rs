@@ -47,7 +47,7 @@ use config::Config;
 ///     port: 1080
 /// });
 /// config.server = vec![ServerConfig {
-///     addr: "127.0.0.1",
+///     addr: "127.0.0.1".to_string(),
 ///     port: 8388,
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
