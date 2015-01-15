@@ -76,6 +76,7 @@ use std::fmt::{Show, Formatter, self};
 
 use crypto::cipher::CipherType;
 
+/// Default DNS cache capacity
 pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 
 /// Configuration for a server
@@ -89,6 +90,7 @@ pub struct ServerConfig {
     pub dns_cache_capacity: usize,
 }
 
+/// Listening address
 pub type ClientConfig = SocketAddr;
 
 #[derive(Clone, Copy)]
@@ -97,6 +99,7 @@ pub enum ConfigType {
     Server
 }
 
+/// Configuration
 #[derive(Clone, Show)]
 pub struct Config {
     pub server: Vec<ServerConfig>,
@@ -119,6 +122,7 @@ pub enum ErrorKind {
     IoError,
 }
 
+/// Configuration parsing error
 pub struct Error {
     pub kind: ErrorKind,
     pub desc: &'static str,

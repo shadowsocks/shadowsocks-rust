@@ -19,11 +19,14 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+//! Rc4Md5 cipher definition
+
 use crypto::openssl::{OpenSSLCrypto, OpenSSLDigest};
 use crypto::cipher::{Cipher, CipherType, CipherResult};
 use crypto::digest::{Digest, DigestType};
 use crypto::CryptoMode;
 
+/// Rc4Md5 Cipher
 pub struct Rc4Md5Cipher {
     crypto: OpenSSLCrypto,
 }
