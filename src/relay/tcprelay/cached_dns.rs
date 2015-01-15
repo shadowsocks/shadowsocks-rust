@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, TaskPool};
 use std::thread::Thread;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::io::net::addrinfo::get_host_addresses;
@@ -29,6 +29,8 @@ use collect::LruCache;
 
 use config::DEFAULT_DNS_CACHE_CAPACITY;
 
+const TASK_POOL_SIZE: usize = 4;
+
 struct DnsLruCache {
     cache: LruCache<String, Vec<IpAddr>>,
     totally_matched: usize,
@@ -37,6 +39,7 @@ struct DnsLruCache {
 
 pub struct CachedDns {
     lru_cache: Arc<Mutex<DnsLruCache>>,
+    pool: TaskPool,
 }
 
 impl CachedDns {
@@ -47,6 +50,7 @@ impl CachedDns {
                 totally_missed: 0,
                 totally_matched: 0,
             })),
+            pool: TaskPool::new(TASK_POOL_SIZE),
         }
     }
 
@@ -57,6 +61,7 @@ impl CachedDns {
                 totally_missed: 0,
                 totally_matched: 0,
             })),
+            pool: TaskPool::new(TASK_POOL_SIZE),
         }
     }
 
@@ -90,7 +95,7 @@ impl CachedDns {
 
         let cloned_mutex = self.lru_cache.clone();
         let cloned_addr = addrs.clone();
-        Thread::spawn(move || {
+        self.pool.execute(move || {
             let mut cache = cloned_mutex.lock().unwrap();
             cache.cache.insert(addr_string, cloned_addr);
         });
@@ -99,3 +104,4 @@ impl CachedDns {
 }
 
 unsafe impl Send for CachedDns {}
+unsafe impl Sync for CachedDns {}
