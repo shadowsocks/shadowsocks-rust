@@ -33,9 +33,11 @@ use std::io::{
     BrokenPipe,
     OtherIoError,
 };
-use std::io::net::ip::SocketAddr;
+use std::io::net::ip::{SocketAddr, IpAddr};
+use std::io::net::addrinfo::get_host_addresses;
 use std::io::{self, BufferedStream};
 use std::thread::Thread;
+use std::collections::BTreeMap;
 
 use config::Config;
 
@@ -43,7 +45,6 @@ use relay::Relay;
 use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
-use relay::tcprelay::cached_dns::CachedDns;
 
 use crypto::cipher;
 use crypto::cipher::CipherType;
@@ -284,33 +285,43 @@ impl Relay for TcpRelayLocal {
 
         info!("Shadowsocks listening on {}", local_conf);
 
-        let cached_dns = CachedDns::new();
+        let mut cached_proxy: BTreeMap<String, Vec<IpAddr>> = BTreeMap::new();
 
         for s in acceptor.incoming() {
             let stream = s.unwrap();
 
             let mut succeed = false;
             for _ in range(0, server_load_balancer.total()) {
-                let ref s = server_load_balancer.pick_server();
-                let addrs = match cached_dns.resolve(s.addr.as_slice()) {
-                    Some(addr) => addr,
-                    None => {
-                        error!("cannot resolve proxy server `{}`", s.addr);
-                        continue;
+                let ref server_cfg = server_load_balancer.pick_server();
+                let addrs = {
+                    match cached_proxy.get(server_cfg.addr.as_slice()).map(|x| x.clone()) {
+                        Some(addr) => addr,
+                        None => {
+                            match get_host_addresses(server_cfg.addr.as_slice()) {
+                                Ok(addr) => {
+                                    if addr.is_empty() {
+                                        error!("cannot resolve proxy server `{}`", server_cfg.addr);
+                                        continue;
+                                    }
+                                    cached_proxy.insert(server_cfg.addr.clone(), addr.clone());
+                                    addr
+                                },
+                                Err(err) => {
+                                    error!("cannot resolve proxy server `{}`: {}", server_cfg.addr, err);
+                                    continue;
+                                }
+                            }
+                        }
                     }
                 };
 
-                if addrs.is_empty() {
-                    error!("cannot resolve proxy server `{}`", s.addr);
-                    continue;
-                }
-
                 let server_addr = SocketAddr {
                     ip: addrs.first().unwrap().clone(),
-                    port: s.port,
+                    port: server_cfg.port,
                 };
-                let encrypt_method = s.method.clone();
-                let pwd = encrypt_method.bytes_to_key(s.password.as_bytes());
+                debug!("Using proxy `{}:{}` (`{}`)", server_cfg.addr, server_cfg.port, server_addr);
+                let encrypt_method = server_cfg.method.clone();
+                let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
 
                 Thread::spawn(move ||
