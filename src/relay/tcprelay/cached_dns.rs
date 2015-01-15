@@ -20,7 +20,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::sync::{Arc, Mutex, TaskPool};
-use std::thread::Thread;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::io::net::addrinfo::get_host_addresses;
 use std::io::net::ip::IpAddr;
