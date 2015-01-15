@@ -46,7 +46,7 @@ impl Show for VersionCode {
     }
 }
 
-pub const VERSION: VersionCode = VersionCode(0, 9, 3);
+pub const VERSION: VersionCode = VersionCode(0, 9, 7);
 
 pub mod config;
 pub mod relay;
