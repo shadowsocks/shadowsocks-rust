@@ -105,6 +105,7 @@ pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
+    pub timeout: Option<u64>,
 }
 
 impl Default for Config {
@@ -169,11 +170,18 @@ impl Config {
             server: Vec::new(),
             local: None,
             enable_udp: false,
+            timeout: None,
         }
     }
 
     fn parse_json_object(o: &json::Object, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
+
+        config.timeout = match o.get(&"timeout".to_string()) {
+            Some(t_str) => Some(try_config!(t_str.as_u64(),
+                                       ErrorKind::Malformed, "`timeout` should be an integer") * 1000),
+            None => None,
+        };
 
         if o.contains_key(&"servers".to_string()) {
             let server_list =
@@ -222,7 +230,7 @@ impl Config {
                                                ErrorKind::Malformed,
                                                "`dns_cache_capacity` should be an integer") as usize,
                         None => DEFAULT_DNS_CACHE_CAPACITY,
-                    },
+                    }
                 };
 
                 config.server.push(cfg);

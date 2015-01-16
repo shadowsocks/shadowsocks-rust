@@ -201,13 +201,15 @@ impl TcpRelayLocal {
                         prefix: "Error occurs while writing header to local stream:");
                     try_result!(buffered_local_stream.flush());
                     try_result!(addr.write_to(&mut encrypt_stream));
-                    // try_result!(encrypt_stream.flush());
                 }
 
                 let addr_cloned = addr.clone();
+                let mut remote_stream_cloned = remote_stream.clone();
+                let mut local_stream_cloned = stream.clone();
                 Thread::spawn(move || {
-                    io::util::copy(&mut buffered_local_stream, &mut encrypt_stream)
-                        .unwrap_or_else(|err| {
+                    match io::util::copy(&mut buffered_local_stream, &mut encrypt_stream) {
+                        Ok(..) => {},
+                        Err(err) => {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
                                     debug!("{} relay from local to remote stream: {}", addr_cloned, err)
@@ -216,9 +218,10 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            // remote_stream.close_write().or(Ok(())).unwrap();
-                            // stream.close_read().or(Ok(())).unwrap();
-                        })
+                            remote_stream_cloned.close_write().or(Ok(())).unwrap();
+                            local_stream_cloned.close_read().or(Ok(())).unwrap();
+                        }
+                    }
                 });
 
                 let remote_iv = try_result!(remote_stream.read_exact(encrypt_method.block_size()));
@@ -226,11 +229,10 @@ impl TcpRelayLocal {
                                                   password.as_slice(),
                                                   remote_iv.as_slice(),
                                                   CryptoMode::Decrypt);
-                let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
-
+                let mut decrypt_stream = DecryptedReader::new(remote_stream.clone(), decryptor);
                 Thread::spawn(move || {
-                    io::util::copy(&mut decrypt_stream, &mut stream)
-                        .unwrap_or_else(|err| {
+                    match io::util::copy(&mut decrypt_stream, &mut stream) {
+                        Err(err) => {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
                                     debug!("{} relay from local to remote stream: {}", addr, err)
@@ -239,12 +241,12 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr, err)
                                 }
                             }
-                            // remote_stream.close_write().or(Ok(())).unwrap();
-                            // stream.close_read().or(Ok(())).unwrap();
-                        })
+                            remote_stream.close_write().or(Ok(())).unwrap();
+                            stream.close_read().or(Ok(())).unwrap();
+                        },
+                        Ok(..) => {},
+                    }
                 });
-
-
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
@@ -273,7 +275,7 @@ impl Relay for TcpRelayLocal {
     fn run(&self) {
         let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
-        let local_conf = self.config.local.unwrap();
+        let local_conf = self.config.local.expect("need local configuration");
 
         let mut acceptor = match TcpListener::bind(
                 format!("{}:{}", local_conf.ip, local_conf.port).as_slice()).listen() {
@@ -288,7 +290,8 @@ impl Relay for TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, Vec<IpAddr>> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let stream = s.unwrap();
+            let mut stream = s.unwrap();
+            stream.set_timeout(self.config.timeout);
 
             let mut succeed = false;
             for _ in range(0, server_load_balancer.total()) {
