@@ -216,21 +216,6 @@ impl Clone for OpenSSLDigest {
             digest_len: self.digest_len,
         }
     }
-
-    fn clone_from(&mut self, source: &OpenSSLDigest) {
-        self.md_ctx = unsafe {
-            let md_ctx = ffi::EVP_MD_CTX_create();
-            assert!(!md_ctx.is_null());
-            if ffi::EVP_MD_CTX_copy_ex(md_ctx, source.md_ctx) != 1 as libc::c_int {
-                ffi::EVP_MD_CTX_destroy(md_ctx);
-                panic!("Failed to call EVP_MD_CTX_copy_ex");
-            }
-            ffi::EVP_MD_CTX_cleanup(self.md_ctx);
-            ffi::EVP_MD_CTX_destroy(self.md_ctx);
-            md_ctx
-        };
-        self.digest_len = source.digest_len;
-    }
 }
 
 #[unsafe_destructor]
@@ -402,7 +387,10 @@ impl Clone for OpenSSLCrypto {
     fn clone(&self) -> OpenSSLCrypto {
         let ctx = unsafe {
             let ctx = ffi::EVP_CIPHER_CTX_new();
-            assert_eq!(ffi::EVP_CIPHER_CTX_copy(ctx, self.evp_ctx), 1);
+            if ffi::EVP_CIPHER_CTX_copy(ctx, self.evp_ctx) != 1 {
+                ffi::EVP_CIPHER_CTX_free(ctx);
+                panic!("Failed to call EVP_CIPHER_CTX_copy");
+            }
             ctx
         };
 
