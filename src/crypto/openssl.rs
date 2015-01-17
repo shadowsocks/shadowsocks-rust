@@ -25,7 +25,7 @@
 
 extern crate libc;
 
-use crypto::cipher::{Cipher, CipherResult};
+use crypto::cipher::{Cipher, CipherType, CipherResult};
 use crypto::cipher;
 
 use crypto::digest::Digest;
@@ -34,21 +34,20 @@ use crypto::CryptoMode;
 
 use std::ptr;
 use std::clone::Clone;
-use std::mem::swap;
 
 mod ffi {
     extern crate libc;
 
     #[allow(non_camel_case_types)]
-    pub type EVP_CIPHER_CTX = *const libc::c_void;
+    pub type EVP_CIPHER_CTX = libc::c_void;
     #[allow(non_camel_case_types)]
-    pub type EVP_CIPHER = *const libc::c_void;
+    pub type EVP_CIPHER = libc::c_void;
     #[allow(non_camel_case_types)]
-    pub type EVP_MD_CTX = *mut libc::c_void;
+    pub type EVP_MD_CTX = libc::c_void;
     #[allow(non_camel_case_types)]
-    pub type EVP_MD = *const libc::c_void;
+    pub type EVP_MD = libc::c_void;
     #[allow(non_camel_case_types)]
-    pub type ENGINE = *const libc::c_void;
+    pub type ENGINE = libc::c_void;
 
     pub const CRYPTO_MODE_ENCRYPT: libc::c_int = 1;
     pub const CRYPTO_MODE_DECRYPT: libc::c_int = 0;
@@ -56,95 +55,97 @@ mod ffi {
     #[allow(dead_code)]
     #[link(name = "crypto")]
     extern {
-        pub fn EVP_CIPHER_CTX_new() -> EVP_CIPHER_CTX;
-        pub fn EVP_CIPHER_CTX_cleanup(ctx: EVP_CIPHER_CTX);
-        pub fn EVP_CIPHER_CTX_free(ctx: EVP_CIPHER_CTX);
+        pub fn EVP_CIPHER_CTX_new() -> *mut EVP_CIPHER_CTX;
+        pub fn EVP_CIPHER_CTX_cleanup(ctx: *mut EVP_CIPHER_CTX);
+        pub fn EVP_CIPHER_CTX_free(ctx: *mut EVP_CIPHER_CTX);
+        pub fn EVP_CIPHER_CTX_copy(out: *mut EVP_CIPHER_CTX, ctx_in: *const EVP_CIPHER_CTX) -> libc::c_int;
 
-        pub fn EVP_CipherInit_ex(ctx: EVP_CIPHER_CTX, evp: EVP_CIPHER, engine: ENGINE,
+        pub fn EVP_CipherInit_ex(ctx: *mut EVP_CIPHER_CTX, evp: *const EVP_CIPHER, engine: *mut ENGINE,
                                  key: *const libc::c_uchar, iv: *const libc::c_uchar, mode: libc::c_int)
             -> libc::c_int;
-        pub fn EVP_CipherUpdate(ctx: EVP_CIPHER_CTX,
+        pub fn EVP_CipherUpdate(ctx: *mut EVP_CIPHER_CTX,
                                 outbuf: *mut libc::c_uchar, outlen: *mut libc::c_int,
                                 inbuf: *const libc::c_uchar, inlen: libc::c_int) -> libc::c_int;
-        pub fn EVP_CipherFinal(ctx: EVP_CIPHER_CTX, res: *mut libc::c_uchar, len: *mut libc::c_int) -> libc::c_int;
+        pub fn EVP_CipherFinal(ctx: *mut EVP_CIPHER_CTX, res: *mut libc::c_uchar, len: *mut libc::c_int)
+            -> libc::c_int;
 
         // Ciphers
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_128_cfb1() -> EVP_CIPHER;
+        pub fn EVP_aes_128_cfb1() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_128_cfb8() -> EVP_CIPHER;
+        pub fn EVP_aes_128_cfb8() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_128_cfb128() -> EVP_CIPHER;
+        pub fn EVP_aes_128_cfb128() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_192_cfb1() -> EVP_CIPHER;
+        pub fn EVP_aes_192_cfb1() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_192_cfb8() -> EVP_CIPHER;
+        pub fn EVP_aes_192_cfb8() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_192_cfb128() -> EVP_CIPHER;
+        pub fn EVP_aes_192_cfb128() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_256_cfb1() -> EVP_CIPHER;
+        pub fn EVP_aes_256_cfb1() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_256_cfb8() -> EVP_CIPHER;
+        pub fn EVP_aes_256_cfb8() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-cfb")]
-        pub fn EVP_aes_256_cfb128() -> EVP_CIPHER;
+        pub fn EVP_aes_256_cfb128() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-aes-ofb")]
-        pub fn EVP_aes_128_ofb() -> EVP_CIPHER;
+        pub fn EVP_aes_128_ofb() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-ofb")]
-        pub fn EVP_aes_192_ofb() -> EVP_CIPHER;
+        pub fn EVP_aes_192_ofb() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-ofb")]
-        pub fn EVP_aes_256_ofb() -> EVP_CIPHER;
+        pub fn EVP_aes_256_ofb() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-aes-ctr")]
-        pub fn EVP_aes_128_ctr() -> EVP_CIPHER;
+        pub fn EVP_aes_128_ctr() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-ctr")]
-        pub fn EVP_aes_192_ctr() -> EVP_CIPHER;
+        pub fn EVP_aes_192_ctr() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-aes-ctr")]
-        pub fn EVP_aes_256_ctr() -> EVP_CIPHER;
+        pub fn EVP_aes_256_ctr() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-bf-cfb")]
-        pub fn EVP_bf_cfb64() -> EVP_CIPHER;
+        pub fn EVP_bf_cfb64() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-camellia-cfb")]
-        pub fn EVP_camellia_128_cfb128() -> EVP_CIPHER;
+        pub fn EVP_camellia_128_cfb128() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-camellia-cfb")]
-        pub fn EVP_camellia_192_cfb128() -> EVP_CIPHER;
+        pub fn EVP_camellia_192_cfb128() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-camellia-cfb")]
-        pub fn EVP_camellia_256_cfb128() -> EVP_CIPHER;
+        pub fn EVP_camellia_256_cfb128() -> *const EVP_CIPHER;
 
         #[cfg(feature = "cipher-cast5-cfb")]
-        pub fn EVP_cast5_cfb64() -> EVP_CIPHER;
+        pub fn EVP_cast5_cfb64() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-des-cfb")]
-        pub fn EVP_des_cfb64() -> EVP_CIPHER;
+        pub fn EVP_des_cfb64() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-idea-cfb")]
-        pub fn EVP_idea_cfb64() -> EVP_CIPHER;
+        pub fn EVP_idea_cfb64() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-rc2-cfb")]
-        pub fn EVP_rc2_cfb64() -> EVP_CIPHER;
+        pub fn EVP_rc2_cfb64() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-seed-cfb")]
-        pub fn EVP_seed_cfb128() -> EVP_CIPHER;
+        pub fn EVP_seed_cfb128() -> *const EVP_CIPHER;
         #[cfg(feature = "cipher-rc4")]
-        pub fn EVP_rc4() -> EVP_CIPHER;
+        pub fn EVP_rc4() -> *const EVP_CIPHER;
 
         // MD
-        pub fn EVP_MD_CTX_create() -> EVP_MD_CTX;
-        pub fn EVP_MD_CTX_init(ctx: EVP_MD_CTX);
-        pub fn EVP_MD_CTX_cleanup(ctx: EVP_MD_CTX);
-        pub fn EVP_MD_CTX_destroy(ctx: EVP_MD_CTX);
-        pub fn EVP_MD_CTX_copy_ex(out: EVP_MD_CTX, ctx_in: EVP_MD_CTX) -> libc::c_int;
-        pub fn EVP_DigestInit_ex(ctx: EVP_MD_CTX, md_type: EVP_MD, engine: ENGINE) -> libc::c_int;
-        pub fn EVP_DigestUpdate(ctx: EVP_MD_CTX, d: *const libc::c_void, cnt: libc::size_t) -> libc::c_int;
-        pub fn EVP_DigestFinal_ex(ctx: EVP_MD_CTX, md: *mut libc::c_uchar, s: *mut libc::size_t);
+        pub fn EVP_MD_CTX_create() -> *mut EVP_MD_CTX;
+        pub fn EVP_MD_CTX_init(ctx: *mut EVP_MD_CTX);
+        pub fn EVP_MD_CTX_cleanup(ctx: *mut EVP_MD_CTX);
+        pub fn EVP_MD_CTX_destroy(ctx: *mut EVP_MD_CTX);
+        pub fn EVP_MD_CTX_copy_ex(out: *mut EVP_MD_CTX, ctx_in: *const EVP_MD_CTX) -> libc::c_int;
+        pub fn EVP_DigestInit_ex(ctx: *mut EVP_MD_CTX, md_type: *const EVP_MD, engine: *mut ENGINE) -> libc::c_int;
+        pub fn EVP_DigestUpdate(ctx: *const EVP_MD_CTX, d: *const libc::c_void, cnt: libc::size_t) -> libc::c_int;
+        pub fn EVP_DigestFinal_ex(ctx: *const EVP_MD_CTX, md: *mut libc::c_uchar, s: *mut libc::size_t);
 
-        pub fn EVP_md5() -> EVP_MD;
-        pub fn EVP_sha() -> EVP_MD;
-        pub fn EVP_sha1() -> EVP_MD;
+        pub fn EVP_md5() -> *const EVP_MD;
+        pub fn EVP_sha() -> *const EVP_MD;
+        pub fn EVP_sha1() -> *const EVP_MD;
     }
 }
 
 pub struct OpenSSLDigest {
-    md_ctx: ffi::EVP_MD_CTX,
+    md_ctx: *mut ffi::EVP_MD_CTX,
     digest_len: usize,
 }
 
@@ -159,7 +160,7 @@ impl OpenSSLDigest {
 
         let md = OpenSSLDigest::get_md(t);
         unsafe {
-            ffi::EVP_DigestInit_ex(ctx, md, ptr::null());
+            ffi::EVP_DigestInit_ex(ctx, md, ptr::null_mut());
         }
 
         OpenSSLDigest {
@@ -168,7 +169,7 @@ impl OpenSSLDigest {
         }
     }
 
-    fn get_md(t: digest::DigestType) -> ffi::EVP_MD {
+    fn get_md(t: digest::DigestType) -> *const ffi::EVP_MD {
         unsafe {
             match t {
                 digest::DigestType::Md5 => ffi::EVP_md5(),
@@ -245,11 +246,8 @@ impl Drop for OpenSSLDigest {
 unsafe impl Send for OpenSSLDigest {}
 
 pub struct OpenSSLCrypto {
-    evp_ctx: ffi::EVP_CIPHER_CTX,
-    cipher_type: cipher::CipherType,
-    key: Vec<u8>,
-    iv: Vec<u8>,
-    mode: CryptoMode,
+    evp_ctx: *mut ffi::EVP_CIPHER_CTX,
+    cipher_type: CipherType,
 }
 
 impl OpenSSLCrypto {
@@ -257,9 +255,8 @@ impl OpenSSLCrypto {
         let ctx = unsafe {
             let cipher = OpenSSLCrypto::get_cipher(cipher_type);
 
-            // assert!(iv.len() >= block_size);
-
-            let evp_ctx = ffi::EVP_CIPHER_CTX_new();
+            debug_assert!(iv.len() >= cipher_type.block_size());
+            let mut evp_ctx = ffi::EVP_CIPHER_CTX_new();
             assert!(!evp_ctx.is_null());
 
             let op = match mode {
@@ -267,8 +264,8 @@ impl OpenSSLCrypto {
                 CryptoMode::Decrypt => ffi::CRYPTO_MODE_DECRYPT,
             };
 
-            if ffi::EVP_CipherInit_ex(evp_ctx, cipher, ptr::null(), key.as_ptr(),
-                              iv.as_ptr(), op) != 1 as libc::c_int {
+            if ffi::EVP_CipherInit_ex(evp_ctx, cipher, ptr::null_mut(), key.as_ptr(),
+                                      iv.as_ptr(), op) != 1 as libc::c_int {
                 ffi::EVP_CIPHER_CTX_free(evp_ctx);
                 panic!("EVP_CipherInit error");
             }
@@ -279,13 +276,10 @@ impl OpenSSLCrypto {
         OpenSSLCrypto {
             evp_ctx: ctx,
             cipher_type: cipher_type,
-            key: key.to_vec(),
-            iv: iv.to_vec(),
-            mode: mode,
         }
     }
 
-    fn get_cipher(cipher_type: cipher::CipherType) -> ffi::EVP_CIPHER {
+    fn get_cipher(cipher_type: cipher::CipherType) -> *const ffi::EVP_CIPHER {
         unsafe {
             match cipher_type {
                 #[cfg(feature = "cipher-aes-cfb")]
@@ -406,19 +400,16 @@ impl OpenSSLCrypto {
 
 impl Clone for OpenSSLCrypto {
     fn clone(&self) -> OpenSSLCrypto {
-        OpenSSLCrypto::new(self.cipher_type.clone(), self.key.as_slice(), self.iv.as_slice(), self.mode.clone())
-    }
+        let ctx = unsafe {
+            let ctx = ffi::EVP_CIPHER_CTX_new();
+            assert_eq!(ffi::EVP_CIPHER_CTX_copy(ctx, self.evp_ctx), 1);
+            ctx
+        };
 
-    fn clone_from(&mut self, source: &OpenSSLCrypto) {
-        let mut new_cipher = OpenSSLCrypto::new(source.cipher_type.clone(),
-                                  source.key.as_slice(),
-                                  source.iv.as_slice(),
-                                  source.mode.clone());
-        swap(&mut self.evp_ctx, &mut new_cipher.evp_ctx);
-        swap(&mut self.cipher_type, &mut new_cipher.cipher_type);
-        swap(&mut self.key, &mut new_cipher.key);
-        swap(&mut self.iv, &mut new_cipher.iv);
-        swap(&mut self.mode, &mut new_cipher.mode);
+        OpenSSLCrypto {
+            evp_ctx: ctx,
+            cipher_type: self.cipher_type,
+        }
     }
 }
 
@@ -460,105 +451,23 @@ impl Drop for OpenSSLCrypto {
 /// ```
 #[derive(Clone)]
 pub struct OpenSSLCipher {
-    worker: OpenSSLCrypto,//Option<OpenSSLCrypto>,
-    // cipher_type: cipher::CipherType,
-    // mode: CryptoMode,
-    // key: Vec<u8>,
-    // iv_cache: Vec<u8>
+    worker: OpenSSLCrypto,
 }
 
 impl OpenSSLCipher {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
         OpenSSLCipher {
             worker: OpenSSLCrypto::new(cipher_type, key.as_slice(), iv.as_slice(), mode),
-            // cipher_type: cipher_type,
-            // mode: mode,
-            // key: key.to_vec(),
-            // iv_cache: Vec::new(),
         }
     }
 }
 
 impl Cipher for OpenSSLCipher {
     fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
-        // match self.worker {
-        //     Some(ref worker) => worker.update(data),
-        //     None => {
-        //         match self.mode {
-        //             CryptoMode::Encrypt => {
-        //                 let (key, mut iv) = {
-        //                     let (key, iv) = bytes_to_key(self.cipher_type,
-        //                                                  self.key.as_slice());
-
-        //                     match self.cipher_type {
-        //                         #[cfg(feature = "cipher-rc4")]
-        //                         cipher::CipherType::Rc4Md5 => {
-        //                             let mut md5_digest = OpenSSLDigest::new(digest::DigestType::Md5);
-        //                             md5_digest.update(key.as_slice());
-        //                             md5_digest.update(iv.as_slice());
-        //                             (md5_digest.digest(), iv)
-        //                         },
-        //                         _ => {
-        //                             (key, iv)
-        //                         }
-        //                     }
-        //                 };
-
-        //                 let worker = OpenSSLCrypto::new(self.cipher_type,
-        //                                                 key.as_slice(),
-        //                                                 iv.as_slice(),
-        //                                                 self.mode);
-        //                 let encrypted_data = try!(worker.update(data));
-        //                 iv.push_all(encrypted_data.as_slice());
-
-        //                 self.worker = Some(worker);
-
-        //                 Ok(iv)
-        //             },
-        //             CryptoMode::Decrypt => {
-        //                 let required_iv_len = self.cipher_type.block_size() - self.iv_cache.len();
-        //                 if required_iv_len <= data.len() {
-        //                     let (remain_iv, realdata) = data.split_at(required_iv_len);
-        //                     self.iv_cache.push_all(remain_iv);
-
-        //                     let (pad_key, _) = bytes_to_key(self.cipher_type, self.key.as_slice());
-
-        //                     let key = match self.cipher_type {
-        //                         #[cfg(feature = "cipher-rc4")]
-        //                         cipher::CipherType::Rc4Md5 => {
-        //                             let mut md5_digest = OpenSSLDigest::new(digest::DigestType::Md5);
-        //                             md5_digest.update(pad_key.as_slice());
-        //                             md5_digest.update(self.iv_cache.as_slice());
-        //                             md5_digest.digest()
-        //                         },
-        //                         _ => {
-        //                             pad_key
-        //                         }
-        //                     };
-
-        //                     self.worker = Some(OpenSSLCrypto::new(self.cipher_type,
-        //                                                           key.as_slice(),
-        //                                                           self.iv_cache.as_slice(),
-        //                                                           self.mode));
-        //                     self.iv_cache.clear();
-        //                     self.worker.as_ref().unwrap().update(realdata)
-        //                 } else {
-        //                     self.iv_cache.push_all(data);
-
-        //                     Ok(Vec::new())
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
         self.worker.update(data)
     }
 
     fn finalize(&mut self) -> CipherResult<Vec<u8>> {
-        // match self.worker {
-        //     Some(ref worker) => worker.finalize(),
-        //     None => Ok(Vec::new())
-        // }
         self.worker.finalize()
     }
 }
