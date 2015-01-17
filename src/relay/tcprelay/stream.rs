@@ -45,6 +45,28 @@ impl<R: Reader> DecryptedReader<R> {
             sent_final: false,
         }
     }
+
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
+
+    /// Gets a mutable reference to the underlying reader.
+    ///
+    /// # Warning
+    ///
+    /// It is inadvisable to read directly from or write directly to the
+    /// underlying reader.
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
+    /// Unwraps this `DecryptedReader`, returning the underlying reader.
+    ///
+    /// The internal buffer is flushed before returning the reader. Any leftover
+    /// data in the read buffer is lost.
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
 }
 
 impl<R: Reader> Buffer for DecryptedReader<R> {
@@ -139,6 +161,20 @@ impl<W: Writer> EncryptedWriter<W> {
                 })
             }
         }
+    }
+
+    pub fn get_ref(&self) -> &W {
+        &self.writer
+    }
+
+    /// Gets a mutable reference to the underlying writer.
+    ///
+    /// # Warning
+    ///
+    /// It is inadvisable to read directly from or write directly to the
+    /// underlying writer.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.writer
     }
 }
 

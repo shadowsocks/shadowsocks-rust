@@ -121,7 +121,7 @@ impl TcpRelayServer {
                 );
 
                 info!("Connecting to {}", addr);
-                let remote_stream = match addr {
+                let mut remote_stream = match addr {
                     Address::SocketAddress(ip, port) => {
                         try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
                                 prefix: format!("Unable to connect {}:", addr)
@@ -157,17 +157,15 @@ impl TcpRelayServer {
                             panic!("Unable to connect {}", addr);
                         };
                         connector()
-
-                        // TcpStream::connect(domainaddr.domain_name.as_slice(), domainaddr.port)
-                        //     .ok().expect(format!("Unable to connect {}", domainaddr).as_slice())
                     }
                 };
 
                 let mut remote_stream_cloned = remote_stream.clone();
                 let addr_cloned = addr.clone();
                 Thread::spawn(move || {
-                    io::util::copy(&mut decrypt_stream, &mut remote_stream_cloned)
-                        .unwrap_or_else(|err| {
+                    match io::util::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
+                        Ok(..) => {},
+                        Err(err) => {
                             match err.kind {
                                 EndOfFile | BrokenPipe => {
                                     debug!("{} relay from local to remote stream: {}", addr_cloned, err)
@@ -176,13 +174,11 @@ impl TcpRelayServer {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            // remote_stream.close_write().or(Ok(())).unwrap();
-                            // stream.close_read().or(Ok(())).unwrap();
-                        })
+                            remote_stream_cloned.close_write().or(Ok(())).unwrap();
+                            decrypt_stream.get_mut().get_mut().close_read().or(Ok(())).unwrap();
+                        }
+                    }
                 });
-
-                // Fixed issue #3
-                // io::util::copy(&mut bufr, &mut remote_stream).unwrap();
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
@@ -192,25 +188,21 @@ impl TcpRelayServer {
                 try_result!(stream.write(iv.as_slice()));
                 let mut buffered_remote_stream = BufferedStream::new(remote_stream.clone());
                 let mut encrypt_stream = EncryptedWriter::new(stream.clone(), encryptor);
-                // let mut remote_cipher = cipher.clone();
-                // let remote_addr_clone = addr.clone();
-                Thread::spawn(move || {
-                    io::util::copy(&mut buffered_remote_stream, &mut encrypt_stream)
-                        .unwrap_or_else(|err| {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from remote to local stream: {}", addr, err)
-                                },
-                                _ => {
-                                    error!("{} relay from remote to local stream: {}", addr, err)
-                                }
+                match io::util::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
+                    Ok(..) => {},
+                    Err(err) => {
+                        match err.kind {
+                            EndOfFile | BrokenPipe => {
+                                debug!("{} relay from remote to local stream: {}", addr, err)
+                            },
+                            _ => {
+                                error!("{} relay from remote to local stream: {}", addr, err)
                             }
-                            // stream.close_write().or(Ok(())).unwrap();
-                            // remote_stream.close_read().or(Ok(())).unwrap();
-                        })
-                });
-
-
+                        }
+                        encrypt_stream.get_mut().close_write().or(Ok(())).unwrap();
+                        buffered_remote_stream.get_mut().close_read().or(Ok(())).unwrap();
+                    }
+                }
             });
         }
     }

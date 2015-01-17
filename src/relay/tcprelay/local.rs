@@ -230,23 +230,21 @@ impl TcpRelayLocal {
                                                   remote_iv.as_slice(),
                                                   CryptoMode::Decrypt);
                 let mut decrypt_stream = DecryptedReader::new(remote_stream.clone(), decryptor);
-                Thread::spawn(move || {
-                    match io::util::copy(&mut decrypt_stream, &mut stream) {
-                        Err(err) => {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr, err)
-                                }
+                match io::util::copy(&mut decrypt_stream, &mut stream) {
+                    Err(err) => {
+                        match err.kind {
+                            EndOfFile | BrokenPipe => {
+                                debug!("{} relay from local to remote stream: {}", addr, err)
+                            },
+                            _ => {
+                                error!("{} relay from local to remote stream: {}", addr, err)
                             }
-                            remote_stream.close_write().or(Ok(())).unwrap();
-                            stream.close_read().or(Ok(())).unwrap();
-                        },
-                        Ok(..) => {},
-                    }
-                });
+                        }
+                        remote_stream.close_write().or(Ok(())).unwrap();
+                        stream.close_read().or(Ok(())).unwrap();
+                    },
+                    Ok(..) => {},
+                }
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
