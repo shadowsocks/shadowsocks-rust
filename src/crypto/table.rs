@@ -52,13 +52,6 @@ impl TableCipher {
             })
         }
 
-        // let enc = range(0, TABLE_SIZE).map(|idx| table[idx] as u8).collect::<Vec<u8>>();
-        // let mut dec = repeat(0u8).take(enc.len()).collect::<Vec<u8>>();
-
-        // for idx in range(0, enc.len()) {
-        //     dec[enc[idx] as usize] = idx as u8;
-        // }
-
         TableCipher {
             table: match mode {
                 CryptoMode::Encrypt => table.into_iter().map(|x| x as u8).collect(),
