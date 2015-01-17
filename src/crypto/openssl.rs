@@ -61,10 +61,11 @@ mod ffi {
         pub fn EVP_CIPHER_CTX_free(ctx: EVP_CIPHER_CTX);
 
         pub fn EVP_CipherInit_ex(ctx: EVP_CIPHER_CTX, evp: EVP_CIPHER, engine: ENGINE,
-                          key: *const libc::c_uchar, iv: *const libc::c_uchar, mode: libc::c_int) -> libc::c_int;
+                                 key: *const libc::c_uchar, iv: *const libc::c_uchar, mode: libc::c_int)
+            -> libc::c_int;
         pub fn EVP_CipherUpdate(ctx: EVP_CIPHER_CTX,
-                            outbuf: *mut libc::c_uchar, outlen: *mut libc::c_int,
-                            inbuf: *const libc::c_uchar, inlen: libc::c_int) -> libc::c_int;
+                                outbuf: *mut libc::c_uchar, outlen: *mut libc::c_int,
+                                inbuf: *const libc::c_uchar, inlen: libc::c_int) -> libc::c_int;
         pub fn EVP_CipherFinal(ctx: EVP_CIPHER_CTX, res: *mut libc::c_uchar, len: *mut libc::c_int) -> libc::c_int;
 
         // Ciphers
@@ -167,7 +168,7 @@ impl OpenSSLDigest {
         }
     }
 
-    pub fn get_md(t: digest::DigestType) -> ffi::EVP_MD {
+    fn get_md(t: digest::DigestType) -> ffi::EVP_MD {
         unsafe {
             match t {
                 digest::DigestType::Md5 => ffi::EVP_md5(),

@@ -33,6 +33,8 @@ cargo build --features "cipher-aes-ctr"
 
 Read `Cargo.toml` for more details.
 
+*Required `libsodium` and `libcrypto` by default.*
+
 ## Getting Started
 
 Create a shadowsocks' configuration file. Example
