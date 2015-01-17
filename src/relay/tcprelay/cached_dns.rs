@@ -42,17 +42,6 @@ pub struct CachedDns {
 }
 
 impl CachedDns {
-    pub fn new() -> CachedDns {
-        CachedDns {
-            lru_cache: Arc::new(Mutex::new(DnsLruCache {
-                cache: LruCache::new(DEFAULT_DNS_CACHE_CAPACITY),
-                totally_missed: 0,
-                totally_matched: 0,
-            })),
-            pool: TaskPool::new(TASK_POOL_SIZE),
-        }
-    }
-
     pub fn with_capacity(cache_capacity: usize) -> CachedDns {
         CachedDns {
             lru_cache: Arc::new(Mutex::new(DnsLruCache {
