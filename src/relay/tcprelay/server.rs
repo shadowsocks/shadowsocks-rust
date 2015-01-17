@@ -121,7 +121,7 @@ impl TcpRelayServer {
                 );
 
                 info!("Connecting to {}", addr);
-                let mut remote_stream = match addr {
+                let remote_stream = match addr {
                     Address::SocketAddress(ip, port) => {
                         try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
                                 prefix: format!("Unable to connect {}:", addr)

@@ -26,8 +26,6 @@ use std::io::net::ip::IpAddr;
 
 use collect::LruCache;
 
-use config::DEFAULT_DNS_CACHE_CAPACITY;
-
 const TASK_POOL_SIZE: usize = 4;
 
 struct DnsLruCache {

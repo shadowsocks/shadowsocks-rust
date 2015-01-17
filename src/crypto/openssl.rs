@@ -242,7 +242,7 @@ impl OpenSSLCrypto {
 
             debug_assert!(iv.len() >= cipher_type.block_size());
             debug_assert!(key.len() == cipher_type.key_size());
-            let mut evp_ctx = ffi::EVP_CIPHER_CTX_new();
+            let evp_ctx = ffi::EVP_CIPHER_CTX_new();
             assert!(!evp_ctx.is_null());
 
             let op = match mode {
