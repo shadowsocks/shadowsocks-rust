@@ -72,7 +72,7 @@ use std::io::net::ip::{Port, SocketAddr};
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
-use std::fmt::{Show, Formatter, self};
+use std::fmt::{Debug, Formatter, self};
 
 use crypto::cipher::CipherType;
 
@@ -80,7 +80,7 @@ use crypto::cipher::CipherType;
 pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 
 /// Configuration for a server
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub addr: String,
     pub port: Port,
@@ -100,7 +100,7 @@ pub enum ConfigType {
 }
 
 /// Configuration
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
@@ -140,7 +140,7 @@ impl Error {
     }
 }
 
-impl Show for Error {
+impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self.detail {
             None => write!(f, "{}", self.desc),

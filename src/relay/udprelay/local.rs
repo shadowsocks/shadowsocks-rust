@@ -127,7 +127,7 @@ impl Relay for UdpRelayLocal {
                         continue;
                     }
 
-                    let request_message = buf.slice_to(len).to_vec();
+                    let request_message = buf[..len].to_vec();
                     let move_socket = socket.clone();
                     let client_map = client_map_arc.clone();
 

@@ -61,7 +61,7 @@ impl UdpRelayServer {
         loop {
             match socket.recv_from(&mut buf) {
                 Ok((len, src)) => {
-                    let data = buf.slice_to(len).to_vec();
+                    let data = buf[..len].to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();
                     let mut captured_socket = socket.clone();
@@ -156,7 +156,7 @@ impl UdpRelayServer {
                                 remote_addr
                             }
                         };
-                        captured_socket.send_to(decrypted_data.as_slice().slice_from(header.len()), sockaddr).unwrap();
+                        captured_socket.send_to(&decrypted_data.as_slice()[header.len()..], sockaddr).unwrap();
                     });
                 },
                 Err(err) => {

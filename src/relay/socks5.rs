@@ -21,7 +21,7 @@
 
 #![allow(dead_code)]
 
-use std::fmt::{self, Show, Formatter};
+use std::fmt::{self, Debug, Formatter};
 use std::io::net::ip::{IpAddr, Port};
 use std::io::net::ip::{Ipv4Addr, Ipv6Addr};
 use std::io::{Reader, IoResult, IoError, OtherIoError};
@@ -52,7 +52,7 @@ const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED         : u8 = 0x07;
 const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED    : u8 = 0x08;
 
 #[allow(dead_code)]
-#[derive(Clone, Show, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum Command {
     TcpConnect,
     TcpBind,
@@ -78,7 +78,7 @@ impl Command {
     }
 }
 
-#[derive(Clone, Show, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum Reply {
     Succeeded,
     GeneralFailure,
@@ -140,13 +140,13 @@ impl Error {
     }
 }
 
-impl Show for Error {
+impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.message)
     }
 }
 
-impl fmt::String for Error {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.message)
     }
@@ -208,7 +208,7 @@ impl Address {
     }
 }
 
-impl Show for Address {
+impl Debug for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
@@ -217,7 +217,7 @@ impl Show for Address {
     }
 }
 
-impl fmt::String for Address {
+impl fmt::Display for Address {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
@@ -226,7 +226,7 @@ impl fmt::String for Address {
     }
 }
 
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct TcpRequestHeader {
     pub command: Command,
     pub address: Address,
@@ -273,7 +273,7 @@ impl TcpRequestHeader {
     }
 }
 
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct TcpResponseHeader {
     pub reply: Reply,
     pub address: Address,
@@ -413,7 +413,7 @@ fn get_addr_len(atyp: &Address) -> usize {
 // +----+----------+----------+
 // | 5  |    1     | 1 to 255 |
 // +----+----------+----------|
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct HandshakeRequest {
     pub methods: Vec<u8>,
 }
@@ -456,7 +456,7 @@ impl HandshakeRequest {
 // +----+--------+
 // | 1  |   1    |
 // +----+--------+
-#[derive(Clone, Show, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub struct HandshakeResponse {
     pub chosen_method: u8,
 }
@@ -489,7 +489,7 @@ impl HandshakeResponse {
     }
 }
 
-#[derive(Clone, Show)]
+#[derive(Clone, Debug)]
 pub struct UdpAssociateHeader {
     pub frag: u8,
     pub address: Address,

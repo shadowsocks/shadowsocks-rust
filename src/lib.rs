@@ -33,13 +33,13 @@ extern crate "rustc-serialize" as serialize;
 extern crate log;
 extern crate collect;
 
-use std::fmt::{Show, Formatter, self};
+use std::fmt::{Debug, Formatter, self};
 
 /// VersionCode(major, minor, patch)
 #[derive(Copy)]
 pub struct VersionCode(u32, u32, u32);
 
-impl Show for VersionCode {
+impl Debug for VersionCode {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let &VersionCode(major, minor, patch) = self;
         write!(f, "{}.{}.{}", major, minor, patch)

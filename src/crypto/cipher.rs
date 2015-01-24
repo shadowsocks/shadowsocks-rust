@@ -22,7 +22,7 @@
 //! Ciphers
 
 use std::str::FromStr;
-use std::fmt::{Show, self};
+use std::fmt::{Debug, Display, self};
 use std::rand::{self, Rng};
 
 use crypto::openssl;
@@ -56,7 +56,17 @@ pub struct Error {
     pub detail: Option<String>,
 }
 
-impl Show for Error {
+impl Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "{}", self.desc));
+        match self.detail {
+            Some(ref d) => write!(f, " ({})", d),
+            None => Ok(())
+        }
+    }
+}
+
+impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "{}", self.desc));
         match self.detail {
@@ -139,7 +149,7 @@ const CIPHER_CHACHA20: &'static str = "chacha20";
 #[cfg(feature = "cipher-salsa20")]
 const CIPHER_SALSA20: &'static str = "salsa20";
 
-#[derive(Clone, Show, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum CipherType {
     Table,
 
