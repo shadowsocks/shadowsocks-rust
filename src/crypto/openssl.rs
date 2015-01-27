@@ -434,9 +434,9 @@ impl Drop for OpenSSLCrypto {
 /// let mut dec = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
 /// let message = "hello world";
 /// let encrypted_message = enc.update(message.as_bytes()).unwrap();
-/// let decrypted_message = dec.update(encrypted_message.as_slice()).unwrap();
+/// let decrypted_message = dec.update(&encrypted_message[]).unwrap();
 ///
-/// assert!(decrypted_message.as_slice() == message.as_bytes());
+/// assert!(&decrypted_message[] == message.as_bytes());
 /// ```
 #[derive(Clone)]
 pub struct OpenSSLCipher {
