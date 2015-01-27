@@ -3,13 +3,6 @@ language: rust
 before_install:
     - sudo apt-get update -qq
     - sudo apt-get install -qq libssl-dev
-    - wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.1.tar.gz -O libsodium.tar.gz
-    - tar -xf libsodium.tar.gz
-    - cd libsodium-1.0.1
-    - ./autogen.sh
-    - ./configure
-    - sudo make install
-    - sudo ldconfig
 
 script:
     - cargo build -v
