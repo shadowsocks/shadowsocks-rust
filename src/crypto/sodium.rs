@@ -30,19 +30,8 @@ use crypto::cipher::{Cipher, CipherType, CipherResult};
 const BLOCK_SIZE: usize = 64; // Just for Salsa20 and Chacha20
 
 mod ffi {
-    extern crate libc;
-
-    #[allow(dead_code)]
-    #[link(name = "sodium")]
-    extern {
-        pub fn crypto_stream_salsa20_xor_ic(c: *mut libc::c_uchar, m: *const libc::c_uchar,
-                                            mlen: libc::c_ulonglong, n: *const libc::c_uchar,
-                                            ic: libc::uint64_t, k: *const libc::c_uchar) -> libc::c_int;
-
-        pub fn crypto_stream_chacha20_xor_ic(c: *mut libc::c_uchar, m: *const libc::c_uchar,
-                                             mlen: libc::c_ulonglong, n: *const libc::c_uchar,
-                                             ic: libc::uint64_t, k: *const libc::c_uchar) -> libc::c_int;
-    }
+    pub use libsodium_ffi::crypto_stream_chacha20_xor_ic;
+    pub use libsodium_ffi::crypto_stream_salsa20_xor_ic;
 }
 
 pub struct SodiumCipher {
@@ -88,14 +77,14 @@ impl Cipher for SodiumCipher {
 
         match self.cipher_type {
             CipherType::ChaCha20 => unsafe {
-                ffi::crypto_stream_chacha20_xor_ic(self.buf.as_mut_ptr(), padded_data.as_ptr(),
+                ffi::crypto_stream_chacha20_xor_ic(self.buf.as_mut_ptr() as *mut libc::c_char, padded_data.as_ptr(),
                                                   (padding_len + data.len()) as libc::c_ulonglong,
                                                   self.iv.as_ptr(),
                                                   (self.counter / BLOCK_SIZE) as libc::uint64_t,
                                                   self.key.as_ptr());
             },
             CipherType::Salsa20 => unsafe {
-                ffi::crypto_stream_salsa20_xor_ic(self.buf.as_mut_ptr(), padded_data.as_ptr(),
+                ffi::crypto_stream_salsa20_xor_ic(self.buf.as_mut_ptr() as *mut libc::c_char, padded_data.as_ptr(),
                                                 (padding_len + data.len()) as libc::c_ulonglong,
                                                 self.iv.as_ptr(),
                                                 (self.counter / BLOCK_SIZE) as libc::uint64_t,

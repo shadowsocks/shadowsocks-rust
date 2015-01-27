@@ -33,6 +33,8 @@ extern crate "rustc-serialize" as serialize;
 extern crate log;
 extern crate collect;
 
+extern crate "libsodium-sys" as libsodium_ffi;
+
 use std::fmt::{Debug, Formatter, self};
 
 /// VersionCode(major, minor, patch)
