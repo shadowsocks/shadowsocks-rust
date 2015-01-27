@@ -196,6 +196,8 @@ pub enum CipherType {
 
 impl CipherType {
     pub fn block_size(&self) -> usize {
+        use libsodium_ffi::{crypto_stream_chacha20_NONCEBYTES, crypto_stream_salsa20_NONCEBYTES};
+
         match *self {
             CipherType::Table => 0,
 
@@ -236,12 +238,14 @@ impl CipherType {
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
             #[cfg(feature = "cipher-seed-cfb")] CipherType::SeedCfb => 16,
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => crypto_stream_chacha20_NONCEBYTES as usize,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => crypto_stream_salsa20_NONCEBYTES as usize,
         }
     }
 
     pub fn key_size(&self) -> usize {
+        use libsodium_ffi::{crypto_stream_chacha20_KEYBYTES, crypto_stream_salsa20_KEYBYTES};
+
         match *self {
             CipherType::Table => 0,
 
@@ -282,8 +286,8 @@ impl CipherType {
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
             #[cfg(feature = "cipher-seed-cfb")] CipherType::SeedCfb => 16,
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => crypto_stream_chacha20_KEYBYTES as usize,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => crypto_stream_salsa20_KEYBYTES as usize,
         }
     }
 
