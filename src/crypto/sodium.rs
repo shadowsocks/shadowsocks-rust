@@ -60,7 +60,7 @@ impl SodiumCipher {
 }
 
 impl Cipher for SodiumCipher {
-    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         let padding_len = self.counter % BLOCK_SIZE;
         let mut pad;
         let padded_data =
@@ -95,11 +95,13 @@ impl Cipher for SodiumCipher {
 
         self.counter += data.len();
 
-        Ok(self.buf[padding_len..padding_len + data.len()].to_vec())
+        out.push_all(&self.buf[padding_len..padding_len + data.len()]);
+
+        Ok(())
     }
 
-    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
-        Ok(Vec::new())
+    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+        Ok(())
     }
 }
 
@@ -118,10 +120,12 @@ mod test_sodium {
         let iv = ct.gen_init_vec();
 
         let mut enc = SodiumCipher::new(ct, &key[..], &iv[..]);
-        let encrypted_msg = enc.update(message).unwrap();
+        let mut encrypted_msg = Vec::new();
+        enc.update(message, &mut encrypted_msg).unwrap();
 
         let mut dec = SodiumCipher::new(ct, &key[..], &iv[..]);
-        let decrypted_msg = dec.update(&encrypted_msg[0..]).unwrap();
+        let mut decrypted_msg = Vec::new();
+        dec.update(&encrypted_msg[0..], &mut decrypted_msg).unwrap();
 
         assert_eq!(message, &decrypted_msg[..]);
     }

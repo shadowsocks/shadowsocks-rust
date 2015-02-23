@@ -69,19 +69,22 @@ impl TableCipher {
         }
     }
 
-    fn process(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
-        let r = data.iter().map(|d| self.table[*d as usize]).collect();
-        Ok(r)
+    fn process(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+        out.reserve(data.len());
+        for d in data.iter() {
+            out.push(self.table[*d as usize]);
+        }
+        Ok(())
     }
 }
 
 impl Cipher for TableCipher {
-    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
-        self.process(data)
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+        self.process(data, out)
     }
 
-    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
-        Ok(Vec::new())
+    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+        Ok(())
     }
 }
 
@@ -92,8 +95,10 @@ fn test_table_cipher() {
 
     let mut enc = TableCipher::new(key.as_bytes(), CryptoMode::Encrypt);
     let mut dec = TableCipher::new(key.as_bytes(), CryptoMode::Decrypt);
-    let encrypted_msg = enc.update(message.as_bytes()).unwrap();
-    let decrypted_msg = dec.update(&encrypted_msg[..]).unwrap();
+    let mut encrypted_msg = Vec::new();
+    enc.update(message.as_bytes(), &mut encrypted_msg).unwrap();
+    let mut decrypted_msg = Vec::new();
+    dec.update(&encrypted_msg[..], &mut decrypted_msg).unwrap();
 
     assert_eq!(&decrypted_msg[..], message.as_bytes());
 }

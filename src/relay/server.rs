@@ -34,7 +34,7 @@ use config::Config;
 /// UDP Associate and Bind commands are not supported currently.
 ///
 /// ```no_run
-/// use std::io::net::ip::SocketAddr;
+/// use std::net::SocketAddr;
 ///
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayServer;

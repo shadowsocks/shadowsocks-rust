@@ -86,8 +86,8 @@ impl UdpRelayServer {
                                                               &key[..],
                                                               &iv[..],
                                                               CryptoMode::Encrypt);
-                                        iv.push_all(&encryptor.update(&response_buf[..]).unwrap()[..]);
-                                        iv.push_all(&encryptor.finalize().unwrap()[..]);
+                                        encryptor.update(&response_buf[..], &mut iv).unwrap();
+                                        encryptor.finalize(&mut iv).unwrap();
 
                                         captured_socket
                                             .send_to(&iv[..], &client_addr)
@@ -111,8 +111,9 @@ impl UdpRelayServer {
                                               &key[..],
                                               &data[0..method.block_size()],
                                               CryptoMode::Decrypt);
-                        let mut decrypted_data = decryptor.update(&data[method.block_size()..]).unwrap();
-                        decrypted_data.push_all(&decryptor.finalize().unwrap()[..]);
+                        let mut decrypted_data = Vec::new();
+                        decryptor.update(&data[method.block_size()..], &mut decrypted_data).unwrap();
+                        &decryptor.finalize(&mut decrypted_data).unwrap();
                         let mut bufr = BufReader::new(&decrypted_data[..]);
 
                         let header = socks5::UdpAssociateHeader::read_from(bufr.by_ref()).unwrap();

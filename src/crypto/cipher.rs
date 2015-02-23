@@ -39,8 +39,8 @@ use crypto::digest::{self, DigestType};
 /// The `update` method could be called multiple times, and the `finalize` method will
 /// encrypt the last block
 pub trait Cipher {
-    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>>;
-    fn finalize(&mut self) -> CipherResult<Vec<u8>>;
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()>;
+    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()>;
 }
 
 pub type CipherResult<T> = Result<T, Error>;
@@ -482,8 +482,10 @@ mod test_cipher {
         let mut decryptor = with_type(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
-        let encrypted_msg = encryptor.update(message.as_bytes()).unwrap();
-        let decrypted_msg = decryptor.update(&encrypted_msg[..]).unwrap();
+        let mut encrypted_msg = Vec::new();
+        encryptor.update(message.as_bytes(), &mut encrypted_msg).unwrap();
+        let mut decrypted_msg = Vec::new();
+        decryptor.update(&encrypted_msg[..], &mut decrypted_msg).unwrap();
 
         assert!(message.as_bytes() == &decrypted_msg[..]);
     }

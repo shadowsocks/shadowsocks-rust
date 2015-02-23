@@ -337,15 +337,15 @@ impl OpenSSLCrypto {
         }
     }
 
-    pub fn update(&self, data: &[u8]) -> CipherResult<Vec<u8>> {
+    pub fn update(&self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         let pdata: *const u8 = data.as_ptr();
         let datalen: libc::c_int = data.len() as libc::c_int;
 
-        let mut out = Vec::with_capacity(data.len() + self.cipher_type.block_size());
-        unsafe { out.set_len(data.len() + self.cipher_type.block_size()); }
+        out.reserve(data.len() + self.cipher_type.block_size());
 
         let mut len: libc::c_int = 0;
-        let pres: *mut u8 = out.as_mut_ptr();
+        let orig_len = out.len();
+        let pres: *mut u8 = out[orig_len..].as_mut_ptr();
 
         unsafe {
             if ffi::EVP_CipherUpdate(self.evp_ctx,
@@ -360,14 +360,14 @@ impl OpenSSLCrypto {
             }
         }
 
-        out.truncate(len as usize);
-        Ok(out)
+        unsafe { out.set_len(orig_len + len as usize) }
+        Ok(())
     }
 
-    pub fn finalize(&self) -> CipherResult<Vec<u8>> {
+    pub fn finalize(&self, out: &mut Vec<u8>) -> CipherResult<()> {
         let mut len: libc::c_int = 0;
-        let mut out = Vec::with_capacity(self.cipher_type.block_size());
-        unsafe { out.set_len(self.cipher_type.block_size()) }
+        let orig_len = out.len();
+        out.reserve(self.cipher_type.block_size());
 
         unsafe {
             if ffi::EVP_CipherFinal(self.evp_ctx, out.as_mut_ptr(), &mut len) != 1 {
@@ -379,8 +379,8 @@ impl OpenSSLCrypto {
             }
         }
 
-        out.truncate(len as usize);
-        Ok(out)
+        unsafe { out.set_len(orig_len + len as usize) }
+        Ok(())
     }
 }
 
@@ -433,10 +433,12 @@ impl Drop for OpenSSLCrypto {
 /// let mut enc = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
 /// let mut dec = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
 /// let message = "hello world";
-/// let encrypted_message = enc.update(message.as_bytes()).unwrap();
-/// let decrypted_message = dec.update(&encrypted_message[]).unwrap();
+/// let mut encrypted_message = Vec::new();
+/// enc.update(message.as_bytes(), &mut encrypted_message).unwrap();
+/// let mut decrypted_message = Vec::new();
+/// dec.update(&encrypted_message[..], &mut decrypted_message).unwrap();
 ///
-/// assert!(&decrypted_message[] == message.as_bytes());
+/// assert!(&decrypted_message[..] == message.as_bytes());
 /// ```
 #[derive(Clone)]
 pub struct OpenSSLCipher {
@@ -452,12 +454,12 @@ impl OpenSSLCipher {
 }
 
 impl Cipher for OpenSSLCipher {
-    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
-        self.worker.update(data)
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+        self.worker.update(data, out)
     }
 
-    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
-        self.worker.finalize()
+    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+        self.worker.finalize(out)
     }
 }
 
@@ -511,13 +513,15 @@ mod test_openssl {
 
             let mut enc = OpenSSLCipher::new(*t, &k[..], &iv[..], CryptoMode::Encrypt);
 
-            let mut encrypted_msg = enc.update(message.as_bytes()).unwrap();
-            encrypted_msg.push_all(&enc.finalize().unwrap()[..]);
+            let mut encrypted_msg = Vec::new();
+            enc.update(message.as_bytes(), &mut encrypted_msg).unwrap();
+            enc.finalize(&mut encrypted_msg).unwrap();
             println!("ENC {:?}", encrypted_msg);
 
             let mut dec = OpenSSLCipher::new(*t, &k[..], &iv[..], CryptoMode::Decrypt);
-            let mut decrypted_msg = dec.update(&encrypted_msg[..]).unwrap();
-            decrypted_msg.push_all(&dec.finalize().unwrap()[..]);
+            let mut decrypted_msg = Vec::new();
+            dec.update(&encrypted_msg[..], &mut decrypted_msg).unwrap();
+            dec.finalize(&mut decrypted_msg).unwrap();
             println!("DEC {:?}", &decrypted_msg[..]);
 
             assert_eq!(message.as_bytes(), &decrypted_msg[..]);
@@ -526,14 +530,14 @@ mod test_openssl {
 
     #[bench]
     fn bench_openssl_default_cipher_encrypt(b: &mut test::Bencher) {
-        use std::rand::random;
+        use rand::random;
 
         let msg_size: usize = 0xffff;
 
         let mut test_data = Vec::new();
-        for _ in range::<usize>(0, 100) {
-            let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        for _ in 0..100 {
+            let msg = (0..msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
+            let key = (1..random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let k = cipher::CipherType::Aes256Cfb.bytes_to_key(&key[..]);
             let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
 
@@ -545,25 +549,27 @@ mod test_openssl {
 
             let mut enc = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
                                              &key[..], &iv[..], CryptoMode::Encrypt);
-            enc.update(&msg[..]).unwrap();
+            let mut out = Vec::new();
+            enc.update(&msg[..], &mut out).unwrap();
         });
         b.bytes = msg_size as u64;
     }
 
     #[bench]
     fn bench_openssl_default_cipher_decrypt(b: &mut test::Bencher) {
-        use std::rand::random;
+        use rand::random;
 
         let msg_size: usize = 0xffff;
         let mut test_data = Vec::new();
-        for _ in range::<usize>(0, 100) {
-            let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        for _ in 0..100 {
+            let msg = (0..msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
+            let key = (1..random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let k = cipher::CipherType::Aes256Cfb.bytes_to_key(&key[..]);
             let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
             let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
                                                 &k[..], &v[..], CryptoMode::Encrypt);
-            let encrypted_msg = cipher.update(&msg[..]).unwrap();
+            let mut encrypted_msg = Vec::new();
+            cipher.update(&msg[..], &mut encrypted_msg).unwrap();
             test_data.push((k, v, encrypted_msg));
         }
 
@@ -571,7 +577,8 @@ mod test_openssl {
             let (ref key, ref iv, ref encrypted_msg) = test_data[random::<usize>() % test_data.len()];
             let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
                                                 &key[..], &iv[..], CryptoMode::Decrypt);
-            cipher.update(&encrypted_msg[..]).unwrap();
+            let mut out = Vec::new();
+            cipher.update(&encrypted_msg[..], &mut out).unwrap();
         });
         b.bytes = msg_size as u64;
     }

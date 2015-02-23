@@ -45,12 +45,12 @@ impl Rc4Md5Cipher {
 }
 
 impl Cipher for Rc4Md5Cipher {
-    fn update(&mut self, data: &[u8]) -> CipherResult<Vec<u8>> {
-        self.crypto.update(data)
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+        self.crypto.update(data, out)
     }
 
-    fn finalize(&mut self) -> CipherResult<Vec<u8>> {
-        self.crypto.finalize()
+    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+        self.crypto.finalize(out)
     }
 }
 

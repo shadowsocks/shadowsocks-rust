@@ -78,18 +78,18 @@ impl<R: Read> BufRead for DecryptedReader<R> {
             match self.reader.read(&mut incoming) {
                 Ok(0) => {
                     // EOF
-                    self.buffer = try!(self.cipher
-                                           .finalize()
-                                           .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                                         err.desc,
-                                                                         err.detail)));
+                    try!(self.cipher
+                             .finalize(&mut self.buffer)
+                             .map_err(|err| io::Error::new(io::ErrorKind::Other,
+                                                           err.desc,
+                                                           err.detail)));
                 }
                 Ok(l) => {
-                    self.buffer = try!(self.cipher
-                                           .update(&incoming[0..l])
-                                           .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                                         err.desc,
-                                                                         err.detail)));
+                    try!(self.cipher
+                             .update(&incoming[0..l], &mut self.buffer)
+                             .map_err(|err| io::Error::new(io::ErrorKind::Other,
+                                                           err.desc,
+                                                           err.detail)));
                 },
                 Err(err) => {
                     return Err(err);
@@ -124,6 +124,7 @@ impl<R: Read> Read for DecryptedReader<R> {
 pub struct EncryptedWriter<W: Write> {
     writer: W,
     cipher: Box<Cipher + Send>,
+    buffer: Vec<u8>,
 }
 
 impl<W: Write> EncryptedWriter<W> {
@@ -131,13 +132,16 @@ impl<W: Write> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
             cipher: cipher,
+            buffer: Vec::new(),
         }
     }
 
     pub fn finalize(&mut self) -> io::Result<()> {
-        match self.cipher.finalize() {
-            Ok(fin) => {
-                self.writer.write_all(&fin[..])
+        match self.cipher.finalize(&mut self.buffer) {
+            Ok(..) => {
+                try!(self.writer.write_all(&self.buffer[..]));
+                self.buffer.clear();
+                Ok(())
             },
             Err(err) => {
                 Err(io::Error::new(
@@ -166,10 +170,13 @@ impl<W: Write> EncryptedWriter<W> {
 
 impl<W: Write> Write for EncryptedWriter<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self.cipher.update(buf) {
-            Ok(ret) => {
-                match self.writer.write_all(ret.as_slice()) {
-                    Ok(..) => Ok(buf.len()),
+        match self.cipher.update(buf, &mut self.buffer) {
+            Ok(..) => {
+                match self.writer.write_all(&self.buffer[..]) {
+                    Ok(..) => {
+                        self.buffer.clear();
+                        Ok(buf.len())
+                    },
                     Err(err) => return Err(err),
                 }
             },

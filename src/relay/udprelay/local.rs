@@ -204,8 +204,8 @@ fn handle_request(socket: UdpSocket,
     request.write_to(&mut wbuf).unwrap();
     io::copy(&mut bufr, &mut wbuf).unwrap();
 
-    iv.push_all(&encryptor.update(&wbuf[..]).unwrap()[..]);
-    iv.push_all(&encryptor.finalize().unwrap()[..]);
+    encryptor.update(&wbuf[..], &mut iv).unwrap();
+    encryptor.finalize(&mut iv).unwrap();
 
     socket.send_to(&iv[..], &server_addr)
         .ok().expect("Error occurs while sending to remote");
@@ -222,8 +222,9 @@ fn handle_response(socket: UdpSocket,
                                           &key[..],
                                           &response_message[0..config.method.block_size()],
                                           CryptoMode::Decrypt);
-    let mut decrypted_data = decryptor.update(&response_message[config.method.block_size()..]).unwrap();
-    decrypted_data.push_all(&decryptor.finalize().unwrap()[..]);
+    let mut decrypted_data = Vec::new();
+    decryptor.update(&response_message[config.method.block_size()..], &mut decrypted_data).unwrap();
+    decryptor.finalize(&mut decrypted_data).unwrap();
 
     let mut bufr = BufReader::new(&decrypted_data[..]);
 

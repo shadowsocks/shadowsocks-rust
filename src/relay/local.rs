@@ -34,18 +34,15 @@ use config::Config;
 /// UDP Associate and Bind commands are not supported currently.
 ///
 /// ```no_run
-/// use std::io::net::ip::SocketAddr;
+/// use std::net::SocketAddr;
 ///
 /// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayLocal;
-/// use shadowsocks::config::{Config, ClientConfig, ServerConfig};
+/// use shadowsocks::config::{Config, ServerConfig};
 /// use shadowsocks::crypto::cipher::CipherType;
 ///
 /// let mut config = Config::new();
-/// config.local = Some(ClientConfig {
-///     ip: "127.0.0.1".parse().unwrap(),
-///     port: 1080
-/// });
+/// config.local = Some(SocketAddr::new("127.0.0.1".parse().unwrap(), 1080));
 /// config.server = vec![ServerConfig {
 ///     addr: "127.0.0.1".to_string(),
 ///     port: 8388,
