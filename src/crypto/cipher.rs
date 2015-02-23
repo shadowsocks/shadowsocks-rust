@@ -23,7 +23,7 @@
 
 use std::str::FromStr;
 use std::fmt::{Debug, Display, self};
-use std::rand::{self, Rng};
+use rand::{self, Rng};
 
 use crypto::openssl;
 use crypto::table;
@@ -313,7 +313,7 @@ impl CipherType {
             if i > 0 {
                 let mut vkey = m[i - 1].clone();
                 vkey.push_all(key);
-                md5.update(vkey.as_slice());
+                md5.update(&vkey[..]);
             } else {
                 md5.update(key);
             }
@@ -322,7 +322,7 @@ impl CipherType {
             i += 1
         }
 
-        let whole = m.into_iter().fold(Vec::new(), |mut a, b| { a.push_all(b.as_slice()); a });
+        let whole = m.into_iter().fold(Vec::new(), |mut a, b| { a.push_all(&b[..]); a });
         let key = whole[0..key_len].to_vec();
         key
     }
@@ -483,8 +483,8 @@ mod test_cipher {
         let message = "HELLO WORLD";
 
         let encrypted_msg = encryptor.update(message.as_bytes()).unwrap();
-        let decrypted_msg = decryptor.update(encrypted_msg.as_slice()).unwrap();
+        let decrypted_msg = decryptor.update(&encrypted_msg[..]).unwrap();
 
-        assert!(message.as_bytes() == decrypted_msg.as_slice());
+        assert!(message.as_bytes() == &decrypted_msg[..]);
     }
 }

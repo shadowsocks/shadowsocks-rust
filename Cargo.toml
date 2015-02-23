@@ -54,10 +54,15 @@ path = "src/bin/server.rs"
 
 [dependencies]
 collect = "*"
-rustc-serialize = "*"
+# rustc-serialize = "*"
 log = "*"
 byteorder = "*"
+rand = "*"
+getopts = "*"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"
 optional = true
+
+[dependencies.rustc-serialize]
+git = "https://github.com/zonyitoo/rustc-serialize"

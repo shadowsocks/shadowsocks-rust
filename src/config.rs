@@ -311,7 +311,7 @@ impl Config {
                                                                         "`local_address` should be a string",
                                                                         None)));
                         let ip = try!(addr_str.parse()
-                                              .map_err(|err| Error::new(ErrorKind::Malformed,
+                                              .map_err(|_| Error::new(ErrorKind::Malformed,
                                                                         "`local_address` is not a valid IP address",
                                                                         None)));
 

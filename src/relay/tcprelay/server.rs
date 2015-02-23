@@ -21,17 +21,15 @@
 
 //! TcpRelay server that running on the server side
 
-use std::sync::Arc;
+// use std::sync::Arc;
 use std::net::{TcpListener, TcpStream, Shutdown};
-use std::net::SocketAddr;
 use std::io::{Read, ReadExt, Write, BufStream, ErrorKind, self};
-use std::time::duration::Duration;
-use std::thread::Thread;
+use std::thread;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
-use relay::socks5::{Address, self};
-use relay::tcprelay::cached_dns::CachedDns;
+use relay::socks5;
+// use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
 use crypto::CryptoMode;
@@ -52,33 +50,37 @@ impl TcpRelayServer {
     }
 
     fn accept_loop(s: ServerConfig) {
-        let mut acceptor = TcpListener::bind(&(s.addr.as_slice(), s.port))
-                                        .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
+        let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
+                                    .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
 
         info!("Shadowsocks listening on {}", s.addr);
 
-        let dnscache_arc = Arc::new(CachedDns::with_capacity(s.dns_cache_capacity));
+        // let dnscache_arc = Arc::new(CachedDns::with_capacity(s.dns_cache_capacity));
 
         let pwd = s.method.bytes_to_key(s.password.as_bytes());
         let timeout = s.timeout;
         let method = s.method;
         for s in acceptor.incoming() {
             let mut stream = s.unwrap();
-            stream.set_keepalive(timeout);
+            let _ = stream.set_keepalive(timeout);
 
             let pwd = pwd.clone();
             let encrypt_method = method;
-            let dnscache = dnscache_arc.clone();
+            // let dnscache = dnscache_arc.clone();
 
-            Thread::spawn(move || {
+            thread::spawn(move || {
                 let remote_iv = {
                     let mut iv = Vec::new();
-                    stream.take(encrypt_method.block_size() as u64).read_to_end(&mut iv).unwrap();
+                    stream.try_clone()
+                          .unwrap()
+                          .take(encrypt_method.block_size() as u64)
+                          .read_to_end(&mut iv)
+                          .unwrap();
                     iv
                 };
                 let decryptor = cipher::with_type(encrypt_method,
-                                                  pwd.as_slice(),
-                                                  remote_iv.as_slice(),
+                                                  &pwd[..],
+                                                  &remote_iv[..],
                                                   CryptoMode::Decrypt);
 
                 let buffered_client_stream = BufStream::new(stream.try_clone().unwrap());
@@ -96,7 +98,7 @@ impl TcpRelayServer {
 
                 let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
                 let addr_cloned = addr.clone();
-                Thread::spawn(move || {
+                thread::spawn(move || {
                     match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
                         Ok(..) => {},
                         Err(err) => {
@@ -116,13 +118,13 @@ impl TcpRelayServer {
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
-                                                  pwd.as_slice(),
-                                                  iv.as_slice(),
+                                                  &pwd[..],
+                                                  &iv[..],
                                                   CryptoMode::Encrypt);
-                stream.write_all(iv.as_slice()).unwrap();
+                stream.write_all(&iv[..]).unwrap();
                 let mut buffered_remote_stream = BufStream::new(remote_stream.try_clone().unwrap());
                 let mut encrypt_stream = EncryptedWriter::new(stream.try_clone().unwrap(), encryptor);
-                match io::util::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
+                match io::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
                     Ok(..) => {},
                     Err(err) => {
                         match err.kind() {
@@ -147,7 +149,7 @@ impl Relay for TcpRelayServer {
         let mut threads = Vec::new();
         for s in self.config.server.iter() {
             let s = s.clone();
-            let fut = Thread::scoped(move || {
+            let fut = thread::scoped(move || {
                 TcpRelayServer::accept_loop(s);
             });
             threads.push(fut);

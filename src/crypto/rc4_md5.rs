@@ -39,7 +39,7 @@ impl Rc4Md5Cipher {
         let key = md5_digest.digest();
 
         Rc4Md5Cipher {
-            crypto: OpenSSLCrypto::new(CipherType::Rc4, key.as_slice(), b"", mode)
+            crypto: OpenSSLCrypto::new(CipherType::Rc4, &key[..], b"", mode)
         }
     }
 }

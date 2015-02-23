@@ -21,7 +21,7 @@
 
 #![allow(dead_code)]
 
-use std::io::{self, ErrorKind, Read, BufRead, Write};
+use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 use std::slice;
 
@@ -137,7 +137,7 @@ impl<W: Write> EncryptedWriter<W> {
     pub fn finalize(&mut self) -> io::Result<()> {
         match self.cipher.finalize() {
             Ok(fin) => {
-                self.writer.write_all(fin.as_slice())
+                self.writer.write_all(&fin[..])
             },
             Err(err) => {
                 Err(io::Error::new(

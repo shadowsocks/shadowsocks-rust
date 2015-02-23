@@ -71,7 +71,7 @@ impl CachedDns {
             }
         }
 
-        let addrs = match lookup_host(addr) {
+        let mut addrs = match lookup_host(addr) {
             Ok(addrs) => addrs,
             Err(err) => {
                 error!("Failed to resolve {}: {}", addr, err);

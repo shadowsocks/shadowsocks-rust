@@ -25,7 +25,7 @@ use std::net::{TcpListener, TcpStream};
 use std::net::{SocketAddr, IpAddr, Shutdown};
 use std::net::lookup_host;
 use std::io::{self, BufStream, ErrorKind, Read, ReadExt, Write};
-use std::thread::Thread;
+use std::thread;
 use std::collections::BTreeMap;
 
 use config::Config;
@@ -119,8 +119,7 @@ impl TcpRelayLocal {
                         match err.kind() {
                             ErrorKind::ConnectionAborted
                                 | ErrorKind::ConnectionReset
-                                | ErrorKind::ConnectionRefused
-                                | ErrorKind::ConnectionAborted => {
+                                | ErrorKind::ConnectionRefused => {
                                 socks5::TcpResponseHeader::new(socks5::Reply::HostUnreachable, addr.clone())
                                     .write_to(&mut stream).unwrap();
                             },
@@ -139,10 +138,10 @@ impl TcpRelayLocal {
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
-                                                  password.as_slice(),
-                                                  iv.as_slice(),
+                                                  &password[..],
+                                                  &iv[..],
                                                   CryptoMode::Encrypt);
-                remote_stream.write_all(iv.as_slice()).unwrap();
+                remote_stream.write_all(&iv[..]).unwrap();
                 let mut encrypt_stream = EncryptedWriter::new(remote_stream.try_clone().unwrap(), encryptor);
 
                 {
@@ -156,10 +155,10 @@ impl TcpRelayLocal {
                 }
 
                 let addr_cloned = addr.clone();
-                let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
-                let mut local_stream_cloned = stream.try_clone().unwrap();
-                Thread::spawn(move || {
-                    match io::util::copy(&mut buffered_local_stream, &mut encrypt_stream) {
+                let remote_stream_cloned = remote_stream.try_clone().unwrap();
+                let local_stream_cloned = stream.try_clone().unwrap();
+                thread::spawn(move || {
+                    match io::copy(&mut buffered_local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind() {
@@ -178,15 +177,19 @@ impl TcpRelayLocal {
 
                 let remote_iv = {
                     let mut iv = Vec::new();
-                    remote_stream.take(encrypt_method.block_size() as u64).read_to_end(&mut iv).unwrap();
+                    remote_stream.try_clone()
+                                 .unwrap()
+                                 .take(encrypt_method.block_size() as u64)
+                                 .read_to_end(&mut iv)
+                                 .unwrap();
                     iv
                 };
                 let decryptor = cipher::with_type(encrypt_method,
-                                                  password.as_slice(),
-                                                  remote_iv.as_slice(),
+                                                  &password[..],
+                                                  &remote_iv[..],
                                                   CryptoMode::Decrypt);
                 let mut decrypt_stream = DecryptedReader::new(remote_stream.try_clone().unwrap(), decryptor);
-                match io::util::copy(&mut decrypt_stream, &mut stream) {
+                match io::copy(&mut decrypt_stream, &mut stream) {
                     Err(err) => {
                         match err.kind() {
                             ErrorKind::BrokenPipe => {
@@ -231,7 +234,7 @@ impl Relay for TcpRelayLocal {
 
         let local_conf = self.config.local.expect("need local configuration");
 
-        let mut acceptor = match TcpListener::bind(&local_conf) {
+        let acceptor = match TcpListener::bind(&local_conf) {
             Ok(acpt) => acpt,
             Err(e) => {
                 panic!("Error occurs while listening local address: {}", e.to_string());
@@ -243,25 +246,25 @@ impl Relay for TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, IpAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let mut stream = s.unwrap();
-            stream.set_keepalive(self.config.timeout);
+            let stream = s.unwrap();
+            let _ = stream.set_keepalive(self.config.timeout);
 
             let mut succeed = false;
-            for _ in range(0, server_load_balancer.total()) {
+            for _ in 0..server_load_balancer.total() {
                 let ref server_cfg = server_load_balancer.pick_server();
                 let addr = {
-                    match cached_proxy.get(server_cfg.addr.as_slice()).map(|x| x.clone()) {
+                    match cached_proxy.get(&server_cfg.addr[..]).map(|x| x.clone()) {
                         Some(addr) => addr,
                         None => {
-                            match lookup_host(server_cfg.addr.as_slice()) {
-                                Ok(addr_itr) => {
+                            match lookup_host(&server_cfg.addr[..]) {
+                                Ok(mut addr_itr) => {
                                     match addr_itr.next() {
                                         None => {
                                             error!("cannot resolve proxy server `{}`", server_cfg.addr);
                                             continue;
                                         },
                                         Some(addr) => {
-                                            cached_proxy.insert(server_cfg.addr.clone(), addr.unwrap().ip().clone());
+                                            cached_proxy.insert(server_cfg.addr.clone(), addr.clone().unwrap().ip());
                                             addr.unwrap().ip()
                                         }
                                     }
@@ -281,7 +284,7 @@ impl Relay for TcpRelayLocal {
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
 
-                Thread::spawn(move ||
+                thread::spawn(move ||
                     TcpRelayLocal::handle_client(stream,
                                                  server_addr,
                                                  pwd,

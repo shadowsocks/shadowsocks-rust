@@ -20,9 +20,9 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::sync::{Arc, Mutex};
-use std::net::{UdpSocket, SocketAddr, lookup_host, ToSocketAddrs};
-use std::io::{BufReader, ReadExt, Read, Write};
-use std::thread::Thread;
+use std::net::{UdpSocket, SocketAddr, lookup_host};
+use std::io::{BufReader, ReadExt};
+use std::thread;
 
 use collect::LruCache;
 
@@ -46,7 +46,7 @@ impl UdpRelayServer {
     }
 
     fn accept_loop(svr_config: ServerConfig) {
-        let mut socket = UdpSocket::bind(&(svr_config.addr.as_slice(), svr_config.port))
+        let socket = UdpSocket::bind(&(&svr_config.addr[..], svr_config.port))
             .ok().expect("Unable to bind UDP socket");
         debug!("UDP server is binding {}", svr_config.addr);
 
@@ -62,12 +62,12 @@ impl UdpRelayServer {
                     let data = buf[..len].to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();
-                    let mut captured_socket = socket.try_clone().unwrap();
+                    let captured_socket = socket.try_clone().unwrap();
 
                     let method = svr_config.method;
                     let password = svr_config.password.clone();
 
-                    Thread::spawn(move || {
+                    thread::spawn(move || {
                         match remote_map.lock().unwrap().get(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().unwrap().get(remote_addr) {
@@ -77,20 +77,20 @@ impl UdpRelayServer {
                                         // Make a header
                                         let mut response_buf = Vec::new();
                                         remote_addr.write_to(&mut response_buf).unwrap();
-                                        response_buf.push_all(data.as_slice());
+                                        response_buf.push_all(&data[..]);
 
                                         let key = method.bytes_to_key(password.as_bytes());
                                         let mut iv = method.gen_init_vec();
                                         let mut encryptor =
                                             cipher::with_type(method,
-                                                              key.as_slice(),
-                                                              iv.as_slice(),
+                                                              &key[..],
+                                                              &iv[..],
                                                               CryptoMode::Encrypt);
-                                        iv.push_all(encryptor.update(response_buf.as_slice()).unwrap().as_slice());
-                                        iv.push_all(encryptor.finalize().unwrap().as_slice());
+                                        iv.push_all(&encryptor.update(&response_buf[..]).unwrap()[..]);
+                                        iv.push_all(&encryptor.finalize().unwrap()[..]);
 
                                         captured_socket
-                                            .send_to(iv.as_slice(), &client_addr)
+                                            .send_to(&iv[..], &client_addr)
                                             .unwrap();
                                     },
                                     None => {
@@ -108,12 +108,12 @@ impl UdpRelayServer {
                         let key = method.bytes_to_key(password.as_bytes());
                         let mut decryptor =
                             cipher::with_type(method,
-                                              key.as_slice(),
+                                              &key[..],
                                               &data[0..method.block_size()],
                                               CryptoMode::Decrypt);
                         let mut decrypted_data = decryptor.update(&data[method.block_size()..]).unwrap();
-                        decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
-                        let mut bufr = BufReader::new(decrypted_data.as_slice());
+                        decrypted_data.push_all(&decryptor.finalize().unwrap()[..]);
+                        let mut bufr = BufReader::new(&decrypted_data[..]);
 
                         let header = socks5::UdpAssociateHeader::read_from(bufr.by_ref()).unwrap();
 
@@ -136,7 +136,7 @@ impl UdpRelayServer {
                                 SocketAddr::new(ip, port)
                             },
                             &Address::DomainNameAddress(ref dnaddr, port) => {
-                                let ipaddrs = lookup_host(dnaddr.as_slice())
+                                let mut ipaddrs = lookup_host(&dnaddr[..])
                                                     .unwrap_or_else(|err| {
                                                         panic!("Unable to resolve {}: {}", dnaddr, err);
                                                     });
@@ -153,7 +153,7 @@ impl UdpRelayServer {
                                 remote_addr
                             }
                         };
-                        captured_socket.send_to(&decrypted_data.as_slice()[header.len()..], &sockaddr).unwrap();
+                        captured_socket.send_to(&decrypted_data[..][header.len()..], &sockaddr).unwrap();
                     });
                 },
                 Err(err) => {
@@ -170,7 +170,7 @@ impl Relay for UdpRelayServer {
         let mut threads = Vec::new();
         for s in self.config.server.iter() {
             let s = s.clone();
-            let fut = Thread::scoped(move || UdpRelayServer::accept_loop(s));
+            let fut = thread::scoped(move || UdpRelayServer::accept_loop(s));
             threads.push(fut);
         }
 

@@ -23,11 +23,7 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![allow(unstable)]
-
-#![feature(unsafe_destructor)]
-#![feature(box_syntax)]
-#![feature(libc)]
+#![feature(unsafe_destructor, box_syntax, libc, core, io, old_path, net, fs, std_misc, collections, test)]
 
 extern crate "rustc-serialize" as serialize;
 #[macro_use]
@@ -37,6 +33,8 @@ extern crate collect;
 extern crate "libsodium-sys" as libsodium_ffi;
 
 extern crate byteorder;
+extern crate rand;
+extern crate getopts;
 
 use std::fmt::{Debug, Formatter, self};
 

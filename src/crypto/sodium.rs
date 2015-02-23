@@ -68,7 +68,7 @@ impl Cipher for SodiumCipher {
                 data
             } else {
                 pad = Some(repeat(0u8).take(padding_len).chain(data.iter().map(|&x| x)).collect::<Vec<u8>>());
-                pad.as_ref().unwrap().as_slice()
+                &pad.as_ref().unwrap()[..]
             };
 
         if self.buf.len() < padding_len + data.len() {
@@ -117,12 +117,12 @@ mod test_sodium {
 
         let iv = ct.gen_init_vec();
 
-        let mut enc = SodiumCipher::new(ct, key.as_slice(), iv.as_slice());
+        let mut enc = SodiumCipher::new(ct, &key[..], &iv[..]);
         let encrypted_msg = enc.update(message).unwrap();
 
-        let mut dec = SodiumCipher::new(ct, key.as_slice(), iv.as_slice());
+        let mut dec = SodiumCipher::new(ct, &key[..], &iv[..]);
         let decrypted_msg = dec.update(&encrypted_msg[0..]).unwrap();
 
-        assert_eq!(message, decrypted_msg.as_slice());
+        assert_eq!(message, &decrypted_msg[..]);
     }
 }

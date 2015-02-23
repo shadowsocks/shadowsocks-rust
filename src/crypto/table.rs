@@ -44,11 +44,11 @@ impl TableCipher {
         md5_digest.update(key);
         let key_digest = md5_digest.digest();
 
-        let mut bufr = BufReader::new(key_digest.as_slice());
+        let mut bufr = BufReader::new(&key_digest[..]);
         let a = bufr.read_u64::<LittleEndian>().unwrap();
-        let mut table = range(0, TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
+        let mut table = (0..TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
 
-        for i in range(1, 1024) {
+        for i in 1..1024 {
             table.as_mut_slice().sort_by(|x, y| {
                 (a % (*x + i)).cmp(&(a % (*y + i)))
             })
@@ -60,7 +60,7 @@ impl TableCipher {
                 CryptoMode::Decrypt => {
                     let mut t = Vec::with_capacity(table.len());
                     unsafe { t.set_len(table.len()); }
-                    for idx in range(0, table.len()) {
+                    for idx in 0..table.len() {
                         t[table[idx] as usize] = idx as u8;
                     }
                     t
@@ -93,7 +93,7 @@ fn test_table_cipher() {
     let mut enc = TableCipher::new(key.as_bytes(), CryptoMode::Encrypt);
     let mut dec = TableCipher::new(key.as_bytes(), CryptoMode::Decrypt);
     let encrypted_msg = enc.update(message.as_bytes()).unwrap();
-    let decrypted_msg = dec.update(encrypted_msg.as_slice()).unwrap();
+    let decrypted_msg = dec.update(&encrypted_msg[..]).unwrap();
 
-    assert_eq!(decrypted_msg.as_slice(), message.as_bytes());
+    assert_eq!(&decrypted_msg[..], message.as_bytes());
 }

@@ -446,7 +446,7 @@ pub struct OpenSSLCipher {
 impl OpenSSLCipher {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
         OpenSSLCipher {
-            worker: OpenSSLCrypto::new(cipher_type, key.as_slice(), iv.as_slice(), mode),
+            worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode),
         }
     }
 }
@@ -509,18 +509,18 @@ mod test_openssl {
             let k = t.bytes_to_key(key.as_bytes());
             let iv = t.gen_init_vec();
 
-            let mut enc = OpenSSLCipher::new(*t, k.as_slice(), iv.as_slice(), CryptoMode::Encrypt);
+            let mut enc = OpenSSLCipher::new(*t, &k[..], &iv[..], CryptoMode::Encrypt);
 
             let mut encrypted_msg = enc.update(message.as_bytes()).unwrap();
-            encrypted_msg.push_all(enc.finalize().unwrap().as_slice());
+            encrypted_msg.push_all(&enc.finalize().unwrap()[..]);
             println!("ENC {:?}", encrypted_msg);
 
-            let mut dec = OpenSSLCipher::new(*t, k.as_slice(), iv.as_slice(), CryptoMode::Decrypt);
-            let mut decrypted_msg = dec.update(encrypted_msg.as_slice()).unwrap();
-            decrypted_msg.push_all(dec.finalize().unwrap().as_slice());
-            println!("DEC {:?}", decrypted_msg.as_slice());
+            let mut dec = OpenSSLCipher::new(*t, &k[..], &iv[..], CryptoMode::Decrypt);
+            let mut decrypted_msg = dec.update(&encrypted_msg[..]).unwrap();
+            decrypted_msg.push_all(&dec.finalize().unwrap()[..]);
+            println!("DEC {:?}", &decrypted_msg[..]);
 
-            assert_eq!(message.as_bytes(), decrypted_msg.as_slice());
+            assert_eq!(message.as_bytes(), &decrypted_msg[..]);
         }
     }
 
@@ -534,7 +534,7 @@ mod test_openssl {
         for _ in range::<usize>(0, 100) {
             let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(key.as_slice());
+            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(&key[..]);
             let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
 
             test_data.push((msg, k, v));
@@ -544,8 +544,8 @@ mod test_openssl {
             let (ref msg, ref key, ref iv) = test_data[random::<usize>() % test_data.len()];
 
             let mut enc = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
-                                             key.as_slice(), iv.as_slice(), CryptoMode::Encrypt);
-            enc.update(msg.as_slice()).unwrap();
+                                             &key[..], &iv[..], CryptoMode::Encrypt);
+            enc.update(&msg[..]).unwrap();
         });
         b.bytes = msg_size as u64;
     }
@@ -559,19 +559,19 @@ mod test_openssl {
         for _ in range::<usize>(0, 100) {
             let msg = range(0, msg_size).map(|_| random::<u8>()).collect::<Vec<u8>>();
             let key = range(1, random::<usize>() % 63).map(|_| random::<u8>()).collect::<Vec<u8>>();
-            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(key.as_slice());
+            let k = cipher::CipherType::Aes256Cfb.bytes_to_key(&key[..]);
             let v = cipher::CipherType::Aes256Cfb.gen_init_vec();
             let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
-                                                k.as_slice(), v.as_slice(), CryptoMode::Encrypt);
-            let encrypted_msg = cipher.update(msg.as_slice()).unwrap();
+                                                &k[..], &v[..], CryptoMode::Encrypt);
+            let encrypted_msg = cipher.update(&msg[..]).unwrap();
             test_data.push((k, v, encrypted_msg));
         }
 
         b.iter(|| {
             let (ref key, ref iv, ref encrypted_msg) = test_data[random::<usize>() % test_data.len()];
             let mut cipher = OpenSSLCipher::new(cipher::CipherType::Aes256Cfb,
-                                                key.as_slice(), iv.as_slice(), CryptoMode::Decrypt);
-            cipher.update(encrypted_msg.as_slice()).unwrap();
+                                                &key[..], &iv[..], CryptoMode::Decrypt);
+            cipher.update(&encrypted_msg[..]).unwrap();
         });
         b.bytes = msg_size as u64;
     }

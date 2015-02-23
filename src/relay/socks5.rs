@@ -27,7 +27,7 @@ use std::io::{self, Read, ReadExt, Write};
 use std::vec;
 use std::error;
 
-use byteorder::{self, ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
+use byteorder::{self, ReadBytesExt, WriteBytesExt, BigEndian};
 
 const SOCKS5_VERSION : u8 = 0x05;
 
@@ -163,7 +163,7 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {
     fn description(&self) -> &str {
-        self.message.as_slice()
+        &self.message[..]
     }
 
     fn cause(&self) -> Option<&error::Error> {
@@ -195,7 +195,7 @@ pub enum Address {
 
 impl Address {
     #[inline]
-    pub fn read_from<R: ReadExt>(reader: &mut R) -> Result<Address, Error> {
+    pub fn read_from<R: ReadExt + Sized>(reader: &mut R) -> Result<Address, Error> {
         match parse_request_header(reader) {
             Ok((_, addr)) => Ok(addr),
             Err(err) => Err(err),
@@ -203,7 +203,7 @@ impl Address {
     }
 
     #[inline]
-    pub fn write_to(&self, writer: &mut Write) -> io::Result<()> {
+    pub fn write_to<W: Write + Sized>(&self, writer: &mut W) -> io::Result<()> {
         write_addr(self, writer)
     }
 
@@ -236,9 +236,9 @@ impl fmt::Display for Address {
 impl ToSocketAddrs for Address {
     type Iter = vec::IntoIter<SocketAddr>;
     fn to_socket_addrs(&self) -> io::Result<vec::IntoIter<SocketAddr>> {
-        match *self {
+        match self.clone() {
             Address::SocketAddress(ip, port) => Ok(vec![SocketAddr::new(ip, port)].into_iter()),
-            Address::DomainNameAddress(addr, port) => (addr.as_slice(), port).to_socket_addrs(),
+            Address::DomainNameAddress(addr, port) => (&addr[..], port).to_socket_addrs(),
         }
     }
 }
@@ -262,7 +262,7 @@ impl TcpRequestHeader {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.to_string().as_slice()))
+            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.description()))
         }
         let [ver, cmd, _] = buf;
 
@@ -280,7 +280,7 @@ impl TcpRequestHeader {
     }
 
     #[inline]
-    pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
+    pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
         try!(stream.write(&[SOCKS5_VERSION, self.command.code(), 0x00]));
         try!(self.address.write_to(stream));
 
@@ -312,7 +312,7 @@ impl TcpResponseHeader {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.to_string().as_slice()))
+            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.description()))
         }
         let [ver, reply_code, _] = buf;
 
@@ -327,7 +327,7 @@ impl TcpResponseHeader {
     }
 
     #[inline]
-    pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
+    pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
         try!(stream.write(&[SOCKS5_VERSION, self.reply.code(), 0x00]));
         try!(self.address.write_to(stream));
 
@@ -387,7 +387,7 @@ fn parse_request_header<R: ReadExt>(stream: &mut R) -> Result<(usize, Address), 
 }
 
 #[inline]
-fn write_addr(addr: &Address, buf: &mut Write) -> io::Result<()> {
+fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
     match addr {
         &Address::SocketAddress(ip, port) => {
             match ip {
@@ -442,7 +442,7 @@ fn write_addr(addr: &Address, buf: &mut Write) -> io::Result<()> {
                             byteorder::Error::Io(err) => err
                         }
                     }));
-            try!(buf.write_all(dnaddr.as_slice().as_bytes()));
+            try!(buf.write_all(dnaddr[..].as_bytes()));
             try!(buf.write_u16::<BigEndian>(port).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
@@ -512,7 +512,7 @@ impl HandshakeRequest {
 
     pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
         try!(stream.write(&[SOCKS5_VERSION, self.methods.len() as u8]));
-        try!(stream.write(self.methods.as_slice()));
+        try!(stream.write(&self.methods[..]));
 
         Ok(())
     }
@@ -577,7 +577,7 @@ impl UdpAssociateHeader {
             match reader.read(&mut buf[read_size..]) {
                 Ok(l) => read_size += l,
                 Err(err) => {
-                    return Err(Error::new(Reply::GeneralFailure, err.to_string().as_slice()));
+                    return Err(Error::new(Reply::GeneralFailure, err.description()));
                 }
             }
         }
@@ -587,7 +587,7 @@ impl UdpAssociateHeader {
         Ok(UdpAssociateHeader::new(frag, try!(Address::read_from(reader))))
     }
 
-    pub fn write_to(&self, writer: &mut Write) -> io::Result<()> {
+    pub fn write_to<W: Write + Sized>(&self, writer: &mut W) -> io::Result<()> {
         try!(writer.write_all(&[0x00, 0x00, self.frag]));
         try!(self.address.write_to(writer));
 

@@ -39,7 +39,7 @@ impl RoundRobin {
 
 impl LoadBalancer for RoundRobin {
     fn pick_server<'a>(&'a mut self) -> &'a ServerConfig {
-        match self.server.as_slice() {
+        match &self.server[..] {
             [ref s] => s,
             _ => {
                 let ref s = self.server[self.index];
