@@ -29,7 +29,9 @@ use crypto::digest::Digest;
 use crypto::digest::DigestType;
 use crypto::CryptoMode;
 
-const TABLE_SIZE: usize = 256us;
+use byteorder::{ReadBytesExt, LittleEndian};
+
+const TABLE_SIZE: usize = 256usize;
 
 #[derive(Clone)]
 pub struct TableCipher {
@@ -43,7 +45,7 @@ impl TableCipher {
         let key_digest = md5_digest.digest();
 
         let mut bufr = BufReader::new(key_digest.as_slice());
-        let a = bufr.read_le_u64().unwrap();
+        let a = bufr.read_u64::<LittleEndian>().unwrap();
         let mut table = range(0, TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
 
         for i in range(1, 1024) {

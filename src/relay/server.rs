@@ -100,7 +100,7 @@ impl Relay for RelayServer {
         }
 
         for fut in threads.into_iter() {
-            fut.join().ok().expect("A relay thread failed and exited");
+            fut.join();
         }
     }
 
@@ -114,6 +114,6 @@ impl Relay for RelayServer {
         let tcp_thread = Thread::scoped(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join().ok().expect("TCP relay thread failed and exited");
+        tcp_thread.join();
     }
 }

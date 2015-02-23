@@ -22,10 +22,9 @@
 //! TcpRelay server that running on the server side
 
 use std::sync::Arc;
-use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{EndOfFile, BrokenPipe};
-use std::io::net::ip::SocketAddr;
-use std::io::{BufferedStream, self};
+use std::net::{TcpListener, TcpStream, Shutdown};
+use std::net::SocketAddr;
+use std::io::{Read, ReadExt, Write, BufStream, ErrorKind, self};
 use std::time::duration::Duration;
 use std::thread::Thread;
 
@@ -36,41 +35,6 @@ use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
 use crypto::CryptoMode;
-
-macro_rules! try_result{
-    ($res:expr) => ({
-        let res = $res;
-        match res {
-            Ok(r) => { r },
-            Err(err) => {
-                error!("{}", err);
-                return;
-            }
-        }
-    });
-    ($res:expr, prefix: $prefix:expr) => ({
-        let res = $res;
-        let prefix = $prefix;
-        match res {
-            Ok(r) => { r },
-            Err(err) => {
-                error!("{} {}", prefix, err);
-                return;
-            }
-        }
-    });
-    ($res:expr, message: $message:expr) => ({
-        let res = $res;
-        let message = $message;
-        match res {
-            Ok(r) => { r },
-            Err(..) => {
-                error!("{}", message);
-                return;
-            }
-        }
-    });
-}
 
 #[derive(Clone)]
 pub struct TcpRelayServer {
@@ -88,8 +52,8 @@ impl TcpRelayServer {
     }
 
     fn accept_loop(s: ServerConfig) {
-        let mut acceptor = try_result!(TcpListener::bind((s.addr.as_slice(), s.port)).listen(),
-                                       prefix: "Failed to bind: ");
+        let mut acceptor = TcpListener::bind(&(s.addr.as_slice(), s.port))
+                                        .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
 
         info!("Shadowsocks listening on {}", s.addr);
 
@@ -100,82 +64,52 @@ impl TcpRelayServer {
         let method = s.method;
         for s in acceptor.incoming() {
             let mut stream = s.unwrap();
-            stream.set_timeout(timeout);
+            stream.set_keepalive(timeout);
 
             let pwd = pwd.clone();
             let encrypt_method = method;
             let dnscache = dnscache_arc.clone();
 
             Thread::spawn(move || {
-                let remote_iv = try_result!(stream.read_exact(encrypt_method.block_size()));
+                let remote_iv = {
+                    let mut iv = Vec::new();
+                    stream.take(encrypt_method.block_size() as u64).read_to_end(&mut iv).unwrap();
+                    iv
+                };
                 let decryptor = cipher::with_type(encrypt_method,
                                                   pwd.as_slice(),
                                                   remote_iv.as_slice(),
                                                   CryptoMode::Decrypt);
 
-                let buffered_client_stream = BufferedStream::new(stream.clone());
+                let buffered_client_stream = BufStream::new(stream.try_clone().unwrap());
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
-                let addr = try_result!(socks5::Address::read_from(&mut decrypt_stream),
-                     prefix: "Error occurs while parsing request header, maybe wrong crypto method or password: "
-                );
+                let addr = socks5::Address::read_from(&mut decrypt_stream).unwrap_or_else(|err| {
+                    panic!("Error occurs while parsing request header, maybe wrong crypto method or password: {:?}",
+                           err);
+                });
 
                 info!("Connecting to {}", addr);
-                let remote_stream = match addr {
-                    Address::SocketAddress(ip, port) => {
-                        try_result!(TcpStream::connect_timeout(SocketAddr {ip: ip, port: port}, Duration::seconds(30)),
-                                prefix: format!("Unable to connect {}:", addr)
-                        )
-                    },
-                    Address::DomainNameAddress(ref name, ref port) => {
-                        let ipaddrs = {
-                            // Cannot fail inside, which will cause other tasks fail, too.
-                            match dnscache.resolve(name.as_slice()) {
-                                Some(v) => { v },
-                                None => {
-                                    error!("Unable to resolve {}:{}", name, port);
-                                    return;
-                                }
-                            }
-                        };
+                let remote_stream = TcpStream::connect(&addr).unwrap_or_else(|err| {
+                    panic!("Unable to connect {:?}: {:?}", addr, err);
+                });
 
-                        let connector = |&:| {
-                            for ipaddr in ipaddrs.iter() {
-                                let result = TcpStream::connect_timeout(SocketAddr {
-                                                                ip: *ipaddr,
-                                                                port: *port
-                                                            },
-                                                            Duration::seconds(30));
-                                match result {
-                                    Err(err) => debug!("{} trying {}: {}", addr, ipaddr, err),
-                                    Ok(host) => {
-                                        debug!("{} trying {}: succeed", addr, ipaddr);
-                                        return host;
-                                    }
-                                }
-                            }
-                            panic!("Unable to connect {}", addr);
-                        };
-                        connector()
-                    }
-                };
-
-                let mut remote_stream_cloned = remote_stream.clone();
+                let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
                 let addr_cloned = addr.clone();
                 Thread::spawn(move || {
-                    match io::util::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
+                    match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
                         Ok(..) => {},
                         Err(err) => {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
+                            match err.kind() {
+                                ErrorKind::BrokenPipe => {
                                     debug!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 },
                                 _ => {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            remote_stream_cloned.close_write().or(Ok(())).unwrap();
-                            decrypt_stream.get_mut().get_mut().close_read().or(Ok(())).unwrap();
+                            remote_stream_cloned.shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                            decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
                         }
                     }
                 });
@@ -185,22 +119,22 @@ impl TcpRelayServer {
                                                   pwd.as_slice(),
                                                   iv.as_slice(),
                                                   CryptoMode::Encrypt);
-                try_result!(stream.write(iv.as_slice()));
-                let mut buffered_remote_stream = BufferedStream::new(remote_stream.clone());
-                let mut encrypt_stream = EncryptedWriter::new(stream.clone(), encryptor);
+                stream.write_all(iv.as_slice()).unwrap();
+                let mut buffered_remote_stream = BufStream::new(remote_stream.try_clone().unwrap());
+                let mut encrypt_stream = EncryptedWriter::new(stream.try_clone().unwrap(), encryptor);
                 match io::util::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
                     Ok(..) => {},
                     Err(err) => {
-                        match err.kind {
-                            EndOfFile | BrokenPipe => {
+                        match err.kind() {
+                            ErrorKind::BrokenPipe => {
                                 debug!("{} relay from remote to local stream: {}", addr, err)
                             },
                             _ => {
                                 error!("{} relay from remote to local stream: {}", addr, err)
                             }
                         }
-                        encrypt_stream.get_mut().close_write().or(Ok(())).unwrap();
-                        buffered_remote_stream.get_mut().close_read().or(Ok(())).unwrap();
+                        encrypt_stream.get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                        buffered_remote_stream.get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
                     }
                 }
             });
@@ -220,7 +154,7 @@ impl Relay for TcpRelayServer {
         }
 
         for fut in threads.into_iter() {
-            fut.join().ok().expect("A thread failed and exited");
+            fut.join();
         }
     }
 }

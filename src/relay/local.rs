@@ -96,7 +96,7 @@ impl Relay for RelayLocal {
         let tcp_thread = Thread::scoped(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join().ok().expect("A thread failed and exited");
+        tcp_thread.join();
     }
 
     #[cfg(feature = "enable-udp")]
@@ -116,7 +116,7 @@ impl Relay for RelayLocal {
         }
 
         for fut in threads.into_iter() {
-            fut.join().ok().expect("A thread failed and exited");
+            fut.join();
         }
     }
 }

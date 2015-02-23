@@ -47,6 +47,7 @@ pub type CipherResult<T> = Result<T, Error>;
 
 #[derive(Copy)]
 pub enum ErrorKind {
+    UnknownCipherType,
     OpenSSLError,
 }
 
@@ -54,6 +55,16 @@ pub struct Error {
     pub kind: ErrorKind,
     pub desc: &'static str,
     pub detail: Option<String>,
+}
+
+impl Error {
+    pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
+        Error {
+            kind: kind,
+            desc: desc,
+            detail: detail,
+        }
+    }
 }
 
 impl Debug for Error {
@@ -327,112 +338,113 @@ impl CipherType {
 }
 
 impl FromStr for CipherType {
-    fn from_str(s: &str) -> Option<CipherType> {
+    type Err = Error;
+    fn from_str(s: &str) -> Result<CipherType, Error> {
         match s {
-            CIPHER_TABLE | "" => Some(CipherType::Table),
+            CIPHER_TABLE | "" => Ok(CipherType::Table),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB =>
-                Some(CipherType::Aes128Cfb),
+                Ok(CipherType::Aes128Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_1 =>
-                Some(CipherType::Aes128Cfb1),
+                Ok(CipherType::Aes128Cfb1),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_8 =>
-                Some(CipherType::Aes128Cfb8),
+                Ok(CipherType::Aes128Cfb8),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_128 =>
-                Some(CipherType::Aes128Cfb128),
+                Ok(CipherType::Aes128Cfb128),
 
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_192_CFB =>
-                Some(CipherType::Aes192Cfb),
+                Ok(CipherType::Aes192Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_192_CFB_1 =>
-                Some(CipherType::Aes192Cfb1),
+                Ok(CipherType::Aes192Cfb1),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_192_CFB_8 =>
-                Some(CipherType::Aes192Cfb8),
+                Ok(CipherType::Aes192Cfb8),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_192_CFB_128 =>
-                Some(CipherType::Aes192Cfb128),
+                Ok(CipherType::Aes192Cfb128),
 
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB =>
-                Some(CipherType::Aes256Cfb),
+                Ok(CipherType::Aes256Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_1 =>
-                Some(CipherType::Aes256Cfb1),
+                Ok(CipherType::Aes256Cfb1),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_8 =>
-                Some(CipherType::Aes256Cfb8),
+                Ok(CipherType::Aes256Cfb8),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_128 =>
-                Some(CipherType::Aes256Cfb128),
+                Ok(CipherType::Aes256Cfb128),
 
             #[cfg(feature = "cipher-aes-ofb")]
             CIPHER_AES_128_OFB =>
-                Some(CipherType::Aes128Ofb),
+                Ok(CipherType::Aes128Ofb),
             #[cfg(feature = "cipher-aes-ofb")]
             CIPHER_AES_192_OFB =>
-                Some(CipherType::Aes192Ofb),
+                Ok(CipherType::Aes192Ofb),
             #[cfg(feature = "cipher-aes-ofb")]
             CIPHER_AES_256_OFB =>
-                Some(CipherType::Aes256Ofb),
+                Ok(CipherType::Aes256Ofb),
 
             #[cfg(feature = "cipher-aes-ctr")]
             CIPHER_AES_128_CTR =>
-                Some(CipherType::Aes128Ctr),
+                Ok(CipherType::Aes128Ctr),
             #[cfg(feature = "cipher-aes-ctr")]
             CIPHER_AES_192_CTR =>
-                Some(CipherType::Aes192Ctr),
+                Ok(CipherType::Aes192Ctr),
             #[cfg(feature = "cipher-aes-ctr")]
             CIPHER_AES_256_CTR =>
-                Some(CipherType::Aes256Ctr),
+                Ok(CipherType::Aes256Ctr),
 
             #[cfg(feature = "cipher-bf-cfb")]
             CIPHER_BF_CFB =>
-                Some(CipherType::BfCfb),
+                Ok(CipherType::BfCfb),
 
             #[cfg(feature = "cipher-camellia-cfb")]
             CIPHER_CAMELLIA_128_CFB =>
-                Some(CipherType::Camellia128Cfb),
+                Ok(CipherType::Camellia128Cfb),
             #[cfg(feature = "cipher-camellia-cfb")]
             CIPHER_CAMELLIA_192_CFB =>
-                Some(CipherType::Camellia192Cfb),
+                Ok(CipherType::Camellia192Cfb),
             #[cfg(feature = "cipher-camellia-cfb")]
             CIPHER_CAMELLIA_256_CFB =>
-                Some(CipherType::Camellia256Cfb),
+                Ok(CipherType::Camellia256Cfb),
 
             #[cfg(feature = "cipher-cast5-cfb")]
             CIPHER_CAST5_CFB =>
-                Some(CipherType::Cast5Cfb),
+                Ok(CipherType::Cast5Cfb),
             #[cfg(feature = "cipher-des-cfb")]
             CIPHER_DES_CFB =>
-                Some(CipherType::DesCfb),
+                Ok(CipherType::DesCfb),
             #[cfg(feature = "cipher-idea-cfb")]
             CIPHER_IDEA_CFB =>
-                Some(CipherType::IdeaCfb),
+                Ok(CipherType::IdeaCfb),
             #[cfg(feature = "cipher-rc2-cfb")]
             CIPHER_RC2_CFB =>
-                Some(CipherType::Rc2Cfb),
+                Ok(CipherType::Rc2Cfb),
             #[cfg(feature = "cipher-rc4")]
             CIPHER_RC4 =>
-                Some(CipherType::Rc4),
+                Ok(CipherType::Rc4),
             #[cfg(feature = "cipher-rc4")]
             CIPHER_RC4_MD5 =>
-                Some(CipherType::Rc4Md5),
+                Ok(CipherType::Rc4Md5),
             #[cfg(feature = "cipher-seed-cfb")]
             CIPHER_SEED_CFB =>
-                Some(CipherType::SeedCfb),
+                Ok(CipherType::SeedCfb),
 
             #[cfg(feature = "cipher-chacha20")]
             CIPHER_CHACHA20 =>
-                Some(CipherType::ChaCha20),
+                Ok(CipherType::ChaCha20),
             #[cfg(feature = "cipher-salsa20")]
             CIPHER_SALSA20 =>
-                Some(CipherType::Salsa20),
+                Ok(CipherType::Salsa20),
 
-            _ => None
+            _ => Err(Error::new(ErrorKind::UnknownCipherType, "Unknown cipher type", None))
         }
     }
 }

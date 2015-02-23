@@ -21,13 +21,13 @@
 
 #![allow(dead_code)]
 
-use std::io::{IoResult, IoError, IoErrorKind};
+use std::io::{self, ErrorKind, Read, BufRead, Write};
 use std::cmp;
 use std::slice;
 
 use crypto::cipher::Cipher;
 
-pub struct DecryptedReader<R: Reader> {
+pub struct DecryptedReader<R: Read> {
     reader: R,
     buffer: Vec<u8>,
     cipher: Box<Cipher + Send>,
@@ -37,7 +37,7 @@ pub struct DecryptedReader<R: Reader> {
 
 const BUFFER_SIZE: usize = 2048;
 
-impl<R: Reader> DecryptedReader<R> {
+impl<R: Read> DecryptedReader<R> {
     pub fn new(r: R, cipher: Box<Cipher + Send>) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
@@ -71,44 +71,28 @@ impl<R: Reader> DecryptedReader<R> {
     }
 }
 
-impl<R: Reader> Buffer for DecryptedReader<R> {
-    fn fill_buf<'b>(&'b mut self) -> IoResult<&'b [u8]> {
+impl<R: Read> BufRead for DecryptedReader<R> {
+    fn fill_buf<'b>(&'b mut self) -> io::Result<&'b [u8]> {
         if self.pos == self.buffer.len() {
             let mut incoming = [0u8; BUFFER_SIZE];
             match self.reader.read(&mut incoming) {
+                Ok(0) => {
+                    // EOF
+                    self.buffer = try!(self.cipher
+                                           .finalize()
+                                           .map_err(|err| io::Error::new(io::ErrorKind::Other,
+                                                                         err.desc,
+                                                                         err.detail)));
+                }
                 Ok(l) => {
-                    self.buffer = match self.cipher.update(&incoming[0..l]) {
-                        Ok(ret) => ret,
-                        Err(err) => return Err(IoError {
-                                        kind: IoErrorKind::OtherIoError,
-                                        desc: err.desc,
-                                        detail: err.detail,
-                                    }),
-                    }
+                    self.buffer = try!(self.cipher
+                                           .update(&incoming[0..l])
+                                           .map_err(|err| io::Error::new(io::ErrorKind::Other,
+                                                                         err.desc,
+                                                                         err.detail)));
                 },
                 Err(err) => {
-                    match err.kind {
-                        IoErrorKind::EndOfFile => {
-                            if self.sent_final {
-                                return Err(err);
-                            }
-
-                            self.sent_final = true;
-                            self.buffer = match self.cipher.finalize() {
-                                Ok(ret) => ret,
-                                Err(err) => return Err(IoError {
-                                    kind: IoErrorKind::OtherIoError,
-                                    desc: err.desc,
-                                    detail: err.detail,
-                                }),
-                            };
-
-                            if self.buffer.len() == 0 {
-                                return Err(err);
-                            }
-                        },
-                        _ => return Err(err),
-                    }
+                    return Err(err);
                 }
             };
 
@@ -124,8 +108,8 @@ impl<R: Reader> Buffer for DecryptedReader<R> {
     }
 }
 
-impl<R: Reader> Reader for DecryptedReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+impl<R: Read> Read for DecryptedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
             let available = try!(self.fill_buf());
             let nread = cmp::min(available.len(), buf.len());
@@ -137,12 +121,12 @@ impl<R: Reader> Reader for DecryptedReader<R> {
     }
 }
 
-pub struct EncryptedWriter<W: Writer> {
+pub struct EncryptedWriter<W: Write> {
     writer: W,
     cipher: Box<Cipher + Send>,
 }
 
-impl<W: Writer> EncryptedWriter<W> {
+impl<W: Write> EncryptedWriter<W> {
     pub fn new(w: W, cipher: Box<Cipher + Send>) -> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
@@ -150,17 +134,17 @@ impl<W: Writer> EncryptedWriter<W> {
         }
     }
 
-    pub fn finalize(&mut self) -> IoResult<()> {
+    pub fn finalize(&mut self) -> io::Result<()> {
         match self.cipher.finalize() {
             Ok(fin) => {
-                self.writer.write(fin.as_slice())
+                self.writer.write_all(fin.as_slice())
             },
             Err(err) => {
-                Err(IoError {
-                    kind: IoErrorKind::OtherIoError,
-                    desc: err.desc,
-                    detail: err.detail,
-                })
+                Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        err.desc,
+                        err.detail,
+                    ))
             }
         }
     }
@@ -180,29 +164,33 @@ impl<W: Writer> EncryptedWriter<W> {
     }
 }
 
-impl<W: Writer> Writer for EncryptedWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
+impl<W: Write> Write for EncryptedWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self.cipher.update(buf) {
             Ok(ret) => {
-                self.writer.write(ret.as_slice())
+                match self.writer.write_all(ret.as_slice()) {
+                    Ok(..) => Ok(buf.len()),
+                    Err(err) => return Err(err),
+                }
             },
             Err(err) => {
-                Err(IoError {
-                    kind: IoErrorKind::OtherIoError,
-                    desc: err.desc,
-                    detail: err.detail,
-                })
+                Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        err.desc,
+                        err.detail,
+                   ))
             }
         }
     }
 
-    // fn flush(&mut self) -> IoResult<()> {
-    //     self.finalize()
-    // }
+    fn flush(&mut self) -> io::Result<()> {
+        // self.finalize()
+        Ok(())
+    }
 }
 
 #[unsafe_destructor]
-impl<W: Writer> Drop for EncryptedWriter<W> {
+impl<W: Write> Drop for EncryptedWriter<W> {
     fn drop(&mut self) {
         self.finalize().unwrap()
     }

@@ -32,7 +32,7 @@ impl RoundRobin {
     pub fn new(config: Vec<ServerConfig>) -> RoundRobin {
         RoundRobin {
             server: config,
-            index: 0us,
+            index: 0usize,
         }
     }
 }

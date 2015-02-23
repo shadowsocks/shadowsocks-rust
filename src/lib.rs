@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![experimental]
+#![unstable(reason = "Waiting for Rust 1.0.0 final release")]
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
@@ -27,6 +27,7 @@
 
 #![feature(unsafe_destructor)]
 #![feature(box_syntax)]
+#![feature(libc)]
 
 extern crate "rustc-serialize" as serialize;
 #[macro_use]
@@ -34,6 +35,8 @@ extern crate log;
 extern crate collect;
 
 extern crate "libsodium-sys" as libsodium_ffi;
+
+extern crate byteorder;
 
 use std::fmt::{Debug, Formatter, self};
 

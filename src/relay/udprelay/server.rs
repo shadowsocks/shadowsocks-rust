@@ -20,10 +20,8 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::sync::{Arc, Mutex};
-use std::io::net::udp::UdpSocket;
-use std::io::net::ip::SocketAddr;
-use std::io::net::addrinfo::get_host_addresses;
-use std::io::BufReader;
+use std::net::{UdpSocket, SocketAddr, lookup_host, ToSocketAddrs};
+use std::io::{BufReader, ReadExt, Read, Write};
 use std::thread::Thread;
 
 use collect::LruCache;
@@ -48,7 +46,7 @@ impl UdpRelayServer {
     }
 
     fn accept_loop(svr_config: ServerConfig) {
-        let mut socket = UdpSocket::bind((svr_config.addr.as_slice(), svr_config.port))
+        let mut socket = UdpSocket::bind(&(svr_config.addr.as_slice(), svr_config.port))
             .ok().expect("Unable to bind UDP socket");
         debug!("UDP server is binding {}", svr_config.addr);
 
@@ -64,7 +62,7 @@ impl UdpRelayServer {
                     let data = buf[..len].to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();
-                    let mut captured_socket = socket.clone();
+                    let mut captured_socket = socket.try_clone().unwrap();
 
                     let method = svr_config.method;
                     let password = svr_config.password.clone();
@@ -79,7 +77,7 @@ impl UdpRelayServer {
                                         // Make a header
                                         let mut response_buf = Vec::new();
                                         remote_addr.write_to(&mut response_buf).unwrap();
-                                        response_buf.write(data.as_slice()).unwrap();
+                                        response_buf.push_all(data.as_slice());
 
                                         let key = method.bytes_to_key(password.as_bytes());
                                         let mut iv = method.gen_init_vec();
@@ -92,7 +90,7 @@ impl UdpRelayServer {
                                         iv.push_all(encryptor.finalize().unwrap().as_slice());
 
                                         captured_socket
-                                            .send_to(iv.as_slice(), client_addr.clone())
+                                            .send_to(iv.as_slice(), &client_addr)
                                             .unwrap();
                                     },
                                     None => {
@@ -117,7 +115,7 @@ impl UdpRelayServer {
                         decrypted_data.push_all(decryptor.finalize().unwrap().as_slice());
                         let mut bufr = BufReader::new(decrypted_data.as_slice());
 
-                        let header = socks5::UdpAssociateHeader::read_from(&mut bufr).unwrap();
+                        let header = socks5::UdpAssociateHeader::read_from(bufr.by_ref()).unwrap();
 
                         if header.frag != 0 {
                             // Drop it
@@ -134,19 +132,18 @@ impl UdpRelayServer {
                                           .insert(header.address.clone(), src);
                                 remote_map.lock()
                                           .unwrap()
-                                          .insert(SocketAddr {ip: ip, port: port}, header.address.clone());
-                                SocketAddr {ip: ip, port: port}
+                                          .insert(SocketAddr::new(ip, port), header.address.clone());
+                                SocketAddr::new(ip, port)
                             },
                             &Address::DomainNameAddress(ref dnaddr, port) => {
-                                let ref ipaddrs = get_host_addresses(dnaddr.as_slice())
-                                    .unwrap_or_else(|err| {
-                                        panic!("Unable to resolve {}: {}", dnaddr, err);
-                                    });
+                                let ipaddrs = lookup_host(dnaddr.as_slice())
+                                                    .unwrap_or_else(|err| {
+                                                        panic!("Unable to resolve {}: {}", dnaddr, err);
+                                                    });
 
-                                let remote_addr = SocketAddr {
-                                                      ip: ipaddrs.first().unwrap().clone(),
-                                                      port: port,
-                                                  };
+                                let remote_addr =
+                                    SocketAddr::new(ipaddrs.next().unwrap().unwrap().ip().clone(), port);
+
                                 client_map.lock()
                                           .unwrap()
                                           .insert(header.address.clone(), src);
@@ -156,7 +153,7 @@ impl UdpRelayServer {
                                 remote_addr
                             }
                         };
-                        captured_socket.send_to(&decrypted_data.as_slice()[header.len()..], sockaddr).unwrap();
+                        captured_socket.send_to(&decrypted_data.as_slice()[header.len()..], &sockaddr).unwrap();
                     });
                 },
                 Err(err) => {
@@ -178,7 +175,7 @@ impl Relay for UdpRelayServer {
         }
 
         for fut in threads.into_iter() {
-            fut.join().ok().expect("A thread failed and exited");
+            fut.join();
         }
     }
 }

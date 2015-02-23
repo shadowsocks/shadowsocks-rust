@@ -21,15 +21,15 @@
 
 use std::sync::{Arc, Mutex, TaskPool};
 // use std::sync::atomic::{AtomicOption, SeqCst};
-use std::io::net::addrinfo::get_host_addresses;
-use std::io::net::ip::IpAddr;
+use std::net::lookup_host;
+use std::net::IpAddr;
 
 use collect::LruCache;
 
 const TASK_POOL_SIZE: usize = 4;
 
 struct DnsLruCache {
-    cache: LruCache<String, Vec<IpAddr>>,
+    cache: LruCache<String, IpAddr>,
     totally_matched: usize,
     totally_missed: usize,
 }
@@ -51,7 +51,7 @@ impl CachedDns {
         }
     }
 
-    pub fn resolve(&self, addr: &str) -> Option<Vec<IpAddr>> {
+    pub fn resolve(&self, addr: &str) -> Option<IpAddr> {
         let addr_string = addr.to_string();
 
         {
@@ -71,7 +71,7 @@ impl CachedDns {
             }
         }
 
-        let addrs = match get_host_addresses(addr) {
+        let addrs = match lookup_host(addr) {
             Ok(addrs) => addrs,
             Err(err) => {
                 error!("Failed to resolve {}: {}", addr, err);
@@ -80,12 +80,16 @@ impl CachedDns {
         };
 
         let cloned_mutex = self.lru_cache.clone();
-        let cloned_addr = addrs.clone();
+        let addr = match addrs.next() {
+            Some(Ok(addr)) => addr.ip(),
+            _ => return None,
+        };
+        let cloned_addr = addr.clone();
         self.pool.execute(move || {
             let mut cache = cloned_mutex.lock().unwrap();
             cache.cache.insert(addr_string, cloned_addr);
         });
-        Some(addrs)
+        Some(addr)
     }
 }
 

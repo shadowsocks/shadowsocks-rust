@@ -67,8 +67,8 @@
 
 use serialize::json;
 
-use std::io::{File, Read, Open};
-use std::io::net::ip::{Port, SocketAddr};
+use std::fs::OpenOptions;
+use std::net::SocketAddr;
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
@@ -83,10 +83,10 @@ pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     pub addr: String,
-    pub port: Port,
+    pub port: u16,
     pub password: String,
     pub method: CipherType,
-    pub timeout: Option<u64>,
+    pub timeout: Option<u32>,
     pub dns_cache_capacity: usize,
 }
 
@@ -105,7 +105,7 @@ pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
-    pub timeout: Option<u64>,
+    pub timeout: Option<u32>,
 }
 
 impl Default for Config {
@@ -149,21 +149,6 @@ impl Debug for Error {
     }
 }
 
-macro_rules! try_config(
-    ($inp:expr, $kind:expr, $desc:expr) => (
-        match $inp {
-            Some(s) => s,
-            None => return Err(Error::new($kind, $desc, None)),
-        }
-    );
-    ($inp:expr, $kind:expr, $desc:expr, $detail:expr) => (
-        match $inp {
-            Some(s) => s,
-            None => return Err(Error::new($kind, $desc, Some($detail))),
-        }
-    );
-);
-
 impl Config {
     pub fn new() -> Config {
         Config {
@@ -178,57 +163,70 @@ impl Config {
         let mut config = Config::new();
 
         config.timeout = match o.get(&"timeout".to_string()) {
-            Some(t_str) => Some(try_config!(t_str.as_u64(),
-                                       ErrorKind::Malformed, "`timeout` should be an integer") * 1000),
+            Some(t_str) => Some(try!(t_str.as_u64()
+                                          .ok_or(Error::new(ErrorKind::Malformed,
+                                                            "`timeout` should be an integer",
+                                                            None))) as u32 * 1000),
             None => None,
         };
 
         if o.contains_key(&"servers".to_string()) {
             let server_list =
-                try_config!(o.get(&"servers".to_string()).unwrap().as_array(),
-                            ErrorKind::Malformed, "`servers` should be a list");
+                try!(o.get(&"servers".to_string()).unwrap().as_array().ok_or(
+                            Error::new(ErrorKind::Malformed, "`servers` should be a list", None)));
 
             for server in server_list.iter() {
                 let method_o =
-                    try_config!(server.find("method"), ErrorKind::MissingField, "need to specify a method");
-                let method_str = try_config!(method_o.as_string(),
+                    try!(server.find("method").ok_or(Error::new(ErrorKind::MissingField, "need to specify a method", None)));
+                let method_str = try!(method_o.as_string().ok_or(Error::new(
                                              ErrorKind::Malformed,
-                                             "`method` should be a string");
-                let method = try_config!(method_str.parse::<CipherType>(),
+                                             "`method` should be a string",
+                                             None)));
+                let method = try!(method_str.parse::<CipherType>().map_err(|_| Error::new(
                                          ErrorKind::Invalid,
                                          "not supported method",
-                                         format!("`{}` is not a supported method", method_str));
+                                         Some(format!("`{}` is not a supported method", method_str)))));
 
-                let addr_o = try_config!(server.find("address"),
-                                         ErrorKind::MissingField, "need to specify a server address");
-                let addr_str = try_config!(addr_o.as_string(),
-                                           ErrorKind::Malformed, "`address` should be a string");
+                let addr_o = try!(server.find("address")
+                                        .ok_or(Error::new(ErrorKind::MissingField,
+                                                          "need to specify a server address",
+                                                          None)));
+                let addr_str = try!(addr_o.as_string()
+                                          .ok_or(Error::new(ErrorKind::Malformed,
+                                                            "`address` should be a string",
+                                                            None)));
 
                 let cfg = ServerConfig {
                     addr: addr_str.to_string(),
-                    port: try_config!(
-                                try_config!(server.find("port"),
-                                            ErrorKind::MissingField,
-                                            "need to specify a server port").as_u64(),
-                                ErrorKind::Malformed,
-                                "`port` should be an integer") as Port,
-                    password: try_config!(
-                                    try_config!(server.find("password"),
-                                                ErrorKind::MissingField,
-                                                "need to specify a password").as_string(),
-                                    ErrorKind::Malformed,
-                                    "`password` should be a string").to_string(),
+                    port: try!(try!(server.find("port")
+                                          .ok_or(Error::new(ErrorKind::MissingField,
+                                                            "need to specify a server port",
+                                                            None)))
+                                .as_u64()
+                                .ok_or(Error::new(ErrorKind::Malformed,
+                                                  "`port` should be an integer",
+                                                  None))) as u16,
+                    password: try!(try!(server.find("password")
+                                              .ok_or(Error::new(ErrorKind::MissingField,
+                                                                "need to specify a password",
+                                                                None)))
+                                    .as_string()
+                                    .ok_or(Error::new(ErrorKind::Malformed,
+                                                      "`password` should be a string",
+                                                      None))).to_string(),
                     method: method,
                     timeout: match server.find("timeout") {
-                        Some(t) => Some(try_config!(t.as_u64(),
-                                                    ErrorKind::Malformed,
-                                                    "`timeout` should be an integer") * 1000),
+                        Some(t) => Some(try!(t.as_u64()
+                                              .ok_or(Error::new(ErrorKind::Malformed,
+                                                                "`timeout` should be an integer",
+                                                                None))) as u32 * 1000),
                         None => None,
                     },
                     dns_cache_capacity: match server.find("dns_cache_capacity") {
-                        Some(t) => try_config!(t.as_u64(),
-                                               ErrorKind::Malformed,
-                                               "`dns_cache_capacity` should be an integer") as usize,
+                        Some(t) => try!(t.as_u64()
+                                         .ok_or(Error::new(ErrorKind::Malformed,
+                                                           "`dns_cache_capacity` should be an integer",
+                                                           None))) as usize,
                         None => DEFAULT_DNS_CACHE_CAPACITY,
                     }
                 };
@@ -241,50 +239,61 @@ impl Config {
                 && o.contains_key(&"password".to_string())
                 && o.contains_key(&"method".to_string()) {
             // Traditional configuration file
-            let method_o = try_config!(o.get(&"method".to_string()),
-                                       ErrorKind::MissingField,
-                                       "need to specify method");
-            let method_str = try_config!(method_o.as_string(),
-                                         ErrorKind::Malformed,
-                                         "`method` should be a string");
-            let method = try_config!(method_str.parse::<CipherType>(),
-                                     ErrorKind::Invalid,
-                                     "not supported method",
-                                     format!("`{}` is not a supported method", method_str));
-            let addr_o = try_config!(o.get(&"server".to_string()),
-                                     ErrorKind::MissingField,
-                                     "need to specify server address");
-            let addr_str = try_config!(addr_o.as_string(),
-                                       ErrorKind::Malformed,
-                                       "`server` should be a string");
+            let method_o = try!(o.get(&"method".to_string())
+                                 .ok_or(Error::new(ErrorKind::MissingField,
+                                                   "need to specify method",
+                                                   None)));
+            let method_str = try!(method_o.as_string()
+                                          .ok_or(Error::new(ErrorKind::Malformed,
+                                                            "`method` should be a string",
+                                                            None)));
+            let method = try!(method_str.parse::<CipherType>()
+                                        .map_err(|_| Error::new(ErrorKind::Invalid,
+                                                          "not supported method",
+                                                          Some(format!("`{}` is not a supported method",
+                                                                       method_str)))));
+            let addr_o = try!(o.get(&"server".to_string())
+                               .ok_or(Error::new(ErrorKind::MissingField,
+                                                 "need to specify server address",
+                                                 None)));
+            let addr_str = try!(addr_o.as_string()
+                                      .ok_or(Error::new(ErrorKind::Malformed,
+                                                        "`server` should be a string",
+                                                        None)));
 
             let single_server = ServerConfig {
                 addr: addr_str.to_string(),
-                port: try_config!(
-                            try_config!(o.get("port"),
-                                        ErrorKind::MissingField,
-                                        "need to specify a server port").as_u64(),
-                            ErrorKind::Malformed,
-                            "`port` should be an integer") as Port,
-                password: try_config!(
-                                try_config!(o.get("password"),
-                                            ErrorKind::MissingField,
-                                            "need to specify a password").as_string(),
-                                ErrorKind::Malformed,
-                                "`password` should be a string").to_string(),
+                port: try!(try!(o.get("port")
+                                 .ok_or(Error::new(ErrorKind::MissingField,
+                                                   "need to specify a server port",
+                                                   None)))
+                            .as_u64()
+                            .ok_or(Error::new(ErrorKind::Malformed,
+                                              "`port` should be an integer",
+                                              None))) as u16,
+                password: try!(try!(o.get("password")
+                                          .ok_or(Error::new(ErrorKind::MissingField,
+                                                            "need to specify a password",
+                                                            None)))
+                                .as_string()
+                                .ok_or(Error::new(ErrorKind::Malformed,
+                                                  "`password` should be a string",
+                                                  None))).to_string(),
                 method: method,
                 timeout: match o.get("timeout") {
-                    Some(t) => Some(try_config!(t.as_u64(),
-                                                ErrorKind::Malformed,
-                                                "`timeout` should be an integer") * 1000),
+                    Some(t) => Some(try!(t.as_u64()
+                                          .ok_or(Error::new(ErrorKind::Malformed,
+                                                            "`timeout` should be an integer",
+                                                            None))) as u32 * 1000),
                     None => None,
                 },
                 dns_cache_capacity: match o.get("dns_cache_capacity") {
-                    Some(t) => try_config!(t.as_u64(),
-                                           ErrorKind::Malformed,
-                                           "`dns_cache_capacity` should be an integer") as usize,
+                    Some(t) => try!(t.as_u64()
+                                     .ok_or(Error::new(ErrorKind::Malformed,
+                                                       "`dns_cache_capacity` should be an integer",
+                                                       None))) as usize,
                     None => DEFAULT_DNS_CACHE_CAPACITY,
-                },
+                }
             };
 
             config.server = vec![single_server];
@@ -297,21 +306,23 @@ impl Config {
             if has_local_address && has_local_port {
                 config.local = match o.get(&"local_address".to_string()) {
                     Some(local_addr) => {
-                        let addr_str = try_config!(local_addr.as_string(),
-                                                   ErrorKind::Malformed,
-                                                   "`local_address` should be a string");
-                        let ip = try_config!(addr_str.parse(),
-                                             ErrorKind::Malformed,
-                                             "`local_address` is not a valid IP address");
+                        let addr_str = try!(local_addr.as_string()
+                                                      .ok_or(Error::new(ErrorKind::Malformed,
+                                                                        "`local_address` should be a string",
+                                                                        None)));
+                        let ip = try!(addr_str.parse()
+                                              .map_err(|err| Error::new(ErrorKind::Malformed,
+                                                                        "`local_address` is not a valid IP address",
+                                                                        None)));
 
-                        let port = try_config!(o.get(&"local_port".to_string()).unwrap().as_u64(),
-                                               ErrorKind::Malformed,
-                                               "`local_port` should be an integer") as Port;
+                        let port = try!(o.get(&"local_port".to_string())
+                                         .unwrap()
+                                         .as_u64()
+                                         .ok_or(Error::new(ErrorKind::Malformed,
+                                                           "`local_port` should be an integer",
+                                                           None))) as u16;
 
-                        Some(SocketAddr {
-                            ip: ip,
-                            port: port,
-                        })
+                        Some(SocketAddr::new(ip, port))
                     },
                     None => None,
                 };
@@ -345,7 +356,7 @@ impl Config {
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let mut readeropt = File::open_mode(&Path::new(filename), Open, Read);
+        let mut readeropt = OpenOptions::new().read(true).open(&Path::new(filename));
 
         let reader = match readeropt {
             Ok(ref mut r) => r,

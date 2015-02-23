@@ -55,11 +55,9 @@
 // +-------+--------------+
 
 use std::sync::{Arc, Mutex};
-use std::io::net::udp::UdpSocket;
-use std::io::net::ip::SocketAddr;
-use std::io::net::addrinfo::get_host_addresses;
+use std::net::{UdpSocket, SocketAddr, lookup_host};
 use std::collections::HashMap;
-use std::io::{BufReader, MemWriter, self};
+use std::io::{BufReader, self};
 use std::thread::Thread;
 
 use collect::LruCache;
@@ -95,19 +93,17 @@ impl Relay for UdpRelayLocal {
             let mut server_set = HashMap::new();
             let mut server_addr = HashMap::new();
             for s in self.config.server.iter() {
-                let addrs = match get_host_addresses(s.addr.as_slice()) {
+                let addrs = match lookup_host(s.addr.as_slice()) {
                     Ok(addr) => addr,
                     Err(..) => continue,
                 };
 
-                if !addrs.is_empty() {
-                    let addr = SocketAddr {
-                        ip: addrs.first().unwrap().clone(),
-                        port: s.port,
-                    };
-
-                    server_set.insert(addr, s.clone());
-                    server_addr.insert(s.addr.clone(), addr);
+                match addrs.next() {
+                    Some(Ok(addr)) => {
+                        server_set.insert(addr, s.clone());
+                        server_addr.insert(s.addr.clone(), addr);
+                    },
+                    _ => {}
                 }
             }
             (server_set, server_addr)
@@ -116,7 +112,7 @@ impl Relay for UdpRelayLocal {
         let client_map_arc = Arc::new(Mutex::new(
                     LruCache::<socks5::Address, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
 
-        let mut socket = UdpSocket::bind(addr).ok().expect("Failed to bind udp socket");
+        let mut socket = UdpSocket::bind(&addr).ok().expect("Failed to bind udp socket");
 
         let mut buf = [0u8; 0xffff];
         loop {
@@ -128,7 +124,7 @@ impl Relay for UdpRelayLocal {
                     }
 
                     let request_message = buf[..len].to_vec();
-                    let move_socket = socket.clone();
+                    let move_socket = socket.try_clone().unwrap();
                     let client_map = client_map_arc.clone();
 
                     match server_set.get(&source_addr) {
@@ -211,7 +207,7 @@ fn handle_request(mut socket: UdpSocket,
     iv.push_all(encryptor.update(wbuf.as_slice()).unwrap().as_slice());
     iv.push_all(encryptor.finalize().unwrap().as_slice());
 
-    socket.send_to(iv.as_slice(), server_addr)
+    socket.send_to(iv.as_slice(), &server_addr)
         .ok().expect("Error occurs while sending to remote");
 }
 
@@ -243,11 +239,11 @@ fn handle_response(mut socket: UdpSocket,
 
     debug!("UDP response {} -> {}", from_addr, client_addr);
 
-    let mut bufw = MemWriter::new();
+    let mut bufw = Vec::new();
     socks5::UdpAssociateHeader::new(0, addr)
         .write_to(&mut bufw).unwrap();
     io::util::copy(&mut bufr, &mut bufw).unwrap();
 
-    socket.send_to(bufw.into_inner().as_slice(), client_addr)
+    socket.send_to(bufw.as_slice(), &client_addr)
         .ok().expect("Error occurs while sending to local");
 }

@@ -21,21 +21,10 @@
 
 //! TcpRelay server that running on local environment
 
-use std::io::{Listener, TcpListener, Acceptor, TcpStream};
-use std::io::{
-    IoResult,
-    IoError,
-    EndOfFile,
-    ConnectionFailed,
-    ConnectionRefused,
-    ConnectionReset,
-    ConnectionAborted,
-    BrokenPipe,
-    OtherIoError,
-};
-use std::io::net::ip::{SocketAddr, IpAddr};
-use std::io::net::addrinfo::get_host_addresses;
-use std::io::{self, BufferedStream};
+use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, IpAddr, Shutdown};
+use std::net::lookup_host;
+use std::io::{self, BufStream, ErrorKind, Read, ReadExt, Write};
 use std::thread::Thread;
 use std::collections::BTreeMap;
 
@@ -55,50 +44,6 @@ pub struct TcpRelayLocal {
     config: Config,
 }
 
-#[inline]
-fn make_io_error(desc: &'static str, detail: Option<String>) -> IoError {
-    IoError {
-        kind: OtherIoError,
-        desc: desc,
-        detail: detail,
-    }
-}
-
-macro_rules! try_result{
-    ($res:expr) => ({
-        let res = $res;
-        match res {
-            Ok(r) => { r },
-            Err(err) => {
-                error!("{}", err);
-                return;
-            }
-        }
-    });
-    ($res:expr, prefix: $prefix:expr) => ({
-        let res = $res;
-        let prefix = $prefix;
-        match res {
-            Ok(r) => { r },
-            Err(err) => {
-                error!("{} {}", prefix, err);
-                return;
-            }
-        }
-    });
-    ($res:expr, message: $message:expr) => ({
-        let res = $res;
-        let message = $message;
-        match res {
-            Ok(r) => { r },
-            Err(..) => {
-                error!("{}", message);
-                return;
-            }
-        }
-    });
-}
-
 impl TcpRelayLocal {
     pub fn new(c: Config) -> TcpRelayLocal {
         if c.server.is_empty() || c.local.is_none() {
@@ -110,7 +55,7 @@ impl TcpRelayLocal {
         }
     }
 
-    fn do_handshake(stream: &mut TcpStream) -> IoResult<()> {
+    fn do_handshake(stream: &mut TcpStream) -> io::Result<()> {
         // Read the handshake header
         let req = try!(socks5::HandshakeRequest::read_from(stream));
 
@@ -118,7 +63,9 @@ impl TcpRelayLocal {
             let resp = socks5::HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
             try!(resp.write_to(stream));
             warn!("Currently shadowsocks-rust does not support authentication");
-            return Err(make_io_error("Currently shadowsocks-rust does not support authentication", None));
+            return Err(io::Error::new(io::ErrorKind::Other,
+                                      "Currently shadowsocks-rust does not support authentication",
+                                      None));
         }
 
         // Reply to client
@@ -127,11 +74,11 @@ impl TcpRelayLocal {
         Ok(())
     }
 
-    fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) -> IoResult<()> {
-        let sockname = try!(stream.socket_name());
+    fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) -> io::Result<()> {
+        let sockname = try!(stream.socket_addr());
 
         let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                   socks5::Address::SocketAddress(sockname.ip, sockname.port));
+                                                   socks5::Address::SocketAddress(sockname.ip(), sockname.port()));
         try!(reply.write_to(stream));
 
         // TODO: record this client's information for udprelay local server to validate
@@ -145,15 +92,17 @@ impl TcpRelayLocal {
                      password: Vec<u8>,
                      encrypt_method: CipherType,
                      enable_udp: bool) {
-        try_result!(TcpRelayLocal::do_handshake(&mut stream), prefix: "Error occurs while doing handshake:");
+        TcpRelayLocal::do_handshake(&mut stream)
+            .unwrap_or_else(|err| panic!("Error occurs while doing handshake: {:?}", err));
 
-        let sockname = try_result!(stream.socket_name(), prefix: "Failed to get socket name:");
+        let sockname = stream.socket_addr()
+                             .unwrap_or_else(|err| panic!("Failed to get socket name: {:?}", err));
 
         let header = match socks5::TcpRequestHeader::read_from(&mut stream) {
             Ok(h) => { h },
             Err(err) => {
                 socks5::TcpResponseHeader::new(err.reply,
-                                               socks5::Address::SocketAddress(sockname.ip, sockname.port));
+                                               socks5::Address::SocketAddress(sockname.ip(), sockname.port()));
                 error!("Failed to read request header: {}", err);
                 return;
             }
@@ -165,10 +114,13 @@ impl TcpRelayLocal {
             socks5::Command::TcpConnect => {
                 info!("CONNECT {}", addr);
 
-                let mut remote_stream = match TcpStream::connect((server_addr.ip, server_addr.port)) {
+                let mut remote_stream = match TcpStream::connect(&server_addr) {
                     Err(err) => {
-                        match err.kind {
-                            ConnectionAborted | ConnectionReset | ConnectionRefused | ConnectionFailed => {
+                        match err.kind() {
+                            ErrorKind::ConnectionAborted
+                                | ErrorKind::ConnectionReset
+                                | ErrorKind::ConnectionRefused
+                                | ErrorKind::ConnectionAborted => {
                                 socks5::TcpResponseHeader::new(socks5::Reply::HostUnreachable, addr.clone())
                                     .write_to(&mut stream).unwrap();
                             },
@@ -183,86 +135,90 @@ impl TcpRelayLocal {
                     Ok(s) => { s },
                 };
 
-                let mut buffered_local_stream = BufferedStream::new(stream.clone());
+                let mut buffered_local_stream = BufStream::new(stream.try_clone().unwrap());
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
                                                   password.as_slice(),
                                                   iv.as_slice(),
                                                   CryptoMode::Encrypt);
-                try_result!(remote_stream.write(iv.as_slice()));
-                let mut encrypt_stream = EncryptedWriter::new(remote_stream.clone(), encryptor);
+                remote_stream.write_all(iv.as_slice()).unwrap();
+                let mut encrypt_stream = EncryptedWriter::new(remote_stream.try_clone().unwrap(), encryptor);
 
                 {
-                    try_result!(socks5::TcpResponseHeader::new(
-                                                    socks5::Reply::Succeeded,
-                                                    socks5::Address::SocketAddress(sockname.ip, sockname.port))
-                                .write_to(&mut buffered_local_stream),
-                        prefix: "Error occurs while writing header to local stream:");
-                    try_result!(buffered_local_stream.flush());
-                    try_result!(addr.write_to(&mut encrypt_stream));
+                    socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                   socks5::Address::SocketAddress(sockname.ip(), sockname.port()))
+                                .write_to(&mut buffered_local_stream)
+                                .unwrap_or_else(|err|
+                                    panic!("Error occurs while writing header to local stream: {:?}", err));
+                    // buffered_local_stream.flush().unwrap();
+                    addr.write_to(&mut encrypt_stream).unwrap();
                 }
 
                 let addr_cloned = addr.clone();
-                let mut remote_stream_cloned = remote_stream.clone();
-                let mut local_stream_cloned = stream.clone();
+                let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
+                let mut local_stream_cloned = stream.try_clone().unwrap();
                 Thread::spawn(move || {
                     match io::util::copy(&mut buffered_local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
                         Err(err) => {
-                            match err.kind {
-                                EndOfFile | BrokenPipe => {
+                            match err.kind() {
+                                ErrorKind::BrokenPipe => {
                                     debug!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 },
                                 _ => {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            remote_stream_cloned.close_write().or(Ok(())).unwrap();
-                            local_stream_cloned.close_read().or(Ok(())).unwrap();
+                            remote_stream_cloned.shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                            local_stream_cloned.shutdown(Shutdown::Read).or(Ok(())).unwrap();
                         }
                     }
                 });
 
-                let remote_iv = try_result!(remote_stream.read_exact(encrypt_method.block_size()));
+                let remote_iv = {
+                    let mut iv = Vec::new();
+                    remote_stream.take(encrypt_method.block_size() as u64).read_to_end(&mut iv).unwrap();
+                    iv
+                };
                 let decryptor = cipher::with_type(encrypt_method,
                                                   password.as_slice(),
                                                   remote_iv.as_slice(),
                                                   CryptoMode::Decrypt);
-                let mut decrypt_stream = DecryptedReader::new(remote_stream.clone(), decryptor);
+                let mut decrypt_stream = DecryptedReader::new(remote_stream.try_clone().unwrap(), decryptor);
                 match io::util::copy(&mut decrypt_stream, &mut stream) {
                     Err(err) => {
-                        match err.kind {
-                            EndOfFile | BrokenPipe => {
+                        match err.kind() {
+                            ErrorKind::BrokenPipe => {
                                 debug!("{} relay from local to remote stream: {}", addr, err)
                             },
                             _ => {
                                 error!("{} relay from local to remote stream: {}", addr, err)
                             }
                         }
-                        remote_stream.close_write().or(Ok(())).unwrap();
-                        stream.close_read().or(Ok(())).unwrap();
+                        remote_stream.shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                        stream.shutdown(Shutdown::Read).or(Ok(())).unwrap();
                     },
                     Ok(..) => {},
                 }
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
-                try_result!(socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
-                    .write_to(&mut stream),
-                    prefix: "Failed to write BIND response:");
+                socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                    .write_to(&mut stream)
+                    .unwrap_or_else(|err| panic!("Failed to write BIND response: {:?}", err));
             },
             socks5::Command::UdpAssociate => {
-                let sockname = stream.peer_name().unwrap();
+                let sockname = stream.peer_addr().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
-                    try_result!(TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr),
-                                prefix: "Failed to write UDP ASSOCIATE response:");
+                    TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr)
+                        .unwrap_or_else(|err| panic!("Failed to write UDP ASSOCIATE response: {:?}", err));
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
-                    try_result!(socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
-                        .write_to(&mut stream),
-                        prefix: "Failed to write UDP ASSOCIATE response:");
+                    socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                        .write_to(&mut stream)
+                        .unwrap_or_else(|err| panic!("Failed to write UDP ASSOCIATE response: {:?}", err));
                 }
             }
         }
@@ -275,8 +231,7 @@ impl Relay for TcpRelayLocal {
 
         let local_conf = self.config.local.expect("need local configuration");
 
-        let mut acceptor = match TcpListener::bind(
-                format!("{}:{}", local_conf.ip, local_conf.port).as_slice()).listen() {
+        let mut acceptor = match TcpListener::bind(&local_conf) {
             Ok(acpt) => acpt,
             Err(e) => {
                 panic!("Error occurs while listening local address: {}", e.to_string());
@@ -285,27 +240,31 @@ impl Relay for TcpRelayLocal {
 
         info!("Shadowsocks listening on {}", local_conf);
 
-        let mut cached_proxy: BTreeMap<String, Vec<IpAddr>> = BTreeMap::new();
+        let mut cached_proxy: BTreeMap<String, IpAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
             let mut stream = s.unwrap();
-            stream.set_timeout(self.config.timeout);
+            stream.set_keepalive(self.config.timeout);
 
             let mut succeed = false;
             for _ in range(0, server_load_balancer.total()) {
                 let ref server_cfg = server_load_balancer.pick_server();
-                let addrs = {
+                let addr = {
                     match cached_proxy.get(server_cfg.addr.as_slice()).map(|x| x.clone()) {
                         Some(addr) => addr,
                         None => {
-                            match get_host_addresses(server_cfg.addr.as_slice()) {
-                                Ok(addr) => {
-                                    if addr.is_empty() {
-                                        error!("cannot resolve proxy server `{}`", server_cfg.addr);
-                                        continue;
+                            match lookup_host(server_cfg.addr.as_slice()) {
+                                Ok(addr_itr) => {
+                                    match addr_itr.next() {
+                                        None => {
+                                            error!("cannot resolve proxy server `{}`", server_cfg.addr);
+                                            continue;
+                                        },
+                                        Some(addr) => {
+                                            cached_proxy.insert(server_cfg.addr.clone(), addr.unwrap().ip().clone());
+                                            addr.unwrap().ip()
+                                        }
                                     }
-                                    cached_proxy.insert(server_cfg.addr.clone(), addr.clone());
-                                    addr
                                 },
                                 Err(err) => {
                                     error!("cannot resolve proxy server `{}`: {}", server_cfg.addr, err);
@@ -316,10 +275,7 @@ impl Relay for TcpRelayLocal {
                     }
                 };
 
-                let server_addr = SocketAddr {
-                    ip: addrs.first().unwrap().clone(),
-                    port: server_cfg.port,
-                };
+                let server_addr = SocketAddr::new(addr.clone(), server_cfg.port);
                 debug!("Using proxy `{}:{}` (`{}`)", server_cfg.addr, server_cfg.port, server_addr);
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
