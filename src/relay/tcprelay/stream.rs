@@ -75,6 +75,7 @@ impl<R: Read> BufRead for DecryptedReader<R> {
     fn fill_buf<'b>(&'b mut self) -> io::Result<&'b [u8]> {
         if self.pos == self.buffer.len() {
             let mut incoming = [0u8; BUFFER_SIZE];
+            self.buffer.clear();
             match self.reader.read(&mut incoming) {
                 Ok(0) => {
                     // EOF

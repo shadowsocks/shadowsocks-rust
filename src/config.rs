@@ -263,7 +263,7 @@ impl Config {
 
             let single_server = ServerConfig {
                 addr: addr_str.to_string(),
-                port: try!(try!(o.get("port")
+                port: try!(try!(o.get("server_port")
                                  .ok_or(Error::new(ErrorKind::MissingField,
                                                    "need to specify a server port",
                                                    None)))

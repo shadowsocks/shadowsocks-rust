@@ -150,7 +150,7 @@ impl TcpRelayLocal {
                                 .write_to(&mut buffered_local_stream)
                                 .unwrap_or_else(|err|
                                     panic!("Error occurs while writing header to local stream: {:?}", err));
-                    // buffered_local_stream.flush().unwrap();
+                    buffered_local_stream.flush().unwrap();
                     addr.write_to(&mut encrypt_stream).unwrap();
                 }
 
@@ -188,7 +188,7 @@ impl TcpRelayLocal {
                                                   &password[..],
                                                   &remote_iv[..],
                                                   CryptoMode::Decrypt);
-                let mut decrypt_stream = DecryptedReader::new(remote_stream.try_clone().unwrap(), decryptor);
+                let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
                 match io::copy(&mut decrypt_stream, &mut stream) {
                     Err(err) => {
                         match err.kind() {
@@ -199,7 +199,7 @@ impl TcpRelayLocal {
                                 error!("{} relay from local to remote stream: {}", addr, err)
                             }
                         }
-                        remote_stream.shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                        decrypt_stream.get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
                         stream.shutdown(Shutdown::Read).or(Ok(())).unwrap();
                     },
                     Ok(..) => {},

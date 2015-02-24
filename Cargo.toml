@@ -59,6 +59,7 @@ log = "*"
 byteorder = "*"
 rand = "*"
 getopts = "*"
+time = "*"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"

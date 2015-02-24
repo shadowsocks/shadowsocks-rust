@@ -28,12 +28,13 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-#![feature(env, net)]
+#![feature(env, net, box_syntax)]
 
 extern crate getopts;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
+extern crate time;
 
 use getopts::Options;
 use std::env;
@@ -43,9 +44,46 @@ use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayServer, Relay};
 
+struct SimpleLogger;
+
+impl log::Log for SimpleLogger {
+    fn enabled(&self, level: log::LogLevel, _module: &str) -> bool {
+        level <= log::LogLevel::Info
+    }
+
+    fn log(&self, record: &log::LogRecord) {
+        if self.enabled(record.level(), record.location().module_path) {
+            println!("{} [{}] {}",
+                     time::now().rfc3339(),
+                     record.level(),
+                     record.args());
+        }
+    }
+}
+
+struct VerboseLogger;
+
+impl log::Log for VerboseLogger {
+    fn enabled(&self, level: log::LogLevel, _module: &str) -> bool {
+        level <= log::LogLevel::Debug
+    }
+
+    fn log(&self, record: &log::LogRecord) {
+        if self.enabled(record.level(), record.location().module_path) {
+            println!("{} [{}] [{}:{}] {}",
+                     time::now().rfc3339(),
+                     record.level(),
+                     record.location().module_path,
+                     record.location().line,
+                     record.args());
+        }
+    }
+}
+
 fn main() {
     let mut opts = Options::new();
-    opts.optflag("v", "version", "print version");
+    opts.optflag("V", "version", "print version");
+    opts.optflag("v", "verbose", "verbose mode");
     opts.optflag("h", "help", "print this message");
     opts.optflag("u", "enable-udp", "enable UDP relay");
     opts.optopt("c", "config", "specify config file", "config.json");
@@ -63,9 +101,21 @@ fn main() {
         return;
     }
 
-    if matches.opt_present("v") {
-        println!("{:?}", shadowsocks::VERSION);
+    if matches.opt_present("V") {
+        println!("{}", shadowsocks::VERSION);
         return;
+    }
+
+    if matches.opt_present("v") {
+        log::set_logger(|mloglevel| {
+            mloglevel.set(log::LogLevelFilter::Debug);
+            box VerboseLogger
+        }).unwrap();
+    } else {
+        log::set_logger(|mloglevel| {
+            mloglevel.set(log::LogLevelFilter::Debug);
+            box SimpleLogger
+        }).unwrap();
     }
 
     let mut config =

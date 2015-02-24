@@ -94,6 +94,8 @@ impl Relay for RelayLocal {
         info!("Enabled TCP relay");
 
         tcp_thread.join();
+
+        panic!("Exit!!");
     }
 
     #[cfg(feature = "enable-udp")]
@@ -115,5 +117,7 @@ impl Relay for RelayLocal {
         for fut in threads.into_iter() {
             fut.join();
         }
+
+        panic!("Exit!!");
     }
 }

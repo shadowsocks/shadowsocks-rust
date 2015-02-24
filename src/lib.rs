@@ -36,20 +36,7 @@ extern crate byteorder;
 extern crate rand;
 extern crate getopts;
 
-use std::fmt::{Debug, Formatter, self};
-
-/// VersionCode(major, minor, patch)
-#[derive(Copy)]
-pub struct VersionCode(u32, u32, u32);
-
-impl Debug for VersionCode {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let &VersionCode(major, minor, patch) = self;
-        write!(f, "{}.{}.{}", major, minor, patch)
-    }
-}
-
-pub const VERSION: VersionCode = VersionCode(0, 9, 7);
+pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub mod config;
 pub mod relay;

@@ -70,7 +70,7 @@ impl TcpRelayServer {
 
             thread::spawn(move || {
                 let remote_iv = {
-                    let mut iv = Vec::new();
+                    let mut iv = Vec::with_capacity(encrypt_method.block_size());
                     stream.try_clone()
                           .unwrap()
                           .take(encrypt_method.block_size() as u64)
@@ -87,20 +87,25 @@ impl TcpRelayServer {
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
                 let addr = socks5::Address::read_from(&mut decrypt_stream).unwrap_or_else(|err| {
-                    panic!("Error occurs while parsing request header, maybe wrong crypto method or password: {:?}",
+                    panic!("Error occurs while parsing request header, maybe wrong crypto method or password: {}",
                            err);
                 });
 
                 info!("Connecting to {}", addr);
                 let remote_stream = TcpStream::connect(&addr).unwrap_or_else(|err| {
-                    panic!("Unable to connect {:?}: {:?}", addr, err);
+                    panic!("Unable to connect {:?}: {}", addr, err);
                 });
 
                 let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
                 let addr_cloned = addr.clone();
                 thread::spawn(move || {
                     match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
-                        Ok(..) => {},
+                        Ok(n) => {
+                            debug!("Relayed {} bytes from {} to {}",
+                                   n,
+                                   decrypt_stream.get_mut().get_mut().socket_addr().unwrap(),
+                                   remote_stream_cloned.socket_addr().unwrap());
+                        },
                         Err(err) => {
                             match err.kind() {
                                 ErrorKind::BrokenPipe => {
@@ -122,10 +127,15 @@ impl TcpRelayServer {
                                                   &iv[..],
                                                   CryptoMode::Encrypt);
                 stream.write_all(&iv[..]).unwrap();
-                let mut buffered_remote_stream = BufStream::new(remote_stream.try_clone().unwrap());
-                let mut encrypt_stream = EncryptedWriter::new(stream.try_clone().unwrap(), encryptor);
+                let mut buffered_remote_stream = BufStream::new(remote_stream);
+                let mut encrypt_stream = EncryptedWriter::new(stream, encryptor);
                 match io::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
-                    Ok(..) => {},
+                    Ok(n) => {
+                        debug!("Relayed {} bytes from {} to {}",
+                               n,
+                               buffered_remote_stream.get_mut().socket_addr().unwrap(),
+                               encrypt_stream.get_mut().socket_addr().unwrap());
+                    },
                     Err(err) => {
                         match err.kind() {
                             ErrorKind::BrokenPipe => {
