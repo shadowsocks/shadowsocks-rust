@@ -115,8 +115,8 @@ impl TcpRelayServer {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            remote_stream_cloned.shutdown(Shutdown::Write).or(Ok(())).unwrap();
-                            decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                            let _ = remote_stream_cloned.shutdown(Shutdown::Write);
+                            let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Write);
                         }
                     }
                 });
@@ -145,8 +145,8 @@ impl TcpRelayServer {
                                 error!("{} relay from remote to local stream: {}", addr, err)
                             }
                         }
-                        encrypt_stream.get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
-                        buffered_remote_stream.get_mut().shutdown(Shutdown::Write).or(Ok(())).unwrap();
+                        let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
+                        let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Write);
                     }
                 }
             });
