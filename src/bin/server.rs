@@ -28,7 +28,7 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-#![feature(env, net, box_syntax)]
+#![feature(net, box_syntax)]
 
 extern crate getopts;
 extern crate shadowsocks;

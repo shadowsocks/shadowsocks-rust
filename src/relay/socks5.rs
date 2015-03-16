@@ -23,7 +23,7 @@
 
 use std::fmt::{self, Debug, Formatter};
 use std::net::{Ipv4Addr, Ipv6Addr, IpAddr, ToSocketAddrs, SocketAddr};
-use std::io::{self, Read, ReadExt, Write};
+use std::io::{self, Read, Write};
 use std::vec;
 use std::error;
 
@@ -195,7 +195,7 @@ pub enum Address {
 
 impl Address {
     #[inline]
-    pub fn read_from<R: ReadExt + Sized>(reader: &mut R) -> Result<Address, Error> {
+    pub fn read_from<R: Read + Sized>(reader: &mut R) -> Result<Address, Error> {
         match parse_request_header(reader) {
             Ok((_, addr)) => Ok(addr),
             Err(err) => Err(err),
@@ -258,7 +258,7 @@ impl TcpRequestHeader {
     }
 
     #[inline]
-    pub fn read_from<R: ReadExt>(stream: &mut R) -> Result<TcpRequestHeader, Error> {
+    pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpRequestHeader, Error> {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
@@ -308,7 +308,7 @@ impl TcpResponseHeader {
     }
 
     #[inline]
-    pub fn read_from<R: ReadExt>(stream: &mut R) -> Result<TcpResponseHeader, Error> {
+    pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpResponseHeader, Error> {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
@@ -341,7 +341,7 @@ impl TcpResponseHeader {
 }
 
 #[inline]
-fn parse_request_header<R: ReadExt>(stream: &mut R) -> Result<(usize, Address), Error> {
+fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Error> {
     let atyp = match stream.read_u8() {
         Ok(atyp) => atyp,
         Err(_) => return Err(Error::new(Reply::GeneralFailure, "Error while reading address type"))
@@ -489,7 +489,7 @@ impl HandshakeRequest {
         }
     }
 
-    pub fn read_from<R: ReadExt>(stream: &mut R) -> io::Result<HandshakeRequest> {
+    pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeRequest> {
         let mut buf = [0; 2];
         try!(stream.read(&mut buf));
         let [ver, nmet] = buf;
@@ -535,7 +535,7 @@ impl HandshakeResponse {
         }
     }
 
-    pub fn read_from<R: ReadExt>(stream: &mut R) -> io::Result<HandshakeResponse> {
+    pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeResponse> {
         let mut buf = [0; 2];
         try!(stream.read(&mut buf));
         let [ver, met] = buf;
@@ -570,7 +570,7 @@ impl UdpAssociateHeader {
         }
     }
 
-    pub fn read_from<R: ReadExt>(reader: &mut R) -> Result<UdpAssociateHeader, Error> {
+    pub fn read_from<R: Read>(reader: &mut R) -> Result<UdpAssociateHeader, Error> {
         let mut buf = [0u8; 3];
         let mut read_size = 0;
         while read_size < 3 {

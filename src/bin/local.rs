@@ -26,7 +26,7 @@
 //! in mod `config`.
 //!
 
-#![feature(env, net, box_syntax)]
+#![feature(net, box_syntax)]
 
 extern crate getopts;
 extern crate shadowsocks;

@@ -23,7 +23,7 @@
 
 // use std::sync::Arc;
 use std::net::{TcpListener, TcpStream, Shutdown};
-use std::io::{Read, ReadExt, Write, BufStream, ErrorKind, self};
+use std::io::{Read, Write, BufStream, ErrorKind, self};
 use std::thread;
 
 use config::{Config, ServerConfig};

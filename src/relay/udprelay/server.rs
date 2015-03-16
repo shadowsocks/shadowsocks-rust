@@ -21,7 +21,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::net::{UdpSocket, SocketAddr, lookup_host};
-use std::io::{BufReader, ReadExt};
+use std::io::{BufReader, Read};
 use std::thread;
 
 use collect::LruCache;

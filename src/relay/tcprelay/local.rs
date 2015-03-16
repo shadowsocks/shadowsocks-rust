@@ -24,7 +24,7 @@
 use std::net::{TcpListener, TcpStream};
 use std::net::{SocketAddr, IpAddr, Shutdown};
 use std::net::lookup_host;
-use std::io::{self, BufStream, ErrorKind, Read, ReadExt, Write};
+use std::io::{self, BufStream, ErrorKind, Read, Write};
 use std::thread;
 use std::collections::BTreeMap;
 
