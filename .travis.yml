@@ -3,7 +3,6 @@ language: rust
 before_install:
     - sudo apt-get update -qq
     - sudo apt-get install -qq libssl-dev
-    - cargo update
 
 script:
     - cargo build -v
