@@ -28,7 +28,7 @@
 extern crate "rustc-serialize" as serialize;
 #[macro_use]
 extern crate log;
-extern crate collect;
+extern crate "lru-cache" as lru_cache;
 
 extern crate "libsodium-sys" as libsodium_ffi;
 

@@ -22,7 +22,7 @@
 #![allow(dead_code)]
 
 use std::fmt::{self, Debug, Formatter};
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr, ToSocketAddrs, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::io::{self, Read, Write};
 use std::vec;
 use std::error;
@@ -189,7 +189,7 @@ impl error::FromError<byteorder::Error> for Error {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
-    SocketAddress(IpAddr, u16),
+    SocketAddress(SocketAddr),
     DomainNameAddress(String, u16),
 }
 
@@ -217,7 +217,7 @@ impl Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
+            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
             Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
         }
     }
@@ -227,7 +227,7 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref ip, ref port) => write!(f, "{}:{}", ip, port),
+            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
             Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
         }
     }
@@ -237,7 +237,7 @@ impl ToSocketAddrs for Address {
     type Iter = vec::IntoIter<SocketAddr>;
     fn to_socket_addrs(&self) -> io::Result<vec::IntoIter<SocketAddr>> {
         match self.clone() {
-            Address::SocketAddress(ip, port) => Ok(vec![SocketAddr::new(ip, port)].into_iter()),
+            Address::SocketAddress(addr) => Ok(vec![addr].into_iter()),
             Address::DomainNameAddress(addr, port) => (&addr[..], port).to_socket_addrs(),
         }
     }
@@ -354,7 +354,7 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
                                        try!(stream.read_u8()),
                                        try!(stream.read_u8()));
             let port = try!(stream.read_u16::<BigEndian>());
-            Ok((7usize, Address::SocketAddress(IpAddr::V4(v4addr), port)))
+            Ok((7usize, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
         },
         SOCKS5_ADDR_TYPE_IPV6 => {
             let v6addr = Ipv6Addr::new(try!(stream.read_u16::<BigEndian>()),
@@ -367,7 +367,7 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
                                        try!(stream.read_u16::<BigEndian>()));
             let port = try!(stream.read_u16::<BigEndian>());
 
-            Ok((19usize, Address::SocketAddress(IpAddr::V6(v6addr), port)))
+            Ok((19usize, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
         },
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
             let addr_len = try!(stream.read_u8()) as usize;
@@ -389,13 +389,13 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
 #[inline]
 fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
     match addr {
-        &Address::SocketAddress(ip, port) => {
-            match ip {
-                IpAddr::V4(addr) => {
+        &Address::SocketAddress(addr) => {
+            match addr {
+                SocketAddr::V4(addr) => {
                     try!(buf.write_all(&[SOCKS5_ADDR_TYPE_IPV4]));
-                    try!(buf.write_all(&addr.octets()));
+                    try!(buf.write_all(&addr.ip().octets()));
                 },
-                IpAddr::V6(addr) => {
+                SocketAddr::V6(addr) => {
                     try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
@@ -404,7 +404,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                             byteorder::Error::Io(err) => err
                         }
                     }));
-                    for seg in addr.segments().iter() {
+                    for seg in addr.ip().segments().iter() {
                         try!(buf.write_u16::<BigEndian>(*seg).map_err(|err| {
                             match err {
                                 byteorder::Error::UnexpectedEOF => {
@@ -416,7 +416,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                     }
                 }
             }
-            try!(buf.write_u16::<BigEndian>(port).map_err(|err| {
+            try!(buf.write_u16::<BigEndian>(addr.port()).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
                                 io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
@@ -460,10 +460,10 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
 #[inline]
 fn get_addr_len(atyp: &Address) -> usize {
     match atyp {
-        &Address::SocketAddress(ip, _) => {
-            match ip {
-                IpAddr::V4(..) => 1 + 4 + 2,
-                IpAddr::V6(..) => 1 + 8 * 2 + 2
+        &Address::SocketAddress(addr) => {
+            match addr {
+                SocketAddr::V4(..) => 1 + 4 + 2,
+                SocketAddr::V6(..) => 1 + 8 * 2 + 2
             }
         },
         &Address::DomainNameAddress(ref dmname, _) => {

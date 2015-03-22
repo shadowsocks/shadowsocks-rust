@@ -68,7 +68,7 @@
 use serialize::json;
 
 use std::fs::OpenOptions;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
@@ -310,10 +310,6 @@ impl Config {
                                                       .ok_or(Error::new(ErrorKind::Malformed,
                                                                         "`local_address` should be a string",
                                                                         None)));
-                        let ip = try!(addr_str.parse()
-                                              .map_err(|_| Error::new(ErrorKind::Malformed,
-                                                                        "`local_address` is not a valid IP address",
-                                                                        None)));
 
                         let port = try!(o.get(&"local_port".to_string())
                                          .unwrap()
@@ -322,7 +318,23 @@ impl Config {
                                                            "`local_port` should be an integer",
                                                            None))) as u16;
 
-                        Some(SocketAddr::new(ip, port))
+                        match addr_str.parse::<Ipv4Addr>() {
+                            Ok(ip) => {
+                                Some(SocketAddr::V4(SocketAddrV4::new(ip, port)))
+                            },
+                            Err(..) => {
+                                match addr_str.parse::<Ipv6Addr>() {
+                                    Ok(ip) => {
+                                        Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0)))
+                                    },
+                                    Err(..) => {
+                                        return Err(Error::new(ErrorKind::Malformed,
+                                                              "`local_address` is not a valid IP address",
+                                                              None))
+                                    }
+                                }
+                            }
+                        }
                     },
                     None => None,
                 };

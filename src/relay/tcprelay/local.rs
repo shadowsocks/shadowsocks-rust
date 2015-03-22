@@ -22,7 +22,7 @@
 //! TcpRelay server that running on local environment
 
 use std::net::{TcpListener, TcpStream};
-use std::net::{SocketAddr, IpAddr, Shutdown};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Shutdown};
 use std::net::lookup_host;
 use std::io::{self, BufStream, ErrorKind, Read, Write};
 use std::thread;
@@ -78,7 +78,7 @@ impl TcpRelayLocal {
         let sockname = try!(stream.socket_addr());
 
         let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                   socks5::Address::SocketAddress(sockname.ip(), sockname.port()));
+                                                   socks5::Address::SocketAddress(sockname));
         try!(reply.write_to(stream));
 
         // TODO: record this client's information for udprelay local server to validate
@@ -102,7 +102,7 @@ impl TcpRelayLocal {
             Ok(h) => { h },
             Err(err) => {
                 socks5::TcpResponseHeader::new(err.reply,
-                                               socks5::Address::SocketAddress(sockname.ip(), sockname.port()));
+                                               socks5::Address::SocketAddress(sockname));
                 error!("Failed to read request header: {}", err);
                 return;
             }
@@ -146,7 +146,7 @@ impl TcpRelayLocal {
 
                 {
                     socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                   socks5::Address::SocketAddress(sockname.ip(), sockname.port()))
+                                                   socks5::Address::SocketAddress(sockname))
                                 .write_to(&mut buffered_local_stream)
                                 .unwrap_or_else(|err|
                                     panic!("Error occurs while writing header to local stream: {:?}", err));
@@ -243,7 +243,7 @@ impl Relay for TcpRelayLocal {
 
         info!("Shadowsocks listening on {}", local_conf);
 
-        let mut cached_proxy: BTreeMap<String, IpAddr> = BTreeMap::new();
+        let mut cached_proxy: BTreeMap<String, SocketAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
             let stream = s.unwrap();
@@ -264,8 +264,8 @@ impl Relay for TcpRelayLocal {
                                             continue;
                                         },
                                         Some(addr) => {
-                                            cached_proxy.insert(server_cfg.addr.clone(), addr.clone().unwrap().ip());
-                                            addr.unwrap().ip()
+                                            cached_proxy.insert(server_cfg.addr.clone(), addr.clone().unwrap());
+                                            addr.unwrap()
                                         }
                                     }
                                 },
@@ -278,7 +278,18 @@ impl Relay for TcpRelayLocal {
                     }
                 };
 
-                let server_addr = SocketAddr::new(addr.clone(), server_cfg.port);
+                let server_addr = match addr {
+                    SocketAddr::V4(addr) => {
+                        SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), server_cfg.port))
+                    },
+                    SocketAddr::V6(addr) => {
+                        SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
+                                                         server_cfg.port,
+                                                         addr.flowinfo(),
+                                                         addr.scope_id()))
+                    }
+                };
+
                 debug!("Using proxy `{}:{}` (`{}`)", server_cfg.addr, server_cfg.port, server_addr);
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());

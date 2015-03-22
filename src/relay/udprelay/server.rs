@@ -20,11 +20,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::sync::{Arc, Mutex};
-use std::net::{UdpSocket, SocketAddr, lookup_host};
+use std::net::{UdpSocket, SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
 use std::io::{BufReader, Read};
 use std::thread;
 
-use collect::LruCache;
+use lru_cache::LruCache;
 
 use config::{Config, ServerConfig};
 use relay::Relay;
@@ -127,14 +127,14 @@ impl UdpRelayServer {
                         debug!("UDP request {} -> {}", src, header.address);
 
                         let sockaddr = match &header.address {
-                            &Address::SocketAddress(ip, port) => {
+                            &Address::SocketAddress(addr) => {
                                 client_map.lock()
                                           .unwrap()
                                           .insert(header.address.clone(), src);
                                 remote_map.lock()
                                           .unwrap()
-                                          .insert(SocketAddr::new(ip, port), header.address.clone());
-                                SocketAddr::new(ip, port)
+                                          .insert(addr.clone(), header.address.clone());
+                                addr
                             },
                             &Address::DomainNameAddress(ref dnaddr, port) => {
                                 let mut ipaddrs = lookup_host(&dnaddr[..])
@@ -142,8 +142,20 @@ impl UdpRelayServer {
                                                         panic!("Unable to resolve {}: {}", dnaddr, err);
                                                     });
 
-                                let remote_addr =
-                                    SocketAddr::new(ipaddrs.next().unwrap().unwrap().ip().clone(), port);
+                                let remote_addr = match ipaddrs.next() {
+                                    Some(Ok(SocketAddr::V4(addr))) => {
+                                        SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), port))
+                                    },
+                                    Some(Ok(SocketAddr::V6(addr))) => {
+                                        SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
+                                                                         port,
+                                                                         addr.flowinfo(),
+                                                                         addr.scope_id()))
+                                    },
+                                    _ => {
+                                        panic!("Failed ot resolve {}", dnaddr);
+                                    }
+                                };
 
                                 client_map.lock()
                                           .unwrap()

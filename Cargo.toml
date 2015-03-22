@@ -53,7 +53,7 @@ name = "ssserver"
 path = "src/bin/server.rs"
 
 [dependencies]
-#collect = "*"
+lru-cache = "*"
 rustc-serialize = "*"
 log = "*"
 byteorder = "*"
@@ -64,6 +64,3 @@ time = "*"
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"
 optional = true
-
-[dependencies.collect]
-git = "https://github.com/Gankro/collect-rs.git"

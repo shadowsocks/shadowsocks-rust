@@ -60,7 +60,7 @@ use std::collections::HashMap;
 use std::io::{BufReader, self};
 use std::thread;
 
-use collect::LruCache;
+use lru_cache::LruCache;
 
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;

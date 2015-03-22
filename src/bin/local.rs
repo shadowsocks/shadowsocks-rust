@@ -37,7 +37,7 @@ extern crate time;
 use getopts::Options;
 
 use std::env;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -158,10 +158,27 @@ fn main() {
     }
 
     if matches.opt_present("b") && matches.opt_present("l") {
-        let local = SocketAddr::new(
-            matches.opt_str("b").unwrap().parse().ok().expect("`local` is not a valid IP address"),
-            matches.opt_str("l").unwrap().parse().ok().expect("`local_port` should be an integer"),
-        );
+        let local_addr_str = matches.opt_str("b").unwrap();
+        let local_port = matches.opt_str("l").unwrap().parse().ok().expect("`local_port` should be an integer");
+
+        let local = match local_addr_str.parse::<Ipv4Addr>() {
+            Ok(ip) => {
+                SocketAddr::V4(SocketAddrV4::new(ip, local_port))
+            },
+            Err(..) => {
+                match local_addr_str.parse::<Ipv6Addr>() {
+                    Ok(ip) => {
+                        SocketAddr::V6(SocketAddrV6::new(ip,
+                                                         local_port,
+                                                         0,
+                                                         0))
+                    }
+                    Err(..) => {
+                        panic!("`local` is not a valid IP address");
+                    }
+                }
+            }
+        };
         config.local = Some(local)
     }
 
