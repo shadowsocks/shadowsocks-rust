@@ -103,7 +103,7 @@ impl TcpRelayServer {
                         Ok(n) => {
                             debug!("Relayed {} bytes from {} to {}",
                                    n,
-                                   decrypt_stream.get_mut().get_mut().socket_addr().unwrap(),
+                                   decrypt_stream.get_mut().get_mut().peer_addr().unwrap(),
                                    remote_stream_cloned.peer_addr().unwrap());
                         },
                         Err(err) => {
@@ -134,7 +134,7 @@ impl TcpRelayServer {
                         debug!("Relayed {} bytes from {} to {}",
                                n,
                                buffered_remote_stream.get_mut().peer_addr().unwrap(),
-                               encrypt_stream.get_mut().socket_addr().unwrap());
+                               encrypt_stream.get_mut().peer_addr().unwrap());
                     },
                     Err(err) => {
                         match err.kind() {

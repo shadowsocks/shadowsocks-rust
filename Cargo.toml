@@ -53,7 +53,7 @@ name = "ssserver"
 path = "src/bin/server.rs"
 
 [dependencies]
-lru-cache = "*"
+#lru-cache = "*"
 rustc-serialize = "*"
 log = "*"
 byteorder = "*"
@@ -64,3 +64,6 @@ time = "*"
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"
 optional = true
+
+[dependencies.lru-cache]
+git = "https://github.com/contain-rs/lru-cache.git"

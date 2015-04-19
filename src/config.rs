@@ -73,6 +73,7 @@ use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
 use std::fmt::{Debug, Formatter, self};
+use std::path::Path;
 
 use crypto::cipher::CipherType;
 
@@ -114,7 +115,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub enum ErrorKind {
     MissingField,
     Malformed,

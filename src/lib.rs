@@ -23,7 +23,7 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(unsafe_destructor, box_syntax, libc, core, io, old_path, tcp, net, collections, test, slice_patterns)]
+#![feature(unsafe_destructor, box_syntax, libc, core, tcp, collections, test, slice_patterns, lookup_host, convert)]
 
 extern crate rustc_serialize as serialize;
 #[macro_use]

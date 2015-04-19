@@ -64,8 +64,7 @@ impl TcpRelayLocal {
             try!(resp.write_to(stream));
             warn!("Currently shadowsocks-rust does not support authentication");
             return Err(io::Error::new(io::ErrorKind::Other,
-                                      "Currently shadowsocks-rust does not support authentication",
-                                      None));
+                                      "Currently shadowsocks-rust does not support authentication"));
         }
 
         // Reply to client
@@ -75,7 +74,7 @@ impl TcpRelayLocal {
     }
 
     fn handle_udp_associate_local(stream: &mut TcpStream, _: &socks5::Address) -> io::Result<()> {
-        let sockname = try!(stream.socket_addr());
+        let sockname = try!(stream.peer_addr());
 
         let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                    socks5::Address::SocketAddress(sockname));
@@ -95,7 +94,7 @@ impl TcpRelayLocal {
         TcpRelayLocal::do_handshake(&mut stream)
             .unwrap_or_else(|err| panic!("Error occurs while doing handshake: {:?}", err));
 
-        let sockname = stream.socket_addr()
+        let sockname = stream.peer_addr()
                              .unwrap_or_else(|err| panic!("Failed to get socket name: {:?}", err));
 
         let header = match socks5::TcpRequestHeader::read_from(&mut stream) {
@@ -264,8 +263,9 @@ impl Relay for TcpRelayLocal {
                                             continue;
                                         },
                                         Some(addr) => {
-                                            cached_proxy.insert(server_cfg.addr.clone(), addr.clone().unwrap());
-                                            addr.unwrap()
+                                            let addr = addr.unwrap().clone();
+                                            cached_proxy.insert(server_cfg.addr.clone(), addr.clone());
+                                            addr
                                         }
                                     }
                                 },

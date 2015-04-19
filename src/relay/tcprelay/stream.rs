@@ -82,15 +82,13 @@ impl<R: Read> BufRead for DecryptedReader<R> {
                     try!(self.cipher
                              .finalize(&mut self.buffer)
                              .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                           err.desc,
-                                                           err.detail)));
+                                                           err.desc)));
                 }
                 Ok(l) => {
                     try!(self.cipher
                              .update(&incoming[0..l], &mut self.buffer)
                              .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                           err.desc,
-                                                           err.detail)));
+                                                           err.desc)));
                 },
                 Err(err) => {
                     return Err(err);
@@ -114,7 +112,7 @@ impl<R: Read> Read for DecryptedReader<R> {
         let nread = {
             let available = try!(self.fill_buf());
             let nread = cmp::min(available.len(), buf.len());
-            slice::bytes::copy_memory(buf, &available[0..nread]);
+            slice::bytes::copy_memory(&available[0..nread], buf);
             nread
         };
         self.pos += nread;
@@ -147,8 +145,7 @@ impl<W: Write> EncryptedWriter<W> {
             Err(err) => {
                 Err(io::Error::new(
                         io::ErrorKind::Other,
-                        err.desc,
-                        err.detail,
+                        err.desc
                     ))
             }
         }
@@ -184,8 +181,7 @@ impl<W: Write> Write for EncryptedWriter<W> {
             Err(err) => {
                 Err(io::Error::new(
                         io::ErrorKind::Other,
-                        err.desc,
-                        err.detail,
+                        err.desc
                    ))
             }
         }

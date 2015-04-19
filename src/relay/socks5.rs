@@ -26,6 +26,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, Sock
 use std::io::{self, Read, Write};
 use std::vec;
 use std::error;
+use std::convert::From;
 
 use byteorder::{self, ReadBytesExt, WriteBytesExt, BigEndian};
 
@@ -171,19 +172,16 @@ impl error::Error for Error {
     }
 }
 
-impl error::FromError<io::Error> for Error {
-    fn from_error(err: io::Error) -> Error {
-        Error::new(Reply::GeneralFailure, err.description())
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
     }
 }
 
-impl error::FromError<byteorder::Error> for Error {
-    fn from_error(err: byteorder::Error) -> Error {
-        let desc = {
-            use std::error::Error;
-            err.description()
-        };
-        Error::new(Reply::GeneralFailure, desc)
+impl From<byteorder::Error> for Error {
+    fn from(err: byteorder::Error) -> Error {
+        let io_err: io::Error = <io::Error as From<byteorder::Error>>::from(err);
+        <Error as From<io::Error>>::from(io_err)
     }
 }
 
@@ -262,7 +260,7 @@ impl TcpRequestHeader {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.description()))
+            Err(err) => return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)))
         }
         let [ver, cmd, _] = buf;
 
@@ -312,7 +310,7 @@ impl TcpResponseHeader {
         let mut buf = [0u8; 3];
         match stream.read(&mut buf) {
             Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, err.description()))
+            Err(err) => return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)))
         }
         let [ver, reply_code, _] = buf;
 
@@ -399,7 +397,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                     try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                             },
                             byteorder::Error::Io(err) => err
                         }
@@ -408,7 +406,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                         try!(buf.write_u16::<BigEndian>(*seg).map_err(|err| {
                             match err {
                                 byteorder::Error::UnexpectedEOF => {
-                                    io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                    io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                                 },
                                 byteorder::Error::Io(err) => err
                             }
@@ -419,7 +417,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
             try!(buf.write_u16::<BigEndian>(addr.port()).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                             },
                             byteorder::Error::Io(err) => err
                         }
@@ -429,7 +427,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
             try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                             },
                             byteorder::Error::Io(err) => err
                         }
@@ -437,7 +435,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
             try!(buf.write_u8(dnaddr.len() as u8).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                             },
                             byteorder::Error::Io(err) => err
                         }
@@ -446,7 +444,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
             try!(buf.write_u16::<BigEndian>(port).map_err(|err| {
                         match err {
                             byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF", None)
+                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
                             },
                             byteorder::Error::Io(err) => err
                         }
@@ -498,7 +496,6 @@ impl HandshakeRequest {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "Invalid Socks5 version",
-                None,
             ));
         }
 
@@ -541,7 +538,7 @@ impl HandshakeResponse {
         let [ver, met] = buf;
 
         if ver != SOCKS5_VERSION {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version", None));
+            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
         }
 
         Ok(HandshakeResponse {
@@ -577,7 +574,7 @@ impl UdpAssociateHeader {
             match reader.read(&mut buf[read_size..]) {
                 Ok(l) => read_size += l,
                 Err(err) => {
-                    return Err(Error::new(Reply::GeneralFailure, err.description()));
+                    return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)));
                 }
             }
         }

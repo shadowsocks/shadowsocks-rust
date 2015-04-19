@@ -45,7 +45,7 @@ pub trait Cipher {
 
 pub type CipherResult<T> = Result<T, Error>;
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub enum ErrorKind {
     UnknownCipherType,
     OpenSSLError,
