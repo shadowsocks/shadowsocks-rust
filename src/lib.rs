@@ -23,14 +23,14 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(unsafe_destructor, box_syntax, libc, core, io, old_path, tcp, net, collections, test)]
+#![feature(unsafe_destructor, box_syntax, libc, core, io, old_path, tcp, net, collections, test, slice_patterns)]
 
-extern crate "rustc-serialize" as serialize;
+extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate log;
-extern crate "lru-cache" as lru_cache;
+extern crate lru_cache;
 
-extern crate "libsodium-sys" as libsodium_ffi;
+extern crate libsodium_sys as libsodium_ffi;
 
 extern crate byteorder;
 extern crate rand;
