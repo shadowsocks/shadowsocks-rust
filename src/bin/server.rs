@@ -47,12 +47,12 @@ use shadowsocks::relay::{RelayServer, Relay};
 struct SimpleLogger;
 
 impl log::Log for SimpleLogger {
-    fn enabled(&self, level: log::LogLevel, _module: &str) -> bool {
-        level <= log::LogLevel::Info
+    fn enabled(&self, meta: &log::LogMetadata) -> bool {
+        meta.level() <= log::LogLevel::Info
     }
 
     fn log(&self, record: &log::LogRecord) {
-        if self.enabled(record.level(), record.location().module_path) {
+        if self.enabled(record.metadata()) {
             println!("{} [{}] {}",
                      time::now().rfc3339(),
                      record.level(),
@@ -64,17 +64,17 @@ impl log::Log for SimpleLogger {
 struct VerboseLogger;
 
 impl log::Log for VerboseLogger {
-    fn enabled(&self, level: log::LogLevel, _module: &str) -> bool {
-        level <= log::LogLevel::Debug
+    fn enabled(&self, meta: &log::LogMetadata) -> bool {
+        meta.level() <= log::LogLevel::Debug
     }
 
     fn log(&self, record: &log::LogRecord) {
-        if self.enabled(record.level(), record.location().module_path) {
+        if self.enabled(record.metadata()) {
             println!("{} [{}] [{}:{}] {}",
                      time::now().rfc3339(),
                      record.level(),
-                     record.location().module_path,
-                     record.location().line,
+                     record.location().module_path(),
+                     record.location().line(),
                      record.args());
         }
     }

@@ -19,11 +19,10 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![unstable(reason = "Waiting for Rust 1.0.0 final release")]
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(unsafe_destructor, box_syntax, libc, core, tcp, collections, test, slice_patterns, lookup_host, convert)]
+#![feature(unsafe_destructor, box_syntax, libc, core, tcp, collections, test, slice_patterns, lookup_host, convert, scoped)]
 
 extern crate rustc_serialize as serialize;
 #[macro_use]
