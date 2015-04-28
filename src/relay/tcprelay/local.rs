@@ -25,7 +25,7 @@ use std::net::{TcpListener, TcpStream};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Shutdown};
 use std::net::lookup_host;
 use std::io::{self, BufStream, ErrorKind, Read, Write};
-use std::thread;
+use std::thread::{self, Builder};
 use std::collections::BTreeMap;
 
 use config::Config;
@@ -156,7 +156,7 @@ impl TcpRelayLocal {
                 let addr_cloned = addr.clone();
                 let remote_stream_cloned = remote_stream.try_clone().unwrap();
                 let local_stream_cloned = stream.try_clone().unwrap();
-                thread::spawn(move || {
+                Builder::new().name(format!("TCP relay from local to {:?}", addr_cloned)).spawn(move || {
                     match io::copy(&mut buffered_local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
                         Err(err) => {
@@ -172,37 +172,39 @@ impl TcpRelayLocal {
                             let _ = local_stream_cloned.shutdown(Shutdown::Read);
                         }
                     }
-                });
+                }).unwrap();
 
-                let remote_iv = {
-                    let mut iv = Vec::new();
-                    remote_stream.try_clone()
-                                 .unwrap()
-                                 .take(encrypt_method.block_size() as u64)
-                                 .read_to_end(&mut iv)
-                                 .unwrap();
-                    iv
-                };
-                let decryptor = cipher::with_type(encrypt_method,
-                                                  &password[..],
-                                                  &remote_iv[..],
-                                                  CryptoMode::Decrypt);
-                let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
-                match io::copy(&mut decrypt_stream, &mut stream) {
-                    Err(err) => {
-                        match err.kind() {
-                            ErrorKind::BrokenPipe => {
-                                debug!("{} relay from local to remote stream: {}", addr, err)
-                            },
-                            _ => {
-                                error!("{} relay from local to remote stream: {}", addr, err)
+                Builder::new().name(format!("TCP relay from {:?} to local", addr)).spawn(move|| {
+                    let remote_iv = {
+                        let mut iv = Vec::new();
+                        remote_stream.try_clone()
+                                     .unwrap()
+                                     .take(encrypt_method.block_size() as u64)
+                                     .read_to_end(&mut iv)
+                                     .unwrap();
+                        iv
+                    };
+                    let decryptor = cipher::with_type(encrypt_method,
+                                                      &password[..],
+                                                      &remote_iv[..],
+                                                      CryptoMode::Decrypt);
+                    let mut decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
+                    match io::copy(&mut decrypt_stream, &mut stream) {
+                        Err(err) => {
+                            match err.kind() {
+                                ErrorKind::BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr, err)
+                                }
                             }
-                        }
-                        let _ = decrypt_stream.get_mut().shutdown(Shutdown::Write);
-                        let _ = stream.shutdown(Shutdown::Read);
-                    },
-                    Ok(..) => {},
-                }
+                            let _ = decrypt_stream.get_mut().shutdown(Shutdown::Write);
+                            let _ = stream.shutdown(Shutdown::Read);
+                        },
+                        Ok(..) => {},
+                    }
+                }).unwrap();
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
