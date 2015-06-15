@@ -183,12 +183,12 @@ impl Relay for UdpRelayServer {
         let mut threads = Vec::new();
         for s in self.config.server.iter() {
             let s = s.clone();
-            let fut = thread::scoped(move || UdpRelayServer::accept_loop(s));
+            let fut = thread::spawn(move || UdpRelayServer::accept_loop(s));
             threads.push(fut);
         }
 
         for fut in threads.into_iter() {
-            fut.join();
+            fut.join().unwrap();
         }
     }
 }

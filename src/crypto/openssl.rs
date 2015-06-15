@@ -218,7 +218,6 @@ impl Clone for OpenSSLDigest {
     }
 }
 
-#[unsafe_destructor]
 impl Drop for OpenSSLDigest {
     fn drop(&mut self) {
         unsafe {
@@ -403,7 +402,6 @@ impl Clone for OpenSSLCrypto {
 }
 
 
-#[unsafe_destructor]
 impl Drop for OpenSSLCrypto {
     fn drop(&mut self) {
         unsafe {

@@ -90,12 +90,10 @@ impl Relay for RelayLocal {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
         let tcprelay = self.tcprelay.clone();
-        let tcp_thread = thread::scoped(move || tcprelay.run());
+        let tcp_thread = thread::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join();
-
-        panic!("Exit!!");
+        tcp_thread.join().unwrap();
     }
 
     #[cfg(feature = "enable-udp")]
@@ -103,21 +101,19 @@ impl Relay for RelayLocal {
         let mut threads = Vec::with_capacity(2);
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_thread = thread::scoped(move || tcprelay.run());
+        let tcp_thread = thread::spawn(move || tcprelay.run());
         threads.push(tcp_thread);
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_thread = thread::scoped(move || udprelay.run());
+            let udp_thread = thread::spawn(move || udprelay.run());
             threads.push(udp_thread);
             info!("Enabled UDP relay");
         }
 
         for fut in threads.into_iter() {
-            fut.join();
+            fut.join().unwrap();
         }
-
-        panic!("Exit!!");
     }
 }

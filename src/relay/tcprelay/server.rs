@@ -167,14 +167,14 @@ impl Relay for TcpRelayServer {
         let mut threads = Vec::new();
         for s in self.config.server.iter() {
             let s = s.clone();
-            let fut = thread::Builder::new().name(format!("TCP relay of `{}:{}`", s.addr, s.port)).scoped(move || {
+            let fut = thread::Builder::new().name(format!("TCP relay of `{}:{}`", s.addr, s.port)).spawn(move || {
                 TcpRelayServer::accept_loop(s);
             }).unwrap();
             threads.push(fut);
         }
 
         for fut in threads.into_iter() {
-            fut.join();
+            fut.join().unwrap();
         }
     }
 }

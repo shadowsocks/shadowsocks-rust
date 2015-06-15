@@ -193,7 +193,6 @@ impl<W: Write> Write for EncryptedWriter<W> {
     }
 }
 
-#[unsafe_destructor]
 impl<W: Write> Drop for EncryptedWriter<W> {
     fn drop(&mut self) {
         self.finalize().unwrap()

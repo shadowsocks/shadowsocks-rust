@@ -89,18 +89,18 @@ impl Relay for RelayServer {
         let mut threads = Vec::with_capacity(2);
 
         let tcprelay = self.tcprelay.clone();
-        threads.push(thread::scoped(move || tcprelay.run()));
+        threads.push(thread::spawn(move || tcprelay.run()));
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_thread = thread::scoped(move || udprelay.run());
+            let udp_thread = thread::spawn(move || udprelay.run());
             threads.push(udp_thread);
             info!("Enabled UDP relay");
         }
 
         for fut in threads.into_iter() {
-            fut.join();
+            fut.join().unwrap();
         }
     }
 
@@ -111,9 +111,9 @@ impl Relay for RelayServer {
         }
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_thread = thread::scoped(move || tcprelay.run());
+        let tcp_thread = thread::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join();
+        tcp_thread.join().unwrap();
     }
 }
