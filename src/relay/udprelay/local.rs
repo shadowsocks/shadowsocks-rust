@@ -55,10 +55,12 @@
 // +-------+--------------+
 
 use std::sync::{Arc, Mutex};
-use std::net::{UdpSocket, SocketAddr, lookup_host};
+use std::net::{SocketAddr, lookup_host};
 use std::collections::HashMap;
 use std::io::{BufReader, self};
-use std::thread;
+
+use simplesched::Scheduler;
+use simplesched::net::UdpSocket;
 
 use lru_cache::LruCache;
 
@@ -130,7 +132,7 @@ impl Relay for UdpRelayLocal {
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
-                            thread::spawn(move ||
+                            Scheduler::spawn(move ||
                                 handle_response(move_socket,
                                                &request_message[..],
                                                source_addr,
@@ -143,7 +145,7 @@ impl Relay for UdpRelayLocal {
                             match server_addr.get(&s.addr) {
                                 Some(saddr) => {
                                     let saddr = saddr.clone();
-                                    thread::spawn(move ||
+                                    Scheduler::spawn(move ||
                                         handle_request(move_socket,
                                                       &request_message[..],
                                                       source_addr,

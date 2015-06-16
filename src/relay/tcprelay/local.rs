@@ -21,12 +21,13 @@
 
 //! TcpRelay server that running on local environment
 
-use std::net::{TcpListener, TcpStream};
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Shutdown};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
 use std::io::{self, BufStream, ErrorKind, Read, Write};
-use std::thread::{self, Builder};
 use std::collections::BTreeMap;
+
+use simplesched::Scheduler;
+use simplesched::net::{TcpListener, TcpStream, Shutdown};
 
 use config::Config;
 
@@ -154,7 +155,7 @@ impl TcpRelayLocal {
                 }
 
                 let addr_cloned = addr.clone();
-                Builder::new().name(format!("TCP relay from local to {:?}", addr_cloned)).spawn(move || {
+                Scheduler::spawn(move || {
                     match io::copy(&mut buffered_local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
                         Err(err) => {
@@ -170,9 +171,9 @@ impl TcpRelayLocal {
                             let _ = buffered_local_stream.get_ref().shutdown(Shutdown::Both);
                         }
                     }
-                }).unwrap();
+                });
 
-                Builder::new().name(format!("TCP relay from {:?} to local", addr)).spawn(move|| {
+                Scheduler::spawn(move|| {
                     let remote_iv = {
                         let mut iv = Vec::with_capacity(encrypt_method.block_size());
                         unsafe {
@@ -209,7 +210,7 @@ impl TcpRelayLocal {
                         },
                         Ok(..) => {},
                     }
-                }).unwrap();
+                });
             },
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
@@ -302,7 +303,7 @@ impl Relay for TcpRelayLocal {
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
 
-                thread::spawn(move ||
+                Scheduler::spawn(move ||
                     TcpRelayLocal::handle_client(stream,
                                                  server_addr,
                                                  pwd,

@@ -21,7 +21,9 @@
 
 //! Local side
 
-use std::thread;
+use simplesched::Scheduler;
+
+use num_cpus;
 
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;
@@ -90,30 +92,24 @@ impl Relay for RelayLocal {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
         let tcprelay = self.tcprelay.clone();
-        let tcp_thread = thread::spawn(move || tcprelay.run());
+        Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        tcp_thread.join().unwrap();
+        Scheduler::run(num_cpus::get());
     }
 
     #[cfg(feature = "enable-udp")]
     fn run(&self) {
-        let mut threads = Vec::with_capacity(2);
-
         let tcprelay = self.tcprelay.clone();
-        let tcp_thread = thread::spawn(move || tcprelay.run());
-        threads.push(tcp_thread);
+        Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_thread = thread::spawn(move || udprelay.run());
-            threads.push(udp_thread);
+            Scheduler::spawn(move || udprelay.run());
             info!("Enabled UDP relay");
         }
 
-        for fut in threads.into_iter() {
-            fut.join().unwrap();
-        }
+        Scheduler::run(num_cpus::get());
     }
 }

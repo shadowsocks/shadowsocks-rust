@@ -78,7 +78,7 @@ fn do_udp(matches: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
     let local_port: u16 = matches.opt_str("l").expect("Require local port").parse().unwrap();
     let local_addr = SocketAddr::new(local_ip, local_port);
 
-    let mut udp_socket = UdpSocket::bind(local_addr).unwrap();
+    let udp_socket = UdpSocket::bind(local_addr).unwrap();
 
     let proxy_real_addr = match udp_proxy_addr {
         Address::SocketAddress(sock) => sock,

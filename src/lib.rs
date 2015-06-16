@@ -22,7 +22,7 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(box_syntax, libc, core, tcp, collections, test, slice_patterns, lookup_host, convert, buf_stream)]
+#![feature(box_syntax, libc, core, collections, test, slice_patterns, lookup_host, convert, buf_stream)]
 
 extern crate rustc_serialize as serialize;
 #[macro_use]
@@ -34,6 +34,9 @@ extern crate libsodium_sys as libsodium_ffi;
 extern crate byteorder;
 extern crate rand;
 extern crate getopts;
+
+extern crate num_cpus;
+extern crate simplesched;
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

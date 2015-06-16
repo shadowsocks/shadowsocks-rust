@@ -65,6 +65,7 @@ byteorder = "*"
 rand = "*"
 getopts = "*"
 time = "*"
+num_cpus = "*"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"
@@ -72,3 +73,6 @@ optional = true
 
 [dependencies.lru-cache]
 git = "https://github.com/contain-rs/lru-cache.git"
+
+[dependencies.simplesched]
+git = "https://github.com/zonyitoo/simplesched.git"
