@@ -141,17 +141,27 @@ impl TcpRelayLocal {
                                                   &password[..],
                                                   &iv[..],
                                                   CryptoMode::Encrypt);
-                remote_stream.write_all(&iv[..]).unwrap();
+                if let Err(err) = remote_stream.write_all(&iv[..]) {
+                    error!("Error occurs while writing initialize vector: {:?}", err);
+                    return;
+                }
                 let mut encrypt_stream = EncryptedWriter::new(remote_stream.try_clone().unwrap(), encryptor);
 
                 {
-                    socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                   socks5::Address::SocketAddress(sockname))
-                                .write_to(&mut buffered_local_stream)
-                                .unwrap_or_else(|err|
-                                    panic!("Error occurs while writing header to local stream: {:?}", err));
-                    buffered_local_stream.flush().unwrap();
-                    addr.write_to(&mut encrypt_stream).unwrap();
+                    if let Err(err) = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                         socks5::Address::SocketAddress(sockname))
+                                .write_to(&mut buffered_local_stream) {
+                        error!("Error occurs while writing header to local stream: {:?}", err);
+                        return;
+                    }
+                    if let Err(err) = buffered_local_stream.flush() {
+                        error!("Error occurs while flushing: {:?}", err);
+                        return;
+                    }
+                    if let Err(err) = addr.write_to(&mut encrypt_stream) {
+                        error!("Error occurs while writing address: {:?}", err);
+                        return;
+                    }
                 }
 
                 let addr_cloned = addr.clone();
@@ -183,9 +193,15 @@ impl TcpRelayLocal {
                         let mut total_len = 0;
                         while total_len < encrypt_method.block_size() {
                             match remote_stream.read(&mut iv[total_len..]) {
-                                Ok(0) => panic!("Unexpected EOF"),
+                                Ok(0) => {
+                                    error!("Unexpected EOF");
+                                    return;
+                                },
                                 Ok(n) => total_len += n,
-                                Err(err) => panic!("Error while reading initialize vector: {:?}", err)
+                                Err(err) => {
+                                    error!("Error while reading initialize vector: {:?}", err);
+                                    return;
+                                }
                             }
                         }
                         iv
@@ -216,19 +232,19 @@ impl TcpRelayLocal {
                 warn!("BIND is not supported");
                 socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                     .write_to(&mut stream)
-                    .unwrap_or_else(|err| panic!("Failed to write BIND response: {:?}", err));
+                    .unwrap_or_else(|err| error!("Failed to write BIND response: {:?}", err));
             },
             socks5::Command::UdpAssociate => {
                 let sockname = stream.peer_addr().unwrap();
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
                     TcpRelayLocal::handle_udp_associate_local(&mut stream, &addr)
-                        .unwrap_or_else(|err| panic!("Failed to write UDP ASSOCIATE response: {:?}", err));
+                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {:?}", err));
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
                     socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                         .write_to(&mut stream)
-                        .unwrap_or_else(|err| panic!("Failed to write UDP ASSOCIATE response: {:?}", err));
+                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {:?}", err));
                 }
             }
         }

@@ -79,9 +79,15 @@ impl TcpRelayServer {
                     let mut total_len = 0;
                     while total_len < encrypt_method.block_size() {
                         match stream.read(&mut iv[total_len..]) {
-                            Ok(0) => panic!("Unexpected EOF"),
+                            Ok(0) => {
+                                error!("Unexpected EOF");
+                                return;
+                            },
                             Ok(n) => total_len += n,
-                            Err(err) => panic!("Error while reading initialize vector: {:?}", err)
+                            Err(err) => {
+                                error!("Error while reading initialize vector: {:?}", err);
+                                return;
+                            },
                         }
                     }
                     iv
@@ -94,15 +100,23 @@ impl TcpRelayServer {
                 let buffered_client_stream = BufStream::new(stream.try_clone().unwrap());
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
-                let addr = socks5::Address::read_from(&mut decrypt_stream).unwrap_or_else(|err| {
-                    panic!("Error occurs while parsing request header, maybe wrong crypto method or password: {}",
+                let addr = match socks5::Address::read_from(&mut decrypt_stream) {
+                    Ok(addr) => addr,
+                    Err(err) => {
+                        error!("Error occurs while parsing request header, maybe wrong crypto method or password: {}",
                            err);
-                });
+                        return;
+                    }
+                };
 
                 info!("Connecting to {}", addr);
-                let remote_stream = TcpStream::connect(&addr).unwrap_or_else(|err| {
-                    panic!("Unable to connect {:?}: {}", addr, err);
-                });
+                let remote_stream = match TcpStream::connect(&addr) {
+                    Ok(stream) => stream,
+                    Err(err) => {
+                        error!("Unable to connect {:?}: {}", addr, err);
+                        return;
+                    }
+                };
 
                 let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
                 let addr_cloned = addr.clone();
