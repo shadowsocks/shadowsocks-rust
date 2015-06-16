@@ -193,7 +193,7 @@ fn main() {
         panic!("UDP relay is disabled");
     }
 
-    info!("ShadowSocks {:?}", shadowsocks::VERSION);
+    info!("ShadowSocks {}", shadowsocks::VERSION);
 
     debug!("Config: {:?}", config);
 

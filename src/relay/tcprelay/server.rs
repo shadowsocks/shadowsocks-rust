@@ -71,11 +71,18 @@ impl TcpRelayServer {
             thread::spawn(move || {
                 let remote_iv = {
                     let mut iv = Vec::with_capacity(encrypt_method.block_size());
-                    stream.try_clone()
-                          .unwrap()
-                          .take(encrypt_method.block_size() as u64)
-                          .read_to_end(&mut iv)
-                          .unwrap();
+                    unsafe {
+                        iv.set_len(encrypt_method.block_size());
+                    }
+
+                    let mut total_len = 0;
+                    while total_len < encrypt_method.block_size() {
+                        match stream.read(&mut iv[total_len..]) {
+                            Ok(0) => panic!("Unexpected EOF"),
+                            Ok(n) => total_len += n,
+                            Err(err) => panic!("Error while reading initialize vector: {:?}", err)
+                        }
+                    }
                     iv
                 };
                 let decryptor = cipher::with_type(encrypt_method,
@@ -118,8 +125,8 @@ impl TcpRelayServer {
                                         error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                     }
                                 }
-                                let _ = remote_stream_cloned.shutdown(Shutdown::Write);
-                                let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Write);
+                                let _ = remote_stream_cloned.shutdown(Shutdown::Both);
+                                let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Both);
                             }
                         }
                     }).unwrap();
@@ -152,8 +159,8 @@ impl TcpRelayServer {
                                         error!("{} relay from remote to local stream: {}", addr, err)
                                     }
                                 }
-                                let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
-                                let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Write);
+                                let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
+                                let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Both);
                             }
                         }
                     }).unwrap();

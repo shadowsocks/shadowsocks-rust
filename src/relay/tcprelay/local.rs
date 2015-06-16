@@ -154,8 +154,6 @@ impl TcpRelayLocal {
                 }
 
                 let addr_cloned = addr.clone();
-                let remote_stream_cloned = remote_stream.try_clone().unwrap();
-                let local_stream_cloned = stream.try_clone().unwrap();
                 Builder::new().name(format!("TCP relay from local to {:?}", addr_cloned)).spawn(move || {
                     match io::copy(&mut buffered_local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
@@ -168,20 +166,27 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            let _ = remote_stream_cloned.shutdown(Shutdown::Write);
-                            let _ = local_stream_cloned.shutdown(Shutdown::Read);
+                            let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
+                            let _ = buffered_local_stream.get_ref().shutdown(Shutdown::Both);
                         }
                     }
                 }).unwrap();
 
                 Builder::new().name(format!("TCP relay from {:?} to local", addr)).spawn(move|| {
                     let remote_iv = {
-                        let mut iv = Vec::new();
-                        remote_stream.try_clone()
-                                     .unwrap()
-                                     .take(encrypt_method.block_size() as u64)
-                                     .read_to_end(&mut iv)
-                                     .unwrap();
+                        let mut iv = Vec::with_capacity(encrypt_method.block_size());
+                        unsafe {
+                            iv.set_len(encrypt_method.block_size());
+                        }
+
+                        let mut total_len = 0;
+                        while total_len < encrypt_method.block_size() {
+                            match remote_stream.read(&mut iv[total_len..]) {
+                                Ok(0) => panic!("Unexpected EOF"),
+                                Ok(n) => total_len += n,
+                                Err(err) => panic!("Error while reading initialize vector: {:?}", err)
+                            }
+                        }
                         iv
                     };
                     let decryptor = cipher::with_type(encrypt_method,
@@ -199,8 +204,8 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr, err)
                                 }
                             }
-                            let _ = decrypt_stream.get_mut().shutdown(Shutdown::Write);
-                            let _ = stream.shutdown(Shutdown::Read);
+                            let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
+                            let _ = stream.shutdown(Shutdown::Both);
                         },
                         Ok(..) => {},
                     }
