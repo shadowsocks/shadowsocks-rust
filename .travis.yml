@@ -1,4 +1,6 @@
 language: rust
+rust:
+    - nightly
 
 before_install:
     - sudo apt-get update -qq
