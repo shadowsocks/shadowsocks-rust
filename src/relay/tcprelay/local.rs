@@ -212,10 +212,13 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr_cloned, err)
                                 }
                             }
-                            let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
-                            let _ = local_reader.get_ref().shutdown(Shutdown::Both);
                         }
                     }
+
+                    let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
+                    let _ = local_reader.get_ref().shutdown(Shutdown::Both);
+
+                    debug!("Local to remote closed");
                 });
 
                 Scheduler::spawn(move|| {
@@ -254,6 +257,7 @@ impl TcpRelayLocal {
                             return;
                         }
                     };
+
                     match io::copy(&mut decrypt_stream, &mut local_writer) {
                         Err(err) => {
                             match err.kind() {
@@ -264,11 +268,14 @@ impl TcpRelayLocal {
                                     error!("{} relay from local to remote stream: {}", addr, err)
                                 }
                             }
-                            let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
-                            let _ = local_writer.shutdown(Shutdown::Both);
                         },
                         Ok(..) => {},
                     }
+
+                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
+                    let _ = local_writer.shutdown(Shutdown::Both);
+
+                    debug!("Remote to local closed");
                 });
             },
             socks5::Command::TcpBind => {

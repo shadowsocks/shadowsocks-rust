@@ -110,6 +110,7 @@ impl Relay for RelayLocal {
             info!("Enabled UDP relay");
         }
 
-        Scheduler::run(num_cpus::get());
+        // Scheduler::run(num_cpus::get());
+        Scheduler::run(1);
     }
 }
