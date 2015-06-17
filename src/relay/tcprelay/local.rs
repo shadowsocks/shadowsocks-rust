@@ -168,7 +168,15 @@ impl TcpRelayLocal {
                     error!("Error occurs while writing initialize vector: {:?}", err);
                     return;
                 }
-                let mut encrypt_stream = EncryptedWriter::new(remote_stream.try_clone().unwrap(), encryptor);
+
+                let remote_writer = match remote_stream.try_clone() {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!("Error occurs while cloning remote stream: {:?}", err);
+                        return;
+                    }
+                };
+                let mut encrypt_stream = EncryptedWriter::new(remote_writer, encryptor);
 
                 {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
@@ -303,7 +311,13 @@ impl Relay for TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, SocketAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let stream = s.unwrap();
+            let stream = match s {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("Error occurs while accepting: {:?}", err);
+                    continue;
+                }
+            };
             let _ = stream.set_keepalive(self.config.timeout);
 
             let mut succeed = false;

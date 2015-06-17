@@ -46,9 +46,9 @@ impl<R: Read> DecryptedReader<R> {
         }
     }
 
-    // pub fn get_ref(&self) -> &R {
-    //     &self.reader
-    // }
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
 
     /// Gets a mutable reference to the underlying reader.
     ///
@@ -195,6 +195,6 @@ impl<W: Write> Write for EncryptedWriter<W> {
 
 impl<W: Write> Drop for EncryptedWriter<W> {
     fn drop(&mut self) {
-        self.finalize().unwrap()
+        let _ = self.finalize();
     }
 }

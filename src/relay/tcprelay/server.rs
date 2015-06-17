@@ -94,7 +94,7 @@ impl TcpRelayServer {
                             Err(err) => {
                                 error!("Error while reading initialize vector: {:?}", err);
                                 return;
-                            },
+                            }
                         }
                     }
                     iv
@@ -136,7 +136,7 @@ impl TcpRelayServer {
                 let mut remote_stream_cloned = match remote_stream.try_clone() {
                     Ok(s) => s,
                     Err(err) => {
-                        error!("Error occurs while cloning remote stream: {:?}" err);
+                        error!("Error occurs while cloning remote stream: {:?}", err);
                         return;
                     }
                 };
@@ -144,10 +144,14 @@ impl TcpRelayServer {
                 Scheduler::spawn(move || {
                     match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
                         Ok(n) => {
-                            debug!("Relayed {} bytes from {} to {}",
-                                   n,
-                                   decrypt_stream.get_mut().get_mut().peer_addr().unwrap(),
-                                   remote_stream_cloned.peer_addr().unwrap());
+                            let _ = decrypt_stream.get_ref().get_ref().peer_addr()
+                                .map(|client_addr| {
+                                    remote_stream_cloned.peer_addr()
+                                        .map(|remote_addr| {
+                                            debug!("Relayed {} bytes from {} to {}", n,
+                                                   client_addr, remote_addr);
+                                        })
+                                });
                         },
                         Err(err) => {
                             match err.kind() {
@@ -179,10 +183,14 @@ impl TcpRelayServer {
                     let mut encrypt_stream = EncryptedWriter::new(stream, encryptor);
                     match io::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
                         Ok(n) => {
-                            debug!("Relayed {} bytes from {} to {}",
-                                   n,
-                                   buffered_remote_stream.get_mut().peer_addr().unwrap(),
-                                   encrypt_stream.get_mut().peer_addr().unwrap());
+                            let _ = buffered_remote_stream.get_ref().peer_addr()
+                                .map(|remote_addr| {
+                                    encrypt_stream.get_ref().peer_addr()
+                                        .map(|client_addr| {
+                                            debug!("Relayed {} bytes from {} to {}", n,
+                                                   remote_addr, client_addr);
+                                        })
+                                });
                         },
                         Err(err) => {
                             match err.kind() {
