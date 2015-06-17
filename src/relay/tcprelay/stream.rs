@@ -46,9 +46,9 @@ impl<R: Read> DecryptedReader<R> {
         }
     }
 
-    pub fn get_ref(&self) -> &R {
-        &self.reader
-    }
+    // pub fn get_ref(&self) -> &R {
+    //     &self.reader
+    // }
 
     /// Gets a mutable reference to the underlying reader.
     ///
@@ -60,13 +60,13 @@ impl<R: Read> DecryptedReader<R> {
         &mut self.reader
     }
 
-    /// Unwraps this `DecryptedReader`, returning the underlying reader.
-    ///
-    /// The internal buffer is flushed before returning the reader. Any leftover
-    /// data in the read buffer is lost.
-    pub fn into_inner(self) -> R {
-        self.reader
-    }
+    // /// Unwraps this `DecryptedReader`, returning the underlying reader.
+    // ///
+    // /// The internal buffer is flushed before returning the reader. Any leftover
+    // /// data in the read buffer is lost.
+    // pub fn into_inner(self) -> R {
+    //     self.reader
+    // }
 }
 
 impl<R: Read> BufRead for DecryptedReader<R> {
@@ -139,17 +139,15 @@ impl<W: Write> EncryptedWriter<W> {
     }
 
     pub fn finalize(&mut self) -> io::Result<()> {
+        self.buffer.clear();
         match self.cipher.finalize(&mut self.buffer) {
             Ok(..) => {
-                try!(self.writer.write_all(&self.buffer[..]));
-                self.buffer.clear();
-                Ok(())
+                self.writer.write_all(&self.buffer[..])
             },
             Err(err) => {
                 Err(io::Error::new(
                         io::ErrorKind::Other,
-                        err.desc
-                    ))
+                        err.desc))
             }
         }
     }
