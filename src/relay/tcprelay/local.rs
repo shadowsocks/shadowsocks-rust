@@ -23,7 +23,7 @@
 
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
-use std::io::{self, BufStream, ErrorKind, Read, Write};
+use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::collections::BTreeMap;
 
 use simplesched::Scheduler;
@@ -134,7 +134,7 @@ impl TcpRelayLocal {
                     Ok(s) => { s },
                 };
 
-                let mut buffered_local_stream = BufStream::new(stream.try_clone().unwrap());
+                let mut local_stream = stream.try_clone().unwrap();
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
@@ -148,25 +148,29 @@ impl TcpRelayLocal {
                 let mut encrypt_stream = EncryptedWriter::new(remote_stream.try_clone().unwrap(), encryptor);
 
                 {
-                    if let Err(err) = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                         socks5::Address::SocketAddress(sockname))
-                                .write_to(&mut buffered_local_stream) {
+                    let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                                socks5::Address::SocketAddress(sockname));
+                    if let Err(err) = header.write_to(&mut local_stream) {
                         error!("Error occurs while writing header to local stream: {:?}", err);
                         return;
                     }
-                    if let Err(err) = buffered_local_stream.flush() {
-                        error!("Error occurs while flushing: {:?}", err);
-                        return;
-                    }
+
                     if let Err(err) = addr.write_to(&mut encrypt_stream) {
                         error!("Error occurs while writing address: {:?}", err);
                         return;
                     }
+                    // FIXME: Must write together if using other backends
+                    // let mut addr_buf = Vec::new();
+                    // addr.write_to(&mut addr_buf).unwrap();
+                    // if let Err(err) = encrypt_stream.write_all(&addr_buf) {
+                    //     error!("Error occurs while writing address: {:?}", err);
+                    //     return;
+                    // }
                 }
 
                 let addr_cloned = addr.clone();
                 Scheduler::spawn(move || {
-                    match io::copy(&mut buffered_local_stream, &mut encrypt_stream) {
+                    match io::copy(&mut local_stream, &mut encrypt_stream) {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind() {
@@ -178,7 +182,7 @@ impl TcpRelayLocal {
                                 }
                             }
                             let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
-                            let _ = buffered_local_stream.get_ref().shutdown(Shutdown::Both);
+                            let _ = local_stream.shutdown(Shutdown::Both);
                         }
                     }
                 });
@@ -194,7 +198,8 @@ impl TcpRelayLocal {
                         while total_len < encrypt_method.block_size() {
                             match remote_stream.read(&mut iv[total_len..]) {
                                 Ok(0) => {
-                                    error!("Unexpected EOF");
+                                    error!("Unexpected EOF while reading initialize vector");
+                                    debug!("Already read: {:?}", &iv[..total_len]);
                                     return;
                                 },
                                 Ok(n) => total_len += n,

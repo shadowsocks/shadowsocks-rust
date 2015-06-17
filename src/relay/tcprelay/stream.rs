@@ -19,8 +19,6 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![allow(dead_code)]
-
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 use std::slice;
@@ -74,6 +72,10 @@ impl<R: Read> DecryptedReader<R> {
 impl<R: Read> BufRead for DecryptedReader<R> {
     fn fill_buf<'b>(&'b mut self) -> io::Result<&'b [u8]> {
         if self.pos == self.buffer.len() {
+            if self.sent_final {
+                return Ok(&[]);
+            }
+
             let mut incoming = [0u8; BUFFER_SIZE];
             self.buffer.clear();
             match self.reader.read(&mut incoming) {
@@ -83,10 +85,11 @@ impl<R: Read> BufRead for DecryptedReader<R> {
                              .finalize(&mut self.buffer)
                              .map_err(|err| io::Error::new(io::ErrorKind::Other,
                                                            err.desc)));
-                }
+                    self.sent_final = true;
+                },
                 Ok(l) => {
                     try!(self.cipher
-                             .update(&incoming[0..l], &mut self.buffer)
+                             .update(&incoming[..l], &mut self.buffer)
                              .map_err(|err| io::Error::new(io::ErrorKind::Other,
                                                            err.desc)));
                 },
@@ -98,7 +101,7 @@ impl<R: Read> BufRead for DecryptedReader<R> {
             self.pos = 0;
         }
 
-        Ok(&self.buffer[self.pos..self.buffer.len()])
+        Ok(&self.buffer[self.pos..])
     }
 
     fn consume(&mut self, amt: usize) {
@@ -168,21 +171,20 @@ impl<W: Write> EncryptedWriter<W> {
 
 impl<W: Write> Write for EncryptedWriter<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.buffer.clear();
         match self.cipher.update(buf, &mut self.buffer) {
             Ok(..) => {
                 match self.writer.write_all(&self.buffer[..]) {
                     Ok(..) => {
-                        self.buffer.clear();
                         Ok(buf.len())
                     },
-                    Err(err) => return Err(err),
+                    Err(err) => Err(err),
                 }
             },
             Err(err) => {
                 Err(io::Error::new(
                         io::ErrorKind::Other,
-                        err.desc
-                   ))
+                        err.desc))
             }
         }
     }
