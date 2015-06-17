@@ -217,8 +217,6 @@ impl TcpRelayLocal {
 
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
                     let _ = local_reader.get_ref().shutdown(Shutdown::Both);
-
-                    debug!("Local to remote closed");
                 });
 
                 Scheduler::spawn(move|| {
@@ -274,8 +272,6 @@ impl TcpRelayLocal {
 
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
                     let _ = local_writer.shutdown(Shutdown::Both);
-
-                    debug!("Remote to local closed");
                 });
             },
             socks5::Command::TcpBind => {
