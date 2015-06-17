@@ -62,7 +62,14 @@ impl TcpRelayServer {
         let timeout = s.timeout;
         let method = s.method;
         for s in acceptor.incoming() {
-            let mut stream = s.unwrap();
+            let mut stream = match s {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("Error occurs while accepting: {:?}", err);
+                    continue;
+                }
+            };
+
             let _ = stream.set_keepalive(timeout);
 
             let pwd = pwd.clone();
@@ -80,7 +87,7 @@ impl TcpRelayServer {
                     while total_len < encrypt_method.block_size() {
                         match stream.read(&mut iv[total_len..]) {
                             Ok(0) => {
-                                error!("Unexpected EOF");
+                                error!("Unexpected EOF while reading initialize vector");
                                 return;
                             },
                             Ok(n) => total_len += n,
@@ -97,7 +104,15 @@ impl TcpRelayServer {
                                                   &remote_iv[..],
                                                   CryptoMode::Decrypt);
 
-                let buffered_client_stream = BufStream::new(stream.try_clone().unwrap());
+                let client_reader = match stream.try_clone() {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!("Error occurs while cloning client stream: {:?}", err);
+                        return;
+                    }
+                };
+
+                let buffered_client_stream = BufStream::new(client_reader);
                 let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
 
                 let addr = match socks5::Address::read_from(&mut decrypt_stream) {
@@ -118,7 +133,13 @@ impl TcpRelayServer {
                     }
                 };
 
-                let mut remote_stream_cloned = remote_stream.try_clone().unwrap();
+                let mut remote_stream_cloned = match remote_stream.try_clone() {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!("Error occurs while cloning remote stream: {:?}" err);
+                        return;
+                    }
+                };
                 let addr_cloned = addr.clone();
                 Scheduler::spawn(move || {
                     match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
@@ -149,7 +170,11 @@ impl TcpRelayServer {
                                                       &pwd[..],
                                                       &iv[..],
                                                       CryptoMode::Encrypt);
-                    stream.write_all(&iv[..]).unwrap();
+                    if let Err(err) = stream.write_all(&iv[..]) {
+                        error!("Error occurs while writing initialize vector: {:?}", err);
+                        return;
+                    }
+
                     let mut buffered_remote_stream = BufStream::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(stream, encryptor);
                     match io::copy(&mut buffered_remote_stream, &mut encrypt_stream) {

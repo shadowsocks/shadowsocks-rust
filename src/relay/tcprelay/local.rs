@@ -85,7 +85,7 @@ impl TcpRelayLocal {
         Ok(())
     }
 
-    fn handle_client(mut stream: TcpStream,
+    fn handle_client(stream: TcpStream,
                      server_addr: SocketAddr,
                      password: Vec<u8>,
                      encrypt_method: CipherType,
