@@ -143,6 +143,7 @@ impl<W: Write> EncryptedWriter<W> {
         match self.cipher.finalize(&mut self.buffer) {
             Ok(..) => {
                 self.writer.write_all(&self.buffer[..])
+                    .and(self.writer.flush())
             },
             Err(err) => {
                 Err(io::Error::new(
@@ -188,8 +189,7 @@ impl<W: Write> Write for EncryptedWriter<W> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        // self.finalize()
-        Ok(())
+        self.writer.flush()
     }
 }
 

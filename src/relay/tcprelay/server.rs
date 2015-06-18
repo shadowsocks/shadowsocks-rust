@@ -141,33 +141,7 @@ impl TcpRelayServer {
                     }
                 };
                 let addr_cloned = addr.clone();
-                Scheduler::spawn(move || {
-                    match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
-                        Ok(n) => {
-                            let _ = decrypt_stream.get_ref().get_ref().peer_addr()
-                                .map(|client_addr| {
-                                    remote_stream_cloned.peer_addr()
-                                        .map(|remote_addr| {
-                                            debug!("Relayed {} bytes from {} to {}", n,
-                                                   client_addr, remote_addr);
-                                        })
-                                });
-                        },
-                        Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
-                                }
-                            }
-                        }
-                    }
 
-                    let _ = remote_stream_cloned.shutdown(Shutdown::Both);
-                    let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Both);
-                });
 
                 Scheduler::spawn(move|| {
                     let iv = encrypt_method.gen_init_vec();
@@ -205,8 +179,42 @@ impl TcpRelayServer {
                         }
                     }
 
-                    let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
-                    let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Both);
+                    // let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
+                    // let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Both);
+
+                    let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
+                    let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Read);
+                });
+
+                Scheduler::spawn(move || {
+                    match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
+                        Ok(n) => {
+                            let _ = decrypt_stream.get_ref().get_ref().peer_addr()
+                                .map(|client_addr| {
+                                    remote_stream_cloned.peer_addr()
+                                        .map(|remote_addr| {
+                                            debug!("Relayed {} bytes from {} to {}", n,
+                                                   client_addr, remote_addr);
+                                        })
+                                });
+                        },
+                        Err(err) => {
+                            match err.kind() {
+                                ErrorKind::BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                }
+                            }
+                        }
+                    }
+
+                    // let _ = remote_stream_cloned.shutdown(Shutdown::Both);
+                    // let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Both);
+
+                    let _ = remote_stream_cloned.shutdown(Shutdown::Write);
+                    let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Read);
                 });
             });
         }

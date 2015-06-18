@@ -65,7 +65,7 @@ pub enum Command {
 
 impl Command {
     #[inline]
-    fn code(&self) -> u8 {
+    fn as_u8(&self) -> u8 {
         match *self {
             Command::TcpConnect => SOCKS5_CMD_TCP_CONNECT,
             Command::TcpBind => SOCKS5_CMD_TCP_BIND,
@@ -74,7 +74,7 @@ impl Command {
     }
 
     #[inline]
-    fn from_code(code: u8) -> Option<Command> {
+    fn from_u8(code: u8) -> Option<Command> {
         match code {
             SOCKS5_CMD_TCP_CONNECT => Some(Command::TcpConnect),
             SOCKS5_CMD_TCP_BIND => Some(Command::TcpBind),
@@ -101,7 +101,7 @@ pub enum Reply {
 
 impl Reply {
     #[inline]
-    fn code(&self) -> u8 {
+    fn as_u8(&self) -> u8 {
         match *self {
             Reply::Succeeded => SOCKS5_REPLY_SUCCEEDED,
             Reply::GeneralFailure => SOCKS5_REPLY_GENERAL_FAILURE,
@@ -117,7 +117,7 @@ impl Reply {
     }
 
     #[inline]
-    fn from_code(code: u8) -> Reply {
+    fn from_u8(code: u8) -> Reply {
         match code {
             SOCKS5_REPLY_SUCCEEDED => Reply::Succeeded,
             SOCKS5_REPLY_GENERAL_FAILURE => Reply::GeneralFailure,
@@ -257,19 +257,16 @@ impl TcpRequestHeader {
 
     #[inline]
     pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpRequestHeader, Error> {
-        let mut buf = [0u8; 3];
-        match stream.read(&mut buf) {
-            Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)))
-        }
-        let [ver, cmd, _] = buf;
-
+        let ver = try!(stream.read_u8());
         if ver != SOCKS5_VERSION {
             return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
         }
 
+        let cmd = try!(stream.read_u8());
+        let _ = try!(stream.read_u8());
+
         Ok(TcpRequestHeader {
-            command: match Command::from_code(cmd) {
+            command: match Command::from_u8(cmd) {
                 Some(c) => c,
                 None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
             },
@@ -279,7 +276,7 @@ impl TcpRequestHeader {
 
     #[inline]
     pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
-        try!(stream.write(&[SOCKS5_VERSION, self.command.code(), 0x00]));
+        try!(stream.write_all(&[SOCKS5_VERSION, self.command.as_u8(), 0x00]));
         try!(self.address.write_to(stream));
 
         Ok(())
@@ -307,26 +304,23 @@ impl TcpResponseHeader {
 
     #[inline]
     pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpResponseHeader, Error> {
-        let mut buf = [0u8; 3];
-        match stream.read(&mut buf) {
-            Ok(_) => (),
-            Err(err) => return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)))
-        }
-        let [ver, reply_code, _] = buf;
-
+        let ver = try!(stream.read_u8());
         if ver != SOCKS5_VERSION {
             return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
         }
 
+        let reply_code = try!(stream.read_u8());
+        let _ = try!(stream.read_u8());
+
         Ok(TcpResponseHeader {
-            reply: Reply::from_code(reply_code),
+            reply: Reply::from_u8(reply_code),
             address: try!(Address::read_from(stream)),
         })
     }
 
     #[inline]
     pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
-        try!(stream.write(&[SOCKS5_VERSION, self.reply.code(), 0x00]));
+        try!(stream.write_all(&[SOCKS5_VERSION, self.reply.as_u8(), 0x00]));
         try!(self.address.write_to(stream));
 
         Ok(())
@@ -373,9 +367,12 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
             try!(stream.take(addr_len as u64).read_to_end(&mut raw_addr));
             let port = try!(stream.read_u16::<BigEndian>());
 
-            Ok((4 + addr_len, Address::DomainNameAddress(String::from_utf8(raw_addr).unwrap(),
-                                                port,
-                                                )))
+            let addr = match String::from_utf8(raw_addr) {
+                Ok(addr) => addr,
+                Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
+            };
+
+            Ok((4 + addr_len, Address::DomainNameAddress(addr, port)))
         },
         _ => {
             // Address type not supported
@@ -488,16 +485,15 @@ impl HandshakeRequest {
     }
 
     pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeRequest> {
-        let mut buf = [0; 2];
-        try!(stream.read(&mut buf));
-        let [ver, nmet] = buf;
-
+        let ver = try!(stream.read_u8());
         if ver != SOCKS5_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "Invalid Socks5 version",
             ));
         }
+
+        let nmet = try!(stream.read_u8());
 
         let mut methods = Vec::new();
         try!(stream.take(nmet as u64).read_to_end(&mut methods));
@@ -508,8 +504,8 @@ impl HandshakeRequest {
     }
 
     pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
-        try!(stream.write(&[SOCKS5_VERSION, self.methods.len() as u8]));
-        try!(stream.write(&self.methods[..]));
+        try!(stream.write_all(&[SOCKS5_VERSION, self.methods.len() as u8]));
+        try!(stream.write_all(&self.methods[..]));
 
         Ok(())
     }
@@ -533,13 +529,12 @@ impl HandshakeResponse {
     }
 
     pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeResponse> {
-        let mut buf = [0; 2];
-        try!(stream.read(&mut buf));
-        let [ver, met] = buf;
-
+        let ver = try!(stream.read_u8());
         if ver != SOCKS5_VERSION {
             return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
         }
+
+        let met = try!(stream.read_u8());
 
         Ok(HandshakeResponse {
             chosen_method: met,
@@ -547,9 +542,7 @@ impl HandshakeResponse {
     }
 
     pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
-        try!(stream.write(&[SOCKS5_VERSION, self.chosen_method]));
-
-        Ok(())
+        stream.write_all(&[SOCKS5_VERSION, self.chosen_method])
     }
 }
 
@@ -568,18 +561,9 @@ impl UdpAssociateHeader {
     }
 
     pub fn read_from<R: Read>(reader: &mut R) -> Result<UdpAssociateHeader, Error> {
-        let mut buf = [0u8; 3];
-        let mut read_size = 0;
-        while read_size < 3 {
-            match reader.read(&mut buf[read_size..]) {
-                Ok(l) => read_size += l,
-                Err(err) => {
-                    return Err(Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err)));
-                }
-            }
-        }
-
-        let [_, _, frag] = buf;
+        let _ = try!(reader.read_u8());
+        let _ = try!(reader.read_u8());
+        let frag = try!(reader.read_u8());
 
         Ok(UdpAssociateHeader::new(frag, try!(Address::read_from(reader))))
     }
