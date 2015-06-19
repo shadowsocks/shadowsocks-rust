@@ -198,6 +198,27 @@ impl TcpRelayLocal {
                 }
 
                 let addr_cloned = addr.clone();
+
+                Scheduler::spawn(move || {
+                    match io::copy(&mut local_reader, &mut encrypt_stream) {
+                        Ok(..) => {},
+                        Err(err) => {
+                            match err.kind() {
+                                ErrorKind::BrokenPipe => {
+                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                },
+                                _ => {
+                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                }
+                            }
+                        }
+                    }
+
+
+                    let _ = encrypt_stream.get_ref().shutdown(Shutdown::Write);
+                    let _ = local_reader.get_ref().shutdown(Shutdown::Read);
+                });
+
                 Scheduler::spawn(move|| {
                     let remote_iv = {
                         let mut iv = Vec::with_capacity(encrypt_method.block_size());
@@ -249,27 +270,10 @@ impl TcpRelayLocal {
                         Ok(..) => {},
                     }
 
+                    let _ = local_writer.flush();
+
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
                     let _ = local_writer.shutdown(Shutdown::Write);
-                });
-
-                Scheduler::spawn(move || {
-                    match io::copy(&mut local_reader, &mut encrypt_stream) {
-                        Ok(..) => {},
-                        Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
-                                }
-                            }
-                        }
-                    }
-
-                    let _ = encrypt_stream.get_ref().shutdown(Shutdown::Write);
-                    let _ = local_reader.get_ref().shutdown(Shutdown::Read);
                 });
             },
             socks5::Command::TcpBind => {
