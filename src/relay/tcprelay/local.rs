@@ -214,7 +214,6 @@ impl TcpRelayLocal {
                         }
                     }
 
-
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Write);
                     let _ = local_reader.get_ref().shutdown(Shutdown::Read);
                 });

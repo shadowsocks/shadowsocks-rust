@@ -111,18 +111,19 @@ impl TcpRelayServer {
                         return;
                     }
                 };
+                let mut client_writer = stream;
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method,
                                                   &pwd[..],
                                                   &iv[..],
                                                   CryptoMode::Encrypt);
-                if let Err(err) = stream.write_all(&iv[..]) {
+                if let Err(err) = client_writer.write_all(&iv[..]) {
                     error!("Error occurs while writing initialize vector: {:?}", err);
                     return;
                 }
 
-                let mut decrypt_stream = DecryptedReader::new(BufReader::new(client_reader),
+                let mut decrypt_stream = DecryptedReader::new(client_reader,
                                                               decryptor);
 
                 let addr = match socks5::Address::read_from(&mut decrypt_stream) {
@@ -143,7 +144,7 @@ impl TcpRelayServer {
                     }
                 };
 
-                let mut remote_stream_cloned = match remote_stream.try_clone() {
+                let mut remote_writer = match remote_stream.try_clone() {
                     Ok(s) => s,
                     Err(err) => {
                         error!("Error occurs while cloning remote stream: {:?}", err);
@@ -155,7 +156,7 @@ impl TcpRelayServer {
 
                 Scheduler::spawn(move|| {
                     let mut remote_reader = BufReader::new(remote_stream);
-                    let mut encrypt_stream = EncryptedWriter::new(stream, encryptor);
+                    let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
                     match io::copy(&mut remote_reader, &mut encrypt_stream) {
                         Ok(n) => {
                             let _ = remote_reader.get_ref().peer_addr()
@@ -179,19 +180,16 @@ impl TcpRelayServer {
                         }
                     }
 
-                    // let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
-                    // let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Both);
-
                     let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
                     let _ = remote_reader.get_mut().shutdown(Shutdown::Read);
                 });
 
                 Scheduler::spawn(move || {
-                    match io::copy(&mut decrypt_stream, &mut remote_stream_cloned) {
+                    match io::copy(&mut decrypt_stream, &mut remote_writer) {
                         Ok(n) => {
-                            let _ = decrypt_stream.get_ref().get_ref().peer_addr()
+                            let _ = decrypt_stream.get_ref().peer_addr()
                                 .map(|client_addr| {
-                                    remote_stream_cloned.peer_addr()
+                                    remote_writer.peer_addr()
                                         .map(|remote_addr| {
                                             debug!("Relayed {} bytes from {} to {}", n,
                                                    client_addr, remote_addr);
@@ -210,11 +208,8 @@ impl TcpRelayServer {
                         }
                     }
 
-                    // let _ = remote_stream_cloned.shutdown(Shutdown::Both);
-                    // let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Both);
-
-                    let _ = remote_stream_cloned.shutdown(Shutdown::Write);
-                    let _ = decrypt_stream.get_mut().get_mut().shutdown(Shutdown::Read);
+                    let _ = remote_writer.shutdown(Shutdown::Write);
+                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
                 });
             });
         }
