@@ -322,7 +322,15 @@ impl Relay for TcpRelayLocal {
                     continue;
                 }
             };
-            let _ = stream.set_keepalive(self.config.timeout);
+            if let Err(err) = stream.set_keepalive(self.config.timeout) {
+                error!("Failed to set keep alive: {:?}", err);
+                continue;
+            }
+
+            if let Err(err) = stream.set_nodelay(true) {
+                error!("Failed to set no delay: {:?}", err);
+                continue;
+            }
 
             let mut succeed = false;
             for _ in 0..server_load_balancer.total() {
