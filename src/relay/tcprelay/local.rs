@@ -159,25 +159,7 @@ impl TcpRelayLocal {
                     Ok(s) => { s },
                 };
 
-                let iv = encrypt_method.gen_init_vec();
-                let encryptor = cipher::with_type(encrypt_method,
-                                                  &password[..],
-                                                  &iv[..],
-                                                  CryptoMode::Encrypt);
-                if let Err(err) = remote_stream.write_all(&iv[..]) {
-                    error!("Error occurs while writing initialize vector: {:?}", err);
-                    return;
-                }
-
-                let remote_writer = match remote_stream.try_clone() {
-                    Ok(s) => s,
-                    Err(err) => {
-                        error!("Error occurs while cloning remote stream: {:?}", err);
-                        return;
-                    }
-                };
-                let mut encrypt_stream = EncryptedWriter::new(remote_writer, encryptor);
-
+                // Send header to client
                 {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                                 socks5::Address::SocketAddress(sockname));
@@ -185,18 +167,34 @@ impl TcpRelayLocal {
                         error!("Error occurs while writing header to local stream: {:?}", err);
                         return;
                     }
+                }
 
-                    if let Err(err) = addr.write_to(&mut encrypt_stream) {
-                        error!("Error occurs while writing address: {:?}", err);
+                // Send initialize vector to remote and create encryptor
+                let mut encrypt_stream = {
+                    let iv = encrypt_method.gen_init_vec();
+                    let encryptor = cipher::with_type(encrypt_method,
+                                                      &password[..],
+                                                      &iv[..],
+                                                      CryptoMode::Encrypt);
+                    if let Err(err) = remote_stream.write_all(&iv[..]) {
+                        error!("Error occurs while writing initialize vector: {:?}", err);
                         return;
                     }
-                    // FIXME: Must write together if using other backends
-                    // let mut addr_buf = Vec::new();
-                    // addr.write_to(&mut addr_buf).unwrap();
-                    // if let Err(err) = encrypt_stream.write_all(&addr_buf) {
-                    //     error!("Error occurs while writing address: {:?}", err);
-                    //     return;
-                    // }
+
+                    let remote_writer = match remote_stream.try_clone() {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error!("Error occurs while cloning remote stream: {:?}", err);
+                            return;
+                        }
+                    };
+                    EncryptedWriter::new(remote_writer, encryptor)
+                };
+
+                // Send relay address to remote
+                if let Err(err) = addr.write_to(&mut encrypt_stream) {
+                    error!("Error occurs while writing address: {:?}", err);
+                    return;
                 }
 
                 let addr_cloned = addr.clone();
