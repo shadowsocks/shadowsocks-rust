@@ -22,7 +22,7 @@
 //! TcpRelay server that running on the server side
 
 // use std::sync::Arc;
-use std::io::{Read, Write, BufStream, ErrorKind, self};
+use std::io::{Read, Write, BufReader, ErrorKind, self};
 
 use simplesched::Scheduler;
 use simplesched::net::{TcpListener, TcpStream, Shutdown};
@@ -112,8 +112,18 @@ impl TcpRelayServer {
                     }
                 };
 
-                let buffered_client_stream = BufStream::new(client_reader);
-                let mut decrypt_stream = DecryptedReader::new(buffered_client_stream, decryptor);
+                let iv = encrypt_method.gen_init_vec();
+                let encryptor = cipher::with_type(encrypt_method,
+                                                  &pwd[..],
+                                                  &iv[..],
+                                                  CryptoMode::Encrypt);
+                if let Err(err) = stream.write_all(&iv[..]) {
+                    error!("Error occurs while writing initialize vector: {:?}", err);
+                    return;
+                }
+
+                let mut decrypt_stream = DecryptedReader::new(BufReader::new(client_reader),
+                                                              decryptor);
 
                 let addr = match socks5::Address::read_from(&mut decrypt_stream) {
                     Ok(addr) => addr,
@@ -144,21 +154,11 @@ impl TcpRelayServer {
 
 
                 Scheduler::spawn(move|| {
-                    let iv = encrypt_method.gen_init_vec();
-                    let encryptor = cipher::with_type(encrypt_method,
-                                                      &pwd[..],
-                                                      &iv[..],
-                                                      CryptoMode::Encrypt);
-                    if let Err(err) = stream.write_all(&iv[..]) {
-                        error!("Error occurs while writing initialize vector: {:?}", err);
-                        return;
-                    }
-
-                    let mut buffered_remote_stream = BufStream::new(remote_stream);
+                    let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(stream, encryptor);
-                    match io::copy(&mut buffered_remote_stream, &mut encrypt_stream) {
+                    match io::copy(&mut remote_reader, &mut encrypt_stream) {
                         Ok(n) => {
-                            let _ = buffered_remote_stream.get_ref().peer_addr()
+                            let _ = remote_reader.get_ref().peer_addr()
                                 .map(|remote_addr| {
                                     encrypt_stream.get_ref().peer_addr()
                                         .map(|client_addr| {
@@ -183,7 +183,7 @@ impl TcpRelayServer {
                     // let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Both);
 
                     let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
-                    let _ = buffered_remote_stream.get_mut().shutdown(Shutdown::Read);
+                    let _ = remote_reader.get_mut().shutdown(Shutdown::Read);
                 });
 
                 Scheduler::spawn(move || {
