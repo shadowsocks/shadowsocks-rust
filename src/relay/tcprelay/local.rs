@@ -31,8 +31,7 @@ use simplesched::net::{TcpListener, TcpStream, Shutdown};
 
 use config::Config;
 
-use relay::Relay;
-use relay::socks5;
+use relay::{self, socks5};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 
@@ -59,6 +58,7 @@ impl TcpRelayLocal {
     fn do_handshake<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result<()> {
         // Read the handshake header
         let req = try!(socks5::HandshakeRequest::read_from(reader));
+        trace!("Got handshake {:?}", req);
 
         if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
             let resp = socks5::HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
@@ -70,6 +70,7 @@ impl TcpRelayLocal {
 
         // Reply to client
         let resp = socks5::HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
+        trace!("Reply handshake {:?}", resp);
         resp.write_to(writer)
     }
 
@@ -131,6 +132,8 @@ impl TcpRelayLocal {
             }
         };
 
+        trace!("Got header {:?}", header);
+
         let addr = header.address;
 
         match header.command {
@@ -163,6 +166,7 @@ impl TcpRelayLocal {
                 {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                                 socks5::Address::SocketAddress(sockname));
+                    trace!("Send header to client {:?}", header);
                     if let Err(err) = header.write_to(&mut local_writer) {
                         error!("Error occurs while writing header to local stream: {:?}", err);
                         return;
@@ -200,7 +204,7 @@ impl TcpRelayLocal {
                 let addr_cloned = addr.clone();
 
                 Scheduler::spawn(move || {
-                    match io::copy(&mut local_reader, &mut encrypt_stream) {
+                    match relay::copy(&mut local_reader, &mut encrypt_stream, "Local to remote") {
                         Ok(..) => {},
                         Err(err) => {
                             match err.kind() {
@@ -213,6 +217,8 @@ impl TcpRelayLocal {
                             }
                         }
                     }
+
+                    trace!("Local to remote relay is going to be closed");
 
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Write);
                     let _ = local_reader.get_ref().shutdown(Shutdown::Read);
@@ -242,6 +248,7 @@ impl TcpRelayLocal {
                         }
                         iv
                     };
+                    trace!("Got initialize vector {:?}", remote_iv);
                     let decryptor = cipher::with_type(encrypt_method,
                                                       &password[..],
                                                       &remote_iv[..],
@@ -255,14 +262,14 @@ impl TcpRelayLocal {
                         }
                     };
 
-                    match io::copy(&mut decrypt_stream, &mut local_writer) {
+                    match relay::copy(&mut decrypt_stream, &mut local_writer, "Remote to local") {
                         Err(err) => {
                             match err.kind() {
                                 ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr, err)
+                                    debug!("{} relay from remote to local stream: {}", addr, err)
                                 },
                                 _ => {
-                                    error!("{} relay from local to remote stream: {}", addr, err)
+                                    error!("{} relay from remote to local stream: {}", addr, err)
                                 }
                             }
                         },
@@ -270,6 +277,8 @@ impl TcpRelayLocal {
                     }
 
                     let _ = local_writer.flush();
+
+                    trace!("Remote to local relay is going to be closed");
 
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
                     let _ = local_writer.shutdown(Shutdown::Write);

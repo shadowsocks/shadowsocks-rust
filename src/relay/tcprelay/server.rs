@@ -22,13 +22,12 @@
 //! TcpRelay server that running on the server side
 
 // use std::sync::Arc;
-use std::io::{Read, Write, BufReader, ErrorKind, self};
+use std::io::{Read, Write, BufReader, ErrorKind};
 
 use simplesched::Scheduler;
 use simplesched::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ServerConfig};
-use relay::Relay;
 use relay::socks5;
 // use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
@@ -161,17 +160,16 @@ impl TcpRelayServer {
                 };
                 let addr_cloned = addr.clone();
 
-
                 Scheduler::spawn(move|| {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
-                    match io::copy(&mut remote_reader, &mut encrypt_stream) {
+                    match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "Remote to local") {
                         Ok(n) => {
                             let _ = remote_reader.get_ref().peer_addr()
                                 .map(|remote_addr| {
                                     encrypt_stream.get_ref().peer_addr()
                                         .map(|client_addr| {
-                                            debug!("Relayed {} bytes from {} to {}", n,
+                                            debug!("Remote to local: relayed {} bytes from {} to {}", n,
                                                    remote_addr, client_addr);
                                         })
                                 });
@@ -188,18 +186,20 @@ impl TcpRelayServer {
                         }
                     }
 
+                    trace!("Remote to local relay is going to be closed");
+
                     let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
                     let _ = remote_reader.get_mut().shutdown(Shutdown::Read);
                 });
 
                 Scheduler::spawn(move || {
-                    match io::copy(&mut decrypt_stream, &mut remote_writer) {
+                    match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "Local to remote") {
                         Ok(n) => {
                             let _ = decrypt_stream.get_ref().peer_addr()
                                 .map(|client_addr| {
                                     remote_writer.peer_addr()
                                         .map(|remote_addr| {
-                                            debug!("Relayed {} bytes from {} to {}", n,
+                                            debug!("Local to remote: relayed {} bytes from {} to {}", n,
                                                    client_addr, remote_addr);
                                         })
                                 });
@@ -216,8 +216,10 @@ impl TcpRelayServer {
                         }
                     }
 
-                    let _ = remote_writer.shutdown(Shutdown::Write);
-                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
+                    trace!("Local to remote relay is going to be closed");
+
+                    // let _ = remote_writer.shutdown(Shutdown::Write);
+                    // let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
                 });
             });
         }

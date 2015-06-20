@@ -7,7 +7,6 @@ extern crate log;
 extern crate shadowsocks;
 
 use clap::{App, Arg};
-use std::env;
 
 use std::net::UdpSocket;
 use std::net::TcpStream;

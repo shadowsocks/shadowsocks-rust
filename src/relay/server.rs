@@ -50,7 +50,7 @@ use config::Config;
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
 /// }];
-/// RelayServer::new(config).run();
+/// RelayServer::new(config).run(1);
 /// ```
 ///
 #[derive(Clone)]

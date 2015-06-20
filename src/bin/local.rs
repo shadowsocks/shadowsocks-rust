@@ -79,18 +79,23 @@ fn main() {
                             .help("Threads in thread pool"))
                     .get_matches();
 
-    let logger_config = fern::DispatchConfig {
-        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
-            format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
+    let logger_config = |show_location| fern::DispatchConfig {
+        format: Box::new(move|msg: &str, level: &log::LogLevel, location: &log::LogLocation| {
+            if show_location {
+                format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        level, location.__module_path, msg)
+            } else {
+                format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
+            }
         }),
         output: vec![fern::OutputConfig::stderr()],
         level: log::LogLevelFilter::Trace
     };
 
     match matches.occurrences_of("VERBOSE") {
-        0 => fern::init_global_logger(logger_config, log::LogLevelFilter::Info).unwrap(),
-        1 => fern::init_global_logger(logger_config, log::LogLevelFilter::Debug).unwrap(),
-        _ => fern::init_global_logger(logger_config, log::LogLevelFilter::Trace).unwrap()
+        0 => fern::init_global_logger(logger_config(false), log::LogLevelFilter::Info).unwrap(),
+        1 => fern::init_global_logger(logger_config(true), log::LogLevelFilter::Debug).unwrap(),
+        _ => fern::init_global_logger(logger_config(true), log::LogLevelFilter::Trace).unwrap()
     }
 
     let mut config =

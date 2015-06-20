@@ -51,7 +51,7 @@ use config::Config;
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
 /// }];
-/// RelayLocal::new(config).run();
+/// RelayLocal::new(config).run(1);
 /// ```
 #[derive(Clone)]
 pub struct RelayLocal {

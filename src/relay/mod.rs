@@ -21,6 +21,8 @@
 
 //! Relay server in local and server side implementations.
 
+use std::io::{self, Read, Write};
+
 pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
 
@@ -34,4 +36,33 @@ pub mod socks5;
 
 pub trait Relay {
     fn run(&self, threads: usize);
+}
+
+fn copy<R: Read, W: Write>(r: &mut R, w: &mut W, prefix: &str) -> io::Result<u64> {
+    let mut buf = [0u8; 4096];
+    let mut written = 0;
+    loop {
+        let len = match r.read(&mut buf) {
+            Ok(0) => {
+                trace!("{}: EOF from reader", prefix);
+                return Ok(written);
+            }
+            Ok(len) => len,
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                trace!("{}: Error from reader {:?}", prefix, e);
+                return Err(e);
+            }
+        };
+        trace!("{}: Read {} bytes from reader", prefix, len);
+        match w.write_all(&buf[..len]) {
+            Ok(..) => {},
+            Err(err) => {
+                trace!("{}: Error from writer {:?}", prefix, err);
+                return Err(err);
+            }
+        }
+        trace!("{}: Write {} bytes to writer", prefix, len);
+        written += len as u64;
+    }
 }
