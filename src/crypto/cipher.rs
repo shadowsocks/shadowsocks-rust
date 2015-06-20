@@ -449,6 +449,84 @@ impl FromStr for CipherType {
     }
 }
 
+impl Display for CipherType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CipherType::Table => write!(f, "{}", CIPHER_TABLE),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb => write!(f, "{}", CIPHER_AES_128_CFB),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb1 => write!(f, "{}", CIPHER_AES_128_CFB_1),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb8 => write!(f, "{}", CIPHER_AES_128_CFB_8),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb128 => write!(f, "{}", CIPHER_AES_128_CFB_128),
+
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes192Cfb => write!(f, "{}", CIPHER_AES_192_CFB),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes192Cfb1 => write!(f, "{}", CIPHER_AES_192_CFB_1),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes192Cfb8 => write!(f, "{}", CIPHER_AES_192_CFB_8),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes192Cfb128 => write!(f, "{}", CIPHER_AES_192_CFB_128),
+
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb => write!(f, "{}", CIPHER_AES_256_CFB),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb1 => write!(f, "{}", CIPHER_AES_256_CFB_1),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb8 => write!(f, "{}", CIPHER_AES_256_CFB_8),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb128 => write!(f, "{}", CIPHER_AES_256_CFB_128),
+
+            #[cfg(feature = "cipher-aes-ofb")]
+            CipherType::Aes128Ofb => write!(f, "{}", CIPHER_AES_128_OFB),
+            #[cfg(feature = "cipher-aes-ofb")]
+            CipherType::Aes192Ofb => write!(f, "{}", CIPHER_AES_192_OFB),
+            #[cfg(feature = "cipher-aes-ofb")]
+            CipherType::Aes256Ofb => write!(f, "{}", CIPHER_AES_256_OFB),
+
+            #[cfg(feature = "cipher-aes-ctr")]
+            CipherType::Aes128Ctr => write!(f, "{}", CIPHER_AES_128_CTR),
+            #[cfg(feature = "cipher-aes-ctr")]
+            CipherType::Aes192Ctr => write!(f, "{}", CIPHER_AES_192_CTR),
+            #[cfg(feature = "cipher-aes-ctr")]
+            CipherType::Aes256Ctr => write!(f, "{}", CIPHER_AES_256_CTR),
+
+            #[cfg(feature = "cipher-bf-cfb")]
+            CipherType::BfCfb => write!(f, "{}", CIPHER_BF_CFB),
+
+            #[cfg(feature = "cipher-camellia-cfb")]
+            CipherType::Camellia128Cfb => write!(f, "{}", CIPHER_CAMELLIA_128_CFB),
+            #[cfg(feature = "cipher-camellia-cfb")]
+            CipherType::Camellia192Cfb => write!(f, "{}", CIPHER_CAMELLIA_192_CFB),
+            #[cfg(feature = "cipher-camellia-cfb")]
+            CipherType::Camellia256Cfb => write!(f, "{}", CIPHER_CAMELLIA_256_CFB),
+
+            #[cfg(feature = "cipher-cast5-cfb")]
+            CipherType::Cast5Cfb => write!(f, "{}", CIPHER_CAST5_CFB),
+            #[cfg(feature = "cipher-des-cfb")]
+            CipherType::DesCfb => write!(f, "{}", CIPHER_DES_CFB),
+            #[cfg(feature = "cipher-idea-cfb")]
+            CipherType::IdeaCfb => write!(f, "{}", CIPHER_IDEA_CFB),
+            #[cfg(feature = "cipher-rc2-cfb")]
+            CipherType::Rc2Cfb => write!(f, "{}", CIPHER_RC2_CFB),
+            #[cfg(feature = "cipher-rc4")]
+            CipherType::Rc4 => write!(f, "{}", CIPHER_RC4),
+            #[cfg(feature = "cipher-rc4")]
+            CipherType::Rc4Md5 => write!(f, "{}", CIPHER_RC4_MD5),
+            #[cfg(feature = "cipher-seed-cfb")]
+            CipherType::SeedCfb => write!(f, "{}", CIPHER_SEED_CFB),
+
+            #[cfg(feature = "cipher-chacha20")]
+            CipherType::ChaCha20 => write!(f, "{}", CIPHER_CHACHA20),
+            #[cfg(feature = "cipher-salsa20")]
+            CipherType::Salsa20 => write!(f, "{}", CIPHER_SALSA20),
+        }
+    }
+}
+
 /// Generate a specific Cipher with key and initialize vector
 pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box<Cipher + Send> {
     match t {
