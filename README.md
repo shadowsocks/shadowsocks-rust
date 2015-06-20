@@ -8,11 +8,10 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 *Currently developing and testing with rust-nightly*
 
-*Note: Currently it is broken, need to be refactored with Eventloop (maybe with Coroutine), see #9.*
-
 ## Dependences
 
 * libcrypto (OpenSSL)
+* libsodium
 * Rust nightly
 * Cargo
 

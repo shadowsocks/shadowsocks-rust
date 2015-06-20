@@ -1,7 +1,7 @@
 [package]
 
 name = "shadowsocks-rust"
-version = "0.9.10"
+version = "0.9.11"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 
 [lib]
@@ -21,8 +21,6 @@ default = [
 
     "cipher-chacha20",
     "cipher-salsa20",
-
-    #"enable-udp",
 ]
 
 cipher-aes-cfb = []
@@ -39,7 +37,7 @@ cipher-seed-cfb = []
 cipher-chacha20 = ["enable-sodium"]
 cipher-salsa20 = ["enable-sodium"]
 
-enable-udp = []
+enable-udp = ["lru-cache"]
 enable-sodium = ["libsodium-sys"]
 
 [[bin]]
@@ -58,7 +56,6 @@ name = "socks5-tool"
 path = "src/bin/socks5-tool.rs"
 
 [dependencies]
-#lru-cache = "*"
 rustc-serialize = "*"
 log = "*"
 byteorder = "*"
@@ -71,8 +68,9 @@ fern = "*"
 git = "https://github.com/zonyitoo/libsodium-sys.git"
 optional = true
 
-#[dependencies.lru-cache]
-#git = "https://github.com/contain-rs/lru-cache.git"
+[dependencies.lru-cache]
+version = "*"
+optional = true
 
 [dependencies.simplesched]
 git = "https://github.com/zonyitoo/simplesched.git"
