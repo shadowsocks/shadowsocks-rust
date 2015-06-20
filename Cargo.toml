@@ -73,4 +73,5 @@ version = "*"
 optional = true
 
 [dependencies.simplesched]
-git = "https://github.com/zonyitoo/simplesched.git"
+#git = "https://github.com/zonyitoo/simplesched.git"
+path = "/Users/zonyitoo/Projects/simplesched"

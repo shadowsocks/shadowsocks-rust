@@ -171,16 +171,21 @@ impl TcpRelayLocal {
                         error!("Error occurs while writing header to local stream: {:?}", err);
                         return;
                     }
+
+                    if let Err(err) = local_writer.flush() {
+                        error!("Error occurs while flushing local writer: {:?}", err);
+                        return;
+                    }
                 }
 
                 // Send initialize vector to remote and create encryptor
                 let mut encrypt_stream = {
-                    let iv = encrypt_method.gen_init_vec();
+                    let local_iv = encrypt_method.gen_init_vec();
                     let encryptor = cipher::with_type(encrypt_method,
                                                       &password[..],
-                                                      &iv[..],
+                                                      &local_iv[..],
                                                       CryptoMode::Encrypt);
-                    if let Err(err) = remote_stream.write_all(&iv[..]) {
+                    if let Err(err) = remote_stream.write_all(&local_iv[..]) {
                         error!("Error occurs while writing initialize vector: {:?}", err);
                         return;
                     }
@@ -196,7 +201,10 @@ impl TcpRelayLocal {
                 };
 
                 // Send relay address to remote
-                if let Err(err) = addr.write_to(&mut encrypt_stream) {
+                let mut addr_buf = Vec::new();
+                addr.write_to(&mut addr_buf).unwrap();
+                // if let Err(err) = addr.write_to(&mut encrypt_stream) {
+                if let Err(err) = encrypt_stream.write_all(&addr_buf) {
                     error!("Error occurs while writing address: {:?}", err);
                     return;
                 }
