@@ -224,8 +224,8 @@ impl TcpRelayServer {
     }
 }
 
-impl Relay for TcpRelayServer {
-    fn run(&self) {
+impl TcpRelayServer {
+    pub fn run(&self) {
         for s in self.config.server.iter() {
             let s = s.clone();
             Scheduler::spawn(move || {

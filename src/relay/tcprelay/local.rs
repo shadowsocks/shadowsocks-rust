@@ -297,8 +297,8 @@ impl TcpRelayLocal {
     }
 }
 
-impl Relay for TcpRelayLocal {
-    fn run(&self) {
+impl TcpRelayLocal {
+    pub fn run(&self) {
         let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
         let local_conf = self.config.local.expect("need local configuration");

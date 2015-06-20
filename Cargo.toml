@@ -63,9 +63,9 @@ rustc-serialize = "*"
 log = "*"
 byteorder = "*"
 rand = "*"
-getopts = "*"
 time = "*"
-num_cpus = "*"
+clap = "*"
+fern = "*"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"

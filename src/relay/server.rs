@@ -23,8 +23,6 @@
 
 use simplesched::Scheduler;
 
-use num_cpus;
-
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
@@ -87,7 +85,7 @@ impl RelayServer {
 
 impl Relay for RelayServer {
     #[cfg(feature = "enable-udp")]
-    fn run(&self) {
+    fn run(&self, threads: usize) {
         let tcprelay = self.tcprelay.clone();
         Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
@@ -98,11 +96,11 @@ impl Relay for RelayServer {
             info!("Enabled UDP relay");
         }
 
-        Scheduler::run(num_cpus::get());
+        Scheduler::run(threads);
     }
 
     #[cfg(not(feature = "enable-udp"))]
-    fn run(&self) {
+    fn run(&self, threads: usize) {
         if self.enable_udp {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
@@ -111,6 +109,6 @@ impl Relay for RelayServer {
         Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        Scheduler::run(num_cpus::get());
+        Scheduler::run(threads);
     }
 }

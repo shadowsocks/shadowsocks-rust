@@ -33,5 +33,5 @@ mod loadbalancing;
 pub mod socks5;
 
 pub trait Relay {
-    fn run(&self);
+    fn run(&self, threads: usize);
 }

@@ -1,12 +1,12 @@
 #![feature(lookup_host, ip_addr)]
-extern crate getopts;
+
+extern crate clap;
 #[macro_use]
 extern crate log;
 
 extern crate shadowsocks;
 
-use getopts::{Options, Matches};
-
+use clap::{App, Arg};
 use std::env;
 
 use std::net::UdpSocket;
@@ -19,7 +19,7 @@ use std::io::{Read, Write, self};
 
 use shadowsocks::relay::socks5::*;
 
-fn do_tcp(_: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
+fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr) {
     let mut proxy_stream = TcpStream::connect(proxy_addr).unwrap();
 
     let shake_req = HandshakeRequest::new(vec![0x00]);
@@ -48,7 +48,7 @@ fn do_tcp(_: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
     io::copy(&mut proxy_stream, &mut stdout()).unwrap();
 }
 
-fn do_udp(matches: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
+fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr) {
     let udp_proxy_addr = {
         let mut proxy_stream = TcpStream::connect(proxy_addr).unwrap();
 
@@ -73,10 +73,6 @@ fn do_udp(matches: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
 
         resp_header.address
     };
-
-    let local_ip: IpAddr = matches.opt_str("b").expect("Require local address").parse().unwrap();
-    let local_port: u16 = matches.opt_str("l").expect("Require local port").parse().unwrap();
-    let local_addr = SocketAddr::new(local_ip, local_port);
 
     let udp_socket = UdpSocket::bind(local_addr).unwrap();
 
@@ -117,43 +113,50 @@ fn do_udp(matches: &Matches, svr_addr: &Address, proxy_addr: &SocketAddr) {
 
 fn main() {
 
-    let mut opts = Options::new();
+    let matches = App::new("socks5-tool")
+                    .author("Y. T. Chung <zonyitoo@gmail.com>")
+                    .about("Socks5 protocol test tool")
+                    .arg(Arg::with_name("SERVER_ADDR").short("s").long("server-addr")
+                            .takes_value(true)
+                            .required(true)
+                            .help("Server address"))
+                    .arg(Arg::with_name("SERVER_PORT").short("p").long("server-port")
+                            .takes_value(true)
+                            .required(true)
+                            .help("Server port"))
+                    .arg(Arg::with_name("PROXY_ADDR").short("x").long("proxy-addr")
+                            .takes_value(true)
+                            .required(true)
+                            .help("Proxy address"))
+                    .arg(Arg::with_name("LOCAL_ADDR").short("b").long("local-addr")
+                            .takes_value(true)
+                            .required(false)
+                            .help("Local address"))
+                    .arg(Arg::with_name("PROTOCOL").short("t").long("protocol")
+                            .takes_value(true)
+                            .required(true)
+                            .help("Protocol to use"))
+                    .get_matches();
 
-    opts.optflag("h", "help", "Print help message");
-    opts.optopt("s", "server-addr", "Server address", "");
-    opts.optopt("p", "server-port", "Server port", "");
-    opts.optopt("b", "local-addr", "Local address for binding", "");
-    opts.optopt("l", "local-port", "Local port for binding", "");
-    opts.optopt("x", "proxy-addr", "Proxy address", "");
-    opts.optopt("o", "proxy-port", "Proxy port", "");
-    opts.optopt("t", "protocol", "Protocol to use", "tcp");
-
-    let matches = opts.parse(env::args().skip(1)).unwrap();
-
-    if matches.opt_present("h") {
-        println!("{}", opts.usage(&format!("Usage: {} [Options]", env::args().next().unwrap())));
-        return;
-    }
-
-    let is_tcp = match &matches.opt_str("t").expect("Required to specify protocol")[..] {
+    let is_tcp = match matches.value_of("PROTOCOL").unwrap() {
         "tcp" => true,
         "udp" => false,
-        _ => panic!("Unsupported protocol")
+        protocol => panic!("Unsupported protocol {:?}", protocol)
     };
 
-    let ip: IpAddr = matches.opt_str("x").expect("Require proxy address").parse().unwrap();
-    let port: u16 = matches.opt_str("o").expect("Require proxy port").parse().unwrap();
-    let proxy_addr = SocketAddr::new(ip, port);
+    let proxy_addr: SocketAddr = matches.value_of("PROXY_ADDR").unwrap().parse().unwrap();
 
-    let svr_port: u16 = matches.opt_str("p").expect("Require server port").parse().unwrap();
-    let svr_addr = match matches.opt_str("s").expect("Require server address").parse::<IpAddr>() {
+    let svr_port: u16 = matches.value_of("SERVER_PORT").unwrap().parse().unwrap();
+    let svr_addr_str = matches.value_of("SERVER_ADDR").unwrap();
+    let svr_addr = match svr_addr_str.parse::<IpAddr>() {
         Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, svr_port)),
-        Err(..) => Address::DomainNameAddress(matches.opt_str("s").unwrap(), svr_port),
+        Err(..) => Address::DomainNameAddress(svr_addr_str.to_owned(), svr_port),
     };
 
     if is_tcp {
-        do_tcp(&matches, &svr_addr, &proxy_addr);
+        do_tcp(&svr_addr, &proxy_addr);
     } else {
-        do_udp(&matches, &svr_addr, &proxy_addr);
+        let local_addr: SocketAddr = matches.value_of("LOCAL_ADDR").unwrap().parse().unwrap();
+        do_udp(&svr_addr, &proxy_addr, &local_addr);
     }
 }

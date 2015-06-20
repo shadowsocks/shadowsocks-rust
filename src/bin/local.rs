@@ -26,167 +26,147 @@
 //! in mod `config`.
 //!
 
-#![feature(box_syntax)]
+#![feature(ip_addr)]
 
-extern crate getopts;
+extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
+extern crate fern;
 extern crate time;
 
-use getopts::Options;
+use clap::{App, Arg};
 
-use std::env;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{SocketAddr, IpAddr};
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
 
-struct SimpleLogger;
-
-impl log::Log for SimpleLogger {
-    fn enabled(&self, meta: &log::LogMetadata) -> bool {
-        meta.level() <= log::LogLevel::Info
-    }
-
-    fn log(&self, record: &log::LogRecord) {
-        if self.enabled(record.metadata()) {
-            println!("{} [{}] {}",
-                     time::now().rfc3339(),
-                     record.level(),
-                     record.args());
-        }
-    }
-}
-
-struct VerboseLogger;
-
-impl log::Log for VerboseLogger {
-    fn enabled(&self, meta: &log::LogMetadata) -> bool {
-        meta.level() <= log::LogLevel::Debug
-    }
-
-    fn log(&self, record: &log::LogRecord) {
-        if self.enabled(record.metadata()) {
-            println!("{} [{}] [{}:{}] {}",
-                     time::now().rfc3339(),
-                     record.level(),
-                     record.location().module_path(),
-                     record.location().line(),
-                     record.args());
-        }
-    }
-}
-
 fn main() {
-    let mut opts = Options::new();
-    opts.optflag("V", "version", "print version");
-    opts.optflag("v", "verbose", "verbose mode");
-    opts.optflag("h", "help", "print this message");
-    opts.optflag("u", "enable-udp", "enable UDP relay");
-    opts.optopt("c", "config", "specify config file", "config.json");
-    opts.optopt("s", "server-addr", "server address", "");
-    opts.optopt("b", "local-addr", "local address, listen only to this address if specified", "");
-    opts.optopt("k", "password", "password", "");
-    opts.optopt("p", "server-port", "server port", "");
-    opts.optopt("l", "local-port", "local socks5 proxy port", "");
-    opts.optopt("m", "encrypt-method", "entryption method", "aes-256-cfb");
+    let matches = App::new("shadowsocks")
+                    .version(shadowsocks::VERSION)
+                    .author("Y. T. Chung <zonyitoo@gmail.com>")
+                    .about("A fast tunnel proxy that helps you bypass firewalls.")
+                    .arg(Arg::with_name("VERBOSE").short("v")
+                            .multiple(true)
+                            .help("Set the level of debug"))
+                    .arg(Arg::with_name("ENABLE_UDP").short("u").long("enable-udp")
+                            .help("Enable UDP relay"))
+                    .arg(Arg::with_name("CONFIG").short("c").long("config")
+                            .takes_value(true)
+                            .help("Specify config file"))
+                    .arg(Arg::with_name("SERVER_ADDR").short("s").long("server-addr")
+                            .takes_value(true)
+                            .help("Server address"))
+                    .arg(Arg::with_name("SERVER_PORT").short("p").long("server-port")
+                            .takes_value(true)
+                            .help("Server port"))
+                    .arg(Arg::with_name("LOCAL_ADDR").short("b").long("local-addr")
+                            .takes_value(true)
+                            .help("Local address, listen only to this address if specified"))
+                    .arg(Arg::with_name("LOCAL_PORT").short("l").long("local-port")
+                            .takes_value(true)
+                            .help("Local port"))
+                    .arg(Arg::with_name("PASSWORD").short("k").long("password")
+                            .takes_value(true)
+                            .help("Password"))
+                    .arg(Arg::with_name("ENCRYPT_METHOD").short("m").long("encrypt-method")
+                            .takes_value(true)
+                            .help("Encryption method"))
+                    .arg(Arg::with_name("THREADS").short("t").long("threads")
+                            .takes_value(true)
+                            .help("Threads in thread pool"))
+                    .get_matches();
 
-    let matches = opts.parse(env::args().skip(1)).unwrap();
+    let logger_config = fern::DispatchConfig {
+        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+            format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
+        }),
+        output: vec![fern::OutputConfig::stderr()],
+        level: log::LogLevelFilter::Trace
+    };
 
-    if matches.opt_present("h") {
-        println!("{}", opts.usage(&format!("Usage: {} [Options]", env::args().next().unwrap())[..]));
-        return;
-    }
-
-    if matches.opt_present("V") {
-        println!("{}", shadowsocks::VERSION);
-        return;
-    }
-
-    if matches.opt_present("v") {
-        log::set_logger(|mloglevel| {
-            mloglevel.set(log::LogLevelFilter::Debug);
-            box VerboseLogger
-        }).unwrap();
-    } else {
-        log::set_logger(|mloglevel| {
-            mloglevel.set(log::LogLevelFilter::Debug);
-            box SimpleLogger
-        }).unwrap();
+    match matches.occurrences_of("VERBOSE") {
+        0 => fern::init_global_logger(logger_config, log::LogLevelFilter::Info).unwrap(),
+        1 => fern::init_global_logger(logger_config, log::LogLevelFilter::Debug).unwrap(),
+        _ => fern::init_global_logger(logger_config, log::LogLevelFilter::Trace).unwrap()
     }
 
     let mut config =
-        if matches.opt_present("c") {
-            let cfile = matches.opt_str("c").unwrap();
-            match Config::load_from_file(&cfile[..], config::ConfigType::Local) {
-                Ok(cfg) => cfg,
-                Err(err) => {
-                    error!("{:?}", err);
-                    return;
+        match matches.value_of("CONFIG") {
+            Some(cpath) => {
+                match Config::load_from_file(cpath, config::ConfigType::Local) {
+                    Ok(cfg) => cfg,
+                    Err(err) => {
+                        error!("{:?}", err);
+                        return;
+                    }
                 }
-            }
-        } else {
-            Config::new()
+            },
+            None => Config::new()
         };
 
-    if matches.opt_present("s") && matches.opt_present("p") && matches.opt_present("k") && matches.opt_present("m") {
-        let addr_str = matches.opt_str("s").unwrap();
+    if matches.value_of("SERVER_ADDR").is_some()
+        && matches.value_of("SERVER_PORT").is_some()
+        && matches.value_of("PASSWORD").is_some()
+        && matches.value_of("ENCRYPT_METHOD").is_some()
+    {
+        let (svr_addr, svr_port, password, method) = matches.value_of("SERVER_ADDR")
+            .and_then(|svr_addr| matches.value_of("SERVER_PORT")
+                                        .map(|svr_port| (svr_addr, svr_port)))
+            .and_then(|(svr_addr, svr_port)| matches.value_of("PASSWORD")
+                                                    .map(|pwd| (svr_addr, svr_port, pwd)))
+            .and_then(|(svr_addr, svr_port, pwd)| matches.value_of("ENCRYPT_METHOD")
+                                                         .map(|m| (svr_addr, svr_port, pwd, m)))
+            .unwrap();
+
         let sc = ServerConfig {
-            addr: addr_str,
-            port: matches.opt_str("p").unwrap().parse().ok().expect("`port` should be an integer"),
-            password: matches.opt_str("k").unwrap(),
-            method: match matches.opt_str("m") {
-                Some(method_s) => {
-                    match method_s.parse() {
-                        Ok(m) => m,
-                        Err(err) => panic!("`{}` is not a supported method: {:?}", method_s, err),
-                    }
-                },
-                None => panic!("failed to get method string"),
+            addr: svr_addr.to_owned(),
+            port: svr_port.parse().ok().expect("`port` should be an integer"),
+            password: password.to_owned(),
+            method: match method.parse() {
+                Ok(m) => m,
+                Err(err) => {
+                    panic!("Does not support {:?} method: {:?}", method, err);
+                }
             },
             timeout: None,
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
+
         config.server.push(sc);
-    } else if !matches.opt_present("s") && !matches.opt_present("b")
-            && !matches.opt_present("k") && !matches.opt_present("m") {
-        // Do nothing
-    } else {
-        panic!("`server`, `server_port`, `method` and `password` should be provided together");
+    }
+    else if matches.value_of("SERVER_ADDR").is_none()
+        && matches.value_of("SERVER_PORT").is_none()
+        && matches.value_of("PASSWORD").is_none()
+        && matches.value_of("ENCRYPT_METHOD").is_none()
+    {
+        // Does not provide server config
+    }
+    else {
+        panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
     }
 
-    if matches.opt_present("b") && matches.opt_present("l") {
-        let local_addr_str = matches.opt_str("b").unwrap();
-        let local_port = matches.opt_str("l").unwrap().parse().ok().expect("`local_port` should be an integer");
+    if matches.value_of("LOCAL_ADDR").is_some() && matches.value_of("LOCAL_PORT").is_some() {
+        let (local_addr, local_port) = matches.value_of("LOCAL_ADDR")
+            .and_then(|local_addr| matches.value_of("LOCAL_PORT").map(|p| (local_addr, p)))
+            .unwrap();
 
-        let local = match local_addr_str.parse::<Ipv4Addr>() {
-            Ok(ip) => {
-                SocketAddr::V4(SocketAddrV4::new(ip, local_port))
-            },
-            Err(..) => {
-                match local_addr_str.parse::<Ipv6Addr>() {
-                    Ok(ip) => {
-                        SocketAddr::V6(SocketAddrV6::new(ip,
-                                                         local_port,
-                                                         0,
-                                                         0))
-                    }
-                    Err(..) => {
-                        panic!("`local` is not a valid IP address");
-                    }
-                }
-            }
-        };
-        config.local = Some(local)
+        let local_addr: IpAddr = local_addr.parse().ok().expect("`local-addr` is not a valid IP address");
+        let local_port: u16 = local_port.parse().ok().expect("`local-port` is not a valid integer");
+
+        config.local = Some(SocketAddr::new(local_addr, local_port));
     }
 
-    config.enable_udp = matches.opt_present("u");
+    config.enable_udp = matches.value_of("ENABLE_UDP").is_some();
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
     debug!("Config: {:?}", config);
 
-    RelayLocal::new(config).run();
+    let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
+        .ok().expect("`threads` should be an integer");
+
+    RelayLocal::new(config).run(threads);
 }
