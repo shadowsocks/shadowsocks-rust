@@ -83,18 +83,19 @@ The `sslocal` will use a load balancing algorithm to dispatch packages to all se
 Start local and server shadowsocks with
 
 ```
-sslocal -c config.json
-ssserver -c config.json
+cargo run --bin sslocal -- -c config.json
+cargo run --bin ssserver -- -c config.json
 ```
 
 List all available arguments with `-h`.
 
-Default log level is `error`, override it by setting environment variable `RUST_LOG`. Please refer
-to [log crate](http://doc.rust-lang.org/log/index.html) for more detail.
+## Useful Tools
+
+1. `socks5-tool` is to demonstrate how to write a Socks5 client.
+
+2. `ssurl` is for encoding and decoding Shadowsocks URLs. Example: `ss://YWVzLTI1Ni1jZmI6aGVsbG93b3JsZF9mdWNrQDEyNy4wLjAuMTo4Mzg4`
 
 ## Notes
-
-Still under developing and waiting for the final release of rust-1.0.
 
 It supports the following features:
 
@@ -102,20 +103,20 @@ It supports the following features:
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
 
-**The `socks5_cli.rs` under the root directory is a Socks5 client for testing.**
+Currently it uses [simplesched](https://github.com/zonyitoo/simplesched) as the backend support library and it is not support Windows, <del>LoL</del>.
 
 ## TODO
 
-* Documentation
-* `BIND` command (Maybe no one will use it)
-* Socks5 authentication
-* <del>Extend configuration format</del>
-* Fully testing on servers
-* Performance testing and improvement
-* User management
-* PAC
-* Improved logging format (waiting for the new official log crate)
-* Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
+- [ ] Documentation
+- [ ] <del>`BIND` command</del>
+- [ ] Socks5 authentication
+- [x] Extend configuration format
+- [ ] Fully testing on servers
+- [ ] Performance testing and improvement
+- [ ] User management
+- [ ] PAC
+- [x] Improved logging format (waiting for the new official log crate)
+- [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 
 ## License
 
