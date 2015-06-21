@@ -5,7 +5,7 @@ extern crate qrcode;
 
 use std::str;
 
-use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
+use rustc_serialize::base64::{FromBase64, ToBase64, STANDARD};
 use rustc_serialize::json::{ToJson, as_pretty_json};
 
 use clap::{App, Arg};
@@ -19,7 +19,7 @@ const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
     let url = format!("{}:{}@{}:{}", svr.method.to_string(), svr.password, svr.addr, svr.port);
-    format!("ss://{}", url.as_bytes().to_base64(URL_SAFE))
+    format!("ss://{}", url.as_bytes().to_base64(STANDARD))
 }
 
 fn print_qrcode(encoded: &str) {
