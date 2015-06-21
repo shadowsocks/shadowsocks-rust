@@ -95,8 +95,15 @@ fn decode(encoded: &str, need_qrcode: bool) {
     let svrconfig = ServerConfig::basic(addr.to_owned(), port.parse().unwrap(),
                                         pwd.to_owned(), method.parse().unwrap());
 
-    let svrconfig_json = svrconfig.to_json();
-    println!("{}", as_pretty_json(&svrconfig_json));
+    let config = Config {
+        server: vec![svrconfig],
+        local: None,
+        enable_udp: false,
+        timeout: None,
+    };
+
+    let config_json = config.to_json();
+    println!("{}", as_pretty_json(&config_json));
 
     if need_qrcode {
         print_qrcode(encoded);

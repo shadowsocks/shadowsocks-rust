@@ -453,6 +453,8 @@ impl json::ToJson for Config {
             obj.insert("local_port".to_owned(), Json::U64(l.port() as u64));
         }
 
+        obj.insert("enable_udp".to_owned(), Json::Boolean(self.enable_udp));
+
         Json::Object(obj)
     }
 }
