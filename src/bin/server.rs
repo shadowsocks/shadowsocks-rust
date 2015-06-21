@@ -153,7 +153,7 @@ fn main() {
         panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
     }
 
-    config.enable_udp = matches.value_of("ENABLE_UDP").is_some();
+    config.enable_udp = matches.is_present("ENABLE_UDP");
 
     if !cfg!(feature = "enable-udp") && config.enable_udp {
         error!("Please compile shadowsocks with --cfg feature=\"enable-udp\"");

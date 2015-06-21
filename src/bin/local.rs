@@ -164,7 +164,7 @@ fn main() {
         config.local = Some(SocketAddr::new(local_addr, local_port));
     }
 
-    config.enable_udp = matches.value_of("ENABLE_UDP").is_some();
+    config.enable_udp = matches.is_present("ENABLE_UDP");
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
