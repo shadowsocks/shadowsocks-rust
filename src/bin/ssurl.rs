@@ -5,10 +5,11 @@ extern crate shadowsocks;
 use std::str;
 
 use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
+use rustc_serialize::json::{ToJson, as_pretty_json};
 
 use clap::{App, Arg};
 
-use shadowsocks::config::{Config, ConfigType};
+use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
 fn encode(filename: &str) {
     let config = Config::load_from_file(filename, ConfigType::Server).unwrap();
@@ -49,12 +50,11 @@ fn decode(encoded: &str) {
         _ => panic!("Malformed input"),
     };
 
-    println!("{{");
-    println!("    \"server\": \"{}\",", addr);
-    println!("    \"server_port\": {},", port);
-    println!("    \"method\": \"{}\",", method);
-    println!("    \"password\": \"{}\"", pwd);
-    println!("}}");
+    let svrconfig = ServerConfig::basic(addr.to_owned(), port.parse().unwrap(),
+                                        pwd.to_owned(), method.parse().unwrap());
+
+    let svrconfig_json = svrconfig.to_json();
+    println!("{}", as_pretty_json(&svrconfig_json));
 }
 
 fn main() {

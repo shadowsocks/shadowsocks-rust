@@ -6,7 +6,7 @@ This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
-*Currently developing and testing with rust-nightly*
+It is unstable! If you encounter any problems, please open an issue.
 
 ## Dependences
 
@@ -54,7 +54,7 @@ Create a shadowsocks' configuration file. Example
 
 Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
 
-In shadowsocks-rust, we also have a extended configuration file format, which is able to define more than one servers:
+In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one servers:
 
 ```json
 {
@@ -93,7 +93,7 @@ List all available arguments with `-h`.
 
 1. `socks5-tool` is to demonstrate how to write a Socks5 client.
 
-2. `ssurl` is for encoding and decoding Shadowsocks URLs. Example: `ss://YWVzLTI1Ni1jZmI6aGVsbG93b3JsZF9mdWNrQDEyNy4wLjAuMTo4Mzg4`
+2. `ssurl` is for encoding and decoding ShadowSocks URLs. Example: `ss://YWVzLTI1Ni1jZmI6aGVsbG93b3JsZF9mdWNrQDEyNy4wLjAuMTo4Mzg4`
 
 ## Notes
 
@@ -103,7 +103,7 @@ It supports the following features:
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
 
-Currently it uses [simplesched](https://github.com/zonyitoo/simplesched) as the backend support library and it is not support Windows, <del>LoL</del>.
+Currently it uses [simplesched](https://github.com/zonyitoo/simplesched) as the backend support library and it does not support Windows, <del>LoL</del>.
 
 ## TODO
 

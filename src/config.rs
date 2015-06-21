@@ -91,6 +91,36 @@ pub struct ServerConfig {
     pub dns_cache_capacity: usize,
 }
 
+impl ServerConfig {
+    pub fn basic(addr: String, port: u16, password: String, method: CipherType) -> ServerConfig {
+        ServerConfig {
+            addr: addr,
+            port: port,
+            password: password,
+            method: method,
+            timeout: None,
+            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
+        }
+    }
+}
+
+impl json::ToJson for ServerConfig {
+    fn to_json(&self) -> json::Json {
+        use serialize::json::Json;
+        let mut obj = json::Object::new();
+        obj.insert("address".to_owned(), Json::String(self.addr.clone()));
+        obj.insert("port".to_owned(), Json::U64(self.port as u64));
+        obj.insert("password".to_owned(), Json::String(self.password.clone()));
+        obj.insert("method".to_owned(), Json::String(self.method.to_string()));
+        if let Some(t) = self.timeout {
+            obj.insert("timeout".to_owned(), Json::U64(t as u64));
+        }
+        obj.insert("dns_cache_capacity".to_owned(), Json::U64(self.dns_cache_capacity as u64));
+
+        Json::Object(obj)
+    }
+}
+
 /// Listening address
 pub type ClientConfig = SocketAddr;
 
@@ -396,5 +426,41 @@ impl Config {
             ConfigType::Local => true,
             ConfigType::Server => false
         })
+    }
+}
+
+impl json::ToJson for Config {
+    fn to_json(&self) -> json::Json {
+        use serialize::json::Json;
+
+        let mut obj = json::Object::new();
+        if self.server.len() == 1 {
+            // Official format
+            obj.insert("server".to_owned(), Json::String(self.server[0].addr.clone()));
+            obj.insert("server_port".to_owned(), Json::U64(self.server[0].port as u64));
+            obj.insert("password".to_owned(), Json::String(self.server[0].password.clone()));
+            obj.insert("method".to_owned(), Json::String(self.server[0].method.to_string()));
+            if let Some(t) = self.server[0].timeout {
+                obj.insert("timeout".to_owned(), Json::U64(t as u64));
+            }
+        } else {
+            let arr: json::Array = self.server.iter().map(|s| s.to_json()).collect();
+            obj.insert("servers".to_owned(), Json::Array(arr));
+        }
+
+        if let Some(l) = self.local {
+            obj.insert("local_address".to_owned(), Json::String(l.ip().to_string()));
+            obj.insert("local_port".to_owned(), Json::U64(l.port() as u64));
+        }
+
+        Json::Object(obj)
+    }
+}
+
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use serialize::json::ToJson;
+
+        write!(f, "{}", self.to_json())
     }
 }
