@@ -197,7 +197,7 @@ impl Config {
             Some(t_str) => Some(try!(t_str.as_u64()
                                           .ok_or(Error::new(ErrorKind::Malformed,
                                                             "`timeout` should be an integer",
-                                                            None))) as u32 * 1000),
+                                                            None))) as u32),
             None => None,
         };
 
@@ -250,7 +250,7 @@ impl Config {
                         Some(t) => Some(try!(t.as_u64()
                                               .ok_or(Error::new(ErrorKind::Malformed,
                                                                 "`timeout` should be an integer",
-                                                                None))) as u32 * 1000),
+                                                                None))) as u32),
                         None => None,
                     },
                     dns_cache_capacity: match server.find("dns_cache_capacity") {
@@ -315,7 +315,7 @@ impl Config {
                     Some(t) => Some(try!(t.as_u64()
                                           .ok_or(Error::new(ErrorKind::Malformed,
                                                             "`timeout` should be an integer",
-                                                            None))) as u32 * 1000),
+                                                            None))) as u32),
                     None => None,
                 },
                 dns_cache_capacity: match o.get("dns_cache_capacity") {
