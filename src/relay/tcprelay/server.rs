@@ -188,8 +188,8 @@ impl TcpRelayServer {
 
                     trace!("Remote to local relay is going to be closed");
 
-                    let _ = encrypt_stream.get_mut().shutdown(Shutdown::Write);
-                    let _ = remote_reader.get_mut().shutdown(Shutdown::Read);
+                    let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
+                    let _ = remote_reader.get_mut().shutdown(Shutdown::Both);
                 });
 
                 Scheduler::spawn(move || {
@@ -218,8 +218,8 @@ impl TcpRelayServer {
 
                     trace!("Local to remote relay is going to be closed");
 
-                    // let _ = remote_writer.shutdown(Shutdown::Write);
-                    // let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
+                    let _ = remote_writer.shutdown(Shutdown::Both);
+                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
                 });
             });
         }

@@ -228,8 +228,8 @@ impl TcpRelayLocal {
 
                     trace!("Local to remote relay is going to be closed");
 
-                    let _ = encrypt_stream.get_ref().shutdown(Shutdown::Write);
-                    let _ = local_reader.get_ref().shutdown(Shutdown::Read);
+                    let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
+                    let _ = local_reader.get_ref().shutdown(Shutdown::Both);
                 });
 
                 Scheduler::spawn(move|| {
@@ -288,8 +288,8 @@ impl TcpRelayLocal {
 
                     trace!("Remote to local relay is going to be closed");
 
-                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Read);
-                    let _ = local_writer.shutdown(Shutdown::Write);
+                    let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
+                    let _ = local_writer.shutdown(Shutdown::Both);
                 });
             },
             socks5::Command::TcpBind => {
