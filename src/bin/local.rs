@@ -210,12 +210,12 @@ fn main() {
                 server.listen(move|req: Request, mut res: Response| {
                     match req.uri {
                         AbsolutePath(ref path) => match (&req.method, &path[..]) {
-                            (&Get, "/") => {
+                            (&Get, "/proxy.pac") => {
                                 if let Err(err) = res.send(&content) {
                                     error!("Error occurs while sending PAC file: {:?}", err);
                                 }
                             },
-                            (_, "/") => {
+                            (_, "/proxy.pac") => {
                                 *res.status_mut() = hyper::status::StatusCode::MethodNotAllowed;
                             },
                             _ => {
