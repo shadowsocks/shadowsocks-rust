@@ -82,3 +82,6 @@ git = "https://github.com/zonyitoo/simplesched.git"
 
 [dependencies.qrcode]
 git = "https://github.com/kennytm/qrcode-rust.git"
+
+[dependencies.hyper]
+git = "https://github.com/hyperium/hyper.git"
