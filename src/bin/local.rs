@@ -204,7 +204,7 @@ fn main() {
 
                 let port = port.parse::<u16>().ok().expect("`pac-port` has to be a u16 number");
 
-                info!("Serving PAC file ({}) at http://{}:{}/", path, config.local.unwrap().ip(), port);
+                info!("Serving PAC file ({}) at http://{}:{}/proxy.pac", path, config.local.unwrap().ip(), port);
 
                 let server = Server::http((config.local.unwrap().ip(), port)).unwrap();
                 server.listen(move|req: Request, mut res: Response| {
