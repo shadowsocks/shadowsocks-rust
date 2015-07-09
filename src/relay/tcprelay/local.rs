@@ -167,13 +167,8 @@ impl TcpRelayLocal {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                                 socks5::Address::SocketAddress(sockname));
                     trace!("Send header to client {:?}", header);
-                    if let Err(err) = header.write_to(&mut local_writer) {
+                    if let Err(err) = header.write_to(&mut local_writer).and(local_writer.flush()) {
                         error!("Error occurs while writing header to local stream: {:?}", err);
-                        return;
-                    }
-
-                    if let Err(err) = local_writer.flush() {
-                        error!("Error occurs while flushing local writer: {:?}", err);
                         return;
                     }
                 }
