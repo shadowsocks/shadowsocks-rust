@@ -22,9 +22,8 @@
 use std::sync::Arc;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::net::lookup_host;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::io;
-use std::vec::IntoIter;
 
 use simplesched::Scheduler;
 use simplesched::sync::Mutex;
