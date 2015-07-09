@@ -19,24 +19,26 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::sync::{Arc, Mutex, TaskPool};
+use std::sync::Arc;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::net::lookup_host;
-use std::net::IpAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::io;
+use std::vec::IntoIter;
 
-use collect::LruCache;
+use simplesched::Scheduler;
+use simplesched::sync::Mutex;
 
-const TASK_POOL_SIZE: usize = 4;
+use lru_cache::LruCache;
 
 struct DnsLruCache {
-    cache: LruCache<String, IpAddr>,
+    cache: LruCache<String, Vec<SocketAddr>>,
     totally_matched: usize,
     totally_missed: usize,
 }
 
 pub struct CachedDns {
     lru_cache: Arc<Mutex<DnsLruCache>>,
-    pool: TaskPool,
 }
 
 impl CachedDns {
@@ -47,49 +49,60 @@ impl CachedDns {
                 totally_missed: 0,
                 totally_matched: 0,
             })),
-            pool: TaskPool::new(TASK_POOL_SIZE),
         }
     }
 
-    pub fn resolve(&self, addr: &str) -> Option<IpAddr> {
-        let addr_string = addr.to_string();
-
+    pub fn resolve(&self, addr_str: &str) -> Option<Vec<SocketAddr>> {
         {
             let mut cache = self.lru_cache.lock().unwrap();
-            match cache.cache.get(&addr_string).map(|x| x.clone()) {
+            match cache.cache.get(addr_str).map(|x| x.clone()) {
                 Some(addrs) => {
                     cache.totally_matched += 1;
-                    debug!("DNS cache matched!: {}", addr_string);
+                    debug!("DNS cache matched!: {}", addr_str);
                     debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
                     return Some(addrs)
                 },
                 None => {
                     cache.totally_missed += 1;
-                    debug!("DNS cache missed!: {}", addr_string);
+                    debug!("DNS cache missed!: {}", addr_str);
                     debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
                 }
             }
         }
 
-        let mut addrs = match lookup_host(addr) {
+        let addrs = match lookup_host(addr_str) {
             Ok(addrs) => addrs,
             Err(err) => {
-                error!("Failed to resolve {}: {}", addr, err);
+                error!("Failed to resolve {}: {}", addr_str, err);
                 return None;
             }
         };
 
         let cloned_mutex = self.lru_cache.clone();
-        let addr = match addrs.next() {
-            Some(Ok(addr)) => addr.ip(),
-            _ => return None,
-        };
-        let cloned_addr = addr.clone();
-        self.pool.execute(move || {
+
+        let mut addr_vec = Vec::new();
+        let mut last_err: io::Result<()> = Ok(());
+        for sock_addr in addrs {
+            match sock_addr {
+                Ok(addr) => {
+                    addr_vec.push(addr);
+                },
+                Err(err) => last_err = Err(err),
+            }
+        }
+
+        if addr_vec.is_empty() && last_err.is_err() {
+            error!("Failed to resolve {}: {:?}", addr_str, last_err.unwrap_err());
+            return None;
+        }
+        let cloned_addrs = addr_vec.clone();
+
+        let addr_string: String = addr_str.to_owned();
+        Scheduler::spawn(move || {
             let mut cache = cloned_mutex.lock().unwrap();
-            cache.cache.insert(addr_string, cloned_addr);
+            cache.cache.insert(addr_string, cloned_addrs);
         });
-        Some(addr)
+        Some(addr_vec)
     }
 }
 

@@ -21,6 +21,8 @@ default = [
 
     "cipher-chacha20",
     "cipher-salsa20",
+
+    "enable-udp",
 ]
 
 cipher-aes-cfb = []
@@ -37,7 +39,7 @@ cipher-seed-cfb = []
 cipher-chacha20 = ["enable-sodium"]
 cipher-salsa20 = ["enable-sodium"]
 
-enable-udp = ["lru-cache"]
+enable-udp = []
 enable-sodium = ["libsodium-sys"]
 
 [[bin]]
@@ -74,8 +76,7 @@ git = "https://github.com/zonyitoo/libsodium-sys.git"
 optional = true
 
 [dependencies.lru-cache]
-version = "*"
-optional = true
+git = "https://github.com/zonyitoo/lru-cache.git"
 
 [dependencies.simplesched]
 git = "https://github.com/zonyitoo/simplesched.git"

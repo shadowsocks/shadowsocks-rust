@@ -22,12 +22,12 @@
 use std::sync::{Arc, Mutex};
 use std::net::{UdpSocket, SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
 use std::io::{BufReader, Read};
-use std::thread;
 
 use lru_cache::LruCache;
 
+use simplesched::Scheduler;
+
 use config::{Config, ServerConfig};
-use relay::Relay;
 use relay::socks5::{Address, self};
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::{cipher, CryptoMode};
@@ -62,12 +62,18 @@ impl UdpRelayServer {
                     let data = buf[..len].to_vec();
                     let client_map = client_map_arc.clone();
                     let remote_map = remote_map_arc.clone();
-                    let captured_socket = socket.try_clone().unwrap();
+                    let captured_socket = match socket.try_clone() {
+                        Ok(sk) => sk,
+                        Err(err) => {
+                            error!("Error occurs while cloning socket: {:?}", err);
+                            return;
+                        }
+                    };
 
                     let method = svr_config.method;
                     let password = svr_config.password.clone();
 
-                    thread::spawn(move || {
+                    Scheduler::spawn(move || {
                         match remote_map.lock().unwrap().get(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().unwrap().get(remote_addr) {
@@ -76,7 +82,11 @@ impl UdpRelayServer {
 
                                         // Make a header
                                         let mut response_buf = Vec::new();
-                                        remote_addr.write_to(&mut response_buf).unwrap();
+                                        if let Err(err) = remote_addr.write_to(&mut response_buf) {
+                                            error!("Error occurs while writing remote addr: {:?}", err);
+                                            return;
+                                        }
+
                                         response_buf.push_all(&data[..]);
 
                                         let key = method.bytes_to_key(password.as_bytes());
@@ -86,12 +96,21 @@ impl UdpRelayServer {
                                                               &key[..],
                                                               &iv[..],
                                                               CryptoMode::Encrypt);
-                                        encryptor.update(&response_buf[..], &mut iv).unwrap();
-                                        encryptor.finalize(&mut iv).unwrap();
 
-                                        captured_socket
-                                            .send_to(&iv[..], &client_addr)
-                                            .unwrap();
+                                        if let Err(err) = encryptor.update(&response_buf[..], &mut iv) {
+                                            error!("Error occurs while encrypting: {:?}", err);
+                                            return;
+                                        }
+
+                                        if let Err(err) = encryptor.finalize(&mut iv) {
+                                            error!("Error occurs while finalizing: {:?}", err);
+                                            return;
+                                        }
+
+                                        if let Err(err) = captured_socket.send_to(&iv[..], &client_addr) {
+                                            error!("Error occurs while sending data: {:?}", err);
+                                            return;
+                                        }
                                     },
                                     None => {
                                         // Unknown response, drop it.
@@ -178,17 +197,11 @@ impl UdpRelayServer {
     }
 }
 
-impl Relay for UdpRelayServer {
-    fn run(&self) {
-        let mut threads = Vec::new();
+impl UdpRelayServer {
+    pub fn run(&self) {
         for s in self.config.server.iter() {
             let s = s.clone();
-            let fut = thread::spawn(move || UdpRelayServer::accept_loop(s));
-            threads.push(fut);
-        }
-
-        for fut in threads.into_iter() {
-            fut.join().unwrap();
+            Scheduler::spawn(move || UdpRelayServer::accept_loop(s));
         }
     }
 }

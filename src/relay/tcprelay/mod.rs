@@ -21,7 +21,7 @@
 
 //! TcpRelay implementation
 
-// mod cached_dns;
+mod cached_dns;
 pub mod local;
 pub mod server;
 mod stream;

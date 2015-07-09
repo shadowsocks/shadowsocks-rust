@@ -67,7 +67,6 @@ use lru_cache::LruCache;
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
 use config::{Config, ServerConfig};
-use relay::Relay;
 use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::udprelay::UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY;
@@ -85,9 +84,15 @@ impl UdpRelayLocal {
     }
 }
 
-impl Relay for UdpRelayLocal {
-    fn run(&self) {
-        let addr = self.config.local.expect("Local configuration should not be None");
+impl UdpRelayLocal {
+    pub fn run(&self) {
+        let addr = match self.config.local {
+            Some(addr) => addr,
+            None => {
+                error!("Local configuration should not be None");
+                return;
+            }
+        };
 
         let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
@@ -114,7 +119,13 @@ impl Relay for UdpRelayLocal {
         let client_map_arc = Arc::new(Mutex::new(
                     LruCache::<socks5::Address, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
 
-        let socket = UdpSocket::bind(&addr).ok().expect("Failed to bind udp socket");
+        let socket = match UdpSocket::bind(&addr) {
+            Ok(sk) => sk,
+            Err(err) => {
+                error!("Failed to bind udp socket: {:?}", err);
+                return;
+            }
+        };
 
         let mut buf = [0u8; 0xffff];
         loop {
@@ -186,7 +197,13 @@ fn handle_request(socket: UdpSocket,
 
 
     let mut bufr = BufReader::new(request_message);
-    let request = socks5::UdpAssociateHeader::read_from(&mut bufr).unwrap();
+    let request = match socks5::UdpAssociateHeader::read_from(&mut bufr) {
+        Ok(r) => r,
+        Err(err) => {
+            error!("Error occurs while reading UdpAssociateHeader: {:?}", err);
+            return;
+        }
+    };
 
     let addr = request.address.clone();
 
@@ -203,14 +220,29 @@ fn handle_request(socket: UdpSocket,
                                           CryptoMode::Encrypt);
 
     let mut wbuf = Vec::new();
-    request.write_to(&mut wbuf).unwrap();
-    io::copy(&mut bufr, &mut wbuf).unwrap();
+    if let Err(err) = request.write_to(&mut wbuf) {
+        error!("Error occurs while writing request: {:?}", err);
+        return;
+    }
 
-    encryptor.update(&wbuf[..], &mut iv).unwrap();
-    encryptor.finalize(&mut iv).unwrap();
+    if let Err(err) = io::copy(&mut bufr, &mut wbuf) {
+        error!("Error occurs while copying from bufr to wbuf: {:?}", err);
+        return;
+    }
 
-    socket.send_to(&iv[..], &server_addr)
-        .ok().expect("Error occurs while sending to remote");
+    if let Err(err) = encryptor.update(&wbuf[..], &mut iv) {
+        error!("Error occurs while encrypting: {:?}", err);
+        return;
+    }
+
+    if let Err(err) = encryptor.finalize(&mut iv) {
+        error!("Error occurs while finalizing: {:?}", err);
+        return;
+    }
+
+    if let Err(err) = socket.send_to(&iv[..], &server_addr) {
+        error!("Error occurs while sending to remote: {:?}", err);
+    }
 }
 
 fn handle_response(socket: UdpSocket,
@@ -225,12 +257,25 @@ fn handle_response(socket: UdpSocket,
                                           &response_message[0..config.method.block_size()],
                                           CryptoMode::Decrypt);
     let mut decrypted_data = Vec::new();
-    decryptor.update(&response_message[config.method.block_size()..], &mut decrypted_data).unwrap();
-    decryptor.finalize(&mut decrypted_data).unwrap();
+    if let Err(err) = decryptor.update(&response_message[config.method.block_size()..], &mut decrypted_data) {
+        error!("Error occurs while decrypting data: {:?}", err);
+        return;
+    }
+
+    if let Err(err) = decryptor.finalize(&mut decrypted_data) {
+        error!("Error occurs while finalizing decrypt: {:?}", err);
+        return;
+    }
 
     let mut bufr = BufReader::new(&decrypted_data[..]);
 
-    let addr = socks5::Address::read_from(&mut bufr).unwrap();
+    let addr = match socks5::Address::read_from(&mut bufr) {
+        Ok(addr) => addr,
+        Err(err) => {
+            error!("Error occurs while reading address: {:?}", err);
+            return;
+        }
+    };
 
     let client_addr = {
         let mut cmap = client_map.lock().unwrap();
@@ -243,10 +288,17 @@ fn handle_response(socket: UdpSocket,
     debug!("UDP response {} -> {}", from_addr, client_addr);
 
     let mut bufw = Vec::new();
-    socks5::UdpAssociateHeader::new(0, addr)
-        .write_to(&mut bufw).unwrap();
-    io::copy(&mut bufr, &mut bufw).unwrap();
+    if let Err(err) = socks5::UdpAssociateHeader::new(0, addr).write_to(&mut bufw) {
+        error!("Error occurs while writing UdpAssociateHeader: {:?}", err);
+        return;
+    }
 
-    socket.send_to(&bufw[..], &client_addr)
-        .ok().expect("Error occurs while sending to local");
+    if let Err(err) = io::copy(&mut bufr, &mut bufw) {
+        error!("Error occurs while copying from bufr to bufw: {:?}", err);
+        return;
+    }
+
+    if let Err(err) = socket.send_to(&bufw[..], &client_addr) {
+        error!("Error occurs while sending to local: {:?}", err);
+    }
 }

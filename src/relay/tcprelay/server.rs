@@ -21,15 +21,15 @@
 
 //! TcpRelay server that running on the server side
 
-// use std::sync::Arc;
-use std::io::{Read, Write, BufReader, ErrorKind};
+use std::sync::Arc;
+use std::io::{self, Read, Write, BufReader, ErrorKind};
 
 use simplesched::Scheduler;
 use simplesched::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ServerConfig};
 use relay::socks5;
-// use relay::tcprelay::cached_dns::CachedDns;
+use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
 use crypto::CryptoMode;
@@ -53,9 +53,9 @@ impl TcpRelayServer {
         let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
                                     .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
 
-        info!("Shadowsocks listening on {}", s.addr);
+        info!("Shadowsocks listening on {}:{}", s.addr, s.port);
 
-        // let dnscache_arc = Arc::new(CachedDns::with_capacity(s.dns_cache_capacity));
+        let dnscache_arc = Arc::new(CachedDns::with_capacity(s.dns_cache_capacity));
 
         let pwd = s.method.bytes_to_key(s.password.as_bytes());
         let timeout = s.timeout;
@@ -81,7 +81,7 @@ impl TcpRelayServer {
 
             let pwd = pwd.clone();
             let encrypt_method = method;
-            // let dnscache = dnscache_arc.clone();
+            let dnscache = dnscache_arc.clone();
 
             Scheduler::spawn(move || {
                 let remote_iv = {
@@ -143,11 +143,42 @@ impl TcpRelayServer {
                 };
 
                 info!("Connecting to {}", addr);
-                let remote_stream = match TcpStream::connect(&addr) {
-                    Ok(stream) => stream,
-                    Err(err) => {
-                        error!("Unable to connect {:?}: {}", addr, err);
-                        return;
+
+                let remote_stream = match &addr {
+                    &socks5::Address::SocketAddress(ref addr) => {
+                        match TcpStream::connect(&addr) {
+                            Ok(stream) => stream,
+                            Err(err) => {
+                                error!("Unable to connect {:?}: {}", addr, err);
+                                return;
+                            }
+                        }
+                    },
+                    &socks5::Address::DomainNameAddress(ref dname, ref port) => {
+                        let addrs = match dnscache.resolve(&dname) {
+                            Some(addrs) => addrs,
+                            None => return,
+                        };
+
+                        let processing = || {
+                            let mut last_err: Option<io::Result<TcpStream>> = None;
+                            for addr in addrs.into_iter() {
+                                match TcpStream::connect(&(addr.ip(), *port)) {
+                                    Ok(stream) => return Ok(stream),
+                                    Err(err) => {
+                                        error!("Unable to connect {:?}: {}", addr, err);
+                                        last_err = Some(Err(err));
+                                    }
+                                }
+                            }
+
+                            last_err.unwrap()
+                        };
+
+                        match processing() {
+                            Ok(s) => s,
+                            Err(_) => return
+                        }
                     }
                 };
 
