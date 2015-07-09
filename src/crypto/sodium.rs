@@ -62,14 +62,18 @@ impl SodiumCipher {
 impl Cipher for SodiumCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         let padding_len = self.counter % BLOCK_SIZE;
-        let mut pad;
-        let padded_data =
+        let pad =
             if padding_len == 0 {
-                data
+                None
             } else {
-                pad = Some(repeat(0u8).take(padding_len).chain(data.iter().map(|&x| x)).collect::<Vec<u8>>());
-                &pad.as_ref().unwrap()[..]
+                let pad = repeat(0u8).take(padding_len).chain(data.iter().map(|&x| x)).collect::<Vec<u8>>();
+                Some(pad)
             };
+
+        let padded_data = match &pad {
+            &Some(ref p) => &p[..],
+            &None => data,
+        };
 
         if self.buf.len() < padding_len + data.len() {
             self.buf.resize(padding_len + data.len(), 0u8);
