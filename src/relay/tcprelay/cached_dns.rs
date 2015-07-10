@@ -25,7 +25,6 @@ use std::net::lookup_host;
 use std::net::SocketAddr;
 use std::io;
 
-use simplesched::Scheduler;
 use simplesched::sync::Mutex;
 
 use lru_cache::LruCache;
@@ -97,10 +96,10 @@ impl CachedDns {
         let cloned_addrs = addr_vec.clone();
 
         let addr_string: String = addr_str.to_owned();
-        Scheduler::spawn(move || {
+        {
             let mut cache = cloned_mutex.lock().unwrap();
             cache.cache.insert(addr_string, cloned_addrs);
-        });
+        }
         Some(addr_vec)
     }
 }
