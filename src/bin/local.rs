@@ -208,6 +208,7 @@ fn main() {
 
                 let server = Server::http((config.local.unwrap().ip(), port)).unwrap();
                 server.listen(move|req: Request, mut res: Response| {
+                    info!("{} requests for PAC file", req.remote_addr);
                     match req.uri {
                         AbsolutePath(ref path) => match (&req.method, &path[..]) {
                             (&Get, "/proxy.pac") => {
