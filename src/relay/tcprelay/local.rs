@@ -240,11 +240,13 @@ impl TcpRelayLocal {
                                 Ok(0) => {
                                     error!("Unexpected EOF while reading initialize vector");
                                     debug!("Already read: {:?}", &iv[..total_len]);
+                                    let _ = local_writer.get_ref().shutdown(Shutdown::Both);
                                     return;
                                 },
                                 Ok(n) => total_len += n,
                                 Err(err) => {
                                     error!("Error while reading initialize vector: {:?}", err);
+                                    let _ = local_writer.get_ref().shutdown(Shutdown::Both);
                                     return;
                                 }
                             }
