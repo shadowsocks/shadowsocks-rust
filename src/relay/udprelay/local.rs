@@ -59,7 +59,7 @@ use std::net::{SocketAddr, lookup_host};
 use std::collections::HashMap;
 use std::io::{BufReader, self};
 
-use coio::Scheduler;
+use coio::Builder;
 use coio::net::UdpSocket;
 
 use lru_cache::LruCache;
@@ -67,7 +67,7 @@ use lru_cache::LruCache;
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
 use config::{Config, ServerConfig};
-use relay::socks5;
+use relay::{socks5, COROUTINE_STACK_SIZE};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::udprelay::UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY;
 
@@ -143,7 +143,7 @@ impl UdpRelayLocal {
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
-                            Scheduler::spawn(move ||
+                            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
                                 handle_response(move_socket,
                                                &request_message[..],
                                                source_addr,
@@ -156,7 +156,7 @@ impl UdpRelayLocal {
                             match server_addr.get(&s.addr) {
                                 Some(saddr) => {
                                     let saddr = saddr.clone();
-                                    Scheduler::spawn(move ||
+                                    Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
                                         handle_request(move_socket,
                                                       &request_message[..],
                                                       source_addr,

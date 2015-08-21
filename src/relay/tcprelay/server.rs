@@ -24,11 +24,11 @@
 use std::sync::Arc;
 use std::io::{self, Read, Write, BufReader, ErrorKind};
 
-use coio::Scheduler;
+use coio::Builder;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ServerConfig};
-use relay::socks5;
+use relay::{socks5, COROUTINE_STACK_SIZE};
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
@@ -83,7 +83,7 @@ impl TcpRelayServer {
             let encrypt_method = method;
             let dnscache = dnscache_arc.clone();
 
-            Scheduler::spawn(move || {
+            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                 let remote_iv = {
                     let mut iv = Vec::with_capacity(encrypt_method.block_size());
                     unsafe {
@@ -191,7 +191,7 @@ impl TcpRelayServer {
                 };
                 let addr_cloned = addr.clone();
 
-                Scheduler::spawn(move|| {
+                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move|| {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
                     match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "Remote to local") {
@@ -223,7 +223,7 @@ impl TcpRelayServer {
                     let _ = remote_reader.get_mut().shutdown(Shutdown::Both);
                 });
 
-                Scheduler::spawn(move || {
+                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                     match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "Local to remote") {
                         Ok(n) => {
                             let _ = decrypt_stream.get_ref().peer_addr()
@@ -261,7 +261,7 @@ impl TcpRelayServer {
     pub fn run(&self) {
         for s in self.config.server.iter() {
             let s = s.clone();
-            Scheduler::spawn(move || {
+            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                 TcpRelayServer::accept_loop(s);
             });
         }

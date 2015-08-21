@@ -25,10 +25,11 @@ use std::io::{BufReader, Read};
 
 use lru_cache::LruCache;
 
-use coio::Scheduler;
+use coio::Builder;
 
 use config::{Config, ServerConfig};
 use relay::socks5::{Address, self};
+use relay::COROUTINE_STACK_SIZE;
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
@@ -73,7 +74,7 @@ impl UdpRelayServer {
                     let method = svr_config.method;
                     let password = svr_config.password.clone();
 
-                    Scheduler::spawn(move || {
+                    Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                         match remote_map.lock().unwrap().get(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().unwrap().get(remote_addr) {
@@ -201,7 +202,7 @@ impl UdpRelayServer {
     pub fn run(&self) {
         for s in self.config.server.iter() {
             let s = s.clone();
-            Scheduler::spawn(move || UdpRelayServer::accept_loop(s));
+            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || UdpRelayServer::accept_loop(s));
         }
     }
 }

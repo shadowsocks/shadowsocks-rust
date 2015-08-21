@@ -21,17 +21,17 @@
 
 //! Server side
 
-use coio::Scheduler;
+use coio::{Scheduler, Builder};
 
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
-use relay::Relay;
+use relay::{Relay, COROUTINE_STACK_SIZE};
 use config::Config;
 
 /// Relay server running on server side.
 ///
-/// UDP Associate and Bind commands are not supported currently.
+/// UDP Associate and Bind commands Builderarnew().stack_size(COROUTINE_STACK_SIZE).e not supported currently.
 ///
 /// ```no_run
 /// use std::net::SocketAddr;
@@ -87,12 +87,12 @@ impl Relay for RelayServer {
     #[cfg(feature = "enable-udp")]
     fn run(&self, threads: usize) {
         let tcprelay = self.tcprelay.clone();
-        Scheduler::spawn(move || tcprelay.run());
+        Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            Scheduler::spawn(move || udprelay.run());
+            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || udprelay.run());
             info!("Enabled UDP relay");
         }
 
@@ -106,7 +106,7 @@ impl Relay for RelayServer {
         }
 
         let tcprelay = self.tcprelay.clone();
-        Scheduler::spawn(move || tcprelay.run());
+        Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
         Scheduler::run(threads);

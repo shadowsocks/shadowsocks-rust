@@ -26,12 +26,12 @@ use std::net::lookup_host;
 use std::io::{self, BufWriter, BufReader, ErrorKind, Read, Write};
 use std::collections::BTreeMap;
 
-use coio::Scheduler;
+use coio::Builder;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::Config;
 
-use relay::{self, socks5};
+use relay::{self, COROUTINE_STACK_SIZE, socks5};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 
@@ -206,7 +206,7 @@ impl TcpRelayLocal {
 
                 let addr_cloned = addr.clone();
 
-                Scheduler::spawn(move || {
+                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                     match relay::copy(&mut local_reader, &mut encrypt_stream, "Local to remote") {
                         Ok(..) => {},
                         Err(err) => {
@@ -227,7 +227,7 @@ impl TcpRelayLocal {
                     let _ = local_reader.get_ref().shutdown(Shutdown::Both);
                 });
 
-                Scheduler::spawn(move|| {
+                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move|| {
                     let remote_iv = {
                         let mut iv = Vec::with_capacity(encrypt_method.block_size());
                         unsafe {
@@ -393,7 +393,7 @@ impl TcpRelayLocal {
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
 
-                Scheduler::spawn(move ||
+                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
                     TcpRelayLocal::handle_client(stream,
                                                  server_addr,
                                                  pwd,
