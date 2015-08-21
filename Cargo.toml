@@ -70,7 +70,6 @@ rand = "^0.3.9"
 time = "^0.1.32"
 clap = "^1.1.6"
 fern = "^0.3.5"
-simplesched = "^0.1.0"
 qrcode = "^0.1.6"
 hyper = "^0.6.9"
 
@@ -81,3 +80,6 @@ optional = true
 [dependencies.lru-cache]
 git = "https://github.com/zonyitoo/lru-cache.git"
 ver = "7688eae5a4ce8e6f9beb075e11d1abb3d2b2f635"
+
+[dependencies.coio]
+git = "https://github.com/zonyitoo/coio-rs.git"

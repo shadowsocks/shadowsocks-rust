@@ -25,7 +25,7 @@ use std::io::{BufReader, Read};
 
 use lru_cache::LruCache;
 
-use simplesched::Scheduler;
+use coio::Scheduler;
 
 use config::{Config, ServerConfig};
 use relay::socks5::{Address, self};

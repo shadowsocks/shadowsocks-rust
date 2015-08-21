@@ -21,7 +21,7 @@
 
 //! Server side
 
-use simplesched::Scheduler;
+use coio::Scheduler;
 
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::server::UdpRelayServer;

@@ -35,7 +35,7 @@ extern crate libsodium_sys as libsodium_ffi;
 extern crate byteorder;
 extern crate rand;
 
-extern crate simplesched;
+extern crate coio;
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

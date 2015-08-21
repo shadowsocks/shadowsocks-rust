@@ -59,8 +59,8 @@ use std::net::{SocketAddr, lookup_host};
 use std::collections::HashMap;
 use std::io::{BufReader, self};
 
-use simplesched::Scheduler;
-use simplesched::net::UdpSocket;
+use coio::Scheduler;
+use coio::net::UdpSocket;
 
 use lru_cache::LruCache;
 

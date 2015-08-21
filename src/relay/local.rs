@@ -21,7 +21,7 @@
 
 //! Local side
 
-use simplesched::Scheduler;
+use coio::Scheduler;
 
 use relay::Relay;
 use relay::tcprelay::local::TcpRelayLocal;

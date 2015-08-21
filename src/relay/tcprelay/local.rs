@@ -26,8 +26,8 @@ use std::net::lookup_host;
 use std::io::{self, BufWriter, BufReader, ErrorKind, Read, Write};
 use std::collections::BTreeMap;
 
-use simplesched::Scheduler;
-use simplesched::net::{TcpListener, TcpStream, Shutdown};
+use coio::Scheduler;
+use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::Config;
 

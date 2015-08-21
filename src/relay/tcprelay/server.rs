@@ -24,8 +24,8 @@
 use std::sync::Arc;
 use std::io::{self, Read, Write, BufReader, ErrorKind};
 
-use simplesched::Scheduler;
-use simplesched::net::{TcpListener, TcpStream, Shutdown};
+use coio::Scheduler;
+use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ServerConfig};
 use relay::socks5;

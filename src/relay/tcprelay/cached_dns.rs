@@ -25,7 +25,7 @@ use std::net::lookup_host;
 use std::net::SocketAddr;
 use std::io;
 
-use simplesched::sync::Mutex;
+use coio::sync::Mutex;
 
 use lru_cache::LruCache;
 

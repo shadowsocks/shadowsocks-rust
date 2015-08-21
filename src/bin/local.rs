@@ -35,7 +35,7 @@ extern crate log;
 extern crate fern;
 extern crate time;
 extern crate hyper;
-extern crate simplesched;
+extern crate coio;
 
 use clap::{App, Arg};
 
@@ -47,7 +47,7 @@ use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
 
-use simplesched::net::http::Server;
+use coio::net::http::Server;
 
 fn main() {
     let matches = App::new("shadowsocks")
