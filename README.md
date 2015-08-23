@@ -1,12 +1,17 @@
 # shadowsocks-rust
 
-[![Build Status](https://travis-ci.org/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
+[![Build Status](https://img.shields.io/travis/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
+[![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
 
-shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
+shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
-It is unstable! If you encounter any problems, please open an issue.
+> **THIS PROJECT IS <u>ONLY FOR</u> TESTING THE AVAILABILITY AND USABILITY OF MY COROUTINE SERVER PROJECT.**
+
+> **IF YOU ARE INTERESTED, PLEASE REFER TO `coio-rs` and `simplesched` PROJECT**.
+
+It is **unstable**! If you encounter any problems, please open an issue.
 
 ## Dependences
 
@@ -103,7 +108,7 @@ It supports the following features:
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
 
-Currently it uses [simplesched](https://github.com/zonyitoo/simplesched) as the backend support library and it does not support Windows, <del>LoL</del>.
+Currently it uses [coio-rs](https://github.com/zonyitoo/coio-rs) as the backend support library and it does not support Windows, <del>LoL</del>.
 
 ## TODO
 
