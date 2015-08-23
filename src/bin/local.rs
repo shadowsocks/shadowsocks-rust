@@ -231,4 +231,5 @@ fn main() {
     }
 
     RelayLocal::new(config).run(threads);
+    panic!("Relay stopped.");
 }
