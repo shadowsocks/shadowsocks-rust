@@ -114,7 +114,7 @@ Currently it uses [simplesched](https://github.com/zonyitoo/simplesched) as the 
 - [ ] Fully testing on servers
 - [ ] Performance testing and improvement
 - [ ] User management
-- [ ] PAC
+- [x] PAC
 - [x] Improved logging format (waiting for the new official log crate)
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 
