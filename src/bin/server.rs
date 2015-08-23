@@ -168,4 +168,5 @@ fn main() {
         .ok().expect("`threads` should be an integer");
 
     RelayServer::new(config).run(threads);
+    panic!("Server should never ends");
 }
