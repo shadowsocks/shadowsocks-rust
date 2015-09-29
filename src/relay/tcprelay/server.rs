@@ -62,7 +62,10 @@ impl TcpRelayServer {
         let method = s.method;
         for s in acceptor.incoming() {
             let mut stream = match s {
-                Ok(s) => s,
+                Ok((s, addr)) => {
+                    debug!("Got connection from {:?}", addr);
+                    s
+                },
                 Err(err) => {
                     error!("Error occurs while accepting: {:?}", err);
                     continue;

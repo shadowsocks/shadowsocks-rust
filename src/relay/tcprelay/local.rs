@@ -330,7 +330,10 @@ impl TcpRelayLocal {
 
         for s in acceptor.incoming() {
             let stream = match s {
-                Ok(s) => s,
+                Ok((s, addr)) => {
+                    debug!("Got connection from client {:?}", addr);
+                    s
+                },
                 Err(err) => {
                     error!("Error occurs while accepting: {:?}", err);
                     continue;
