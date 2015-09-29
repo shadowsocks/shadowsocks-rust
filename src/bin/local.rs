@@ -34,20 +34,15 @@ extern crate shadowsocks;
 extern crate log;
 extern crate fern;
 extern crate time;
-extern crate hyper;
 extern crate coio;
 
 use clap::{App, Arg};
 
 use std::net::{SocketAddr, IpAddr};
-use std::fs::File;
-use std::io::Read;
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
-
-use coio::net::http::Server;
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -83,12 +78,6 @@ fn main() {
                     .arg(Arg::with_name("THREADS").short("t").long("threads")
                             .takes_value(true)
                             .help("Threads in thread pool"))
-                    .arg(Arg::with_name("PAC_PATH").short("a").long("pac-path")
-                            .takes_value(true)
-                            .help("PAC file path"))
-                    .arg(Arg::with_name("PAC_PORT").short("o").long("pac-port")
-                            .takes_value(true)
-                            .help("PAC server will listen on this port"))
                     .get_matches();
 
     let logger_config = |show_location| fern::DispatchConfig {
@@ -184,51 +173,6 @@ fn main() {
 
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
-
-    if matches.value_of("PAC_PATH").is_some() ^ matches.value_of("PAC_PORT").is_some() {
-        panic!("`pac-path` and `pac-port` must be specified together");
-    } else {
-        if let Some(path) = matches.value_of("PAC_PATH") {
-
-            let content = {
-                let mut pac_file = File::open(&path).unwrap();
-                let mut buf = Vec::new();
-                pac_file.read_to_end(&mut buf).unwrap();
-                buf
-            };
-
-            if let Some(port) = matches.value_of("PAC_PORT") {
-                use hyper::server::{Request, Response};
-                use hyper::uri::RequestUri::AbsolutePath;
-                use hyper::Get;
-
-                let port = port.parse::<u16>().ok().expect("`pac-port` has to be a u16 number");
-
-                info!("Serving PAC file ({}) at http://{}:{}/proxy.pac", path, config.local.unwrap().ip(), port);
-
-                let server = Server::http((config.local.unwrap().ip(), port)).unwrap();
-                server.listen(move|req: Request, mut res: Response| {
-                    info!("{} requests for PAC file", req.remote_addr);
-                    match req.uri {
-                        AbsolutePath(ref path) => match (&req.method, &path[..]) {
-                            (&Get, "/proxy.pac") => {
-                                if let Err(err) = res.send(&content) {
-                                    error!("Error occurs while sending PAC file: {:?}", err);
-                                }
-                            },
-                            (_, "/proxy.pac") => {
-                                *res.status_mut() = hyper::status::StatusCode::MethodNotAllowed;
-                            },
-                            _ => {
-                                *res.status_mut() = hyper::NotFound;
-                            }
-                        },
-                        _ => return
-                    }
-                }).unwrap();
-            }
-        }
-    }
 
     RelayLocal::new(config).run(threads);
     panic!("Relay stopped.");

@@ -119,7 +119,7 @@ Currently it uses [coio-rs](https://github.com/zonyitoo/coio-rs) as the backend 
 - [ ] Fully testing on servers
 - [ ] Performance testing and improvement
 - [ ] User management
-- [x] PAC
+- [ ] <del>PAC</del>
 - [x] Improved logging format (waiting for the new official log crate)
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 

@@ -71,7 +71,6 @@ time = "^0.1.32"
 clap = "^1.1.6"
 fern = "^0.3.5"
 qrcode = "^0.1.6"
-hyper = "^0.6.9"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"
