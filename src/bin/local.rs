@@ -40,6 +40,8 @@ use clap::{App, Arg};
 
 use std::net::{SocketAddr, IpAddr};
 
+use coio::Scheduler;
+
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
 use shadowsocks::relay::{RelayLocal, Relay};
@@ -174,6 +176,7 @@ fn main() {
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
 
-    RelayLocal::new(config).run(threads);
-    panic!("Relay stopped.");
+    Scheduler::with_workers(threads).run(move|| {
+        RelayLocal::new(config).run();
+    }).unwrap();
 }

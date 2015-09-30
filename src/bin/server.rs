@@ -36,8 +36,11 @@ extern crate shadowsocks;
 extern crate log;
 extern crate fern;
 extern crate time;
+extern crate coio;
 
 use clap::{App, Arg};
+
+use coio::Scheduler;
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -167,6 +170,7 @@ fn main() {
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
 
-    RelayServer::new(config).run(threads);
-    panic!("Server should never ends");
+    Scheduler::with_workers(threads).run(move|| {
+        RelayServer::new(config).run();
+    }).unwrap();
 }

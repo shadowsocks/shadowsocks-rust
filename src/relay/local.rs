@@ -21,7 +21,7 @@
 
 //! Local side
 
-use coio::{Scheduler, Builder};
+use coio::Builder;
 
 use relay::{Relay, COROUTINE_STACK_SIZE};
 use relay::tcprelay::local::TcpRelayLocal;
@@ -85,29 +85,35 @@ impl RelayLocal {
 
 impl Relay for RelayLocal {
     #[cfg(not(feature = "enable-udp"))]
-    fn run(&self, threads: usize) {
+    fn run(&self) {
         if self.enable_udp {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
         let tcprelay = self.tcprelay.clone();
-        Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
+        let fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
-        Scheduler::run(threads);
+        fut.join().unwrap();
     }
 
     #[cfg(feature = "enable-udp")]
-    fn run(&self, threads: usize) {
+    fn run(&self) {
+        let mut futs = Vec::new();
+
         let tcprelay = self.tcprelay.clone();
-        Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
+        let tcp_fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
+        futs.push(tcp_fut);
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || udprelay.run());
+            let udp_fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || udprelay.run());
             info!("Enabled UDP relay");
+            futs.push(udp_fut);
         }
 
-        Scheduler::run(threads);
+        for fut in futs {
+            fut.join().unwrap();
+        }
     }
 }

@@ -37,7 +37,7 @@ pub mod socks5;
 pub const COROUTINE_STACK_SIZE: usize = 32 * 1024; // 32KB
 
 pub trait Relay {
-    fn run(&self, threads: usize);
+    fn run(&self);
 }
 
 fn copy<R: Read, W: Write>(r: &mut R, w: &mut W, prefix: &str) -> io::Result<u64> {
