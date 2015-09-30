@@ -262,11 +262,18 @@ impl TcpRelayServer {
 
 impl TcpRelayServer {
     pub fn run(&self) {
+        let mut futs = Vec::with_capacity(self.config.server.len());
+
         for s in self.config.server.iter() {
             let s = s.clone();
-            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+            let fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                 TcpRelayServer::accept_loop(s);
             });
+            futs.push(fut);
+        }
+
+        for fut in futs {
+            fut.join().unwrap();
         }
     }
 }
