@@ -176,7 +176,7 @@ fn main() {
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
 
-    Scheduler::with_workers(threads).run(move|| {
+    Scheduler::new().with_workers(threads).run(move|| {
         RelayLocal::new(config).run();
     }).unwrap();
 }
