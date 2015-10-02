@@ -13,7 +13,7 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
 It is **unstable**! If you encounter any problems, please open an issue.
 
-## Dependences
+## Dependencies
 
 * libcrypto (OpenSSL)
 * libsodium
@@ -39,7 +39,7 @@ cargo build --features "cipher-aes-ctr"
 
 Read `Cargo.toml` for more details.
 
-*Required `libsodium` and `libcrypto` by default.*
+*Require `libsodium` and `libcrypto` by default.*
 
 ## Getting Started
 
