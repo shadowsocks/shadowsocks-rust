@@ -177,6 +177,15 @@ fn main() {
         .ok().expect("`threads` should be an integer");
 
     Scheduler::new().with_workers(threads).run(move|| {
+        if matches.occurrences_of("VERBOSE") >= 1 {
+            Scheduler::spawn(move|| {
+                loop {
+                    coio::sleep_ms(1000);
+                    debug!("Running coroutines: {}", Scheduler::instance().work_count());
+                }
+            });
+        }
+
         RelayLocal::new(config).run();
     }).unwrap();
 }
