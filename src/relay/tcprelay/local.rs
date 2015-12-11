@@ -221,7 +221,7 @@ impl TcpRelayLocal {
                         }
                     }
 
-                    trace!("Local to remote relay is going to be closed");
+                    info!("{} local -> remote is going to be closed", addr_cloned);
 
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
                     let _ = local_reader.get_ref().shutdown(Shutdown::Both);
@@ -283,7 +283,7 @@ impl TcpRelayLocal {
 
                     let _ = local_writer.flush();
 
-                    trace!("Remote to local relay is going to be closed");
+                    info!("{} remote -> local is going to be closed", addr);
 
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
                     let _ = local_writer.shutdown(Shutdown::Both);

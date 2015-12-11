@@ -312,7 +312,7 @@ impl CipherType {
             let mut md5 = digest::with_type(DigestType::Md5);
             if i > 0 {
                 let mut vkey = m[i - 1].clone();
-                vkey.push_all(key);
+                vkey.extend(key);
                 md5.update(&vkey[..]);
             } else {
                 md5.update(key);
@@ -322,7 +322,7 @@ impl CipherType {
             i += 1
         }
 
-        let whole = m.into_iter().fold(Vec::new(), |mut a, b| { a.push_all(&b[..]); a });
+        let whole = m.into_iter().fold(Vec::new(), |mut a, b| { a.extend(&b[..]); a });
         let key = whole[0..key_len].to_vec();
         key
     }

@@ -88,7 +88,7 @@ impl UdpRelayServer {
                                             return;
                                         }
 
-                                        response_buf.push_all(&data[..]);
+                                        response_buf.extend(&data[..]);
 
                                         let key = method.bytes_to_key(password.as_bytes());
                                         let mut iv = method.gen_init_vec();

@@ -99,7 +99,7 @@ impl Cipher for SodiumCipher {
 
         self.counter += data.len();
 
-        out.push_all(&self.buf[padding_len..padding_len + data.len()]);
+        out.extend(&self.buf[padding_len..padding_len + data.len()]);
 
         Ok(())
     }

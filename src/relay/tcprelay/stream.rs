@@ -21,7 +21,6 @@
 
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
-use std::slice;
 
 use crypto::cipher::Cipher;
 
@@ -105,20 +104,17 @@ impl<R: Read> BufRead for DecryptedReader<R> {
     }
 
     fn consume(&mut self, amt: usize) {
-        self.pos += amt;
-        assert!(self.pos <= self.buffer.len());
+        self.pos = cmp::min(self.pos + amt, self.buffer.len());
     }
 }
 
 impl<R: Read> Read for DecryptedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
-            let available = try!(self.fill_buf());
-            let nread = cmp::min(available.len(), buf.len());
-            slice::bytes::copy_memory(&available[0..nread], buf);
-            nread
+            let mut available = try!(self.fill_buf());
+            try!(available.read(buf))
         };
-        self.pos += nread;
+        self.consume(nread);
         Ok(nread)
     }
 }
