@@ -34,7 +34,7 @@ pub mod server;
 mod loadbalancing;
 pub mod socks5;
 
-pub const COROUTINE_STACK_SIZE: usize = 32 * 1024; // 32KB
+pub const COROUTINE_STACK_SIZE: usize = 128 * 1024; // 128KB
 
 pub trait Relay {
     fn run(&self);
