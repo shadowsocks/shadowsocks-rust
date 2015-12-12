@@ -28,8 +28,6 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-#![feature(box_syntax)]
-
 extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
