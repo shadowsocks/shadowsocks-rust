@@ -177,7 +177,7 @@ fn main() {
         };
 
         config.server.push(sc);
-        has_provided_config = true;
+        has_provided_server_config = true;
     }
     else if matches.value_of("SERVER_ADDR").is_none()
         && matches.value_of("SERVER_PORT").is_none()
