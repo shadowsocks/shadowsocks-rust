@@ -41,6 +41,13 @@ Read `Cargo.toml` for more details.
 
 *Require `libsodium` and `libcrypto` by default.*
 
+### Run binaries with Cargo
+
+```
+$ cargo run --release --bin sslocal -- -c config.json
+$ cargo run --release --bin ssserver -- -c config.json
+```
+
 ## Getting Started
 
 Create a shadowsocks' configuration file. Example
@@ -122,6 +129,8 @@ Currently it uses [coio-rs](https://github.com/zonyitoo/coio-rs) as the backend 
 - [ ] <del>PAC</del>
 - [x] Improved logging format (waiting for the new official log crate)
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
+- [ ] Windows support. Depending on Mio and Coio-rs.
+- [ ] Build with stable.
 
 ## License
 
