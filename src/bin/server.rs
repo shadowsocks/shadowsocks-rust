@@ -37,6 +37,7 @@ extern crate coio;
 extern crate env_logger;
 
 use std::env;
+use std::time::Duration;
 
 use clap::{App, Arg};
 
@@ -209,10 +210,10 @@ fn main() {
         .ok().expect("`threads` should be an integer");
 
     Scheduler::new().with_workers(threads).run(move|| {
-        if matches.occurrences_of("VERBOSE") >= 1 {
+        if matches.occurrences_of("VERBOSE") >= 2 {
             Scheduler::spawn(move|| {
                 loop {
-                    coio::sleep_ms(1000);
+                    coio::sleep(Duration::from_secs(1));
                     debug!("Running coroutines: {}", Scheduler::instance().work_count());
                 }
             });

@@ -20,12 +20,13 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::sync::{Arc, Mutex};
-use std::net::{UdpSocket, SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
 use std::io::{BufReader, Read};
 
 use lru_cache::LruCache;
 
 use coio::Builder;
+use coio::net::UdpSocket;
 
 use config::{Config, ServerConfig};
 use relay::socks5::{Address, self};
@@ -61,7 +62,8 @@ impl UdpRelayServer {
         let remote_map_arc = Arc::new(Mutex::new(
                             LruCache::<SocketAddr, Address>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
 
-        let mut buf = [0u8; 0xffff];
+        let mut buf = Vec::with_capacity(0xffff);
+        unsafe { buf.set_len(0xffff); }
         loop {
             match socket.recv_from(&mut buf) {
                 Ok((len, src)) => {
