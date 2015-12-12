@@ -152,6 +152,7 @@ impl UdpRelayLocal {
                         }
                         None => {
                             let s = server_load_balancer.pick_server().clone();
+                            debug!("UDP associate picked a server: {:?}", s);
 
                             match server_addr.get(&s.addr) {
                                 Some(saddr) => {

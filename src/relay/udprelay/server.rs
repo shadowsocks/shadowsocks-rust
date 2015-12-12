@@ -47,9 +47,14 @@ impl UdpRelayServer {
     }
 
     fn accept_loop(svr_config: ServerConfig) {
-        let socket = UdpSocket::bind(&(&svr_config.addr[..], svr_config.port))
-            .ok().expect("Unable to bind UDP socket");
-        debug!("UDP server is binding {}", svr_config.addr);
+        let socket = match UdpSocket::bind(&(&svr_config.addr[..], svr_config.port)) {
+            Ok(sock) => sock,
+            Err(err) => {
+                error!("Unable to bind UDP socket: {:?}", err);
+                return;
+            }
+        };
+        debug!("UDP server is binding {}:{}", svr_config.addr, svr_config.port);
 
         let client_map_arc = Arc::new(Mutex::new(
                             LruCache::<Address, SocketAddr>::new(UDP_RELAY_SERVER_LRU_CACHE_CAPACITY)));
@@ -202,7 +207,8 @@ impl UdpRelayServer {
     pub fn run(&self) {
         for s in self.config.server.iter() {
             let s = s.clone();
-            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || UdpRelayServer::accept_loop(s));
+            Builder::new().stack_size(COROUTINE_STACK_SIZE)
+                          .spawn(move || UdpRelayServer::accept_loop(s));
         }
     }
 }

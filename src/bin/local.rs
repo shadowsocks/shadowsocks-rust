@@ -220,7 +220,7 @@ fn main() {
         .ok().expect("`threads` should be an integer");
 
     Scheduler::new().with_workers(threads).run(move|| {
-        if matches.occurrences_of("VERBOSE") >= 1 {
+        if matches.occurrences_of("VERBOSE") >= 2 {
             Scheduler::spawn(move|| {
                 loop {
                     coio::sleep_ms(1000);

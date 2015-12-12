@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 use coio::Builder;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
-use config::Config;
+use config::{Config, ClientConfig};
 
 use relay::{self, COROUTINE_STACK_SIZE, socks5};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
@@ -74,10 +74,14 @@ impl TcpRelayLocal {
         resp.write_to(writer)
     }
 
-    fn handle_udp_associate_local<W: Write>(stream: &mut W, addr: SocketAddr, _dest_addr: &socks5::Address)
+    fn handle_udp_associate_local<W: Write>(stream: &mut W,
+                                            _addr: SocketAddr,
+                                            _dest_addr: &socks5::Address,
+                                            local_conf: ClientConfig)
             -> io::Result<()> {
         let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                   socks5::Address::SocketAddress(addr));
+                                                   socks5::Address::SocketAddress(local_conf));
+        trace!("Replying Header for UDP ASSOCIATE, {:?}", reply);
         try!(reply.write_to(stream));
 
         // TODO: record this client's information for udprelay local server to validate
@@ -90,7 +94,8 @@ impl TcpRelayLocal {
                      server_addr: SocketAddr,
                      password: Vec<u8>,
                      encrypt_method: CipherType,
-                     enable_udp: bool) {
+                     enable_udp: bool,
+                     local_conf: ClientConfig) {
         let sockname = match stream.peer_addr() {
             Ok(sockname) => sockname,
             Err(err) => {
@@ -298,7 +303,7 @@ impl TcpRelayLocal {
             socks5::Command::UdpAssociate => {
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
-                    TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr)
+                    TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr, local_conf)
                         .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {:?}", err));
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
@@ -395,13 +400,15 @@ impl TcpRelayLocal {
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
+                let local_conf = local_conf.clone();
 
                 Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
                     TcpRelayLocal::handle_client(stream,
                                                  server_addr,
                                                  pwd,
                                                  encrypt_method,
-                                                 enable_udp));
+                                                 enable_udp,
+                                                 local_conf));
                 succeed = true;
                 break;
             }

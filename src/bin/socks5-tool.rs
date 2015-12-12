@@ -13,12 +13,12 @@ use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddr};
 use std::net::lookup_host;
 use std::io::Cursor;
-use std::io::{stdin, stdout};
-use std::io::{Read, Write, self};
+use std::io::stdout;
+use std::io::{Write, self};
 
 use shadowsocks::relay::socks5::*;
 
-fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr) {
+fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr, msg: &str) {
     let mut proxy_stream = TcpStream::connect(proxy_addr).unwrap();
 
     let shake_req = HandshakeRequest::new(vec![0x00]);
@@ -29,12 +29,9 @@ fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr) {
         panic!("Proxy server needs authentication");
     }
 
-    let mut data = Vec::new();
-    stdin().read_to_end(&mut data).unwrap();
-
     let req_header = TcpRequestHeader::new(Command::TcpConnect, svr_addr.clone());
     req_header.write_to(&mut proxy_stream).unwrap();
-    proxy_stream.write(&data).unwrap();
+    proxy_stream.write(msg.as_bytes()).unwrap();
 
     let resp_header = TcpResponseHeader::read_from(&mut proxy_stream).unwrap();
     match resp_header.reply {
@@ -47,7 +44,7 @@ fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr) {
     io::copy(&mut proxy_stream, &mut stdout()).unwrap();
 }
 
-fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr) {
+fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr, msg: &str) {
     let udp_proxy_addr = {
         let mut proxy_stream = TcpStream::connect(proxy_addr).unwrap();
 
@@ -92,17 +89,15 @@ fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr) 
         }
     };
 
-    let mut data = Vec::new();
-    stdin().read_to_end(&mut data).unwrap();
-
     let mut bufw = Vec::new();
     let udp_header = UdpAssociateHeader::new(0, svr_addr.clone());
     udp_header.write_to(&mut bufw).unwrap();
-    bufw.write(&data).unwrap();
+    bufw.write(msg.as_bytes()).unwrap();
     udp_socket.send_to(&bufw, proxy_real_addr).unwrap();
 
     let mut buf = [0; 0xffff];
     let (len, _) = udp_socket.recv_from(&mut buf).unwrap();
+    println!("Got buf: {:?}", &buf[..len]);
 
     let mut bufr = Cursor::new(&buf[..len]);
     let _ = UdpAssociateHeader::read_from(&mut bufr).unwrap();
@@ -135,6 +130,10 @@ fn main() {
                             .takes_value(true)
                             .required(true)
                             .help("Protocol to use"))
+                    .arg(Arg::with_name("MESSAGE").short("m").long("message")
+                            .takes_value(true)
+                            .required(true)
+                            .help("Message to be sent"))
                     .get_matches();
 
     let is_tcp = match matches.value_of("PROTOCOL").unwrap() {
@@ -152,10 +151,12 @@ fn main() {
         Err(..) => Address::DomainNameAddress(svr_addr_str.to_owned(), svr_port),
     };
 
+    let msg = matches.value_of("MESSAGE").unwrap();
+
     if is_tcp {
-        do_tcp(&svr_addr, &proxy_addr);
+        do_tcp(&svr_addr, &proxy_addr, msg);
     } else {
         let local_addr: SocketAddr = matches.value_of("LOCAL_ADDR").unwrap().parse().unwrap();
-        do_udp(&svr_addr, &proxy_addr, &local_addr);
+        do_udp(&svr_addr, &proxy_addr, &local_addr, msg);
     }
 }
