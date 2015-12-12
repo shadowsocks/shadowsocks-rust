@@ -221,7 +221,7 @@ impl TcpRelayLocal {
                         }
                     }
 
-                    info!("SYSTEM Connect {} local -> remote is closing", addr_cloned);
+                    debug!("SYSTEM Connect {} local -> remote is closing", addr_cloned);
 
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
                     let _ = local_reader.get_ref().shutdown(Shutdown::Both);
@@ -283,7 +283,7 @@ impl TcpRelayLocal {
 
                     let _ = local_writer.flush();
 
-                    info!("SYSTEM Connect {} local <- remote is closing", addr);
+                    debug!("SYSTEM Connect {} local <- remote is closing", addr);
 
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
                     let _ = local_writer.shutdown(Shutdown::Both);

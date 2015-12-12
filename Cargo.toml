@@ -69,8 +69,8 @@ byteorder = "^0.3.11"
 rand = "^0.3.9"
 time = "^0.1.32"
 clap = "^1.1.6"
-fern = "^0.3.5"
 qrcode = "^0.1.6"
+env_logger = "^0.3.2"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"

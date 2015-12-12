@@ -32,15 +32,19 @@ extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
-extern crate fern;
 extern crate time;
 extern crate coio;
+extern crate env_logger;
 
 use clap::{App, Arg};
 
 use std::net::{SocketAddr, IpAddr};
+use std::env;
 
 use coio::Scheduler;
+
+use env_logger::LogBuilder;
+use log::{LogRecord, LogLevelFilter};
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -82,24 +86,46 @@ fn main() {
                             .help("Threads in thread pool"))
                     .get_matches();
 
-    let logger_config = |show_location| fern::DispatchConfig {
-        format: Box::new(move|msg: &str, level: &log::LogLevel, location: &log::LogLocation| {
-            if show_location {
-                format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                        level, location.__module_path, msg)
-            } else {
-                format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
-            }
-        }),
-        output: vec![fern::OutputConfig::stderr()],
-        level: log::LogLevelFilter::Trace
-    };
+    let mut log_builder = LogBuilder::new();
+    log_builder.filter(None, LogLevelFilter::Info);
 
     match matches.occurrences_of("VERBOSE") {
-        0 => fern::init_global_logger(logger_config(false), log::LogLevelFilter::Info).unwrap(),
-        1 => fern::init_global_logger(logger_config(true), log::LogLevelFilter::Debug).unwrap(),
-        _ => fern::init_global_logger(logger_config(true), log::LogLevelFilter::Trace).unwrap()
+        0 => {
+            // Default filter
+            log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(), record.args())
+            });
+        },
+        1 => {
+            let mut log_builder = log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(), record.location().module_path(), record.args())
+            });
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
+        },
+        2 => {
+            let mut log_builder = log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(), record.location().module_path(), record.args())
+            });
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
+                       .filter(Some("shadowsocks"), LogLevelFilter::Debug);
+        },
+        _ => {
+            let mut log_builder = log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(), record.location().module_path(), record.args())
+            });
+            log_builder.filter(None, LogLevelFilter::Trace);
+        }
     }
+
+    if let Ok(env_conf) = env::var("RUST_LOG") {
+        log_builder.parse(&env_conf);
+    }
+
+    log_builder.init().unwrap();
 
     let mut config =
         match matches.value_of("CONFIG") {
