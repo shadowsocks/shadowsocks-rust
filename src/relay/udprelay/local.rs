@@ -107,7 +107,8 @@ impl UdpRelayLocal {
 
                 match addrs.next() {
                     Some(Ok(addr)) => {
-                        server_set.insert(addr, s.clone());
+                        let addr = SocketAddr::new(addr.ip(), s.port);
+                        server_set.insert(addr.clone(), s.clone());
                         server_addr.insert(s.addr.clone(), addr);
                     },
                     _ => {}
@@ -140,6 +141,7 @@ impl UdpRelayLocal {
                     let move_socket = socket.try_clone().unwrap();
                     let client_map = client_map_arc.clone();
 
+                    debug!("Received UDP packet, source {:?}", source_addr);
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
@@ -244,6 +246,8 @@ fn handle_request(socket: UdpSocket,
     if let Err(err) = socket.send_to(&iv[..], &server_addr) {
         error!("Error occurs while sending to remote: {:?}", err);
     }
+
+    debug!("Sent packet:{:?} to {:?}", iv, server_addr);
 }
 
 fn handle_response(socket: UdpSocket,
