@@ -209,11 +209,12 @@ fn main() {
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
 
+    let enabled_printing_work_count = matches.occurrences_of("VERBOSE") >= 2;
     Scheduler::new().with_workers(threads).run(move|| {
-        if matches.occurrences_of("VERBOSE") >= 2 {
+        if enabled_printing_work_count {
             Scheduler::spawn(move|| {
                 loop {
-                    coio::sleep(Duration::from_secs(1));
+                    coio::sleep(Duration::from_secs(5));
                     debug!("Running coroutines: {}", Scheduler::instance().work_count());
                 }
             });
