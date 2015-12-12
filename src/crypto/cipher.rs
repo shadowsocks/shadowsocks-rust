@@ -24,6 +24,7 @@
 use std::str::FromStr;
 use std::fmt::{Debug, Display, self};
 use rand::{self, Rng};
+use std::convert::From;
 
 use crypto::openssl;
 use crypto::table;
@@ -527,23 +528,74 @@ impl Display for CipherType {
     }
 }
 
+macro_rules! define_ciphers {
+    ($($name:ident => $cipher:ty,)+) => {
+        pub enum CipherVariant {
+            $(
+                $name($cipher),
+            )+
+        }
+
+        impl CipherVariant {
+            pub fn new<C>(cipher: C) -> CipherVariant
+                where CipherVariant: From<C>
+            {
+                From::from(cipher)
+            }
+        }
+
+        impl Cipher for CipherVariant {
+            fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+                match *self {
+                    $(
+                        CipherVariant::$name(ref mut cipher) => cipher.update(data, out),
+                    )+
+                }
+            }
+
+            fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+                match *self {
+                    $(
+                        CipherVariant::$name(ref mut cipher) => cipher.finalize(out),
+                    )+
+                }
+            }
+        }
+
+        $(
+            impl From<$cipher> for CipherVariant {
+                fn from(cipher: $cipher) -> CipherVariant {
+                    CipherVariant::$name(cipher)
+                }
+            }
+        )+
+    }
+}
+
+define_ciphers! {
+    TableCipher => table::TableCipher,
+    SodiumCipher => sodium::SodiumCipher,
+    Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
+    OpenSSLCipher => openssl::OpenSSLCipher,
+}
+
 /// Generate a specific Cipher with key and initialize vector
-pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box<Cipher + Send> {
+pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> CipherVariant {
     match t {
-        CipherType::Table => box table::TableCipher::new(key, mode) as Box<Cipher + Send>,
+        CipherType::Table => CipherVariant::new(table::TableCipher::new(key, mode)),
 
         #[cfg(feature = "cipher-chacha20")]
         CipherType::ChaCha20 =>
-            box sodium::SodiumCipher::new(t, key, iv) as Box<Cipher + Send>,
+            CipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
         #[cfg(feature = "cipher-salsa20")]
         CipherType::Salsa20 =>
-            box sodium::SodiumCipher::new(t, key, iv) as Box<Cipher + Send>,
+            CipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
 
         #[cfg(feature = "cipher-rc4")]
         CipherType::Rc4Md5 =>
-            box rc4_md5::Rc4Md5Cipher::new(key, iv, mode) as Box<Cipher + Send>,
+            CipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
-        _ => box openssl::OpenSSLCipher::new(t, key, iv, mode) as Box<Cipher + Send>,
+        _ => CipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
     }
 }
 

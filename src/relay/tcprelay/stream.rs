@@ -22,12 +22,12 @@
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 
-use crypto::cipher::Cipher;
+use crypto::cipher::{Cipher, CipherVariant};
 
 pub struct DecryptedReader<R: Read> {
     reader: R,
     buffer: Vec<u8>,
-    cipher: Box<Cipher + Send>,
+    cipher: CipherVariant,
     pos: usize,
     sent_final: bool,
 }
@@ -35,7 +35,7 @@ pub struct DecryptedReader<R: Read> {
 const BUFFER_SIZE: usize = 2048;
 
 impl<R: Read> DecryptedReader<R> {
-    pub fn new(r: R, cipher: Box<Cipher + Send>) -> DecryptedReader<R> {
+    pub fn new(r: R, cipher: CipherVariant) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
             buffer: Vec::new(),
@@ -121,12 +121,12 @@ impl<R: Read> Read for DecryptedReader<R> {
 
 pub struct EncryptedWriter<W: Write> {
     writer: W,
-    cipher: Box<Cipher + Send>,
+    cipher: CipherVariant,
     buffer: Vec<u8>,
 }
 
 impl<W: Write> EncryptedWriter<W> {
-    pub fn new(w: W, cipher: Box<Cipher + Send>) -> EncryptedWriter<W> {
+    pub fn new(w: W, cipher: CipherVariant) -> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
             cipher: cipher,
