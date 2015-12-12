@@ -127,11 +127,16 @@ fn main() {
 
     log_builder.init().unwrap();
 
+    let mut has_provided_config = false;
+
     let mut config =
         match matches.value_of("CONFIG") {
             Some(cpath) => {
                 match Config::load_from_file(cpath, config::ConfigType::Local) {
-                    Ok(cfg) => cfg,
+                    Ok(cfg) => {
+                        has_provided_config = true;
+                        cfg
+                    },
                     Err(err) => {
                         error!("{:?}", err);
                         return;
@@ -140,6 +145,8 @@ fn main() {
             },
             None => Config::new()
         };
+
+    let mut has_provided_server_config = false;
 
     if matches.value_of("SERVER_ADDR").is_some()
         && matches.value_of("SERVER_PORT").is_some()
@@ -170,6 +177,7 @@ fn main() {
         };
 
         config.server.push(sc);
+        has_provided_config = true;
     }
     else if matches.value_of("SERVER_ADDR").is_none()
         && matches.value_of("SERVER_PORT").is_none()
@@ -182,6 +190,8 @@ fn main() {
         panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
     }
 
+    let mut has_provided_local_config = false;
+
     if matches.value_of("LOCAL_ADDR").is_some() && matches.value_of("LOCAL_PORT").is_some() {
         let (local_addr, local_port) = matches.value_of("LOCAL_ADDR")
             .and_then(|local_addr| matches.value_of("LOCAL_PORT").map(|p| (local_addr, p)))
@@ -191,6 +201,13 @@ fn main() {
         let local_port: u16 = local_port.parse().ok().expect("`local-port` is not a valid integer");
 
         config.local = Some(SocketAddr::new(local_addr, local_port));
+        has_provided_local_config = true;
+    }
+
+    if !has_provided_config && !(has_provided_server_config && has_provided_local_config) {
+        println!("You have to specify a configuration file or pass arguments by argument list");
+        println!("{}", matches.usage());
+        return;
     }
 
     config.enable_udp = matches.is_present("ENABLE_UDP");

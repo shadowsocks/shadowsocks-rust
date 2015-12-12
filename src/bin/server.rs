@@ -128,11 +128,15 @@ fn main() {
 
     log_builder.init().unwrap();
 
+    let mut has_provided_config = false;
     let mut config =
         match matches.value_of("CONFIG") {
             Some(cpath) => {
                 match Config::load_from_file(cpath, config::ConfigType::Server) {
-                    Ok(cfg) => cfg,
+                    Ok(cfg) => {
+                        has_provided_config = true;
+                        cfg
+                    },
                     Err(err) => {
                         error!("{:?}", err);
                         return;
@@ -141,6 +145,8 @@ fn main() {
             },
             None => Config::new()
         };
+
+    let mut has_provided_server_config = false;
 
     if matches.value_of("SERVER_ADDR").is_some()
         && matches.value_of("SERVER_PORT").is_some()
@@ -171,6 +177,7 @@ fn main() {
         };
 
         config.server.push(sc);
+        has_provided_server_config = true;
     }
     else if matches.value_of("SERVER_ADDR").is_none()
         && matches.value_of("SERVER_PORT").is_none()
@@ -181,6 +188,12 @@ fn main() {
     }
     else {
         panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
+    }
+
+    if !has_provided_config && !has_provided_server_config {
+        println!("You have to specify a configuration file or pass arguments from argument list");
+        println!("{}", matches.usage());
+        return;
     }
 
     config.enable_udp = matches.is_present("ENABLE_UDP");
