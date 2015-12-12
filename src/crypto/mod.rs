@@ -31,6 +31,7 @@ pub mod table;
 pub mod rc4_md5;
 #[cfg(feature = "enable-sodium")]
 pub mod sodium;
+pub mod crypto;
 
 #[derive(Clone, Copy)]
 pub enum CryptoMode {
