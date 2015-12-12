@@ -102,14 +102,14 @@ fn main() {
                 format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
                         record.level(), record.location().module_path(), record.args())
             });
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
+            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug);
         },
         2 => {
             let mut log_builder = log_builder.format(|record: &LogRecord| {
                 format!("[{}][{}] [{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
                         record.level(), record.location().module_path(), record.args())
             });
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
+            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         },
         _ => {
