@@ -1,6 +1,7 @@
 # shadowsocks-rust
 
 [![Build Status](https://img.shields.io/travis/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
+[![Build status](https://ci.appveyor.com/api/projects/status/qx3wfyjxxuokvyrs?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
