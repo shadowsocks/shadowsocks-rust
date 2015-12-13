@@ -4,6 +4,7 @@ extern crate shadowsocks;
 extern crate qrcode;
 
 use std::str;
+use std::collections::HashSet;
 
 use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
 use rustc_serialize::json::{ToJson, as_pretty_json};
@@ -100,6 +101,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
         local: None,
         enable_udp: false,
         timeout: None,
+        forbidden_ip: HashSet::new(),
     };
 
     let config_json = config.to_json();
