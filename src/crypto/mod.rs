@@ -24,6 +24,10 @@
 extern crate libc;
 extern crate test;
 
+use std::convert::From;
+
+use openssl::crypto::symm;
+
 pub mod cipher;
 pub mod openssl;
 pub mod digest;
@@ -35,4 +39,13 @@ pub mod crypto;
 pub enum CryptoMode {
     Encrypt,
     Decrypt
+}
+
+impl From<CryptoMode> for symm::Mode {
+    fn from(m: CryptoMode) -> symm::Mode {
+        match m {
+            CryptoMode::Encrypt => symm::Mode::Encrypt,
+            CryptoMode::Decrypt => symm::Mode::Decrypt,
+        }
+    }
 }
