@@ -396,6 +396,11 @@ impl TcpRelayLocal {
                     }
                 };
 
+                if self.config.forbidden_ip.contains(&server_addr) {
+                    info!("{} is in `forbidden_ip` list, skipping", server_addr);
+                    continue;
+                }
+
                 debug!("Using proxy `{}:{}` (`{}`)", server_cfg.addr, server_cfg.port, server_addr);
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
