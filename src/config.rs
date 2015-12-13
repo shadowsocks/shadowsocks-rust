@@ -449,7 +449,12 @@ impl json::ToJson for Config {
         }
 
         if let Some(l) = self.local {
-            obj.insert("local_address".to_owned(), Json::String(l.ip().to_string()));
+            let ip_str = match &l {
+                &SocketAddr::V4(ref v4) => v4.ip().to_string(),
+                &SocketAddr::V6(ref v6) => v6.ip().to_string(),
+            };
+
+            obj.insert("local_address".to_owned(), Json::String(ip_str));
             obj.insert("local_port".to_owned(), Json::U64(l.port() as u64));
         }
 

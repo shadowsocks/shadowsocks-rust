@@ -37,6 +37,8 @@ extern crate rand;
 
 extern crate coio;
 
+extern crate ip;
+
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub mod config;

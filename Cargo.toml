@@ -71,6 +71,7 @@ time = "^0.1.32"
 clap = "^1.1.6"
 qrcode = "^0.1.6"
 env_logger = "^0.3.2"
+ip = "1.0.0"
 
 [dependencies.libsodium-sys]
 git = "https://github.com/zonyitoo/libsodium-sys.git"

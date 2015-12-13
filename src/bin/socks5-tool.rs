@@ -1,20 +1,22 @@
-#![feature(lookup_host, ip_addr)]
+#![feature(lookup_host)]
 
 extern crate clap;
 #[macro_use]
 extern crate log;
-
 extern crate shadowsocks;
+extern crate ip;
 
 use clap::{App, Arg};
 
 use std::net::UdpSocket;
 use std::net::TcpStream;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
 use std::io::Cursor;
 use std::io::stdout;
 use std::io::{Write, self};
+
+use ip::IpAddr;
 
 use shadowsocks::relay::socks5::*;
 
@@ -85,7 +87,17 @@ fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr, 
                 Err(err) => panic!("LookupHost: {:?}", err),
             };
 
-            SocketAddr::new(host.ip(), port)
+            match host {
+                SocketAddr::V4(v4) => {
+                    SocketAddr::V4(SocketAddrV4::new(*v4.ip(), port))
+                }
+                SocketAddr::V6(v6) => {
+                    SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
+                                                     port,
+                                                     v6.flowinfo(),
+                                                     v6.scope_id()))
+                }
+            }
         }
     };
 
@@ -147,7 +159,16 @@ fn main() {
     let svr_port: u16 = matches.value_of("SERVER_PORT").unwrap().parse().unwrap();
     let svr_addr_str = matches.value_of("SERVER_ADDR").unwrap();
     let svr_addr = match svr_addr_str.parse::<IpAddr>() {
-        Ok(ip) => Address::SocketAddress(SocketAddr::new(ip, svr_port)),
+        Ok(ip) => {
+            let addr = match ip {
+                IpAddr::V4(v4) =>
+                    SocketAddr::V4(SocketAddrV4::new(v4, svr_port)),
+                IpAddr::V6(v6) =>
+                    SocketAddr::V6(SocketAddrV6::new(v6, svr_port, 0, 0)),
+            };
+
+            Address::SocketAddress(addr)
+        }
         Err(..) => Address::DomainNameAddress(svr_addr_str.to_owned(), svr_port),
     };
 
