@@ -28,10 +28,9 @@ use std::convert::From;
 
 use crypto::openssl;
 use crypto::table;
-#[cfg(feature = "enable-sodium")]
-use crypto::sodium;
 use crypto::CryptoMode;
 use crypto::rc4_md5;
+use crypto::crypto::CryptoCipher;
 
 use crypto::digest::{self, DigestType};
 
@@ -208,8 +207,6 @@ pub enum CipherType {
 
 impl CipherType {
     pub fn block_size(&self) -> usize {
-        use libsodium_ffi::{crypto_stream_chacha20_NONCEBYTES, crypto_stream_salsa20_NONCEBYTES};
-
         match *self {
             CipherType::Table => 0,
 
@@ -250,14 +247,12 @@ impl CipherType {
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
             #[cfg(feature = "cipher-seed-cfb")] CipherType::SeedCfb => 16,
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => crypto_stream_chacha20_NONCEBYTES as usize,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => crypto_stream_salsa20_NONCEBYTES as usize,
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
         }
     }
 
     pub fn key_size(&self) -> usize {
-        use libsodium_ffi::{crypto_stream_chacha20_KEYBYTES, crypto_stream_salsa20_KEYBYTES};
-
         match *self {
             CipherType::Table => 0,
 
@@ -298,8 +293,8 @@ impl CipherType {
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
             #[cfg(feature = "cipher-seed-cfb")] CipherType::SeedCfb => 16,
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => crypto_stream_chacha20_KEYBYTES as usize,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => crypto_stream_salsa20_KEYBYTES as usize,
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
         }
     }
 
@@ -574,9 +569,9 @@ macro_rules! define_ciphers {
 
 define_ciphers! {
     TableCipher => table::TableCipher,
-    SodiumCipher => sodium::SodiumCipher,
     Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
     OpenSSLCipher => openssl::OpenSSLCipher,
+    CryptoCipher => CryptoCipher,
 }
 
 /// Generate a specific Cipher with key and initialize vector
@@ -586,10 +581,10 @@ pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Ciph
 
         #[cfg(feature = "cipher-chacha20")]
         CipherType::ChaCha20 =>
-            CipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
+            CipherVariant::new(CryptoCipher::new(t, key, iv)),
         #[cfg(feature = "cipher-salsa20")]
         CipherType::Salsa20 =>
-            CipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
+            CipherVariant::new(CryptoCipher::new(t, key, iv)),
 
         #[cfg(feature = "cipher-rc4")]
         CipherType::Rc4Md5 =>

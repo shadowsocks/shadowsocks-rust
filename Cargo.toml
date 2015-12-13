@@ -36,11 +36,10 @@ cipher-idea-cfb = []
 cipher-rc2-cfb = []
 cipher-rc4 = []
 cipher-seed-cfb = []
-cipher-chacha20 = ["enable-sodium"]
-cipher-salsa20 = ["enable-sodium"]
+cipher-chacha20 = []
+cipher-salsa20 = []
 
 enable-udp = []
-enable-sodium = ["libsodium-sys"]
 
 [[bin]]
 
@@ -73,10 +72,6 @@ qrcode = "^0.1.6"
 env_logger = "^0.3.2"
 rust-crypto = "^0.2.34"
 ip = "1.0.0"
-
-[dependencies.libsodium-sys]
-git = "https://github.com/zonyitoo/libsodium-sys.git"
-optional = true
 
 [dependencies.lru-cache]
 git = "https://github.com/zonyitoo/lru-cache.git"

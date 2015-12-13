@@ -23,6 +23,7 @@
 
 use std::sync::Arc;
 use std::io::{self, Read, Write, BufReader, ErrorKind};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use coio::Builder;
 use coio::net::{TcpListener, TcpStream, Shutdown};
@@ -166,7 +167,19 @@ impl TcpRelayServer {
                         let processing = || {
                             let mut last_err: Option<io::Result<TcpStream>> = None;
                             for addr in addrs.into_iter() {
-                                match TcpStream::connect(&(addr.ip(), *port)) {
+                                let addr = match addr {
+                                    SocketAddr::V4(addr) => {
+                                        SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), *port))
+                                    },
+                                    SocketAddr::V6(addr) => {
+                                        SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
+                                                                         *port,
+                                                                         addr.flowinfo(),
+                                                                         addr.scope_id()))
+                                    }
+                                };
+
+                                match TcpStream::connect(addr) {
                                     Ok(stream) => return Ok(stream),
                                     Err(err) => {
                                         error!("Unable to connect {:?}: {}", addr, err);
