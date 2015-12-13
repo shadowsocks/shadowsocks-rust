@@ -76,6 +76,8 @@ use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
 use std::collections::HashSet;
 
+use ip::IpAddr;
+
 use crypto::cipher::CipherType;
 
 /// Default DNS cache capacity
@@ -139,7 +141,7 @@ pub struct Config {
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
     pub timeout: Option<u32>,
-    pub forbidden_ip: HashSet<SocketAddr>,
+    pub forbidden_ip: HashSet<IpAddr>,
 }
 
 impl Default for Config {
@@ -414,7 +416,7 @@ impl Config {
                     }
                 };
 
-                match x.parse::<SocketAddr>() {
+                match x.parse::<IpAddr>() {
                     Ok(sock) => Some(sock),
                     Err(err) => {
                         error!("Invalid forbidden IP {}, {:?}, skipping", x, err);

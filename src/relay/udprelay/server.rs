@@ -22,6 +22,9 @@
 use std::sync::{Arc, Mutex};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
 use std::io::{BufReader, Read};
+use std::collections::HashSet;
+
+use ip::IpAddr;
 
 use lru_cache::LruCache;
 
@@ -47,7 +50,7 @@ impl UdpRelayServer {
         }
     }
 
-    fn accept_loop(svr_config: ServerConfig) {
+    fn accept_loop(svr_config: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
         let socket = match UdpSocket::bind(&(&svr_config.addr[..], svr_config.port)) {
             Ok(sock) => sock,
             Err(err) => {
@@ -80,6 +83,7 @@ impl UdpRelayServer {
 
                     let method = svr_config.method;
                     let password = svr_config.password.clone();
+                    let forbidden_ip = forbidden_ip.clone();
 
                     Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                         match remote_map.lock().unwrap().get(&src) {
@@ -155,6 +159,11 @@ impl UdpRelayServer {
 
                         let sockaddr = match &header.address {
                             &Address::SocketAddress(addr) => {
+                                if forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
+                                    info!("{} is in `forbidden_ip` list, skipping", addr);
+                                    return;
+                                }
+
                                 client_map.lock()
                                           .unwrap()
                                           .insert(header.address.clone(), src);
@@ -184,6 +193,11 @@ impl UdpRelayServer {
                                     }
                                 };
 
+                                if forbidden_ip.contains(&::relay::take_ip_addr(&remote_addr)) {
+                                    info!("{} is in `forbidden_ip` list, skipping", remote_addr);
+                                    return;
+                                }
+
                                 client_map.lock()
                                           .unwrap()
                                           .insert(header.address.clone(), src);
@@ -207,10 +221,12 @@ impl UdpRelayServer {
 
 impl UdpRelayServer {
     pub fn run(&self) {
+        let forbidden_ip = Arc::new(self.config.forbidden_ip.clone());
         for s in self.config.server.iter() {
             let s = s.clone();
+            let forbidden_ip = forbidden_ip.clone();
             Builder::new().stack_size(COROUTINE_STACK_SIZE)
-                          .spawn(move || UdpRelayServer::accept_loop(s));
+                          .spawn(move || UdpRelayServer::accept_loop(s, forbidden_ip));
         }
     }
 }

@@ -98,29 +98,36 @@ impl UdpRelayLocal {
             let mut server_set = HashMap::new();
             let mut server_addr = HashMap::new();
             for s in self.config.server.iter() {
-                let mut addrs = match lookup_host(&s.addr[..]) {
+                let addrs = match lookup_host(&s.addr[..]) {
                     Ok(addr) => addr,
                     Err(..) => continue,
                 };
 
-                match addrs.next() {
-                    Some(Ok(addr)) => {
-                        let addr = match addr {
-                            SocketAddr::V4(v4) => {
-                                SocketAddr::V4(SocketAddrV4::new(*v4.ip(), s.port))
-                            }
-                            SocketAddr::V6(v6) => {
-                                SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
-                                                                 s.port,
-                                                                 v6.flowinfo(),
-                                                                 v6.scope_id()))
-                            }
-                        };
+                for addr in addrs {
+                    match addr {
+                        Ok(addr) => {
+                            let addr = match addr {
+                                SocketAddr::V4(v4) => {
+                                    SocketAddr::V4(SocketAddrV4::new(*v4.ip(), s.port))
+                                }
+                                SocketAddr::V6(v6) => {
+                                    SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
+                                                                     s.port,
+                                                                     v6.flowinfo(),
+                                                                     v6.scope_id()))
+                                }
+                            };
 
-                        server_set.insert(addr.clone(), s.clone());
-                        server_addr.insert(s.addr.clone(), addr);
+                            if self.config.forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
+                                info!("{} is in `forbidden_ip` list, skipping", addr);
+                                continue;
+                            }
+
+                            server_set.insert(addr.clone(), s.clone());
+                            server_addr.insert(s.addr.clone(), addr);
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
             (server_set, server_addr)

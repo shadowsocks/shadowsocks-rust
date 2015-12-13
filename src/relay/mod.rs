@@ -22,9 +22,12 @@
 //! Relay server in local and server side implementations.
 
 use std::io::{self, Read, Write};
+use std::net::SocketAddr;
 
 pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
+
+use ip::IpAddr;
 
 mod tcprelay;
 #[cfg(feature = "enable-udp")]
@@ -66,5 +69,12 @@ fn copy<R: Read, W: Write>(r: &mut R, w: &mut W, prefix: &str) -> io::Result<u64
         }
         trace!("{}: Write {} bytes to writer", prefix, len);
         written += len as u64;
+    }
+}
+
+fn take_ip_addr(sockaddr: &SocketAddr) -> IpAddr {
+    match sockaddr {
+        &SocketAddr::V4(ref v4) => IpAddr::V4(*v4.ip()),
+        &SocketAddr::V6(ref v6) => IpAddr::V6(*v6.ip()),
     }
 }

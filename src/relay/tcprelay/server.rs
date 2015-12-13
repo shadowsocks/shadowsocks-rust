@@ -26,6 +26,8 @@ use std::io::{self, Read, Write, BufReader, ErrorKind};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::collections::HashSet;
 
+use ip::IpAddr;
+
 use coio::Builder;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
@@ -49,7 +51,7 @@ impl TcpRelayServer {
         TcpRelayServer { config: c }
     }
 
-    fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<SocketAddr>>) {
+    fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
         let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
                            .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
 
@@ -150,7 +152,7 @@ impl TcpRelayServer {
 
                 let remote_stream = match &addr {
                     &socks5::Address::SocketAddress(ref addr) => {
-                        if forbidden_ip.contains(addr) {
+                        if forbidden_ip.contains(&::relay::take_ip_addr(addr)) {
                             info!("{} has been blocked by `forbidden_ip`", addr);
                             return;
                         }
@@ -184,9 +186,11 @@ impl TcpRelayServer {
                                     }
                                 };
 
-                                if forbidden_ip.contains(&addr) {
+                                if forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
                                     info!("{} has been blocked by `forbidden_ip`", addr);
-                                    last_err = Some(Err(io::Error::new(io::ErrorKind::Other, "Blocked by `forbidden_ip`")));
+                                    last_err = Some(Err(io::Error::new(io::ErrorKind::Other,
+                                                                       "Blocked by \
+                                                                        `forbidden_ip`")));
                                     continue;
                                 }
 

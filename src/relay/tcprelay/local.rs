@@ -396,7 +396,7 @@ impl TcpRelayLocal {
                     }
                 };
 
-                if self.config.forbidden_ip.contains(&server_addr) {
+                if self.config.forbidden_ip.contains(&::relay::take_ip_addr(&server_addr)) {
                     info!("{} is in `forbidden_ip` list, skipping", server_addr);
                     continue;
                 }
