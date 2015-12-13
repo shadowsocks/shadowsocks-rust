@@ -220,7 +220,7 @@ impl TcpRelayServer {
                         }
                     }
 
-                    info!("{} local <- remote is closing", addr);
+                    debug!("{} local <- remote is closing", addr);
 
                     let _ = encrypt_stream.get_mut().shutdown(Shutdown::Both);
                     let _ = remote_reader.get_mut().shutdown(Shutdown::Both);
@@ -250,7 +250,7 @@ impl TcpRelayServer {
                         }
                     }
 
-                    info!("{} local -> remote is closing", addr_cloned);
+                    debug!("{} local -> remote is closing", addr_cloned);
 
                     let _ = remote_writer.shutdown(Shutdown::Both);
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);

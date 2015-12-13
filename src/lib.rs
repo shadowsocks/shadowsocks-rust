@@ -38,6 +38,7 @@ extern crate rand;
 extern crate coio;
 
 extern crate crypto as rust_crypto;
+extern crate ip;
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

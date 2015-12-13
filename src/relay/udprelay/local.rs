@@ -55,9 +55,9 @@
 // +-------+--------------+
 
 use std::sync::{Arc, Mutex};
-use std::net::{SocketAddr, lookup_host};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, lookup_host};
 use std::collections::HashMap;
-use std::io::{BufReader, self};
+use std::io::{self, BufReader};
 
 use coio::Builder;
 use coio::net::UdpSocket;
@@ -78,9 +78,7 @@ pub struct UdpRelayLocal {
 
 impl UdpRelayLocal {
     pub fn new(config: Config) -> UdpRelayLocal {
-        UdpRelayLocal {
-            config: config,
-        }
+        UdpRelayLocal { config: config }
     }
 }
 
@@ -107,18 +105,30 @@ impl UdpRelayLocal {
 
                 match addrs.next() {
                     Some(Ok(addr)) => {
-                        let addr = SocketAddr::new(addr.ip(), s.port);
+                        let addr = match addr {
+                            SocketAddr::V4(v4) => {
+                                SocketAddr::V4(SocketAddrV4::new(*v4.ip(), s.port))
+                            }
+                            SocketAddr::V6(v6) => {
+                                SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
+                                                                 s.port,
+                                                                 v6.flowinfo(),
+                                                                 v6.scope_id()))
+                            }
+                        };
+
                         server_set.insert(addr.clone(), s.clone());
                         server_addr.insert(s.addr.clone(), addr);
-                    },
+                    }
                     _ => {}
                 }
             }
             (server_set, server_addr)
         };
 
-        let client_map_arc = Arc::new(Mutex::new(
-                    LruCache::<socks5::Address, SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
+        let client_map_arc =
+            Arc::new(Mutex::new(LruCache::<socks5::Address,
+                                           SocketAddr>::new(UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY)));
 
         let socket = match UdpSocket::bind(&addr) {
             Ok(sk) => sk,
@@ -145,12 +155,13 @@ impl UdpRelayLocal {
                     match server_set.get(&source_addr) {
                         Some(sref) => {
                             let s = sref.clone();
-                            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
+                            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
                                 handle_response(move_socket,
-                                               &request_message[..],
-                                               source_addr,
-                                               &s,
-                                               client_map));
+                                                &request_message[..],
+                                                source_addr,
+                                                &s,
+                                                client_map)
+                            });
                         }
                         None => {
                             let s = server_load_balancer.pick_server().clone();
@@ -159,22 +170,25 @@ impl UdpRelayLocal {
                             match server_addr.get(&s.addr) {
                                 Some(saddr) => {
                                     let saddr = saddr.clone();
-                                    Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move ||
-                                        handle_request(move_socket,
-                                                      &request_message[..],
-                                                      source_addr,
-                                                      saddr,
-                                                      &s,
-                                                      client_map));
-                                },
+                                    Builder::new()
+                                        .stack_size(COROUTINE_STACK_SIZE)
+                                        .spawn(move || {
+                                            handle_request(move_socket,
+                                                           &request_message[..],
+                                                           source_addr,
+                                                           saddr,
+                                                           &s,
+                                                           client_map)
+                                        });
+                                }
                                 None => {}
                             }
                         }
                     }
-                },
+                }
                 Err(err) => {
                     error!("Failed in UDP recv_from: {}", err);
-                    break
+                    break;
                 }
             }
         }
@@ -217,10 +231,7 @@ fn handle_request(socket: UdpSocket,
 
     let key = config.method.bytes_to_key(config.password.as_bytes());
     let mut iv = config.method.gen_init_vec();
-    let mut encryptor = cipher::with_type(config.method,
-                                          &key[..],
-                                          &iv[..],
-                                          CryptoMode::Encrypt);
+    let mut encryptor = cipher::with_type(config.method, &key[..], &iv[..], CryptoMode::Encrypt);
 
     let mut wbuf = Vec::new();
     if let Err(err) = request.write_to(&mut wbuf) {
@@ -262,7 +273,8 @@ fn handle_response(socket: UdpSocket,
                                           &response_message[0..config.method.block_size()],
                                           CryptoMode::Decrypt);
     let mut decrypted_data = Vec::new();
-    if let Err(err) = decryptor.update(&response_message[config.method.block_size()..], &mut decrypted_data) {
+    if let Err(err) = decryptor.update(&response_message[config.method.block_size()..],
+                                       &mut decrypted_data) {
         error!("Error occurs while decrypting data: {:?}", err);
         return;
     }
@@ -286,7 +298,7 @@ fn handle_response(socket: UdpSocket,
         let mut cmap = client_map.lock().unwrap();
         match cmap.get(&addr) {
             Some(a) => a.clone(),
-            None => return
+            None => return,
         }
     };
 

@@ -26,8 +26,6 @@
 //! in mod `config`.
 //!
 
-#![feature(ip_addr)]
-
 extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
@@ -35,10 +33,11 @@ extern crate log;
 extern crate time;
 extern crate coio;
 extern crate env_logger;
+extern crate ip;
 
 use clap::{App, Arg};
 
-use std::net::{SocketAddr, IpAddr};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::env;
 use std::time::Duration;
 
@@ -46,6 +45,8 @@ use coio::Scheduler;
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
+
+use ip::IpAddr;
 
 use shadowsocks::config::{Config, ServerConfig, self};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -201,7 +202,12 @@ fn main() {
         let local_addr: IpAddr = local_addr.parse().ok().expect("`local-addr` is not a valid IP address");
         let local_port: u16 = local_port.parse().ok().expect("`local-port` is not a valid integer");
 
-        config.local = Some(SocketAddr::new(local_addr, local_port));
+        config.local = Some(match local_addr {
+            IpAddr::V4(v4) =>
+                SocketAddr::V4(SocketAddrV4::new(v4, local_port)),
+            IpAddr::V6(v6) =>
+                SocketAddr::V6(SocketAddrV6::new(v6, local_port, 0, 0)),
+        });
         has_provided_local_config = true;
     }
 
@@ -220,11 +226,12 @@ fn main() {
     let threads = matches.value_of("THREADS").unwrap_or("1").parse::<usize>()
         .ok().expect("`threads` should be an integer");
 
+    let enabled_printing_work_count = matches.occurrences_of("VERBOSE") >= 2;
     Scheduler::new().with_workers(threads).run(move|| {
-        if matches.occurrences_of("VERBOSE") >= 2 {
+        if enabled_printing_work_count {
             Scheduler::spawn(move|| {
                 loop {
-                    coio::sleep(Duration::from_secs(1));
+                    coio::sleep(Duration::from_secs(5));
                     debug!("Running coroutines: {}", Scheduler::instance().work_count());
                 }
             });
