@@ -2,9 +2,12 @@ language: rust
 rust:
     - nightly
 
-before_install:
-    - sudo apt-get update -qq
-    - sudo apt-get install -qq libssl-dev
+sudo: false
+
+addons:
+    apt:
+        packages:
+            - libssl-dev
 
 script:
     - cargo build -v
