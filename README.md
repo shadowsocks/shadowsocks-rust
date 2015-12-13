@@ -17,7 +17,6 @@ It is **unstable**! If you encounter any problems, please open an issue.
 ## Dependencies
 
 * libcrypto (OpenSSL)
-* libsodium
 * Rust nightly
 * Cargo
 
@@ -40,14 +39,7 @@ cargo build --features "cipher-aes-ctr"
 
 Read `Cargo.toml` for more details.
 
-*Require `libsodium` and `libcrypto` by default.*
-
-### Run binaries with Cargo
-
-```
-$ cargo run --release --bin sslocal -- -c config.json
-$ cargo run --release --bin ssserver -- -c config.json
-```
+*Require `libcrypto` by default.*
 
 ## Getting Started
 
