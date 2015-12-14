@@ -303,7 +303,7 @@ fn handle_response(socket: UdpSocket,
 
     let client_addr = {
         let mut cmap = client_map.lock().unwrap();
-        match cmap.get(&addr) {
+        match cmap.get_mut(&addr) {
             Some(a) => a.clone(),
             None => return,
         }

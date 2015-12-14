@@ -53,7 +53,7 @@ impl CachedDns {
     pub fn resolve(&self, addr_str: &str) -> Option<Vec<SocketAddr>> {
         {
             let mut cache = self.lru_cache.lock().unwrap();
-            match cache.cache.get(addr_str).map(|x| x.clone()) {
+            match cache.cache.get_mut(addr_str).map(|x| x.clone()) {
                 Some(addrs) => {
                     cache.totally_matched += 1;
                     debug!("DNS cache matched!: {}", addr_str);

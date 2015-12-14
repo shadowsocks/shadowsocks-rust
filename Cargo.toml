@@ -59,10 +59,7 @@ env_logger = "^0.3.2"
 rust-crypto = "^0.2.34"
 ip = "1.0.0"
 openssl = "^0.7.1"
-
-[dependencies.lru-cache]
-git = "https://github.com/zonyitoo/lru-cache.git"
-ver = "7688eae5a4ce8e6f9beb075e11d1abb3d2b2f635"
+lru-cache = "^0.0.5"
 
 [dependencies.coio]
 git = "https://github.com/zonyitoo/coio-rs.git"

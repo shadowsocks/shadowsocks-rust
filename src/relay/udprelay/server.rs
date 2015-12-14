@@ -86,9 +86,9 @@ impl UdpRelayServer {
                     let forbidden_ip = forbidden_ip.clone();
 
                     Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
-                        match remote_map.lock().unwrap().get(&src) {
+                        match remote_map.lock().unwrap().get_mut(&src) {
                             Some(remote_addr) => {
-                                match client_map.lock().unwrap().get(remote_addr) {
+                                match client_map.lock().unwrap().get_mut(remote_addr) {
                                     Some(client_addr) => {
                                         debug!("UDP response {} -> {}", remote_addr, client_addr);
 
@@ -119,7 +119,7 @@ impl UdpRelayServer {
                                             return;
                                         }
 
-                                        if let Err(err) = captured_socket.send_to(&iv[..], &client_addr) {
+                                        if let Err(err) = captured_socket.send_to(&iv[..], &*client_addr) {
                                             error!("Error occurs while sending data: {:?}", err);
                                             return;
                                         }
