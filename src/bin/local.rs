@@ -232,7 +232,7 @@ fn main() {
             Scheduler::spawn(move|| {
                 loop {
                     coio::sleep(Duration::from_secs(5));
-                    debug!("Running coroutines: {}", Scheduler::instance().work_count());
+                    debug!("Running coroutines: {}", Scheduler::instance().map(|s| s.work_count()).unwrap());
                 }
             });
         }
