@@ -28,12 +28,11 @@ use ip::IpAddr;
 
 use lru_cache::LruCache;
 
-use coio::Builder;
+use coio::Scheduler;
 use coio::net::UdpSocket;
 
 use config::{Config, ServerConfig};
 use relay::socks5::{Address, self};
-use relay::COROUTINE_STACK_SIZE;
 use relay::udprelay::{UDP_RELAY_SERVER_LRU_CACHE_CAPACITY};
 use crypto::{cipher, CryptoMode};
 use crypto::cipher::Cipher;
@@ -85,7 +84,7 @@ impl UdpRelayServer {
                     let password = svr_config.password.clone();
                     let forbidden_ip = forbidden_ip.clone();
 
-                    Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+                    Scheduler::spawn(move || {
                         match remote_map.lock().unwrap().get_mut(&src) {
                             Some(remote_addr) => {
                                 match client_map.lock().unwrap().get_mut(remote_addr) {
@@ -225,8 +224,7 @@ impl UdpRelayServer {
         for s in self.config.server.iter() {
             let s = s.clone();
             let forbidden_ip = forbidden_ip.clone();
-            Builder::new().stack_size(COROUTINE_STACK_SIZE)
-                          .spawn(move || UdpRelayServer::accept_loop(s, forbidden_ip));
+            Scheduler::spawn(move || UdpRelayServer::accept_loop(s, forbidden_ip));
         }
     }
 }

@@ -28,11 +28,11 @@ use std::collections::HashSet;
 
 use ip::IpAddr;
 
-use coio::Builder;
+use coio::Scheduler;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ServerConfig};
-use relay::{socks5, COROUTINE_STACK_SIZE};
+use relay::socks5;
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
 use crypto::cipher;
@@ -89,7 +89,7 @@ impl TcpRelayServer {
             let dnscache = dnscache_arc.clone();
             let forbidden_ip = forbidden_ip.clone();
 
-            Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+            Scheduler::spawn(move || {
                 let remote_iv = {
                     let mut iv = Vec::with_capacity(encrypt_method.block_size());
                     unsafe {
@@ -222,7 +222,7 @@ impl TcpRelayServer {
                 };
                 let addr_cloned = addr.clone();
 
-                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+                Scheduler::spawn(move || {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
                     match ::relay::copy(&mut remote_reader,
@@ -260,7 +260,7 @@ impl TcpRelayServer {
                     let _ = remote_reader.get_mut().shutdown(Shutdown::Both);
                 });
 
-                Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+                Scheduler::spawn(move || {
                     match ::relay::copy(&mut decrypt_stream,
                                         &mut remote_writer,
                                         "Local to remote") {
@@ -313,7 +313,7 @@ impl TcpRelayServer {
         for s in self.config.server.iter() {
             let s = s.clone();
             let forbidden_ip = forbidden_ip.clone();
-            let fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || {
+            let fut = Scheduler::spawn(move || {
                 TcpRelayServer::accept_loop(s, forbidden_ip);
             });
             futs.push(fut);

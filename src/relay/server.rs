@@ -21,12 +21,12 @@
 
 //! Server side
 
-use coio::Builder;
+use coio::Scheduler;
 
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
-use relay::{Relay, COROUTINE_STACK_SIZE};
+use relay::Relay;
 use config::Config;
 
 /// Relay server running on server side.
@@ -89,13 +89,13 @@ impl Relay for RelayServer {
         let mut futs = Vec::new();
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
+        let tcp_fut = Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
         futs.push(tcp_fut);
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || udprelay.run());
+            let udp_fut = Scheduler::spawn(move || udprelay.run());
             info!("Enabled UDP relay");
             futs.push(udp_fut);
         }
@@ -112,7 +112,7 @@ impl Relay for RelayServer {
         }
 
         let tcprelay = self.tcprelay.clone();
-        let fut = Builder::new().stack_size(COROUTINE_STACK_SIZE).spawn(move || tcprelay.run());
+        let fut = Scheduler::spawn(move || tcprelay.run());
         info!("Enabled TCP relay");
 
         fut.join().unwrap();
