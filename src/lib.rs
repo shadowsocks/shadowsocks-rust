@@ -22,7 +22,7 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(box_syntax, libc, test, slice_patterns, lookup_host)]
+#![feature(lookup_host)]
 
 extern crate rustc_serialize as serialize;
 #[macro_use]
@@ -37,6 +37,8 @@ extern crate coio;
 extern crate crypto as rust_crypto;
 extern crate ip;
 extern crate openssl;
+
+extern crate libc;
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

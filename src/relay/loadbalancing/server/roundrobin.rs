@@ -39,14 +39,13 @@ impl RoundRobin {
 
 impl LoadBalancer for RoundRobin {
     fn pick_server<'a>(&'a mut self) -> &'a ServerConfig {
-        match &self.server[..] {
-            [ref s] => s,
-            _ => {
-                let ref s = self.server[self.index];
-                self.index = (self.index + 1) % self.server.len();
-                s
-            }
+        if self.server.is_empty() {
+            panic!("No server");
         }
+
+        let ref s = self.server[self.index];
+        self.index = (self.index + 1) % self.server.len();
+        s
     }
 
     fn total(&self) -> usize {

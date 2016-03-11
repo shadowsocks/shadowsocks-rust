@@ -21,8 +21,6 @@
 
 //! Crypto methods for shadowsocks
 
-extern crate libc;
-extern crate test;
 
 use std::convert::From;
 

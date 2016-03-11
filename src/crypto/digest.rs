@@ -48,6 +48,6 @@ impl DigestType {
 pub fn with_type(t: DigestType) -> Box<Digest + Send> {
     match t {
         DigestType::Md5 | DigestType::Sha1 | DigestType::Sha =>
-            box openssl::OpenSSLDigest::new(t) as Box<Digest + Send>,
+            Box::new(openssl::OpenSSLDigest::new(t)) as Box<Digest + Send>,
     }
 }
