@@ -39,7 +39,7 @@ use clap::{App, Arg};
 
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::env;
-// use std::time::Duration;
+use std::time::Duration;
 
 use coio::Scheduler;
 
@@ -272,12 +272,11 @@ fn main() {
                          .ok()
                          .expect("`threads` should be an integer");
 
-    // let enabled_printing_work_count = matches.occurrences_of("VERBOSE") >= 2;
+    let enabled_printing_work_count = matches.occurrences_of("VERBOSE") >= 2;
     Scheduler::new()
         .with_workers(threads)
         .default_stack_size(64 * 1024)
         .run(move || {
-            /*
             if enabled_printing_work_count {
                 Scheduler::spawn(move || {
                     loop {
@@ -287,7 +286,6 @@ fn main() {
                     }
                 });
             }
-            */
 
             RelayLocal::new(config).run();
         })
