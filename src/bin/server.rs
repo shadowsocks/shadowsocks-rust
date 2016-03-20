@@ -139,6 +139,30 @@ fn main() {
             log_builder.filter(Some("ssserver"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         }
+        3 => {
+            let mut log_builder = log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] [{}] {}",
+                        time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(),
+                        record.location().module_path(),
+                        record.args())
+            });
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
+                       .filter(Some("shadowsocks"), LogLevelFilter::Trace)
+                       .filter(Some("coio"), LogLevelFilter::Trace);
+        }
+        4 => {
+            let mut log_builder = log_builder.format(|record: &LogRecord| {
+                format!("[{}][{}] [{}] {}",
+                        time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
+                        record.level(),
+                        record.location().module_path(),
+                        record.args())
+            });
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
+                       .filter(Some("shadowsocks"), LogLevelFilter::Trace)
+                       .filter(Some("coio"), LogLevelFilter::Trace);
+        }
         _ => {
             let mut log_builder = log_builder.format(|record: &LogRecord| {
                 format!("[{}][{}] [{}] {}",
