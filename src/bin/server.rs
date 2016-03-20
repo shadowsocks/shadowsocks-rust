@@ -37,7 +37,6 @@ extern crate coio;
 extern crate env_logger;
 
 use std::env;
-use std::time::Duration;
 
 use clap::{App, Arg};
 
@@ -276,21 +275,10 @@ fn main() {
                          .ok()
                          .expect("`threads` should be an integer");
 
-    let enabled_printing_work_count = matches.occurrences_of("VERBOSE") >= 2;
     Scheduler::new()
         .with_workers(threads)
         .default_stack_size(64 * 1024)
         .run(move || {
-            if enabled_printing_work_count {
-                Scheduler::spawn(move || {
-                    loop {
-                        coio::sleep(Duration::from_secs(5));
-                        debug!("Running coroutines: {}",
-                               Scheduler::instance().map(|s| s.work_count()).unwrap());
-                    }
-                });
-            }
-
             RelayServer::new(config).run();
         })
         .unwrap();
