@@ -4,7 +4,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/qx3wfyjxxuokvyrs?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 
-This is a port of [shadowsocks](https://github.com/clowwindy/shadowsocks).
+This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
@@ -57,7 +57,7 @@ Create a shadowsocks' configuration file. Example
 }
 ```
 
-Detailed explaination could be found in [shadowsocks' documentation](https://github.com/clowwindy/shadowsocks/wiki).
+Detailed explaination could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki).
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one servers:
 
@@ -127,7 +127,7 @@ Currently it uses [coio-rs](https://github.com/zonyitoo/coio-rs) as the backend 
 
 ## License
 
-[The MIT License (MIT)](http://opensource.org/licenses/MIT)
+[The MIT License (MIT)](https://opensource.org/licenses/MIT)
 
 Copyright (c) 2014 Y. T. CHUNG
 
