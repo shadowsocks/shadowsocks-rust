@@ -277,7 +277,7 @@ fn main() {
 
     Scheduler::new()
         .with_workers(threads)
-        .default_stack_size(64 * 1024)
+        .default_stack_size(128 * 1024)
         .run(move || {
             RelayServer::new(config).run();
         })
