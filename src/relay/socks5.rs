@@ -28,7 +28,7 @@ use std::vec;
 use std::error;
 use std::convert::From;
 
-use byteorder::{self, ReadBytesExt, WriteBytesExt, BigEndian};
+use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
 const SOCKS5_VERSION : u8 = 0x05;
 
@@ -175,13 +175,6 @@ impl error::Error for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
-    }
-}
-
-impl From<byteorder::Error> for Error {
-    fn from(err: byteorder::Error) -> Error {
-        let io_err: io::Error = <io::Error as From<byteorder::Error>>::from(err);
-        <Error as From<io::Error>>::from(io_err)
     }
 }
 
@@ -391,61 +384,19 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                     try!(buf.write_all(&addr.ip().octets()));
                 },
                 SocketAddr::V6(addr) => {
-                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6).map_err(|err| {
-                        match err {
-                            byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                            },
-                            byteorder::Error::Io(err) => err
-                        }
-                    }));
+                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6));
                     for seg in addr.ip().segments().iter() {
-                        try!(buf.write_u16::<BigEndian>(*seg).map_err(|err| {
-                            match err {
-                                byteorder::Error::UnexpectedEOF => {
-                                    io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                                },
-                                byteorder::Error::Io(err) => err
-                            }
-                        }));
+                        try!(buf.write_u16::<BigEndian>(*seg));
                     }
                 }
             }
-            try!(buf.write_u16::<BigEndian>(addr.port()).map_err(|err| {
-                        match err {
-                            byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                            },
-                            byteorder::Error::Io(err) => err
-                        }
-                    }));
+            try!(buf.write_u16::<BigEndian>(addr.port()));
         },
         &Address::DomainNameAddress(ref dnaddr, port) => {
-            try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME).map_err(|err| {
-                        match err {
-                            byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                            },
-                            byteorder::Error::Io(err) => err
-                        }
-                    }));
-            try!(buf.write_u8(dnaddr.len() as u8).map_err(|err| {
-                        match err {
-                            byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                            },
-                            byteorder::Error::Io(err) => err
-                        }
-                    }));
+            try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
+            try!(buf.write_u8(dnaddr.len() as u8));
             try!(buf.write_all(dnaddr[..].as_bytes()));
-            try!(buf.write_u16::<BigEndian>(port).map_err(|err| {
-                        match err {
-                            byteorder::Error::UnexpectedEOF => {
-                                io::Error::new(io::ErrorKind::Other, "Unexpected EOF")
-                            },
-                            byteorder::Error::Io(err) => err
-                        }
-                    }));
+            try!(buf.write_u16::<BigEndian>(port));
         }
     }
 

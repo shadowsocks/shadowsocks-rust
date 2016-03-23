@@ -50,7 +50,7 @@ path = "src/bin/ssurl.rs"
 [dependencies]
 rustc-serialize = "^0.3.15"
 log = "^0.3.1"
-byteorder = "^0.3.11"
+byteorder = "^0.5.0"
 rand = "^0.3.9"
 time = "^0.1.32"
 clap = "^1.1.6"
