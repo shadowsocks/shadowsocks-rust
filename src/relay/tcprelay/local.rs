@@ -99,7 +99,7 @@ impl TcpRelayLocal {
         let sockname = match stream.peer_addr() {
             Ok(sockname) => sockname,
             Err(err) => {
-                error!("Failed to get peer addr: {:?}", err);
+                error!("Failed to get peer addr: {}", err);
                 return;
             }
         };
@@ -107,7 +107,7 @@ impl TcpRelayLocal {
         let local_reader = match stream.try_clone() {
             Ok(s) => s,
             Err(err) => {
-                error!("Failed to clone local stream: {:?}", err);
+                error!("Failed to clone local stream: {}", err);
                 return;
             }
         };
@@ -115,12 +115,12 @@ impl TcpRelayLocal {
         let mut local_writer = BufWriter::new(stream);
 
         if let Err(err) = TcpRelayLocal::do_handshake(&mut local_reader, &mut local_writer) {
-            error!("Error occurs while doing handshake: {:?}", err);
+            error!("Error occurs while doing handshake: {}", err);
             return;
         }
 
         if let Err(err) = local_writer.flush() {
-            error!("Error occurs while flushing local writer: {:?}", err);
+            error!("Error occurs while flushing local writer: {}", err);
             return;
         }
 
@@ -131,7 +131,7 @@ impl TcpRelayLocal {
                                                             socks5::Address::SocketAddress(sockname));
                 error!("Failed to read request header: {}", err);
                 if let Err(err) = header.write_to(&mut local_writer) {
-                    error!("Failed to write response header to local stream: {:?}", err);
+                    error!("Failed to write response header to local stream: {}", err);
                 }
                 return;
             }
@@ -173,7 +173,7 @@ impl TcpRelayLocal {
                                                                 socks5::Address::SocketAddress(sockname));
                     trace!("Send header to client {:?}", header);
                     if let Err(err) = header.write_to(&mut local_writer).and_then(|_| local_writer.flush()) {
-                        error!("Error occurs while writing header to local stream: {:?}", err);
+                        error!("Error occurs while writing header to local stream: {}", err);
                         return;
                     }
                 }
@@ -186,14 +186,14 @@ impl TcpRelayLocal {
                                                       &local_iv[..],
                                                       CryptoMode::Encrypt);
                     if let Err(err) = remote_stream.write_all(&local_iv[..]) {
-                        error!("Error occurs while writing initialize vector: {:?}", err);
+                        error!("Error occurs while writing initialize vector: {}", err);
                         return;
                     }
 
                     let remote_writer = match remote_stream.try_clone() {
                         Ok(s) => s,
                         Err(err) => {
-                            error!("Error occurs while cloning remote stream: {:?}", err);
+                            error!("Error occurs while cloning remote stream: {}", err);
                             return;
                         }
                     };
@@ -205,7 +205,7 @@ impl TcpRelayLocal {
                 addr.write_to(&mut addr_buf).unwrap();
                 // if let Err(err) = addr.write_to(&mut encrypt_stream) {
                 if let Err(err) = encrypt_stream.write_all(&addr_buf) {
-                    error!("Error occurs while writing address: {:?}", err);
+                    error!("Error occurs while writing address: {}", err);
                     return;
                 }
 
@@ -250,7 +250,7 @@ impl TcpRelayLocal {
                                 },
                                 Ok(n) => total_len += n,
                                 Err(err) => {
-                                    error!("Error while reading initialize vector: {:?}", err);
+                                    error!("Error while reading initialize vector: {}", err);
                                     let _ = local_writer.get_ref().shutdown(Shutdown::Both);
                                     return;
                                 }
@@ -267,7 +267,7 @@ impl TcpRelayLocal {
                     let mut local_writer = match local_writer.into_inner() {
                         Ok(writer) => writer,
                         Err(err) => {
-                            error!("Error occurs while taking out local writer: {:?}", err);
+                            error!("Error occurs while taking out local writer: {}", err);
                             return;
                         }
                     };
@@ -298,18 +298,18 @@ impl TcpRelayLocal {
                 warn!("BIND is not supported");
                 socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                     .write_to(&mut local_writer)
-                    .unwrap_or_else(|err| error!("Failed to write BIND response: {:?}", err));
+                    .unwrap_or_else(|err| error!("Failed to write BIND response: {}", err));
             },
             socks5::Command::UdpAssociate => {
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
                     TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr, local_conf)
-                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {:?}", err));
+                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {}", err));
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
                     socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                         .write_to(&mut local_writer)
-                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {:?}", err));
+                        .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {}", err));
                 }
             }
         }

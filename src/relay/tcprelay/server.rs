@@ -53,7 +53,7 @@ impl TcpRelayServer {
 
     fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
         let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
-                           .unwrap_or_else(|err| panic!("Failed to bind: {:?}", err));
+                           .unwrap_or_else(|err| panic!("Failed to bind a UDP socket: {}", err));
 
         info!("Shadowsocks listening on {}:{}", s.addr, s.port);
 
@@ -69,18 +69,18 @@ impl TcpRelayServer {
                     s
                 }
                 Err(err) => {
-                    error!("Error occurs while accepting: {:?}", err);
+                    error!("Error occurs while accepting: {}", err);
                     continue;
                 }
             };
 
             if let Err(err) = stream.set_keepalive(timeout) {
-                error!("Failed to set keep alive: {:?}", err);
+                error!("Failed to set keep alive: {}", err);
                 continue;
             }
 
             if let Err(err) = stream.set_nodelay(true) {
-                error!("Failed to set no delay: {:?}", err);
+                error!("Failed to set no delay: {}", err);
                 continue;
             }
 
@@ -105,7 +105,7 @@ impl TcpRelayServer {
                             }
                             Ok(n) => total_len += n,
                             Err(err) => {
-                                error!("Error while reading initialize vector: {:?}", err);
+                                error!("Error while reading initialize vector: {}", err);
                                 return;
                             }
                         }
@@ -120,7 +120,7 @@ impl TcpRelayServer {
                 let client_reader = match stream.try_clone() {
                     Ok(s) => s,
                     Err(err) => {
-                        error!("Error occurs while cloning client stream: {:?}", err);
+                        error!("Error occurs while cloning client stream: {}", err);
                         return;
                     }
                 };
@@ -132,7 +132,7 @@ impl TcpRelayServer {
                                                   &iv[..],
                                                   CryptoMode::Encrypt);
                 if let Err(err) = client_writer.write_all(&iv[..]) {
-                    error!("Error occurs while writing initialize vector: {:?}", err);
+                    error!("Error occurs while writing initialize vector: {}", err);
                     return;
                 }
 
@@ -216,7 +216,7 @@ impl TcpRelayServer {
                 let mut remote_writer = match remote_stream.try_clone() {
                     Ok(s) => s,
                     Err(err) => {
-                        error!("Error occurs while cloning remote stream: {:?}", err);
+                        error!("Error occurs while cloning remote stream: {}", err);
                         return;
                     }
                 };
