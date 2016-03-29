@@ -310,7 +310,7 @@ impl TcpRelayServer {
         let mut futs = Vec::with_capacity(self.config.server.len());
         let forbidden_ip = Arc::new(self.config.forbidden_ip.clone());
 
-        for s in self.config.server.iter() {
+        for s in &self.config.server {
             let s = s.clone();
             let forbidden_ip = forbidden_ip.clone();
             let fut = Scheduler::spawn(move || {

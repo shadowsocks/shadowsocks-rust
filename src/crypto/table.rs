@@ -60,8 +60,8 @@ impl TableCipher {
                 CryptoMode::Decrypt => {
                     let mut t = Vec::with_capacity(table.len());
                     unsafe { t.set_len(table.len()); }
-                    for idx in 0..table.len() {
-                        t[table[idx] as usize] = idx as u8;
+                    for (idx, &item) in table.iter().enumerate() {
+                        t[item as usize] = idx as u8;
                     }
                     t
                 }
