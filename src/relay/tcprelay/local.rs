@@ -25,6 +25,7 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
 use std::io::{self, BufWriter, BufReader, ErrorKind, Read, Write};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use coio::Scheduler;
 use coio::net::{TcpListener, TcpStream, Shutdown};
@@ -41,7 +42,7 @@ use crypto::CryptoMode;
 
 #[derive(Clone)]
 pub struct TcpRelayLocal {
-    config: Config,
+    config: Arc<Config>,
 }
 
 impl TcpRelayLocal {
@@ -51,7 +52,7 @@ impl TcpRelayLocal {
         }
 
         TcpRelayLocal {
-            config: c,
+            config: Arc::new(c),
         }
     }
 
@@ -95,7 +96,7 @@ impl TcpRelayLocal {
                      password: Vec<u8>,
                      encrypt_method: CipherType,
                      enable_udp: bool,
-                     local_conf: ClientConfig) {
+                     conf: Arc<Config>) {
         let sockname = match stream.peer_addr() {
             Ok(sockname) => sockname,
             Err(err) => {
@@ -166,6 +167,11 @@ impl TcpRelayLocal {
                     },
                     Ok(s) => { s },
                 };
+
+                if let Err(err) = remote_stream.set_read_timeout(conf.timeout) {
+                    error!("Failed to set read timeout: {:?}", err);
+                    return;
+                }
 
                 // Send header to client
                 {
@@ -303,7 +309,7 @@ impl TcpRelayLocal {
             socks5::Command::UdpAssociate => {
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
-                    TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr, local_conf)
+                    TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr, conf.local.unwrap())
                         .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {}", err));
                 } else {
                     warn!("UDP ASSOCIATE is disabled");
@@ -334,7 +340,7 @@ impl TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, SocketAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let stream = match s {
+            let mut stream = match s {
                 Ok((s, addr)) => {
                     debug!("Got connection from client {:?}", addr);
                     s
@@ -344,8 +350,9 @@ impl TcpRelayLocal {
                     continue;
                 }
             };
-            if let Err(err) = stream.set_keepalive(self.config.timeout) {
-                error!("Failed to set keep alive: {:?}", err);
+
+            if let Err(err) = stream.set_read_timeout(self.config.timeout) {
+                error!("Failed to set read timeout: {:?}", err);
                 continue;
             }
 
@@ -405,15 +412,15 @@ impl TcpRelayLocal {
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
-                let local_conf = local_conf.clone();
 
+                let conf = self.config.clone();
                 Scheduler::spawn(move ||
                     TcpRelayLocal::handle_client(stream,
                                                  server_addr,
                                                  pwd,
                                                  encrypt_method,
                                                  enable_udp,
-                                                 local_conf));
+                                                 conf));
                 succeed = true;
                 break;
             }

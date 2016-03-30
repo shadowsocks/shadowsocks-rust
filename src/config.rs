@@ -75,6 +75,7 @@ use std::default::Default;
 use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
 use std::collections::HashSet;
+use std::time::Duration;
 
 use ip::IpAddr;
 
@@ -90,7 +91,7 @@ pub struct ServerConfig {
     pub port: u16,
     pub password: String,
     pub method: CipherType,
-    pub timeout: Option<u32>,
+    pub timeout: Option<Duration>,
     pub dns_cache_capacity: usize,
 }
 
@@ -116,7 +117,7 @@ impl json::ToJson for ServerConfig {
         obj.insert("password".to_owned(), Json::String(self.password.clone()));
         obj.insert("method".to_owned(), Json::String(self.method.to_string()));
         if let Some(t) = self.timeout {
-            obj.insert("timeout".to_owned(), Json::U64(t as u64));
+            obj.insert("timeout".to_owned(), Json::U64(t.as_secs()));
         }
         obj.insert("dns_cache_capacity".to_owned(),
                    Json::U64(self.dns_cache_capacity as u64));
@@ -140,7 +141,7 @@ pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
-    pub timeout: Option<u32>,
+    pub timeout: Option<Duration>,
     pub forbidden_ip: HashSet<IpAddr>,
 }
 
@@ -201,10 +202,11 @@ impl Config {
 
         config.timeout = match o.get("timeout") {
             Some(t_str) => {
-                Some(try!(t_str.as_u64()
-                               .ok_or(Error::new(ErrorKind::Malformed,
-                                                 "`timeout` should be an integer",
-                                                 None))) as u32)
+                let val = try!(t_str.as_u64()
+                                    .ok_or(Error::new(ErrorKind::Malformed,
+                                                      "`timeout` should be an integer",
+                                                      None)));
+                Some(Duration::from_secs(val))
             }
             None => None,
         };
@@ -262,10 +264,13 @@ impl Config {
                                   .to_string(),
                     method: method,
                     timeout: match server.find("timeout") {
-                        Some(t) => Some(try!(t.as_u64()
-                                              .ok_or(Error::new(ErrorKind::Malformed,
-                                                                "`timeout` should be an integer",
-                                                                None))) as u32),
+                        Some(t) => {
+                            let val = try!(t.as_u64()
+                                            .ok_or(Error::new(ErrorKind::Malformed,
+                                                              "`timeout` should be an integer",
+                                                              None)));
+                            Some(Duration::from_secs(val))
+                        }
                         None => None,
                     },
                     dns_cache_capacity: match server.find("dns_cache_capacity") {
@@ -333,10 +338,11 @@ impl Config {
                 method: method,
                 timeout: match o.get("timeout") {
                     Some(t) => {
-                        Some(try!(t.as_u64()
-                                   .ok_or(Error::new(ErrorKind::Malformed,
-                                                     "`timeout` should be an integer",
-                                                     None))) as u32)
+                        let val = try!(t.as_u64()
+                                        .ok_or(Error::new(ErrorKind::Malformed,
+                                                          "`timeout` should be an integer",
+                                                          None)));
+                        Some(Duration::from_secs(val))
                     }
                     None => None,
                 },
@@ -508,7 +514,7 @@ impl json::ToJson for Config {
             obj.insert("method".to_owned(),
                        Json::String(self.server[0].method.to_string()));
             if let Some(t) = self.server[0].timeout {
-                obj.insert("timeout".to_owned(), Json::U64(t as u64));
+                obj.insert("timeout".to_owned(), Json::U64(t.as_secs()));
             }
         } else {
             let arr: json::Array = self.server.iter().map(|s| s.to_json()).collect();

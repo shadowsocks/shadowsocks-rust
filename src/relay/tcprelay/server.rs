@@ -74,8 +74,8 @@ impl TcpRelayServer {
                 }
             };
 
-            if let Err(err) = stream.set_keepalive(timeout) {
-                error!("Failed to set keep alive: {}", err);
+            if let Err(err) = stream.set_read_timeout(timeout) {
+                error!("Failed to set read timeout: {:?}", err);
                 continue;
             }
 
