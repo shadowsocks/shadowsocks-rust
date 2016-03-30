@@ -98,7 +98,7 @@ impl UdpRelayServer {
                                             return;
                                         }
 
-                                        response_buf.extend(&data[..]);
+                                        response_buf.extend_from_slice(&data);
 
                                         let key = method.bytes_to_key(password.as_bytes());
                                         let mut iv = method.gen_init_vec();
@@ -221,7 +221,7 @@ impl UdpRelayServer {
 impl UdpRelayServer {
     pub fn run(&self) {
         let forbidden_ip = Arc::new(self.config.forbidden_ip.clone());
-        for s in self.config.server.iter() {
+        for s in &self.config.server {
             let s = s.clone();
             let forbidden_ip = forbidden_ip.clone();
             Scheduler::spawn(move || UdpRelayServer::accept_loop(s, forbidden_ip));

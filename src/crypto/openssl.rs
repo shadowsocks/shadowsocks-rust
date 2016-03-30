@@ -69,13 +69,13 @@ impl OpenSSLCrypto {
 
     pub fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         let output = self.inner.update(data);
-        out.extend(output.into_iter());
+        out.extend_from_slice(&output);
         Ok(())
     }
 
     pub fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
         let output = self.inner.finalize();
-        out.extend(output.into_iter());
+        out.extend_from_slice(&output);
         Ok(())
     }
 }

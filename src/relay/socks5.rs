@@ -385,7 +385,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                 },
                 SocketAddr::V6(addr) => {
                     try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6));
-                    for seg in addr.ip().segments().iter() {
+                    for seg in &addr.ip().segments() {
                         try!(buf.write_u16::<BigEndian>(*seg));
                     }
                 }

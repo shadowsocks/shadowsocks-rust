@@ -199,7 +199,7 @@ impl Config {
     fn parse_json_object(o: &json::Object, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
 
-        config.timeout = match o.get(&"timeout".to_string()) {
+        config.timeout = match o.get("timeout") {
             Some(t_str) => {
                 Some(try!(t_str.as_u64()
                                .ok_or(Error::new(ErrorKind::Malformed,
@@ -209,8 +209,8 @@ impl Config {
             None => None,
         };
 
-        if o.contains_key(&"servers".to_string()) {
-            let server_list = try!(o.get(&"servers".to_string())
+        if o.contains_key("servers") {
+            let server_list = try!(o.get("servers")
                                     .unwrap()
                                     .as_array()
                                     .ok_or(Error::new(ErrorKind::Malformed,
@@ -283,11 +283,10 @@ impl Config {
                 config.server.push(cfg);
             }
 
-        } else if o.contains_key(&"server".to_string()) && o.contains_key(&"server_port".to_string()) &&
-           o.contains_key(&"password".to_string()) &&
-           o.contains_key(&"method".to_string()) {
+        } else if o.contains_key("server") && o.contains_key("server_port") &&
+           o.contains_key("password") && o.contains_key("method") {
             // Traditional configuration file
-            let method_o = try!(o.get(&"method".to_string())
+            let method_o = try!(o.get("method")
                                  .ok_or(Error::new(ErrorKind::MissingField,
                                                    "need to specify method",
                                                    None)));
@@ -303,7 +302,7 @@ impl Config {
                                                                      method",
                                                                     method_str)))
                                         }));
-            let addr_o = try!(o.get(&"server".to_string())
+            let addr_o = try!(o.get("server")
                                .ok_or(Error::new(ErrorKind::MissingField,
                                                  "need to specify server address",
                                                  None)));
@@ -356,11 +355,11 @@ impl Config {
         }
 
         if require_local_info {
-            let has_local_address = o.contains_key(&"local_address".to_string());
-            let has_local_port = o.contains_key(&"local_port".to_string());
+            let has_local_address = o.contains_key("local_address");
+            let has_local_port = o.contains_key("local_port");
 
             if has_local_address && has_local_port {
-                config.local = match o.get(&"local_address".to_string()) {
+                config.local = match o.get("local_address") {
                     Some(local_addr) => {
                         let addr_str = try!(local_addr.as_string()
                                                       .ok_or(Error::new(ErrorKind::Malformed,
@@ -369,7 +368,7 @@ impl Config {
                                                                         None)));
 
                         let port =
-                            try!(o.get(&"local_port".to_string())
+                            try!(o.get("local_port")
                                   .unwrap()
                                   .as_u64()
                                   .ok_or(Error::new(ErrorKind::Malformed,

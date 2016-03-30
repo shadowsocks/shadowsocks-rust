@@ -97,7 +97,7 @@ impl UdpRelayLocal {
         let (server_set, server_addr) = {
             let mut server_set = HashMap::new();
             let mut server_addr = HashMap::new();
-            for s in self.config.server.iter() {
+            for s in &self.config.server {
                 let addrs = match lookup_host(&s.addr[..]) {
                     Ok(addr) => addr,
                     Err(..) => continue,
