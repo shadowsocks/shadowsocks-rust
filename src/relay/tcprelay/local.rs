@@ -168,11 +168,6 @@ impl TcpRelayLocal {
                     Ok(s) => { s },
                 };
 
-                if let Err(err) = remote_stream.set_read_timeout(conf.timeout) {
-                    error!("Failed to set read timeout: {:?}", err);
-                    return;
-                }
-
                 // Send header to client
                 {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
