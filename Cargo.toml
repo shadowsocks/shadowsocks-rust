@@ -63,5 +63,5 @@ lru-cache = "0.0.7"
 libc = "^0.2.7"
 
 [dependencies.coio]
-# git = "https://github.com/zonyitoo/coio-rs.git"
-path = "../coio-rs"
+git = "https://github.com/zonyitoo/coio-rs.git"
+branch = "feature-timeout"
