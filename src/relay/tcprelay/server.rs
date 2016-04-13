@@ -53,7 +53,7 @@ impl TcpRelayServer {
 
     fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
         let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
-                           .unwrap_or_else(|err| panic!("Failed to bind a UDP socket: {}", err));
+                           .unwrap_or_else(|err| panic!("Failed to bind a TCP socket: {}", err));
 
         info!("Shadowsocks listening on {}:{}", s.addr, s.port);
 
