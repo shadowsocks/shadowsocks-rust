@@ -37,6 +37,7 @@ extern crate coio;
 extern crate env_logger;
 
 use std::env;
+use std::time::Duration;
 
 use clap::{App, Arg};
 
@@ -44,6 +45,7 @@ use coio::Scheduler;
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
+use time::PreciseTime;
 
 use shadowsocks::config::{self, Config, ServerConfig};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
@@ -275,10 +277,21 @@ fn main() {
                          .ok()
                          .expect("`threads` should be an integer");
 
+    let show_run_time = matches.occurrences_of("VERBOSE") >= 2;
     Scheduler::new()
         .with_workers(threads)
         .default_stack_size(128 * 1024)
         .run(move || {
+            if show_run_time {
+                let start_time = PreciseTime::now();
+                Scheduler::spawn(move|| {
+                    loop {
+                        info!("SYSTEM System has already run {}", start_time.to(PreciseTime::now()));
+                        coio::sleep(Duration::from_secs(5));
+                    }
+                });
+            }
+
             RelayServer::new(config).run();
         })
         .unwrap();
