@@ -58,7 +58,7 @@ fn copy<R: Read, W: Write>(r: &mut R, w: &mut W, prefix: &str) -> io::Result<u64
             }
         };
         trace!("{}: Read {} bytes from reader", prefix, len);
-        match w.write_all(&buf[..len]) {
+        match w.write_all(&buf[..len]).and_then(|_| w.flush()) {
             Ok(..) => {},
             Err(err) => {
                 trace!("{}: Error from writer {:?}", prefix, err);
