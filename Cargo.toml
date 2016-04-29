@@ -64,4 +64,4 @@ libc = "^0.2.7"
 
 [dependencies.coio]
 git = "https://github.com/zonyitoo/coio-rs.git"
-branch = "feature-timeout"
+branch = "io-timeouts"

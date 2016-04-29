@@ -335,7 +335,7 @@ impl TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, SocketAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let mut stream = match s {
+            let stream = match s {
                 Ok((s, addr)) => {
                     debug!("Got connection from client {:?}", addr);
                     s
