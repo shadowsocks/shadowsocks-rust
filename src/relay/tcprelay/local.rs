@@ -371,7 +371,7 @@ impl TcpRelayLocal {
                                             continue;
                                         },
                                         Some(addr) => {
-                                            let addr = addr.unwrap().clone();
+                                            let addr = addr.clone();
                                             cached_proxy.insert(server_cfg.addr.clone(), addr.clone());
                                             addr
                                         }

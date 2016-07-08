@@ -23,7 +23,6 @@ use std::sync::Arc;
 // use std::sync::atomic::{AtomicOption, SeqCst};
 use std::net::lookup_host;
 use std::net::SocketAddr;
-use std::io;
 
 use coio::sync::Mutex;
 
@@ -57,19 +56,23 @@ impl CachedDns {
                 Some(addrs) => {
                     cache.totally_matched += 1;
                     debug!("DNS cache matched!: {}", addr_str);
-                    debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
-                    return Some(addrs)
-                },
+                    debug!("DNS cache matched: {}, missed: {}",
+                           cache.totally_matched,
+                           cache.totally_missed);
+                    return Some(addrs);
+                }
                 None => {
                     cache.totally_missed += 1;
                     debug!("DNS cache missed!: {}", addr_str);
-                    debug!("DNS cache matched: {}, missed: {}", cache.totally_matched, cache.totally_missed);
+                    debug!("DNS cache matched: {}, missed: {}",
+                           cache.totally_matched,
+                           cache.totally_missed);
                 }
             }
         }
 
-        let addrs = match lookup_host(addr_str) {
-            Ok(addrs) => addrs,
+        let addr_vec = match lookup_host(addr_str) {
+            Ok(addrs) => addrs.collect::<Vec<SocketAddr>>(),
             Err(err) => {
                 error!("Failed to resolve {}: {}", addr_str, err);
                 return None;
@@ -78,19 +81,8 @@ impl CachedDns {
 
         let cloned_mutex = self.lru_cache.clone();
 
-        let mut addr_vec = Vec::new();
-        let mut last_err: io::Result<()> = Ok(());
-        for sock_addr in addrs {
-            match sock_addr {
-                Ok(addr) => {
-                    addr_vec.push(addr);
-                },
-                Err(err) => last_err = Err(err),
-            }
-        }
-
-        if addr_vec.is_empty() && last_err.is_err() {
-            error!("Failed to resolve {}: {:?}", addr_str, last_err.unwrap_err());
+        if addr_vec.is_empty() {
+            error!("Failed to resolve {}", addr_str);
             return None;
         }
         let cloned_addrs = addr_vec.clone();

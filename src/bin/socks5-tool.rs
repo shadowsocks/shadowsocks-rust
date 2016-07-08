@@ -14,7 +14,7 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
 use std::io::Cursor;
 use std::io::stdout;
-use std::io::{Write, self};
+use std::io::{self, Write};
 
 use ip::IpAddr;
 
@@ -37,7 +37,7 @@ fn do_tcp(svr_addr: &Address, proxy_addr: &SocketAddr, msg: &str) {
 
     let resp_header = TcpResponseHeader::read_from(&mut proxy_stream).unwrap();
     match resp_header.reply {
-        Reply::Succeeded => {},
+        Reply::Succeeded => {}
         _ => {
             panic!("Failed with error {:?}", resp_header.reply);
         }
@@ -63,7 +63,7 @@ fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr, 
 
         let resp_header = TcpResponseHeader::read_from(&mut proxy_stream).unwrap();
         match resp_header.reply {
-            Reply::Succeeded => {},
+            Reply::Succeeded => {}
             _ => {
                 panic!("Failed with error {:?}", resp_header.reply);
             }
@@ -80,22 +80,17 @@ fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr, 
             let host = match lookup_host(&dm) {
                 Ok(mut hosts) => {
                     match hosts.next() {
-                        Some(h) => h.unwrap(),
+                        Some(h) => h,
                         None => panic!("No hosts could be found by {:?}", dm),
                     }
-                },
+                }
                 Err(err) => panic!("LookupHost: {:?}", err),
             };
 
             match host {
-                SocketAddr::V4(v4) => {
-                    SocketAddr::V4(SocketAddrV4::new(*v4.ip(), port))
-                }
+                SocketAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(*v4.ip(), port)),
                 SocketAddr::V6(v6) => {
-                    SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
-                                                     port,
-                                                     v6.flowinfo(),
-                                                     v6.scope_id()))
+                    SocketAddr::V6(SocketAddrV6::new(*v6.ip(), port, v6.flowinfo(), v6.scope_id()))
                 }
             }
         }
@@ -120,38 +115,50 @@ fn do_udp(svr_addr: &Address, proxy_addr: &SocketAddr, local_addr: &SocketAddr, 
 fn main() {
 
     let matches = App::new("socks5-tool")
-                    .author("Y. T. Chung <zonyitoo@gmail.com>")
-                    .about("Socks5 protocol test tool")
-                    .arg(Arg::with_name("SERVER_ADDR").short("s").long("server-addr")
-                            .takes_value(true)
-                            .required(true)
-                            .help("Server address"))
-                    .arg(Arg::with_name("SERVER_PORT").short("p").long("server-port")
-                            .takes_value(true)
-                            .required(true)
-                            .help("Server port"))
-                    .arg(Arg::with_name("PROXY_ADDR").short("x").long("proxy-addr")
-                            .takes_value(true)
-                            .required(true)
-                            .help("Proxy address"))
-                    .arg(Arg::with_name("LOCAL_ADDR").short("b").long("local-addr")
-                            .takes_value(true)
-                            .required(false)
-                            .help("Local address"))
-                    .arg(Arg::with_name("PROTOCOL").short("t").long("protocol")
-                            .takes_value(true)
-                            .required(true)
-                            .help("Protocol to use"))
-                    .arg(Arg::with_name("MESSAGE").short("m").long("message")
-                            .takes_value(true)
-                            .required(true)
-                            .help("Message to be sent"))
-                    .get_matches();
+        .author("Y. T. Chung <zonyitoo@gmail.com>")
+        .about("Socks5 protocol test tool")
+        .arg(Arg::with_name("SERVER_ADDR")
+            .short("s")
+            .long("server-addr")
+            .takes_value(true)
+            .required(true)
+            .help("Server address"))
+        .arg(Arg::with_name("SERVER_PORT")
+            .short("p")
+            .long("server-port")
+            .takes_value(true)
+            .required(true)
+            .help("Server port"))
+        .arg(Arg::with_name("PROXY_ADDR")
+            .short("x")
+            .long("proxy-addr")
+            .takes_value(true)
+            .required(true)
+            .help("Proxy address"))
+        .arg(Arg::with_name("LOCAL_ADDR")
+            .short("b")
+            .long("local-addr")
+            .takes_value(true)
+            .required(false)
+            .help("Local address"))
+        .arg(Arg::with_name("PROTOCOL")
+            .short("t")
+            .long("protocol")
+            .takes_value(true)
+            .required(true)
+            .help("Protocol to use"))
+        .arg(Arg::with_name("MESSAGE")
+            .short("m")
+            .long("message")
+            .takes_value(true)
+            .required(true)
+            .help("Message to be sent"))
+        .get_matches();
 
     let is_tcp = match matches.value_of("PROTOCOL").unwrap() {
         "tcp" => true,
         "udp" => false,
-        protocol => panic!("Unsupported protocol {:?}", protocol)
+        protocol => panic!("Unsupported protocol {:?}", protocol),
     };
 
     let proxy_addr: SocketAddr = matches.value_of("PROXY_ADDR").unwrap().parse().unwrap();
@@ -161,10 +168,8 @@ fn main() {
     let svr_addr = match svr_addr_str.parse::<IpAddr>() {
         Ok(ip) => {
             let addr = match ip {
-                IpAddr::V4(v4) =>
-                    SocketAddr::V4(SocketAddrV4::new(v4, svr_port)),
-                IpAddr::V6(v6) =>
-                    SocketAddr::V6(SocketAddrV6::new(v6, svr_port, 0, 0)),
+                IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, svr_port)),
+                IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, svr_port, 0, 0)),
             };
 
             Address::SocketAddress(addr)

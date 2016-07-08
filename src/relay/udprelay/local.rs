@@ -104,30 +104,23 @@ impl UdpRelayLocal {
                 };
 
                 for addr in addrs {
-                    match addr {
-                        Ok(addr) => {
-                            let addr = match addr {
-                                SocketAddr::V4(v4) => {
-                                    SocketAddr::V4(SocketAddrV4::new(*v4.ip(), s.port))
-                                }
-                                SocketAddr::V6(v6) => {
-                                    SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
-                                                                     s.port,
-                                                                     v6.flowinfo(),
-                                                                     v6.scope_id()))
-                                }
-                            };
-
-                            if self.config.forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
-                                info!("{} is in `forbidden_ip` list, skipping", addr);
-                                continue;
-                            }
-
-                            server_set.insert(addr.clone(), s.clone());
-                            server_addr.insert(s.addr.clone(), addr);
+                    let addr = match addr {
+                        SocketAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(*v4.ip(), s.port)),
+                        SocketAddr::V6(v6) => {
+                            SocketAddr::V6(SocketAddrV6::new(*v6.ip(),
+                                                             s.port,
+                                                             v6.flowinfo(),
+                                                             v6.scope_id()))
                         }
-                        _ => {}
+                    };
+
+                    if self.config.forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
+                        info!("{} is in `forbidden_ip` list, skipping", addr);
+                        continue;
                     }
+
+                    server_set.insert(addr.clone(), s.clone());
+                    server_addr.insert(s.addr.clone(), addr);
                 }
             }
             (server_set, server_addr)
@@ -178,13 +171,13 @@ impl UdpRelayLocal {
                                 Some(saddr) => {
                                     let saddr = saddr.clone();
                                     Scheduler::spawn(move || {
-                                            handle_request(move_socket,
-                                                           &request_message[..],
-                                                           source_addr,
-                                                           saddr,
-                                                           &s,
-                                                           client_map)
-                                        });
+                                        handle_request(move_socket,
+                                                       &request_message[..],
+                                                       source_addr,
+                                                       saddr,
+                                                       &s,
+                                                       client_map)
+                                    });
                                 }
                                 None => {}
                             }

@@ -25,7 +25,6 @@ use std::io::BufReader;
 
 use crypto::cipher::{Cipher, CipherResult};
 use crypto::digest;
-use crypto::digest::Digest;
 use crypto::digest::DigestType;
 use crypto::CryptoMode;
 
@@ -49,9 +48,7 @@ impl TableCipher {
         let mut table = (0..TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
 
         for i in 1..1024 {
-            table.as_mut_slice().sort_by(|x, y| {
-                (a % (*x + i)).cmp(&(a % (*y + i)))
-            })
+            table.as_mut_slice().sort_by(|x, y| (a % (*x + i)).cmp(&(a % (*y + i))))
         }
 
         TableCipher {
@@ -59,7 +56,9 @@ impl TableCipher {
                 CryptoMode::Encrypt => table.into_iter().map(|x| x as u8).collect(),
                 CryptoMode::Decrypt => {
                     let mut t = Vec::with_capacity(table.len());
-                    unsafe { t.set_len(table.len()); }
+                    unsafe {
+                        t.set_len(table.len());
+                    }
                     for (idx, &item) in table.iter().enumerate() {
                         t[item as usize] = idx as u8;
                     }

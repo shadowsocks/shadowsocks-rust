@@ -178,10 +178,10 @@ impl UdpRelayServer {
                                                     });
 
                                 let remote_addr = match ipaddrs.next() {
-                                    Some(Ok(SocketAddr::V4(addr))) => {
+                                    Some(SocketAddr::V4(addr)) => {
                                         SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), port))
                                     },
-                                    Some(Ok(SocketAddr::V6(addr))) => {
+                                    Some(SocketAddr::V6(addr)) => {
                                         SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
                                                                          port,
                                                                          addr.flowinfo(),
