@@ -341,8 +341,7 @@ impl TcpRelayLocal {
                     s
                 },
                 Err(err) => {
-                    error!("Error occurs while accepting: {:?}", err);
-                    continue;
+                    panic!("Error occurs while accepting: {:?}", err);
                 }
             };
 
