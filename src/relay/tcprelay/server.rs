@@ -119,14 +119,14 @@ impl TcpRelayServer {
                                                   &remote_iv[..],
                                                   CryptoMode::Decrypt);
 
-                let client_reader = match stream.try_clone() {
+                let mut client_writer = match stream.try_clone() {
                     Ok(s) => s,
                     Err(err) => {
                         error!("Error occurs while cloning client stream: {}", err);
                         return;
                     }
                 };
-                let mut client_writer = stream;
+                let client_reader = stream;
 
                 let iv = encrypt_method.gen_init_vec();
                 let encryptor = cipher::with_type(encrypt_method, &pwd[..], &iv[..], CryptoMode::Encrypt);

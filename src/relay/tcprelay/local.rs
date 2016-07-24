@@ -104,15 +104,15 @@ impl TcpRelayLocal {
             }
         };
 
-        let local_reader = match stream.try_clone() {
+        let stream_writer = match stream.try_clone() {
             Ok(s) => s,
             Err(err) => {
                 error!("Failed to clone local stream: {}", err);
                 return;
             }
         };
-        let mut local_reader = BufReader::new(local_reader);
-        let mut local_writer = BufWriter::new(stream);
+        let mut local_reader = BufReader::new(stream);
+        let mut local_writer = BufWriter::new(stream_writer);
 
         if let Err(err) = TcpRelayLocal::do_handshake(&mut local_reader, &mut local_writer) {
             error!("Error occurs while doing handshake: {}", err);
