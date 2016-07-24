@@ -51,9 +51,7 @@ impl TcpRelayLocal {
             panic!("You have to provide configuration for server and local");
         }
 
-        TcpRelayLocal {
-            config: Arc::new(c),
-        }
+        TcpRelayLocal { config: Arc::new(c) }
     }
 
     fn do_handshake<R: Read, W: Write>(reader: &mut R, writer: &mut W) -> io::Result<()> {
@@ -66,7 +64,8 @@ impl TcpRelayLocal {
             try!(resp.write_to(writer));
             warn!("Currently shadowsocks-rust does not support authentication");
             return Err(io::Error::new(io::ErrorKind::Other,
-                                      "Currently shadowsocks-rust does not support authentication"));
+                                      "Currently shadowsocks-rust does not support \
+                                       authentication"));
         }
 
         // Reply to client
@@ -79,7 +78,7 @@ impl TcpRelayLocal {
                                             _addr: SocketAddr,
                                             _dest_addr: &socks5::Address,
                                             local_conf: ClientConfig)
-            -> io::Result<()> {
+                                            -> io::Result<()> {
         let reply = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                    socks5::Address::SocketAddress(local_conf));
         trace!("Replying Header for UDP ASSOCIATE, {:?}", reply);
@@ -126,10 +125,9 @@ impl TcpRelayLocal {
         }
 
         let header = match socks5::TcpRequestHeader::read_from(&mut local_reader) {
-            Ok(h) => { h },
+            Ok(h) => h,
             Err(err) => {
-                let header = socks5::TcpResponseHeader::new(err.reply,
-                                                            socks5::Address::SocketAddress(sockname));
+                let header = socks5::TcpResponseHeader::new(err.reply, socks5::Address::SocketAddress(sockname));
                 error!("Failed to read request header: {}", err);
                 if let Err(err) = header.write_to(&mut local_writer) {
                     error!("Failed to write response header to local stream: {}", err);
@@ -149,13 +147,13 @@ impl TcpRelayLocal {
                 let mut remote_stream = match TcpStream::connect(&server_addr) {
                     Err(err) => {
                         match err.kind() {
-                            ErrorKind::ConnectionAborted
-                                | ErrorKind::ConnectionReset
-                                | ErrorKind::ConnectionRefused => {
+                            ErrorKind::ConnectionAborted |
+                            ErrorKind::ConnectionReset |
+                            ErrorKind::ConnectionRefused => {
                                 let header = socks5::TcpResponseHeader::new(socks5::Reply::HostUnreachable,
                                                                             addr.clone());
                                 let _ = header.write_to(&mut local_writer);
-                            },
+                            }
                             _ => {
                                 let header = socks5::TcpResponseHeader::new(socks5::Reply::NetworkUnreachable,
                                                                             addr.clone());
@@ -164,8 +162,8 @@ impl TcpRelayLocal {
                         }
                         error!("Failed to connect remote server: {}", err);
                         return;
-                    },
-                    Ok(s) => { s },
+                    }
+                    Ok(s) => s,
                 };
 
                 // Send header to client
@@ -173,7 +171,8 @@ impl TcpRelayLocal {
                     let header = socks5::TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                                 socks5::Address::SocketAddress(sockname));
                     trace!("Send header to client {:?}", header);
-                    if let Err(err) = header.write_to(&mut local_writer).and_then(|_| local_writer.flush()) {
+                    if let Err(err) = header.write_to(&mut local_writer)
+                        .and_then(|_| local_writer.flush()) {
                         error!("Error occurs while writing header to local stream: {}", err);
                         return;
                     }
@@ -214,15 +213,14 @@ impl TcpRelayLocal {
 
                 Scheduler::spawn(move || {
                     match relay::copy(&mut local_reader, &mut encrypt_stream, "Local to remote") {
-                        Ok(..) => {},
+                        Ok(..) => {}
                         Err(err) => {
                             match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}", addr_cloned, err)
-                                },
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}", addr_cloned, err)
+                                ErrorKind::BrokenPipe => debug!("{} local -> remote: {}", addr_cloned, err),
+                                ErrorKind::TimedOut => {
+                                    info!("SYSTEM Connect {} local -> remote is timedout", addr_cloned);
                                 }
+                                _ => error!("{} local -> remote: {}", addr_cloned, err),
                             }
                         }
                     }
@@ -233,7 +231,7 @@ impl TcpRelayLocal {
                     let _ = local_reader.get_ref().shutdown(Shutdown::Both);
                 });
 
-                Scheduler::spawn(move|| {
+                Scheduler::spawn(move || {
                     let remote_iv = {
                         let mut iv = Vec::with_capacity(encrypt_method.block_size());
                         unsafe {
@@ -248,7 +246,7 @@ impl TcpRelayLocal {
                                     debug!("Already read: {:?}", &iv[..total_len]);
                                     let _ = local_writer.get_ref().shutdown(Shutdown::Both);
                                     return;
-                                },
+                                }
                                 Ok(n) => total_len += n,
                                 Err(err) => {
                                     error!("Error while reading initialize vector: {}", err);
@@ -276,15 +274,12 @@ impl TcpRelayLocal {
                     match relay::copy(&mut decrypt_stream, &mut local_writer, "Remote to local") {
                         Err(err) => {
                             match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from remote to local stream: {}", addr, err)
-                                },
-                                _ => {
-                                    error!("{} relay from remote to local stream: {}", addr, err)
-                                }
+                                ErrorKind::BrokenPipe => debug!("{} local <- remote: {}", addr, err),
+                                ErrorKind::TimedOut => info!("SYSTEM Connect {} local <- remote is timedout", addr),
+                                _ => error!("{} local <- remote: {}", addr, err),
                             }
-                        },
-                        Ok(..) => {},
+                        }
+                        Ok(..) => {}
                     }
 
                     let _ = local_writer.flush();
@@ -294,13 +289,13 @@ impl TcpRelayLocal {
                     let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
                     let _ = local_writer.shutdown(Shutdown::Both);
                 });
-            },
+            }
             socks5::Command::TcpBind => {
                 warn!("BIND is not supported");
                 socks5::TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                     .write_to(&mut local_writer)
                     .unwrap_or_else(|err| error!("Failed to write BIND response: {}", err));
-            },
+            }
             socks5::Command::UdpAssociate => {
                 info!("{} requests for UDP ASSOCIATE", sockname);
                 if cfg!(feature = "enable-udp") && enable_udp {
@@ -326,7 +321,8 @@ impl TcpRelayLocal {
         let acceptor = match TcpListener::bind(&local_conf) {
             Ok(acpt) => acpt,
             Err(e) => {
-                panic!("Error occurs while listening local address: {}", e.to_string());
+                panic!("Error occurs while listening local address: {}",
+                       e.to_string());
             }
         };
 
@@ -339,7 +335,7 @@ impl TcpRelayLocal {
                 Ok((s, addr)) => {
                     debug!("Got connection from client {:?}", addr);
                     s
-                },
+                }
                 Err(err) => {
                     panic!("Error occurs while accepting: {:?}", err);
                 }
@@ -368,14 +364,14 @@ impl TcpRelayLocal {
                                         None => {
                                             error!("cannot resolve proxy server `{}`", server_cfg.addr);
                                             continue;
-                                        },
+                                        }
                                         Some(addr) => {
                                             let addr = addr.clone();
                                             cached_proxy.insert(server_cfg.addr.clone(), addr.clone());
                                             addr
                                         }
                                     }
-                                },
+                                }
                                 Err(err) => {
                                     error!("cannot resolve proxy server `{}`: {}", server_cfg.addr, err);
                                     continue;
@@ -386,9 +382,7 @@ impl TcpRelayLocal {
                 };
 
                 let server_addr = match addr {
-                    SocketAddr::V4(addr) => {
-                        SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), server_cfg.port))
-                    },
+                    SocketAddr::V4(addr) => SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), server_cfg.port)),
                     SocketAddr::V6(addr) => {
                         SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
                                                          server_cfg.port,
@@ -402,19 +396,18 @@ impl TcpRelayLocal {
                     continue;
                 }
 
-                debug!("Using proxy `{}:{}` (`{}`)", server_cfg.addr, server_cfg.port, server_addr);
+                debug!("Using proxy `{}:{}` (`{}`)",
+                       server_cfg.addr,
+                       server_cfg.port,
+                       server_addr);
                 let encrypt_method = server_cfg.method.clone();
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
                 let enable_udp = self.config.enable_udp;
 
                 let conf = self.config.clone();
-                Scheduler::spawn(move ||
-                    TcpRelayLocal::handle_client(stream,
-                                                 server_addr,
-                                                 pwd,
-                                                 encrypt_method,
-                                                 enable_udp,
-                                                 conf));
+                Scheduler::spawn(move || {
+                    TcpRelayLocal::handle_client(stream, server_addr, pwd, encrypt_method, enable_udp, conf)
+                });
                 succeed = true;
                 break;
             }

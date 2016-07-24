@@ -53,7 +53,7 @@ impl TcpRelayServer {
 
     fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
         let acceptor = TcpListener::bind(&(&s.addr[..], s.port))
-                           .unwrap_or_else(|err| panic!("Failed to bind a TCP socket: {}", err));
+            .unwrap_or_else(|err| panic!("Failed to bind a TCP socket: {}", err));
 
         info!("Shadowsocks listening on {}:{}", s.addr, s.port);
 
@@ -62,6 +62,9 @@ impl TcpRelayServer {
         let pwd = s.method.bytes_to_key(s.password.as_bytes());
         let timeout = s.timeout;
         let method = s.method;
+
+        info!("Method {}, Timeout: {:?}", method, timeout);
+
         for s in acceptor.incoming() {
             let mut stream = match s {
                 Ok((s, addr)) => {
@@ -126,10 +129,7 @@ impl TcpRelayServer {
                 let mut client_writer = stream;
 
                 let iv = encrypt_method.gen_init_vec();
-                let encryptor = cipher::with_type(encrypt_method,
-                                                  &pwd[..],
-                                                  &iv[..],
-                                                  CryptoMode::Encrypt);
+                let encryptor = cipher::with_type(encrypt_method, &pwd[..], &iv[..], CryptoMode::Encrypt);
                 if let Err(err) = client_writer.write_all(&iv[..]) {
                     error!("Error occurs while writing initialize vector: {}", err);
                     return;
@@ -174,9 +174,7 @@ impl TcpRelayServer {
                             let mut last_err: Option<io::Result<TcpStream>> = None;
                             for addr in addrs.into_iter() {
                                 let addr = match addr {
-                                    SocketAddr::V4(addr) => {
-                                        SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), *port))
-                                    }
+                                    SocketAddr::V4(addr) => SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), *port)),
                                     SocketAddr::V6(addr) => {
                                         SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
                                                                          *port,
@@ -188,8 +186,7 @@ impl TcpRelayServer {
                                 if forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
                                     info!("{} has been blocked by `forbidden_ip`", addr);
                                     last_err = Some(Err(io::Error::new(io::ErrorKind::Other,
-                                                                       "Blocked by \
-                                                                        `forbidden_ip`")));
+                                                                       "Blocked by `forbidden_ip`")));
                                     continue;
                                 }
 
@@ -224,31 +221,22 @@ impl TcpRelayServer {
                 Scheduler::spawn(move || {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
-                    match ::relay::copy(&mut remote_reader,
-                                        &mut encrypt_stream,
-                                        "Remote to local") {
+
+                    let remote_addr = remote_reader.get_ref().peer_addr().unwrap();
+                    let client_addr = encrypt_stream.get_ref().peer_addr().unwrap();
+                    match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "Remote to local") {
                         Ok(n) => {
-                            let _ = remote_reader.get_ref()
-                                                 .peer_addr()
-                                                 .map(|remote_addr| {
-                                                     encrypt_stream.get_ref()
-                                                                   .peer_addr()
-                                                                   .map(|client_addr| {
-                                                                       debug!("Remote to local: \
-                                                                               relayed {} bytes \
-                                                                               from {} to {}",
-                                                                              n,
-                                                                              remote_addr,
-                                                                              client_addr);
-                                                                   })
-                                                 });
+                            debug!("{} local <- remote: relayed {} bytes from {} to {}",
+                                   addr,
+                                   n,
+                                   remote_addr,
+                                   client_addr)
                         }
                         Err(err) => {
                             match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from remote to local stream: {}", addr, err)
-                                }
-                                _ => error!("{} relay from remote to local stream: {}", addr, err),
+                                ErrorKind::BrokenPipe => debug!("{} local <- remote: {}", addr, err),
+                                ErrorKind::TimedOut => info!("{} local <- remote: {}", addr, err),
+                                _ => error!("{} local <- remote: {}", addr, err),
                             }
                         }
                     }
@@ -260,36 +248,22 @@ impl TcpRelayServer {
                 });
 
                 Scheduler::spawn(move || {
-                    match ::relay::copy(&mut decrypt_stream,
-                                        &mut remote_writer,
-                                        "Local to remote") {
+                    let client_addr = decrypt_stream.get_ref().peer_addr().unwrap();
+                    let remote_addr = remote_writer.peer_addr().unwrap();
+
+                    match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "Local to remote") {
                         Ok(n) => {
-                            let _ = decrypt_stream.get_ref()
-                                                  .peer_addr()
-                                                  .map(|client_addr| {
-                                                      remote_writer.peer_addr()
-                                                                   .map(|remote_addr| {
-                                                                       debug!("Local to remote: \
-                                                                               relayed {} bytes \
-                                                                               from {} to {}",
-                                                                              n,
-                                                                              client_addr,
-                                                                              remote_addr);
-                                                                   })
-                                                  });
+                            debug!("{} local -> remote: relayed {} bytes from {} to {}",
+                                   addr_cloned,
+                                   n,
+                                   client_addr,
+                                   remote_addr)
                         }
                         Err(err) => {
                             match err.kind() {
-                                ErrorKind::BrokenPipe => {
-                                    debug!("{} relay from local to remote stream: {}",
-                                           addr_cloned,
-                                           err)
-                                }
-                                _ => {
-                                    error!("{} relay from local to remote stream: {}",
-                                           addr_cloned,
-                                           err)
-                                }
+                                ErrorKind::BrokenPipe => debug!("{} local -> remote: {}", addr_cloned, err),
+                                ErrorKind::TimedOut => info!("{} local -> remote: {}", addr_cloned, err),
+                                _ => error!("{} local -> remote: {}", addr_cloned, err),
                             }
                         }
                     }
