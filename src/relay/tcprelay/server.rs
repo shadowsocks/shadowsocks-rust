@@ -222,15 +222,16 @@ impl TcpRelayServer {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
 
-                    let remote_addr = remote_reader.get_ref().peer_addr().unwrap();
-                    let client_addr = encrypt_stream.get_ref().peer_addr().unwrap();
-                    match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "Remote to local") {
+                    match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "local <- remote") {
                         Ok(n) => {
-                            debug!("{} local <- remote: relayed {} bytes from {} to {}",
-                                   addr,
-                                   n,
-                                   remote_addr,
-                                   client_addr)
+                            if let (Ok(remote_addr), Ok(client_addr)) = (remote_reader.get_ref().peer_addr(),
+                                                                         encrypt_stream.get_ref().peer_addr()) {
+                                debug!("{} local <- remote: relayed {} bytes from {} to {}",
+                                       addr,
+                                       n,
+                                       remote_addr,
+                                       client_addr)
+                            }
                         }
                         Err(err) => {
                             match err.kind() {
@@ -248,16 +249,16 @@ impl TcpRelayServer {
                 });
 
                 Scheduler::spawn(move || {
-                    let client_addr = decrypt_stream.get_ref().peer_addr().unwrap();
-                    let remote_addr = remote_writer.peer_addr().unwrap();
-
-                    match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "Local to remote") {
+                    match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "local -> remote") {
                         Ok(n) => {
-                            debug!("{} local -> remote: relayed {} bytes from {} to {}",
-                                   addr_cloned,
-                                   n,
-                                   client_addr,
-                                   remote_addr)
+                            if let (Ok(remote_addr), Ok(client_addr)) = (remote_writer.peer_addr(),
+                                                                         decrypt_stream.get_ref().peer_addr()) {
+                                debug!("{} local -> remote: relayed {} bytes from {} to {}",
+                                       addr_cloned,
+                                       n,
+                                       client_addr,
+                                       remote_addr)
+                            }
                         }
                         Err(err) => {
                             match err.kind() {

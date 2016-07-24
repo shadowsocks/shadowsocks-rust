@@ -212,7 +212,7 @@ impl TcpRelayLocal {
                 let addr_cloned = addr.clone();
 
                 Scheduler::spawn(move || {
-                    match relay::copy(&mut local_reader, &mut encrypt_stream, "Local to remote") {
+                    match relay::copy(&mut local_reader, &mut encrypt_stream, "local -> remote") {
                         Ok(..) => {}
                         Err(err) => {
                             match err.kind() {
@@ -271,7 +271,7 @@ impl TcpRelayLocal {
                         }
                     };
 
-                    match relay::copy(&mut decrypt_stream, &mut local_writer, "Remote to local") {
+                    match relay::copy(&mut decrypt_stream, &mut local_writer, "local <- remote") {
                         Err(err) => {
                             match err.kind() {
                                 ErrorKind::BrokenPipe => debug!("{} local <- remote: {}", addr, err),
