@@ -32,7 +32,7 @@ use coio::net::{TcpListener, TcpStream, Shutdown};
 
 use config::{Config, ClientConfig};
 
-use relay::{self, socks5};
+use relay::socks5;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::tcprelay::stream::{EncryptedWriter, DecryptedReader};
 
@@ -212,15 +212,18 @@ impl TcpRelayLocal {
                 let addr_cloned = addr.clone();
 
                 Scheduler::spawn(move || {
-                    match relay::copy(&mut local_reader, &mut encrypt_stream, "local -> remote") {
-                        Ok(..) => {}
-                        Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => debug!("{} local -> remote: {}", addr_cloned, err),
-                                ErrorKind::TimedOut => {
-                                    info!("SYSTEM Connect {} local -> remote is timedout", addr_cloned);
-                                }
-                                _ => error!("{} local -> remote: {}", addr_cloned, err),
+                    loop {
+                        match ::relay::copy_once(&mut local_reader, &mut encrypt_stream) {
+                            Ok(0) => {
+                                trace!("{} local -> remote: EOF", addr_cloned);
+                                break;
+                            }
+                            Ok(n) => {
+                                trace!("{} local -> remote: relayed {} bytes", addr_cloned, n);
+                            }
+                            Err(err) => {
+                                error!("SYSTEM Connect {} local -> remote: {}", addr_cloned, err);
+                                break;
                             }
                         }
                     }
@@ -271,15 +274,20 @@ impl TcpRelayLocal {
                         }
                     };
 
-                    match relay::copy(&mut decrypt_stream, &mut local_writer, "local <- remote") {
-                        Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => debug!("{} local <- remote: {}", addr, err),
-                                ErrorKind::TimedOut => info!("SYSTEM Connect {} local <- remote is timedout", addr),
-                                _ => error!("{} local <- remote: {}", addr, err),
+                    loop {
+                        match ::relay::copy_once(&mut decrypt_stream, &mut local_writer) {
+                            Ok(0) => {
+                                trace!("{} local <- remote: EOF", addr);
+                                break;
+                            }
+                            Ok(n) => {
+                                trace!("{} local <- remote: relayed {} bytes", addr, n);
+                            }
+                            Err(err) => {
+                                error!("SYSTEM Connect {} local <- remote: {}", addr, err);
+                                break;
                             }
                         }
-                        Ok(..) => {}
                     }
 
                     let _ = local_writer.flush();

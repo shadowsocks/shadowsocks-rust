@@ -22,7 +22,7 @@
 //! TcpRelay server that running on the server side
 
 use std::sync::Arc;
-use std::io::{self, Read, Write, BufReader, ErrorKind};
+use std::io::{self, Read, Write, BufReader};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::collections::HashSet;
 
@@ -222,23 +222,40 @@ impl TcpRelayServer {
                     let mut remote_reader = BufReader::new(remote_stream);
                     let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
 
-                    match ::relay::copy(&mut remote_reader, &mut encrypt_stream, "local <- remote") {
+                    match ::relay::copy_once(&mut remote_reader, &mut encrypt_stream) {
+                        Ok(0) => {}
                         Ok(n) => {
-                            if let (Ok(remote_addr), Ok(client_addr)) = (remote_reader.get_ref().peer_addr(),
-                                                                         encrypt_stream.get_ref().peer_addr()) {
-                                debug!("{} local <- remote: relayed {} bytes from {} to {}",
-                                       addr,
-                                       n,
-                                       remote_addr,
-                                       client_addr)
+                            let remote_addr = encrypt_stream.get_ref().peer_addr().unwrap();
+                            let client_addr = remote_reader.get_ref().peer_addr().unwrap();
+
+                            trace!("{} local <- remote: relayed {} bytes from {} to {}",
+                                   addr,
+                                   n,
+                                   remote_addr,
+                                   client_addr);
+
+                            loop {
+                                match ::relay::copy_once(&mut remote_reader, &mut encrypt_stream) {
+                                    Ok(0) => {
+                                        trace!("{} local <- remote: EOF", addr);
+                                        break;
+                                    }
+                                    Ok(n) => {
+                                        trace!("{} local <- remote: relayed {} bytes from {} to {}",
+                                               addr,
+                                               n,
+                                               remote_addr,
+                                               client_addr)
+                                    }
+                                    Err(err) => {
+                                        error!("{} local <- remote: {}", addr, err);
+                                        break;
+                                    }
+                                }
                             }
                         }
                         Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => debug!("{} local <- remote: {}", addr, err),
-                                ErrorKind::TimedOut => info!("{} local <- remote: {}", addr, err),
-                                _ => error!("{} local <- remote: {}", addr, err),
-                            }
+                            error!("{} local <- remote: {}", addr, err);
                         }
                     }
 
@@ -249,23 +266,40 @@ impl TcpRelayServer {
                 });
 
                 Scheduler::spawn(move || {
-                    match ::relay::copy(&mut decrypt_stream, &mut remote_writer, "local -> remote") {
+                    match ::relay::copy_once(&mut decrypt_stream, &mut remote_writer) {
+                        Ok(0) => {}
                         Ok(n) => {
-                            if let (Ok(remote_addr), Ok(client_addr)) = (remote_writer.peer_addr(),
-                                                                         decrypt_stream.get_ref().peer_addr()) {
-                                debug!("{} local -> remote: relayed {} bytes from {} to {}",
-                                       addr_cloned,
-                                       n,
-                                       client_addr,
-                                       remote_addr)
+                            let remote_addr = remote_writer.peer_addr().unwrap();
+                            let client_addr = decrypt_stream.get_ref().peer_addr().unwrap();
+
+                            debug!("{} local -> remote: relayed {} bytes from {} to {}",
+                                   addr_cloned,
+                                   n,
+                                   remote_addr,
+                                   client_addr);
+
+                            loop {
+                                match ::relay::copy_once(&mut decrypt_stream, &mut remote_writer) {
+                                    Ok(0) => {
+                                        trace!("{} local -> remote: EOF", addr_cloned);
+                                        break;
+                                    }
+                                    Ok(n) => {
+                                        debug!("{} local -> remote: relayed {} bytes from {} to {}",
+                                               addr_cloned,
+                                               n,
+                                               remote_addr,
+                                               client_addr);
+                                    }
+                                    Err(err) => {
+                                        error!("{} local -> remote: {}", addr_cloned, err);
+                                        break;
+                                    }
+                                }
                             }
                         }
                         Err(err) => {
-                            match err.kind() {
-                                ErrorKind::BrokenPipe => debug!("{} local -> remote: {}", addr_cloned, err),
-                                ErrorKind::TimedOut => info!("{} local -> remote: {}", addr_cloned, err),
-                                _ => error!("{} local -> remote: {}", addr_cloned, err),
-                            }
+                            error!("{} local -> remote: {}", addr_cloned, err);
                         }
                     }
 
