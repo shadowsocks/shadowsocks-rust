@@ -19,14 +19,18 @@ const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let url = format!("{}:{}@{}:{}", svr.method.to_string(), svr.password, svr.addr, svr.port);
+    let url = format!("{}:{}@{}:{}",
+                      svr.method.to_string(),
+                      svr.password,
+                      svr.addr,
+                      svr.port);
     format!("ss://{}", url.as_bytes().to_base64(URL_SAFE))
 }
 
 fn print_qrcode(encoded: &str) {
     let qrcode = QrCode::new(encoded.as_bytes()).unwrap();
 
-    for _ in 0..qrcode.width()+2 {
+    for _ in 0..qrcode.width() + 2 {
         print!("{}", WHITE);
     }
     println!("");
@@ -34,18 +38,14 @@ fn print_qrcode(encoded: &str) {
     for y in 0..qrcode.width() {
         print!("{}", WHITE);
         for x in 0..qrcode.width() {
-            let color = if qrcode[(x, y)] {
-                BLACK
-            } else {
-                WHITE
-            };
+            let color = if qrcode[(x, y)] { BLACK } else { WHITE };
 
             print!("{}", color);
         }
         println!("{}", WHITE);
     }
 
-    for _ in 0..qrcode.width()+2 {
+    for _ in 0..qrcode.width() + 2 {
         print!("{}", WHITE);
     }
     println!("");
@@ -75,9 +75,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
     let mut sp1 = decoded.split('@');
     let (account, addr) = match (sp1.next(), sp1.next()) {
-        (Some(account), Some(addr)) => {
-            (account, addr)
-        },
+        (Some(account), Some(addr)) => (account, addr),
         _ => panic!("Malformed input"),
     };
 
@@ -93,12 +91,15 @@ fn decode(encoded: &str, need_qrcode: bool) {
         _ => panic!("Malformed input"),
     };
 
-    let svrconfig = ServerConfig::basic(addr.to_owned(), port.parse().unwrap(),
-                                        pwd.to_owned(), method.parse().unwrap());
+    let svrconfig = ServerConfig::basic(addr.to_owned(),
+                                        port.parse().unwrap(),
+                                        pwd.to_owned(),
+                                        method.parse().unwrap());
 
     let config = Config {
         server: vec![svrconfig],
         local: None,
+        http_proxy: None,
         enable_udp: false,
         timeout: None,
         forbidden_ip: HashSet::new(),
@@ -114,17 +115,23 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
 fn main() {
     let app = App::new("ssurl")
-                    .author("Y. T. Chung <zonyitoo@gmail.com>")
-                    .about("Encode and decode ShadowSocks URL")
-                    .arg(Arg::with_name("ENCODE").short("e").long("encode")
-                            .takes_value(true)
-                            .help("Encode the server configuration in the provided JSON file"))
-                    .arg(Arg::with_name("DECODE").short("d").long("decode")
-                            .takes_value(true)
-                            .help("Decode the server configuration from the provide ShadowSocks URL"))
-                    .arg(Arg::with_name("QRCODE").short("c").long("qrcode")
-                            .takes_value(false)
-                            .help("Generate the QRCode with the provided configuration"));
+        .author("Y. T. Chung <zonyitoo@gmail.com>")
+        .about("Encode and decode ShadowSocks URL")
+        .arg(Arg::with_name("ENCODE")
+            .short("e")
+            .long("encode")
+            .takes_value(true)
+            .help("Encode the server configuration in the provided JSON file"))
+        .arg(Arg::with_name("DECODE")
+            .short("d")
+            .long("decode")
+            .takes_value(true)
+            .help("Decode the server configuration from the provide ShadowSocks URL"))
+        .arg(Arg::with_name("QRCODE")
+            .short("c")
+            .long("qrcode")
+            .takes_value(false)
+            .help("Generate the QRCode with the provided configuration"));
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");

@@ -25,3 +25,4 @@ mod cached_dns;
 pub mod local;
 pub mod server;
 mod stream;
+mod http;

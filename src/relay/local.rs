@@ -24,6 +24,7 @@
 use coio::Scheduler;
 
 use relay::Relay;
+use relay::tcprelay::local::HttpRelayLocal;
 use relay::tcprelay::local::TcpRelayLocal;
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::local::UdpRelayLocal;
@@ -57,6 +58,7 @@ use config::Config;
 pub struct RelayLocal {
     enable_udp: bool,
     tcprelay: TcpRelayLocal,
+    httprelay: Option<HttpRelayLocal>,
     #[cfg(feature = "enable-udp")]
     udprelay: UdpRelayLocal,
 }
@@ -65,9 +67,15 @@ impl RelayLocal {
     #[cfg(feature = "enable-udp")]
     pub fn new(config: Config) -> RelayLocal {
         let tcprelay = TcpRelayLocal::new(config.clone());
+        let httprelay = if config.http_proxy.is_some() {
+            Some(HttpRelayLocal::new(config.clone()))
+        } else {
+            None
+        };
         let udprelay = UdpRelayLocal::new(config.clone());
         RelayLocal {
             tcprelay: tcprelay,
+            httprelay: httprelay,
             udprelay: udprelay,
             enable_udp: config.enable_udp,
         }
@@ -76,8 +84,14 @@ impl RelayLocal {
     #[cfg(not(feature = "enable-udp"))]
     pub fn new(config: Config) -> RelayLocal {
         let tcprelay = TcpRelayLocal::new(config.clone());
+        let httprelay = if config.http_proxy.is_some() {
+            Some(HttpRelayLocal::new(config.clone()))
+        } else {
+            None
+        };
         RelayLocal {
             tcprelay: tcprelay,
+            httprelay: httprelay,
             enable_udp: config.enable_udp,
         }
     }
@@ -89,14 +103,25 @@ impl Relay for RelayLocal {
         if self.enable_udp {
             warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
         }
-        let tcprelay = self.tcprelay.clone();
-        let fut = Scheduler::spawn(move || tcprelay.run());
-        info!("Enabled TCP relay");
+        let mut futs = Vec::new();
 
-        fut.join().unwrap();
+        let tcprelay = self.tcprelay.clone();
+        let tcp_fut = Scheduler::spawn(move || tcprelay.run());
+        info!("Enabled TCP relay");
+        futs.push(tcp_fut);
+
+        if let Some(ref httprelay) = self.httprelay {
+            let httprelay = httprelay.clone();
+            let http_fut = Scheduler::spawn(move || httprelay.run());
+            info!("Enabled Http relay");
+            futs.push(http_fut);
+        }
+
+        for fut in futs {
+            fut.join().unwrap();
+        }
     }
 
-    #[cfg(feature = "enable-udp")]
     fn run(&self) {
         let mut futs = Vec::new();
 
@@ -110,6 +135,13 @@ impl Relay for RelayLocal {
             let udp_fut = Scheduler::spawn(move || udprelay.run());
             info!("Enabled UDP relay");
             futs.push(udp_fut);
+        }
+
+        if let Some(ref httprelay) = self.httprelay {
+            let httprelay = httprelay.clone();
+            let http_fut = Scheduler::spawn(move || httprelay.run());
+            info!("Enabled Http relay");
+            futs.push(http_fut);
         }
 
         for fut in futs {
