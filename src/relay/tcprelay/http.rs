@@ -22,19 +22,18 @@
 /// Http Proxy
 
 use std::io::{self, Read, Write};
-use std::net::{SocketAddr, Shutdown};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Shutdown};
 use std::time::Duration;
 
 use coio::net::TcpStream;
 
 use hyper::net::NetworkStream;
-use hyper::server::request::Request;
 use hyper::server::response::Response;
-use hyper::method::Method;
 use hyper::uri::RequestUri;
-use hyper::buffer::BufReader;
 use hyper::header::Headers;
 use hyper::status::StatusCode;
+
+use url::Host;
 
 use relay::socks5::Address;
 
@@ -75,25 +74,10 @@ impl NetworkStream for HttpStream {
     }
 }
 
-fn do_handshake(stream: &mut HttpStream, addr: SocketAddr) -> Result<Address, StatusCode> {
-    let mut reader = BufReader::new(stream as &mut NetworkStream);
-    let request = match Request::new(&mut reader, addr) {
-        Ok(r) => r,
-        Err(err) => {
-            error!("Failed to create Request: {:?}", err);
-            return Err(StatusCode::BadRequest);
-        }
-    };
 
-    match request.method {
-        Method::Connect => {}
-        _ => {
-            error!("Does not support {:?}", request.method);
-            return Err(StatusCode::MethodNotAllowed);
-        }
-    }
 
-    match &request.uri {
+pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
+    match uri {
         &RequestUri::Authority(ref s) => {
             match s.parse::<SocketAddr>() {
                 Ok(addr) => Ok(Address::SocketAddress(addr)),
@@ -119,6 +103,22 @@ fn do_handshake(stream: &mut HttpStream, addr: SocketAddr) -> Result<Address, St
                 }
             }
         }
+        &RequestUri::AbsoluteUri(ref uri) => {
+            if !uri.has_host() {
+                error!("URI does not have Host: {:?}", uri);
+                return Err(StatusCode::BadRequest);
+            }
+
+            let port = uri.port_or_known_default().unwrap_or(80);
+
+            let addr = match uri.host().unwrap() {
+                Host::Domain(dom) => Address::DomainNameAddress(dom.to_owned(), port),
+                Host::Ipv4(v4) => Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4, port))),
+                Host::Ipv6(v6) => Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),
+            };
+
+            Ok(addr)
+        }
         u => {
             error!("Invalid Uri {:?}", u);
             Err(StatusCode::BadRequest)
@@ -126,21 +126,11 @@ fn do_handshake(stream: &mut HttpStream, addr: SocketAddr) -> Result<Address, St
     }
 }
 
-pub fn handshake(stream: &mut HttpStream, addr: SocketAddr) -> io::Result<Address> {
-    match do_handshake(stream, addr) {
-        Ok(r) => {
-            stream.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-                .map(|_| r)
-        }
-        Err(status) => {
-            let mut headers = Headers::new();
-            let mut resp = Response::new(stream, &mut headers);
-            *resp.status_mut() = status;
-            try!(resp.start().and_then(|r| r.end()));
+pub fn write_response(stream: &mut Write, status: StatusCode) -> io::Result<()> {
+    let mut headers = Headers::new();
+    let mut resp = Response::new(stream, &mut headers);
+    *resp.status_mut() = status;
+    try!(resp.start().and_then(|r| r.end()));
 
-            let err = io::Error::new(io::ErrorKind::Other, "Handshake error");
-            Err(err)
-        }
-    }
-
+    Ok(())
 }

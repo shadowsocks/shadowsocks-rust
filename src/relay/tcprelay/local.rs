@@ -30,9 +30,14 @@ use std::sync::Arc;
 use coio::Scheduler;
 use coio::net::{TcpListener, TcpStream, Shutdown};
 
+use hyper::net::NetworkStream;
+use hyper::server::request::Request;
+use hyper::method::Method;
+use hyper::status::StatusCode;
+
 use config::{Config, ClientConfig};
 
-use relay::socks5;
+use relay::socks5::{self, Address};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use crypto::cipher::CipherType;
@@ -241,50 +246,29 @@ impl TcpRelayLocal {
         }
     }
 
-    fn handle_http_client(stream: TcpStream, server_addr: SocketAddr, password: Vec<u8>, encrypt_method: CipherType) {
-        use super::http::handshake;
-        use super::http::HttpStream;
-
-        let sockname = match stream.peer_addr() {
-            Ok(sockname) => sockname,
-            Err(err) => {
-                error!("Failed to get peer addr: {}", err);
-                return;
-            }
-        };
-
-        let stream_writer = match stream.try_clone() {
-            Ok(s) => s,
-            Err(err) => {
-                error!("Failed to clone local stream: {}", err);
-                return;
-            }
-        };
-
-        let mut http_stream = HttpStream(stream);
-        let addr = match handshake(&mut http_stream, sockname) {
-            Ok(addr) => addr,
-            Err(err) => {
-                error!("Error occurs while doing handshake: {}", err);
-                return;
-            }
-        };
-
-        // NOTE: We have already sent Connection Established while doing handshake
-
-        let HttpStream(stream) = http_stream; // Extract
+    fn handle_http_connect(stream: TcpStream,
+                           stream_writer: TcpStream,
+                           addr: Address,
+                           server_addr: SocketAddr,
+                           password: Vec<u8>,
+                           encrypt_method: CipherType)
+                           -> io::Result<()> {
+        info!("CONNECT (Http) {}", addr);
 
         let mut local_reader = BufReader::new(stream);
         let mut local_writer = stream_writer;
 
-        info!("CONNECT (Http) {}", addr);
+        if let Err(err) = local_writer.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n") {
+            error!("Failed to send handshake: {:?}", err);
+            return Err(err);
+        }
 
         let (mut decrypt_stream, mut encrypt_stream) =
             match super::connect_proxy_server(&server_addr, encrypt_method, &password[..], &addr) {
                 Ok(x) => x,
                 Err(err) => {
                     error!("Failed to connect to proxy server: {:?}", err);
-                    return;
+                    return Err(err);
                 }
             };
 
@@ -337,6 +321,78 @@ impl TcpRelayLocal {
             let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
             let _ = local_writer.shutdown(Shutdown::Both);
         });
+
+        Ok(())
+    }
+
+    fn handle_http_client(stream: TcpStream, server_addr: SocketAddr, password: Vec<u8>, encrypt_method: CipherType) {
+        use hyper::buffer::BufReader;
+        use super::http::{HttpStream, get_address, write_response};
+
+        let sockname = match stream.peer_addr() {
+            Ok(sockname) => sockname,
+            Err(err) => {
+                error!("Failed to get peer addr: {}", err);
+                return;
+            }
+        };
+
+        let mut stream_writer = match stream.try_clone() {
+            Ok(s) => s,
+            Err(err) => {
+                error!("Failed to clone stream: {:?}", err);
+                return;
+            }
+        };
+
+        let mut http_stream = HttpStream(stream);
+
+        let opt_stream = {
+            let opt_addr = {
+                let mut reader = BufReader::new(&mut http_stream as &mut NetworkStream);
+                let request = match Request::new(&mut reader, sockname) {
+                    Ok(r) => r,
+                    Err(err) => {
+                        error!("Failed to create Request: {:?}", err);
+                        let _ = write_response(&mut stream_writer, StatusCode::BadRequest);
+                        return;
+                    }
+                };
+
+                let addr = match get_address(&request.uri) {
+                    Ok(addr) => addr,
+                    Err(status) => {
+                        let _ = write_response(&mut stream_writer, status);
+                        return;
+                    }
+                };
+
+                match request.method {
+                    Method::Connect => Some(addr),
+                    method => {
+                        info!("{} (Http) {} (Not supported)", method, addr);
+                        let _ = write_response(&mut stream_writer, StatusCode::MethodNotAllowed);
+
+                        None
+                    }
+                }
+            };
+
+            opt_addr.map(move |addr| {
+                let HttpStream(stream) = http_stream;  // Deconstruct
+                (stream, addr)
+            })
+        };
+
+        if let Some((stream, addr)) = opt_stream {
+            // CONNECT
+            let _ = TcpRelayLocal::handle_http_connect(stream,
+                                                       stream_writer,
+                                                       addr,
+                                                       server_addr,
+                                                       password,
+                                                       encrypt_method);
+        }
     }
 }
 

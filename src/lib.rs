@@ -38,6 +38,7 @@ extern crate crypto as rust_crypto;
 extern crate ip;
 extern crate openssl;
 extern crate hyper;
+extern crate url;
 
 extern crate libc;
 

@@ -62,6 +62,7 @@ openssl = "^0.7.1"
 lru-cache = "0.0.7"
 libc = "^0.2.7"
 hyper = "0.9"
+url = "^1.2"
 
 [dependencies.coio]
 git = "https://github.com/zonyitoo/coio-rs.git"
