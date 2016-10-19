@@ -21,13 +21,9 @@
 
 /// Http Proxy
 
-use std::io::{self, Read, Write};
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Shutdown};
-use std::time::Duration;
+use std::io::{self, Write};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
-use coio::net::TcpStream;
-
-use hyper::net::NetworkStream;
 use hyper::server::response::Response;
 use hyper::uri::RequestUri;
 use hyper::header::Headers;
@@ -36,45 +32,6 @@ use hyper::status::StatusCode;
 use url::Host;
 
 use relay::socks5::Address;
-
-#[derive(Debug)]
-pub struct HttpStream(pub TcpStream);
-
-impl Read for HttpStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read(buf)
-    }
-}
-
-impl Write for HttpStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.0.flush()
-    }
-}
-
-impl NetworkStream for HttpStream {
-    fn peer_addr(&mut self) -> io::Result<SocketAddr> {
-        self.0.peer_addr()
-    }
-
-    fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-        self.0.set_read_timeout(dur)
-    }
-
-    fn set_write_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
-        self.0.set_write_timeout(dur)
-    }
-
-    fn close(&mut self, how: Shutdown) -> io::Result<()> {
-        self.0.shutdown(how)
-    }
-}
-
-
 
 pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     match uri {

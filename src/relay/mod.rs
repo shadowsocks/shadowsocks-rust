@@ -51,6 +51,31 @@ fn copy_once<R: Read, W: Write>(r: &mut R, w: &mut W) -> io::Result<usize> {
     w.write_all(&buf[..len]).and_then(|_| w.flush()).map(|_| len)
 }
 
+fn copy_exact<R: Read, W: Write>(r: &mut R, w: &mut W, len: usize) -> io::Result<()> {
+    let mut buf = [0u8; 2048];
+    let mut remain = len;
+
+    while remain > 0 {
+        let bufl = if remain > buf.len() { buf.len() } else { remain };
+        let len = match r.read(&mut buf[..bufl]) {
+            Ok(0) => break,
+            Ok(len) => {
+                remain -= len;
+                len
+            }
+            Err(e) => return Err(e),
+        };
+        try!(w.write_all(&buf[..len]).and_then(|_| w.flush()));
+    }
+
+    if remain != 0 {
+        let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
 fn take_ip_addr(sockaddr: &SocketAddr) -> IpAddr {
     match sockaddr {
         &SocketAddr::V4(ref v4) => IpAddr::V4(*v4.ip()),
