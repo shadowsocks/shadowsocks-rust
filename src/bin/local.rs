@@ -39,6 +39,7 @@ use clap::{App, Arg};
 
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::env;
+use std::time::Duration;
 
 use coio::Scheduler;
 
@@ -109,7 +110,8 @@ fn main() {
     let mut log_builder = LogBuilder::new();
     log_builder.filter(None, LogLevelFilter::Info);
 
-    match matches.occurrences_of("VERBOSE") {
+    let debug_level = matches.occurrences_of("VERBOSE");
+    match debug_level {
         0 => {
             // Default filter
             log_builder.format(|record: &LogRecord| {
@@ -235,7 +237,7 @@ fn main() {
         config.server.push(sc);
         has_provided_server_config = true;
     } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("SERVER_PORT").is_none() &&
-       matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
+              matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
         // Does not provide server config
     } else {
         panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
@@ -295,6 +297,19 @@ fn main() {
         .with_workers(threads)
         .default_stack_size(stack_size)
         .run(move || {
+            if debug_level > 0 && cfg!(debug_assertions) {
+                // Statistic coroutine
+                Scheduler::spawn(|| {
+                    loop {
+                        debug!("STAT Coroutines: {}, TCP work: {}, HTTP work: {}",
+                               Scheduler::instance().unwrap().work_count(),
+                               RelayLocal::global_tcp_work_count(),
+                               RelayLocal::global_http_work_count());
+                        coio::sleep(Duration::from_secs(1));
+                    }
+                });
+            }
+
             RelayLocal::new(config).run();
         })
         .unwrap();

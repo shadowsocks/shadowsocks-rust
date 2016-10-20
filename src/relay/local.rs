@@ -84,6 +84,16 @@ impl RelayLocal {
             enable_http: config.http_proxy.is_some(),
         }
     }
+
+    /// Global TCP work count
+    pub fn global_tcp_work_count() -> usize {
+        super::tcprelay::global_tcp_work_count()
+    }
+
+    /// Global HTTP work count
+    pub fn global_http_work_count() -> usize {
+        super::tcprelay::global_http_work_count()
+    }
 }
 
 impl Relay for RelayLocal {

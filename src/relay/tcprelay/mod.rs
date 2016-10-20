@@ -68,7 +68,8 @@ fn connect_proxy_server(server_addr: &SocketAddr,
         EncryptedWriter::new(remote_writer, encryptor)
     };
 
-    trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
+    trace!("Got encrypt stream and going to send addr: {:?}",
+           relay_addr);
 
     // Send relay address to remote
     let mut addr_buf = Vec::new();
@@ -115,4 +116,91 @@ fn connect_proxy_server(server_addr: &SocketAddr,
 
     trace!("Finished creating remote encrypt stream pair");
     Ok((decrypt_stream, encrypt_stream))
+}
+
+#[cfg(debug_assertions)]
+mod stat {
+    use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+
+    static GLOBAL_TCP_WORK_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+    static GLOBAL_HTTP_WORK_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+    pub fn global_tcp_work_count_add() {
+        GLOBAL_TCP_WORK_COUNT.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn global_tcp_work_count_sub() {
+        GLOBAL_TCP_WORK_COUNT.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    pub fn global_tcp_work_count_get() -> usize {
+        GLOBAL_TCP_WORK_COUNT.load(Ordering::Relaxed)
+    }
+
+    pub fn global_http_work_count_add() {
+        GLOBAL_HTTP_WORK_COUNT.fetch_add(1, Ordering::Relaxed);
+    }
+    pub fn global_http_work_count_sub() {
+        GLOBAL_HTTP_WORK_COUNT.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    pub fn global_http_work_count_get() -> usize {
+        GLOBAL_HTTP_WORK_COUNT.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(not(debug_assertions))]
+mod stat {
+    pub fn global_tcp_work_count_add() {}
+    pub fn global_tcp_work_count_sub() {}
+
+    pub fn global_tcp_work_count_get() -> usize {
+        0
+    }
+
+    pub fn global_http_work_count_add() {}
+    pub fn global_http_work_count_sub() {}
+
+    pub fn global_http_work_count_get() -> usize {
+        0
+    }
+}
+
+struct TcpWorkCounter;
+
+impl TcpWorkCounter {
+    fn new() -> TcpWorkCounter {
+        stat::global_tcp_work_count_add();
+        TcpWorkCounter
+    }
+}
+
+impl Drop for TcpWorkCounter {
+    fn drop(&mut self) {
+        stat::global_tcp_work_count_sub();
+    }
+}
+
+struct HttpWorkCounter;
+
+impl HttpWorkCounter {
+    fn new() -> HttpWorkCounter {
+        stat::global_http_work_count_add();
+        HttpWorkCounter
+    }
+}
+
+impl Drop for HttpWorkCounter {
+    fn drop(&mut self) {
+        stat::global_http_work_count_sub();
+    }
+}
+
+/// Get total TCP relay work count
+pub fn global_tcp_work_count() -> usize {
+    stat::global_tcp_work_count_get()
+}
+
+/// Get total HTTP relay work count
+pub fn global_http_work_count() -> usize {
+    stat::global_http_work_count_get()
 }

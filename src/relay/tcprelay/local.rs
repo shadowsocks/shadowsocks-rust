@@ -98,7 +98,6 @@ impl TcpRelayLocal {
                          server_addr: SocketAddr,
                          password: Vec<u8>,
                          encrypt_method: CipherType,
-                         enable_udp: bool,
                          conf: Arc<Config>) {
         let sockname = match stream.peer_addr() {
             Ok(sockname) => sockname,
@@ -172,6 +171,8 @@ impl TcpRelayLocal {
                 let addr_cloned = addr.clone();
 
                 Scheduler::spawn(move || {
+                    let _guard = super::TcpWorkCounter::new();
+
                     loop {
                         match ::relay::copy_once(&mut local_reader, &mut encrypt_stream) {
                             Ok(0) => {
@@ -235,7 +236,7 @@ impl TcpRelayLocal {
             }
             socks5::Command::UdpAssociate => {
                 info!("{} requests for UDP ASSOCIATE", sockname);
-                if cfg!(feature = "enable-udp") && enable_udp {
+                if cfg!(feature = "enable-udp") && conf.enable_udp {
                     TcpRelayLocal::handle_udp_associate_local(&mut local_writer, sockname, &addr, conf.local.unwrap())
                         .unwrap_or_else(|err| error!("Failed to write UDP ASSOCIATE response: {}", err));
                 } else {
@@ -286,6 +287,8 @@ impl TcpRelayLocal {
         let addr_cloned = addr.clone();
 
         Scheduler::spawn(move || {
+            let _guard = super::HttpWorkCounter::new();
+
             loop {
                 match ::relay::copy_once(&mut local_reader, &mut encrypt_stream) {
                     Ok(0) => {
@@ -380,6 +383,8 @@ impl TcpRelayLocal {
         let mut remain_len = content_len.saturating_sub(remain.len());
 
         Scheduler::spawn(move || {
+            let _guard = super::HttpWorkCounter::new();
+
             let mut buf = [0u8; 1024];
 
             let mut content_len = content_len;
@@ -691,10 +696,9 @@ impl TcpRelayLocal {
     pub fn run_tcp(&self) {
         self.run_server(self.config.local.expect("Require local config"),
                         |stream, server_addr, pwd, encrypt_method, conf| {
-                            let enable_udp = conf.enable_udp;
                             Scheduler::spawn(move || {
-                TcpRelayLocal::handle_tcp_client(stream, server_addr, pwd, encrypt_method, enable_udp, conf);
-            });
+                                TcpRelayLocal::handle_tcp_client(stream, server_addr, pwd, encrypt_method, conf);
+                            });
                         });
     }
 
