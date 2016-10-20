@@ -47,7 +47,6 @@ fn connect_proxy_server(server_addr: &SocketAddr,
 
     // Encrypt data to remote server
 
-
     // Send initialize vector to remote and create encryptor
     let mut encrypt_stream = {
         let local_iv = encrypt_method.gen_init_vec();
@@ -73,12 +72,11 @@ fn connect_proxy_server(server_addr: &SocketAddr,
 
     // Send relay address to remote
     let mut addr_buf = Vec::new();
-    relay_addr.write_to(&mut addr_buf).unwrap();
-    if let Err(err) = encrypt_stream.write_all(&addr_buf) {
+    try!(relay_addr.write_to(&mut addr_buf));
+    if let Err(err) = encrypt_stream.write_all(&addr_buf).and_then(|_| encrypt_stream.flush()) {
         error!("Error occurs while writing address: {}", err);
         return Err(err);
     }
-
 
     // Decrypt data from remote server
 

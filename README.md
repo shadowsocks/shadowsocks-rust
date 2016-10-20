@@ -55,8 +55,8 @@ Create a shadowsocks' configuration file. Example
     "timeout": 300,
     "method": "aes-256-cfb",
 
-    "http_local_port": 10240,
-    "http_local_address": "127.0.0.1",
+    "local_http_port": 10240,
+    "local_http_address": "127.0.0.1"
 }
 ```
 
@@ -84,8 +84,8 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
     "local_port": 8388,
     "local_address": "127.0.0.1",
 
-    "http_local_port": 10240,
-    "http_local_address": "127.0.0.1",
+    "local_http_port": 10240,
+    "local_http_address": "127.0.0.1"
 }
 ```
 

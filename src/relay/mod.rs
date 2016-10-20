@@ -23,6 +23,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
+use std::mem;
 
 pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
@@ -42,7 +43,7 @@ pub trait Relay {
 }
 
 fn copy_once<R: Read, W: Write>(r: &mut R, w: &mut W) -> io::Result<usize> {
-    let mut buf = [0u8; 2048];
+    let mut buf: [u8; 4096] = unsafe { mem::uninitialized() };
     let len = match r.read(&mut buf) {
         Ok(0) => return Ok(0),
         Ok(len) => len,
@@ -52,11 +53,15 @@ fn copy_once<R: Read, W: Write>(r: &mut R, w: &mut W) -> io::Result<usize> {
 }
 
 fn copy_exact<R: Read, W: Write>(r: &mut R, w: &mut W, len: usize) -> io::Result<()> {
-    let mut buf = [0u8; 2048];
+    let mut buf: [u8; 4096] = unsafe { mem::uninitialized() };
     let mut remain = len;
 
     while remain > 0 {
-        let bufl = if remain > buf.len() { buf.len() } else { remain };
+        let bufl = if remain > buf.len() {
+            buf.len()
+        } else {
+            remain
+        };
         let len = match r.read(&mut buf[..bufl]) {
             Ok(0) => break,
             Ok(len) => {

@@ -264,7 +264,7 @@ impl TcpRelayLocal {
 
         const HANDSHAKE: &'static [u8] = b"HTTP/1.1 200 Connection Established\r\n\r\n";
 
-        if let Err(err) = local_writer.write_all(HANDSHAKE) {
+        if let Err(err) = local_writer.write_all(HANDSHAKE).and_then(|_| local_writer.flush()) {
             error!("Failed to send handshake: {:?}", err);
             return Err(err);
         }
@@ -282,7 +282,7 @@ impl TcpRelayLocal {
 
         trace!("HTTP Connect: Connected remote server");
 
-        try!(encrypt_stream.write_all(remain));
+        try!(encrypt_stream.write_all(remain).and_then(|_| encrypt_stream.flush()));
 
         let addr_cloned = addr.clone();
 
