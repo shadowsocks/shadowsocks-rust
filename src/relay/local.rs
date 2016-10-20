@@ -95,13 +95,17 @@ impl Relay for RelayLocal {
         let mut futs = Vec::new();
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Scheduler::spawn(move || tcprelay.run_tcp());
-        info!("Enabled TCP relay");
+        let tcp_fut = Scheduler::spawn(move || {
+            info!("Enabled TCP relay");
+            tcprelay.run_tcp()
+        });
         futs.push(tcp_fut);
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Scheduler::spawn(move || tcprelay.run_http());
-        info!("Enabled HTTP relay");
+        let tcp_fut = Scheduler::spawn(move || {
+            info!("Enabled HTTP relay");
+            tcprelay.run_http()
+        });
         futs.push(tcp_fut);
 
         for fut in futs {
@@ -113,20 +117,27 @@ impl Relay for RelayLocal {
         let mut futs = Vec::new();
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Scheduler::spawn(move || tcprelay.run_tcp());
-        info!("Enabled TCP relay");
+        let tcp_fut = Scheduler::spawn(move || {
+            info!("Enabled TCP relay");
+            tcprelay.run_tcp()
+        });
+
         futs.push(tcp_fut);
 
         if self.enable_udp {
             let udprelay = self.udprelay.clone();
-            let udp_fut = Scheduler::spawn(move || udprelay.run());
-            info!("Enabled UDP relay");
+            let udp_fut = Scheduler::spawn(move || {
+                info!("Enabled UDP relay");
+                udprelay.run()
+            });
             futs.push(udp_fut);
         }
 
         let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Scheduler::spawn(move || tcprelay.run_http());
-        info!("Enabled HTTP relay");
+        let tcp_fut = Scheduler::spawn(move || {
+            info!("Enabled HTTP relay");
+            tcprelay.run_http()
+        });
         futs.push(tcp_fut);
 
         for fut in futs {

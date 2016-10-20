@@ -30,30 +30,30 @@ use std::convert::From;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
 
-const SOCKS5_VERSION : u8 = 0x05;
+const SOCKS5_VERSION: u8 = 0x05;
 
-pub const SOCKS5_AUTH_METHOD_NONE            : u8 = 0x00;
-pub const SOCKS5_AUTH_METHOD_GSSAPI          : u8 = 0x01;
-pub const SOCKS5_AUTH_METHOD_PASSWORD        : u8 = 0x02;
-pub const SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE  : u8 = 0xff;
+pub const SOCKS5_AUTH_METHOD_NONE: u8 = 0x00;
+pub const SOCKS5_AUTH_METHOD_GSSAPI: u8 = 0x01;
+pub const SOCKS5_AUTH_METHOD_PASSWORD: u8 = 0x02;
+pub const SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE: u8 = 0xff;
 
-const SOCKS5_CMD_TCP_CONNECT   : u8 = 0x01;
-const SOCKS5_CMD_TCP_BIND      : u8 = 0x02;
-const SOCKS5_CMD_UDP_ASSOCIATE : u8 = 0x03;
+const SOCKS5_CMD_TCP_CONNECT: u8 = 0x01;
+const SOCKS5_CMD_TCP_BIND: u8 = 0x02;
+const SOCKS5_CMD_UDP_ASSOCIATE: u8 = 0x03;
 
-const SOCKS5_ADDR_TYPE_IPV4        : u8 = 0x01;
-const SOCKS5_ADDR_TYPE_DOMAIN_NAME : u8 = 0x03;
-const SOCKS5_ADDR_TYPE_IPV6        : u8 = 0x04;
+const SOCKS5_ADDR_TYPE_IPV4: u8 = 0x01;
+const SOCKS5_ADDR_TYPE_DOMAIN_NAME: u8 = 0x03;
+const SOCKS5_ADDR_TYPE_IPV6: u8 = 0x04;
 
-const SOCKS5_REPLY_SUCCEEDED                     : u8 = 0x00;
-const SOCKS5_REPLY_GENERAL_FAILURE               : u8 = 0x01;
-const SOCKS5_REPLY_CONNECTION_NOT_ALLOWED        : u8 = 0x02;
-const SOCKS5_REPLY_NETWORK_UNREACHABLE           : u8 = 0x03;
-const SOCKS5_REPLY_HOST_UNREACHABLE              : u8 = 0x04;
-const SOCKS5_REPLY_CONNECTION_REFUSED            : u8 = 0x05;
-const SOCKS5_REPLY_TTL_EXPIRED                   : u8 = 0x06;
-const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED         : u8 = 0x07;
-const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED    : u8 = 0x08;
+const SOCKS5_REPLY_SUCCEEDED: u8 = 0x00;
+const SOCKS5_REPLY_GENERAL_FAILURE: u8 = 0x01;
+const SOCKS5_REPLY_CONNECTION_NOT_ALLOWED: u8 = 0x02;
+const SOCKS5_REPLY_NETWORK_UNREACHABLE: u8 = 0x03;
+const SOCKS5_REPLY_HOST_UNREACHABLE: u8 = 0x04;
+const SOCKS5_REPLY_CONNECTION_REFUSED: u8 = 0x05;
+const SOCKS5_REPLY_TTL_EXPIRED: u8 = 0x06;
+const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED: u8 = 0x07;
+const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED: u8 = 0x08;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Copy)]
@@ -96,7 +96,7 @@ pub enum Reply {
     CommandNotSupported,
     AddressTypeNotSupported,
 
-    OtherReply(u8)
+    OtherReply(u8),
 }
 
 impl Reply {
@@ -128,7 +128,7 @@ impl Reply {
             SOCKS5_REPLY_TTL_EXPIRED => Reply::TtlExpired,
             SOCKS5_REPLY_COMMAND_NOT_SUPPORTED => Reply::CommandNotSupported,
             SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Reply::AddressTypeNotSupported,
-            _ => Reply::OtherReply(code)
+            _ => Reply::OtherReply(code),
         }
     }
 }
@@ -174,7 +174,8 @@ impl error::Error for Error {
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
+        Error::new(Reply::GeneralFailure,
+                   <io::Error as error::Error>::description(&err))
     }
 }
 
@@ -329,7 +330,7 @@ impl TcpResponseHeader {
 fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Error> {
     let atyp = match stream.read_u8() {
         Ok(atyp) => atyp,
-        Err(_) => return Err(Error::new(Reply::GeneralFailure, "Error while reading address type"))
+        Err(_) => return Err(Error::new(Reply::GeneralFailure, "Error while reading address type")),
     };
 
     match atyp {
@@ -340,7 +341,7 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
                                        try!(stream.read_u8()));
             let port = try!(stream.read_u16::<BigEndian>());
             Ok((7usize, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
-        },
+        }
         SOCKS5_ADDR_TYPE_IPV6 => {
             let v6addr = Ipv6Addr::new(try!(stream.read_u16::<BigEndian>()),
                                        try!(stream.read_u16::<BigEndian>()),
@@ -353,7 +354,7 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
             let port = try!(stream.read_u16::<BigEndian>());
 
             Ok((19usize, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
-        },
+        }
         SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
             let addr_len = try!(stream.read_u8()) as usize;
             let mut raw_addr = Vec::with_capacity(addr_len);
@@ -366,7 +367,7 @@ fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Err
             };
 
             Ok((4 + addr_len, Address::DomainNameAddress(addr, port)))
-        },
+        }
         _ => {
             // Address type not supported
             Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"))
@@ -382,7 +383,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                 SocketAddr::V4(addr) => {
                     try!(buf.write_all(&[SOCKS5_ADDR_TYPE_IPV4]));
                     try!(buf.write_all(&addr.ip().octets()));
-                },
+                }
                 SocketAddr::V6(addr) => {
                     try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6));
                     for seg in &addr.ip().segments() {
@@ -391,7 +392,7 @@ fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
                 }
             }
             try!(buf.write_u16::<BigEndian>(addr.port()));
-        },
+        }
         &Address::DomainNameAddress(ref dnaddr, port) => {
             try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
             try!(buf.write_u8(dnaddr.len() as u8));
@@ -409,12 +410,10 @@ fn get_addr_len(atyp: &Address) -> usize {
         &Address::SocketAddress(addr) => {
             match addr {
                 SocketAddr::V4(..) => 1 + 4 + 2,
-                SocketAddr::V6(..) => 1 + 8 * 2 + 2
+                SocketAddr::V6(..) => 1 + 8 * 2 + 2,
             }
-        },
-        &Address::DomainNameAddress(ref dmname, _) => {
-            1 + 1 + dmname.len() + 2
-        },
+        }
+        &Address::DomainNameAddress(ref dmname, _) => 1 + 1 + dmname.len() + 2,
     }
 }
 
@@ -430,18 +429,13 @@ pub struct HandshakeRequest {
 
 impl HandshakeRequest {
     pub fn new(methods: Vec<u8>) -> HandshakeRequest {
-        HandshakeRequest {
-            methods: methods,
-        }
+        HandshakeRequest { methods: methods }
     }
 
     pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeRequest> {
         let ver = try!(stream.read_u8());
         if ver != SOCKS5_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Invalid Socks5 version",
-            ));
+            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
         }
 
         let nmet = try!(stream.read_u8());
@@ -449,9 +443,7 @@ impl HandshakeRequest {
         let mut methods = Vec::new();
         try!(stream.take(nmet as u64).read_to_end(&mut methods));
 
-        Ok(HandshakeRequest {
-            methods: methods,
-        })
+        Ok(HandshakeRequest { methods: methods })
     }
 
     pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
@@ -474,9 +466,7 @@ pub struct HandshakeResponse {
 
 impl HandshakeResponse {
     pub fn new(cm: u8) -> HandshakeResponse {
-        HandshakeResponse {
-            chosen_method: cm,
-        }
+        HandshakeResponse { chosen_method: cm }
     }
 
     pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeResponse> {
@@ -487,9 +477,7 @@ impl HandshakeResponse {
 
         let met = try!(stream.read_u8());
 
-        Ok(HandshakeResponse {
-            chosen_method: met,
-        })
+        Ok(HandshakeResponse { chosen_method: met })
     }
 
     pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {

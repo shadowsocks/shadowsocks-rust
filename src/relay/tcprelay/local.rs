@@ -256,24 +256,30 @@ impl TcpRelayLocal {
                            encrypt_method: CipherType,
                            remain: &[u8])
                            -> io::Result<()> {
-        info!("CONNECT (Http) {}", addr);
+        info!("CONNECT (HTTP) {}", addr);
 
         let mut local_reader = BufReader::new(stream);
         let mut local_writer = stream_writer;
 
-        if let Err(err) = local_writer.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n") {
+        const HANDSHAKE: &'static [u8] = b"HTTP/1.1 200 Connection Established\r\n\r\n";
+
+        if let Err(err) = local_writer.write_all(HANDSHAKE) {
             error!("Failed to send handshake: {:?}", err);
             return Err(err);
         }
+
+        trace!("HTTP Connect: Sent HTTP tunnel handshakes");
 
         let (mut decrypt_stream, mut encrypt_stream) =
             match super::connect_proxy_server(&server_addr, encrypt_method, &password[..], &addr) {
                 Ok(x) => x,
                 Err(err) => {
-                    error!("Failed to connect to proxy server: {:?}", err);
+                    error!("Failed to connect to proxy server: {}", err);
                     return Err(err);
                 }
             };
+
+        trace!("HTTP Connect: Connected remote server");
 
         try!(encrypt_stream.write_all(remain));
 
@@ -283,20 +289,25 @@ impl TcpRelayLocal {
             loop {
                 match ::relay::copy_once(&mut local_reader, &mut encrypt_stream) {
                     Ok(0) => {
-                        trace!("{} local -> remote: EOF", addr_cloned);
+                        trace!("HTTP Connect: {} local -> remote: EOF", addr_cloned);
                         break;
                     }
                     Ok(n) => {
-                        trace!("{} local -> remote: relayed {} bytes", addr_cloned, n);
+                        trace!("HTTP Connect: {} local -> remote: relayed {} bytes",
+                               addr_cloned,
+                               n);
                     }
                     Err(err) => {
-                        error!("SYSTEM Connect {} local -> remote: {}", addr_cloned, err);
+                        error!("SYSTEM HTTP Connect {} local -> remote: {}",
+                               addr_cloned,
+                               err);
                         break;
                     }
                 }
             }
 
-            debug!("SYSTEM Connect {} local -> remote is closing", addr_cloned);
+            debug!("SYSTEM HTTP Connect {} local -> remote is closing",
+                   addr_cloned);
 
             let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
             let _ = local_reader.get_ref().shutdown(Shutdown::Both);
@@ -306,14 +317,16 @@ impl TcpRelayLocal {
             loop {
                 match ::relay::copy_once(&mut decrypt_stream, &mut local_writer) {
                     Ok(0) => {
-                        trace!("{} local <- remote: EOF", addr);
+                        trace!("HTTP Connect: {} local <- remote: EOF", addr);
                         break;
                     }
                     Ok(n) => {
-                        trace!("{} local <- remote: relayed {} bytes", addr, n);
+                        trace!("HTTP Connect: {} local <- remote: relayed {} bytes",
+                               addr,
+                               n);
                     }
                     Err(err) => {
-                        error!("SYSTEM Connect {} local <- remote: {}", addr, err);
+                        error!("SYSTEM HTTP Connect {} local <- remote: {}", addr, err);
                         break;
                     }
                 }
@@ -321,7 +334,7 @@ impl TcpRelayLocal {
 
             let _ = local_writer.flush();
 
-            debug!("SYSTEM Connect {} local <- remote is closing", addr);
+            debug!("SYSTEM HTTP Connect {} local <- remote is closing", addr);
 
             let _ = decrypt_stream.get_mut().shutdown(Shutdown::Both);
             let _ = local_writer.shutdown(Shutdown::Both);
@@ -339,7 +352,7 @@ impl TcpRelayLocal {
                           encrypt_method: CipherType,
                           remain: &[u8])
                           -> io::Result<()> {
-        info!("{} (Http) {}", req.method, addr);
+        info!("{} (HTTP) {}", req.method, addr);
 
         let mut local_reader = BufReader::new(stream);
         let mut local_writer = stream_writer;
@@ -348,10 +361,13 @@ impl TcpRelayLocal {
             match super::connect_proxy_server(&server_addr, encrypt_method, &password[..], &addr) {
                 Ok(x) => x,
                 Err(err) => {
-                    error!("Failed to connect to proxy server: {:?}", err);
+                    error!("Failed to connect to proxy server: {}", err);
                     return Err(err);
                 }
             };
+
+        trace!("HTTP Proxy: Connected remote server");
+        trace!("HTTP Proxy: {} Target url {}", req.method, req.request_uri);
 
         req.clear_request_uri_host();
 
@@ -366,6 +382,8 @@ impl TcpRelayLocal {
         Scheduler::spawn(move || {
             let mut buf = [0u8; 1024];
 
+            let mut content_len = content_len;
+
             'outer: loop {
                 // 1. Send body
                 match ::relay::copy_exact(&mut local_reader, &mut encrypt_stream, remain_len) {
@@ -375,6 +393,8 @@ impl TcpRelayLocal {
                         break;
                     }
                 }
+
+                trace!("HTTP Proxy: Written body {} bytes", content_len);
 
                 if let Err(err) = encrypt_stream.flush() {
                     error!("Failed to flush: {}", err);
@@ -406,6 +426,10 @@ impl TcpRelayLocal {
                                 }
                             };
 
+                            trace!("HTTP Proxy: {} Target url {}",
+                                   request.method,
+                                   request.request_uri);
+
                             request.clear_request_uri_host();
                             if let Err(err) = request.write_to(&mut encrypt_stream) {
                                 error!("Failed to write HttpRequest: {}", err);
@@ -417,7 +441,7 @@ impl TcpRelayLocal {
                                 break;
                             }
 
-                            let content_len = request.headers
+                            content_len = request.headers
                                 .get::<header::ContentLength>()
                                 .unwrap_or(&header::ContentLength(0))
                                 .0 as usize;
@@ -474,14 +498,6 @@ impl TcpRelayLocal {
                           password: Vec<u8>,
                           encrypt_method: CipherType) {
         use super::http::{get_address, write_response};
-
-        // let sockname = match stream.peer_addr() {
-        //     Ok(sockname) => sockname,
-        //     Err(err) => {
-        //         error!("Failed to get peer addr: {}", err);
-        //         return;
-        //     }
-        // };
 
         let mut stream_writer = match stream.try_clone() {
             Ok(s) => s,
