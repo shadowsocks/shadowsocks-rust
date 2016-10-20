@@ -28,10 +28,79 @@ use hyper::server::response::Response;
 use hyper::uri::RequestUri;
 use hyper::header::Headers;
 use hyper::status::StatusCode;
+use hyper::version::HttpVersion;
+use hyper::method::Method;
+use hyper;
+
+use httparse::{self, Request};
 
 use url::Host;
 
 use relay::socks5::Address;
+
+pub struct HttpRequest {
+    pub version: HttpVersion,
+    pub method: Method,
+    pub request_uri: RequestUri,
+    pub headers: Headers,
+}
+
+impl HttpRequest {
+    pub fn from_raw<'headers, 'buf: 'headers>(req: &Request<'headers, 'buf>,
+                                              headers: &'headers [httparse::Header])
+                                              -> hyper::Result<HttpRequest> {
+        Ok(HttpRequest {
+            version: if req.version.unwrap() == 1 {
+                HttpVersion::Http11
+            } else {
+                HttpVersion::Http10
+            },
+            method: try!(req.method.unwrap().parse::<Method>()),
+            request_uri: try!(req.path.unwrap().parse::<RequestUri>()),
+            headers: try!(Headers::from_raw(headers)),
+        })
+    }
+
+    pub fn clear_request_uri_host(&mut self) {
+        let ptr = &mut self.request_uri as *mut RequestUri;
+        match &mut self.request_uri {
+            &mut RequestUri::AbsoluteUri(ref url) => {
+                let mut abs = String::new();
+                abs += url.path();
+                if let Some(query) = url.query() {
+                    abs += "?";
+                    abs += query;
+                }
+
+                if let Some(frag) = url.fragment() {
+                    abs += "#";
+                    abs += frag;
+                }
+
+                // Force replace
+                let unsafe_ref = unsafe { &mut *ptr };
+                ::std::mem::replace(unsafe_ref, RequestUri::AbsolutePath(abs));
+            }
+            _ => {}
+        }
+    }
+
+    pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
+        try!(write!(w,
+                    "{} {} {}\r\n",
+                    self.method,
+                    self.request_uri,
+                    self.version));
+
+        for header in self.headers.iter() {
+            try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+        }
+
+        try!(write!(w, "\r\n"));
+
+        Ok(())
+    }
+}
 
 pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     match uri {
