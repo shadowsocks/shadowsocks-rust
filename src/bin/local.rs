@@ -30,27 +30,21 @@ extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
-extern crate time;
-extern crate coio;
 extern crate env_logger;
-extern crate ip;
+extern crate time;
 
 use clap::{App, Arg};
 
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::SocketAddr;
 use std::env;
-use std::time::Duration;
-
-use coio::Scheduler;
+use std::sync::Arc;
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
-use ip::IpAddr;
-
 use shadowsocks::config::{self, Config, ServerConfig};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
-use shadowsocks::relay::{RelayLocal, Relay};
+use shadowsocks::relay::RelayLocal;
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -75,21 +69,11 @@ fn main() {
             .long("server-addr")
             .takes_value(true)
             .help("Server address"))
-        .arg(Arg::with_name("SERVER_PORT")
-            .short("p")
-            .long("server-port")
-            .takes_value(true)
-            .help("Server port"))
         .arg(Arg::with_name("LOCAL_ADDR")
             .short("b")
             .long("local-addr")
             .takes_value(true)
             .help("Local address, listen only to this address if specified"))
-        .arg(Arg::with_name("LOCAL_PORT")
-            .short("l")
-            .long("local-port")
-            .takes_value(true)
-            .help("Local port"))
         .arg(Arg::with_name("PASSWORD")
             .short("k")
             .long("password")
@@ -203,26 +187,21 @@ fn main() {
 
     let mut has_provided_server_config = false;
 
-    if matches.value_of("SERVER_ADDR").is_some() && matches.value_of("SERVER_PORT").is_some() &&
-       matches.value_of("PASSWORD").is_some() && matches.value_of("ENCRYPT_METHOD").is_some() {
-        let (svr_addr, svr_port, password, method) = matches.value_of("SERVER_ADDR")
+    if matches.value_of("SERVER_ADDR").is_some() && matches.value_of("PASSWORD").is_some() &&
+       matches.value_of("ENCRYPT_METHOD").is_some() {
+        let (svr_addr, password, method) = matches.value_of("SERVER_ADDR")
             .and_then(|svr_addr| {
-                matches.value_of("SERVER_PORT")
-                    .map(|svr_port| (svr_addr, svr_port))
-            })
-            .and_then(|(svr_addr, svr_port)| {
                 matches.value_of("PASSWORD")
-                    .map(|pwd| (svr_addr, svr_port, pwd))
+                    .map(|pwd| (svr_addr, pwd))
             })
-            .and_then(|(svr_addr, svr_port, pwd)| {
+            .and_then(|(svr_addr, pwd)| {
                 matches.value_of("ENCRYPT_METHOD")
-                    .map(|m| (svr_addr, svr_port, pwd, m))
+                    .map(|m| (svr_addr, pwd, m))
             })
             .unwrap();
 
         let sc = ServerConfig {
-            addr: svr_addr.to_owned(),
-            port: svr_port.parse().ok().expect("`port` should be an integer"),
+            addr: svr_addr.parse::<SocketAddr>().expect("Invalid server addr"),
             password: password.to_owned(),
             method: match method.parse() {
                 Ok(m) => m,
@@ -234,34 +213,26 @@ fn main() {
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
-        config.server.push(sc);
+        config.server.push(Arc::new(sc));
         has_provided_server_config = true;
-    } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("SERVER_PORT").is_none() &&
-              matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
+    } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("PASSWORD").is_none() &&
+              matches.value_of("ENCRYPT_METHOD").is_none() {
         // Does not provide server config
     } else {
-        panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
+        panic!("`server-addr`, `method` and `password` should be provided together");
     }
 
     let mut has_provided_local_config = false;
 
-    if matches.value_of("LOCAL_ADDR").is_some() && matches.value_of("LOCAL_PORT").is_some() {
-        let (local_addr, local_port) = matches.value_of("LOCAL_ADDR")
-            .and_then(|local_addr| {
-                matches.value_of("LOCAL_PORT")
-                    .map(|p| (local_addr, p))
-            })
+    if matches.value_of("LOCAL_ADDR").is_some() {
+        let local_addr = matches.value_of("LOCAL_ADDR")
             .unwrap();
 
-        let local_addr: IpAddr = local_addr.parse()
+        let local_addr: SocketAddr = local_addr.parse()
             .ok()
             .expect("`local-addr` is not a valid IP address");
-        let local_port: u16 = local_port.parse().ok().expect("`local-port` is not a valid integer");
 
-        config.local = Some(match local_addr {
-            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, local_port)),
-            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, local_port, 0, 0)),
-        });
+        config.local = Some(Arc::new(local_addr));
         has_provided_local_config = true;
     }
 
@@ -277,40 +248,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    let threads = matches.value_of("THREADS")
-        .unwrap_or("1")
-        .parse::<usize>()
-        .ok()
-        .expect("`threads` should be an integer");
-
-    let stack_size = if matches.occurrences_of("VERBOSE") >= 1 {
-        1 * 1024 * 1024 // 1M stack for formatting!
-    } else {
-        128 * 1024
-    };
-
-    trace!("Coroutine stack size: {}, thread count {}",
-           stack_size,
-           threads);
-
-    Scheduler::new()
-        .with_workers(threads)
-        .default_stack_size(stack_size)
-        .run(move || {
-            if debug_level > 0 && cfg!(debug_assertions) {
-                // Statistic coroutine
-                Scheduler::spawn(|| {
-                    loop {
-                        debug!("STAT Coroutines: {}, TCP work: {}, HTTP work: {}",
-                               Scheduler::instance().unwrap().work_count(),
-                               RelayLocal::global_tcp_work_count(),
-                               RelayLocal::global_http_work_count());
-                        coio::sleep(Duration::from_secs(1));
-                    }
-                });
-            }
-
-            RelayLocal::new(config).run();
-        })
-        .unwrap();
+    RelayLocal::new(Arc::new(config)).run().unwrap();
 }

@@ -35,6 +35,7 @@ use openssl::crypto::symm;
 use openssl::crypto::hash;
 
 pub struct OpenSSLCrypto {
+    cipher: symm::Type,
     inner: symm::Crypter,
 }
 
@@ -56,26 +57,38 @@ impl OpenSSLCrypto {
 
             #[cfg(feature = "cipher-rc4")]
             CipherType::Rc4 => symm::Type::RC4_128,
-            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
+            _ => {
+                panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
+                       cipher_type)
+            }
         };
 
-        let cipher = symm::Crypter::new(t);
-        cipher.init(From::from(mode), key, iv);
+        let key = cipher_type.bytes_to_key(key);
+
+        // Panic if error occurs
+        let cipher = symm::Crypter::new(t, From::from(mode), &key[..], Some(iv)).unwrap();
 
         OpenSSLCrypto {
+            cipher: t,
             inner: cipher,
         }
     }
 
     pub fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-        let output = self.inner.update(data);
-        out.extend_from_slice(&output);
+        let orig_length = out.len();
+        let least_reserved = data.len() + self.cipher.block_size();
+        out.resize(orig_length + least_reserved, 0);
+        let length = try!(self.inner.update(data, &mut out[orig_length..]));
+        out.resize(orig_length + length, 0);
         Ok(())
     }
 
     pub fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
-        let output = self.inner.finalize();
-        out.extend_from_slice(&output);
+        let orig_length = out.len();
+        let least_reserved = self.cipher.block_size();
+        out.resize(orig_length + least_reserved, 0);
+        let length = try!(self.inner.finalize(&mut out[orig_length..]));
+        out.resize(orig_length + length, 0);
         Ok(())
     }
 }
@@ -113,9 +126,7 @@ pub struct OpenSSLCipher {
 
 impl OpenSSLCipher {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
-        OpenSSLCipher {
-            worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode),
-        }
+        OpenSSLCipher { worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode) }
     }
 }
 
@@ -143,9 +154,7 @@ impl OpenSSLDigest {
             digest::DigestType::Sha1 => hash::Type::SHA1,
         };
 
-        OpenSSLDigest {
-            inner: hash::Hasher::new(t),
-        }
+        OpenSSLDigest { inner: hash::Hasher::new(t).unwrap() }
     }
 }
 
@@ -157,6 +166,7 @@ impl Digest for OpenSSLDigest {
     }
 
     fn digest(&mut self) -> Vec<u8> {
-        self.inner.finish()
+        // TODO: Check error
+        self.inner.finish().unwrap()
     }
 }

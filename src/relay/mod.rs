@@ -21,14 +21,8 @@
 
 //! Relay server in local and server side implementations.
 
-use std::io::{self, Read, Write};
-use std::net::SocketAddr;
-use std::mem;
-
 pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
-
-use ip::IpAddr;
 
 mod tcprelay;
 #[cfg(feature = "enable-udp")]
@@ -37,53 +31,3 @@ pub mod local;
 pub mod server;
 mod loadbalancing;
 pub mod socks5;
-
-pub trait Relay {
-    fn run(&self);
-}
-
-fn copy_once<R: Read, W: Write>(r: &mut R, w: &mut W) -> io::Result<usize> {
-    let mut buf: [u8; 4096] = unsafe { mem::uninitialized() };
-    let len = match r.read(&mut buf) {
-        Ok(0) => return Ok(0),
-        Ok(len) => len,
-        Err(e) => return Err(e),
-    };
-    w.write_all(&buf[..len]).and_then(|_| w.flush()).map(|_| len)
-}
-
-fn copy_exact<R: Read, W: Write>(r: &mut R, w: &mut W, len: usize) -> io::Result<()> {
-    let mut buf: [u8; 4096] = unsafe { mem::uninitialized() };
-    let mut remain = len;
-
-    while remain > 0 {
-        let bufl = if remain > buf.len() {
-            buf.len()
-        } else {
-            remain
-        };
-        let len = match r.read(&mut buf[..bufl]) {
-            Ok(0) => break,
-            Ok(len) => {
-                remain -= len;
-                len
-            }
-            Err(e) => return Err(e),
-        };
-        try!(w.write_all(&buf[..len]).and_then(|_| w.flush()));
-    }
-
-    if remain != 0 {
-        let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
-        Err(err)
-    } else {
-        Ok(())
-    }
-}
-
-fn take_ip_addr(sockaddr: &SocketAddr) -> IpAddr {
-    match sockaddr {
-        &SocketAddr::V4(ref v4) => IpAddr::V4(*v4.ip()),
-        &SocketAddr::V6(ref v6) => IpAddr::V6(*v6.ip()),
-    }
-}

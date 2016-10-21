@@ -32,24 +32,21 @@ extern crate clap;
 extern crate shadowsocks;
 #[macro_use]
 extern crate log;
-extern crate time;
-extern crate coio;
 extern crate env_logger;
+extern crate time;
 
 use std::env;
-use std::time::Duration;
+use std::sync::Arc;
+use std::net::SocketAddr;
 
 use clap::{App, Arg};
 
-use coio::Scheduler;
-
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
-use time::PreciseTime;
 
 use shadowsocks::config::{self, Config, ServerConfig};
 use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
-use shadowsocks::relay::{RelayServer, Relay};
+use shadowsocks::relay::RelayServer;
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -74,11 +71,6 @@ fn main() {
             .long("server-addr")
             .takes_value(true)
             .help("Server address"))
-        .arg(Arg::with_name("SERVER_PORT")
-            .short("p")
-            .long("server-port")
-            .takes_value(true)
-            .help("Server port"))
         .arg(Arg::with_name("LOCAL_ADDR")
             .short("b")
             .long("local-addr")
@@ -201,26 +193,21 @@ fn main() {
 
     let mut has_provided_server_config = false;
 
-    if matches.value_of("SERVER_ADDR").is_some() && matches.value_of("SERVER_PORT").is_some() &&
-       matches.value_of("PASSWORD").is_some() && matches.value_of("ENCRYPT_METHOD").is_some() {
-        let (svr_addr, svr_port, password, method) = matches.value_of("SERVER_ADDR")
+    if matches.value_of("SERVER_ADDR").is_some() && matches.value_of("PASSWORD").is_some() &&
+       matches.value_of("ENCRYPT_METHOD").is_some() {
+        let (svr_addr, password, method) = matches.value_of("SERVER_ADDR")
             .and_then(|svr_addr| {
-                matches.value_of("SERVER_PORT")
-                    .map(|svr_port| (svr_addr, svr_port))
-            })
-            .and_then(|(svr_addr, svr_port)| {
                 matches.value_of("PASSWORD")
-                    .map(|pwd| (svr_addr, svr_port, pwd))
+                    .map(|pwd| (svr_addr, pwd))
             })
-            .and_then(|(svr_addr, svr_port, pwd)| {
+            .and_then(|(svr_addr, pwd)| {
                 matches.value_of("ENCRYPT_METHOD")
-                    .map(|m| (svr_addr, svr_port, pwd, m))
+                    .map(|m| (svr_addr, pwd, m))
             })
             .unwrap();
 
         let sc = ServerConfig {
-            addr: svr_addr.to_owned(),
-            port: svr_port.parse().ok().expect("`port` should be an integer"),
+            addr: svr_addr.parse::<SocketAddr>().expect("`server-addr` invalid"),
             password: password.to_owned(),
             method: match method.parse() {
                 Ok(m) => m,
@@ -232,13 +219,13 @@ fn main() {
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
-        config.server.push(sc);
+        config.server.push(Arc::new(sc));
         has_provided_server_config = true;
-    } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("SERVER_PORT").is_none() &&
-       matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
+    } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("PASSWORD").is_none() &&
+              matches.value_of("ENCRYPT_METHOD").is_none() {
         // Does not provide server config
     } else {
-        panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");
+        panic!("`server-addr`, `method` and `password` should be provided together");
     }
 
     if !has_provided_config && !has_provided_server_config {
@@ -264,33 +251,5 @@ fn main() {
         .ok()
         .expect("`threads` should be an integer");
 
-    let stack_size = if matches.occurrences_of("VERBOSE") >= 1 {
-        1 * 1024 * 1024 // 1M stack for formatting!
-    } else {
-        128 * 1024
-    };
-
-    trace!("Coroutine stack size: {}, thread count {}",
-           stack_size,
-           threads);
-
-    let show_run_time = matches.occurrences_of("VERBOSE") >= 2;
-    Scheduler::new()
-        .with_workers(threads)
-        .default_stack_size(stack_size)
-        .run(move || {
-            if show_run_time {
-                let start_time = PreciseTime::now();
-                Scheduler::spawn(move || {
-                    loop {
-                        info!("SYSTEM System has already run {}",
-                              start_time.to(PreciseTime::now()));
-                        coio::sleep(Duration::from_secs(5));
-                    }
-                });
-            }
-
-            RelayServer::new(config).run();
-        })
-        .unwrap();
+    RelayServer::new(Arc::new(config)).run(threads).unwrap();
 }

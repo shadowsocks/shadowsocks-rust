@@ -26,6 +26,8 @@ use std::convert::From;
 
 use openssl::crypto::symm;
 
+pub use self::cipher::{CipherType, Cipher, CipherVariant};
+
 pub mod cipher;
 pub mod openssl;
 pub mod digest;
@@ -36,7 +38,7 @@ pub mod crypto;
 #[derive(Clone, Copy)]
 pub enum CryptoMode {
     Encrypt,
-    Decrypt
+    Decrypt,
 }
 
 impl From<CryptoMode> for symm::Mode {

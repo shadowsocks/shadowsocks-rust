@@ -19,12 +19,17 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#![allow(dead_code)]
+
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 
-use crypto::cipher::{Cipher, CipherVariant};
+use crypto::{Cipher, CipherVariant};
 
-pub struct DecryptedReader<R: Read> {
+/// Reader wrapper that will decrypt data automatically
+pub struct DecryptedReader<R>
+    where R: Read + 'static
+{
     reader: R,
     buffer: Vec<u8>,
     cipher: CipherVariant,
@@ -34,7 +39,9 @@ pub struct DecryptedReader<R: Read> {
 
 const BUFFER_SIZE: usize = 2048;
 
-impl<R: Read> DecryptedReader<R> {
+impl<R> DecryptedReader<R>
+    where R: Read + 'static
+{
     pub fn new(r: R, cipher: CipherVariant) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
@@ -59,18 +66,20 @@ impl<R: Read> DecryptedReader<R> {
         &mut self.reader
     }
 
-    // /// Unwraps this `DecryptedReader`, returning the underlying reader.
-    // ///
-    // /// The internal buffer is flushed before returning the reader. Any leftover
-    // /// data in the read buffer is lost.
-    // pub fn into_inner(self) -> R {
-    //     self.reader
-    // }
+    /// Unwraps this `DecryptedReader`, returning the underlying reader.
+    ///
+    /// The internal buffer is flushed before returning the reader. Any leftover
+    /// data in the read buffer is lost.
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
 }
 
-impl<R: Read> BufRead for DecryptedReader<R> {
+impl<R> BufRead for DecryptedReader<R>
+    where R: Read + 'static
+{
     fn fill_buf<'b>(&'b mut self) -> io::Result<&'b [u8]> {
-        while self.pos == self.buffer.len() {
+        while self.pos >= self.buffer.len() {
             if self.sent_final {
                 return Ok(&[]);
             }
@@ -81,21 +90,17 @@ impl<R: Read> BufRead for DecryptedReader<R> {
                 Ok(0) => {
                     // EOF
                     try!(self.cipher
-                             .finalize(&mut self.buffer)
-                             .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                           err.desc)));
+                        .finalize(&mut self.buffer));
                     self.sent_final = true;
-                },
+                }
                 Ok(l) => {
                     try!(self.cipher
-                             .update(&incoming[..l], &mut self.buffer)
-                             .map_err(|err| io::Error::new(io::ErrorKind::Other,
-                                                           err.desc)));
-                },
+                        .update(&incoming[..l], &mut self.buffer));
+                }
                 Err(err) => {
                     return Err(err);
                 }
-            };
+            }
 
             self.pos = 0;
         }
@@ -108,7 +113,9 @@ impl<R: Read> BufRead for DecryptedReader<R> {
     }
 }
 
-impl<R: Read> Read for DecryptedReader<R> {
+impl<R> Read for DecryptedReader<R>
+    where R: Read + 'static
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
             let mut available = try!(self.fill_buf());
@@ -119,13 +126,19 @@ impl<R: Read> Read for DecryptedReader<R> {
     }
 }
 
-pub struct EncryptedWriter<W: Write> {
+/// Writer wrapper that will encrypt data automatically
+pub struct EncryptedWriter<W>
+    where W: Write + 'static
+{
     writer: W,
     cipher: CipherVariant,
     buffer: Vec<u8>,
 }
 
-impl<W: Write> EncryptedWriter<W> {
+impl<W> EncryptedWriter<W>
+    where W: Write + 'static
+{
+    /// Creates a new EncryptedWriter
     pub fn new(w: W, cipher: CipherVariant) -> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
@@ -134,21 +147,20 @@ impl<W: Write> EncryptedWriter<W> {
         }
     }
 
+    /// Finalize the cipher, which will writes the final block into buffer
     pub fn finalize(&mut self) -> io::Result<()> {
         self.buffer.clear();
         match self.cipher.finalize(&mut self.buffer) {
             Ok(..) => {
-                self.writer.write_all(&self.buffer[..])
+                self.writer
+                    .write_all(&self.buffer[..])
                     .and_then(|_| self.writer.flush())
-            },
-            Err(err) => {
-                Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        err.desc))
             }
+            Err(err) => Err(From::from(err)),
         }
     }
 
+    /// Get reference to the inner writer
     pub fn get_ref(&self) -> &W {
         &self.writer
     }
@@ -164,23 +176,19 @@ impl<W: Write> EncryptedWriter<W> {
     }
 }
 
-impl<W: Write> Write for EncryptedWriter<W> {
+impl<W> Write for EncryptedWriter<W>
+    where W: Write + 'static
+{
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.buffer.clear();
         match self.cipher.update(buf, &mut self.buffer) {
             Ok(..) => {
                 match self.writer.write_all(&self.buffer[..]) {
-                    Ok(..) => {
-                        Ok(buf.len())
-                    },
+                    Ok(..) => Ok(buf.len()),
                     Err(err) => Err(err),
                 }
-            },
-            Err(err) => {
-                Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        err.desc))
             }
+            Err(err) => Err(From::from(err)),
         }
     }
 
@@ -189,7 +197,9 @@ impl<W: Write> Write for EncryptedWriter<W> {
     }
 }
 
-impl<W: Write> Drop for EncryptedWriter<W> {
+impl<W> Drop for EncryptedWriter<W>
+    where W: Write + 'static
+{
     fn drop(&mut self) {
         let _ = self.finalize();
     }

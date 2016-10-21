@@ -22,8 +22,6 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#![feature(lookup_host)]
-
 extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate log;
@@ -32,14 +30,17 @@ extern crate lru_cache;
 extern crate byteorder;
 extern crate rand;
 
-extern crate coio;
-
 extern crate crypto as rust_crypto;
 extern crate ip;
 extern crate openssl;
 extern crate hyper;
 extern crate url;
 extern crate httparse;
+
+extern crate futures;
+extern crate futures_cpupool;
+#[macro_use]
+extern crate tokio_core;
 
 extern crate libc;
 

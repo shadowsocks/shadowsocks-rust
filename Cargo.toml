@@ -16,8 +16,6 @@ default = [
 
     "cipher-chacha20",
     "cipher-salsa20",
-
-    "enable-udp",
 ]
 
 cipher-aes-cfb = []
@@ -58,13 +56,12 @@ qrcode = "^0.1.6"
 env_logger = "^0.3.2"
 rust-crypto = "^0.2.34"
 ip = "1.0.0"
-openssl = "^0.7.1"
+openssl = "^0.8"
 lru-cache = "0.0.7"
 libc = "^0.2.7"
 hyper = "0.9"
 url = "^1.2"
 httparse = "^1.1"
-
-[dependencies.coio]
-git = "https://github.com/zonyitoo/coio-rs.git"
-#branch = "io-timeouts"
+futures = "0.1"
+futures-cpupool = "0.1"
+tokio-core = "0.1"

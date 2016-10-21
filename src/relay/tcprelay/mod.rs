@@ -21,184 +21,193 @@
 
 //! TcpRelay implementation
 
-use std::net::SocketAddr;
 use std::io::{self, Read, Write};
+use std::sync::Arc;
+use std::mem;
 
-use crypto::cipher::{self, CipherType};
+use crypto::cipher;
 use crypto::CryptoMode;
 use relay::socks5::Address;
+use config::ServerConfig;
 
-use coio::net::TcpStream;
+use tokio_core::net::TcpStream;
+use tokio_core::reactor::Handle;
+use tokio_core::io::{read_exact, write_all, flush};
+use tokio_core::io::{ReadHalf, WriteHalf};
+use tokio_core::io::Io;
 
-use self::stream::{DecryptedReader, EncryptedWriter};
+use futures::{Future, BoxFuture, Poll};
 
-mod cached_dns;
+use self::stream::{EncryptedWriter, DecryptedReader};
+
+// use coio::net::TcpStream;
+
+// use self::stream::{DecryptedReader, EncryptedWriter};
+
+// mod cached_dns;
 pub mod local;
 pub mod server;
 mod stream;
 mod http;
 
-fn connect_proxy_server(server_addr: &SocketAddr,
-                        encrypt_method: CipherType,
-                        pwd: &[u8],
-                        relay_addr: &Address)
-                        -> io::Result<(DecryptedReader<TcpStream>, EncryptedWriter<TcpStream>)> {
-    let mut remote_stream = try!(TcpStream::connect(&server_addr));
+type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
+type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
-    // Encrypt data to remote server
+fn connect_proxy_server(handle: &Handle,
+                        svr_cfg: Arc<ServerConfig>,
+                        relay_addr: Address)
+                        -> BoxFuture<(DecryptedHalf, EncryptedHalf), io::Error> {
+    TcpStream::connect(&svr_cfg.addr, handle)
+        .and_then(move |remote_stream| {
+            let (r, w) = remote_stream.split();
 
-    // Send initialize vector to remote and create encryptor
-    let mut encrypt_stream = {
-        let local_iv = encrypt_method.gen_init_vec();
-        trace!("Going to send initialize vector: {:?}", local_iv);
-        let encryptor = cipher::with_type(encrypt_method, pwd, &local_iv[..], CryptoMode::Encrypt);
-        if let Err(err) = remote_stream.write_all(&local_iv[..]) {
-            error!("Error occurs while writing initialize vector: {}", err);
-            return Err(err);
+            // Encrypt data to remote server
+
+            // Send initialize vector to remote and create encryptor
+
+            let local_iv = svr_cfg.method.gen_init_vec();
+            trace!("Going to send initialize vector: {:?}", local_iv);
+
+
+            write_all(w, local_iv)
+                .and_then(move |(w, local_iv)| {
+                    let encryptor = cipher::with_type(svr_cfg.method,
+                                                      svr_cfg.password.as_bytes(),
+                                                      &local_iv[..],
+                                                      CryptoMode::Encrypt);
+
+                    Ok((svr_cfg, r, EncryptedWriter::new(w, encryptor)))
+                })
+                .and_then(|(svr_cfg, r, enc_w)| {
+                    trace!("Got encrypt stream and going to send addr: {:?}",
+                           relay_addr);
+
+                    // Send relay address to remote
+                    relay_addr.write_to(Vec::new())
+                        .and_then(|addr_buf| {
+                            write_all(enc_w, addr_buf)
+                                .and_then(|(enc_w, _)| flush(enc_w))
+                                .and_then(|enc_w| Ok((svr_cfg, r, enc_w)))
+                        })
+                })
+        })
+        .and_then(|(svr_cfg, r, enc_w)| {
+            // Decrypt data from remote server
+
+            let iv_len = svr_cfg.method.iv_size();
+            read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
+                trace!("Got initialize vector {:?}", remote_iv);
+
+                let decryptor = cipher::with_type(svr_cfg.method,
+                                                  svr_cfg.password.as_bytes(),
+                                                  &remote_iv[..],
+                                                  CryptoMode::Decrypt);
+                let decrypt_stream = DecryptedReader::new(r, decryptor);
+
+                trace!("Finished creating remote encrypt stream pair");
+
+                Ok((decrypt_stream, enc_w))
+            })
+        })
+        .boxed()
+}
+
+/// Copy exactly N bytes
+pub enum CopyExact<R, W>
+    where R: Read,
+          W: Write
+{
+    Pending {
+        reader: R,
+        writer: W,
+        buf: [u8; 4096],
+        remain: usize,
+        pos: usize,
+        cap: usize,
+    },
+    Empty,
+}
+
+impl<R, W> CopyExact<R, W>
+    where R: Read,
+          W: Write
+{
+    pub fn new(r: R, w: W, amt: usize) -> CopyExact<R, W> {
+        CopyExact::Pending {
+            reader: r,
+            writer: w,
+            buf: [0u8; 4096],
+            remain: amt,
+            pos: 0,
+            cap: 0,
         }
-
-        let remote_writer = match remote_stream.try_clone() {
-            Ok(s) => s,
-            Err(err) => {
-                error!("Error occurs while cloning remote stream: {}", err);
-                return Err(err);
-            }
-        };
-        EncryptedWriter::new(remote_writer, encryptor)
-    };
-
-    trace!("Got encrypt stream and going to send addr: {:?}",
-           relay_addr);
-
-    // Send relay address to remote
-    let mut addr_buf = Vec::new();
-    try!(relay_addr.write_to(&mut addr_buf));
-    if let Err(err) = encrypt_stream.write_all(&addr_buf).and_then(|_| encrypt_stream.flush()) {
-        error!("Error occurs while writing address: {}", err);
-        return Err(err);
     }
+}
 
-    // Decrypt data from remote server
+impl<R, W> Future for CopyExact<R, W>
+    where R: Read,
+          W: Write
+{
+    type Item = (R, W);
+    type Error = io::Error;
 
-    let remote_iv = {
-        let mut iv = Vec::with_capacity(encrypt_method.block_size());
-        unsafe {
-            iv.set_len(encrypt_method.block_size());
-        }
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self {
+            &mut CopyExact::Empty => panic!("poll after CopyExact is finished"),
+            &mut CopyExact::Pending { ref mut reader,
+                                      ref mut writer,
+                                      ref mut buf,
+                                      ref mut remain,
+                                      ref mut pos,
+                                      ref mut cap } => {
+                loop {
+                    // If our buffer is empty, then we need to read some data to
+                    // continue.
+                    if *pos == *cap && *remain != 0 {
+                        let buf_len = if *remain > buf.len() {
+                            buf.len()
+                        } else {
+                            *remain
+                        };
+                        let n = try_nb!(reader.read(&mut buf[..buf_len]));
+                        if n == 0 {
+                            // Unexpected EOF!
+                            let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+                            return Err(err);
+                        } else {
+                            *pos = 0;
+                            *cap = n;
+                            *remain -= n;
+                        }
+                    }
 
-        let mut total_len = 0;
-        while total_len < encrypt_method.block_size() {
-            match remote_stream.read(&mut iv[total_len..]) {
-                Ok(0) => {
-                    error!("Unexpected EOF while reading initialize vector");
-                    debug!("Already read: {:?}", &iv[..total_len]);
+                    // If our buffer has some data, let's write it out!
+                    while *pos < *cap {
+                        let i = try_nb!(writer.write(&buf[*pos..*cap]));
+                        *pos += i;
+                    }
 
-                    let err = io::Error::new(io::ErrorKind::UnexpectedEof,
-                                             "Unexpected EOF while reading initialize vector");
-                    return Err(err);
+                    // If we've written al the data and we've seen EOF, flush out the
+                    // data and finish the transfer.
+                    // done with the entire transfer.
+                    if *pos == *cap && *remain == 0 {
+                        try_nb!(writer.flush());
+                        break; // The only path to execute the following logic
+                    }
                 }
-                Ok(n) => total_len += n,
-                Err(err) => {
-                    error!("Error while reading initialize vector: {}", err);
-                    return Err(err);
-                }
             }
         }
-        iv
-    };
 
-    trace!("Got initialize vector {:?}", remote_iv);
-
-    let decryptor = cipher::with_type(encrypt_method, pwd, &remote_iv[..], CryptoMode::Decrypt);
-    let decrypt_stream = DecryptedReader::new(remote_stream, decryptor);
-
-    trace!("Finished creating remote encrypt stream pair");
-    Ok((decrypt_stream, encrypt_stream))
-}
-
-#[cfg(debug_assertions)]
-mod stat {
-    use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-
-    static GLOBAL_TCP_WORK_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
-    static GLOBAL_HTTP_WORK_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
-
-    pub fn global_tcp_work_count_add() {
-        GLOBAL_TCP_WORK_COUNT.fetch_add(1, Ordering::Relaxed);
-    }
-    pub fn global_tcp_work_count_sub() {
-        GLOBAL_TCP_WORK_COUNT.fetch_sub(1, Ordering::Relaxed);
-    }
-
-    pub fn global_tcp_work_count_get() -> usize {
-        GLOBAL_TCP_WORK_COUNT.load(Ordering::Relaxed)
-    }
-
-    pub fn global_http_work_count_add() {
-        GLOBAL_HTTP_WORK_COUNT.fetch_add(1, Ordering::Relaxed);
-    }
-    pub fn global_http_work_count_sub() {
-        GLOBAL_HTTP_WORK_COUNT.fetch_sub(1, Ordering::Relaxed);
-    }
-
-    pub fn global_http_work_count_get() -> usize {
-        GLOBAL_HTTP_WORK_COUNT.load(Ordering::Relaxed)
+        match mem::replace(self, CopyExact::Empty) {
+            CopyExact::Pending { reader, writer, .. } => Ok((reader, writer).into()),
+            CopyExact::Empty => unreachable!(),
+        }
     }
 }
 
-#[cfg(not(debug_assertions))]
-mod stat {
-    pub fn global_tcp_work_count_add() {}
-    pub fn global_tcp_work_count_sub() {}
-
-    pub fn global_tcp_work_count_get() -> usize {
-        0
-    }
-
-    pub fn global_http_work_count_add() {}
-    pub fn global_http_work_count_sub() {}
-
-    pub fn global_http_work_count_get() -> usize {
-        0
-    }
-}
-
-struct TcpWorkCounter;
-
-impl TcpWorkCounter {
-    fn new() -> TcpWorkCounter {
-        stat::global_tcp_work_count_add();
-        TcpWorkCounter
-    }
-}
-
-impl Drop for TcpWorkCounter {
-    fn drop(&mut self) {
-        stat::global_tcp_work_count_sub();
-    }
-}
-
-struct HttpWorkCounter;
-
-impl HttpWorkCounter {
-    fn new() -> HttpWorkCounter {
-        stat::global_http_work_count_add();
-        HttpWorkCounter
-    }
-}
-
-impl Drop for HttpWorkCounter {
-    fn drop(&mut self) {
-        stat::global_http_work_count_sub();
-    }
-}
-
-/// Get total TCP relay work count
-pub fn global_tcp_work_count() -> usize {
-    stat::global_tcp_work_count_get()
-}
-
-/// Get total HTTP relay work count
-pub fn global_http_work_count() -> usize {
-    stat::global_http_work_count_get()
+pub fn copy_exact<R, W>(r: R, w: W, amt: usize) -> CopyExact<R, W>
+    where R: Read,
+          W: Write
+{
+    CopyExact::new(r, w, amt)
 }

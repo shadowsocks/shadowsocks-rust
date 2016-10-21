@@ -21,10 +21,10 @@
 
 /// Http Proxy
 
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::mem;
 
-use hyper::server::response::Response;
 use hyper::uri::RequestUri;
 use hyper::header::Headers;
 use hyper::status::StatusCode;
@@ -36,8 +36,13 @@ use httparse::{self, Request};
 
 use url::Host;
 
+use futures::{self, Future, BoxFuture, Poll};
+
+use tokio_core::io::write_all;
+
 use relay::socks5::Address;
 
+#[derive(Debug)]
 pub struct HttpRequest {
     pub version: HttpVersion,
     pub method: Method,
@@ -85,20 +90,27 @@ impl HttpRequest {
         }
     }
 
-    pub fn write_to<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        try!(write!(w,
-                    "{} {} {}\r\n",
-                    self.method,
-                    self.request_uri,
-                    self.version));
+    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        futures::lazy(move || {
+                let mut w = Vec::new();
+                try!(write!(w,
+                            "{} {} {}\r\n",
+                            self.method,
+                            self.request_uri,
+                            self.version));
 
-        for header in self.headers.iter() {
-            try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
-        }
+                for header in self.headers.iter() {
+                    try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                }
 
-        try!(write!(w, "\r\n"));
-
-        Ok(())
+                try!(write!(w, "\r\n"));
+                Ok(w)
+            })
+            .and_then(|buf| write_all(w, buf))
+            .map(|(w, _)| w)
+            .boxed()
     }
 }
 
@@ -152,11 +164,93 @@ pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     }
 }
 
-pub fn write_response(stream: &mut Write, status: StatusCode) -> io::Result<()> {
-    let mut headers = Headers::new();
-    let mut resp = Response::new(stream, &mut headers);
-    *resp.status_mut() = status;
-    try!(resp.start().and_then(|r| r.end()));
+pub fn write_response<W>(w: W, version: HttpVersion, status: StatusCode) -> BoxFuture<W, io::Error>
+    where W: Write + Send + 'static
+{
+    let buf = format!("{} {}\r\n\r\n", version, status);
+    write_all(w, buf.into_bytes()).map(|(w, _)| w).boxed()
+}
 
-    Ok(())
+/// HTTP Client
+pub enum RequestReader<R>
+    where R: Read
+{
+    Pending { r: R, buf: Vec<u8> },
+    Empty,
+}
+
+impl<R> RequestReader<R>
+    where R: Read
+{
+    pub fn new(r: R) -> RequestReader<R> {
+        RequestReader::with_buf(r, Vec::new())
+    }
+
+    pub fn with_buf(r: R, buf: Vec<u8>) -> RequestReader<R> {
+        RequestReader::Pending { r: r, buf: buf }
+    }
+}
+
+impl<R> Future for RequestReader<R>
+    where R: Read
+{
+    type Item = (R, HttpRequest, Vec<u8>);
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let mut lbuf = [0u8; 4096];
+        let (req, len) = match self {
+            &mut RequestReader::Pending { ref mut r, ref mut buf } => {
+                let mut http_req = None;
+                let mut total_len = 0;
+                loop {
+                    let n = try_nb!(r.read(&mut lbuf));
+                    buf.extend_from_slice(&lbuf[..n]);
+
+                    // Maximum 128 headers
+                    let mut headers = [httparse::EMPTY_HEADER; 128];
+                    let headers_ptr = &headers as *const _;
+                    let mut req = Request::new(&mut headers);
+                    match req.parse(&mut buf[..]) {
+                        Ok(httparse::Status::Partial) => {
+                            if n == 0 {
+                                // Already EOF!
+                                let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+                                return Err(err);
+                            }
+                        }
+                        Ok(httparse::Status::Complete(len)) => {
+                            total_len = len;
+
+                            // Make borrow checker happy
+                            let headers_ref = unsafe { &*headers_ptr };
+                            let hreq = match HttpRequest::from_raw(&req, headers_ref) {
+                                Ok(r) => r,
+                                Err(err) => {
+                                    error!("HttpRequest::from_raw: {}", err);
+                                    let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+                                    return Err(err);
+                                }
+                            };
+                            http_req = Some(hreq);
+                            break;
+                        }
+                        Err(err) => {
+                            error!("Request parse: {:?}", err);
+                            let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+                            return Err(err);
+                        }
+                    }
+                }
+
+                (http_req.unwrap(), total_len)
+            }
+            &mut RequestReader::Empty => panic!("poll a RequestReader after it's done"),
+        };
+
+        match mem::replace(self, RequestReader::Empty) {
+            RequestReader::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
+            RequestReader::Empty => unreachable!(),
+        }
+    }
 }

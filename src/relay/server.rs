@@ -21,12 +21,14 @@
 
 //! Server side
 
-use coio::Scheduler;
+use std::sync::Arc;
+use std::io;
 
-#[cfg(feature = "enable-udp")]
-use relay::udprelay::server::UdpRelayServer;
+use tokio_core::reactor::Core;
+
+// #[cfg(feature = "enable-udp")]
+// use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
-use relay::Relay;
 use config::Config;
 
 /// Relay server running on server side.
@@ -55,66 +57,18 @@ use config::Config;
 ///
 #[derive(Clone)]
 pub struct RelayServer {
-    enable_udp: bool,
-    tcprelay: TcpRelayServer,
-    #[cfg(feature = "enable-udp")]
-    udprelay: UdpRelayServer,
+    config: Arc<Config>,
 }
 
 impl RelayServer {
-    #[cfg(feature = "enable-udp")]
-    pub fn new(config: Config) -> RelayServer {
-        let tcprelay = TcpRelayServer::new(config.clone());
-        let udprelay = UdpRelayServer::new(config.clone());
-        RelayServer {
-            tcprelay: tcprelay,
-            udprelay: udprelay,
-            enable_udp: config.enable_udp,
-        }
+    pub fn new(config: Arc<Config>) -> RelayServer {
+        RelayServer { config: config }
     }
 
-    #[cfg(not(feature = "enable-udp"))]
-    pub fn new(config: Config) -> RelayServer {
-        let tcprelay = TcpRelayServer::new(config.clone());
-        RelayServer {
-            tcprelay: tcprelay,
-            enable_udp: config.enable_udp,
-        }
-    }
-}
-
-impl Relay for RelayServer {
-    #[cfg(feature = "enable-udp")]
-    fn run(&self) {
-        let mut futs = Vec::new();
-
-        let tcprelay = self.tcprelay.clone();
-        let tcp_fut = Scheduler::spawn(move || tcprelay.run());
-        info!("Enabled TCP relay");
-        futs.push(tcp_fut);
-
-        if self.enable_udp {
-            let udprelay = self.udprelay.clone();
-            let udp_fut = Scheduler::spawn(move || udprelay.run());
-            info!("Enabled UDP relay");
-            futs.push(udp_fut);
-        }
-
-        for fut in futs {
-            fut.join().unwrap();
-        }
-    }
-
-    #[cfg(not(feature = "enable-udp"))]
-    fn run(&self) {
-        if self.enable_udp {
-            warn!("UDP relay feature is disabled, recompile with feature=\"enable-udp\" to enable this feature");
-        }
-
-        let tcprelay = self.tcprelay.clone();
-        let fut = Scheduler::spawn(move || tcprelay.run());
-        info!("Enabled TCP relay");
-
-        fut.join().unwrap();
+    pub fn run(self, threads: usize) -> io::Result<()> {
+        let mut lp = try!(Core::new());
+        let handle = lp.handle();
+        let tcp_fut = TcpRelayServer::new(self.config.clone(), threads).run(handle.clone());
+        lp.run(tcp_fut)
     }
 }

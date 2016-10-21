@@ -23,12 +23,16 @@
 
 use std::fmt::{self, Debug, Formatter};
 use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::io::{self, Read, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::vec;
 use std::error;
 use std::convert::From;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
+
+use futures::{self, Future, BoxFuture};
+
+use tokio_core::io::{read_exact, write_all};
 
 const SOCKS5_VERSION: u8 = 0x05;
 
@@ -179,6 +183,12 @@ impl From<io::Error> for Error {
     }
 }
 
+impl From<Error> for io::Error {
+    fn from(err: Error) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, err.message)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
     SocketAddress(SocketAddr),
@@ -186,16 +196,16 @@ pub enum Address {
 }
 
 impl Address {
-    #[inline]
-    pub fn read_from<R: Read + Sized>(reader: &mut R) -> Result<Address, Error> {
-        match parse_request_header(reader) {
-            Ok((_, addr)) => Ok(addr),
-            Err(err) => Err(err),
-        }
+    pub fn read_from<R>(stream: R) -> BoxFuture<(R, Address), Error>
+        where R: Read + Send + 'static
+    {
+        parse_request_header(stream)
     }
 
     #[inline]
-    pub fn write_to<W: Write + Sized>(&self, writer: &mut W) -> io::Result<()> {
+    pub fn write_to<W>(self, writer: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
         write_addr(self, writer)
     }
 
@@ -249,31 +259,46 @@ impl TcpRequestHeader {
         }
     }
 
-    #[inline]
-    pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpRequestHeader, Error> {
-        let ver = try!(stream.read_u8());
-        if ver != SOCKS5_VERSION {
-            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
-        }
+    pub fn read_from<R>(r: R) -> BoxFuture<(R, TcpRequestHeader), Error>
+        where R: Read + Send + 'static
+    {
+        read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                if ver != SOCKS5_VERSION {
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+                }
 
-        let cmd = try!(stream.read_u8());
-        let _ = try!(stream.read_u8());
+                let cmd = buf[1];
+                let command = match Command::from_u8(cmd) {
+                    Some(c) => c,
+                    None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
+                };
 
-        Ok(TcpRequestHeader {
-            command: match Command::from_u8(cmd) {
-                Some(c) => c,
-                None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
-            },
-            address: try!(Address::read_from(stream)),
-        })
+                Ok((r, command))
+            })
+            .and_then(|(r, command)| {
+                Address::read_from(r).map(move |(conn, address)| {
+                    let header = TcpRequestHeader {
+                        command: command,
+                        address: address,
+                    };
+
+                    (conn, header)
+                })
+            })
+            .boxed()
     }
 
-    #[inline]
-    pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
-        try!(stream.write_all(&[SOCKS5_VERSION, self.command.as_u8(), 0x00]));
-        try!(self.address.write_to(stream));
+    pub fn write_to<W>(&self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        let addr = self.address.clone();
 
-        Ok(())
+        write_all(w, [SOCKS5_VERSION, self.command.as_u8(), 0x00])
+            .and_then(move |(conn, _)| addr.write_to(conn))
+            .boxed()
     }
 
     #[inline]
@@ -296,28 +321,42 @@ impl TcpResponseHeader {
         }
     }
 
-    #[inline]
-    pub fn read_from<R: Read>(stream: &mut R) -> Result<TcpResponseHeader, Error> {
-        let ver = try!(stream.read_u8());
-        if ver != SOCKS5_VERSION {
-            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
-        }
+    pub fn read_from<R>(r: R) -> BoxFuture<(R, TcpResponseHeader), Error>
+        where R: Read + Send + 'static
+    {
+        read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                let reply_code = buf[1];
 
-        let reply_code = try!(stream.read_u8());
-        let _ = try!(stream.read_u8());
+                if ver != SOCKS5_VERSION {
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+                }
 
-        Ok(TcpResponseHeader {
-            reply: Reply::from_u8(reply_code),
-            address: try!(Address::read_from(stream)),
-        })
+                Ok((r, reply_code))
+            })
+            .and_then(|(r, reply_code)| {
+                Address::read_from(r).map(move |(r, address)| {
+                    let rep = TcpResponseHeader {
+                        reply: Reply::from_u8(reply_code),
+                        address: address,
+                    };
+
+                    (r, rep)
+                })
+            })
+            .boxed()
     }
 
-    #[inline]
-    pub fn write_to<W: Write + Sized>(&self, stream: &mut W) -> io::Result<()> {
-        try!(stream.write_all(&[SOCKS5_VERSION, self.reply.as_u8(), 0x00]));
-        try!(self.address.write_to(stream));
-
-        Ok(())
+    pub fn write_to<W>(&self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        let addr = self.address.clone();
+        write_all(w, [SOCKS5_VERSION, self.reply.as_u8(), 0x00])
+            .map(From::from)
+            .and_then(move |(w, _)| addr.write_to(w))
+            .boxed()
     }
 
     #[inline]
@@ -326,82 +365,134 @@ impl TcpResponseHeader {
     }
 }
 
-#[inline]
-fn parse_request_header<R: Read>(stream: &mut R) -> Result<(usize, Address), Error> {
-    let atyp = match stream.read_u8() {
-        Ok(atyp) => atyp,
-        Err(_) => return Err(Error::new(Reply::GeneralFailure, "Error while reading address type")),
-    };
+fn parse_request_header<R>(stream: R) -> BoxFuture<(R, Address), Error>
+    where R: Read + Send + 'static
+{
+    read_exact(stream, [0u8])
+        .map_err(|_| Error::new(Reply::GeneralFailure, "Error while reading address type"))
+        .and_then(|(conn, atyp)| {
+            match atyp[0] {
+                SOCKS5_ADDR_TYPE_IPV4 => {
+                    let v4addr = read_exact(conn, [0u8; 6]).map_err(From::from);
+                    v4addr.and_then(|(conn, v4addr)| {
+                            let mut stream = Cursor::new(v4addr);
+                            let v4addr = Ipv4Addr::new(try!(stream.read_u8()),
+                                                       try!(stream.read_u8()),
+                                                       try!(stream.read_u8()),
+                                                       try!(stream.read_u8()));
+                            let port = try!(stream.read_u16::<BigEndian>());
 
-    match atyp {
-        SOCKS5_ADDR_TYPE_IPV4 => {
-            let v4addr = Ipv4Addr::new(try!(stream.read_u8()),
-                                       try!(stream.read_u8()),
-                                       try!(stream.read_u8()),
-                                       try!(stream.read_u8()));
-            let port = try!(stream.read_u16::<BigEndian>());
-            Ok((7usize, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
-        }
-        SOCKS5_ADDR_TYPE_IPV6 => {
-            let v6addr = Ipv6Addr::new(try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()),
-                                       try!(stream.read_u16::<BigEndian>()));
-            let port = try!(stream.read_u16::<BigEndian>());
-
-            Ok((19usize, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
-        }
-        SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-            let addr_len = try!(stream.read_u8()) as usize;
-            let mut raw_addr = Vec::with_capacity(addr_len);
-            try!(stream.take(addr_len as u64).read_to_end(&mut raw_addr));
-            let port = try!(stream.read_u16::<BigEndian>());
-
-            let addr = match String::from_utf8(raw_addr) {
-                Ok(addr) => addr,
-                Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
-            };
-
-            Ok((4 + addr_len, Address::DomainNameAddress(addr, port)))
-        }
-        _ => {
-            // Address type not supported
-            Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"))
-        }
-    }
-}
-
-#[inline]
-fn write_addr<W: Write + Sized>(addr: &Address, buf: &mut W) -> io::Result<()> {
-    match addr {
-        &Address::SocketAddress(addr) => {
-            match addr {
-                SocketAddr::V4(addr) => {
-                    try!(buf.write_all(&[SOCKS5_ADDR_TYPE_IPV4]));
-                    try!(buf.write_all(&addr.ip().octets()));
+                            Ok((conn, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
+                        })
+                        .boxed()
                 }
-                SocketAddr::V6(addr) => {
-                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_IPV6));
-                    for seg in &addr.ip().segments() {
-                        try!(buf.write_u16::<BigEndian>(*seg));
-                    }
+                SOCKS5_ADDR_TYPE_IPV6 => {
+                    let v6addr = read_exact(conn, [0u8; 18]).map_err(From::from);
+                    v6addr.and_then(|(conn, v6addr)| {
+                            let mut stream = Cursor::new(v6addr);
+                            let v6addr = Ipv6Addr::new(try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()),
+                                                       try!(stream.read_u16::<BigEndian>()));
+                            let port = try!(stream.read_u16::<BigEndian>());
+
+                            Ok((conn, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
+                        })
+                        .boxed()
+                }
+                SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                    let addr_len = read_exact(conn, [0u8]).map_err(From::from);
+                    addr_len.and_then(|(conn, addr_len)| {
+                            let addr_len = addr_len[0] as usize;
+                            let raw_addr = read_exact(conn, vec![0u8; addr_len]).map_err(From::from);
+                            raw_addr.and_then(|(conn, raw_addr)| {
+                                let port = read_exact(conn, [0u8; 2]).map_err(From::from);
+                                port.and_then(|(conn, port)| {
+                                    let mut stream = Cursor::new(port);
+                                    let port = try!(stream.read_u16::<BigEndian>());
+
+                                    let addr = match String::from_utf8(raw_addr) {
+                                        Ok(addr) => addr,
+                                        Err(..) => {
+                                            return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding"))
+                                        }
+                                    };
+
+                                    Ok((conn, Address::DomainNameAddress(addr, port)))
+                                })
+                            })
+                        })
+                        .boxed()
+                }
+                _ => {
+                    // Address type not supported
+                    futures::failed(Error::new(Reply::AddressTypeNotSupported, "Not supported address type")).boxed()
                 }
             }
-            try!(buf.write_u16::<BigEndian>(addr.port()));
+        })
+        .boxed()
+}
+
+fn write_addr<W>(addr: Address, w: W) -> BoxFuture<W, io::Error>
+    where W: Write + Send + 'static
+{
+    match addr {
+        Address::SocketAddress(addr) => {
+            let write_addr = match addr {
+                SocketAddr::V4(addr) => {
+                    write_all(w, [SOCKS5_ADDR_TYPE_IPV4])
+                        .and_then(move |(w, _)| write_all(w, addr.ip().octets()))
+                        .map(|(conn, _)| conn)
+                        .boxed()
+                }
+                SocketAddr::V6(addr) => {
+                    write_all(w, [SOCKS5_ADDR_TYPE_IPV6])
+                        .and_then(move |(w, _)| {
+                            let mut rbuf = [0u8; 16];
+                            {
+                                let mut buf = Cursor::new(&mut rbuf[..]);
+                                for seg in &addr.ip().segments() {
+                                    try!(buf.write_u16::<BigEndian>(*seg));
+                                }
+                            }
+                            Ok((w, rbuf))
+                        })
+                        .and_then(|(w, rbuf)| write_all(w, rbuf))
+                        .map(|(conn, _)| conn)
+                        .boxed()
+                }
+            };
+
+            write_addr.and_then(move |w| {
+                    let mut rbuf = [0u8; 2];
+                    {
+                        let mut buf = Cursor::new(&mut rbuf[..]);
+                        try!(buf.write_u16::<BigEndian>(addr.port()));
+                    }
+                    Ok((w, rbuf))
+                })
+                .and_then(|(w, rbuf)| write_all(w, rbuf))
+                .map(|(conn, _)| conn)
+                .boxed()
         }
-        &Address::DomainNameAddress(ref dnaddr, port) => {
-            try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
-            try!(buf.write_u8(dnaddr.len() as u8));
-            try!(buf.write_all(dnaddr[..].as_bytes()));
-            try!(buf.write_u16::<BigEndian>(port));
+        Address::DomainNameAddress(dnaddr, port) => {
+            futures::lazy(move || {
+                    let mut buf = Vec::with_capacity(dnaddr.len() + 4);
+                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
+                    try!(buf.write_u8(dnaddr.len() as u8));
+                    try!(buf.write_all(dnaddr[..].as_bytes()));
+                    try!(buf.write_u16::<BigEndian>(port));
+                    Ok(buf)
+                })
+                .and_then(|buf| write_all(w, buf))
+                .map(|(conn, _)| conn)
+                .boxed()
         }
     }
-
-    Ok(())
 }
 
 #[inline]
@@ -432,25 +523,34 @@ impl HandshakeRequest {
         HandshakeRequest { methods: methods }
     }
 
-    pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeRequest> {
-        let ver = try!(stream.read_u8());
-        if ver != SOCKS5_VERSION {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
-        }
+    pub fn read_from<R>(r: R) -> BoxFuture<(R, HandshakeRequest), io::Error>
+        where R: Read + Send + 'static
+    {
+        read_exact(r, [0u8, 0u8])
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                let nmet = buf[1];
 
-        let nmet = try!(stream.read_u8());
+                if ver != SOCKS5_VERSION {
+                    return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
+                }
 
-        let mut methods = Vec::new();
-        try!(stream.take(nmet as u64).read_to_end(&mut methods));
-
-        Ok(HandshakeRequest { methods: methods })
+                Ok((r, nmet))
+            })
+            .and_then(|(r, nmet)| {
+                read_exact(r, vec![0u8; nmet as usize])
+                    .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
+            })
+            .boxed()
     }
 
-    pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
-        try!(stream.write_all(&[SOCKS5_VERSION, self.methods.len() as u8]));
-        try!(stream.write_all(&self.methods[..]));
-
-        Ok(())
+    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        write_all(w, [SOCKS5_VERSION, self.methods.len() as u8])
+            .and_then(move |(w, _)| write_all(w, self.methods))
+            .map(|(w, _)| w)
+            .boxed()
     }
 }
 
@@ -469,19 +569,27 @@ impl HandshakeResponse {
         HandshakeResponse { chosen_method: cm }
     }
 
-    pub fn read_from<R: Read>(stream: &mut R) -> io::Result<HandshakeResponse> {
-        let ver = try!(stream.read_u8());
-        if ver != SOCKS5_VERSION {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
-        }
+    pub fn read_from<R>(r: R) -> BoxFuture<(R, HandshakeResponse), io::Error>
+        where R: Read + Send + 'static
+    {
+        read_exact(r, [0u8, 0u8])
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                let met = buf[1];
 
-        let met = try!(stream.read_u8());
-
-        Ok(HandshakeResponse { chosen_method: met })
+                if ver != SOCKS5_VERSION {
+                    Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
+                } else {
+                    Ok((r, HandshakeResponse { chosen_method: met }))
+                }
+            })
+            .boxed()
     }
 
-    pub fn write_to(&self, stream: &mut Write) -> io::Result<()> {
-        stream.write_all(&[SOCKS5_VERSION, self.chosen_method])
+    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        write_all(w, [SOCKS5_VERSION, self.chosen_method]).map(|(w, _)| w).boxed()
     }
 }
 
@@ -499,19 +607,29 @@ impl UdpAssociateHeader {
         }
     }
 
-    pub fn read_from<R: Read>(reader: &mut R) -> Result<UdpAssociateHeader, Error> {
-        let _ = try!(reader.read_u8());
-        let _ = try!(reader.read_u8());
-        let frag = try!(reader.read_u8());
-
-        Ok(UdpAssociateHeader::new(frag, try!(Address::read_from(reader))))
+    pub fn read_from<R>(r: R) -> BoxFuture<(R, UdpAssociateHeader), Error>
+        where R: Read + Send + 'static
+    {
+        read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                let frag = buf[2];
+                Address::read_from(r).map(move |(r, address)| {
+                    let h = UdpAssociateHeader::new(frag, address);
+                    (r, h)
+                })
+            })
+            .boxed()
     }
 
-    pub fn write_to<W: Write + Sized>(&self, writer: &mut W) -> io::Result<()> {
-        try!(writer.write_all(&[0x00, 0x00, self.frag]));
-        try!(self.address.write_to(writer));
-
-        Ok(())
+    pub fn write_to<W>(&self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        let addr = self.address.clone();
+        write_all(w, [0x00, 0x00, self.frag])
+            .map_err(From::from)
+            .and_then(move |(w, _)| addr.write_to(w))
+            .boxed()
     }
 
     pub fn len(&self) -> usize {

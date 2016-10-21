@@ -19,13 +19,15 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use std::sync::Arc;
+
 pub use self::roundrobin::RoundRobin;
 
 use config::ServerConfig;
 
 pub mod roundrobin;
 
-pub trait LoadBalancer {
-    fn pick_server<'a>(&'a mut self) -> &'a ServerConfig;
+pub trait LoadBalancer: Send + 'static {
+    fn pick_server(&mut self) -> Arc<ServerConfig>;
     fn total(&self) -> usize;
 }

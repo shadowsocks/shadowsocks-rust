@@ -19,36 +19,40 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use std::sync::Arc;
+
 use relay::loadbalancing::server::LoadBalancer;
-use config::ServerConfig;
+use config::{Config, ServerConfig};
 
 #[derive(Clone)]
 pub struct RoundRobin {
-    server: Vec<ServerConfig>,
+    config: Arc<Config>,
     index: usize,
 }
 
 impl RoundRobin {
-    pub fn new(config: Vec<ServerConfig>) -> RoundRobin {
+    pub fn new(config: Arc<Config>) -> RoundRobin {
         RoundRobin {
-            server: config,
+            config: config,
             index: 0usize,
         }
     }
 }
 
 impl LoadBalancer for RoundRobin {
-    fn pick_server<'a>(&'a mut self) -> &'a ServerConfig {
-        if self.server.is_empty() {
+    fn pick_server(&mut self) -> Arc<ServerConfig> {
+        let server = &self.config.server;
+
+        if server.is_empty() {
             panic!("No server");
         }
 
-        let ref s = self.server[self.index];
-        self.index = (self.index + 1) % self.server.len();
-        s
+        let ref s = server[self.index];
+        self.index = (self.index + 1) % server.len();
+        s.clone()
     }
 
     fn total(&self) -> usize {
-        self.server.len()
+        self.config.server.len()
     }
 }

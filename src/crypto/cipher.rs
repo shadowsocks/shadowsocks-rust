@@ -22,7 +22,8 @@
 //! Ciphers
 
 use std::str::FromStr;
-use std::fmt::{Debug, Display, self};
+use std::fmt::{self, Debug, Display};
+use std::io;
 use rand::{self, Rng};
 use std::convert::From;
 
@@ -33,6 +34,8 @@ use crypto::rc4_md5;
 use crypto::crypto::CryptoCipher;
 
 use crypto::digest::{self, DigestType};
+
+use openssl::crypto::symm;
 
 /// Basic operation of Cipher, which is a Symmetric Cipher.
 ///
@@ -45,45 +48,45 @@ pub trait Cipher {
 
 pub type CipherResult<T> = Result<T, Error>;
 
-#[derive(Copy, Clone)]
-pub enum ErrorKind {
+pub enum Error {
     UnknownCipherType,
-    OpenSSLError,
-}
-
-pub struct Error {
-    pub kind: ErrorKind,
-    pub desc: &'static str,
-    pub detail: Option<String>,
-}
-
-impl Error {
-    pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
-        Error {
-            kind: kind,
-            desc: desc,
-            detail: detail,
-        }
-    }
+    OpenSSLError(::openssl::error::ErrorStack),
+    IoError(io::Error),
 }
 
 impl Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{}", self.desc));
-        match self.detail {
-            Some(ref d) => write!(f, " ({})", d),
-            None => Ok(())
+        match self {
+            &Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            &Error::OpenSSLError(ref err) => write!(f, "{:?}", err),
+            &Error::IoError(ref err) => write!(f, "{:?}", err),
         }
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "{}", self.desc));
-        match self.detail {
-            Some(ref d) => write!(f, " ({})", d),
-            None => Ok(())
+        match self {
+            &Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            &Error::OpenSSLError(ref err) => write!(f, "{}", err),
+            &Error::IoError(ref err) => write!(f, "{}", err),
         }
+    }
+}
+
+impl From<Error> for io::Error {
+    fn from(e: Error) -> io::Error {
+        match e {
+            Error::UnknownCipherType => io::Error::new(io::ErrorKind::Other, "Unknown Cipher type"),
+            Error::OpenSSLError(err) => From::from(err),
+            Error::IoError(err) => err,
+        }
+    }
+}
+
+impl From<::openssl::error::ErrorStack> for Error {
+    fn from(e: ::openssl::error::ErrorStack) -> Error {
+        Error::OpenSSLError(e)
     }
 }
 
@@ -121,21 +124,33 @@ const CIPHER_SALSA20: &'static str = "salsa20";
 pub enum CipherType {
     Table,
 
-    #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb,
-    #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb1,
-    #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb8,
-    #[cfg(feature = "cipher-aes-cfb")] Aes128Cfb128,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes128Cfb,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes128Cfb1,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes128Cfb8,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes128Cfb128,
 
-    #[cfg(feature = "cipher-aes-cfb")] Aes256Cfb,
-    #[cfg(feature = "cipher-aes-cfb")] Aes256Cfb1,
-    #[cfg(feature = "cipher-aes-cfb")] Aes256Cfb8,
-    #[cfg(feature = "cipher-aes-cfb")] Aes256Cfb128,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes256Cfb,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes256Cfb1,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes256Cfb8,
+    #[cfg(feature = "cipher-aes-cfb")]
+    Aes256Cfb128,
 
-    #[cfg(feature = "cipher-rc4")] Rc4,
-    #[cfg(feature = "cipher-rc4")] Rc4Md5,
+    #[cfg(feature = "cipher-rc4")]
+    Rc4,
+    #[cfg(feature = "cipher-rc4")]
+    Rc4Md5,
 
-    #[cfg(feature = "cipher-chacha20")] ChaCha20,
-    #[cfg(feature = "cipher-salsa20")] Salsa20,
+    #[cfg(feature = "cipher-chacha20")]
+    ChaCha20,
+    #[cfg(feature = "cipher-salsa20")]
+    Salsa20,
 }
 
 impl CipherType {
@@ -143,18 +158,25 @@ impl CipherType {
         match *self {
             CipherType::Table => 0,
 
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb1 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb8 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb128 => 16,
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.block_size(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.block_size(),
 
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb1 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb8 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb128 => 16,
-
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => 0,
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.block_size(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.block_size(),
 
             #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
@@ -165,18 +187,25 @@ impl CipherType {
         match *self {
             CipherType::Table => 0,
 
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb1 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb8 => 16,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes128Cfb128 => 16,
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.key_len(),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.key_len(),
 
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb => 32,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb1 => 32,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb8 => 32,
-            #[cfg(feature = "cipher-aes-cfb")] CipherType::Aes256Cfb128 => 32,
-
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => 16,
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => 16,
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.key_len(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.key_len(),
 
             #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
@@ -203,15 +232,49 @@ impl CipherType {
             i += 1
         }
 
-        let whole = m.iter().fold(Vec::new(), |mut a, b| { a.extend_from_slice(b); a });
+        let whole = m.iter().fold(Vec::new(), |mut a, b| {
+            a.extend_from_slice(b);
+            a
+        });
         let key = whole[0..key_len].to_vec();
         key
     }
 
+    pub fn iv_size(&self) -> usize {
+        match *self {
+            CipherType::Table => 0,
+
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-aes-cfb")]
+            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.iv_len().unwrap_or(0),
+
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.iv_len().unwrap_or(0),
+
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
+        }
+    }
+
     pub fn gen_init_vec(&self) -> Vec<u8> {
-        let iv_len = self.block_size();
+        let iv_len = self.iv_size();
         let mut iv = Vec::with_capacity(iv_len);
-        unsafe { iv.set_len(iv_len); }
+        unsafe {
+            iv.set_len(iv_len);
+        }
         rand::thread_rng().fill_bytes(iv.as_mut_slice());
 
         iv
@@ -224,46 +287,34 @@ impl FromStr for CipherType {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_128_CFB =>
-                Ok(CipherType::Aes128Cfb),
+            CIPHER_AES_128_CFB => Ok(CipherType::Aes128Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_128_CFB_1 =>
-                Ok(CipherType::Aes128Cfb1),
+            CIPHER_AES_128_CFB_1 => Ok(CipherType::Aes128Cfb1),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_128_CFB_8 =>
-                Ok(CipherType::Aes128Cfb8),
+            CIPHER_AES_128_CFB_8 => Ok(CipherType::Aes128Cfb8),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_128_CFB_128 =>
-                Ok(CipherType::Aes128Cfb128),
+            CIPHER_AES_128_CFB_128 => Ok(CipherType::Aes128Cfb128),
 
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_256_CFB =>
-                Ok(CipherType::Aes256Cfb),
+            CIPHER_AES_256_CFB => Ok(CipherType::Aes256Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_256_CFB_1 =>
-                Ok(CipherType::Aes256Cfb1),
+            CIPHER_AES_256_CFB_1 => Ok(CipherType::Aes256Cfb1),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_256_CFB_8 =>
-                Ok(CipherType::Aes256Cfb8),
+            CIPHER_AES_256_CFB_8 => Ok(CipherType::Aes256Cfb8),
             #[cfg(feature = "cipher-aes-cfb")]
-            CIPHER_AES_256_CFB_128 =>
-                Ok(CipherType::Aes256Cfb128),
+            CIPHER_AES_256_CFB_128 => Ok(CipherType::Aes256Cfb128),
 
             #[cfg(feature = "cipher-rc4")]
-            CIPHER_RC4 =>
-                Ok(CipherType::Rc4),
+            CIPHER_RC4 => Ok(CipherType::Rc4),
             #[cfg(feature = "cipher-rc4")]
-            CIPHER_RC4_MD5 =>
-                Ok(CipherType::Rc4Md5),
+            CIPHER_RC4_MD5 => Ok(CipherType::Rc4Md5),
 
             #[cfg(feature = "cipher-chacha20")]
-            CIPHER_CHACHA20 =>
-                Ok(CipherType::ChaCha20),
+            CIPHER_CHACHA20 => Ok(CipherType::ChaCha20),
             #[cfg(feature = "cipher-salsa20")]
-            CIPHER_SALSA20 =>
-                Ok(CipherType::Salsa20),
+            CIPHER_SALSA20 => Ok(CipherType::Salsa20),
 
-            _ => Err(Error::new(ErrorKind::UnknownCipherType, "Unknown cipher type", None))
+            _ => Err(Error::UnknownCipherType),
         }
     }
 }
@@ -360,15 +411,12 @@ pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Ciph
         CipherType::Table => CipherVariant::new(table::TableCipher::new(key, mode)),
 
         #[cfg(feature = "cipher-chacha20")]
-        CipherType::ChaCha20 =>
-            CipherVariant::new(CryptoCipher::new(t, key, iv)),
+        CipherType::ChaCha20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),
         #[cfg(feature = "cipher-salsa20")]
-        CipherType::Salsa20 =>
-            CipherVariant::new(CryptoCipher::new(t, key, iv)),
+        CipherType::Salsa20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),
 
         #[cfg(feature = "cipher-rc4")]
-        CipherType::Rc4Md5 =>
-            CipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
+        CipherType::Rc4Md5 => CipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
         _ => CipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
     }
@@ -383,8 +431,14 @@ mod test_cipher {
     fn test_get_cipher() {
         let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
         let iv = CipherType::Aes128Cfb.gen_init_vec();
-        let mut encryptor = with_type(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
-        let mut decryptor = with_type(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
+        let mut encryptor = with_type(CipherType::Aes128Cfb,
+                                      &key[0..],
+                                      &iv[0..],
+                                      CryptoMode::Encrypt);
+        let mut decryptor = with_type(CipherType::Aes128Cfb,
+                                      &key[0..],
+                                      &iv[0..],
+                                      CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();
