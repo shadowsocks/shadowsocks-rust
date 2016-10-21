@@ -235,7 +235,7 @@ fn main() {
         config.server.push(sc);
         has_provided_server_config = true;
     } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("SERVER_PORT").is_none() &&
-       matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
+              matches.value_of("PASSWORD").is_none() && matches.value_of("ENCRYPT_METHOD").is_none() {
         // Does not provide server config
     } else {
         panic!("`server-addr`, `server-port`, `method` and `password` should be provided together");

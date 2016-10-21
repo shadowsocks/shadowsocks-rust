@@ -35,8 +35,10 @@ use config::{Config, ServerConfig};
 use relay::socks5;
 use relay::tcprelay::cached_dns::CachedDns;
 use relay::tcprelay::stream::{DecryptedReader, EncryptedWriter};
-use crypto::cipher;
+use crypto::cipher::{self, CipherType};
 use crypto::CryptoMode;
+
+use super::SharedTcpStream;
 
 #[derive(Clone)]
 pub struct TcpRelayServer {
@@ -49,6 +51,117 @@ impl TcpRelayServer {
             panic!("You have to provide a server configuration");
         }
         TcpRelayServer { config: c }
+    }
+
+    fn handshake(mut stream: SharedTcpStream,
+                 encrypt_method: CipherType,
+                 pwd: &[u8])
+                 -> io::Result<(DecryptedReader<SharedTcpStream>, EncryptedWriter<SharedTcpStream>)> {
+        // Decrypt
+        let remote_iv = {
+            let mut iv = Vec::with_capacity(encrypt_method.block_size());
+            unsafe {
+                iv.set_len(encrypt_method.block_size());
+            }
+
+            let mut total_len = 0;
+            while total_len < encrypt_method.block_size() {
+                match stream.read(&mut iv[total_len..]) {
+                    Ok(0) => {
+                        error!("Unexpected EOF while reading initialize vector");
+                        let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+                        return Err(err);
+                    }
+                    Ok(n) => total_len += n,
+                    Err(err) => {
+                        error!("Error while reading initialize vector: {}", err);
+                        return Err(err);
+                    }
+                }
+            }
+            iv
+        };
+        let decryptor = cipher::with_type(encrypt_method, pwd, &remote_iv[..], CryptoMode::Decrypt);
+        let decrypt_stream = DecryptedReader::new(stream.clone(), decryptor);
+
+        // Encrypt
+        let iv = encrypt_method.gen_init_vec();
+        let encryptor = cipher::with_type(encrypt_method, pwd, &iv[..], CryptoMode::Encrypt);
+        if let Err(err) = stream.write_all(&iv[..]) {
+            error!("Error occurs while writing initialize vector: {}", err);
+            return Err(err);
+        }
+
+        let encrypt_stream = EncryptedWriter::new(stream, encryptor);
+        Ok((decrypt_stream, encrypt_stream))
+    }
+
+    fn connect_remote(addr: &socks5::Address,
+                      dnscache: &Arc<CachedDns>,
+                      forbidden_ip: &Arc<HashSet<IpAddr>>)
+                      -> io::Result<TcpStream> {
+        info!("Connecting to {}", addr);
+
+        match addr {
+            &socks5::Address::SocketAddress(ref addr) => {
+                if forbidden_ip.contains(&::relay::take_ip_addr(addr)) {
+                    info!("{} has been blocked by `forbidden_ip`", addr);
+                    let err = io::Error::new(io::ErrorKind::Other, "IP blocked");
+                    return Err(err);
+                }
+
+                match TcpStream::connect(&addr) {
+                    Ok(stream) => Ok(stream),
+                    Err(err) => {
+                        error!("Unable to connect {:?}: {}", addr, err);
+                        Err(err)
+                    }
+                }
+            }
+            &socks5::Address::DomainNameAddress(ref dname, ref port) => {
+                let addrs = match dnscache.resolve(&dname) {
+                    Some(addrs) => addrs,
+                    None => {
+                        error!("Failed to resolve {}", dname);
+                        let err = io::Error::new(io::ErrorKind::Other, "DNS resolve error");
+                        return Err(err);
+                    }
+                };
+
+                let processing = || {
+                    let mut last_err: Option<io::Result<TcpStream>> = None;
+                    for addr in addrs.into_iter() {
+                        let addr = match addr {
+                            SocketAddr::V4(addr) => SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), *port)),
+                            SocketAddr::V6(addr) => {
+                                SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
+                                                                 *port,
+                                                                 addr.flowinfo(),
+                                                                 addr.scope_id()))
+                            }
+                        };
+
+                        if forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
+                            info!("{} has been blocked by `forbidden_ip`", addr);
+                            last_err = Some(Err(io::Error::new(io::ErrorKind::Other, "Blocked by `forbidden_ip`")));
+                            continue;
+                        }
+
+                        match TcpStream::connect(addr) {
+                            Ok(stream) => return Ok(stream),
+                            Err(err) => {
+                                error!("Unable to connect {:?}: {}", addr, err);
+                                last_err = Some(Err(err));
+                            }
+                        }
+                    }
+
+                    last_err.unwrap()
+                };
+
+                processing()
+            }
+        }
     }
 
     fn accept_loop(s: ServerConfig, forbidden_ip: Arc<HashSet<IpAddr>>) {
@@ -66,7 +179,7 @@ impl TcpRelayServer {
         info!("Method {}, Timeout: {:?}", method, timeout);
 
         for s in acceptor.incoming() {
-            let mut stream = match s {
+            let stream = match s {
                 Ok((s, addr)) => {
                     debug!("Got connection from {:?}", addr);
                     s
@@ -92,50 +205,14 @@ impl TcpRelayServer {
             let forbidden_ip = forbidden_ip.clone();
 
             Scheduler::spawn(move || {
-                let remote_iv = {
-                    let mut iv = Vec::with_capacity(encrypt_method.block_size());
-                    unsafe {
-                        iv.set_len(encrypt_method.block_size());
-                    }
-
-                    let mut total_len = 0;
-                    while total_len < encrypt_method.block_size() {
-                        match stream.read(&mut iv[total_len..]) {
-                            Ok(0) => {
-                                error!("Unexpected EOF while reading initialize vector");
-                                return;
-                            }
-                            Ok(n) => total_len += n,
-                            Err(err) => {
-                                error!("Error while reading initialize vector: {}", err);
-                                return;
-                            }
+                let (mut decrypt_stream, mut encrypt_stream) =
+                    match TcpRelayServer::handshake(SharedTcpStream::new(stream), encrypt_method, &pwd[..]) {
+                        Ok(x) => x,
+                        Err(err) => {
+                            error!("Failed to do handshake, {}", err);
+                            return;
                         }
-                    }
-                    iv
-                };
-                let decryptor = cipher::with_type(encrypt_method,
-                                                  &pwd[..],
-                                                  &remote_iv[..],
-                                                  CryptoMode::Decrypt);
-
-                let mut client_writer = match stream.try_clone() {
-                    Ok(s) => s,
-                    Err(err) => {
-                        error!("Error occurs while cloning client stream: {}", err);
-                        return;
-                    }
-                };
-                let client_reader = stream;
-
-                let iv = encrypt_method.gen_init_vec();
-                let encryptor = cipher::with_type(encrypt_method, &pwd[..], &iv[..], CryptoMode::Encrypt);
-                if let Err(err) = client_writer.write_all(&iv[..]) {
-                    error!("Error occurs while writing initialize vector: {}", err);
-                    return;
-                }
-
-                let mut decrypt_stream = DecryptedReader::new(client_reader, decryptor);
+                    };
 
                 let addr = match socks5::Address::read_from(&mut decrypt_stream) {
                     Ok(addr) => addr,
@@ -147,81 +224,19 @@ impl TcpRelayServer {
                     }
                 };
 
-                info!("Connecting to {}", addr);
-
-                let remote_stream = match &addr {
-                    &socks5::Address::SocketAddress(ref addr) => {
-                        if forbidden_ip.contains(&::relay::take_ip_addr(addr)) {
-                            info!("{} has been blocked by `forbidden_ip`", addr);
-                            return;
-                        }
-
-                        match TcpStream::connect(&addr) {
-                            Ok(stream) => stream,
-                            Err(err) => {
-                                error!("Unable to connect {:?}: {}", addr, err);
-                                return;
-                            }
-                        }
-                    }
-                    &socks5::Address::DomainNameAddress(ref dname, ref port) => {
-                        let addrs = match dnscache.resolve(&dname) {
-                            Some(addrs) => addrs,
-                            None => return,
-                        };
-
-                        let processing = || {
-                            let mut last_err: Option<io::Result<TcpStream>> = None;
-                            for addr in addrs.into_iter() {
-                                let addr = match addr {
-                                    SocketAddr::V4(addr) => SocketAddr::V4(SocketAddrV4::new(addr.ip().clone(), *port)),
-                                    SocketAddr::V6(addr) => {
-                                        SocketAddr::V6(SocketAddrV6::new(addr.ip().clone(),
-                                                                         *port,
-                                                                         addr.flowinfo(),
-                                                                         addr.scope_id()))
-                                    }
-                                };
-
-                                if forbidden_ip.contains(&::relay::take_ip_addr(&addr)) {
-                                    info!("{} has been blocked by `forbidden_ip`", addr);
-                                    last_err = Some(Err(io::Error::new(io::ErrorKind::Other,
-                                                                       "Blocked by `forbidden_ip`")));
-                                    continue;
-                                }
-
-                                match TcpStream::connect(addr) {
-                                    Ok(stream) => return Ok(stream),
-                                    Err(err) => {
-                                        error!("Unable to connect {:?}: {}", addr, err);
-                                        last_err = Some(Err(err));
-                                    }
-                                }
-                            }
-
-                            last_err.unwrap()
-                        };
-
-                        match processing() {
-                            Ok(s) => s,
-                            Err(_) => return,
-                        }
-                    }
-                };
-
-                let mut remote_writer = match remote_stream.try_clone() {
-                    Ok(s) => s,
+                let remote_stream = match TcpRelayServer::connect_remote(&addr, &dnscache, &forbidden_ip) {
+                    Ok(s) => SharedTcpStream::new(s),
                     Err(err) => {
-                        error!("Error occurs while cloning remote stream: {}", err);
+                        error!("Failed to connect to {}: {}", addr, err);
                         return;
                     }
                 };
+
+                let mut remote_writer = remote_stream.clone();
                 let addr_cloned = addr.clone();
 
                 Scheduler::spawn(move || {
                     let mut remote_reader = BufReader::new(remote_stream);
-                    let mut encrypt_stream = EncryptedWriter::new(client_writer, encryptor);
-
                     match ::relay::copy_once(&mut remote_reader, &mut encrypt_stream) {
                         Ok(0) => {}
                         Ok(n) => {

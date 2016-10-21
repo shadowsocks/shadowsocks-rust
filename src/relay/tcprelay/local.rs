@@ -23,7 +23,7 @@
 
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::lookup_host;
-use std::io::{self, BufWriter, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -41,6 +41,7 @@ use relay::socks5::{self, Address};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 
 use super::http::HttpRequest;
+use super::SharedTcpStream;
 
 use crypto::cipher::CipherType;
 
@@ -94,30 +95,15 @@ impl TcpRelayLocal {
         Ok(())
     }
 
-    fn handle_tcp_client(stream: TcpStream,
+    fn handle_tcp_client((stream, sockname): (TcpStream, SocketAddr),
                          server_addr: SocketAddr,
                          password: Vec<u8>,
                          encrypt_method: CipherType,
                          conf: Arc<Config>) {
-        let sockname = match stream.peer_addr() {
-            Ok(sockname) => sockname,
-            Err(err) => {
-                error!("Failed to get peer addr: {}", err);
-                return;
-            }
-        };
+        let mut local_reader = SharedTcpStream::new(stream);
+        let mut local_writer = local_reader.clone();
 
-        let stream_writer = match stream.try_clone() {
-            Ok(s) => s,
-            Err(err) => {
-                error!("Failed to clone local stream: {}", err);
-                return;
-            }
-        };
-        let mut local_reader = BufReader::new(stream);
-        let mut local_writer = BufWriter::new(stream_writer);
-
-        if let Err(err) = TcpRelayLocal::do_handshake(&mut local_reader, &mut local_writer) {
+        if let Err(err) = TcpRelayLocal::do_handshake(&mut local_reader, &mut (&*local_writer)) {
             error!("Error occurs while doing handshake: {}", err);
             return;
         }
@@ -192,18 +178,10 @@ impl TcpRelayLocal {
                     debug!("SYSTEM Connect {} local -> remote is closing", addr_cloned);
 
                     let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
-                    let _ = local_reader.get_ref().shutdown(Shutdown::Both);
+                    let _ = local_reader.shutdown(Shutdown::Both);
                 });
 
                 Scheduler::spawn(move || {
-                    let mut local_writer = match local_writer.into_inner() {
-                        Ok(writer) => writer,
-                        Err(err) => {
-                            error!("Error occurs while taking out local writer: {}", err);
-                            return;
-                        }
-                    };
-
                     loop {
                         match ::relay::copy_once(&mut decrypt_stream, &mut local_writer) {
                             Ok(0) => {
@@ -249,8 +227,7 @@ impl TcpRelayLocal {
         }
     }
 
-    fn handle_http_connect(stream: TcpStream,
-                           stream_writer: TcpStream,
+    fn handle_http_connect((stream, sockname): (SharedTcpStream, SocketAddr),
                            addr: Address,
                            server_addr: SocketAddr,
                            password: Vec<u8>,
@@ -258,9 +235,10 @@ impl TcpRelayLocal {
                            remain: &[u8])
                            -> io::Result<()> {
         info!("CONNECT (HTTP) {}", addr);
+        trace!("HTTP Connect: connection from {}", sockname);
 
-        let mut local_reader = BufReader::new(stream);
-        let mut local_writer = stream_writer;
+        let mut local_reader = stream;
+        let mut local_writer = local_reader.clone();
 
         const HANDSHAKE: &'static [u8] = b"HTTP/1.1 200 Connection Established\r\n\r\n";
 
@@ -313,7 +291,7 @@ impl TcpRelayLocal {
                    addr_cloned);
 
             let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
-            let _ = local_reader.get_ref().shutdown(Shutdown::Both);
+            let _ = local_reader.shutdown(Shutdown::Both);
         });
 
         Scheduler::spawn(move || {
@@ -347,8 +325,7 @@ impl TcpRelayLocal {
     }
 
     fn handle_http_others(mut req: HttpRequest,
-                          stream: TcpStream,
-                          stream_writer: TcpStream,
+                          (stream, sockname): (SharedTcpStream, SocketAddr),
                           addr: Address,
                           server_addr: SocketAddr,
                           password: Vec<u8>,
@@ -356,9 +333,10 @@ impl TcpRelayLocal {
                           remain: &[u8])
                           -> io::Result<()> {
         info!("{} (HTTP) {}", req.method, addr);
+        trace!("HTTP {}: Got connection from {}", req.method, sockname);
 
-        let mut local_reader = BufReader::new(stream);
-        let mut local_writer = stream_writer;
+        let mut local_reader = stream;
+        let mut local_writer = local_reader.clone();
 
         let (mut decrypt_stream, mut encrypt_stream) =
             match super::connect_proxy_server(&server_addr, encrypt_method, &password[..], &addr) {
@@ -467,7 +445,7 @@ impl TcpRelayLocal {
             debug!("SYSTEM Connect {} local -> remote is closing", addr_cloned);
 
             let _ = encrypt_stream.get_ref().shutdown(Shutdown::Both);
-            let _ = local_reader.get_ref().shutdown(Shutdown::Both);
+            let _ = local_reader.shutdown(Shutdown::Both);
         });
 
         Scheduler::spawn(move || {
@@ -498,19 +476,14 @@ impl TcpRelayLocal {
         Ok(())
     }
 
-    fn handle_http_client(mut stream: TcpStream,
+    fn handle_http_client((stream, sockname): (TcpStream, SocketAddr),
                           server_addr: SocketAddr,
                           password: Vec<u8>,
                           encrypt_method: CipherType) {
         use super::http::{get_address, write_response};
 
-        let mut stream_writer = match stream.try_clone() {
-            Ok(s) => s,
-            Err(err) => {
-                error!("Failed to clone stream: {:?}", err);
-                return;
-            }
-        };
+        let mut stream = SharedTcpStream::new(stream);
+        let mut stream_writer = stream.clone();
 
         let mut req_buf = Vec::with_capacity(8192);
         let mut got_header = false;
@@ -551,8 +524,7 @@ impl TcpRelayLocal {
 
                     match request.method.clone() {
                         Method::Connect => {
-                            let _ = TcpRelayLocal::handle_http_connect(stream,
-                                                                       stream_writer,
+                            let _ = TcpRelayLocal::handle_http_connect((stream, sockname),
                                                                        addr,
                                                                        server_addr,
                                                                        password,
@@ -561,8 +533,7 @@ impl TcpRelayLocal {
                         }
                         _ => {
                             let _ = TcpRelayLocal::handle_http_others(request,
-                                                                      stream,
-                                                                      stream_writer,
+                                                                      (stream, sockname),
                                                                       addr,
                                                                       server_addr,
                                                                       password,
@@ -591,7 +562,11 @@ impl TcpRelayLocal {
 
 impl TcpRelayLocal {
     fn run_server<F>(&self, local_conf: SocketAddr, handler: F)
-        where F: Fn(TcpStream, SocketAddr, Vec<u8>, CipherType, Arc<Config>)
+        where F: Fn((TcpStream, SocketAddr),
+                    SocketAddr,
+                    Vec<u8>,
+                    CipherType,
+                    Arc<Config>)
     {
         let mut server_load_balancer = RoundRobin::new(self.config.server.clone());
 
@@ -608,10 +583,10 @@ impl TcpRelayLocal {
         let mut cached_proxy: BTreeMap<String, SocketAddr> = BTreeMap::new();
 
         for s in acceptor.incoming() {
-            let stream = match s {
+            let (stream, sockname) = match s {
                 Ok((s, addr)) => {
                     debug!("Got connection from client {:?}", addr);
-                    s
+                    (s, addr)
                 }
                 Err(err) => {
                     panic!("Error occurs while accepting: {:?}", err);
@@ -681,7 +656,7 @@ impl TcpRelayLocal {
                 let pwd = encrypt_method.bytes_to_key(server_cfg.password.as_bytes());
 
                 let conf = self.config.clone();
-                handler(stream, server_addr, pwd, encrypt_method, conf);
+                handler((stream, sockname), server_addr, pwd, encrypt_method, conf);
 
                 succeed = true;
                 break;

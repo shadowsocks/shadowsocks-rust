@@ -23,6 +23,8 @@
 
 use std::net::SocketAddr;
 use std::io::{self, Read, Write};
+use std::sync::Arc;
+use std::ops::Deref;
 
 use crypto::cipher::{self, CipherType};
 use crypto::CryptoMode;
@@ -38,12 +40,44 @@ pub mod server;
 mod stream;
 mod http;
 
+#[derive(Clone)]
+pub struct SharedTcpStream(Arc<TcpStream>);
+
+impl SharedTcpStream {
+    pub fn new(s: TcpStream) -> SharedTcpStream {
+        SharedTcpStream(Arc::new(s))
+    }
+}
+
+impl Read for SharedTcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        (&*self.0).read(buf)
+    }
+}
+
+impl Write for SharedTcpStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        (&*self.0).write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        (&*self.0).flush()
+    }
+}
+
+impl Deref for SharedTcpStream {
+    type Target = TcpStream;
+    fn deref(&self) -> &TcpStream {
+        &*self.0
+    }
+}
+
 fn connect_proxy_server(server_addr: &SocketAddr,
                         encrypt_method: CipherType,
                         pwd: &[u8],
                         relay_addr: &Address)
-                        -> io::Result<(DecryptedReader<TcpStream>, EncryptedWriter<TcpStream>)> {
-    let mut remote_stream = try!(TcpStream::connect(&server_addr));
+                        -> io::Result<(DecryptedReader<SharedTcpStream>, EncryptedWriter<SharedTcpStream>)> {
+    let mut remote_stream = SharedTcpStream::new(try!(TcpStream::connect(&server_addr)));
 
     // Encrypt data to remote server
 
@@ -56,15 +90,7 @@ fn connect_proxy_server(server_addr: &SocketAddr,
             error!("Error occurs while writing initialize vector: {}", err);
             return Err(err);
         }
-
-        let remote_writer = match remote_stream.try_clone() {
-            Ok(s) => s,
-            Err(err) => {
-                error!("Error occurs while cloning remote stream: {}", err);
-                return Err(err);
-            }
-        };
-        EncryptedWriter::new(remote_writer, encryptor)
+        EncryptedWriter::new(remote_stream.clone(), encryptor)
     };
 
     trace!("Got encrypt stream and going to send addr: {:?}",
