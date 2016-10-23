@@ -43,7 +43,7 @@ use ip::IpAddr;
 
 use futures::{self, Future, BoxFuture, Poll};
 
-use tokio_core::io::write_all;
+use tokio_core::io::{write_all, flush};
 
 use relay::socks5::Address;
 
@@ -107,10 +107,13 @@ impl HttpRequest {
                             self.version));
 
                 for header in self.headers.iter() {
-                    try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                    if !header.name().is_empty() {
+                        try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                    }
                 }
 
                 try!(write!(w, "\r\n"));
+
                 Ok(w)
             })
             .and_then(|buf| write_all(w, buf))
@@ -494,7 +497,7 @@ fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
 
 /// Proxy this HTTP Request to writer
 pub fn proxy_request<R, W>((r, w): (R, W),
-                           client_addr: SocketAddr,
+                           _client_addr: SocketAddr,
                            mut req: HttpRequest,
                            mut remains: Vec<u8>)
                            -> BoxFuture<(R, W, Vec<u8>), io::Error>
@@ -502,22 +505,26 @@ pub fn proxy_request<R, W>((r, w): (R, W),
           W: Write + Send + 'static
 {
     let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
-    let client_ip = socket_to_ip(&client_addr);
+    // let client_ip = socket_to_ip(&client_addr);
 
-    // Set proxy IP info
-    let xf = if let Some(fw) = req.headers.get_mut::<XForwardFor>() {
-        let mut flst = fw.0.clone();
-        flst.push(client_ip.clone());
-        flst
-    } else {
-        vec![client_ip.clone()]
-    };
-    req.headers.set(XForwardFor(xf));
+    // // Set proxy IP info
+    // let xf = if let Some(fw) = req.headers.get_mut::<XForwardFor>() {
+    //     let mut flst = fw.0.clone();
+    //     flst.push(client_ip.clone());
+    //     flst
+    // } else {
+    //     vec![client_ip.clone()]
+    // };
+    // req.headers.set(XForwardFor(xf));
 
-    // Set real ip
-    req.headers.set(XRealIp(client_ip));
+    // // Set real ip
+    // req.headers.set(XRealIp(client_ip));
+
+    // Clears host, which only for proxy
+    req.clear_request_uri_host();
 
     req.write_to(w)
+        .and_then(|w| flush(w))
         .and_then(move |w| {
             if content_length == 0 {
                 futures::finished((r, w, remains)).boxed()
@@ -560,6 +567,7 @@ pub fn proxy_response<R, W>((r, w): (R, W),
     rsp.headers.set(XRealIp(server_ip));
 
     rsp.write_to(w)
+        .and_then(|w| flush(w))
         .and_then(move |w| {
             if content_length == 0 {
                 futures::finished((r, w, remains)).boxed()

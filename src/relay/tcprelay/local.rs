@@ -281,12 +281,16 @@ impl HttpRelayServer {
                     .and_then(move |(r, svr_w, req_remains)| {
                         HttpResponseFut::with_buf(svr_r, rsp_remains)
                             .and_then(move |(svr_r, rsp, rsp_remains)| {
+                                let is_succeed = rsp.status.is_success();
                                 http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
+                                    .map(move |(svr_r, w, rsp_remains)| (svr_r, w, rsp_remains, is_succeed))
                             })
-                            .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
+                            .map(move |(svr_r, w, rsp_remains, is_succeed)| {
+                                (r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)
+                            })
                     })
-                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
-                        if should_keep_alive {
+                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)| {
+                        if should_keep_alive && is_succeed {
                             HttpRelayServer::handle_http_again((r, w),
                                                                (svr_r, svr_w),
                                                                client_addr_cloned,
@@ -297,6 +301,16 @@ impl HttpRelayServer {
                             futures::finished(()).boxed()
                         }
                     })
+            })
+            .or_else(|err| {
+                match err.kind() {
+                    io::ErrorKind::UnexpectedEof |
+                    io::ErrorKind::BrokenPipe => {
+                        // Ignores this kind of errors, normally because of connection aborted
+                        Ok(())
+                    }
+                    _ => Err(err),
+                }
             })
             .boxed()
     }
@@ -323,12 +337,17 @@ impl HttpRelayServer {
                     .and_then(move |(r, svr_w, req_remains)| {
                         HttpResponseFut::new(svr_r)
                             .and_then(move |(svr_r, rsp, rsp_remains)| {
+                                trace!("Proxy response, {:?}", rsp);
+                                let is_succeed = rsp.status.is_success();
                                 http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
+                                    .map(move |(svr_r, w, rsp_remains)| (svr_r, w, rsp_remains, is_succeed))
                             })
-                            .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
+                            .map(move |(svr_r, w, rsp_remains, is_succeed)| {
+                                (r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)
+                            })
                     })
-                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
-                        if should_keep_alive {
+                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)| {
+                        if should_keep_alive && is_succeed {
                             HttpRelayServer::handle_http_again((r, w),
                                                                (svr_r, svr_w),
                                                                client_addr_cloned,
