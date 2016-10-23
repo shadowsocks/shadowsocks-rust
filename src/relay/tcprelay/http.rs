@@ -24,17 +24,21 @@
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::mem;
+use std::str;
+use std::fmt;
 
 use hyper::uri::RequestUri;
-use hyper::header::Headers;
+use hyper::header::{Header, HeaderFormat, Headers};
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::method::Method;
 use hyper;
 
-use httparse::{self, Request};
+use httparse::{self, Request, Response};
 
 use url::Host;
+
+use ip::IpAddr;
 
 use futures::{self, Future, BoxFuture, Poll};
 
@@ -112,9 +116,14 @@ impl HttpRequest {
             .map(|(w, _)| w)
             .boxed()
     }
+
+    #[inline]
+    pub fn get_address(&self) -> Result<Address, StatusCode> {
+        get_address(&self.request_uri)
+    }
 }
 
-pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
+fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     match uri {
         &RequestUri::Authority(ref s) => {
             match s.parse::<SocketAddr>() {
@@ -164,11 +173,155 @@ pub fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     }
 }
 
+#[derive(Debug)]
+pub struct HttpResponse {
+    pub version: HttpVersion,
+    pub status: StatusCode,
+    pub message: Option<String>,
+    pub headers: Headers,
+}
+
+impl HttpResponse {
+    /// Creates an empty Response
+    pub fn new() -> HttpResponse {
+        HttpResponse {
+            version: HttpVersion::Http11,
+            status: StatusCode::Ok,
+            message: None,
+            headers: Headers::new(),
+        }
+    }
+
+    pub fn from_raw<'headers, 'buf: 'headers>(rsp: &Response<'headers, 'buf>,
+                                              headers: &'headers [httparse::Header])
+                                              -> hyper::Result<HttpResponse> {
+        Ok(HttpResponse {
+            version: if rsp.version.unwrap() == 1 {
+                HttpVersion::Http11
+            } else {
+                HttpVersion::Http10
+            },
+            status: StatusCode::from_u16(rsp.code.unwrap()),
+            message: rsp.reason.map(|s| s.to_owned()).clone(),
+            headers: try!(Headers::from_raw(headers)),
+        })
+    }
+
+    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+        where W: Write + Send + 'static
+    {
+        futures::lazy(move || {
+                let mut w = Vec::new();
+                let msg = self.message
+                    .as_ref()
+                    .map(|s| &s[..])
+                    .or_else(|| self.status.canonical_reason())
+                    .unwrap_or("<unknown status code>");
+                try!(write!(w, "{} {} {}\r\n", self.version, self.status.to_u16(), msg));
+                for header in self.headers.iter() {
+                    try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                }
+
+                try!(write!(w, "\r\n"));
+                Ok(w)
+            })
+            .and_then(|buf| write_all(w, buf))
+            .map(|(w, _)| w)
+            .boxed()
+    }
+}
+
 pub fn write_response<W>(w: W, version: HttpVersion, status: StatusCode) -> BoxFuture<W, io::Error>
     where W: Write + Send + 'static
 {
     let buf = format!("{} {}\r\n\r\n", version, status);
     write_all(w, buf.into_bytes()).map(|(w, _)| w).boxed()
+}
+
+#[derive(Debug, Clone)]
+pub struct XForwardFor(pub Vec<IpAddr>);
+
+impl Header for XForwardFor {
+    fn header_name() -> &'static str {
+        "X-Forward-For"
+    }
+
+    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<XForwardFor> {
+        let mut ips = Vec::new();
+        for raw_h in raw.iter() {
+            let xfor = try!(str::from_utf8(&raw_h[..]));
+            for xfor_str in xfor.split(',') {
+                let trimmed = xfor_str.trim();
+                if trimmed.is_empty() {
+                    // Ignore empty string
+                    continue;
+                }
+                match trimmed.parse::<IpAddr>() {
+                    Ok(i) => ips.push(i),
+                    Err(..) => return Err(hyper::Error::Header),
+                }
+            }
+        }
+
+        Ok(XForwardFor(ips))
+    }
+}
+
+impl HeaderFormat for XForwardFor {
+    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut first = true;
+        for ip in &self.0 {
+            if first {
+                first = false;
+            } else {
+                try!(write!(f, ", "));
+            }
+
+            try!(write!(f, "{}", ip));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct XRealIp(pub Option<IpAddr>);
+
+impl Header for XRealIp {
+    fn header_name() -> &'static str {
+        "X-Real-IP"
+    }
+
+    fn parse_header(raw: &[Vec<u8>]) -> hyper::Result<XRealIp> {
+        let mut ip = None;
+        for raw_ip in raw.iter() {
+            let x_ip = try!(str::from_utf8(&raw_ip[..]));
+            match x_ip.trim().parse::<IpAddr>() {
+                Ok(i) => {
+                    if let Some(prev_ip) = ip.take() {
+                        if prev_ip != i {
+                            return Err(hyper::Error::Header);
+                        }
+                    }
+
+                    ip = Some(i);
+                }
+                Err(..) => return Err(hyper::Error::Header),
+            }
+        }
+
+        Ok(XRealIp(ip))
+    }
+}
+
+impl HeaderFormat for XRealIp {
+    fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref ip) = self.0 {
+            try!(write!(f, "{}", ip));
+        }
+
+        Ok(())
+    }
 }
 
 /// HTTP Client

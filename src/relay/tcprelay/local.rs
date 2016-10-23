@@ -232,12 +232,8 @@ impl HttpRelayServer {
         super::connect_proxy_server(&handle, svr_cfg, addr)
             .and_then(move |(svr_r, svr_w)| {
                 let handshake_resp = format!("{} 200 Connection Established\r\n\r\n", http_version);
+                trace!("Sending HTTP tunnel handshake response");
                 write_all(w, handshake_resp.into_bytes()).and_then(|(w, _)| flush(w)).map(|w| (svr_r, svr_w, w))
-            })
-            .and_then(move |(svr_r, svr_w, w)| {
-                req.write_to(svr_w)
-                    .and_then(|svr_w| write_all(svr_w, remains))
-                    .map(move |(svr_w, _)| (svr_r, svr_w, w))
             })
             .and_then(move |(svr_r, svr_w, w)| {
                 let c2s = copy(r, svr_w);
@@ -263,7 +259,7 @@ impl HttpRelayServer {
                        req.method,
                        req.request_uri);
 
-                match http::get_address(&req.request_uri) {
+                match req.get_address() {
                     Ok(..) => {
                         req.clear_request_uri_host();
                         let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0;
@@ -352,7 +348,7 @@ impl HttpRelayServer {
                            req.method,
                            req.request_uri);
 
-                    match http::get_address(&req.request_uri) {
+                    match req.get_address() {
                         Ok(addr) => {
                             req.clear_request_uri_host();
                             futures::finished((r, w, req, addr, remains)).boxed()
