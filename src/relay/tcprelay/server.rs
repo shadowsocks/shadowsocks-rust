@@ -44,7 +44,7 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::{read_exact, write_all, copy};
+use tokio_core::io::{read_exact, write_all, copy, flush};
 
 use ip::IpAddr;
 
@@ -87,15 +87,17 @@ impl TcpRelayServer {
             .and_then(|(svr_cfg, enc_r)| {
                 let iv = svr_cfg.method.gen_init_vec();
                 trace!("Going to send handshake iv: {:?}", iv);
-                write_all(w, iv).and_then(move |(w, iv)| {
-                    let encryptor = cipher::with_type(svr_cfg.method,
-                                                      svr_cfg.password.as_bytes(),
-                                                      &iv[..],
-                                                      CryptoMode::Encrypt);
-                    let encrypt_stream = EncryptedWriter::new(w, encryptor);
+                write_all(w, iv)
+                    .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
+                    .and_then(move |(w, iv)| {
+                        let encryptor = cipher::with_type(svr_cfg.method,
+                                                          svr_cfg.password.as_bytes(),
+                                                          &iv[..],
+                                                          CryptoMode::Encrypt);
+                        let encrypt_stream = EncryptedWriter::new(w, encryptor);
 
-                    Ok((enc_r, encrypt_stream))
-                })
+                        Ok((enc_r, encrypt_stream))
+                    })
             })
             .boxed()
     }
@@ -170,10 +172,9 @@ impl TcpRelayServer {
                 let (svr_r, svr_w) = svr_s.split();
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
-                c2s.join(s2c)
-                    .and_then(move |(c2s_amt, s2c_amt)| {
-                        trace!("Relayed {} client -> remote {}bytes", addr, c2s_amt);
-                        trace!("Relayed {} client <- remote {}bytes", addr, s2c_amt);
+                c2s.select(s2c)
+                    .then(move |_| {
+                        trace!("Relay {} is finished", addr);
                         Ok(())
                     })
             });
