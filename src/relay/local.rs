@@ -33,27 +33,24 @@ use config::Config;
 
 /// Relay server running under local environment.
 ///
-/// UDP Associate and Bind commands are not supported currently.
-///
 /// ```no_run
-/// use std::net::{SocketAddr, SocketAddrV4};
+/// use std::net::SocketAddr;
+/// use std::sync::Arc;
 ///
-/// use shadowsocks::relay::Relay;
 /// use shadowsocks::relay::RelayLocal;
 /// use shadowsocks::config::{Config, ServerConfig};
-/// use shadowsocks::crypto::cipher::CipherType;
+/// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();
-/// config.local = Some(SocketAddr::V4(SocketAddrV4::new("127.0.0.1".parse().unwrap(), 1080)));
-/// config.server = vec![ServerConfig {
-///     addr: "127.0.0.1".to_string(),
-///     port: 8388,
+/// config.local = Some(Arc::new("127.0.0.1:1080".parse().unwrap()));
+/// config.server = vec![Arc::new(ServerConfig {
+///     addr: "127.0.0.1:8388".parse().unwrap(),
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// }];
-/// RelayLocal::new(config).run();
+/// })];
+/// RelayLocal::new(Arc::new(config)).run();
 /// ```
 #[derive(Clone)]
 pub struct RelayLocal {

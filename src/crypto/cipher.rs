@@ -264,8 +264,8 @@ impl CipherType {
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.iv_len().unwrap_or(0),
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
+            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
+            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
         }
     }
 
