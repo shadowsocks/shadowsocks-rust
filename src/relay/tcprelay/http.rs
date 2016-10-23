@@ -213,7 +213,9 @@ impl HttpResponse {
                     .unwrap_or("<unknown status code>");
                 try!(write!(w, "{} {} {}\r\n", self.version, self.status.to_u16(), msg));
                 for header in self.headers.iter() {
-                    try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                    if !header.name().is_empty() {
+                        try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+                    }
                 }
 
                 try!(write!(w, "\r\n"));
