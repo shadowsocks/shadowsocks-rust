@@ -181,7 +181,9 @@ impl Socks5RelayLocal {
             match res {
                 Ok(..) => Ok(()),
                 Err(err) => {
-                    error!("Failed to handle client: {}", err);
+                    if err.kind() != io::ErrorKind::BrokenPipe {
+                        error!("Failed to handle client: {}", err);
+                    }
                     Err(())
                 }
             }
@@ -240,7 +242,10 @@ impl HttpRelayServer {
                 trace!("Sending HTTP tunnel handshake response");
                 write_all(w, handshake_resp.into_bytes()).and_then(|(w, _)| flush(w)).map(|w| (svr_r, svr_w, w))
             })
-            .and_then(move |(svr_r, svr_w, w)| write_all(svr_w, remains).map(|(svr_w, _)| (svr_r, svr_w, w)))
+            .and_then(move |(svr_r, svr_w, w)| {
+                trace!("HTTP tunnel handshake finished, established tunnel");
+                write_all(svr_w, remains).map(|(svr_w, _)| (svr_r, svr_w, w))
+            })
             .and_then(move |(svr_r, svr_w, w)| {
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
@@ -260,11 +265,17 @@ impl HttpRelayServer {
                          (req_remains, rsp_remains): (Vec<u8>, Vec<u8>),
                          svr_cfg: Arc<ServerConfig>)
                          -> BoxFuture<(), io::Error> {
+        trace!("Continue proxying HTTP request for {}", client_addr);
+
         let client_addr_cloned = client_addr.clone();
         HttpRequestFut::with_buf(r, req_remains)
             .and_then(move |(r, req, req_remains)| {
                 let svr_addr = svr_cfg.addr.clone();
                 let should_keep_alive = http::should_keep_alive(&req);
+
+                trace!("Proxy {} request, keep_alive: {}",
+                       req.method,
+                       should_keep_alive);
 
                 http::proxy_request((r, svr_w), client_addr, req, req_remains)
                     .and_then(move |(r, svr_w, req_remains)| {
@@ -282,6 +293,7 @@ impl HttpRelayServer {
                                                                (req_remains, rsp_remains),
                                                                svr_cfg)
                         } else {
+                            trace!("HTTP proxy finished");
                             futures::finished(()).boxed()
                         }
                     })
@@ -302,7 +314,10 @@ impl HttpRelayServer {
 
         super::connect_proxy_server(&handle, svr_cfg.clone(), addr)
             .and_then(move |(svr_r, svr_w)| {
-                trace!("Going to pass req to server: {:?}", req);
+                trace!("Proxy {} request, keep_alive: {}",
+                       req.method,
+                       should_keep_alive);
+
                 let svr_addr = svr_cfg.addr.clone();
                 http::proxy_request((r, svr_w), client_addr, req, remains)
                     .and_then(move |(r, svr_w, req_remains)| {
@@ -320,6 +335,7 @@ impl HttpRelayServer {
                                                                (req_remains, rsp_remains),
                                                                svr_cfg)
                         } else {
+                            trace!("HTTP proxy finished");
                             futures::finished(()).boxed()
                         }
                     })
@@ -344,6 +360,7 @@ impl HttpRelayServer {
                             futures::finished((r, w, req, addr, remains)).boxed()
                         }
                         Err(status_code) => {
+                            error!("Invalid Uri: {}", req.request_uri);
                             http::write_response(w, req.version, status_code)
                                 .then(|_| {
                                     let err = io::Error::new(io::ErrorKind::Other, "Invalid Uri");
@@ -377,7 +394,10 @@ impl HttpRelayServer {
             match res {
                 Ok(..) => Ok(()),
                 Err(err) => {
-                    error!("Failed to handle client: {}", err);
+                    if err.kind() != io::ErrorKind::BrokenPipe {
+                        error!("Failed to handle client: {}", err);
+                    }
+
                     Err(())
                 }
             }
