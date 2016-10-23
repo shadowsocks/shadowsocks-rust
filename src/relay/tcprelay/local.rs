@@ -166,7 +166,13 @@ impl Socks5RelayLocal {
                             .map(|_| ())
                             .boxed()
                     }
-                    socks5::Command::UdpAssociate => unimplemented!(),
+                    socks5::Command::UdpAssociate => {
+                        warn!("UDP Associate is not supported");
+                        TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                            .write_to(w)
+                            .map(|_| ())
+                            .boxed()
+                    }
                 }
             });
 
