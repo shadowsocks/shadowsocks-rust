@@ -84,11 +84,6 @@ fn main() {
             .long("encrypt-method")
             .takes_value(true)
             .help("Encryption method"))
-        .arg(Arg::with_name("THREADS")
-            .short("t")
-            .long("threads")
-            .takes_value(true)
-            .help("Threads in thread pool"))
         .get_matches();
 
     let mut log_builder = LogBuilder::new();

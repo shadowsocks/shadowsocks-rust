@@ -8,10 +8,6 @@ This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
-> **THIS PROJECT IS <u>ONLY FOR</u> TESTING THE AVAILABILITY AND USABILITY OF MY COROUTINE SERVER PROJECT.**
-
-> **IF YOU ARE INTERESTED, PLEASE REFER TO `coio-rs` and `simplesched` PROJECT**.
-
 It is **unstable**! If you encounter any problems, please open an issue.
 
 ## Dependencies
@@ -113,8 +109,6 @@ It supports the following features:
 * CONNECT, UDP ASSOCIATE commands
 * Crypto algorithms defined in `Cargo.toml`
 * **Load balancing**
-
-Currently it uses [coio-rs](https://github.com/zonyitoo/coio-rs) as the backend support library and it does not support Windows, <del>LoL</del>.
 
 ## TODO
 
