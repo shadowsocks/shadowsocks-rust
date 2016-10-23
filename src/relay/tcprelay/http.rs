@@ -29,6 +29,7 @@ use std::fmt;
 
 use hyper::uri::RequestUri;
 use hyper::header::{Header, HeaderFormat, Headers, ContentLength};
+use hyper::header::{Connection, ConnectionOption};
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::method::Method;
@@ -573,4 +574,20 @@ pub fn proxy_response<R, W>((r, w): (R, W),
             }
         })
         .boxed()
+}
+
+pub fn should_keep_alive(req: &HttpRequest) -> bool {
+    let default_keep_alive = req.version >= HttpVersion::Http11;
+    match req.headers.get::<Connection>() {
+        Some(conn) => {
+            for opt in conn.iter() {
+                if let &ConnectionOption::KeepAlive = opt {
+                    return true;
+                }
+            }
+
+            default_keep_alive
+        }
+        None => default_keep_alive,
+    }
 }

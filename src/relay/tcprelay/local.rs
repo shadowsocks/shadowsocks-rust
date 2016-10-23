@@ -264,6 +264,8 @@ impl HttpRelayServer {
         HttpRequestFut::with_buf(r, req_remains)
             .and_then(move |(r, req, req_remains)| {
                 let svr_addr = svr_cfg.addr.clone();
+                let should_keep_alive = http::should_keep_alive(&req);
+
                 http::proxy_request((r, svr_w), client_addr, req, req_remains)
                     .and_then(move |(r, svr_w, req_remains)| {
                         HttpResponseFut::with_buf(svr_r, rsp_remains)
@@ -273,11 +275,15 @@ impl HttpRelayServer {
                             .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
                     })
                     .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
-                        HttpRelayServer::handle_http_again((r, w),
-                                                           (svr_r, svr_w),
-                                                           client_addr_cloned,
-                                                           (req_remains, rsp_remains),
-                                                           svr_cfg)
+                        if should_keep_alive {
+                            HttpRelayServer::handle_http_again((r, w),
+                                                               (svr_r, svr_w),
+                                                               client_addr_cloned,
+                                                               (req_remains, rsp_remains),
+                                                               svr_cfg)
+                        } else {
+                            futures::finished(()).boxed()
+                        }
                     })
             })
             .boxed()
@@ -292,6 +298,7 @@ impl HttpRelayServer {
                          svr_cfg: Arc<ServerConfig>)
                          -> BoxFuture<(), io::Error> {
         let client_addr_cloned = client_addr.clone();
+        let should_keep_alive = http::should_keep_alive(&req);
 
         super::connect_proxy_server(&handle, svr_cfg.clone(), addr)
             .and_then(move |(svr_r, svr_w)| {
@@ -306,11 +313,15 @@ impl HttpRelayServer {
                             .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
                     })
                     .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
-                        HttpRelayServer::handle_http_again((r, w),
-                                                           (svr_r, svr_w),
-                                                           client_addr_cloned,
-                                                           (req_remains, rsp_remains),
-                                                           svr_cfg)
+                        if should_keep_alive {
+                            HttpRelayServer::handle_http_again((r, w),
+                                                               (svr_r, svr_w),
+                                                               client_addr_cloned,
+                                                               (req_remains, rsp_remains),
+                                                               svr_cfg)
+                        } else {
+                            futures::finished(()).boxed()
+                        }
                     })
             })
             .boxed()
