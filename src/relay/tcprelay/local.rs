@@ -34,7 +34,6 @@ use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::{flush, copy, write_all};
 
-use hyper::header::ContentLength;
 use hyper::method::Method;
 
 use config::{Config, ServerConfig};
@@ -44,7 +43,7 @@ use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 
-use super::http::{self, RequestReader};
+use super::http::{self, HttpRequestFut, HttpResponseFut};
 
 /// TCP relay local server
 pub struct TcpRelayLocal {
@@ -235,6 +234,7 @@ impl HttpRelayServer {
                 trace!("Sending HTTP tunnel handshake response");
                 write_all(w, handshake_resp.into_bytes()).and_then(|(w, _)| flush(w)).map(|w| (svr_r, svr_w, w))
             })
+            .and_then(move |(svr_r, svr_w, w)| write_all(svr_w, remains).map(|(svr_w, _)| (svr_r, svr_w, w)))
             .and_then(move |(svr_r, svr_w, w)| {
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
@@ -250,99 +250,72 @@ impl HttpRelayServer {
 
     fn handle_http_again((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                          (svr_r, svr_w): (super::DecryptedHalf, super::EncryptedHalf),
-                         remains: Vec<u8>)
+                         client_addr: SocketAddr,
+                         (req_remains, rsp_remains): (Vec<u8>, Vec<u8>),
+                         svr_cfg: Arc<ServerConfig>)
                          -> BoxFuture<(), io::Error> {
-        RequestReader::with_buf(r, remains)
-            .and_then(move |(r, mut req, remains)| {
-                trace!("Got HTTP Request, version: {}, method: {}, uri: {}",
-                       req.version,
-                       req.method,
-                       req.request_uri);
-
-                match req.get_address() {
-                    Ok(..) => {
-                        req.clear_request_uri_host();
-                        let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0;
-                        req.write_to(svr_w)
-                            .and_then(move |svr_w| {
-                                if content_length == 0 {
-                                    // Do nothing because this request does not have a body
-                                    futures::finished((r, svr_w, remains)).boxed()
-                                } else {
-                                    write_all(svr_w, remains)
-                                        .and_then(move |(svr_w, remains)| {
-                                            let remain_len = content_length - remains.len() as u64;
-                                            super::copy_exact(r, svr_w, remain_len as usize)
-                                        })
-                                        .map(|(r, svr_w)| (r, svr_w, vec![]))
-                                        .boxed()
-                                }
+        let client_addr_cloned = client_addr.clone();
+        HttpRequestFut::with_buf(r, req_remains)
+            .and_then(move |(r, req, req_remains)| {
+                let svr_addr = svr_cfg.addr.clone();
+                http::proxy_request((r, svr_w), client_addr, req, req_remains)
+                    .and_then(move |(r, svr_w, req_remains)| {
+                        HttpResponseFut::with_buf(svr_r, rsp_remains)
+                            .and_then(move |(svr_r, rsp, rsp_remains)| {
+                                http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
                             })
-                            .map(move |(r, svr_w, remains)| {
-                                HttpRelayServer::handle_http_again((r, w), (svr_r, svr_w), remains)
-                            })
-                            .boxed()
-                    }
-                    Err(status_code) => {
-                        http::write_response(w, req.version, status_code)
-                            .then(|_| {
-                                let err = io::Error::new(io::ErrorKind::Other, "Invalid Uri");
-                                Err(err)
-                            })
-                            .boxed()
-                    }
-                }
-            })
-            .then(|res| {
-                if let Err(err) = res {
-                    error!("HTTP again: {}", err);
-                }
-                Ok(())
+                            .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
+                    })
+                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
+                        HttpRelayServer::handle_http_again((r, w),
+                                                           (svr_r, svr_w),
+                                                           client_addr_cloned,
+                                                           (req_remains, rsp_remains),
+                                                           svr_cfg)
+                    })
             })
             .boxed()
     }
 
     fn handle_http_proxy(handle: Handle,
                          (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                         client_addr: SocketAddr,
                          req: http::HttpRequest,
                          addr: Address,
                          remains: Vec<u8>,
                          svr_cfg: Arc<ServerConfig>)
                          -> BoxFuture<(), io::Error> {
-        let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0;
+        let client_addr_cloned = client_addr.clone();
 
-        super::connect_proxy_server(&handle, svr_cfg, addr)
+        super::connect_proxy_server(&handle, svr_cfg.clone(), addr)
             .and_then(move |(svr_r, svr_w)| {
                 trace!("Going to pass req to server: {:?}", req);
-                req.write_to(svr_w)
-                    .and_then(move |svr_w| {
-                        trace!("Going to relay request body, len: {}", content_length);
-                        if content_length == 0 {
-                            // Do nothing because this request does not have a body
-                            futures::finished((r, svr_w, remains)).boxed()
-                        } else {
-                            write_all(svr_w, remains)
-                                .and_then(move |(svr_w, remains)| {
-                                    let remain_len = content_length - remains.len() as u64;
-                                    super::copy_exact(r, svr_w, remain_len as usize)
-                                })
-                                .map(|(r, svr_w)| (r, svr_w, vec![]))
-                                .boxed()
-                        }
+                let svr_addr = svr_cfg.addr.clone();
+                http::proxy_request((r, svr_w), client_addr, req, remains)
+                    .and_then(move |(r, svr_w, req_remains)| {
+                        HttpResponseFut::new(svr_r)
+                            .and_then(move |(svr_r, rsp, rsp_remains)| {
+                                http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
+                            })
+                            .map(move |(svr_r, w, rsp_remains)| (r, w, svr_r, svr_w, req_remains, rsp_remains))
                     })
-                    .map(move |(r, svr_w, remains)| {
-                        HttpRelayServer::handle_http_again((r, w), (svr_r, svr_w), remains)
+                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains)| {
+                        HttpRelayServer::handle_http_again((r, w),
+                                                           (svr_r, svr_w),
+                                                           client_addr_cloned,
+                                                           (req_remains, rsp_remains),
+                                                           svr_cfg)
                     })
             })
-            .map(|_| ())
             .boxed()
     }
 
     fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
         let cloned_handle = handle.clone();
+        let client_addr = try!(socket.peer_addr());
         let fut = futures::lazy(|| Ok(socket.split()))
             .and_then(|(r, w)| {
-                RequestReader::new(r).and_then(move |(r, mut req, remains)| {
+                HttpRequestFut::new(r).and_then(move |(r, mut req, remains)| {
                     trace!("Got HTTP Request, version: {}, method: {}, uri: {}",
                            req.version,
                            req.method,
@@ -372,7 +345,13 @@ impl HttpRelayServer {
                     }
                     met => {
                         info!("{} (Http) {}", met, addr);
-                        HttpRelayServer::handle_http_proxy(cloned_handle, (r, w), req, addr, remains, svr_cfg)
+                        HttpRelayServer::handle_http_proxy(cloned_handle,
+                                                           (r, w),
+                                                           client_addr,
+                                                           req,
+                                                           addr,
+                                                           remains,
+                                                           svr_cfg)
                     }
                 }
             });

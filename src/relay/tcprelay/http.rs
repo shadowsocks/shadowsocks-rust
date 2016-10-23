@@ -28,7 +28,7 @@ use std::str;
 use std::fmt;
 
 use hyper::uri::RequestUri;
-use hyper::header::{Header, HeaderFormat, Headers};
+use hyper::header::{Header, HeaderFormat, Headers, ContentLength};
 use hyper::status::StatusCode;
 use hyper::version::HttpVersion;
 use hyper::method::Method;
@@ -182,16 +182,6 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
-    /// Creates an empty Response
-    pub fn new() -> HttpResponse {
-        HttpResponse {
-            version: HttpVersion::Http11,
-            status: StatusCode::Ok,
-            message: None,
-            headers: Headers::new(),
-        }
-    }
-
     pub fn from_raw<'headers, 'buf: 'headers>(rsp: &Response<'headers, 'buf>,
                                               headers: &'headers [httparse::Header])
                                               -> hyper::Result<HttpResponse> {
@@ -285,7 +275,7 @@ impl HeaderFormat for XForwardFor {
 }
 
 #[derive(Debug, Clone)]
-pub struct XRealIp(pub Option<IpAddr>);
+pub struct XRealIp(pub IpAddr);
 
 impl Header for XRealIp {
     fn header_name() -> &'static str {
@@ -310,41 +300,41 @@ impl Header for XRealIp {
             }
         }
 
-        Ok(XRealIp(ip))
+        match ip {
+            Some(ip) => Ok(XRealIp(ip)),
+            None => Err(hyper::Error::Header),
+        }
     }
 }
 
 impl HeaderFormat for XRealIp {
+    #[inline]
     fn fmt_header(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ref ip) = self.0 {
-            try!(write!(f, "{}", ip));
-        }
-
-        Ok(())
+        write!(f, "{}", self.0)
     }
 }
 
-/// HTTP Client
-pub enum RequestReader<R>
+/// Future for reading HttpRequest
+pub enum HttpRequestFut<R>
     where R: Read
 {
     Pending { r: R, buf: Vec<u8> },
     Empty,
 }
 
-impl<R> RequestReader<R>
+impl<R> HttpRequestFut<R>
     where R: Read
 {
-    pub fn new(r: R) -> RequestReader<R> {
-        RequestReader::with_buf(r, Vec::new())
+    pub fn new(r: R) -> HttpRequestFut<R> {
+        HttpRequestFut::with_buf(r, Vec::new())
     }
 
-    pub fn with_buf(r: R, buf: Vec<u8>) -> RequestReader<R> {
-        RequestReader::Pending { r: r, buf: buf }
+    pub fn with_buf(r: R, buf: Vec<u8>) -> HttpRequestFut<R> {
+        HttpRequestFut::Pending { r: r, buf: buf }
     }
 }
 
-impl<R> Future for RequestReader<R>
+impl<R> Future for HttpRequestFut<R>
     where R: Read
 {
     type Item = (R, HttpRequest, Vec<u8>);
@@ -353,9 +343,10 @@ impl<R> Future for RequestReader<R>
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut lbuf = [0u8; 4096];
         let (req, len) = match self {
-            &mut RequestReader::Pending { ref mut r, ref mut buf } => {
-                let mut http_req = None;
-                let mut total_len = 0;
+            &mut HttpRequestFut::Pending { ref mut r, ref mut buf } => {
+                // FIXME: Compiler force me to do this!
+                let http_req: Option<HttpRequest>;
+                let total_len: usize;
                 loop {
                     let n = try_nb!(r.read(&mut lbuf));
                     buf.extend_from_slice(&lbuf[..n]);
@@ -398,12 +389,188 @@ impl<R> Future for RequestReader<R>
 
                 (http_req.unwrap(), total_len)
             }
-            &mut RequestReader::Empty => panic!("poll a RequestReader after it's done"),
+            &mut HttpRequestFut::Empty => panic!("poll a HttpRequestFut after it's done"),
         };
 
-        match mem::replace(self, RequestReader::Empty) {
-            RequestReader::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
-            RequestReader::Empty => unreachable!(),
+        match mem::replace(self, HttpRequestFut::Empty) {
+            HttpRequestFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
+            HttpRequestFut::Empty => unreachable!(),
         }
     }
+}
+
+/// Future for reading HttpRequest
+pub enum HttpResponseFut<R>
+    where R: Read
+{
+    Pending { r: R, buf: Vec<u8> },
+    Empty,
+}
+
+impl<R> HttpResponseFut<R>
+    where R: Read
+{
+    pub fn new(r: R) -> HttpResponseFut<R> {
+        HttpResponseFut::with_buf(r, Vec::new())
+    }
+
+    pub fn with_buf(r: R, buf: Vec<u8>) -> HttpResponseFut<R> {
+        HttpResponseFut::Pending { r: r, buf: buf }
+    }
+}
+
+impl<R> Future for HttpResponseFut<R>
+    where R: Read
+{
+    type Item = (R, HttpResponse, Vec<u8>);
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let mut lbuf = [0u8; 4096];
+        let (req, len) = match self {
+            &mut HttpResponseFut::Pending { ref mut r, ref mut buf } => {
+                // FIXME: Compiler force me to do this!
+                let http_req: Option<HttpResponse>;
+                let total_len: usize;
+                loop {
+                    let n = try_nb!(r.read(&mut lbuf));
+                    buf.extend_from_slice(&lbuf[..n]);
+
+                    // Maximum 128 headers
+                    let mut headers = [httparse::EMPTY_HEADER; 128];
+                    let headers_ptr = &headers as *const _;
+                    let mut req = Response::new(&mut headers);
+                    match req.parse(&mut buf[..]) {
+                        Ok(httparse::Status::Partial) => {
+                            if n == 0 {
+                                // Already EOF!
+                                let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+                                return Err(err);
+                            }
+                        }
+                        Ok(httparse::Status::Complete(len)) => {
+                            total_len = len;
+
+                            // Make borrow checker happy
+                            let headers_ref = unsafe { &*headers_ptr };
+                            let hreq = match HttpResponse::from_raw(&req, headers_ref) {
+                                Ok(r) => r,
+                                Err(err) => {
+                                    error!("HttpResponse::from_raw: {}", err);
+                                    let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+                                    return Err(err);
+                                }
+                            };
+                            http_req = Some(hreq);
+                            break;
+                        }
+                        Err(err) => {
+                            error!("Request parse: {:?}", err);
+                            let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+                            return Err(err);
+                        }
+                    }
+                }
+
+                (http_req.unwrap(), total_len)
+            }
+            &mut HttpResponseFut::Empty => panic!("poll a HttpResponseFut after it's done"),
+        };
+
+        match mem::replace(self, HttpResponseFut::Empty) {
+            HttpResponseFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
+            HttpResponseFut::Empty => unreachable!(),
+        }
+    }
+}
+
+fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
+    match *addr {
+        SocketAddr::V4(ref v4) => IpAddr::V4(v4.ip().clone()),
+        SocketAddr::V6(ref v6) => IpAddr::V6(v6.ip().clone()),
+    }
+}
+
+/// Proxy this HTTP Request to writer
+pub fn proxy_request<R, W>((r, w): (R, W),
+                           client_addr: SocketAddr,
+                           mut req: HttpRequest,
+                           mut remains: Vec<u8>)
+                           -> BoxFuture<(R, W, Vec<u8>), io::Error>
+    where R: Read + Send + 'static,
+          W: Write + Send + 'static
+{
+    let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
+    let client_ip = socket_to_ip(&client_addr);
+
+    // Set proxy IP info
+    let xf = if let Some(fw) = req.headers.get_mut::<XForwardFor>() {
+        let mut flst = fw.0.clone();
+        flst.push(client_ip.clone());
+        flst
+    } else {
+        vec![client_ip.clone()]
+    };
+    req.headers.set(XForwardFor(xf));
+
+    // Set real ip
+    req.headers.set(XRealIp(client_ip));
+
+    req.write_to(w)
+        .and_then(move |w| {
+            if content_length == 0 {
+                futures::finished((r, w, remains)).boxed()
+            } else if content_length <= remains.len() {
+                let after_that = remains.split_off(content_length);
+                write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
+            } else {
+                let missing_bytes = content_length - remains.len();
+                write_all(w, remains)
+                    .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
+                    .boxed()
+            }
+        })
+        .boxed()
+}
+
+/// Proxy this HTTP Response to writer
+pub fn proxy_response<R, W>((r, w): (R, W),
+                            server_addr: SocketAddr,
+                            mut rsp: HttpResponse,
+                            mut remains: Vec<u8>)
+                            -> BoxFuture<(R, W, Vec<u8>), io::Error>
+    where R: Read + Send + 'static,
+          W: Write + Send + 'static
+{
+    let content_length = rsp.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
+    let server_ip = socket_to_ip(&server_addr);
+
+    // Set proxy IP info
+    let xf = if let Some(fw) = rsp.headers.get_mut::<XForwardFor>() {
+        let mut flst = fw.0.clone();
+        flst.push(server_ip.clone());
+        flst
+    } else {
+        vec![server_ip.clone()]
+    };
+    rsp.headers.set(XForwardFor(xf));
+
+    // Set real ip
+    rsp.headers.set(XRealIp(server_ip));
+
+    rsp.write_to(w)
+        .and_then(move |w| {
+            if content_length == 0 {
+                futures::finished((r, w, remains)).boxed()
+            } else if content_length <= remains.len() {
+                let after_that = remains.split_off(content_length);
+                write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
+            } else {
+                let missing_bytes = content_length - remains.len();
+                write_all(w, remains)
+                    .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
+                    .boxed()
+            }
+        })
+        .boxed()
 }
