@@ -5,6 +5,8 @@ extern crate qrcode;
 
 use std::str;
 use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
 use rustc_serialize::json::{ToJson, as_pretty_json};
@@ -19,11 +21,7 @@ const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let url = format!("{}:{}@{}:{}",
-                      svr.method.to_string(),
-                      svr.password,
-                      svr.addr,
-                      svr.port);
+    let url = format!("{}:{}@{}", svr.method.to_string(), svr.password, svr.addr);
     format!("ss://{}", url.as_bytes().to_base64(URL_SAFE))
 }
 
@@ -85,24 +83,20 @@ fn decode(encoded: &str, need_qrcode: bool) {
         _ => panic!("Malformed input"),
     };
 
-    let mut sp3 = addr.split(':');
-    let (addr, port) = match (sp3.next(), sp3.next()) {
-        (Some(a), Some(p)) => (a, p),
-        _ => panic!("Malformed input"),
+    let addr = match addr.parse::<SocketAddr>() {
+        Ok(a) => a,
+        Err(err) => panic!("Malformed input: {:?}", err),
     };
 
-    let svrconfig = ServerConfig::basic(addr.to_owned(),
-                                        port.parse().unwrap(),
-                                        pwd.to_owned(),
-                                        method.parse().unwrap());
+    let svrconfig = ServerConfig::basic(addr, pwd.to_owned(), method.parse().unwrap());
 
     let config = Config {
-        server: vec![svrconfig],
+        server: vec![Arc::new(svrconfig)],
         local: None,
         http_proxy: None,
         enable_udp: false,
         timeout: None,
-        forbidden_ip: HashSet::new(),
+        forbidden_ip: Arc::new(HashSet::new()),
     };
 
     let config_json = config.to_json();
