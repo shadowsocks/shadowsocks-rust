@@ -73,33 +73,38 @@ impl TcpRelayServer {
                  svr_cfg: Arc<ServerConfig>)
                  -> BoxFuture<(DecryptedHalf, EncryptedHalf), io::Error> {
         let iv_len = svr_cfg.method.iv_size();
-        read_exact(r, vec![0u8; iv_len])
-            .and_then(move |(r, iv)| {
-                trace!("Got handshake iv: {:?}", iv);
-                let decryptor = cipher::with_type(svr_cfg.method,
-                                                  svr_cfg.password.as_bytes(),
-                                                  &iv[..],
-                                                  CryptoMode::Decrypt);
-                let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-                Ok((svr_cfg, decrypt_stream))
-            })
-            .and_then(|(svr_cfg, enc_r)| {
-                let iv = svr_cfg.method.gen_init_vec();
-                trace!("Going to send handshake iv: {:?}", iv);
-                write_all(w, iv)
-                    .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
-                    .and_then(move |(w, iv)| {
-                        let encryptor = cipher::with_type(svr_cfg.method,
-                                                          svr_cfg.password.as_bytes(),
-                                                          &iv[..],
-                                                          CryptoMode::Encrypt);
-                        let encrypt_stream = EncryptedWriter::new(w, encryptor);
+        let svr_cfg_cloned = svr_cfg.clone();
+        let read_fut = read_exact(r, vec![0u8; iv_len]).and_then(move |(r, iv)| {
+            trace!("Got handshake iv: {:?}", iv);
+            let decryptor = cipher::with_type(svr_cfg.method,
+                                              svr_cfg.password.as_bytes(),
+                                              &iv[..],
+                                              CryptoMode::Decrypt);
+            let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-                        Ok((enc_r, encrypt_stream))
-                    })
-            })
-            .boxed()
+            Ok(decrypt_stream)
+        });
+
+        let write_fut = futures::lazy(move || {
+            let svr_cfg = svr_cfg_cloned;
+
+            let iv = svr_cfg.method.gen_init_vec();
+            trace!("Going to send handshake iv: {:?}", iv);
+            write_all(w, iv)
+                .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
+                .and_then(move |(w, iv)| {
+                    let encryptor = cipher::with_type(svr_cfg.method,
+                                                      svr_cfg.password.as_bytes(),
+                                                      &iv[..],
+                                                      CryptoMode::Encrypt);
+                    let encrypt_stream = EncryptedWriter::new(w, encryptor);
+
+                    Ok(encrypt_stream)
+                })
+        });
+
+        read_fut.join(write_fut).boxed()
     }
 
     fn resolve_address(addr: Address, cpu_pool: CpuPool) -> BoxFuture<SocketAddr, io::Error> {

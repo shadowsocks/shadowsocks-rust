@@ -36,7 +36,7 @@ use tokio_core::io::{read_exact, write_all, flush};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
-use futures::{Future, BoxFuture, Poll};
+use futures::{self, Future, BoxFuture, Poll};
 
 use self::stream::{EncryptedWriter, DecryptedReader};
 
@@ -57,57 +57,69 @@ fn connect_proxy_server(handle: &Handle,
                         svr_cfg: Arc<ServerConfig>,
                         relay_addr: Address)
                         -> BoxFuture<(DecryptedHalf, EncryptedHalf), io::Error> {
+
+
     TcpStream::connect(&svr_cfg.addr, handle)
         .and_then(move |remote_stream| {
             let (r, w) = remote_stream.split();
 
-            // Encrypt data to remote server
+            let svr_cfg_cloned = svr_cfg.clone();
 
-            // Send initialize vector to remote and create encryptor
+            let enc = futures::lazy(move || {
+                // Encrypt data to remote server
 
-            let local_iv = svr_cfg.method.gen_init_vec();
-            trace!("Going to send initialize vector: {:?}", local_iv);
+                // Send initialize vector to remote and create encryptor
 
+                let local_iv = svr_cfg.method.gen_init_vec();
+                trace!("Going to send initialize vector: {:?}", local_iv);
 
-            write_all(w, local_iv)
-                .and_then(move |(w, local_iv)| {
-                    let encryptor = cipher::with_type(svr_cfg.method,
+                write_all(w, local_iv)
+                    .and_then(move |(w, local_iv)| {
+                        let encryptor = cipher::with_type(svr_cfg.method,
+                                                          svr_cfg.password.as_bytes(),
+                                                          &local_iv[..],
+                                                          CryptoMode::Encrypt);
+
+                        Ok(EncryptedWriter::new(w, encryptor))
+                    })
+                    .and_then(move |enc_w| {
+                        trace!("Got encrypt stream and going to send addr: {:?}",
+                               relay_addr);
+
+                        // Send relay address to remote
+                        relay_addr.write_to(Vec::new())
+                            .and_then(|addr_buf| {
+                                write_all(enc_w, addr_buf)
+                                    .and_then(|(enc_w, _)| flush(enc_w))
+                                    .and_then(|enc_w| Ok(enc_w))
+                            })
+                    })
+            });
+
+            let dec = futures::lazy(move || {
+                let svr_cfg = svr_cfg_cloned;
+
+                // Decrypt data from remote server
+
+                let iv_len = svr_cfg.method.iv_size();
+                read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
+                    trace!("Got initialize vector {:?}", remote_iv);
+
+                    let decryptor = cipher::with_type(svr_cfg.method,
                                                       svr_cfg.password.as_bytes(),
-                                                      &local_iv[..],
-                                                      CryptoMode::Encrypt);
+                                                      &remote_iv[..],
+                                                      CryptoMode::Decrypt);
+                    let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-                    Ok((svr_cfg, r, EncryptedWriter::new(w, encryptor)))
+                    Ok(decrypt_stream)
                 })
-                .and_then(|(svr_cfg, r, enc_w)| {
-                    trace!("Got encrypt stream and going to send addr: {:?}",
-                           relay_addr);
+            });
 
-                    // Send relay address to remote
-                    relay_addr.write_to(Vec::new())
-                        .and_then(|addr_buf| {
-                            write_all(enc_w, addr_buf)
-                                .and_then(|(enc_w, _)| flush(enc_w))
-                                .and_then(|enc_w| Ok((svr_cfg, r, enc_w)))
-                        })
-                })
+            dec.join(enc)
         })
-        .and_then(|(svr_cfg, r, enc_w)| {
-            // Decrypt data from remote server
-
-            let iv_len = svr_cfg.method.iv_size();
-            read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
-                trace!("Got initialize vector {:?}", remote_iv);
-
-                let decryptor = cipher::with_type(svr_cfg.method,
-                                                  svr_cfg.password.as_bytes(),
-                                                  &remote_iv[..],
-                                                  CryptoMode::Decrypt);
-                let decrypt_stream = DecryptedReader::new(r, decryptor);
-
-                trace!("Finished creating remote encrypt stream pair");
-
-                Ok((decrypt_stream, enc_w))
-            })
+        .and_then(|(enc_r, enc_w)| {
+            trace!("Finished creating remote connection pair");
+            Ok((enc_r, enc_w))
         })
         .boxed()
 }
