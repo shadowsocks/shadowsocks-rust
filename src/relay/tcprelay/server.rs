@@ -177,7 +177,7 @@ impl TcpRelayServer {
                 let (svr_r, svr_w) = svr_s.split();
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
-                c2s.select(s2c)
+                c2s.join(s2c)
                     .then(move |_| {
                         trace!("Relay {} is finished", addr);
                         Ok(())
