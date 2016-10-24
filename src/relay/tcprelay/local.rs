@@ -43,8 +43,8 @@ use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 
-use super::http::{self, HttpRequestFut, HttpResponseFut};
-use super::tunnel;
+use super::http::{self, HttpRequestFut};
+use super::{BoxIoFuture, tunnel};
 
 /// TCP relay local server
 pub struct TcpRelayLocal {
@@ -264,100 +264,94 @@ impl HttpRelayServer {
             .boxed()
     }
 
-    fn handle_http_again((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
-                         (svr_r, svr_w): (super::DecryptedHalf, super::EncryptedHalf),
-                         client_addr: SocketAddr,
-                         (req_remains, rsp_remains): (Vec<u8>, Vec<u8>),
-                         svr_cfg: Arc<ServerConfig>)
-                         -> BoxFuture<(), io::Error> {
-        trace!("Continue proxying HTTP request for {}", client_addr);
-
-        let client_addr_cloned = client_addr.clone();
+    fn handle_http_keepalive(r: ReadHalf<TcpStream>,
+                             svr_w: super::EncryptedHalf,
+                             req_remains: Vec<u8>)
+                             -> BoxIoFuture<()> {
         HttpRequestFut::with_buf(r, req_remains)
-            .and_then(move |(r, req, req_remains)| {
-                let svr_addr = svr_cfg.addr.clone();
-                let should_keep_alive = http::should_keep_alive(&req);
+            .then(|res| {
+                match res {
+                    Ok((r, req, remains)) => {
+                        let should_keep_alive = http::should_keep_alive(&req);
+                        trace!("Going to proxy request: {:?}", req);
+                        trace!("Should keep alive? {}", should_keep_alive);
 
-                trace!("Proxy {} request, keep_alive: {}",
-                       req.method,
-                       should_keep_alive);
-
-                http::proxy_request((r, svr_w), client_addr, req, req_remains)
-                    .and_then(move |(r, svr_w, req_remains)| {
-                        HttpResponseFut::with_buf(svr_r, rsp_remains)
-                            .and_then(move |(svr_r, rsp, rsp_remains)| {
-                                let is_succeed = rsp.status.is_success();
-                                http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
-                                    .map(move |(svr_r, w, rsp_remains)| (svr_r, w, rsp_remains, is_succeed))
+                        http::proxy_request((r, svr_w), None, req, remains)
+                            .and_then(move |(r, svr_w, req_remains)| {
+                                if should_keep_alive {
+                                    HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
+                                } else {
+                                    futures::finished(()).boxed()
+                                }
                             })
-                            .map(move |(svr_r, w, rsp_remains, is_succeed)| {
-                                (r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)
-                            })
-                    })
-                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)| {
-                        if should_keep_alive && is_succeed {
-                            HttpRelayServer::handle_http_again((r, w),
-                                                               (svr_r, svr_w),
-                                                               client_addr_cloned,
-                                                               (req_remains, rsp_remains),
-                                                               svr_cfg)
-                        } else {
-                            trace!("HTTP proxy finished");
-                            futures::finished(()).boxed()
-                        }
-                    })
-            })
-            .or_else(|err| {
-                match err.kind() {
-                    io::ErrorKind::UnexpectedEof |
-                    io::ErrorKind::BrokenPipe => {
-                        // Ignores this kind of errors, normally because of connection aborted
-                        Ok(())
+                            .boxed()
                     }
-                    _ => Err(err),
+                    Err(err) => {
+                        futures::lazy(|| {
+                                use std::io::ErrorKind;
+                                match err.kind() {
+                                    // It is Ok for client to close connection
+                                    ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe => Ok(()),
+                                    _ => Err(err),
+                                }
+                            })
+                            .boxed()
+                    }
                 }
             })
             .boxed()
     }
 
-    // fn handle_http_proxy(handle: Handle,
-    //                      (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
-    //                      client_addr: SocketAddr,
-    //                      req: http::HttpRequest,
-    //                      addr: Address,
-    //                      remains: Vec<u8>,
-    //                      svr_cfg: Arc<ServerConfig>)
-    //                      -> BoxFuture<(), io::Error> {
-    //     let client_addr_cloned = client_addr.clone();
-    //     let should_keep_alive = http::should_keep_alive(&req);
-    //     let cloned_addr = addr.clone();
+    fn handle_http_proxy(handle: Handle,
+                         (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                         client_addr: &SocketAddr,
+                         req: http::HttpRequest,
+                         addr: Address,
+                         remains: Vec<u8>,
+                         svr_cfg: Arc<ServerConfig>)
+                         -> BoxFuture<(), io::Error> {
+        trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
 
-    //     super::connect_proxy_server(&handle, svr_cfg.clone())
-    //         .and_then(move |svr_s| {
-    //             trace!("Proxy server connected");
+        let should_keep_alive = http::should_keep_alive(&req);
+        super::connect_proxy_server(&handle, svr_cfg.clone())
+            .and_then(move |svr_s| {
+                trace!("Proxy server connected");
 
-    //             super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
-    //                 // Just proxy anything to client
-    //                 let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-    //                 let whalf = svr_w.and_then(move |svr_w| {
-    //                     unimplemented!();
-    //                 });
+                let cloned_addr = addr.clone();
+                super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+                    // Just proxy anything to client
+                    let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+                    let whalf = svr_w.and_then(move |svr_w| {
+                        // Send the first request to server
+                        trace!("Going to proxy request: {:?}", req);
+                        trace!("Should keep alive? {}", should_keep_alive);
+                        http::proxy_request((r, svr_w), None, req, remains)
+                            .and_then(move |(r, svr_w, req_remains)| {
+                                if should_keep_alive {
+                                    HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
+                                } else {
+                                    futures::finished(()).boxed()
+                                }
+                            })
+                    });
 
-    //                 rhalf.join(whalf)
-    //                     .then(move |_| {
-    //                         trace!("Relay to {} is finished", cloned_addr);
-    //                         Ok(())
-    //                     })
-    //             })
-    //         })
-    //         .boxed()
-    // }
+                    rhalf.join(whalf)
+                        .then(move |_| {
+                            trace!("Relay to {} is finished", cloned_addr);
+                            Ok(())
+                        })
+                })
+            })
+            .boxed()
+    }
 
     fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
         let cloned_handle = handle.clone();
         let client_addr = try!(socket.peer_addr());
         let fut = futures::lazy(|| Ok(socket.split()))
             .and_then(|(r, w)| {
+                // Process the first request to see whether client wants CONNECT tunnel or normal HTTP proxy
+
                 HttpRequestFut::new(r).and_then(move |(r, mut req, remains)| {
                     trace!("Got HTTP Request, version: {}, method: {}, uri: {}",
                            req.version,
@@ -389,14 +383,13 @@ impl HttpRelayServer {
                     }
                     met => {
                         info!("{} (Http) {}", met, addr);
-                        // HttpRelayServer::handle_http_proxy(cloned_handle,
-                        //                                    (r, w),
-                        //                                    client_addr,
-                        //                                    req,
-                        //                                    addr,
-                        //                                    remains,
-                        //                                    svr_cfg)
-                        unimplemented!();
+                        HttpRelayServer::handle_http_proxy(cloned_handle,
+                                                           (r, w),
+                                                           &client_addr,
+                                                           req,
+                                                           addr,
+                                                           remains,
+                                                           svr_cfg)
                     }
                 }
             });

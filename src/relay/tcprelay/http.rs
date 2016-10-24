@@ -35,7 +35,7 @@ use hyper::version::HttpVersion;
 use hyper::method::Method;
 use hyper;
 
-use httparse::{self, Request, Response};
+use httparse::{self, Request};
 
 use url::Host;
 
@@ -177,55 +177,55 @@ fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     }
 }
 
-#[derive(Debug)]
-pub struct HttpResponse {
-    pub version: HttpVersion,
-    pub status: StatusCode,
-    pub message: Option<String>,
-    pub headers: Headers,
-}
+// #[derive(Debug)]
+// pub struct HttpResponse {
+//     pub version: HttpVersion,
+//     pub status: StatusCode,
+//     pub message: Option<String>,
+//     pub headers: Headers,
+// }
 
-impl HttpResponse {
-    pub fn from_raw<'headers, 'buf: 'headers>(rsp: &Response<'headers, 'buf>,
-                                              headers: &'headers [httparse::Header])
-                                              -> hyper::Result<HttpResponse> {
-        Ok(HttpResponse {
-            version: if rsp.version.unwrap() == 1 {
-                HttpVersion::Http11
-            } else {
-                HttpVersion::Http10
-            },
-            status: StatusCode::from_u16(rsp.code.unwrap()),
-            message: rsp.reason.map(|s| s.to_owned()).clone(),
-            headers: try!(Headers::from_raw(headers)),
-        })
-    }
+// impl HttpResponse {
+//     pub fn from_raw<'headers, 'buf: 'headers>(rsp: &Response<'headers, 'buf>,
+//                                               headers: &'headers [httparse::Header])
+//                                               -> hyper::Result<HttpResponse> {
+//         Ok(HttpResponse {
+//             version: if rsp.version.unwrap() == 1 {
+//                 HttpVersion::Http11
+//             } else {
+//                 HttpVersion::Http10
+//             },
+//             status: StatusCode::from_u16(rsp.code.unwrap()),
+//             message: rsp.reason.map(|s| s.to_owned()).clone(),
+//             headers: try!(Headers::from_raw(headers)),
+//         })
+//     }
 
-    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
-        where W: Write + Send + 'static
-    {
-        futures::lazy(move || {
-                let mut w = Vec::new();
-                let msg = self.message
-                    .as_ref()
-                    .map(|s| &s[..])
-                    .or_else(|| self.status.canonical_reason())
-                    .unwrap_or("<unknown status code>");
-                try!(write!(w, "{} {} {}\r\n", self.version, self.status.to_u16(), msg));
-                for header in self.headers.iter() {
-                    if !header.name().is_empty() {
-                        try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
-                    }
-                }
+//     pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+//         where W: Write + Send + 'static
+//     {
+//         futures::lazy(move || {
+//                 let mut w = Vec::new();
+//                 let msg = self.message
+//                     .as_ref()
+//                     .map(|s| &s[..])
+//                     .or_else(|| self.status.canonical_reason())
+//                     .unwrap_or("<unknown status code>");
+//                 try!(write!(w, "{} {} {}\r\n", self.version, self.status.to_u16(), msg));
+//                 for header in self.headers.iter() {
+//                     if !header.name().is_empty() {
+//                         try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+//                     }
+//                 }
 
-                try!(write!(w, "\r\n"));
-                Ok(w)
-            })
-            .and_then(|buf| write_all(w, buf))
-            .map(|(w, _)| w)
-            .boxed()
-    }
-}
+//                 try!(write!(w, "\r\n"));
+//                 Ok(w)
+//             })
+//             .and_then(|buf| write_all(w, buf))
+//             .map(|(w, _)| w)
+//             .boxed()
+//     }
+// }
 
 pub fn write_response<W>(w: W, version: HttpVersion, status: StatusCode) -> BoxFuture<W, io::Error>
     where W: Write + Send + 'static
@@ -405,90 +405,90 @@ impl<R> Future for HttpRequestFut<R>
     }
 }
 
-/// Future for reading HttpRequest
-pub enum HttpResponseFut<R>
-    where R: Read
-{
-    Pending { r: R, buf: Vec<u8> },
-    Empty,
-}
+// /// Future for reading HttpRequest
+// pub enum HttpResponseFut<R>
+//     where R: Read
+// {
+//     Pending { r: R, buf: Vec<u8> },
+//     Empty,
+// }
 
-impl<R> HttpResponseFut<R>
-    where R: Read
-{
-    pub fn new(r: R) -> HttpResponseFut<R> {
-        HttpResponseFut::with_buf(r, Vec::new())
-    }
+// impl<R> HttpResponseFut<R>
+//     where R: Read
+// {
+//     pub fn new(r: R) -> HttpResponseFut<R> {
+//         HttpResponseFut::with_buf(r, Vec::new())
+//     }
 
-    pub fn with_buf(r: R, buf: Vec<u8>) -> HttpResponseFut<R> {
-        HttpResponseFut::Pending { r: r, buf: buf }
-    }
-}
+//     pub fn with_buf(r: R, buf: Vec<u8>) -> HttpResponseFut<R> {
+//         HttpResponseFut::Pending { r: r, buf: buf }
+//     }
+// }
 
-impl<R> Future for HttpResponseFut<R>
-    where R: Read
-{
-    type Item = (R, HttpResponse, Vec<u8>);
-    type Error = io::Error;
+// impl<R> Future for HttpResponseFut<R>
+//     where R: Read
+// {
+//     type Item = (R, HttpResponse, Vec<u8>);
+//     type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut lbuf = [0u8; 4096];
-        let (req, len) = match self {
-            &mut HttpResponseFut::Pending { ref mut r, ref mut buf } => {
-                // FIXME: Compiler force me to do this!
-                let http_req: Option<HttpResponse>;
-                let total_len: usize;
-                loop {
-                    let n = try_nb!(r.read(&mut lbuf));
-                    buf.extend_from_slice(&lbuf[..n]);
+//     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+//         let mut lbuf = [0u8; 4096];
+//         let (req, len) = match self {
+//             &mut HttpResponseFut::Pending { ref mut r, ref mut buf } => {
+//                 // FIXME: Compiler force me to do this!
+//                 let http_req: Option<HttpResponse>;
+//                 let total_len: usize;
+//                 loop {
+//                     let n = try_nb!(r.read(&mut lbuf));
+//                     buf.extend_from_slice(&lbuf[..n]);
 
-                    // Maximum 128 headers
-                    let mut headers = [httparse::EMPTY_HEADER; 128];
-                    let headers_ptr = &headers as *const _;
-                    let mut req = Response::new(&mut headers);
-                    match req.parse(&mut buf[..]) {
-                        Ok(httparse::Status::Partial) => {
-                            if n == 0 {
-                                // Already EOF!
-                                let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
-                                return Err(err);
-                            }
-                        }
-                        Ok(httparse::Status::Complete(len)) => {
-                            total_len = len;
+//                     // Maximum 128 headers
+//                     let mut headers = [httparse::EMPTY_HEADER; 128];
+//                     let headers_ptr = &headers as *const _;
+//                     let mut req = Response::new(&mut headers);
+//                     match req.parse(&mut buf[..]) {
+//                         Ok(httparse::Status::Partial) => {
+//                             if n == 0 {
+//                                 // Already EOF!
+//                                 let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+//                                 return Err(err);
+//                             }
+//                         }
+//                         Ok(httparse::Status::Complete(len)) => {
+//                             total_len = len;
 
-                            // Make borrow checker happy
-                            let headers_ref = unsafe { &*headers_ptr };
-                            let hreq = match HttpResponse::from_raw(&req, headers_ref) {
-                                Ok(r) => r,
-                                Err(err) => {
-                                    error!("HttpResponse::from_raw: {}", err);
-                                    let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
-                                    return Err(err);
-                                }
-                            };
-                            http_req = Some(hreq);
-                            break;
-                        }
-                        Err(err) => {
-                            error!("Request parse: {:?}", err);
-                            let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
-                            return Err(err);
-                        }
-                    }
-                }
+//                             // Make borrow checker happy
+//                             let headers_ref = unsafe { &*headers_ptr };
+//                             let hreq = match HttpResponse::from_raw(&req, headers_ref) {
+//                                 Ok(r) => r,
+//                                 Err(err) => {
+//                                     error!("HttpResponse::from_raw: {}", err);
+//                                     let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+//                                     return Err(err);
+//                                 }
+//                             };
+//                             http_req = Some(hreq);
+//                             break;
+//                         }
+//                         Err(err) => {
+//                             error!("Request parse: {:?}", err);
+//                             let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
+//                             return Err(err);
+//                         }
+//                     }
+//                 }
 
-                (http_req.unwrap(), total_len)
-            }
-            &mut HttpResponseFut::Empty => panic!("poll a HttpResponseFut after it's done"),
-        };
+//                 (http_req.unwrap(), total_len)
+//             }
+//             &mut HttpResponseFut::Empty => panic!("poll a HttpResponseFut after it's done"),
+//         };
 
-        match mem::replace(self, HttpResponseFut::Empty) {
-            HttpResponseFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
-            HttpResponseFut::Empty => unreachable!(),
-        }
-    }
-}
+//         match mem::replace(self, HttpResponseFut::Empty) {
+//             HttpResponseFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
+//             HttpResponseFut::Empty => unreachable!(),
+//         }
+//     }
+// }
 
 fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
     match *addr {
@@ -499,7 +499,7 @@ fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
 
 /// Proxy this HTTP Request to writer
 pub fn proxy_request<R, W>((r, w): (R, W),
-                           _client_addr: SocketAddr,
+                           client_addr: Option<&SocketAddr>,
                            mut req: HttpRequest,
                            mut remains: Vec<u8>)
                            -> BoxFuture<(R, W, Vec<u8>), io::Error>
@@ -507,20 +507,23 @@ pub fn proxy_request<R, W>((r, w): (R, W),
           W: Write + Send + 'static
 {
     let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
-    // let client_ip = socket_to_ip(&client_addr);
 
-    // // Set proxy IP info
-    // let xf = if let Some(fw) = req.headers.get_mut::<XForwardFor>() {
-    //     let mut flst = fw.0.clone();
-    //     flst.push(client_ip.clone());
-    //     flst
-    // } else {
-    //     vec![client_ip.clone()]
-    // };
-    // req.headers.set(XForwardFor(xf));
+    if let Some(client_addr) = client_addr {
+        let client_ip = socket_to_ip(client_addr);
 
-    // // Set real ip
-    // req.headers.set(XRealIp(client_ip));
+        // Set proxy IP info
+        let xf = if let Some(fw) = req.headers.get_mut::<XForwardFor>() {
+            let mut flst = fw.0.clone();
+            flst.push(client_ip.clone());
+            flst
+        } else {
+            vec![client_ip.clone()]
+        };
+        req.headers.set(XForwardFor(xf));
+
+        // Set real ip
+        req.headers.set(XRealIp(client_ip));
+    }
 
     // Clears host, which only for proxy
     req.clear_request_uri_host();
@@ -543,48 +546,48 @@ pub fn proxy_request<R, W>((r, w): (R, W),
         .boxed()
 }
 
-/// Proxy this HTTP Response to writer
-pub fn proxy_response<R, W>((r, w): (R, W),
-                            server_addr: SocketAddr,
-                            mut rsp: HttpResponse,
-                            mut remains: Vec<u8>)
-                            -> BoxFuture<(R, W, Vec<u8>), io::Error>
-    where R: Read + Send + 'static,
-          W: Write + Send + 'static
-{
-    let content_length = rsp.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
-    let server_ip = socket_to_ip(&server_addr);
+// /// Proxy this HTTP Response to writer
+// pub fn proxy_response<R, W>((r, w): (R, W),
+//                             server_addr: SocketAddr,
+//                             mut rsp: HttpResponse,
+//                             mut remains: Vec<u8>)
+//                             -> BoxFuture<(R, W, Vec<u8>), io::Error>
+//     where R: Read + Send + 'static,
+//           W: Write + Send + 'static
+// {
+//     let content_length = rsp.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
+//     let server_ip = socket_to_ip(&server_addr);
 
-    // Set proxy IP info
-    let xf = if let Some(fw) = rsp.headers.get_mut::<XForwardFor>() {
-        let mut flst = fw.0.clone();
-        flst.push(server_ip.clone());
-        flst
-    } else {
-        vec![server_ip.clone()]
-    };
-    rsp.headers.set(XForwardFor(xf));
+//     // Set proxy IP info
+//     let xf = if let Some(fw) = rsp.headers.get_mut::<XForwardFor>() {
+//         let mut flst = fw.0.clone();
+//         flst.push(server_ip.clone());
+//         flst
+//     } else {
+//         vec![server_ip.clone()]
+//     };
+//     rsp.headers.set(XForwardFor(xf));
 
-    // Set real ip
-    rsp.headers.set(XRealIp(server_ip));
+//     // Set real ip
+//     rsp.headers.set(XRealIp(server_ip));
 
-    rsp.write_to(w)
-        .and_then(|w| flush(w))
-        .and_then(move |w| {
-            if content_length == 0 {
-                futures::finished((r, w, remains)).boxed()
-            } else if content_length <= remains.len() {
-                let after_that = remains.split_off(content_length);
-                write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
-            } else {
-                let missing_bytes = content_length - remains.len();
-                write_all(w, remains)
-                    .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
-                    .boxed()
-            }
-        })
-        .boxed()
-}
+//     rsp.write_to(w)
+//         .and_then(|w| flush(w))
+//         .and_then(move |w| {
+//             if content_length == 0 {
+//                 futures::finished((r, w, remains)).boxed()
+//             } else if content_length <= remains.len() {
+//                 let after_that = remains.split_off(content_length);
+//                 write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
+//             } else {
+//                 let missing_bytes = content_length - remains.len();
+//                 write_all(w, remains)
+//                     .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
+//                     .boxed()
+//             }
+//         })
+//         .boxed()
+// }
 
 pub fn should_keep_alive(req: &HttpRequest) -> bool {
     let default_keep_alive = req.version >= HttpVersion::Http11;
