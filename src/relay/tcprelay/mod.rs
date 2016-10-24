@@ -56,11 +56,11 @@ pub enum TunnelDirection {
     Server2Client,
 }
 
-type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
-type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
+pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
+pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
-type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
-type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
+pub type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
+pub type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
 
 pub type BoxIoFuture<T> = BoxFuture<T, io::Error>;
 
@@ -68,10 +68,32 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxIoFut
     TcpStream::connect(&svr_cfg.addr, handle).boxed()
 }
 
-fn proxy_server_handshake(remote_stream: TcpStream,
-                          svr_cfg: Arc<ServerConfig>,
-                          relay_addr: Address)
-                          -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+/// Handshake logic for ShadowSocks Client
+pub fn proxy_server_handshake(remote_stream: TcpStream,
+                              svr_cfg: Arc<ServerConfig>,
+                              relay_addr: Address)
+                              -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+    proxy_handshake(remote_stream, svr_cfg)
+        .and_then(|(r_fut, w_fut)| {
+            let w_fut = w_fut.and_then(move |enc_w| {
+                    trace!("Got encrypt stream and going to send addr: {:?}",
+                           relay_addr);
+
+                    // Send relay address to remote
+                    relay_addr.write_to(enc_w).and_then(flush)
+                })
+                .boxed();
+
+            Ok((r_fut, w_fut))
+        })
+        .boxed()
+}
+
+/// ShadowSocks Client-Server handshake protocol
+/// Exchange cipher IV and creates stream wrapper
+pub fn proxy_handshake(remote_stream: TcpStream,
+                       svr_cfg: Arc<ServerConfig>)
+                       -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     futures::lazy(move || {
             let (r, w) = remote_stream.split();
 
@@ -95,18 +117,7 @@ fn proxy_server_handshake(remote_stream: TcpStream,
 
                         Ok(EncryptedWriter::new(w, encryptor))
                     })
-                    .and_then(move |enc_w| {
-                        trace!("Got encrypt stream and going to send addr: {:?}",
-                               relay_addr);
 
-                        // Send relay address to remote
-                        relay_addr.write_to(Vec::new())
-                            .and_then(|addr_buf| {
-                                write_all(enc_w, addr_buf)
-                                    .and_then(|(enc_w, _)| flush(enc_w))
-                                    .and_then(|enc_w| Ok(enc_w))
-                            })
-                    })
             });
 
             let dec = futures::lazy(move || {
@@ -128,10 +139,6 @@ fn proxy_server_handshake(remote_stream: TcpStream,
             });
 
             Ok((dec.boxed(), enc.boxed()))
-        })
-        .and_then(|(enc_r, enc_w)| {
-            trace!("Remote proxy server connected");
-            Ok((enc_r, enc_w))
         })
         .boxed()
 }

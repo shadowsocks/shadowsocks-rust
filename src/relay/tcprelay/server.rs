@@ -28,11 +28,6 @@ use std::collections::HashSet;
 
 use config::{Config, ServerConfig};
 
-use crypto::CryptoMode;
-use crypto::cipher;
-
-use super::stream::{EncryptedWriter, DecryptedReader};
-
 use relay::socks5::Address;
 
 use futures::{self, Future, BoxFuture};
@@ -43,18 +38,11 @@ use futures_cpupool::CpuPool;
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::io::Io;
-use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::{read_exact, write_all, copy, flush};
+use tokio_core::io::copy;
 
 use ip::IpAddr;
 
-use super::tunnel;
-
-type ClientRead = ReadHalf<TcpStream>;
-type ClientWrite = WriteHalf<TcpStream>;
-
-type EncryptedHalf = EncryptedWriter<ClientWrite>;
-type DecryptedHalf = DecryptedReader<ClientRead>;
+use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
 
 /// TCP Relay backend
 pub struct TcpRelayServer {
@@ -73,48 +61,13 @@ impl TcpRelayServer {
         }
     }
 
-    fn handshake(client: TcpStream,
+    fn handshake(remote_stream: TcpStream,
                  svr_cfg: Arc<ServerConfig>)
-                 -> BoxIoFuture<(BoxIoFuture<(super::DecryptedHalf, Address)>, super::EncryptedHalfFut)> {
-        let iv_len = svr_cfg.method.iv_size();
-
-        futures::lazy(move || Ok(client.split()))
-            .and_then(move |(r, w)| {
-                let svr_cfg_cloned = svr_cfg.clone();
-                let read_fut = read_exact(r, vec![0u8; iv_len])
-                    .and_then(move |(r, iv)| {
-                        trace!("Got handshake iv: {:?}", iv);
-                        let decryptor = cipher::with_type(svr_cfg.method,
-                                                          svr_cfg.password.as_bytes(),
-                                                          &iv[..],
-                                                          CryptoMode::Decrypt);
-                        let decrypt_stream = DecryptedReader::new(r, decryptor);
-
-                        Ok(decrypt_stream)
-                    })
-                    .and_then(|r| Address::read_from(r).map_err(From::from))
-                    .boxed();
-
-                let write_fut = futures::lazy(move || {
-                        let svr_cfg = svr_cfg_cloned;
-
-                        let iv = svr_cfg.method.gen_init_vec();
-                        trace!("Going to send handshake iv: {:?}", iv);
-                        write_all(w, iv)
-                            .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
-                            .and_then(move |(w, iv)| {
-                                let encryptor = cipher::with_type(svr_cfg.method,
-                                                                  svr_cfg.password.as_bytes(),
-                                                                  &iv[..],
-                                                                  CryptoMode::Encrypt);
-                                let encrypt_stream = EncryptedWriter::new(w, encryptor);
-
-                                Ok(encrypt_stream)
-                            })
-                    })
-                    .boxed();
-
-                Ok((read_fut, write_fut))
+                 -> BoxIoFuture<(DecryptedHalf, Address, EncryptedHalfFut)> {
+        proxy_handshake(remote_stream, svr_cfg)
+            .and_then(|(r_fut, w_fut)| {
+                r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
+                    .map(move |(r, addr)| (r, addr, w_fut))
             })
             .boxed()
     }
@@ -177,17 +130,14 @@ impl TcpRelayServer {
 
         let cloned_handle = handle.clone();
 
-        let fut = TcpRelayServer::handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
-            r_fut.and_then(move |(r, addr)| {
-                info!("Connecting {}", addr);
-                let cloned_addr = addr.clone();
-                TcpRelayServer::connect_remote(cpu_pool, cloned_handle.clone(), addr, forbidden_ip)
-                    .and_then(move |svr_s| {
-                        let (svr_r, svr_w) = svr_s.split();
-                        tunnel(cloned_addr,
-                               copy(r, svr_w),
-                               w_fut.and_then(|w| copy(svr_r, w)))
-                    })
+        let fut = TcpRelayServer::handshake(s, svr_cfg).and_then(move |(r, addr, w_fut)| {
+            info!("Connecting {}", addr);
+            let cloned_addr = addr.clone();
+            TcpRelayServer::connect_remote(cpu_pool, cloned_handle.clone(), addr, forbidden_ip).and_then(move |svr_s| {
+                let (svr_r, svr_w) = svr_s.split();
+                tunnel(cloned_addr,
+                       copy(r, svr_w),
+                       w_fut.and_then(|w| copy(svr_r, w)))
             })
         });
 
