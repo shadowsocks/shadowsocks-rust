@@ -98,9 +98,9 @@ impl Socks5RelayLocal {
             .and_then(move |(svr_r, svr_w, w)| {
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
-                c2s.select(s2c)
+                c2s.join(s2c)
                     .then(move |_| {
-                        trace!("Relay {} is finished", cloned_addr);
+                        trace!("Relay to {} is finished", cloned_addr);
                         Ok(())
                     })
             })
@@ -248,9 +248,9 @@ impl HttpRelayServer {
             .and_then(move |(svr_r, svr_w, w)| {
                 let c2s = copy(r, svr_w);
                 let s2c = copy(svr_r, w);
-                c2s.select(s2c)
+                c2s.join(s2c)
                     .then(move |_| {
-                        trace!("Relay {} is finished", cloned_addr);
+                        trace!("Relay to {} is finished", cloned_addr);
                         Ok(())
                     })
             })
