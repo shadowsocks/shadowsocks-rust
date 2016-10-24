@@ -48,6 +48,8 @@ use tokio_core::io::{read_exact, write_all, copy, flush};
 
 use ip::IpAddr;
 
+use super::tunnel;
+
 type ClientRead = ReadHalf<TcpStream>;
 type ClientWrite = WriteHalf<TcpStream>;
 
@@ -179,16 +181,13 @@ impl TcpRelayServer {
             r_fut.and_then(move |(r, addr)| {
                 info!("Connecting {}", addr);
                 let cloned_addr = addr.clone();
-                TcpRelayServer::connect_remote(cpu_pool, cloned_handle, addr, forbidden_ip).and_then(|svr_s| {
-                    let (svr_r, svr_w) = svr_s.split();
-                    let c2s = copy(r, svr_w);
-                    let s2c = w_fut.and_then(|w| copy(svr_r, w));
-                    c2s.join(s2c)
-                        .then(move |_| {
-                            trace!("Relay {} is finished", cloned_addr);
-                            Ok(())
-                        })
-                })
+                TcpRelayServer::connect_remote(cpu_pool, cloned_handle.clone(), addr, forbidden_ip)
+                    .and_then(move |svr_s| {
+                        let (svr_r, svr_w) = svr_s.split();
+                        tunnel(cloned_addr,
+                               copy(r, svr_w),
+                               w_fut.and_then(|w| copy(svr_r, w)))
+                    })
             })
         });
 

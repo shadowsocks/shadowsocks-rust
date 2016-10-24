@@ -32,7 +32,7 @@ use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::reactor::Handle;
 use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::{flush, copy, write_all};
+use tokio_core::io::{flush, write_all, copy};
 
 use hyper::method::Method;
 
@@ -44,6 +44,7 @@ use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 
 use super::http::{self, HttpRequestFut, HttpResponseFut};
+use super::tunnel;
 
 /// TCP relay local server
 pub struct TcpRelayLocal {
@@ -104,11 +105,7 @@ impl Socks5RelayLocal {
                     let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
                     let whalf = svr_w.and_then(move |svr_w| copy(r, svr_w));
 
-                    rhalf.join(whalf)
-                        .then(move |_| {
-                            trace!("Relay to {} is finished", cloned_addr);
-                            Ok(())
-                        })
+                    tunnel(cloned_addr, whalf, rhalf)
                 })
             })
             .boxed()
@@ -258,13 +255,10 @@ impl HttpRelayServer {
             .and_then(move |(svr_s, w)| {
                 super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                     let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                    let whalf = svr_w.and_then(move |svr_w| copy(r, svr_w));
+                    let whalf = svr_w.and_then(move |svr_w| write_all(svr_w, remains))
+                        .and_then(move |(svr_w, _)| copy(r, svr_w));
 
-                    rhalf.join(whalf)
-                        .then(move |_| {
-                            trace!("Relay to {} is finished", cloned_addr);
-                            Ok(())
-                        })
+                    tunnel(cloned_addr, whalf, rhalf)
                 })
             })
             .boxed()

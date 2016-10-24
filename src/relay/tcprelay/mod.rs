@@ -50,20 +50,28 @@ pub mod server;
 mod stream;
 mod http;
 
+#[derive(Debug, Copy, Clone)]
+pub enum TunnelDirection {
+    Client2Server,
+    Server2Client,
+}
+
 type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
 type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
 type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
 type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
 
-fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxFuture<TcpStream, io::Error> {
+pub type BoxIoFuture<T> = BoxFuture<T, io::Error>;
+
+fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxIoFuture<TcpStream> {
     TcpStream::connect(&svr_cfg.addr, handle).boxed()
 }
 
 fn proxy_server_handshake(remote_stream: TcpStream,
                           svr_cfg: Arc<ServerConfig>,
                           relay_addr: Address)
-                          -> BoxFuture<(DecryptedHalfFut, EncryptedHalfFut), io::Error> {
+                          -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     futures::lazy(move || {
             let (r, w) = remote_stream.split();
 
@@ -199,7 +207,7 @@ impl<R, W> Future for CopyExact<R, W>
 
                     // If our buffer has some data, let's write it out!
                     while *pos < *cap {
-                        let i = try_nb!(writer.write(&buf[*pos..*cap]));
+                        let i = try_nb!(writer.write(&buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
                         *pos += i;
                     }
 
@@ -226,4 +234,61 @@ pub fn copy_exact<R, W>(r: R, w: W, amt: usize) -> CopyExact<R, W>
           W: Write
 {
     CopyExact::new(r, w, amt)
+}
+
+pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
+    where CF: Future<Item = u64, Error = io::Error> + Send + 'static,
+          SF: Future<Item = u64, Error = io::Error> + Send + 'static
+{
+    let addr = Arc::new(addr);
+
+    let cloned_addr = addr.clone();
+    let c2s = c2s.then(move |res| {
+        match res {
+            Ok(amt) => {
+                // Continue reading response from remote server
+                trace!("Relay {} client -> server is finished, relayed {} bytes",
+                       cloned_addr,
+                       amt);
+
+                Ok(TunnelDirection::Client2Server)
+            }
+            Err(err) => {
+                error!("Relay {} client -> server aborted: {}", cloned_addr, err);
+                Err(err)
+            }
+        }
+    });
+
+    let cloned_addr = addr.clone();
+    let s2c = s2c.then(move |res| {
+        match res {
+            Ok(amt) => {
+                trace!("Relay {} client <- server is finished, relayed {} bytes",
+                       cloned_addr,
+                       amt);
+
+                Ok(TunnelDirection::Server2Client)
+            }
+            Err(err) => {
+                error!("Relay {} client <- server aborted: {}", cloned_addr, err);
+                Err(err)
+            }
+        }
+    });
+
+    c2s.select(s2c)
+        .map_err(|(err, _)| err)
+        .and_then(move |(dir, next)| {
+            match dir {
+                TunnelDirection::Client2Server => next.map(move |_| ()).boxed(),
+                // Shutdown connection directly because remote server has disconnected
+                TunnelDirection::Server2Client => futures::finished(()).boxed(),
+            }
+        })
+        .and_then(move |_| {
+            trace!("Relay {} client <-> server are all finished, closing", addr);
+            Ok(())
+        })
+        .boxed()
 }
