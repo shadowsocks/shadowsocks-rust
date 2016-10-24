@@ -85,24 +85,31 @@ impl Socks5RelayLocal {
                              svr_cfg: Arc<ServerConfig>)
                              -> BoxFuture<(), io::Error> {
         let cloned_addr = addr.clone();
-        super::connect_proxy_server(handle, svr_cfg, addr)
-            .and_then(move |(svr_r, svr_w)| {
+        let cloned_svr_cfg = svr_cfg.clone();
+        super::connect_proxy_server(handle, svr_cfg)
+            .and_then(move |svr_s| {
+                trace!("Proxy server connected");
+
+                // Tell the client that we are ready
                 let header = TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                     Address::SocketAddress(client_addr));
                 trace!("Send header: {:?}", header);
 
                 header.write_to(w)
-                    .and_then(|w| flush(w))
-                    .and_then(|w| Ok((svr_r, svr_w, w)))
+                    .and_then(flush)
+                    .map(move |w| (svr_s, w))
             })
-            .and_then(move |(svr_r, svr_w, w)| {
-                let c2s = copy(r, svr_w);
-                let s2c = copy(svr_r, w);
-                c2s.join(s2c)
-                    .then(move |_| {
-                        trace!("Relay to {} is finished", cloned_addr);
-                        Ok(())
-                    })
+            .and_then(move |(svr_s, w)| {
+                super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+                    let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+                    let whalf = svr_w.and_then(move |svr_w| copy(r, svr_w));
+
+                    rhalf.join(whalf)
+                        .then(move |_| {
+                            trace!("Relay to {} is finished", cloned_addr);
+                            Ok(())
+                        })
+                })
             })
             .boxed()
     }
@@ -130,7 +137,7 @@ impl Socks5RelayLocal {
                         // Reply to client
                         let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
                         trace!("Reply handshake {:?}", resp);
-                        resp.write_to(w).and_then(|w| Ok((r, w))).boxed()
+                        resp.write_to(w).and_then(flush).and_then(|w| Ok((r, w))).boxed()
                     }
                 })
             })
@@ -235,24 +242,30 @@ impl HttpRelayServer {
                       -> BoxFuture<(), io::Error> {
         let cloned_addr = addr.clone();
         let http_version = req.version;
-        super::connect_proxy_server(&handle, svr_cfg, addr)
-            .and_then(move |(svr_r, svr_w)| {
+        let cloned_svr_cfg = svr_cfg.clone();
+
+        super::connect_proxy_server(&handle, svr_cfg)
+            .and_then(move |svr_s| {
+                trace!("Proxy server connected");
+
+                // Tell the client that we are ready
                 let handshake_resp = format!("{} 200 Connection Established\r\n\r\n", http_version);
                 trace!("Sending HTTP tunnel handshake response");
-                write_all(w, handshake_resp.into_bytes()).and_then(|(w, _)| flush(w)).map(|w| (svr_r, svr_w, w))
+                write_all(w, handshake_resp.into_bytes())
+                    .and_then(|(w, _)| flush(w))
+                    .map(|w| (svr_s, w))
             })
-            .and_then(move |(svr_r, svr_w, w)| {
-                trace!("HTTP tunnel handshake finished, established tunnel");
-                write_all(svr_w, remains).map(|(svr_w, _)| (svr_r, svr_w, w))
-            })
-            .and_then(move |(svr_r, svr_w, w)| {
-                let c2s = copy(r, svr_w);
-                let s2c = copy(svr_r, w);
-                c2s.join(s2c)
-                    .then(move |_| {
-                        trace!("Relay to {} is finished", cloned_addr);
-                        Ok(())
-                    })
+            .and_then(move |(svr_s, w)| {
+                super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+                    let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+                    let whalf = svr_w.and_then(move |svr_w| copy(r, svr_w));
+
+                    rhalf.join(whalf)
+                        .then(move |_| {
+                            trace!("Relay to {} is finished", cloned_addr);
+                            Ok(())
+                        })
+                })
             })
             .boxed()
     }
@@ -313,52 +326,38 @@ impl HttpRelayServer {
             .boxed()
     }
 
-    fn handle_http_proxy(handle: Handle,
-                         (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
-                         client_addr: SocketAddr,
-                         req: http::HttpRequest,
-                         addr: Address,
-                         remains: Vec<u8>,
-                         svr_cfg: Arc<ServerConfig>)
-                         -> BoxFuture<(), io::Error> {
-        let client_addr_cloned = client_addr.clone();
-        let should_keep_alive = http::should_keep_alive(&req);
+    // fn handle_http_proxy(handle: Handle,
+    //                      (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+    //                      client_addr: SocketAddr,
+    //                      req: http::HttpRequest,
+    //                      addr: Address,
+    //                      remains: Vec<u8>,
+    //                      svr_cfg: Arc<ServerConfig>)
+    //                      -> BoxFuture<(), io::Error> {
+    //     let client_addr_cloned = client_addr.clone();
+    //     let should_keep_alive = http::should_keep_alive(&req);
+    //     let cloned_addr = addr.clone();
 
-        super::connect_proxy_server(&handle, svr_cfg.clone(), addr)
-            .and_then(move |(svr_r, svr_w)| {
-                trace!("Proxy {} request, keep_alive: {}",
-                       req.method,
-                       should_keep_alive);
+    //     super::connect_proxy_server(&handle, svr_cfg.clone())
+    //         .and_then(move |svr_s| {
+    //             trace!("Proxy server connected");
 
-                let svr_addr = svr_cfg.addr.clone();
-                http::proxy_request((r, svr_w), client_addr, req, remains)
-                    .and_then(move |(r, svr_w, req_remains)| {
-                        HttpResponseFut::new(svr_r)
-                            .and_then(move |(svr_r, rsp, rsp_remains)| {
-                                trace!("Proxy response, {:?}", rsp);
-                                let is_succeed = rsp.status.is_success();
-                                http::proxy_response((svr_r, w), svr_addr, rsp, rsp_remains)
-                                    .map(move |(svr_r, w, rsp_remains)| (svr_r, w, rsp_remains, is_succeed))
-                            })
-                            .map(move |(svr_r, w, rsp_remains, is_succeed)| {
-                                (r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)
-                            })
-                    })
-                    .and_then(move |(r, w, svr_r, svr_w, req_remains, rsp_remains, is_succeed)| {
-                        if should_keep_alive && is_succeed {
-                            HttpRelayServer::handle_http_again((r, w),
-                                                               (svr_r, svr_w),
-                                                               client_addr_cloned,
-                                                               (req_remains, rsp_remains),
-                                                               svr_cfg)
-                        } else {
-                            trace!("HTTP proxy finished");
-                            futures::finished(()).boxed()
-                        }
-                    })
-            })
-            .boxed()
-    }
+    //             super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+    //                 // Just proxy anything to client
+    //                 let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+    //                 let whalf = svr_w.and_then(move |svr_w| {
+    //                     unimplemented!();
+    //                 });
+
+    //                 rhalf.join(whalf)
+    //                     .then(move |_| {
+    //                         trace!("Relay to {} is finished", cloned_addr);
+    //                         Ok(())
+    //                     })
+    //             })
+    //         })
+    //         .boxed()
+    // }
 
     fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
         let cloned_handle = handle.clone();
@@ -396,13 +395,14 @@ impl HttpRelayServer {
                     }
                     met => {
                         info!("{} (Http) {}", met, addr);
-                        HttpRelayServer::handle_http_proxy(cloned_handle,
-                                                           (r, w),
-                                                           client_addr,
-                                                           req,
-                                                           addr,
-                                                           remains,
-                                                           svr_cfg)
+                        // HttpRelayServer::handle_http_proxy(cloned_handle,
+                        //                                    (r, w),
+                        //                                    client_addr,
+                        //                                    req,
+                        //                                    addr,
+                        //                                    remains,
+                        //                                    svr_cfg)
+                        unimplemented!();
                     }
                 }
             });

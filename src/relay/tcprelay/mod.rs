@@ -53,14 +53,18 @@ mod http;
 type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
 type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
-fn connect_proxy_server(handle: &Handle,
-                        svr_cfg: Arc<ServerConfig>,
-                        relay_addr: Address)
-                        -> BoxFuture<(DecryptedHalf, EncryptedHalf), io::Error> {
+type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
+type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
 
+fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxFuture<TcpStream, io::Error> {
+    TcpStream::connect(&svr_cfg.addr, handle).boxed()
+}
 
-    TcpStream::connect(&svr_cfg.addr, handle)
-        .and_then(move |remote_stream| {
+fn proxy_server_handshake(remote_stream: TcpStream,
+                          svr_cfg: Arc<ServerConfig>,
+                          relay_addr: Address)
+                          -> BoxFuture<(DecryptedHalfFut, EncryptedHalfFut), io::Error> {
+    futures::lazy(move || {
             let (r, w) = remote_stream.split();
 
             let svr_cfg_cloned = svr_cfg.clone();
@@ -74,6 +78,7 @@ fn connect_proxy_server(handle: &Handle,
                 trace!("Going to send initialize vector: {:?}", local_iv);
 
                 write_all(w, local_iv)
+                    .and_then(|(w, local_iv)| flush(w).map(move |w| (w, local_iv)))
                     .and_then(move |(w, local_iv)| {
                         let encryptor = cipher::with_type(svr_cfg.method,
                                                           svr_cfg.password.as_bytes(),
@@ -100,7 +105,6 @@ fn connect_proxy_server(handle: &Handle,
                 let svr_cfg = svr_cfg_cloned;
 
                 // Decrypt data from remote server
-
                 let iv_len = svr_cfg.method.iv_size();
                 read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
                     trace!("Got initialize vector {:?}", remote_iv);
@@ -115,10 +119,10 @@ fn connect_proxy_server(handle: &Handle,
                 })
             });
 
-            dec.join(enc)
+            Ok((dec.boxed(), enc.boxed()))
         })
         .and_then(|(enc_r, enc_w)| {
-            trace!("Finished creating remote connection pair");
+            trace!("Remote proxy server connected");
             Ok((enc_r, enc_w))
         })
         .boxed()
