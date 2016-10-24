@@ -60,6 +60,8 @@ pub struct TcpRelayServer {
     cpu_pool: CpuPool,
 }
 
+type BoxIoFuture<T> = BoxFuture<T, io::Error>;
+
 impl TcpRelayServer {
     /// Creates an instance
     pub fn new(config: Arc<Config>, threads: usize) -> TcpRelayServer {
@@ -69,45 +71,53 @@ impl TcpRelayServer {
         }
     }
 
-    fn handshake((r, w): (ClientRead, ClientWrite),
+    fn handshake(client: TcpStream,
                  svr_cfg: Arc<ServerConfig>)
-                 -> BoxFuture<(DecryptedHalf, EncryptedHalf), io::Error> {
+                 -> BoxIoFuture<(BoxIoFuture<(super::DecryptedHalf, Address)>, super::EncryptedHalfFut)> {
         let iv_len = svr_cfg.method.iv_size();
 
-        let svr_cfg_cloned = svr_cfg.clone();
-        let read_fut = read_exact(r, vec![0u8; iv_len]).and_then(move |(r, iv)| {
-            trace!("Got handshake iv: {:?}", iv);
-            let decryptor = cipher::with_type(svr_cfg.method,
-                                              svr_cfg.password.as_bytes(),
-                                              &iv[..],
-                                              CryptoMode::Decrypt);
-            let decrypt_stream = DecryptedReader::new(r, decryptor);
+        futures::lazy(move || Ok(client.split()))
+            .and_then(move |(r, w)| {
+                let svr_cfg_cloned = svr_cfg.clone();
+                let read_fut = read_exact(r, vec![0u8; iv_len])
+                    .and_then(move |(r, iv)| {
+                        trace!("Got handshake iv: {:?}", iv);
+                        let decryptor = cipher::with_type(svr_cfg.method,
+                                                          svr_cfg.password.as_bytes(),
+                                                          &iv[..],
+                                                          CryptoMode::Decrypt);
+                        let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-            Ok(decrypt_stream)
-        });
+                        Ok(decrypt_stream)
+                    })
+                    .and_then(|r| Address::read_from(r).map_err(From::from))
+                    .boxed();
 
-        let write_fut = futures::lazy(move || {
-            let svr_cfg = svr_cfg_cloned;
+                let write_fut = futures::lazy(move || {
+                        let svr_cfg = svr_cfg_cloned;
 
-            let iv = svr_cfg.method.gen_init_vec();
-            trace!("Going to send handshake iv: {:?}", iv);
-            write_all(w, iv)
-                .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
-                .and_then(move |(w, iv)| {
-                    let encryptor = cipher::with_type(svr_cfg.method,
-                                                      svr_cfg.password.as_bytes(),
-                                                      &iv[..],
-                                                      CryptoMode::Encrypt);
-                    let encrypt_stream = EncryptedWriter::new(w, encryptor);
+                        let iv = svr_cfg.method.gen_init_vec();
+                        trace!("Going to send handshake iv: {:?}", iv);
+                        write_all(w, iv)
+                            .and_then(|(w, iv)| flush(w).map(|w| (w, iv)))
+                            .and_then(move |(w, iv)| {
+                                let encryptor = cipher::with_type(svr_cfg.method,
+                                                                  svr_cfg.password.as_bytes(),
+                                                                  &iv[..],
+                                                                  CryptoMode::Encrypt);
+                                let encrypt_stream = EncryptedWriter::new(w, encryptor);
 
-                    Ok(encrypt_stream)
-                })
-        });
+                                Ok(encrypt_stream)
+                            })
+                    })
+                    .boxed();
 
-        read_fut.join(write_fut).boxed()
+                Ok((read_fut, write_fut))
+            })
+            .boxed()
     }
 
-    fn resolve_address(addr: Address, cpu_pool: CpuPool) -> BoxFuture<SocketAddr, io::Error> {
+    fn resolve_address(addr: Address, cpu_pool: CpuPool) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(addr) => futures::finished(addr).boxed(),
             Address::DomainNameAddress(dname, port) => {
@@ -124,7 +134,7 @@ impl TcpRelayServer {
     fn resolve_remote(cpu_pool: CpuPool,
                       addr: Address,
                       forbidden_ip: Arc<HashSet<IpAddr>>)
-                      -> BoxFuture<SocketAddr, io::Error> {
+                      -> Box<Future<Item = SocketAddr, Error = io::Error>> {
         TcpRelayServer::resolve_address(addr, cpu_pool)
             .and_then(move |addr| {
                 trace!("Resolved address as {}", addr);
@@ -164,25 +174,23 @@ impl TcpRelayServer {
         trace!("Got connection from {}", peer_addr);
 
         let cloned_handle = handle.clone();
-        let fut = futures::lazy(|| Ok(s.split()))
-            .and_then(move |(r, w)| TcpRelayServer::handshake((r, w), svr_cfg))
-            .and_then(|(r, w)| Address::read_from(r).map(|(r, addr)| (r, w, addr)).map_err(From::from))
-            .and_then(move |(r, w, addr)| {
+
+        let fut = TcpRelayServer::handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
+            r_fut.and_then(move |(r, addr)| {
                 info!("Connecting {}", addr);
                 let cloned_addr = addr.clone();
-                TcpRelayServer::connect_remote(cpu_pool, cloned_handle, addr, forbidden_ip)
-                    .map(|svr_s| (svr_s, r, w, cloned_addr))
+                TcpRelayServer::connect_remote(cpu_pool, cloned_handle, addr, forbidden_ip).and_then(|svr_s| {
+                    let (svr_r, svr_w) = svr_s.split();
+                    let c2s = copy(r, svr_w);
+                    let s2c = w_fut.and_then(|w| copy(svr_r, w));
+                    c2s.join(s2c)
+                        .then(move |_| {
+                            trace!("Relay {} is finished", cloned_addr);
+                            Ok(())
+                        })
+                })
             })
-            .and_then(|(svr_s, r, w, addr)| {
-                let (svr_r, svr_w) = svr_s.split();
-                let c2s = copy(r, svr_w);
-                let s2c = copy(svr_r, w);
-                c2s.join(s2c)
-                    .then(move |_| {
-                        trace!("Relay {} is finished", addr);
-                        Ok(())
-                    })
-            });
+        });
 
         handle.spawn(fut.then(|res| {
             match res {
