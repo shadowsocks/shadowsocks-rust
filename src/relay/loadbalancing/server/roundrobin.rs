@@ -31,7 +31,7 @@ pub struct RoundRobin {
 }
 
 impl RoundRobin {
-    pub fn new(config: Arc<Config>) -> RoundRobin {
+    pub fn new(config: &Config) -> RoundRobin {
         RoundRobin {
             servers: config.server.iter().map(|s| Arc::new(s.clone())).collect(),
             index: 0usize,

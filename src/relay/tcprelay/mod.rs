@@ -28,6 +28,7 @@ use std::mem;
 use crypto::cipher;
 use crypto::CryptoMode;
 use relay::socks5::Address;
+use relay::BoxIoFuture;
 use config::ServerConfig;
 
 use tokio_core::net::TcpStream;
@@ -39,10 +40,6 @@ use tokio_core::io::Io;
 use futures::{self, Future, BoxFuture, Poll};
 
 use self::stream::{EncryptedWriter, DecryptedReader};
-
-// use coio::net::TcpStream;
-
-// use self::stream::{DecryptedReader, EncryptedWriter};
 
 // mod cached_dns;
 pub mod local;
@@ -61,8 +58,6 @@ pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
 pub type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
 pub type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
-
-pub type BoxIoFuture<T> = BoxFuture<T, io::Error>;
 
 fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxIoFuture<TcpStream> {
     TcpStream::connect(&svr_cfg.addr, handle).boxed()

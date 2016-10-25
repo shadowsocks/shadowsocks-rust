@@ -24,6 +24,10 @@
 pub use self::local::RelayLocal;
 pub use self::server::RelayServer;
 
+use std::io;
+
+use futures::BoxFuture;
+
 mod tcprelay;
 #[cfg(feature = "enable-udp")]
 mod udprelay;
@@ -31,3 +35,5 @@ pub mod local;
 pub mod server;
 mod loadbalancing;
 pub mod socks5;
+
+pub type BoxIoFuture<T> = BoxFuture<T, io::Error>;

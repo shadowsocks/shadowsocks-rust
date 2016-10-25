@@ -230,5 +230,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    RelayLocal::new(config).run().unwrap();
+    RelayLocal::run(config).unwrap();
 }

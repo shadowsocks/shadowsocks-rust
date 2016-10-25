@@ -53,20 +53,14 @@ use config::Config;
 /// RelayLocal::new(config).run();
 /// ```
 #[derive(Clone)]
-pub struct RelayLocal {
-    config: Config,
-}
+pub struct RelayLocal;
 
 impl RelayLocal {
-    pub fn new(config: Config) -> RelayLocal {
-        RelayLocal { config: config }
-    }
-
-    pub fn run(self) -> io::Result<()> {
+    pub fn run(config: Config) -> io::Result<()> {
         let mut lp = try!(Core::new());
         let handle = lp.handle();
-        let config = Arc::new(self.config);
-        let tcp_fut = TcpRelayLocal::new(config).run(handle.clone());
+        let config = Arc::new(config);
+        let tcp_fut = TcpRelayLocal::run(config, handle);
         lp.run(tcp_fut)
     }
 }

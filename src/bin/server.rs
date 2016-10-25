@@ -238,5 +238,5 @@ fn main() {
         .ok()
         .expect("`threads` should be an integer");
 
-    RelayServer::new(config).run(threads).unwrap();
+    RelayServer::run(config, threads).unwrap();
 }

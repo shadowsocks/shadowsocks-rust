@@ -42,25 +42,20 @@ use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address};
 use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
+use relay::BoxIoFuture;
 
 use super::http::{self, HttpRequestFut};
-use super::{BoxIoFuture, tunnel};
+use super::tunnel;
 
 /// TCP relay local server
-pub struct TcpRelayLocal {
-    config: Arc<Config>,
-}
+pub struct TcpRelayLocal;
 
 impl TcpRelayLocal {
-    pub fn new(config: Arc<Config>) -> TcpRelayLocal {
-        TcpRelayLocal { config: config }
-    }
-
-    pub fn run(self, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
-        let tcp_fut = Socks5RelayLocal::new(self.config.clone()).run(handle.clone());
-        match &self.config.http_proxy {
+    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+        let tcp_fut = Socks5RelayLocal::run(config.clone(), handle.clone());
+        match &config.http_proxy {
             &Some(..) => {
-                let http_fut = HttpRelayServer::new(self.config.clone()).run(handle);
+                let http_fut = HttpRelayServer::run(config, handle);
                 Box::new(tcp_fut.join(http_fut)
                     .map(|_| ()))
             }
@@ -70,15 +65,9 @@ impl TcpRelayLocal {
 }
 
 /// Socks5 local server
-pub struct Socks5RelayLocal {
-    config: Arc<Config>,
-}
+pub struct Socks5RelayLocal;
 
 impl Socks5RelayLocal {
-    pub fn new(config: Arc<Config>) -> Socks5RelayLocal {
-        Socks5RelayLocal { config: config }
-    }
-
     fn handle_socks5_connect(handle: &Handle,
                              (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                              client_addr: SocketAddr,
@@ -196,15 +185,15 @@ impl Socks5RelayLocal {
     }
 
     // Runs TCP relay local server
-    pub fn run(self, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
         let listener = {
-            let local_addr = self.config.local.as_ref().unwrap();
+            let local_addr = config.local.as_ref().unwrap();
             let listener = TcpListener::bind(local_addr, &handle).unwrap();
             info!("ShadowSocks TCP Listening on {}", local_addr);
             listener
         };
 
-        let mut servers = RoundRobin::new(self.config);
+        let mut servers = RoundRobin::new(&*config);
         let listening = listener.incoming()
             .for_each(move |(socket, addr)| {
                 let server_cfg = servers.pick_server();
@@ -221,15 +210,9 @@ impl Socks5RelayLocal {
 }
 
 /// HTTP local server
-pub struct HttpRelayServer {
-    config: Arc<Config>,
-}
+pub struct HttpRelayServer;
 
 impl HttpRelayServer {
-    pub fn new(config: Arc<Config>) -> HttpRelayServer {
-        HttpRelayServer { config: config }
-    }
-
     fn handle_connect(handle: Handle,
                       (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                       req: http::HttpRequest,
@@ -410,15 +393,15 @@ impl HttpRelayServer {
         Ok(())
     }
 
-    pub fn run(self, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
         let listener = {
-            let local_addr = self.config.http_proxy.as_ref().unwrap();
+            let local_addr = config.http_proxy.as_ref().unwrap();
             let listener = TcpListener::bind(local_addr, &handle).unwrap();
             info!("ShadowSocks HTTP Listening on {}", local_addr);
             listener
         };
 
-        let mut servers = RoundRobin::new(self.config);
+        let mut servers = RoundRobin::new(&*config);
         let listening = listener.incoming()
             .for_each(move |(socket, addr)| {
                 let server_cfg = servers.pick_server();

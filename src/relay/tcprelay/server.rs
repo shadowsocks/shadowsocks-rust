@@ -29,8 +29,9 @@ use std::collections::HashSet;
 use config::{Config, ServerConfig};
 
 use relay::socks5::Address;
+use relay::BoxIoFuture;
 
-use futures::{self, Future, BoxFuture};
+use futures::{self, Future};
 use futures::stream::Stream;
 
 use futures_cpupool::CpuPool;
@@ -45,22 +46,9 @@ use ip::IpAddr;
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
 
 /// TCP Relay backend
-pub struct TcpRelayServer {
-    config: Arc<Config>,
-    cpu_pool: CpuPool,
-}
-
-type BoxIoFuture<T> = BoxFuture<T, io::Error>;
+pub struct TcpRelayServer;
 
 impl TcpRelayServer {
-    /// Creates an instance
-    pub fn new(config: Arc<Config>, threads: usize) -> TcpRelayServer {
-        TcpRelayServer {
-            config: config,
-            cpu_pool: CpuPool::new(threads),
-        }
-    }
-
     fn handshake(remote_stream: TcpStream,
                  svr_cfg: Arc<ServerConfig>)
                  -> BoxIoFuture<(DecryptedHalf, Address, EncryptedHalfFut)> {
@@ -155,13 +143,15 @@ impl TcpRelayServer {
     }
 
     /// Runs the server
-    pub fn run(self, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Arc<Config>, handle: Handle, threads: usize) -> Box<Future<Item = (), Error = io::Error>> {
+        let cpu_pool = CpuPool::new(threads);
+
         let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
-        let ref forbidden_ip = self.config.forbidden_ip;
+        let ref forbidden_ip = config.forbidden_ip;
         let forbidden_ip = Arc::new(forbidden_ip.clone());
 
-        for svr_cfg in &self.config.server {
+        for svr_cfg in &config.server {
             let listener = {
                 let addr = &svr_cfg.addr;
                 let listener = TcpListener::bind(addr, &handle).unwrap();
@@ -171,7 +161,7 @@ impl TcpRelayServer {
 
             let svr_cfg = Arc::new(svr_cfg.clone());
             let handle = handle.clone();
-            let cpu_pool = self.cpu_pool.clone();
+            let cpu_pool = cpu_pool.clone();
             let forbidden_ip = forbidden_ip.clone();
             let listening = listener.incoming()
                 .for_each(move |(socket, addr)| {
