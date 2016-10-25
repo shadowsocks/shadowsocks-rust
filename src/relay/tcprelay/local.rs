@@ -25,7 +25,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use futures::{self, Future, BoxFuture};
+use futures::{self, Future};
 use futures::stream::Stream;
 
 use tokio_core::net::{TcpStream, TcpListener};
@@ -43,6 +43,7 @@ use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::BoxIoFuture;
+use relay::dns_resolver::DnsResolver;
 
 use super::http::{self, HttpRequestFut};
 use super::tunnel;
@@ -51,11 +52,14 @@ use super::tunnel;
 pub struct TcpRelayLocal;
 
 impl TcpRelayLocal {
-    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
-        let tcp_fut = Socks5RelayLocal::run(config.clone(), handle.clone());
+    pub fn run(config: Arc<Config>,
+               handle: Handle,
+               dns_resolver: DnsResolver)
+               -> Box<Future<Item = (), Error = io::Error>> {
+        let tcp_fut = Socks5RelayLocal::run(config.clone(), handle.clone(), dns_resolver.clone());
         match &config.http_proxy {
             &Some(..) => {
-                let http_fut = HttpRelayServer::run(config, handle);
+                let http_fut = HttpRelayServer::run(config, handle, dns_resolver);
                 Box::new(tcp_fut.join(http_fut)
                     .map(|_| ()))
             }
@@ -72,11 +76,12 @@ impl Socks5RelayLocal {
                              (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                              client_addr: SocketAddr,
                              addr: Address,
-                             svr_cfg: Arc<ServerConfig>)
-                             -> BoxFuture<(), io::Error> {
+                             svr_cfg: Arc<ServerConfig>,
+                             dns_resolver: DnsResolver)
+                             -> Box<Future<Item = (), Error = io::Error>> {
         let cloned_addr = addr.clone();
         let cloned_svr_cfg = svr_cfg.clone();
-        super::connect_proxy_server(handle, svr_cfg)
+        let fut = super::connect_proxy_server(handle, svr_cfg, dns_resolver)
             .and_then(move |svr_s| {
                 trace!("Proxy server connected");
 
@@ -96,11 +101,17 @@ impl Socks5RelayLocal {
 
                     tunnel(cloned_addr, whalf, rhalf)
                 })
-            })
-            .boxed()
+            });
+
+        Box::new(fut)
     }
 
-    fn handle_client(handle: &Handle, s: TcpStream, _: SocketAddr, conf: Arc<ServerConfig>) -> io::Result<()> {
+    fn handle_client(handle: &Handle,
+                     s: TcpStream,
+                     _: SocketAddr,
+                     conf: Arc<ServerConfig>,
+                     dns_resolver: DnsResolver)
+                     -> io::Result<()> {
         let cloned_handle = handle.clone();
         let client_addr = try!(s.peer_addr());
         let cloned_client_addr = client_addr.clone();
@@ -149,7 +160,12 @@ impl Socks5RelayLocal {
                 match header.command {
                     socks5::Command::TcpConnect => {
                         info!("CONNECT {}", addr);
-                        Socks5RelayLocal::handle_socks5_connect(&cloned_handle, (r, w), cloned_client_addr, addr, conf)
+                        Socks5RelayLocal::handle_socks5_connect(&cloned_handle,
+                                                                (r, w),
+                                                                cloned_client_addr,
+                                                                addr,
+                                                                conf,
+                                                                dns_resolver)
                     }
                     socks5::Command::TcpBind => {
                         warn!("BIND is not supported");
@@ -185,7 +201,10 @@ impl Socks5RelayLocal {
     }
 
     // Runs TCP relay local server
-    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Arc<Config>,
+               handle: Handle,
+               dns_resolver: DnsResolver)
+               -> Box<Future<Item = (), Error = io::Error>> {
         let listener = {
             let local_addr = config.local.as_ref().unwrap();
             let listener = TcpListener::bind(local_addr, &handle).unwrap();
@@ -193,13 +212,16 @@ impl Socks5RelayLocal {
             listener
         };
 
+        let dns_resolver = dns_resolver.clone();
+
         let mut servers = RoundRobin::new(&*config);
         let listening = listener.incoming()
             .for_each(move |(socket, addr)| {
                 let server_cfg = servers.pick_server();
                 trace!("Got connection, addr: {}", addr);
                 trace!("Picked proxy server: {:?}", server_cfg);
-                Socks5RelayLocal::handle_client(&handle, socket, addr, server_cfg)
+                let dns_resolver = dns_resolver.clone();
+                Socks5RelayLocal::handle_client(&handle, socket, addr, server_cfg, dns_resolver)
             });
 
         Box::new(listening.map_err(|err| {
@@ -218,13 +240,14 @@ impl HttpRelayServer {
                       req: http::HttpRequest,
                       addr: Address,
                       remains: Vec<u8>,
-                      svr_cfg: Arc<ServerConfig>)
-                      -> BoxFuture<(), io::Error> {
+                      svr_cfg: Arc<ServerConfig>,
+                      dns_resolver: DnsResolver)
+                      -> Box<Future<Item = (), Error = io::Error>> {
         let cloned_addr = addr.clone();
         let http_version = req.version;
         let cloned_svr_cfg = svr_cfg.clone();
 
-        super::connect_proxy_server(&handle, svr_cfg)
+        let fut = super::connect_proxy_server(&handle, svr_cfg, dns_resolver)
             .and_then(move |svr_s| {
                 trace!("Proxy server connected");
 
@@ -243,46 +266,46 @@ impl HttpRelayServer {
 
                     tunnel(cloned_addr, whalf, rhalf)
                 })
-            })
-            .boxed()
+            });
+
+        Box::new(fut)
     }
 
     fn handle_http_keepalive(r: ReadHalf<TcpStream>,
                              svr_w: super::EncryptedHalf,
                              req_remains: Vec<u8>)
                              -> BoxIoFuture<()> {
-        HttpRequestFut::with_buf(r, req_remains)
-            .then(|res| {
-                match res {
-                    Ok((r, req, remains)) => {
-                        let should_keep_alive = http::should_keep_alive(&req);
-                        trace!("Going to proxy request: {:?}", req);
-                        trace!("Should keep alive? {}", should_keep_alive);
+        let fut = HttpRequestFut::with_buf(r, req_remains).then(|res| {
+            match res {
+                Ok((r, req, remains)) => {
+                    let should_keep_alive = http::should_keep_alive(&req);
+                    trace!("Going to proxy request: {:?}", req);
+                    trace!("Should keep alive? {}", should_keep_alive);
 
-                        http::proxy_request((r, svr_w), None, req, remains)
-                            .and_then(move |(r, svr_w, req_remains)| {
-                                if should_keep_alive {
-                                    HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
-                                } else {
-                                    futures::finished(()).boxed()
-                                }
-                            })
-                            .boxed()
-                    }
-                    Err(err) => {
-                        futures::lazy(|| {
-                                use std::io::ErrorKind;
-                                match err.kind() {
-                                    // It is Ok for client to close connection
-                                    ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe => Ok(()),
-                                    _ => Err(err),
-                                }
-                            })
-                            .boxed()
-                    }
+                    let fut = http::proxy_request((r, svr_w), None, req, remains)
+                        .and_then(move |(r, svr_w, req_remains)| {
+                            if should_keep_alive {
+                                HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
+                            } else {
+                                futures::finished(()).boxed()
+                            }
+                        });
+                    Box::new(fut) as BoxIoFuture<()>
                 }
-            })
-            .boxed()
+                Err(err) => {
+                    let fut = futures::lazy(|| {
+                        use std::io::ErrorKind;
+                        match err.kind() {
+                            // It is Ok for client to close connection
+                            ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe => Ok(()),
+                            _ => Err(err),
+                        }
+                    });
+                    Box::new(fut) as BoxIoFuture<()>
+                }
+            }
+        });
+        Box::new(fut)
     }
 
     fn handle_http_proxy(handle: Handle,
@@ -291,44 +314,49 @@ impl HttpRelayServer {
                          req: http::HttpRequest,
                          addr: Address,
                          remains: Vec<u8>,
-                         svr_cfg: Arc<ServerConfig>)
-                         -> BoxFuture<(), io::Error> {
+                         svr_cfg: Arc<ServerConfig>,
+                         dns_resolver: DnsResolver)
+                         -> Box<Future<Item = (), Error = io::Error>> {
         trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
 
         let should_keep_alive = http::should_keep_alive(&req);
-        super::connect_proxy_server(&handle, svr_cfg.clone())
-            .and_then(move |svr_s| {
-                trace!("Proxy server connected");
+        let fut = super::connect_proxy_server(&handle, svr_cfg.clone(), dns_resolver).and_then(move |svr_s| {
+            trace!("Proxy server connected");
 
-                let cloned_addr = addr.clone();
-                super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
-                    // Just proxy anything to client
-                    let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                    let whalf = svr_w.and_then(move |svr_w| {
-                        // Send the first request to server
-                        trace!("Going to proxy request: {:?}", req);
-                        trace!("Should keep alive? {}", should_keep_alive);
-                        http::proxy_request((r, svr_w), None, req, remains)
-                            .and_then(move |(r, svr_w, req_remains)| {
-                                if should_keep_alive {
-                                    HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
-                                } else {
-                                    futures::finished(()).boxed()
-                                }
-                            })
-                    });
+            let cloned_addr = addr.clone();
+            super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+                // Just proxy anything to client
+                let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+                let whalf = svr_w.and_then(move |svr_w| {
+                    // Send the first request to server
+                    trace!("Going to proxy request: {:?}", req);
+                    trace!("Should keep alive? {}", should_keep_alive);
+                    http::proxy_request((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
+                        if should_keep_alive {
+                            HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
+                        } else {
+                            futures::finished(()).boxed()
+                        }
+                    })
+                });
 
-                    rhalf.join(whalf)
-                        .then(move |_| {
-                            trace!("Relay to {} is finished", cloned_addr);
-                            Ok(())
-                        })
-                })
+                rhalf.join(whalf)
+                    .then(move |_| {
+                        trace!("Relay to {} is finished", cloned_addr);
+                        Ok(())
+                    })
             })
-            .boxed()
+        });
+
+        Box::new(fut)
     }
 
-    fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
+    fn handle_client(handle: &Handle,
+                     socket: TcpStream,
+                     _: SocketAddr,
+                     svr_cfg: Arc<ServerConfig>,
+                     dns_resolver: DnsResolver)
+                     -> io::Result<()> {
         let cloned_handle = handle.clone();
         let client_addr = try!(socket.peer_addr());
         let fut = futures::lazy(|| Ok(socket.split()))
@@ -362,7 +390,13 @@ impl HttpRelayServer {
                 match req.method.clone() {
                     Method::Connect => {
                         info!("CONNECT (Http) {}", addr);
-                        HttpRelayServer::handle_connect(cloned_handle, (r, w), req, addr, remains, svr_cfg)
+                        HttpRelayServer::handle_connect(cloned_handle,
+                                                        (r, w),
+                                                        req,
+                                                        addr,
+                                                        remains,
+                                                        svr_cfg,
+                                                        dns_resolver)
                     }
                     met => {
                         info!("{} (Http) {}", met, addr);
@@ -372,7 +406,8 @@ impl HttpRelayServer {
                                                            req,
                                                            addr,
                                                            remains,
-                                                           svr_cfg)
+                                                           svr_cfg,
+                                                           dns_resolver)
                     }
                 }
             });
@@ -393,7 +428,10 @@ impl HttpRelayServer {
         Ok(())
     }
 
-    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Arc<Config>,
+               handle: Handle,
+               dns_resolver: DnsResolver)
+               -> Box<Future<Item = (), Error = io::Error>> {
         let listener = {
             let local_addr = config.http_proxy.as_ref().unwrap();
             let listener = TcpListener::bind(local_addr, &handle).unwrap();
@@ -407,7 +445,8 @@ impl HttpRelayServer {
                 let server_cfg = servers.pick_server();
                 trace!("Got connection, addr: {}", addr);
                 trace!("Picked proxy server: {:?}", server_cfg);
-                HttpRelayServer::handle_client(&handle, socket, addr, server_cfg)
+                let dns_resolver = dns_resolver.clone();
+                HttpRelayServer::handle_client(&handle, socket, addr, server_cfg, dns_resolver)
             });
 
         Box::new(listening.map_err(|err| {

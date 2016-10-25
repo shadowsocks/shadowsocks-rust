@@ -22,6 +22,7 @@
 //! TcpRelay implementation
 
 use std::io::{self, Read, Write};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::sync::Arc;
 use std::mem;
 
@@ -29,7 +30,8 @@ use crypto::cipher;
 use crypto::CryptoMode;
 use relay::socks5::Address;
 use relay::BoxIoFuture;
-use config::ServerConfig;
+use relay::dns_resolver::DnsResolver;
+use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Handle;
@@ -39,9 +41,10 @@ use tokio_core::io::Io;
 
 use futures::{self, Future, BoxFuture, Poll};
 
+use ip::IpAddr;
+
 use self::stream::{EncryptedWriter, DecryptedReader};
 
-// mod cached_dns;
 pub mod local;
 pub mod server;
 mod stream;
@@ -59,8 +62,25 @@ pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 pub type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
 pub type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
 
-fn connect_proxy_server(handle: &Handle, svr_cfg: Arc<ServerConfig>) -> BoxIoFuture<TcpStream> {
-    TcpStream::connect(&svr_cfg.addr, handle).boxed()
+fn connect_proxy_server(handle: &Handle,
+                        svr_cfg: Arc<ServerConfig>,
+                        dns_resolver: DnsResolver)
+                        -> Box<Future<Item = TcpStream, Error = io::Error>> {
+    match &svr_cfg.addr {
+        &ServerAddr::SocketAddr(ref addr) => Box::new(TcpStream::connect(addr, handle)),
+        &ServerAddr::DomainName(ref domain, port) => {
+            let handle = handle.clone();
+            let fut = dns_resolver.resolve(&domain[..])
+                .and_then(move |sockaddr| {
+                    let sockaddr = match sockaddr {
+                        IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                        IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                    };
+                    TcpStream::connect(&sockaddr, &handle).boxed()
+                });
+            Box::new(fut)
+        }
+    }
 }
 
 /// Handshake logic for ShadowSocks Client
@@ -68,20 +88,19 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                               svr_cfg: Arc<ServerConfig>,
                               relay_addr: Address)
                               -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    proxy_handshake(remote_stream, svr_cfg)
-        .and_then(|(r_fut, w_fut)| {
-            let w_fut = w_fut.and_then(move |enc_w| {
-                    trace!("Got encrypt stream and going to send addr: {:?}",
-                           relay_addr);
+    let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {
+        let w_fut = w_fut.and_then(move |enc_w| {
+                trace!("Got encrypt stream and going to send addr: {:?}",
+                       relay_addr);
 
-                    // Send relay address to remote
-                    relay_addr.write_to(enc_w).and_then(flush)
-                })
-                .boxed();
+                // Send relay address to remote
+                relay_addr.write_to(enc_w).and_then(flush)
+            })
+            .boxed();
 
-            Ok((r_fut, w_fut))
-        })
-        .boxed()
+        Ok((r_fut, w_fut))
+    });
+    Box::new(fut)
 }
 
 /// ShadowSocks Client-Server handshake protocol

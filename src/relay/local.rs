@@ -29,6 +29,7 @@ use tokio_core::reactor::Core;
 use relay::tcprelay::local::TcpRelayLocal;
 #[cfg(feature = "enable-udp")]
 use relay::udprelay::local::UdpRelayLocal;
+use relay::dns_resolver::DnsResolver;
 use config::Config;
 
 /// Relay server running under local environment.
@@ -38,19 +39,18 @@ use config::Config;
 /// use std::sync::Arc;
 ///
 /// use shadowsocks::relay::RelayLocal;
-/// use shadowsocks::config::{Config, ServerConfig};
+/// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
 /// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();
 /// config.local = Some("127.0.0.1:1080".parse().unwrap());
 /// config.server = vec![ServerConfig {
-///     addr: "127.0.0.1:8388".parse().unwrap(),
+///     addr: ServerAddr::SocketAddr("127.0.0.1:8388".parse().unwrap()),
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
-///     dns_cache_capacity: 1024,
 /// }];
-/// RelayLocal::new(config).run();
+/// RelayLocal::run(config);
 /// ```
 #[derive(Clone)]
 pub struct RelayLocal;
@@ -60,7 +60,8 @@ impl RelayLocal {
         let mut lp = try!(Core::new());
         let handle = lp.handle();
         let config = Arc::new(config);
-        let tcp_fut = TcpRelayLocal::run(config, handle);
+        let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
+        let tcp_fut = TcpRelayLocal::run(config, handle, dns_resolver);
         lp.run(tcp_fut)
     }
 }

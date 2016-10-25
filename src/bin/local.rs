@@ -41,8 +41,7 @@ use std::env;
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
-use shadowsocks::config::{self, Config, ServerConfig};
-use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
+use shadowsocks::config::{self, Config, ServerConfig, ServerAddr};
 use shadowsocks::relay::RelayLocal;
 
 fn main() {
@@ -183,7 +182,7 @@ fn main() {
             .unwrap();
 
         let sc = ServerConfig {
-            addr: svr_addr.parse::<SocketAddr>().expect("Invalid server addr"),
+            addr: svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
             password: password.to_owned(),
             method: match method.parse() {
                 Ok(m) => m,
@@ -192,7 +191,6 @@ fn main() {
                 }
             },
             timeout: None,
-            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
         config.server.push(sc);

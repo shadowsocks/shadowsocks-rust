@@ -72,37 +72,116 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 use std::string::ToString;
 use std::option::Option;
 use std::default::Default;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Display, Debug, Formatter};
 use std::path::Path;
 use std::collections::HashSet;
 use std::time::Duration;
 use std::convert::From;
+use std::str::FromStr;
 
 use ip::IpAddr;
 
 use crypto::cipher::CipherType;
 
 /// Default DNS cache capacity
-pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 65536;
+pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 128;
+
+/// Server address
+#[derive(Clone, Debug)]
+pub enum ServerAddr {
+    /// IP Address
+    SocketAddr(SocketAddr),
+    /// Domain name address, eg. example.com:8080
+    DomainName(String, u16),
+}
+
+impl ServerAddr {
+    /// Get address for server listener
+    /// Panic if address is domain name
+    pub fn listen_addr(&self) -> &SocketAddr {
+        match self {
+            &ServerAddr::SocketAddr(ref s) => s,
+            _ => panic!("Cannot use domain name as server listen address"),
+        }
+    }
+
+    fn to_json_object_inner(&self, obj: &mut json::Object, addr_key: &str, port_key: &str) {
+        use serialize::json::Json;
+
+        match self {
+            &ServerAddr::SocketAddr(SocketAddr::V4(ref v4)) => {
+                obj.insert(addr_key.to_owned(), Json::String(v4.ip().to_string()));
+                obj.insert(port_key.to_owned(), Json::U64(v4.port() as u64));
+            }
+            &ServerAddr::SocketAddr(SocketAddr::V6(ref v6)) => {
+                obj.insert(addr_key.to_owned(), Json::String(v6.ip().to_string()));
+                obj.insert(port_key.to_owned(), Json::U64(v6.port() as u64));
+            }
+            &ServerAddr::DomainName(ref domain, port) => {
+                obj.insert(addr_key.to_owned(), Json::String(domain.to_owned()));
+                obj.insert(port_key.to_owned(), Json::U64(port as u64));
+            }
+        }
+    }
+
+    fn to_json_object(&self, obj: &mut json::Object) {
+        self.to_json_object_inner(obj, "address", "port")
+    }
+
+    fn to_json_object_old(&self, obj: &mut json::Object) {
+        self.to_json_object_inner(obj, "server", "server_port")
+    }
+}
+
+#[derive(Debug)]
+pub struct ServerAddrError;
+
+impl FromStr for ServerAddr {
+    type Err = ServerAddrError;
+    fn from_str(s: &str) -> Result<ServerAddr, ServerAddrError> {
+        match s.parse::<SocketAddr>() {
+            Ok(addr) => Ok(ServerAddr::SocketAddr(addr)),
+            Err(..) => {
+                let mut sp = s.split(':');
+                match (sp.next(), sp.next()) {
+                    (Some(dn), Some(port)) => {
+                        match port.parse::<u16>() {
+                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                            Err(..) => Err(ServerAddrError),
+                        }
+                    }
+                    _ => Err(ServerAddrError),
+                }
+            }
+        }
+    }
+}
+
+impl Display for ServerAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            &ServerAddr::SocketAddr(ref a) => write!(f, "{}", a),
+            &ServerAddr::DomainName(ref d, port) => write!(f, "{}:{}", d, port),
+        }
+    }
+}
 
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
-    pub addr: SocketAddr,
+    pub addr: ServerAddr,
     pub password: String,
     pub method: CipherType,
     pub timeout: Option<Duration>,
-    pub dns_cache_capacity: usize,
 }
 
 impl ServerConfig {
     pub fn basic(addr: SocketAddr, password: String, method: CipherType) -> ServerConfig {
         ServerConfig {
-            addr: addr,
+            addr: ServerAddr::SocketAddr(addr),
             password: password,
             method: method,
             timeout: None,
-            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         }
     }
 }
@@ -112,24 +191,13 @@ impl json::ToJson for ServerConfig {
         use serialize::json::Json;
         let mut obj = json::Object::new();
 
-        match self.addr {
-            SocketAddr::V4(ref v4) => {
-                obj.insert("address".to_owned(), Json::String(v4.ip().to_string()));
-                obj.insert("port".to_owned(), Json::U64(v4.port() as u64));
-            }
-            SocketAddr::V6(ref v6) => {
-                obj.insert("address".to_owned(), Json::String(v6.ip().to_string()));
-                obj.insert("port".to_owned(), Json::U64(v6.port() as u64));
-            }
-        }
+        self.addr.to_json_object(&mut obj);
 
         obj.insert("password".to_owned(), Json::String(self.password.clone()));
         obj.insert("method".to_owned(), Json::String(self.method.to_string()));
         if let Some(t) = self.timeout {
             obj.insert("timeout".to_owned(), Json::U64(t.as_secs()));
         }
-        obj.insert("dns_cache_capacity".to_owned(),
-                   Json::U64(self.dns_cache_capacity as u64));
 
         Json::Object(obj)
     }
@@ -153,6 +221,7 @@ pub struct Config {
     pub enable_udp: bool,
     pub timeout: Option<Duration>,
     pub forbidden_ip: HashSet<IpAddr>,
+    pub dns_cache_capacity: usize,
 }
 
 impl Default for Config {
@@ -176,8 +245,6 @@ pub struct Error {
     pub desc: &'static str,
     pub detail: Option<String>,
 }
-
-
 
 impl Error {
     pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
@@ -229,6 +296,7 @@ impl Debug for Error {
 }
 
 impl Config {
+    /// Creates an empty configuration
     pub fn new() -> Config {
         Config {
             server: Vec::new(),
@@ -237,6 +305,7 @@ impl Config {
             enable_udp: false,
             timeout: None,
             forbidden_ip: HashSet::new(),
+            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         }
     }
 
@@ -286,21 +355,15 @@ impl Config {
             })
             .and_then(|addr_str| {
                 addr_str.parse::<Ipv4Addr>()
-                    .map(|v4| SocketAddr::V4(SocketAddrV4::new(v4, port)))
+                    .map(|v4| ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))))
                     .or_else(|_| {
                         addr_str.parse::<Ipv6Addr>()
-                            .map(|v6| SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)))
+                            .map(|v6| ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))))
                     })
-                    .map_err(|_| Error::new(ErrorKind::Malformed, "invalid server addr", None))
+                    .or_else(|_| Ok(ServerAddr::DomainName(addr_str.to_string(), port)))
             });
 
-        let mut addr = try!(addr);
-
-        // Merge address and port
-        match addr {
-            SocketAddr::V4(ref mut v4) => v4.set_port(port),
-            SocketAddr::V6(ref mut v6) => v6.set_port(port),
-        }
+        let addr = try!(addr);
 
         let password = server.get("password")
             .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
@@ -321,22 +384,11 @@ impl Config {
             None => None,
         };
 
-        let dns_cache_capacity = match server.get("dns_cache_capacity") {
-            Some(t) => {
-                try!(t.as_u64()
-                    .ok_or(Error::new(ErrorKind::Malformed,
-                                      "`dns_cache_capacity` should be an integer",
-                                      None))) as usize
-            }
-            None => DEFAULT_DNS_CACHE_CAPACITY,
-        };
-
         Ok(ServerConfig {
             addr: addr,
             password: password,
             method: method,
             timeout: timeout,
-            dns_cache_capacity: dns_cache_capacity,
         })
     }
 
@@ -477,6 +529,18 @@ impl Config {
             }));
         }
 
+        let dns_cache_capacity = match o.get("dns_cache_capacity") {
+            Some(t) => {
+                try!(t.as_u64()
+                    .ok_or(Error::new(ErrorKind::Malformed,
+                                      "`dns_cache_capacity` should be an integer",
+                                      None))) as usize
+            }
+            None => DEFAULT_DNS_CACHE_CAPACITY,
+        };
+
+        config.dns_cache_capacity = dns_cache_capacity;
+
         Ok(config)
     }
 
@@ -515,17 +579,7 @@ impl json::ToJson for Config {
             // Official format
 
             let server = &self.server[0];
-
-            match server.addr {
-                SocketAddr::V4(ref v4) => {
-                    obj.insert("server".to_owned(), Json::String(v4.ip().to_string()));
-                    obj.insert("server_port".to_owned(), Json::U64(v4.port() as u64));
-                }
-                SocketAddr::V6(ref v6) => {
-                    obj.insert("server".to_owned(), Json::String(v6.ip().to_string()));
-                    obj.insert("server_port".to_owned(), Json::U64(v6.port() as u64));
-                }
-            }
+            server.addr.to_json_object_old(&mut obj);
 
             obj.insert("password".to_owned(),
                        Json::String(self.server[0].password.clone()));
@@ -550,6 +604,8 @@ impl json::ToJson for Config {
         }
 
         obj.insert("enable_udp".to_owned(), Json::Boolean(self.enable_udp));
+        obj.insert("dns_cache_capacity".to_owned(),
+                   Json::U64(self.dns_cache_capacity as u64));
 
         Json::Object(obj)
     }

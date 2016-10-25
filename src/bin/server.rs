@@ -36,15 +36,13 @@ extern crate env_logger;
 extern crate time;
 
 use std::env;
-use std::net::SocketAddr;
 
 use clap::{App, Arg};
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
-use shadowsocks::config::{self, Config, ServerConfig};
-use shadowsocks::config::DEFAULT_DNS_CACHE_CAPACITY;
+use shadowsocks::config::{self, Config, ServerConfig, ServerAddr};
 use shadowsocks::relay::RelayServer;
 
 fn main() {
@@ -90,11 +88,6 @@ fn main() {
             .long("encrypt-method")
             .takes_value(true)
             .help("Encryption method"))
-        .arg(Arg::with_name("THREADS")
-            .short("t")
-            .long("threads")
-            .takes_value(true)
-            .help("Threads in thread pool"))
         .get_matches();
 
     let mut log_builder = LogBuilder::new();
@@ -194,7 +187,7 @@ fn main() {
             .unwrap();
 
         let sc = ServerConfig {
-            addr: svr_addr.parse::<SocketAddr>().expect("`server-addr` invalid"),
+            addr: svr_addr.parse::<ServerAddr>().expect("`server-addr` invalid"),
             password: password.to_owned(),
             method: match method.parse() {
                 Ok(m) => m,
@@ -203,7 +196,6 @@ fn main() {
                 }
             },
             timeout: None,
-            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
         config.server.push(sc);
@@ -232,11 +224,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    let threads = matches.value_of("THREADS")
-        .unwrap_or("1")
-        .parse::<usize>()
-        .ok()
-        .expect("`threads` should be an integer");
-
-    RelayServer::run(config, threads).unwrap();
+    RelayServer::run(config).unwrap();
 }

@@ -38,29 +38,28 @@ use config::Config;
 /// use std::sync::Arc;
 ///
 /// use shadowsocks::relay::RelayServer;
-/// use shadowsocks::config::{Config, ServerConfig};
+/// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
 /// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();
 /// config.server = vec![ServerConfig {
-///     addr: "127.0.0.1:8388".parse().unwrap(),
+///     addr: ServerAddr::SocketAddr("127.0.0.1:8388".parse().unwrap()),
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
-///     dns_cache_capacity: 1024,
 /// }];
-/// RelayServer::new(config).run(1);
+/// RelayServer::run(config);
 /// ```
 ///
 #[derive(Clone)]
 pub struct RelayServer;
 
 impl RelayServer {
-    pub fn run(config: Config, threads: usize) -> io::Result<()> {
+    pub fn run(config: Config) -> io::Result<()> {
         let mut lp = try!(Core::new());
         let handle = lp.handle();
         let config = Arc::new(config);
-        let tcp_fut = TcpRelayServer::run(config, handle, threads);
+        let tcp_fut = TcpRelayServer::run(config, handle);
         lp.run(tcp_fut)
     }
 }
