@@ -77,6 +77,7 @@ use std::path::Path;
 use std::collections::HashSet;
 use std::time::Duration;
 use std::sync::Arc;
+use std::convert::From;
 
 use ip::IpAddr;
 
@@ -177,6 +178,8 @@ pub struct Error {
     pub detail: Option<String>,
 }
 
+
+
 impl Error {
     pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
         Error {
@@ -187,6 +190,32 @@ impl Error {
     }
 }
 
+macro_rules! impl_from {
+    ($error:ty,$kind:expr,$desc:expr) => (
+        impl From<$error> for Error {
+            fn from(err:$error) -> Self {
+                Error::new($kind,$desc,Some(format!("{:?}",err)))
+            }
+        }
+    )
+}
+
+impl_from!(::std::io::Error,ErrorKind::IoError,"error while reading file");
+impl_from!(json::BuilderError,ErrorKind::JsonParsingError,"Json parse error");
+
+macro_rules! except {
+    ($expr:expr,$kind:expr,$desc:expr) => (except!($expr,$kind,$desc,None));
+    ($expr:expr,$kind:expr,$desc:expr,$detail:expr) => (
+        match $expr {
+            ::std::option::Option::Some(val) => val,
+            ::std::option::Option::None => {
+                return ::std::result::Result::Err(
+                    $crate::config::Error::new($kind,$desc,$detail)
+                )
+            }
+        }
+    )
+}
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self.detail {
@@ -453,66 +482,26 @@ impl Config {
     }
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let object = match json::Json::from_str(s) {
-            Ok(obj) => obj,
-            Err(err) => {
-                return Err(Error::new(ErrorKind::JsonParsingError,
-                                      "json parse error",
-                                      Some(format!("{:?}", err))));
-            }
-        };
-
-        let json_object = match object.as_object() {
-            Some(obj) => obj,
-            None => {
-                return Err(Error::new(ErrorKind::JsonParsingError,
-                                      "root is not a JsonObject",
-                                      None))
-            }
-        };
-
-        Config::parse_json_object(json_object,
-                                  match config_type {
-                                      ConfigType::Local => true,
-                                      ConfigType::Server => false,
-                                  })
+        let object = try!(json::Json::from_str(s));
+        let json_object = except!(object.as_object(),ErrorKind::JsonParsingError,"root is not a JsonObject");
+        Config::parse_json_object(
+            json_object,
+            match config_type {
+                ConfigType::Local => true,
+                ConfigType::Server => false,
+            })
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let mut readeropt = OpenOptions::new().read(true).open(&Path::new(filename));
-
-        let reader = match readeropt {
-            Ok(ref mut r) => r,
-            Err(err) => {
-                return Err(Error::new(ErrorKind::IoError,
-                                      "error while reading file",
-                                      Some(err.to_string())))
-            }
-        };
-
-        let object = match json::Json::from_reader(reader) {
-            Ok(obj) => obj,
-            Err(err) => {
-                return Err(Error::new(ErrorKind::JsonParsingError,
-                                      "json parse error",
-                                      Some(format!("{:?}", err))));
-            }
-        };
-
-        let json_object = match object.as_object() {
-            Some(obj) => obj,
-            None => {
-                return Err(Error::new(ErrorKind::JsonParsingError,
-                                      "root is not a JsonObject",
-                                      None))
-            }
-        };
-
-        Config::parse_json_object(json_object,
-                                  match config_type {
-                                      ConfigType::Local => true,
-                                      ConfigType::Server => false,
-                                  })
+        let reader = &mut try!(OpenOptions::new().read(true).open(&Path::new(filename)));
+        let object = try!(json::Json::from_reader(reader));
+        let json_object = except!(object.as_object(),ErrorKind::JsonParsingError,"root is not a JsonObject");
+        Config::parse_json_object(
+            json_object,
+            match config_type {
+                ConfigType::Local => true,
+                ConfigType::Server => false,
+            })
     }
 }
 
