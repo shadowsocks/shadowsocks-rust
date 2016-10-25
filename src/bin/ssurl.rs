@@ -4,9 +4,7 @@ extern crate shadowsocks;
 extern crate qrcode;
 
 use std::str;
-use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
 use rustc_serialize::json::{ToJson, as_pretty_json};
@@ -90,14 +88,8 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
     let svrconfig = ServerConfig::basic(addr, pwd.to_owned(), method.parse().unwrap());
 
-    let config = Config {
-        server: vec![Arc::new(svrconfig)],
-        local: None,
-        http_proxy: None,
-        enable_udp: false,
-        timeout: None,
-        forbidden_ip: Arc::new(HashSet::new()),
-    };
+    let mut config = Config::new();
+    config.server.push(svrconfig);
 
     let config_json = config.to_json();
     println!("{}", as_pretty_json(&config_json));

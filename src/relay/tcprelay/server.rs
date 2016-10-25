@@ -158,6 +158,9 @@ impl TcpRelayServer {
     pub fn run(self, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
         let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
+        let ref forbidden_ip = self.config.forbidden_ip;
+        let forbidden_ip = Arc::new(forbidden_ip.clone());
+
         for svr_cfg in &self.config.server {
             let listener = {
                 let addr = &svr_cfg.addr;
@@ -166,10 +169,10 @@ impl TcpRelayServer {
                 listener
             };
 
-            let svr_cfg = svr_cfg.clone();
+            let svr_cfg = Arc::new(svr_cfg.clone());
             let handle = handle.clone();
-            let forbidden_ip = self.config.forbidden_ip.clone();
             let cpu_pool = self.cpu_pool.clone();
+            let forbidden_ip = forbidden_ip.clone();
             let listening = listener.incoming()
                 .for_each(move |(socket, addr)| {
                     let server_cfg = svr_cfg.clone();

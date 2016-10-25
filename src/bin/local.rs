@@ -37,7 +37,6 @@ use clap::{App, Arg};
 
 use std::net::SocketAddr;
 use std::env;
-use std::sync::Arc;
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
@@ -196,7 +195,7 @@ fn main() {
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
-        config.server.push(Arc::new(sc));
+        config.server.push(sc);
         has_provided_server_config = true;
     } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("PASSWORD").is_none() &&
               matches.value_of("ENCRYPT_METHOD").is_none() {
@@ -215,7 +214,7 @@ fn main() {
             .ok()
             .expect("`local-addr` is not a valid IP address");
 
-        config.local = Some(Arc::new(local_addr));
+        config.local = Some(local_addr);
         has_provided_local_config = true;
     }
 
@@ -231,5 +230,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    RelayLocal::new(Arc::new(config)).run().unwrap();
+    RelayLocal::new(config).run().unwrap();
 }

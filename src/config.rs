@@ -76,7 +76,6 @@ use std::fmt::{self, Debug, Formatter};
 use std::path::Path;
 use std::collections::HashSet;
 use std::time::Duration;
-use std::sync::Arc;
 use std::convert::From;
 
 use ip::IpAddr;
@@ -148,12 +147,12 @@ pub enum ConfigType {
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub server: Vec<Arc<ServerConfig>>,
-    pub local: Option<Arc<ClientConfig>>,
-    pub http_proxy: Option<Arc<ClientConfig>>,
+    pub server: Vec<ServerConfig>,
+    pub local: Option<ClientConfig>,
+    pub http_proxy: Option<ClientConfig>,
     pub enable_udp: bool,
     pub timeout: Option<Duration>,
-    pub forbidden_ip: Arc<HashSet<IpAddr>>,
+    pub forbidden_ip: HashSet<IpAddr>,
 }
 
 impl Default for Config {
@@ -200,8 +199,12 @@ macro_rules! impl_from {
     )
 }
 
-impl_from!(::std::io::Error,ErrorKind::IoError,"error while reading file");
-impl_from!(json::BuilderError,ErrorKind::JsonParsingError,"Json parse error");
+impl_from!(::std::io::Error,
+           ErrorKind::IoError,
+           "error while reading file");
+impl_from!(json::BuilderError,
+           ErrorKind::JsonParsingError,
+           "Json parse error");
 
 macro_rules! except {
     ($expr:expr,$kind:expr,$desc:expr) => (except!($expr,$kind,$desc,None));
@@ -233,7 +236,7 @@ impl Config {
             http_proxy: None,
             enable_udp: false,
             timeout: None,
-            forbidden_ip: Arc::new(HashSet::new()),
+            forbidden_ip: HashSet::new(),
         }
     }
 
@@ -358,7 +361,7 @@ impl Config {
             for server in server_list.iter() {
                 if let Some(server) = server.as_object() {
                     let cfg = try!(Config::parse_server(server));
-                    config.server.push(Arc::new(cfg));
+                    config.server.push(cfg);
                 }
             }
 
@@ -366,7 +369,7 @@ impl Config {
                   o.contains_key("method") {
             // Traditional configuration file
             let single_server = try!(Config::parse_server(o));
-            config.server = vec![Arc::new(single_server)];
+            config.server = vec![single_server];
         }
 
         if require_local_info {
@@ -389,10 +392,10 @@ impl Config {
                                               None))) as u16;
 
                         match addr_str.parse::<Ipv4Addr>() {
-                            Ok(ip) => Some(Arc::new(SocketAddr::V4(SocketAddrV4::new(ip, port)))),
+                            Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
                             Err(..) => {
                                 match addr_str.parse::<Ipv6Addr>() {
-                                    Ok(ip) => Some(Arc::new(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0)))),
+                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
                                     Err(..) => {
                                         return Err(Error::new(ErrorKind::Malformed,
                                                               "`local_address` is not a valid IP \
@@ -428,10 +431,10 @@ impl Config {
                                               None))) as u16;
 
                         match addr_str.parse::<Ipv4Addr>() {
-                            Ok(ip) => Some(Arc::new(SocketAddr::V4(SocketAddrV4::new(ip, port)))),
+                            Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
                             Err(..) => {
                                 match addr_str.parse::<Ipv6Addr>() {
-                                    Ok(ip) => Some(Arc::new(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0)))),
+                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
                                     Err(..) => {
                                         return Err(Error::new(ErrorKind::Malformed,
                                                               "`local_http_address` is not a valid IP \
@@ -454,9 +457,7 @@ impl Config {
                 .ok_or(Error::new(ErrorKind::Malformed,
                                   "`forbidden_ip` should be a list",
                                   None)));
-            let mut forbidden_ip = HashSet::new();
-
-            forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
+            config.forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
                 let x = match x.as_string() {
                     Some(x) => x,
                     None => {
@@ -474,8 +475,6 @@ impl Config {
                     }
                 }
             }));
-
-            config.forbidden_ip = Arc::new(forbidden_ip);
         }
 
         Ok(config)
@@ -483,25 +482,27 @@ impl Config {
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let object = try!(json::Json::from_str(s));
-        let json_object = except!(object.as_object(),ErrorKind::JsonParsingError,"root is not a JsonObject");
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            })
+        let json_object = except!(object.as_object(),
+                                  ErrorKind::JsonParsingError,
+                                  "root is not a JsonObject");
+        Config::parse_json_object(json_object,
+                                  match config_type {
+                                      ConfigType::Local => true,
+                                      ConfigType::Server => false,
+                                  })
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let reader = &mut try!(OpenOptions::new().read(true).open(&Path::new(filename)));
         let object = try!(json::Json::from_reader(reader));
-        let json_object = except!(object.as_object(),ErrorKind::JsonParsingError,"root is not a JsonObject");
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            })
+        let json_object = except!(object.as_object(),
+                                  ErrorKind::JsonParsingError,
+                                  "root is not a JsonObject");
+        Config::parse_json_object(json_object,
+                                  match config_type {
+                                      ConfigType::Local => true,
+                                      ConfigType::Server => false,
+                                  })
     }
 }
 
@@ -539,7 +540,7 @@ impl json::ToJson for Config {
         }
 
         if let Some(ref l) = self.local {
-            let ip_str = match &**l {
+            let ip_str = match l {
                 &SocketAddr::V4(ref v4) => v4.ip().to_string(),
                 &SocketAddr::V6(ref v6) => v6.ip().to_string(),
             };

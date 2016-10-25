@@ -36,7 +36,6 @@ extern crate env_logger;
 extern crate time;
 
 use std::env;
-use std::sync::Arc;
 use std::net::SocketAddr;
 
 use clap::{App, Arg};
@@ -207,7 +206,7 @@ fn main() {
             dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         };
 
-        config.server.push(Arc::new(sc));
+        config.server.push(sc);
         has_provided_server_config = true;
     } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("PASSWORD").is_none() &&
               matches.value_of("ENCRYPT_METHOD").is_none() {
@@ -239,5 +238,5 @@ fn main() {
         .ok()
         .expect("`threads` should be an integer");
 
-    RelayServer::new(Arc::new(config)).run(threads).unwrap();
+    RelayServer::new(config).run(threads).unwrap();
 }

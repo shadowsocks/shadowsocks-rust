@@ -42,30 +42,31 @@ use config::Config;
 /// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();
-/// config.server = vec![Arc::new(ServerConfig {
+/// config.server = vec![ServerConfig {
 ///     addr: "127.0.0.1:8388".parse().unwrap(),
 ///     password: "server-password".to_string(),
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 ///     dns_cache_capacity: 1024,
-/// })];
-/// RelayServer::new(Arc::new(config)).run(1);
+/// }];
+/// RelayServer::new(config).run(1);
 /// ```
 ///
 #[derive(Clone)]
 pub struct RelayServer {
-    config: Arc<Config>,
+    config: Config,
 }
 
 impl RelayServer {
-    pub fn new(config: Arc<Config>) -> RelayServer {
+    pub fn new(config: Config) -> RelayServer {
         RelayServer { config: config }
     }
 
     pub fn run(self, threads: usize) -> io::Result<()> {
         let mut lp = try!(Core::new());
         let handle = lp.handle();
-        let tcp_fut = TcpRelayServer::new(self.config.clone(), threads).run(handle.clone());
+        let config = Arc::new(self.config);
+        let tcp_fut = TcpRelayServer::new(config, threads).run(handle.clone());
         lp.run(tcp_fut)
     }
 }

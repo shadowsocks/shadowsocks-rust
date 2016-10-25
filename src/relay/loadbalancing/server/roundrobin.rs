@@ -26,14 +26,14 @@ use config::{Config, ServerConfig};
 
 #[derive(Clone)]
 pub struct RoundRobin {
-    config: Arc<Config>,
+    servers: Vec<Arc<ServerConfig>>,
     index: usize,
 }
 
 impl RoundRobin {
     pub fn new(config: Arc<Config>) -> RoundRobin {
         RoundRobin {
-            config: config,
+            servers: config.server.iter().map(|s| Arc::new(s.clone())).collect(),
             index: 0usize,
         }
     }
@@ -41,7 +41,7 @@ impl RoundRobin {
 
 impl LoadBalancer for RoundRobin {
     fn pick_server(&mut self) -> Arc<ServerConfig> {
-        let server = &self.config.server;
+        let server = &self.servers;
 
         if server.is_empty() {
             panic!("No server");
@@ -53,6 +53,6 @@ impl LoadBalancer for RoundRobin {
     }
 
     fn total(&self) -> usize {
-        self.config.server.len()
+        self.servers.len()
     }
 }
