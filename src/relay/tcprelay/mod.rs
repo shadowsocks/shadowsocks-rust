@@ -25,6 +25,7 @@ use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::sync::Arc;
 use std::mem;
+use std::cmp;
 
 use crypto::cipher;
 use crypto::CryptoMode;
@@ -121,16 +122,14 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 let local_iv = svr_cfg.method.gen_init_vec();
                 trace!("Going to send initialize vector: {:?}", local_iv);
 
-                write_all(w, local_iv)
-                    .and_then(|(w, local_iv)| flush(w).map(move |w| (w, local_iv)))
-                    .and_then(move |(w, local_iv)| {
-                        let encryptor = cipher::with_type(svr_cfg.method,
-                                                          svr_cfg.password.as_bytes(),
-                                                          &local_iv[..],
-                                                          CryptoMode::Encrypt);
+                write_all(w, local_iv).and_then(move |(w, local_iv)| {
+                    let encryptor = cipher::with_type(svr_cfg.method,
+                                                      svr_cfg.password.as_bytes(),
+                                                      &local_iv[..],
+                                                      CryptoMode::Encrypt);
 
-                        Ok(EncryptedWriter::new(w, encryptor))
-                    })
+                    Ok(EncryptedWriter::new(w, encryptor))
+                })
 
             });
 
@@ -209,11 +208,7 @@ impl<R, W> Future for CopyExact<R, W>
                     // If our buffer is empty, then we need to read some data to
                     // continue.
                     if *pos == *cap && *remain != 0 {
-                        let buf_len = if *remain > buf.len() {
-                            buf.len()
-                        } else {
-                            *remain
-                        };
+                        let buf_len = cmp::min(*remain, buf.len());
                         let n = try_nb!(reader.read(&mut buf[..buf_len]));
                         if n == 0 {
                             // Unexpected EOF!
@@ -298,18 +293,20 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
         }
     });
 
-    c2s.select(s2c)
-        .map_err(|(err, _)| err)
-        .and_then(move |(dir, next)| {
-            match dir {
-                TunnelDirection::Client2Server => next.map(move |_| ()).boxed(),
-                // Shutdown connection directly because remote server has disconnected
-                TunnelDirection::Server2Client => futures::finished(()).boxed(),
-            }
-        })
-        .and_then(move |_| {
-            trace!("Relay {} client <-> server are all finished, closing", addr);
-            Ok(())
-        })
-        .boxed()
+    c2s.join(s2c).map(|_| ()).boxed()
+
+    // c2s.select(s2c)
+    //     .map_err(|(err, _)| err)
+    //     .and_then(move |(dir, next)| {
+    //         match dir {
+    //             TunnelDirection::Client2Server => next.map(move |_| ()).boxed(),
+    //             // Shutdown connection directly because remote server has disconnected
+    //             TunnelDirection::Server2Client => futures::finished(()).boxed(),
+    //         }
+    //     })
+    //     .and_then(move |_| {
+    //         trace!("Relay {} client <-> server are all finished, closing", addr);
+    //         Ok(())
+    //     })
+    //     .boxed()
 }
