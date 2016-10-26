@@ -31,6 +31,7 @@ use crypto::openssl;
 use crypto::table;
 use crypto::CryptoMode;
 use crypto::rc4_md5;
+use crypto::dummy;
 use crypto::crypto::CryptoCipher;
 
 use crypto::digest::{self, DigestType};
@@ -120,9 +121,12 @@ const CIPHER_CHACHA20: &'static str = "chacha20";
 #[cfg(feature = "cipher-salsa20")]
 const CIPHER_SALSA20: &'static str = "salsa20";
 
+const CIPHER_DUMMY: &'static str = "dummy";
+
 #[derive(Clone, Debug, Copy)]
 pub enum CipherType {
     Table,
+    Dummy,
 
     #[cfg(feature = "cipher-aes-cfb")]
     Aes128Cfb,
@@ -157,6 +161,7 @@ impl CipherType {
     pub fn block_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
+            CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.block_size(),
@@ -186,6 +191,7 @@ impl CipherType {
     pub fn key_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
+            CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.key_len(),
@@ -243,6 +249,7 @@ impl CipherType {
     pub fn iv_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
+            CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.iv_len().unwrap_or(0),
@@ -286,6 +293,7 @@ impl FromStr for CipherType {
     fn from_str(s: &str) -> Result<CipherType, Error> {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
+            CIPHER_DUMMY => Ok(CipherType::Dummy),
             #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB => Ok(CipherType::Aes128Cfb),
             #[cfg(feature = "cipher-aes-cfb")]
@@ -323,6 +331,7 @@ impl Display for CipherType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             CipherType::Table => write!(f, "{}", CIPHER_TABLE),
+            CipherType::Dummy => write!(f, "{}", CIPHER_DUMMY),
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => write!(f, "{}", CIPHER_AES_128_CFB),
             #[cfg(feature = "cipher-aes-cfb")]
@@ -400,6 +409,7 @@ macro_rules! define_ciphers {
 
 define_ciphers! {
     TableCipher => table::TableCipher,
+    DummyCipher => dummy::DummyCipher,
     Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
     OpenSSLCipher => openssl::OpenSSLCipher,
     CryptoCipher => CryptoCipher,
@@ -409,6 +419,7 @@ define_ciphers! {
 pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> CipherVariant {
     match t {
         CipherType::Table => CipherVariant::new(table::TableCipher::new(key, mode)),
+        CipherType::Dummy => CipherVariant::new(dummy::DummyCipher),
 
         #[cfg(feature = "cipher-chacha20")]
         CipherType::ChaCha20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),

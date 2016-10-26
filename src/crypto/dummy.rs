@@ -19,34 +19,17 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! Crypto methods for shadowsocks
+use super::{Cipher, CipherResult};
 
+pub struct DummyCipher;
 
-use std::convert::From;
+impl Cipher for DummyCipher {
+    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+        out.extend_from_slice(data);
+        Ok(())
+    }
 
-use openssl::crypto::symm;
-
-pub use self::cipher::{CipherType, Cipher, CipherVariant, CipherResult};
-
-pub mod cipher;
-pub mod openssl;
-pub mod digest;
-pub mod table;
-pub mod rc4_md5;
-pub mod crypto;
-pub mod dummy;
-
-#[derive(Clone, Copy)]
-pub enum CryptoMode {
-    Encrypt,
-    Decrypt,
-}
-
-impl From<CryptoMode> for symm::Mode {
-    fn from(m: CryptoMode) -> symm::Mode {
-        match m {
-            CryptoMode::Encrypt => symm::Mode::Encrypt,
-            CryptoMode::Decrypt => symm::Mode::Decrypt,
-        }
+    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+        Ok(())
     }
 }
