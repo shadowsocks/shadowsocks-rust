@@ -149,7 +149,6 @@ impl<W> EncryptedWriter<W>
 
     /// Finalize the cipher, which will writes the final block into buffer
     pub fn finalize(&mut self) -> io::Result<()> {
-        self.buffer.clear();
         match self.cipher.finalize(&mut self.buffer) {
             Ok(..) => {
                 self.writer
@@ -180,13 +179,11 @@ impl<W> Write for EncryptedWriter<W>
     where W: Write + 'static
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.buffer.clear();
         match self.cipher.update(buf, &mut self.buffer) {
             Ok(..) => {
-                match self.writer.write_all(&self.buffer[..]) {
-                    Ok(..) => Ok(buf.len()),
-                    Err(err) => Err(err),
-                }
+                let len = try!(self.writer.write(&self.buffer[..]));
+                self.buffer.drain(..len);
+                Ok(len)
             }
             Err(err) => Err(From::from(err)),
         }
