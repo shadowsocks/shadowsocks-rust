@@ -279,15 +279,15 @@ impl<R: Read, W: Write> Future for EncryptedCopy<R, W> {
             // continue.
             if self.pos == self.cap && !self.read_done {
                 let n = try_nb!(self.reader.read(&mut local_buf[..]));
+                self.buf.clear();
                 if n == 0 {
                     self.read_done = true;
+                    try!(self.writer.cipher_finalize(&mut self.buf));
                 } else {
-                    self.pos = 0;
-
-                    self.buf.clear();
                     try!(self.writer.cipher_update(&local_buf[..n], &mut self.buf));
-                    self.cap = self.buf.len();
                 }
+                self.pos = 0;
+                self.cap = self.buf.len();
             }
 
             // If our buffer has some data, let's write it out!
