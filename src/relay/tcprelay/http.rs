@@ -46,6 +46,7 @@ use futures::{self, Future, BoxFuture, Poll};
 use tokio_core::io::{write_all, flush};
 
 use relay::socks5::Address;
+use super::stream::EncryptedWriter;
 
 #[derive(Debug)]
 pub struct HttpRequest {
@@ -95,7 +96,33 @@ impl HttpRequest {
         }
     }
 
-    pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+    // pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
+    //     where W: Write + Send + 'static
+    // {
+    //     futures::lazy(move || {
+    //             let mut w = Vec::new();
+    //             try!(write!(w,
+    //                         "{} {} {}\r\n",
+    //                         self.method,
+    //                         self.request_uri,
+    //                         self.version));
+
+    //             for header in self.headers.iter() {
+    //                 if !header.name().is_empty() {
+    //                     try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
+    //                 }
+    //             }
+
+    //             try!(write!(w, "\r\n"));
+
+    //             Ok(w)
+    //         })
+    //         .and_then(|buf| write_all(w, buf))
+    //         .map(|(w, _)| w)
+    //         .boxed()
+    // }
+
+    pub fn write_to_encrypted<W>(self, w: EncryptedWriter<W>) -> BoxFuture<EncryptedWriter<W>, io::Error>
         where W: Write + Send + 'static
     {
         futures::lazy(move || {
@@ -116,7 +143,7 @@ impl HttpRequest {
 
                 Ok(w)
             })
-            .and_then(|buf| write_all(w, buf))
+            .and_then(|buf| w.write_all_encrypted(buf))
             .map(|(w, _)| w)
             .boxed()
     }
@@ -498,11 +525,11 @@ fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
 }
 
 /// Proxy this HTTP Request to writer
-pub fn proxy_request<R, W>((r, w): (R, W),
-                           client_addr: Option<&SocketAddr>,
-                           mut req: HttpRequest,
-                           mut remains: Vec<u8>)
-                           -> BoxFuture<(R, W, Vec<u8>), io::Error>
+pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
+                                     client_addr: Option<&SocketAddr>,
+                                     mut req: HttpRequest,
+                                     mut remains: Vec<u8>)
+                                     -> BoxFuture<(R, EncryptedWriter<W>, Vec<u8>), io::Error>
     where R: Read + Send + 'static,
           W: Write + Send + 'static
 {
@@ -528,18 +555,20 @@ pub fn proxy_request<R, W>((r, w): (R, W),
     // Clears host, which only for proxy
     req.clear_request_uri_host();
 
-    req.write_to(w)
+    req.write_to_encrypted(w)
         .and_then(|w| flush(w))
         .and_then(move |w| {
             if content_length == 0 {
                 futures::finished((r, w, remains)).boxed()
             } else if content_length <= remains.len() {
                 let after_that = remains.split_off(content_length);
-                write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
+                w.write_all_encrypted(remains).map(|(w, _)| (r, w, after_that)).boxed()
             } else {
                 let missing_bytes = content_length - remains.len();
-                write_all(w, remains)
-                    .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
+                w.write_all_encrypted(remains)
+                    .and_then(move |(w, _)| {
+                        super::copy_exact_encrypted(r, w, missing_bytes).map(|(r, w)| (r, w, vec![]))
+                    })
                     .boxed()
             }
         })

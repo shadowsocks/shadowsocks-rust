@@ -96,7 +96,9 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 
                 // Send relay address to remote
                 let local_buf = Vec::new();
-                relay_addr.write_to(local_buf).and_then(|buf| enc_w.write_all(buf)).and_then(|(enc_w, _)| flush(enc_w))
+                relay_addr.write_to(local_buf)
+                    .and_then(|buf| enc_w.write_all_encrypted(buf))
+                    .and_then(|(enc_w, _)| flush(enc_w))
             })
             .boxed();
 
@@ -157,54 +159,153 @@ pub fn proxy_handshake(remote_stream: TcpStream,
         .boxed()
 }
 
+// /// Copy exactly N bytes
+// pub enum CopyExact<R, W>
+//     where R: Read,
+//           W: Write
+// {
+//     Pending {
+//         reader: R,
+//         writer: W,
+//         buf: [u8; 4096],
+//         remain: usize,
+//         pos: usize,
+//         cap: usize,
+//     },
+//     Empty,
+// }
+
+// impl<R, W> CopyExact<R, W>
+//     where R: Read,
+//           W: Write
+// {
+//     pub fn new(r: R, w: W, amt: usize) -> CopyExact<R, W> {
+//         CopyExact::Pending {
+//             reader: r,
+//             writer: w,
+//             buf: [0u8; 4096],
+//             remain: amt,
+//             pos: 0,
+//             cap: 0,
+//         }
+//     }
+// }
+
+// impl<R, W> Future for CopyExact<R, W>
+//     where R: Read,
+//           W: Write
+// {
+//     type Item = (R, W);
+//     type Error = io::Error;
+
+//     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+//         match self {
+//             &mut CopyExact::Empty => panic!("poll after CopyExact is finished"),
+//             &mut CopyExact::Pending { ref mut reader,
+//                                       ref mut writer,
+//                                       ref mut buf,
+//                                       ref mut remain,
+//                                       ref mut pos,
+//                                       ref mut cap } => {
+//                 loop {
+//                     // If our buffer is empty, then we need to read some data to
+//                     // continue.
+//                     if *pos == *cap && *remain != 0 {
+//                         let buf_len = cmp::min(*remain, buf.len());
+//                         let n = try_nb!(reader.read(&mut buf[..buf_len]));
+//                         if n == 0 {
+//                             // Unexpected EOF!
+//                             let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
+//                             return Err(err);
+//                         } else {
+//                             *pos = 0;
+//                             *cap = n;
+//                             *remain -= n;
+//                         }
+//                     }
+
+//                     // If our buffer has some data, let's write it out!
+//                     while *pos < *cap {
+//                         let i = try_nb!(writer.write(&buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
+//                         *pos += i;
+//                     }
+
+//                     // If we've written al the data and we've seen EOF, flush out the
+//                     // data and finish the transfer.
+//                     // done with the entire transfer.
+//                     if *pos == *cap && *remain == 0 {
+//                         try_nb!(writer.flush());
+//                         break; // The only path to execute the following logic
+//                     }
+//                 }
+//             }
+//         }
+
+//         match mem::replace(self, CopyExact::Empty) {
+//             CopyExact::Pending { reader, writer, .. } => Ok((reader, writer).into()),
+//             CopyExact::Empty => unreachable!(),
+//         }
+//     }
+// }
+
+// pub fn copy_exact<R, W>(r: R, w: W, amt: usize) -> CopyExact<R, W>
+//     where R: Read,
+//           W: Write
+// {
+//     CopyExact::new(r, w, amt)
+// }
+
 /// Copy exactly N bytes
-pub enum CopyExact<R, W>
+pub enum CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
 {
     Pending {
         reader: R,
-        writer: W,
+        writer: EncryptedWriter<W>,
         buf: [u8; 4096],
         remain: usize,
         pos: usize,
         cap: usize,
+        enc_buf: Vec<u8>,
     },
     Empty,
 }
 
-impl<R, W> CopyExact<R, W>
+impl<R, W> CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
 {
-    pub fn new(r: R, w: W, amt: usize) -> CopyExact<R, W> {
-        CopyExact::Pending {
+    pub fn new(r: R, w: EncryptedWriter<W>, amt: usize) -> CopyExactEncrypted<R, W> {
+        CopyExactEncrypted::Pending {
             reader: r,
             writer: w,
             buf: [0u8; 4096],
             remain: amt,
             pos: 0,
             cap: 0,
+            enc_buf: Vec::new(),
         }
     }
 }
 
-impl<R, W> Future for CopyExact<R, W>
+impl<R, W> Future for CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
 {
-    type Item = (R, W);
+    type Item = (R, EncryptedWriter<W>);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
-            &mut CopyExact::Empty => panic!("poll after CopyExact is finished"),
-            &mut CopyExact::Pending { ref mut reader,
-                                      ref mut writer,
-                                      ref mut buf,
-                                      ref mut remain,
-                                      ref mut pos,
-                                      ref mut cap } => {
+            &mut CopyExactEncrypted::Empty => panic!("poll after CopyExactEncrypted is finished"),
+            &mut CopyExactEncrypted::Pending { ref mut reader,
+                                               ref mut writer,
+                                               ref mut buf,
+                                               ref mut remain,
+                                               ref mut pos,
+                                               ref mut cap,
+                                               ref mut enc_buf } => {
                 loop {
                     // If our buffer is empty, then we need to read some data to
                     // continue.
@@ -217,14 +318,17 @@ impl<R, W> Future for CopyExact<R, W>
                             return Err(err);
                         } else {
                             *pos = 0;
-                            *cap = n;
                             *remain -= n;
+
+                            enc_buf.clear();
+                            try!(writer.cipher_update(&buf[..n], enc_buf));
+                            *cap = enc_buf.len();
                         }
                     }
 
                     // If our buffer has some data, let's write it out!
                     while *pos < *cap {
-                        let i = try_nb!(writer.write(&buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
+                        let i = try_nb!(writer.write(&enc_buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
                         *pos += i;
                     }
 
@@ -239,18 +343,18 @@ impl<R, W> Future for CopyExact<R, W>
             }
         }
 
-        match mem::replace(self, CopyExact::Empty) {
-            CopyExact::Pending { reader, writer, .. } => Ok((reader, writer).into()),
-            CopyExact::Empty => unreachable!(),
+        match mem::replace(self, CopyExactEncrypted::Empty) {
+            CopyExactEncrypted::Pending { reader, writer, .. } => Ok((reader, writer).into()),
+            CopyExactEncrypted::Empty => unreachable!(),
         }
     }
 }
 
-pub fn copy_exact<R, W>(r: R, w: W, amt: usize) -> CopyExact<R, W>
+pub fn copy_exact_encrypted<R, W>(r: R, w: EncryptedWriter<W>, amt: usize) -> CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
 {
-    CopyExact::new(r, w, amt)
+    CopyExactEncrypted::new(r, w, amt)
 }
 
 pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>

@@ -97,7 +97,7 @@ impl Socks5RelayLocal {
             .and_then(move |(svr_s, w)| {
                 super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                     let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                    let whalf = svr_w.and_then(move |svr_w| svr_w.copy_from(r));
+                    let whalf = svr_w.and_then(move |svr_w| svr_w.copy_from_encrypted(r));
 
                     tunnel(cloned_addr, whalf, rhalf)
                 })
@@ -261,8 +261,8 @@ impl HttpRelayServer {
             .and_then(move |(svr_s, w)| {
                 super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                     let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                    let whalf = svr_w.and_then(move |svr_w| write_all(svr_w, remains))
-                        .and_then(move |(svr_w, _)| copy(r, svr_w));
+                    let whalf = svr_w.and_then(move |svr_w| svr_w.write_all_encrypted(remains))
+                        .and_then(move |(svr_w, _)| svr_w.copy_from_encrypted(r));
 
                     tunnel(cloned_addr, whalf, rhalf)
                 })
@@ -282,7 +282,7 @@ impl HttpRelayServer {
                     trace!("Going to proxy request: {:?}", req);
                     trace!("Should keep alive? {}", should_keep_alive);
 
-                    let fut = http::proxy_request((r, svr_w), None, req, remains)
+                    let fut = http::proxy_request_encrypted((r, svr_w), None, req, remains)
                         .and_then(move |(r, svr_w, req_remains)| {
                             if should_keep_alive {
                                 HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
@@ -331,13 +331,14 @@ impl HttpRelayServer {
                     // Send the first request to server
                     trace!("Going to proxy request: {:?}", req);
                     trace!("Should keep alive? {}", should_keep_alive);
-                    http::proxy_request((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
-                        if should_keep_alive {
-                            HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
-                        } else {
-                            futures::finished(()).boxed()
-                        }
-                    })
+                    http::proxy_request_encrypted((r, svr_w), None, req, remains)
+                        .and_then(move |(r, svr_w, req_remains)| {
+                            if should_keep_alive {
+                                HttpRelayServer::handle_http_keepalive(r, svr_w, req_remains)
+                            } else {
+                                futures::finished(()).boxed()
+                            }
+                        })
                 });
 
                 rhalf.join(whalf)

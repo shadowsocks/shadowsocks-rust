@@ -163,16 +163,18 @@ impl<W> EncryptedWriter<W>
         &mut self.writer
     }
 
-    fn cipher_update(&mut self, buf: &[u8], out: &mut Vec<u8>) -> io::Result<()> {
+    #[doc(hidden)]
+    pub fn cipher_update(&mut self, buf: &[u8], out: &mut Vec<u8>) -> io::Result<()> {
         self.cipher.update(buf, out).map_err(From::from)
     }
 
-    fn cipher_finalize(&mut self, out: &mut Vec<u8>) -> io::Result<()> {
+    #[doc(hidden)]
+    pub fn cipher_finalize(&mut self, out: &mut Vec<u8>) -> io::Result<()> {
         self.cipher.finalize(out).map_err(From::from)
     }
 
     /// write_all
-    pub fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<W, B> {
+    pub fn write_all_encrypted<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<W, B> {
         EncryptedWriteAll::Writing {
             writer: self,
             buf: buf,
@@ -183,7 +185,7 @@ impl<W> EncryptedWriter<W>
     }
 
     /// Copy all data from reader
-    pub fn copy_from<R: Read>(self, r: R) -> EncryptedCopy<R, W> {
+    pub fn copy_from_encrypted<R: Read>(self, r: R) -> EncryptedCopy<R, W> {
         EncryptedCopy {
             reader: r,
             writer: self,
