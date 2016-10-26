@@ -97,7 +97,7 @@ impl Socks5RelayLocal {
             .and_then(move |(svr_s, w)| {
                 super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                     let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                    let whalf = svr_w.and_then(move |svr_w| copy(r, svr_w));
+                    let whalf = svr_w.and_then(move |svr_w| svr_w.copy_from(r));
 
                     tunnel(cloned_addr, whalf, rhalf)
                 })

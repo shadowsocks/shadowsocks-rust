@@ -95,7 +95,8 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                        relay_addr);
 
                 // Send relay address to remote
-                relay_addr.write_to(enc_w).and_then(flush)
+                let local_buf = Vec::new();
+                relay_addr.write_to(local_buf).and_then(|buf| enc_w.write_all(buf)).and_then(|(enc_w, _)| flush(enc_w))
             })
             .boxed();
 

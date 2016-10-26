@@ -125,7 +125,7 @@ impl TcpRelayServer {
                     let (svr_r, svr_w) = svr_s.split();
                     tunnel(cloned_addr,
                            copy(r, svr_w),
-                           w_fut.and_then(|w| copy(svr_r, w)))
+                           w_fut.and_then(|w| w.copy_from(svr_r)))
                 })
         });
 
