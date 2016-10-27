@@ -41,11 +41,12 @@ use url::Host;
 
 use ip::IpAddr;
 
-use futures::{self, Future, BoxFuture, Poll};
+use futures::{self, Future, Poll};
 
 use tokio_core::io::{write_all, flush};
 
 use relay::socks5::Address;
+use relay::{BoxIoFuture, boxed_future};
 use super::stream::EncryptedWriter;
 
 #[derive(Debug)]
@@ -96,36 +97,11 @@ impl HttpRequest {
         }
     }
 
-    // pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
-    //     where W: Write + Send + 'static
-    // {
-    //     futures::lazy(move || {
-    //             let mut w = Vec::new();
-    //             try!(write!(w,
-    //                         "{} {} {}\r\n",
-    //                         self.method,
-    //                         self.request_uri,
-    //                         self.version));
-
-    //             for header in self.headers.iter() {
-    //                 if !header.name().is_empty() {
-    //                     try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
-    //                 }
-    //             }
-
-    //             try!(write!(w, "\r\n"));
-
-    //             Ok(w)
-    //         })
-    //         .and_then(|buf| write_all(w, buf))
-    //         .map(|(w, _)| w)
-    //         .boxed()
-    // }
-
-    pub fn write_to_encrypted<W>(self, w: EncryptedWriter<W>) -> BoxFuture<EncryptedWriter<W>, io::Error>
-        where W: Write + Send + 'static
+    /// Writes request into an EncryptedWriter
+    pub fn write_to_encrypted<W>(self, w: EncryptedWriter<W>) -> BoxIoFuture<EncryptedWriter<W>>
+        where W: Write + 'static
     {
-        futures::lazy(move || {
+        let fut = futures::lazy(move || {
                 let mut w = Vec::new();
                 try!(write!(w,
                             "{} {} {}\r\n",
@@ -144,10 +120,12 @@ impl HttpRequest {
                 Ok(w)
             })
             .and_then(|buf| w.write_all_encrypted(buf))
-            .map(|(w, _)| w)
-            .boxed()
+            .map(|(w, _)| w);
+
+        Box::new(fut)
     }
 
+    /// Get Socks5 address from URI
     #[inline]
     pub fn get_address(&self) -> Result<Address, StatusCode> {
         get_address(&self.request_uri)
@@ -204,63 +182,14 @@ fn get_address(uri: &RequestUri) -> Result<Address, StatusCode> {
     }
 }
 
-// #[derive(Debug)]
-// pub struct HttpResponse {
-//     pub version: HttpVersion,
-//     pub status: StatusCode,
-//     pub message: Option<String>,
-//     pub headers: Headers,
-// }
-
-// impl HttpResponse {
-//     pub fn from_raw<'headers, 'buf: 'headers>(rsp: &Response<'headers, 'buf>,
-//                                               headers: &'headers [httparse::Header])
-//                                               -> hyper::Result<HttpResponse> {
-//         Ok(HttpResponse {
-//             version: if rsp.version.unwrap() == 1 {
-//                 HttpVersion::Http11
-//             } else {
-//                 HttpVersion::Http10
-//             },
-//             status: StatusCode::from_u16(rsp.code.unwrap()),
-//             message: rsp.reason.map(|s| s.to_owned()).clone(),
-//             headers: try!(Headers::from_raw(headers)),
-//         })
-//     }
-
-//     pub fn write_to<W>(self, w: W) -> BoxFuture<W, io::Error>
-//         where W: Write + Send + 'static
-//     {
-//         futures::lazy(move || {
-//                 let mut w = Vec::new();
-//                 let msg = self.message
-//                     .as_ref()
-//                     .map(|s| &s[..])
-//                     .or_else(|| self.status.canonical_reason())
-//                     .unwrap_or("<unknown status code>");
-//                 try!(write!(w, "{} {} {}\r\n", self.version, self.status.to_u16(), msg));
-//                 for header in self.headers.iter() {
-//                     if !header.name().is_empty() {
-//                         try!(write!(w, "{}: {}\r\n", header.name(), header.value_string()));
-//                     }
-//                 }
-
-//                 try!(write!(w, "\r\n"));
-//                 Ok(w)
-//             })
-//             .and_then(|buf| write_all(w, buf))
-//             .map(|(w, _)| w)
-//             .boxed()
-//     }
-// }
-
-pub fn write_response<W>(w: W, version: HttpVersion, status: StatusCode) -> BoxFuture<W, io::Error>
-    where W: Write + Send + 'static
+pub fn write_response<W>(w: W, version: HttpVersion, status: StatusCode) -> BoxIoFuture<W>
+    where W: Write + 'static
 {
     let buf = format!("{} {}\r\n\r\n", version, status);
-    write_all(w, buf.into_bytes()).map(|(w, _)| w).boxed()
+    Box::new(write_all(w, buf.into_bytes()).map(|(w, _)| w))
 }
 
+/// X-Forward-For header
 #[derive(Debug, Clone)]
 pub struct XForwardFor(pub Vec<IpAddr>);
 
@@ -307,6 +236,7 @@ impl HeaderFormat for XForwardFor {
     }
 }
 
+/// X-Real-IP header
 #[derive(Debug, Clone)]
 pub struct XRealIp(pub IpAddr);
 
@@ -432,91 +362,6 @@ impl<R> Future for HttpRequestFut<R>
     }
 }
 
-// /// Future for reading HttpRequest
-// pub enum HttpResponseFut<R>
-//     where R: Read
-// {
-//     Pending { r: R, buf: Vec<u8> },
-//     Empty,
-// }
-
-// impl<R> HttpResponseFut<R>
-//     where R: Read
-// {
-//     pub fn new(r: R) -> HttpResponseFut<R> {
-//         HttpResponseFut::with_buf(r, Vec::new())
-//     }
-
-//     pub fn with_buf(r: R, buf: Vec<u8>) -> HttpResponseFut<R> {
-//         HttpResponseFut::Pending { r: r, buf: buf }
-//     }
-// }
-
-// impl<R> Future for HttpResponseFut<R>
-//     where R: Read
-// {
-//     type Item = (R, HttpResponse, Vec<u8>);
-//     type Error = io::Error;
-
-//     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-//         let mut lbuf = [0u8; 4096];
-//         let (req, len) = match self {
-//             &mut HttpResponseFut::Pending { ref mut r, ref mut buf } => {
-//                 // FIXME: Compiler force me to do this!
-//                 let http_req: Option<HttpResponse>;
-//                 let total_len: usize;
-//                 loop {
-//                     let n = try_nb!(r.read(&mut lbuf));
-//                     buf.extend_from_slice(&lbuf[..n]);
-
-//                     // Maximum 128 headers
-//                     let mut headers = [httparse::EMPTY_HEADER; 128];
-//                     let headers_ptr = &headers as *const _;
-//                     let mut req = Response::new(&mut headers);
-//                     match req.parse(&mut buf[..]) {
-//                         Ok(httparse::Status::Partial) => {
-//                             if n == 0 {
-//                                 // Already EOF!
-//                                 let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
-//                                 return Err(err);
-//                             }
-//                         }
-//                         Ok(httparse::Status::Complete(len)) => {
-//                             total_len = len;
-
-//                             // Make borrow checker happy
-//                             let headers_ref = unsafe { &*headers_ptr };
-//                             let hreq = match HttpResponse::from_raw(&req, headers_ref) {
-//                                 Ok(r) => r,
-//                                 Err(err) => {
-//                                     error!("HttpResponse::from_raw: {}", err);
-//                                     let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
-//                                     return Err(err);
-//                                 }
-//                             };
-//                             http_req = Some(hreq);
-//                             break;
-//                         }
-//                         Err(err) => {
-//                             error!("Request parse: {:?}", err);
-//                             let err = io::Error::new(io::ErrorKind::Other, "Hyper error");
-//                             return Err(err);
-//                         }
-//                     }
-//                 }
-
-//                 (http_req.unwrap(), total_len)
-//             }
-//             &mut HttpResponseFut::Empty => panic!("poll a HttpResponseFut after it's done"),
-//         };
-
-//         match mem::replace(self, HttpResponseFut::Empty) {
-//             HttpResponseFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
-//             HttpResponseFut::Empty => unreachable!(),
-//         }
-//     }
-// }
-
 fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
     match *addr {
         SocketAddr::V4(ref v4) => IpAddr::V4(v4.ip().clone()),
@@ -529,9 +374,9 @@ pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
                                      client_addr: Option<&SocketAddr>,
                                      mut req: HttpRequest,
                                      mut remains: Vec<u8>)
-                                     -> BoxFuture<(R, EncryptedWriter<W>, Vec<u8>), io::Error>
-    where R: Read + Send + 'static,
-          W: Write + Send + 'static
+                                     -> BoxIoFuture<(R, EncryptedWriter<W>, Vec<u8>)>
+    where R: Read + 'static,
+          W: Write + 'static
 {
     let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
 
@@ -555,69 +400,27 @@ pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
     // Clears host, which only for proxy
     req.clear_request_uri_host();
 
-    req.write_to_encrypted(w)
+    let fut = req.write_to_encrypted(w)
         .and_then(|w| flush(w))
         .and_then(move |w| {
             if content_length == 0 {
-                futures::finished((r, w, remains)).boxed()
+                boxed_future(futures::finished((r, w, remains)))
             } else if content_length <= remains.len() {
                 let after_that = remains.split_off(content_length);
-                w.write_all_encrypted(remains).map(|(w, _)| (r, w, after_that)).boxed()
+                boxed_future(w.write_all_encrypted(remains).map(|(w, _)| (r, w, after_that)))
             } else {
                 let missing_bytes = content_length - remains.len();
-                w.write_all_encrypted(remains)
+                let fut = w.write_all_encrypted(remains)
                     .and_then(move |(w, _)| {
                         super::copy_exact_encrypted(r, w, missing_bytes).map(|(r, w)| (r, w, vec![]))
-                    })
-                    .boxed()
+                    });
+                boxed_future(fut)
             }
-        })
-        .boxed()
+        });
+    Box::new(fut)
 }
 
-// /// Proxy this HTTP Response to writer
-// pub fn proxy_response<R, W>((r, w): (R, W),
-//                             server_addr: SocketAddr,
-//                             mut rsp: HttpResponse,
-//                             mut remains: Vec<u8>)
-//                             -> BoxFuture<(R, W, Vec<u8>), io::Error>
-//     where R: Read + Send + 'static,
-//           W: Write + Send + 'static
-// {
-//     let content_length = rsp.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
-//     let server_ip = socket_to_ip(&server_addr);
-
-//     // Set proxy IP info
-//     let xf = if let Some(fw) = rsp.headers.get_mut::<XForwardFor>() {
-//         let mut flst = fw.0.clone();
-//         flst.push(server_ip.clone());
-//         flst
-//     } else {
-//         vec![server_ip.clone()]
-//     };
-//     rsp.headers.set(XForwardFor(xf));
-
-//     // Set real ip
-//     rsp.headers.set(XRealIp(server_ip));
-
-//     rsp.write_to(w)
-//         .and_then(|w| flush(w))
-//         .and_then(move |w| {
-//             if content_length == 0 {
-//                 futures::finished((r, w, remains)).boxed()
-//             } else if content_length <= remains.len() {
-//                 let after_that = remains.split_off(content_length);
-//                 write_all(w, remains).map(|(w, _)| (r, w, after_that)).boxed()
-//             } else {
-//                 let missing_bytes = content_length - remains.len();
-//                 write_all(w, remains)
-//                     .and_then(move |(w, _)| super::copy_exact(r, w, missing_bytes).map(|(r, w)| (r, w, vec![])))
-//                     .boxed()
-//             }
-//         })
-//         .boxed()
-// }
-
+/// Check `Connection` header to determine whether we should keep alive
 pub fn should_keep_alive(req: &HttpRequest) -> bool {
     let default_keep_alive = req.version >= HttpVersion::Http11;
     match req.headers.get::<Connection>() {

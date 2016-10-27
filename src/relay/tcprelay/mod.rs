@@ -30,7 +30,7 @@ use std::cmp;
 use crypto::cipher;
 use crypto::CryptoMode;
 use relay::socks5::Address;
-use relay::BoxIoFuture;
+use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
 use config::{ServerConfig, ServerAddr};
 
@@ -40,7 +40,7 @@ use tokio_core::io::{read_exact, write_all, flush};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
-use futures::{self, Future, BoxFuture, Poll};
+use futures::{self, Future, Poll};
 
 use ip::IpAddr;
 
@@ -60,13 +60,13 @@ pub enum TunnelDirection {
 pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
 pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
-pub type DecryptedHalfFut = BoxFuture<DecryptedHalf, io::Error>;
-pub type EncryptedHalfFut = BoxFuture<EncryptedHalf, io::Error>;
+pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
+pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(handle: &Handle,
                         svr_cfg: Arc<ServerConfig>,
                         dns_resolver: DnsResolver)
-                        -> Box<Future<Item = TcpStream, Error = io::Error>> {
+                        -> BoxIoFuture<TcpStream> {
     match &svr_cfg.addr {
         &ServerAddr::SocketAddr(ref addr) => Box::new(TcpStream::connect(addr, handle)),
         &ServerAddr::DomainName(ref domain, port) => {
@@ -91,18 +91,16 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                               -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
-                trace!("Got encrypt stream and going to send addr: {:?}",
-                       relay_addr);
+            trace!("Got encrypt stream and going to send addr: {:?}",
+                   relay_addr);
 
-                // Send relay address to remote
-                let local_buf = Vec::new();
-                relay_addr.write_to(local_buf)
-                    .and_then(|buf| enc_w.write_all_encrypted(buf))
-                    .and_then(|(enc_w, _)| flush(enc_w))
-            })
-            .boxed();
-
-        Ok((r_fut, w_fut))
+            // Send relay address to remote
+            let local_buf = Vec::new();
+            relay_addr.write_to(local_buf)
+                .and_then(|buf| enc_w.write_all_encrypted(buf))
+                .and_then(|(enc_w, _)| flush(enc_w))
+        });
+        Ok((r_fut, boxed_future(w_fut)))
     });
     Box::new(fut)
 }
@@ -112,150 +110,54 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 pub fn proxy_handshake(remote_stream: TcpStream,
                        svr_cfg: Arc<ServerConfig>)
                        -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    futures::lazy(move || {
-            let (r, w) = remote_stream.split();
+    let fut = futures::lazy(move || {
+        let (r, w) = remote_stream.split();
 
-            let svr_cfg_cloned = svr_cfg.clone();
+        let svr_cfg_cloned = svr_cfg.clone();
 
-            let enc = futures::lazy(move || {
-                // Encrypt data to remote server
+        let enc = futures::lazy(move || {
+            // Encrypt data to remote server
 
-                // Send initialize vector to remote and create encryptor
+            // Send initialize vector to remote and create encryptor
 
-                let local_iv = svr_cfg.method.gen_init_vec();
-                trace!("Going to send initialize vector: {:?}", local_iv);
+            let local_iv = svr_cfg.method.gen_init_vec();
+            trace!("Going to send initialize vector: {:?}", local_iv);
 
-                write_all(w, local_iv).and_then(move |(w, local_iv)| {
-                    let encryptor = cipher::with_type(svr_cfg.method,
-                                                      svr_cfg.password.as_bytes(),
-                                                      &local_iv[..],
-                                                      CryptoMode::Encrypt);
+            write_all(w, local_iv).and_then(move |(w, local_iv)| {
+                let encryptor = cipher::with_type(svr_cfg.method,
+                                                  svr_cfg.password.as_bytes(),
+                                                  &local_iv[..],
+                                                  CryptoMode::Encrypt);
 
-                    Ok(EncryptedWriter::new(w, encryptor))
-                })
+                Ok(EncryptedWriter::new(w, encryptor))
+            })
 
-            });
+        });
 
-            let dec = futures::lazy(move || {
-                let svr_cfg = svr_cfg_cloned;
+        let dec = futures::lazy(move || {
+            let svr_cfg = svr_cfg_cloned;
 
-                // Decrypt data from remote server
-                let iv_len = svr_cfg.method.iv_size();
-                read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
-                    trace!("Got initialize vector {:?}", remote_iv);
+            // Decrypt data from remote server
+            let iv_len = svr_cfg.method.iv_size();
+            read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
+                trace!("Got initialize vector {:?}", remote_iv);
 
-                    let decryptor = cipher::with_type(svr_cfg.method,
-                                                      svr_cfg.password.as_bytes(),
-                                                      &remote_iv[..],
-                                                      CryptoMode::Decrypt);
-                    let decrypt_stream = DecryptedReader::new(r, decryptor);
+                let decryptor = cipher::with_type(svr_cfg.method,
+                                                  svr_cfg.password.as_bytes(),
+                                                  &remote_iv[..],
+                                                  CryptoMode::Decrypt);
+                let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-                    Ok(decrypt_stream)
-                })
-            });
+                Ok(decrypt_stream)
+            })
+        });
 
-            Ok((dec.boxed(), enc.boxed()))
-        })
-        .boxed()
+        Ok((boxed_future(dec), boxed_future(enc)))
+    });
+    Box::new(fut)
 }
 
-// /// Copy exactly N bytes
-// pub enum CopyExact<R, W>
-//     where R: Read,
-//           W: Write
-// {
-//     Pending {
-//         reader: R,
-//         writer: W,
-//         buf: [u8; 4096],
-//         remain: usize,
-//         pos: usize,
-//         cap: usize,
-//     },
-//     Empty,
-// }
-
-// impl<R, W> CopyExact<R, W>
-//     where R: Read,
-//           W: Write
-// {
-//     pub fn new(r: R, w: W, amt: usize) -> CopyExact<R, W> {
-//         CopyExact::Pending {
-//             reader: r,
-//             writer: w,
-//             buf: [0u8; 4096],
-//             remain: amt,
-//             pos: 0,
-//             cap: 0,
-//         }
-//     }
-// }
-
-// impl<R, W> Future for CopyExact<R, W>
-//     where R: Read,
-//           W: Write
-// {
-//     type Item = (R, W);
-//     type Error = io::Error;
-
-//     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-//         match self {
-//             &mut CopyExact::Empty => panic!("poll after CopyExact is finished"),
-//             &mut CopyExact::Pending { ref mut reader,
-//                                       ref mut writer,
-//                                       ref mut buf,
-//                                       ref mut remain,
-//                                       ref mut pos,
-//                                       ref mut cap } => {
-//                 loop {
-//                     // If our buffer is empty, then we need to read some data to
-//                     // continue.
-//                     if *pos == *cap && *remain != 0 {
-//                         let buf_len = cmp::min(*remain, buf.len());
-//                         let n = try_nb!(reader.read(&mut buf[..buf_len]));
-//                         if n == 0 {
-//                             // Unexpected EOF!
-//                             let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
-//                             return Err(err);
-//                         } else {
-//                             *pos = 0;
-//                             *cap = n;
-//                             *remain -= n;
-//                         }
-//                     }
-
-//                     // If our buffer has some data, let's write it out!
-//                     while *pos < *cap {
-//                         let i = try_nb!(writer.write(&buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
-//                         *pos += i;
-//                     }
-
-//                     // If we've written al the data and we've seen EOF, flush out the
-//                     // data and finish the transfer.
-//                     // done with the entire transfer.
-//                     if *pos == *cap && *remain == 0 {
-//                         try_nb!(writer.flush());
-//                         break; // The only path to execute the following logic
-//                     }
-//                 }
-//             }
-//         }
-
-//         match mem::replace(self, CopyExact::Empty) {
-//             CopyExact::Pending { reader, writer, .. } => Ok((reader, writer).into()),
-//             CopyExact::Empty => unreachable!(),
-//         }
-//     }
-// }
-
-// pub fn copy_exact<R, W>(r: R, w: W, amt: usize) -> CopyExact<R, W>
-//     where R: Read,
-//           W: Write
-// {
-//     CopyExact::new(r, w, amt)
-// }
-
-/// Copy exactly N bytes
+/// Copy exactly N bytes by encryption
 pub enum CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
@@ -350,6 +252,7 @@ impl<R, W> Future for CopyExactEncrypted<R, W>
     }
 }
 
+/// Copy all bytes from reader and write all encrypted data into writer
 pub fn copy_exact_encrypted<R, W>(r: R, w: EncryptedWriter<W>, amt: usize) -> CopyExactEncrypted<R, W>
     where R: Read,
           W: Write
@@ -357,9 +260,10 @@ pub fn copy_exact_encrypted<R, W>(r: R, w: EncryptedWriter<W>, amt: usize) -> Co
     CopyExactEncrypted::new(r, w, amt)
 }
 
+/// Establish tunnel between server and client
 pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
-    where CF: Future<Item = u64, Error = io::Error> + Send + 'static,
-          SF: Future<Item = u64, Error = io::Error> + Send + 'static
+    where CF: Future<Item = u64, Error = io::Error> + 'static,
+          SF: Future<Item = u64, Error = io::Error> + 'static
 {
     let addr = Arc::new(addr);
 
@@ -398,7 +302,7 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
         }
     });
 
-    c2s.join(s2c).map(|_| ()).boxed()
+    Box::new(c2s.join(s2c).map(|_| ()))
 
     // c2s.select(s2c)
     //     .map_err(|(err, _)| err)

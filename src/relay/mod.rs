@@ -38,3 +38,9 @@ mod dns_resolver;
 pub mod socks5;
 
 pub type BoxIoFuture<T> = Box<Future<Item = T, Error = io::Error>>;
+
+fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E>>
+    where F: Future<Item = T, Error = E> + 'static
+{
+    Box::new(f)
+}

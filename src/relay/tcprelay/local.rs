@@ -42,7 +42,7 @@ use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address};
 use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
-use relay::BoxIoFuture;
+use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
 
 use super::http::{self, HttpRequestFut};
@@ -78,7 +78,7 @@ impl Socks5RelayLocal {
                              addr: Address,
                              svr_cfg: Arc<ServerConfig>,
                              dns_resolver: DnsResolver)
-                             -> Box<Future<Item = (), Error = io::Error>> {
+                             -> BoxIoFuture<()> {
         let cloned_addr = addr.clone();
         let cloned_svr_cfg = svr_cfg.clone();
         let fut = super::connect_proxy_server(handle, svr_cfg, dns_resolver)
@@ -123,18 +123,19 @@ impl Socks5RelayLocal {
 
                     if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
                         let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-                        resp.write_to(w)
+                        let fut = resp.write_to(w)
                             .then(|_| {
                                 warn!("Currently shadowsocks-rust does not support authentication");
                                 Err(io::Error::new(io::ErrorKind::Other,
                                                    "Currently shadowsocks-rust does not support authentication"))
-                            })
-                            .boxed()
+                            });
+                        boxed_future(fut)
                     } else {
                         // Reply to client
                         let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
                         trace!("Reply handshake {:?}", resp);
-                        resp.write_to(w).and_then(flush).and_then(|w| Ok((r, w))).boxed()
+                        let fut = resp.write_to(w).and_then(flush).and_then(|w| Ok((r, w)));
+                        boxed_future(fut)
                     }
                 })
             })
@@ -142,13 +143,13 @@ impl Socks5RelayLocal {
                 // Fetch headers
                 TcpRequestHeader::read_from(r).then(move |res| {
                     match res {
-                        Ok((r, h)) => futures::finished((r, w, h)).boxed(),
+                        Ok((r, h)) => boxed_future(futures::finished((r, w, h))),
                         Err(err) => {
                             error!("Failed to get TcpRequestHeader: {}", err);
-                            TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr))
+                            let fut = TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr))
                                 .write_to(w)
-                                .then(|_| Err(From::from(err)))
-                                .boxed()
+                                .then(|_| Err(From::from(err)));
+                            boxed_future(fut)
                         }
                     }
                 })
@@ -169,17 +170,17 @@ impl Socks5RelayLocal {
                     }
                     socks5::Command::TcpBind => {
                         warn!("BIND is not supported");
-                        TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                        let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                             .write_to(w)
-                            .map(|_| ())
-                            .boxed()
+                            .map(|_| ());
+                        boxed_future(fut)
                     }
                     socks5::Command::UdpAssociate => {
                         warn!("UDP Associate is not supported");
-                        TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                        let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                             .write_to(w)
-                            .map(|_| ())
-                            .boxed()
+                            .map(|_| ());
+                        boxed_future(fut)
                     }
                 }
             });
@@ -373,16 +374,15 @@ impl HttpRelayServer {
                     match req.get_address() {
                         Ok(addr) => {
                             req.clear_request_uri_host();
-                            futures::finished((r, w, req, addr, remains)).boxed()
+                            boxed_future(futures::finished((r, w, req, addr, remains)))
                         }
                         Err(status_code) => {
                             error!("Invalid Uri: {}", req.request_uri);
-                            http::write_response(w, req.version, status_code)
-                                .then(|_| {
-                                    let err = io::Error::new(io::ErrorKind::Other, "Invalid Uri");
-                                    Err(err)
-                                })
-                                .boxed()
+                            let fut = http::write_response(w, req.version, status_code).then(|_| {
+                                let err = io::Error::new(io::ErrorKind::Other, "Invalid Uri");
+                                Err(err)
+                            });
+                            boxed_future(fut)
                         }
                     }
                 })
