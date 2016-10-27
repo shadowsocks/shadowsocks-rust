@@ -23,7 +23,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::sync::Arc;
+use std::rc::Rc;
 use std::mem;
 use std::cmp;
 
@@ -64,7 +64,7 @@ pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
 pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(handle: &Handle,
-                        svr_cfg: Arc<ServerConfig>,
+                        svr_cfg: Rc<ServerConfig>,
                         dns_resolver: DnsResolver)
                         -> BoxIoFuture<TcpStream> {
     match &svr_cfg.addr {
@@ -86,7 +86,7 @@ fn connect_proxy_server(handle: &Handle,
 
 /// Handshake logic for ShadowSocks Client
 pub fn proxy_server_handshake(remote_stream: TcpStream,
-                              svr_cfg: Arc<ServerConfig>,
+                              svr_cfg: Rc<ServerConfig>,
                               relay_addr: Address)
                               -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {
@@ -108,7 +108,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
 pub fn proxy_handshake(remote_stream: TcpStream,
-                       svr_cfg: Arc<ServerConfig>)
+                       svr_cfg: Rc<ServerConfig>)
                        -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = futures::lazy(move || {
         let (r, w) = remote_stream.split();
@@ -265,7 +265,7 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
     where CF: Future<Item = u64, Error = io::Error> + 'static,
           SF: Future<Item = u64, Error = io::Error> + 'static
 {
-    let addr = Arc::new(addr);
+    let addr = Rc::new(addr);
 
     let cloned_addr = addr.clone();
     let c2s = c2s.then(move |res| {

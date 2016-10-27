@@ -23,7 +23,7 @@
 
 use std::io;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::sync::Arc;
+use std::rc::Rc;
 use std::collections::HashSet;
 
 use config::{Config, ServerConfig};
@@ -37,27 +37,53 @@ use futures::stream::Stream;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener};
-use tokio_core::io::Io;
+use tokio_core::io::{Io, ReadHalf, WriteHalf};
 use tokio_core::io::copy;
 
 use ip::IpAddr;
 
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
 
-/// TCP Relay backend
-pub struct TcpRelayServer;
+struct TcpRelayClientHandshake {
+    handle: Handle,
+    dns_resolver: DnsResolver,
+    s: TcpStream,
+    svr_cfg: Rc<ServerConfig>,
+    forbidden_ip: Rc<HashSet<IpAddr>>,
+}
 
-impl TcpRelayServer {
-    fn handshake(remote_stream: TcpStream,
-                 svr_cfg: Arc<ServerConfig>)
-                 -> BoxIoFuture<(DecryptedHalf, Address, EncryptedHalfFut)> {
-        let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {
+impl TcpRelayClientHandshake {
+    fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
+        let handle = self.handle;
+        let forbidden_ip = self.forbidden_ip;
+        let dns_resolver = self.dns_resolver;
+        let fut = proxy_handshake(self.s, self.svr_cfg).and_then(|(r_fut, w_fut)| {
             r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
-                .map(move |(r, addr)| (r, addr, w_fut))
+                .map(move |(r, addr)| {
+                    TcpRelayClientPending {
+                        handle: handle,
+                        r: r,
+                        addr: addr,
+                        w: w_fut,
+                        forbidden_ip: forbidden_ip,
+                        dns_resolver: dns_resolver,
+                    }
+                })
         });
         Box::new(fut)
     }
+}
 
+struct TcpRelayClientPending {
+    handle: Handle,
+    r: DecryptedHalf,
+    addr: Address,
+    w: EncryptedHalfFut,
+    forbidden_ip: Rc<HashSet<IpAddr>>,
+    dns_resolver: DnsResolver,
+}
+
+impl TcpRelayClientPending {
     fn resolve_address(addr: Address, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
@@ -76,9 +102,9 @@ impl TcpRelayServer {
 
     fn resolve_remote(dns_resolver: DnsResolver,
                       addr: Address,
-                      forbidden_ip: Arc<HashSet<IpAddr>>)
+                      forbidden_ip: Rc<HashSet<IpAddr>>)
                       -> BoxIoFuture<SocketAddr> {
-        let fut = TcpRelayServer::resolve_address(addr, dns_resolver).and_then(move |addr| {
+        let fut = TcpRelayClientPending::resolve_address(addr, dns_resolver).and_then(move |addr| {
             trace!("Resolved address as {}", addr);
             let ipaddr = match addr.clone() {
                 SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
@@ -99,57 +125,56 @@ impl TcpRelayServer {
     fn connect_remote(dns_resolver: DnsResolver,
                       handle: Handle,
                       addr: Address,
-                      forbidden_ip: Arc<HashSet<IpAddr>>)
+                      forbidden_ip: Rc<HashSet<IpAddr>>)
                       -> BoxIoFuture<TcpStream> {
         trace!("Connecting to remote {}", addr);
-        Box::new(TcpRelayServer::resolve_remote(dns_resolver, addr, forbidden_ip)
+        Box::new(TcpRelayClientPending::resolve_remote(dns_resolver, addr, forbidden_ip)
             .and_then(move |addr| TcpStream::connect(&addr, &handle)))
     }
 
-    pub fn handle_client(handle: &Handle,
-                         dns_resolver: DnsResolver,
-                         s: TcpStream,
-                         svr_cfg: Arc<ServerConfig>,
-                         forbidden_ip: Arc<HashSet<IpAddr>>)
-                         -> io::Result<()> {
-        let peer_addr = try!(s.peer_addr());
-        trace!("Got connection from {}", peer_addr);
-
-        let cloned_handle = handle.clone();
-
-        let fut = TcpRelayServer::handshake(s, svr_cfg).and_then(move |(r, addr, w_fut)| {
-            info!("Connecting {}", addr);
-            let cloned_addr = addr.clone();
-            TcpRelayServer::connect_remote(dns_resolver, cloned_handle.clone(), addr, forbidden_ip)
-                .and_then(move |svr_s| {
-                    let (svr_r, svr_w) = svr_s.split();
-                    tunnel(cloned_addr,
-                           copy(r, svr_w),
-                           w_fut.and_then(|w| w.copy_from_encrypted(svr_r)))
-                })
-        });
-
-        handle.spawn(fut.then(|res| {
-            match res {
-                Ok(..) => Ok(()),
-                Err(err) => {
-                    error!("Failed to handle client: {}", err);
-                    Err(())
+    fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
+        let addr = self.addr.clone();
+        let client_pair = (self.r, self.w);
+        let fut = TcpRelayClientPending::connect_remote(self.dns_resolver, self.handle, self.addr, self.forbidden_ip)
+            .map(|stream| {
+                TcpRelayClientConnected {
+                    server: stream.split(),
+                    client: client_pair,
+                    addr: addr,
                 }
-            }
-        }));
-
-        Ok(())
+            });
+        Box::new(fut)
     }
+}
 
+struct TcpRelayClientConnected {
+    server: (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+    client: (DecryptedHalf, EncryptedHalfFut),
+    addr: Address,
+}
+
+impl TcpRelayClientConnected {
+    fn tunnel(self) -> BoxIoFuture<()> {
+        let (svr_r, svr_w) = self.server;
+        let (r, w_fut) = self.client;
+        tunnel(self.addr,
+               copy(r, svr_w),
+               w_fut.and_then(|w| w.copy_from_encrypted(svr_r)))
+    }
+}
+
+/// TCP Relay backend
+pub struct TcpRelayServer;
+
+impl TcpRelayServer {
     /// Runs the server
-    pub fn run(config: Arc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
         let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
 
         let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
         let ref forbidden_ip = config.forbidden_ip;
-        let forbidden_ip = Arc::new(forbidden_ip.clone());
+        let forbidden_ip = Rc::new(forbidden_ip.clone());
 
         for svr_cfg in &config.server {
             let listener = {
@@ -160,7 +185,7 @@ impl TcpRelayServer {
                 listener
             };
 
-            let svr_cfg = Arc::new(svr_cfg.clone());
+            let svr_cfg = Rc::new(svr_cfg.clone());
             let handle = handle.clone();
             let dns_resolver = dns_resolver.clone();
             let forbidden_ip = forbidden_ip.clone();
@@ -172,7 +197,24 @@ impl TcpRelayServer {
 
                     trace!("Got connection, addr: {}", addr);
                     trace!("Picked proxy server: {:?}", server_cfg);
-                    TcpRelayServer::handle_client(&handle, dns_resolver, socket, server_cfg, forbidden_ip)
+
+                    let client = TcpRelayClientHandshake {
+                        handle: handle.clone(),
+                        dns_resolver: dns_resolver,
+                        s: socket,
+                        svr_cfg: server_cfg,
+                        forbidden_ip: forbidden_ip,
+                    };
+
+                    let fut = client.handshake()
+                        .and_then(|c| c.connect())
+                        .and_then(|c| c.tunnel())
+                        .map_err(move |err| {
+                            error!("Failed to handle client ({}): {}", addr, err);
+                        });
+
+                    handle.spawn(fut);
+                    Ok(())
                 })
                 .map_err(|err| {
                     error!("Server run failed: {}", err);

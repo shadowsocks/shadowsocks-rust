@@ -23,7 +23,7 @@
 
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use futures::{self, Future};
 use futures::stream::Stream;
@@ -52,7 +52,7 @@ use super::tunnel;
 pub struct TcpRelayLocal;
 
 impl TcpRelayLocal {
-    pub fn run(config: Arc<Config>,
+    pub fn run(config: Rc<Config>,
                handle: Handle,
                dns_resolver: DnsResolver)
                -> Box<Future<Item = (), Error = io::Error>> {
@@ -76,7 +76,7 @@ impl Socks5RelayLocal {
                              (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                              client_addr: SocketAddr,
                              addr: Address,
-                             svr_cfg: Arc<ServerConfig>,
+                             svr_cfg: Rc<ServerConfig>,
                              dns_resolver: DnsResolver)
                              -> BoxIoFuture<()> {
         let cloned_addr = addr.clone();
@@ -109,7 +109,7 @@ impl Socks5RelayLocal {
     fn handle_client(handle: &Handle,
                      s: TcpStream,
                      _: SocketAddr,
-                     conf: Arc<ServerConfig>,
+                     conf: Rc<ServerConfig>,
                      dns_resolver: DnsResolver)
                      -> io::Result<()> {
         let cloned_handle = handle.clone();
@@ -202,7 +202,7 @@ impl Socks5RelayLocal {
     }
 
     // Runs TCP relay local server
-    pub fn run(config: Arc<Config>,
+    pub fn run(config: Rc<Config>,
                handle: Handle,
                dns_resolver: DnsResolver)
                -> Box<Future<Item = (), Error = io::Error>> {
@@ -241,7 +241,7 @@ impl HttpRelayServer {
                       req: http::HttpRequest,
                       addr: Address,
                       remains: Vec<u8>,
-                      svr_cfg: Arc<ServerConfig>,
+                      svr_cfg: Rc<ServerConfig>,
                       dns_resolver: DnsResolver)
                       -> Box<Future<Item = (), Error = io::Error>> {
         let cloned_addr = addr.clone();
@@ -315,7 +315,7 @@ impl HttpRelayServer {
                          req: http::HttpRequest,
                          addr: Address,
                          remains: Vec<u8>,
-                         svr_cfg: Arc<ServerConfig>,
+                         svr_cfg: Rc<ServerConfig>,
                          dns_resolver: DnsResolver)
                          -> Box<Future<Item = (), Error = io::Error>> {
         trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
@@ -356,7 +356,7 @@ impl HttpRelayServer {
     fn handle_client(handle: &Handle,
                      socket: TcpStream,
                      _: SocketAddr,
-                     svr_cfg: Arc<ServerConfig>,
+                     svr_cfg: Rc<ServerConfig>,
                      dns_resolver: DnsResolver)
                      -> io::Result<()> {
         let cloned_handle = handle.clone();
@@ -429,7 +429,7 @@ impl HttpRelayServer {
         Ok(())
     }
 
-    pub fn run(config: Arc<Config>,
+    pub fn run(config: Rc<Config>,
                handle: Handle,
                dns_resolver: DnsResolver)
                -> Box<Future<Item = (), Error = io::Error>> {

@@ -19,28 +19,28 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 use relay::loadbalancing::server::LoadBalancer;
 use config::{Config, ServerConfig};
 
 #[derive(Clone)]
 pub struct RoundRobin {
-    servers: Vec<Arc<ServerConfig>>,
+    servers: Vec<Rc<ServerConfig>>,
     index: usize,
 }
 
 impl RoundRobin {
     pub fn new(config: &Config) -> RoundRobin {
         RoundRobin {
-            servers: config.server.iter().map(|s| Arc::new(s.clone())).collect(),
+            servers: config.server.iter().map(|s| Rc::new(s.clone())).collect(),
             index: 0usize,
         }
     }
 }
 
 impl LoadBalancer for RoundRobin {
-    fn pick_server(&mut self) -> Arc<ServerConfig> {
+    fn pick_server(&mut self) -> Rc<ServerConfig> {
         let server = &self.servers;
 
         if server.is_empty() {

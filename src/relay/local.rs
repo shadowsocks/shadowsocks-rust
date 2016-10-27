@@ -21,7 +21,7 @@
 
 //! Local side
 
-use std::sync::Arc;
+use std::rc::Rc;
 use std::io;
 
 use tokio_core::reactor::Core;
@@ -36,7 +36,6 @@ use config::Config;
 ///
 /// ```no_run
 /// use std::net::SocketAddr;
-/// use std::sync::Arc;
 ///
 /// use shadowsocks::relay::RelayLocal;
 /// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
@@ -59,7 +58,7 @@ impl RelayLocal {
     pub fn run(config: Config) -> io::Result<()> {
         let mut lp = try!(Core::new());
         let handle = lp.handle();
-        let config = Arc::new(config);
+        let config = Rc::new(config);
         let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
         let tcp_fut = TcpRelayLocal::run(config, handle, dns_resolver);
         lp.run(tcp_fut)

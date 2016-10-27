@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub use self::roundrobin::RoundRobin;
 
@@ -27,7 +27,7 @@ use config::ServerConfig;
 
 pub mod roundrobin;
 
-pub trait LoadBalancer: Send + 'static {
-    fn pick_server(&mut self) -> Arc<ServerConfig>;
+pub trait LoadBalancer {
+    fn pick_server(&mut self) -> Rc<ServerConfig>;
     fn total(&self) -> usize;
 }
