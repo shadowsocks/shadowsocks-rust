@@ -35,11 +35,6 @@ path = "src/bin/local.rs"
 name = "ssserver"
 path = "src/bin/server.rs"
 
-#[[bin]]
-#
-#name = "socks5-tool"
-#path = "src/bin/socks5-tool.rs"
-
 [[bin]]
 
 name = "ssurl"

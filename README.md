@@ -13,8 +13,6 @@ It is **unstable**! If you encounter any problems, please open an issue.
 ## Dependencies
 
 * libcrypto (OpenSSL)
-* Rust nightly
-* Cargo
 
 ## Usage
 
@@ -87,7 +85,7 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
 
 The `sslocal` will use a load balancing algorithm to dispatch packages to all servers.
 
-Start local and server shadowsocks with
+Start local and server ShadowSocks with
 
 ```
 cargo run --bin sslocal -- -c config.json
@@ -98,23 +96,23 @@ List all available arguments with `-h`.
 
 ## Useful Tools
 
-1. `socks5-tool` is to demonstrate how to write a Socks5 client.
-
-2. `ssurl` is for encoding and decoding ShadowSocks URLs. Example: `ss://YWVzLTI1Ni1jZmI6aGVsbG93b3JsZF9mdWNrQDEyNy4wLjAuMTo4Mzg4`
+1. `ssurl` is for encoding and decoding ShadowSocks URLs. Example: `ss://YWVzLTI1Ni1jZmI6aGVsbG93b3JsZF9mdWNrQDEyNy4wLjAuMTo4Mzg4`
 
 ## Notes
 
 It supports the following features:
 
-* CONNECT, UDP ASSOCIATE commands
-* Crypto algorithms defined in `Cargo.toml`
-* **Load balancing**
+- [x] Socks5 CONNECT command
+- [ ] UDP ASSOCIATE command
+- [x] HTTP Proxy protocol
+- [x] Various crypto algorithms
+- [x] Load balancing (multiple servers)
 
 ## TODO
 
 - [ ] Documentation
 - [ ] <del>`BIND` command</del>
-- [ ] Socks5 authentication
+- [ ] <del>Socks5 authentication</del>
 - [x] Extend configuration format
 - [ ] Fully testing on servers
 - [ ] Performance testing and improvement
@@ -122,8 +120,8 @@ It supports the following features:
 - [ ] <del>PAC</del>
 - [x] Improved logging format (waiting for the new official log crate)
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
-- [ ] Windows support. (Depending on mio and coio-rs)
-- [ ] Build with stable. (Depending on coio)
+- [x] Windows support. <del>(Depending on mio and coio-rs)</del>
+- [x] Build with stable. <del>(Depending on coio)</del>
 - [x] Support HTTP Proxy protocol
 
 ## License
