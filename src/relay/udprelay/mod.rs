@@ -21,8 +21,17 @@
 
 //! UdpRelay implementation
 
+use std::net::SocketAddr;
+use std::mem;
+use std::io;
+
+use tokio_core::net::UdpSocket;
+
+use futures::stream::Stream;
+use futures::{Future, Poll, Async};
+
 pub mod local;
-pub mod server;
+// pub mod server;
 
 /// The maximum UDP payload size (defined in the original shadowsocks Python)
 ///
@@ -33,3 +42,72 @@ pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
 
 /// Maximum associations to maintain
 pub const MAXIMUM_ASSOCIATE_MAP_SIZE: usize = 65536;
+
+/// UDP incoming stream
+pub struct Incoming {
+    socket: UdpSocket,
+}
+
+impl Stream for Incoming {
+    type Item = (Vec<u8>, SocketAddr);
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        if self.socket.poll_read().is_not_ready() {
+            return Ok(Async::NotReady);
+        }
+
+        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        match self.socket.recv_from(&mut buf) {
+            Ok((n, addr)) => Ok(Some((buf[..n].to_vec(), addr)).into()),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+/// Handle UDP connections as stream
+pub fn udp_incoming(socket: UdpSocket) -> Incoming {
+    Incoming { socket: socket }
+}
+
+/// Future for `send_to`
+pub enum SendToUdpSocket<B: AsRef<[u8]>> {
+    Pending {
+        socket: UdpSocket,
+        buf: B,
+        target_addr: SocketAddr,
+    },
+    Empty,
+}
+
+impl<B: AsRef<[u8]>> Future for SendToUdpSocket<B> {
+    type Item = (UdpSocket, B, usize);
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let length = match self {
+            &mut SendToUdpSocket::Empty => panic!("poll after SendToUdpSocket is finished"),
+            &mut SendToUdpSocket::Pending { ref socket, ref buf, ref target_addr } => {
+                if socket.poll_write().is_not_ready() {
+                    return Ok(Async::NotReady);
+                }
+
+                try_nb!(socket.send_to(buf.as_ref(), target_addr))
+            }
+        };
+
+        match mem::replace(self, SendToUdpSocket::Empty) {
+            SendToUdpSocket::Pending { socket, buf, .. } => Ok((socket, buf, length).into()),
+            SendToUdpSocket::Empty => unreachable!(),
+        }
+    }
+}
+
+/// Send data to UdpSocket
+pub fn send_to<B: AsRef<[u8]>>(socket: UdpSocket, buf: B, target: SocketAddr) -> SendToUdpSocket<B> {
+    SendToUdpSocket::Pending {
+        socket: socket,
+        buf: buf,
+        target_addr: target,
+    }
+}

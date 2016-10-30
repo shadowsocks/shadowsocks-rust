@@ -58,6 +58,7 @@ struct UdpConfig {
 pub struct TcpRelayLocal;
 
 impl TcpRelayLocal {
+    /// Starts a TCP local server
     pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
         let tcp_fut = Socks5RelayLocal::run(config.clone(), handle.clone(), dns_resolver.clone());
         match &config.http_proxy {
@@ -217,7 +218,7 @@ impl Socks5RelayLocal {
         Ok(())
     }
 
-    // Runs TCP relay local server
+    /// Starts a TCP local server with Socks5 proxy protocol
     pub fn run(config: Rc<Config>,
                handle: Handle,
                dns_resolver: DnsResolver)
@@ -450,6 +451,7 @@ impl HttpRelayServer {
         Ok(())
     }
 
+    /// TCP local server using HTTP proxy protocol
     pub fn run(config: Rc<Config>,
                handle: Handle,
                dns_resolver: DnsResolver)

@@ -36,6 +36,7 @@ pub mod rc4_md5;
 pub mod crypto;
 pub mod dummy;
 
+/// Crypto mode, encrypt or decrypt
 #[derive(Clone, Copy)]
 pub enum CryptoMode {
     Encrypt,

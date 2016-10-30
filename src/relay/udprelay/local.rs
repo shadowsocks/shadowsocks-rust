@@ -54,13 +54,14 @@
 // | Fixed |   Variable   |
 // +-------+--------------+
 
+//! UDP relay local server
+
 use std::rc::Rc;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::io::{self, Cursor};
 use std::cell::RefCell;
-use std::mem;
 
-use futures::{self, Future, Poll, Async};
+use futures::{self, Future};
 use futures::stream::Stream;
 
 use tokio_core::reactor::Handle;
@@ -78,12 +79,13 @@ use relay::socks5::{Address, UdpAssociateHeader};
 use crypto::cipher::{self, Cipher};
 use crypto::CryptoMode;
 
-use super::{MAXIMUM_UDP_PAYLOAD_SIZE, MAXIMUM_ASSOCIATE_MAP_SIZE};
+use super::MAXIMUM_ASSOCIATE_MAP_SIZE;
+use super::{send_to, udp_incoming};
 
 type AssociateMap = LruCache<Address, SocketAddr>;
 type ServerCache = LruCache<SocketAddr, Rc<ServerConfig>>;
 
-#[derive(Clone)]
+/// UDP relay local server
 pub struct UdpRelayLocal;
 
 impl UdpRelayLocal {
@@ -260,6 +262,7 @@ impl UdpRelayLocal {
         boxed_future(fut)
     }
 
+    /// Starts a UDP local server
     pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
         let fut = futures::lazy(move || {
                 let l = {
@@ -272,70 +275,5 @@ impl UdpRelayLocal {
             .and_then(move |(config, l, handle)| UdpRelayLocal::run_server(config, l, handle, dns_resolver));
 
         boxed_future(fut)
-    }
-}
-
-struct Incoming {
-    socket: UdpSocket,
-}
-
-impl Stream for Incoming {
-    type Item = (Vec<u8>, SocketAddr);
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        if self.socket.poll_read().is_not_ready() {
-            return Ok(Async::NotReady);
-        }
-
-        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        match self.socket.recv_from(&mut buf) {
-            Ok((n, addr)) => Ok(Some((buf[..n].to_vec(), addr)).into()),
-            Err(err) => Err(err),
-        }
-    }
-}
-
-fn udp_incoming(socket: UdpSocket) -> Incoming {
-    Incoming { socket: socket }
-}
-
-enum SendToUdpSocket<B: AsRef<[u8]>> {
-    Pending {
-        socket: UdpSocket,
-        buf: B,
-        target_addr: SocketAddr,
-    },
-    Empty,
-}
-
-impl<B: AsRef<[u8]>> Future for SendToUdpSocket<B> {
-    type Item = (UdpSocket, B, usize);
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let length = match self {
-            &mut SendToUdpSocket::Empty => panic!("poll after SendToUdpSocket is finished"),
-            &mut SendToUdpSocket::Pending { ref socket, ref buf, ref target_addr } => {
-                if socket.poll_write().is_not_ready() {
-                    return Ok(Async::NotReady);
-                }
-
-                try_nb!(socket.send_to(buf.as_ref(), target_addr))
-            }
-        };
-
-        match mem::replace(self, SendToUdpSocket::Empty) {
-            SendToUdpSocket::Pending { socket, buf, .. } => Ok((socket, buf, length).into()),
-            SendToUdpSocket::Empty => unreachable!(),
-        }
-    }
-}
-
-fn send_to<B: AsRef<[u8]>>(socket: UdpSocket, buf: B, target: SocketAddr) -> SendToUdpSocket<B> {
-    SendToUdpSocket::Pending {
-        socket: socket,
-        buf: buf,
-        target_addr: target,
     }
 }

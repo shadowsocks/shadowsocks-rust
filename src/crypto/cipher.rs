@@ -47,8 +47,10 @@ pub trait Cipher {
     fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()>;
 }
 
+/// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
 
+/// Cipher error
 pub enum Error {
     UnknownCipherType,
     OpenSSLError(::openssl::error::ErrorStack),
@@ -123,6 +125,7 @@ const CIPHER_SALSA20: &'static str = "salsa20";
 
 const CIPHER_DUMMY: &'static str = "dummy";
 
+/// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
 pub enum CipherType {
     Table,
@@ -158,6 +161,7 @@ pub enum CipherType {
 }
 
 impl CipherType {
+    /// Symmetric crypto block size
     pub fn block_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
@@ -188,6 +192,7 @@ impl CipherType {
         }
     }
 
+    /// Symmetric crypto key size
     pub fn key_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
@@ -218,6 +223,7 @@ impl CipherType {
         }
     }
 
+    /// Extends key to match the required key length
     pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
         let iv_len = self.block_size();
         let key_len = self.key_size();
@@ -246,6 +252,7 @@ impl CipherType {
         key
     }
 
+    /// Symmetric crypto initialize vector size
     pub fn iv_size(&self) -> usize {
         match *self {
             CipherType::Table => 0,
@@ -276,6 +283,7 @@ impl CipherType {
         }
     }
 
+    /// Generate a random initialize vector for this cipher
     pub fn gen_init_vec(&self) -> Vec<u8> {
         let iv_len = self.iv_size();
         let mut iv = Vec::with_capacity(iv_len);
@@ -365,6 +373,7 @@ impl Display for CipherType {
 
 macro_rules! define_ciphers {
     ($($name:ident => $cipher:ty,)+) => {
+        /// Variant cipher which contains all possible ciphers
         pub enum CipherVariant {
             $(
                 $name($cipher),
@@ -372,6 +381,7 @@ macro_rules! define_ciphers {
         }
 
         impl CipherVariant {
+            /// Creates from an actual cipher
             pub fn new<C>(cipher: C) -> CipherVariant
                 where CipherVariant: From<C>
             {

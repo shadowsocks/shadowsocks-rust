@@ -34,12 +34,14 @@ use crypto::CryptoMode;
 use openssl::crypto::symm;
 use openssl::crypto::hash;
 
+/// Core cipher of OpenSSL
 pub struct OpenSSLCrypto {
     cipher: symm::Type,
     inner: symm::Crypter,
 }
 
 impl OpenSSLCrypto {
+    /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let t = match cipher_type {
             #[cfg(feature = "cipher-aes-cfb")]
@@ -74,6 +76,7 @@ impl OpenSSLCrypto {
         }
     }
 
+    /// Update data
     pub fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         let orig_length = out.len();
         let least_reserved = data.len() + self.cipher.block_size();
@@ -83,6 +86,7 @@ impl OpenSSLCrypto {
         Ok(())
     }
 
+    /// Generate the final block
     pub fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
         let orig_length = out.len();
         let least_reserved = self.cipher.block_size();
@@ -103,18 +107,22 @@ impl OpenSSLCrypto {
 ///
 /// ```rust
 /// use shadowsocks::crypto::CryptoMode;
-/// use shadowsocks::crypto::cipher;
+/// use shadowsocks::crypto::cipher::CipherType;
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
 /// use shadowsocks::crypto::cipher::Cipher;
 ///
-/// let key = cipher::CipherType::Aes128Cfb.bytes_to_key(b"password");
-/// let iv = cipher::CipherType::Aes128Cfb.gen_init_vec();
+/// let method = CipherType::Aes128Cfb;
 ///
-/// let mut enc = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
-/// let mut dec = OpenSSLCipher::new(cipher::CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
+/// let key = method.bytes_to_key(b"password");
+/// let iv = method.gen_init_vec();
+///
+/// let mut enc = OpenSSLCipher::new(method, &key[0..], &iv[0..], CryptoMode::Encrypt);
+/// let mut dec = OpenSSLCipher::new(method, &key[0..], &iv[0..], CryptoMode::Decrypt);
+///
 /// let message = "hello world";
 /// let mut encrypted_message = Vec::new();
 /// enc.update(message.as_bytes(), &mut encrypted_message).unwrap();
+///
 /// let mut decrypted_message = Vec::new();
 /// dec.update(&encrypted_message[..], &mut decrypted_message).unwrap();
 ///
@@ -125,6 +133,7 @@ pub struct OpenSSLCipher {
 }
 
 impl OpenSSLCipher {
+    /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
         OpenSSLCipher { worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode) }
     }
@@ -142,11 +151,13 @@ impl Cipher for OpenSSLCipher {
     }
 }
 
+/// Digest provided by OpenSSL
 pub struct OpenSSLDigest {
     inner: hash::Hasher,
 }
 
 impl OpenSSLDigest {
+    /// Creates by type
     pub fn new(t: digest::DigestType) -> OpenSSLDigest {
         let t = match t {
             digest::DigestType::Md5 => hash::Type::MD5,

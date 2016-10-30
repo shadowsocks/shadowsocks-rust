@@ -32,6 +32,7 @@ use byteorder::{ReadBytesExt, LittleEndian};
 
 const TABLE_SIZE: usize = 256usize;
 
+/// Table cipher
 #[derive(Clone)]
 pub struct TableCipher {
     table: Vec<u8>,

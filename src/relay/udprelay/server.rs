@@ -18,3 +18,37 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+//! UDP relay proxy server
+
+use std::rc::Rc;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::io::{self, Cursor};
+use std::cell::RefCell;
+use std::mem;
+
+use futures::{self, Future, Poll, Async};
+use futures::stream::Stream;
+
+use tokio_core::reactor::Handle;
+use tokio_core::net::UdpSocket;
+
+use lru_cache::LruCache;
+
+use ip::IpAddr;
+
+use config::{Config, ServerConfig, ServerAddr};
+use relay::{BoxIoFuture, boxed_future};
+use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
+use relay::dns_resolver::DnsResolver;
+use relay::socks5::{Address, UdpAssociateHeader};
+use crypto::cipher::{self, Cipher};
+use crypto::CryptoMode;
+
+use super::MAXIMUM_ASSOCIATE_MAP_SIZE;
+
+type AssociateMap = LruCache<Address, SocketAddr>;
+type ServerCache = LruCache<SocketAddr, Rc<ServerConfig>>;
+
+/// UDP relay proxy server
+pub struct UdpRelayServer;

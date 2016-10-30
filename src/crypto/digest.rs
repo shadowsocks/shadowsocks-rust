@@ -23,11 +23,16 @@
 
 use crypto::openssl;
 
+/// Digest trait
 pub trait Digest: Send {
+    /// Update data
     fn update(&mut self, data: &[u8]);
+
+    /// Generates digest
     fn digest(&mut self) -> Vec<u8>;
 }
 
+/// Type of defined digests
 #[derive(Clone, Copy)]
 pub enum DigestType {
     Md5,
@@ -36,6 +41,7 @@ pub enum DigestType {
 }
 
 impl DigestType {
+    /// Length of digest
     pub fn digest_len(&self) -> usize {
         match *self {
             DigestType::Md5 => 16,
@@ -45,9 +51,11 @@ impl DigestType {
     }
 }
 
+/// Create digest with type
 pub fn with_type(t: DigestType) -> Box<Digest + Send> {
     match t {
-        DigestType::Md5 | DigestType::Sha1 | DigestType::Sha =>
-            Box::new(openssl::OpenSSLDigest::new(t)) as Box<Digest + Send>,
+        DigestType::Md5 | DigestType::Sha1 | DigestType::Sha => {
+            Box::new(openssl::OpenSSLDigest::new(t)) as Box<Digest + Send>
+        }
     }
 }

@@ -27,20 +27,18 @@ use rust_crypto::salsa20::Salsa20;
 
 use crypto::cipher::{Cipher, CipherType, CipherResult};
 
+/// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
     ChaCha20(ChaCha20),
     Salsa20(Salsa20),
 }
 
 impl CryptoCipher {
+    /// Creates an instance
     pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> CryptoCipher {
         match t {
-            CipherType::ChaCha20 => {
-                CryptoCipher::ChaCha20(ChaCha20::new(key, iv))
-            },
-            CipherType::Salsa20 => {
-                CryptoCipher::Salsa20(Salsa20::new(key, iv))
-            },
+            CipherType::ChaCha20 => CryptoCipher::ChaCha20(ChaCha20::new(key, iv)),
+            CipherType::Salsa20 => CryptoCipher::Salsa20(Salsa20::new(key, iv)),
             _ => panic!("Rust Crypto does not support {:?} cipher", t),
         }
     }
