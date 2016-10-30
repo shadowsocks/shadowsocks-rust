@@ -4,7 +4,6 @@ extern crate shadowsocks;
 extern crate qrcode;
 
 use std::str;
-use std::net::SocketAddr;
 
 use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
 use rustc_serialize::json::{ToJson, as_pretty_json};
@@ -14,7 +13,7 @@ use clap::{App, Arg};
 use qrcode::QrCode;
 
 use shadowsocks::VERSION;
-use shadowsocks::config::{Config, ConfigType, ServerConfig};
+use shadowsocks::config::{Config, ConfigType, ServerConfig, ServerAddr};
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
@@ -85,12 +84,12 @@ fn decode(encoded: &str, need_qrcode: bool) {
         _ => panic!("Malformed input"),
     };
 
-    let addr = match addr.parse::<SocketAddr>() {
+    let addr = match addr.parse::<ServerAddr>() {
         Ok(a) => a,
         Err(err) => panic!("Malformed input: {:?}", err),
     };
 
-    let svrconfig = ServerConfig::basic(addr, pwd.to_owned(), method.parse().unwrap());
+    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None);
 
     let mut config = Config::new();
     config.server.push(svrconfig);
