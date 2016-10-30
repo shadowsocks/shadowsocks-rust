@@ -75,7 +75,7 @@ fn connect_proxy_server(handle: &Handle,
                         svr_cfg: Rc<ServerConfig>,
                         dns_resolver: DnsResolver)
                         -> BoxIoFuture<TcpStream> {
-    match &svr_cfg.addr {
+    match svr_cfg.addr() {
         &ServerAddr::SocketAddr(ref addr) => Box::new(TcpStream::connect(addr, handle)),
         &ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
@@ -128,12 +128,12 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
             // Send initialize vector to remote and create encryptor
 
-            let local_iv = svr_cfg.method.gen_init_vec();
+            let local_iv = svr_cfg.method().gen_init_vec();
             trace!("Going to send initialize vector: {:?}", local_iv);
 
             write_all(w, local_iv).and_then(move |(w, local_iv)| {
-                let encryptor = cipher::with_type(svr_cfg.method,
-                                                  svr_cfg.password.as_bytes(),
+                let encryptor = cipher::with_type(svr_cfg.method(),
+                                                  svr_cfg.key(),
                                                   &local_iv[..],
                                                   CryptoMode::Encrypt);
 
@@ -146,12 +146,12 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             let svr_cfg = svr_cfg_cloned;
 
             // Decrypt data from remote server
-            let iv_len = svr_cfg.method.iv_size();
+            let iv_len = svr_cfg.method().iv_size();
             read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
                 trace!("Got initialize vector {:?}", remote_iv);
 
-                let decryptor = cipher::with_type(svr_cfg.method,
-                                                  svr_cfg.password.as_bytes(),
+                let decryptor = cipher::with_type(svr_cfg.method(),
+                                                  svr_cfg.key(),
                                                   &remote_iv[..],
                                                   CryptoMode::Decrypt);
                 let decrypt_stream = DecryptedReader::new(r, decryptor);

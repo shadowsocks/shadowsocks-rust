@@ -65,10 +65,8 @@ impl OpenSSLCrypto {
             }
         };
 
-        let key = cipher_type.bytes_to_key(key);
-
         // Panic if error occurs
-        let cipher = symm::Crypter::new(t, From::from(mode), &key[..], Some(iv)).unwrap();
+        let cipher = symm::Crypter::new(t, From::from(mode), key, Some(iv)).unwrap();
 
         OpenSSLCrypto {
             cipher: t,

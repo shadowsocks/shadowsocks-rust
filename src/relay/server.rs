@@ -39,12 +39,10 @@ use config::Config;
 /// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();
-/// config.server = vec![ServerConfig {
-///     addr: ServerAddr::SocketAddr("127.0.0.1:8388".parse().unwrap()),
-///     password: "server-password".to_string(),
-///     method: CipherType::Aes256Cfb,
-///     timeout: None,
-/// }];
+/// config.server = vec![
+///     ServerConfig::basic("127.0.0.1:8388".parse().unwrap(),
+///                         "server-password".to_string(),
+///                         CipherType::Aes256Cfb)];
 /// RelayServer::run(config).unwrap();
 /// ```
 ///

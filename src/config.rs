@@ -171,24 +171,60 @@ impl Display for ServerAddr {
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// Server address
-    pub addr: ServerAddr,
+    addr: ServerAddr,
     /// Encryption password (key)
-    pub password: String,
+    password: String,
     /// Encryption type (method)
-    pub method: CipherType,
+    method: CipherType,
     /// Connection timeout
-    pub timeout: Option<Duration>,
+    timeout: Option<Duration>,
+    /// Encryption key
+    enc_key: Vec<u8>,
 }
 
 impl ServerConfig {
+    /// Creates a new ServerConfig
+    pub fn new(addr: ServerAddr, pwd: String, method: CipherType, timeout: Option<Duration>) -> ServerConfig {
+        let enc_key = method.bytes_to_key(pwd.as_bytes());
+        ServerConfig {
+            addr: addr,
+            password: pwd,
+            method: method,
+            timeout: timeout,
+            enc_key: enc_key,
+        }
+    }
+
     /// Create a basic config
     pub fn basic(addr: SocketAddr, password: String, method: CipherType) -> ServerConfig {
-        ServerConfig {
-            addr: ServerAddr::SocketAddr(addr),
-            password: password,
-            method: method,
-            timeout: None,
-        }
+        ServerConfig::new(ServerAddr::SocketAddr(addr), password, method, None)
+    }
+
+    /// Set encryption method
+    pub fn set_method(&mut self, t: CipherType, pwd: String) {
+        self.password = pwd;
+        self.method = t;
+        self.enc_key = t.bytes_to_key(self.password.as_bytes());
+    }
+
+    /// Get server address
+    pub fn addr(&self) -> &ServerAddr {
+        &self.addr
+    }
+
+    /// Get encryption key
+    pub fn key(&self) -> &[u8] {
+        &self.enc_key[..]
+    }
+
+    /// Get password
+    pub fn password(&self) -> &str {
+        &self.password[..]
+    }
+
+    /// Get method
+    pub fn method(&self) -> CipherType {
+        self.method
     }
 }
 
@@ -396,12 +432,7 @@ impl Config {
             None => None,
         };
 
-        Ok(ServerConfig {
-            addr: addr,
-            password: password,
-            method: method,
-            timeout: timeout,
-        })
+        Ok(ServerConfig::new(addr, password, method, timeout))
     }
 
     fn parse_json_object(o: &json::Object, require_local_info: bool) -> Result<Config, Error> {

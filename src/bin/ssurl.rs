@@ -20,7 +20,10 @@ const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let url = format!("{}:{}@{}", svr.method.to_string(), svr.password, svr.addr);
+    let url = format!("{}:{}@{}",
+                      svr.method().to_string(),
+                      svr.password(),
+                      svr.addr());
     format!("ss://{}", url.as_bytes().to_base64(URL_SAFE))
 }
 

@@ -90,9 +90,9 @@ pub struct UdpRelayLocal;
 
 impl UdpRelayLocal {
     fn resolve_server_addr(svr_cfg: Rc<ServerConfig>, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
-        match svr_cfg.addr {
-            ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
-            ServerAddr::DomainName(ref dname, port) => {
+        match svr_cfg.addr() {
+            &ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
+            &ServerAddr::DomainName(ref dname, port) => {
                 let fut = dns_resolver.resolve(dname)
                     .map(move |sockaddr| {
                         match sockaddr {
@@ -125,10 +125,10 @@ impl UdpRelayLocal {
                         // Proxy -> Client
 
                         trace!("Got packet from server {}, length {}",
-                               svr_cfg.addr,
+                               svr_cfg.addr(),
                                buf.len());
 
-                        let iv_len = svr_cfg.method.iv_size();
+                        let iv_len = svr_cfg.method().iv_size();
                         if buf.len() < iv_len {
                             error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
                                    iv_len,
@@ -138,10 +138,7 @@ impl UdpRelayLocal {
                         }
 
                         let iv = &buf[..iv_len];
-                        let mut cipher = cipher::with_type(svr_cfg.method,
-                                                           svr_cfg.password.as_bytes(),
-                                                           iv,
-                                                           CryptoMode::Decrypt);
+                        let mut cipher = cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
 
                         let mut payload = Vec::with_capacity(buf.len());
                         try!(cipher.update(&buf[iv_len..], &mut payload));
@@ -208,9 +205,9 @@ impl UdpRelayLocal {
 
                                 // Client -> Proxy
                                 let fut = futures::lazy(move || {
-                                        let iv = svr_cfg.method.gen_init_vec();
-                                        let mut cipher = cipher::with_type(svr_cfg.method,
-                                                                           svr_cfg.password.as_bytes(),
+                                        let iv = svr_cfg.method().gen_init_vec();
+                                        let mut cipher = cipher::with_type(svr_cfg.method(),
+                                                                           svr_cfg.key(),
                                                                            &iv[..],
                                                                            CryptoMode::Encrypt);
 

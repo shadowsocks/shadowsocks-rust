@@ -186,17 +186,17 @@ fn main() {
             })
             .unwrap();
 
-        let sc = ServerConfig {
-            addr: svr_addr.parse::<ServerAddr>().expect("`server-addr` invalid"),
-            password: password.to_owned(),
-            method: match method.parse() {
-                Ok(m) => m,
-                Err(err) => {
-                    panic!("Does not support {:?} method: {:?}", method, err);
-                }
-            },
-            timeout: None,
+        let method = match method.parse() {
+            Ok(m) => m,
+            Err(err) => {
+                panic!("Does not support {:?} method: {:?}", method, err);
+            }
         };
+
+        let sc = ServerConfig::new(svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
+                                   password.to_owned(),
+                                   method,
+                                   None);
 
         config.server.push(sc);
         has_provided_server_config = true;

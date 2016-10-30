@@ -43,12 +43,10 @@ use config::Config;
 ///
 /// let mut config = Config::new();
 /// config.local = Some("127.0.0.1:1080".parse().unwrap());
-/// config.server = vec![ServerConfig {
-///     addr: ServerAddr::SocketAddr("127.0.0.1:8388".parse().unwrap()),
-///     password: "server-password".to_string(),
-///     method: CipherType::Aes256Cfb,
-///     timeout: None,
-/// }];
+/// config.server = vec![
+///     ServerConfig::basic("127.0.0.1:8388".parse().unwrap(),
+///                         "server-password".to_string(),
+///                         CipherType::Aes256Cfb)];
 /// RelayLocal::run(config).unwrap();
 /// ```
 #[derive(Clone)]

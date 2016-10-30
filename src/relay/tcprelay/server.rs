@@ -178,7 +178,7 @@ impl TcpRelayServer {
 
         for svr_cfg in &config.server {
             let listener = {
-                let addr = &svr_cfg.addr;
+                let addr = svr_cfg.addr();
                 let addr = addr.listen_addr();
                 let listener = TcpListener::bind(addr, &handle).unwrap();
                 trace!("ShadowSocks TCP Listening on {}", addr);

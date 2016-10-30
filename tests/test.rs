@@ -29,12 +29,7 @@ const METHOD: CipherType = CipherType::Aes128Cfb;
 fn get_config() -> Config {
     let mut cfg = Config::new();
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![ServerConfig {
-                          addr: SERVER_ADDR.parse().unwrap(),
-                          password: PASSWORD.to_owned(),
-                          method: METHOD,
-                          timeout: None,
-                      }];
+    cfg.server = vec![ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD)];
     cfg
 }
 

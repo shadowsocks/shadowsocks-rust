@@ -36,10 +36,9 @@ pub enum CryptoCipher {
 impl CryptoCipher {
     /// Creates an instance
     pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> CryptoCipher {
-        let key = t.bytes_to_key(key);
         match t {
-            CipherType::ChaCha20 => CryptoCipher::ChaCha20(ChaCha20::new(&key[..], iv)),
-            CipherType::Salsa20 => CryptoCipher::Salsa20(Salsa20::new(&key[..], iv)),
+            CipherType::ChaCha20 => CryptoCipher::ChaCha20(ChaCha20::new(key, iv)),
+            CipherType::Salsa20 => CryptoCipher::Salsa20(Salsa20::new(key, iv)),
             _ => panic!("Rust Crypto does not support {:?} cipher", t),
         }
     }
