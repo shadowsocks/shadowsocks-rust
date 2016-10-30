@@ -13,6 +13,7 @@ It is **unstable**! If you encounter any problems, please open an issue.
 ## Dependencies
 
 * libcrypto (OpenSSL)
+* libsodium
 
 ## Usage
 
@@ -22,8 +23,8 @@ Build with [Cargo](http://doc.crates.io):
 cargo build
 ```
 
-Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries of
-the official shadowsocks' implementation.
+Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries in
+the official ShadowSocks' implementation.
 
 Enable more crypto algorithms by passing the name `cipher-[name]` via command line argument `--features`
 
@@ -33,11 +34,9 @@ cargo build --features "cipher-aes-ctr"
 
 Read `Cargo.toml` for more details.
 
-*Require `libcrypto` by default.*
-
 ## Getting Started
 
-Create a shadowsocks' configuration file. Example
+Create a ShadowSocks' configuration file. Example
 
 ```json
 {
@@ -103,21 +102,15 @@ List all available arguments with `-h`.
 It supports the following features:
 
 - [x] Socks5 CONNECT command
-- [ ] UDP ASSOCIATE command
+- [ ] UDP ASSOCIATE command (partial)
 - [x] HTTP Proxy protocol
 - [x] Various crypto algorithms
 - [x] Load balancing (multiple servers)
 
 ## TODO
 
-- [ ] Documentation
-- [ ] <del>`BIND` command</del>
-- [ ] <del>Socks5 authentication</del>
+- [x] Documentation
 - [x] Extend configuration format
-- [ ] Fully testing on servers
-- [ ] Performance testing and improvement
-- [ ] User management
-- [ ] <del>PAC</del>
 - [x] Improved logging format (waiting for the new official log crate)
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 - [x] Windows support. <del>(Depending on mio and coio-rs)</del>

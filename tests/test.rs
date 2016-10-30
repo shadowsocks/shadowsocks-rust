@@ -84,8 +84,7 @@ fn socks5_relay() {
             .and_then(|(c, _)| flush(c))
             .and_then(|c| read_to_end(c, Vec::new()))
             .map(|(_, buf)| {
-                println!("Got reply from server: {}",
-                         unsafe { String::from_utf8_unchecked(buf) });
+                println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
             })
     });
 
