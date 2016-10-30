@@ -26,10 +26,12 @@ use std::io;
 
 use tokio_core::reactor::Core;
 
+use futures::{self, Future};
+
 use relay::tcprelay::local::TcpRelayLocal;
-#[cfg(feature = "enable-udp")]
 use relay::udprelay::local::UdpRelayLocal;
 use relay::dns_resolver::DnsResolver;
+use relay::boxed_future;
 use config::Config;
 
 /// Relay server running under local environment.
@@ -60,7 +62,17 @@ impl RelayLocal {
         let handle = lp.handle();
         let config = Rc::new(config);
         let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
-        let tcp_fut = TcpRelayLocal::run(config, handle, dns_resolver);
-        lp.run(tcp_fut)
+
+        let tcp_fut = TcpRelayLocal::run(config.clone(), handle.clone(), dns_resolver.clone());
+
+        let udp_fut = if config.enable_udp {
+            UdpRelayLocal::run(config, handle, dns_resolver)
+        } else {
+            boxed_future(futures::finished(()))
+        };
+
+        let join = tcp_fut.join(udp_fut).map(|_| ());
+
+        lp.run(join)
     }
 }

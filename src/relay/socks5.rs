@@ -244,6 +244,12 @@ impl ToSocketAddrs for Address {
     }
 }
 
+impl From<SocketAddr> for Address {
+    fn from(s: SocketAddr) -> Address {
+        Address::SocketAddress(s)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TcpRequestHeader {
     pub command: Command,

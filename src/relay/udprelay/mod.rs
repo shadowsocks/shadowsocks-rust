@@ -22,5 +22,12 @@
 pub mod local;
 pub mod server;
 
-const UDP_RELAY_LOCAL_LRU_CACHE_CAPACITY: usize = 1024;
-const UDP_RELAY_SERVER_LRU_CACHE_CAPACITY: usize = 10240;
+/// The maximum UDP payload size (defined in the original shadowsocks Python)
+///
+/// *I cannot find any references about why clowwindy used this value as the maximum
+/// Socks5 UDP ASSOCIATE packet size. The only thing I can find is
+/// [here](http://support.microsoft.com/kb/822061/)*
+pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
+
+/// Maximum associations to maintain
+pub const MAXIMUM_ASSOCIATE_MAP_SIZE: usize = 65536;

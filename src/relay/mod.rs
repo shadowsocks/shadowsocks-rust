@@ -28,9 +28,8 @@ use std::io;
 
 use futures::Future;
 
-mod tcprelay;
-#[cfg(feature = "enable-udp")]
-mod udprelay;
+pub mod tcprelay;
+pub mod udprelay;
 pub mod local;
 pub mod server;
 mod loadbalancing;

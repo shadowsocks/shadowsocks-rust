@@ -23,8 +23,6 @@ cipher-rc4 = []
 cipher-chacha20 = []
 cipher-salsa20 = []
 
-enable-udp = []
-
 [[bin]]
 
 name = "sslocal"

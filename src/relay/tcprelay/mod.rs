@@ -303,19 +303,42 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
     });
 
     Box::new(c2s.join(s2c).map(|_| ()))
+}
 
-    // c2s.select(s2c)
-    //     .map_err(|(err, _)| err)
-    //     .and_then(move |(dir, next)| {
-    //         match dir {
-    //             TunnelDirection::Client2Server => next.map(move |_| ()).boxed(),
-    //             // Shutdown connection directly because remote server has disconnected
-    //             TunnelDirection::Server2Client => futures::finished(()).boxed(),
-    //         }
-    //     })
-    //     .and_then(move |_| {
-    //         trace!("Relay {} client <-> server are all finished, closing", addr);
-    //         Ok(())
-    //     })
-    //     .boxed()
+/// Read until EOF, and ignore
+pub enum IgnoreUntilEnd<R: Read> {
+    Pending { r: R, amt: u64 },
+    Empty,
+}
+
+impl<R: Read> Future for IgnoreUntilEnd<R> {
+    type Item = u64;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self {
+            &mut IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
+            &mut IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
+                let mut buf = [0u8; 4096];
+                loop {
+                    let n = try_nb!(r.read(&mut buf));
+                    *amt += n as u64;
+
+                    if n == 0 {
+                        break;
+                    }
+                }
+            }
+        }
+
+        match mem::replace(self, IgnoreUntilEnd::Empty) {
+            IgnoreUntilEnd::Pending { amt, .. } => Ok(amt.into()),
+            IgnoreUntilEnd::Empty => unreachable!(),
+        }
+    }
+}
+
+/// Ignore all data from the reader
+pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
+    IgnoreUntilEnd::Pending { r: r, amt: 0 }
 }

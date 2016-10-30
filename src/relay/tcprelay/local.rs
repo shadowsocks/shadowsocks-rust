@@ -46,16 +46,19 @@ use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
 
 use super::http::{self, HttpRequestFut};
-use super::tunnel;
+use super::{tunnel, ignore_until_end};
+
+#[derive(Debug, Clone)]
+struct UdpConfig {
+    enable_udp: bool,
+    client_addr: Rc<SocketAddr>,
+}
 
 /// TCP relay local server
 pub struct TcpRelayLocal;
 
 impl TcpRelayLocal {
-    pub fn run(config: Rc<Config>,
-               handle: Handle,
-               dns_resolver: DnsResolver)
-               -> Box<Future<Item = (), Error = io::Error>> {
+    pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
         let tcp_fut = Socks5RelayLocal::run(config.clone(), handle.clone(), dns_resolver.clone());
         match &config.http_proxy {
             &Some(..) => {
@@ -108,9 +111,9 @@ impl Socks5RelayLocal {
 
     fn handle_client(handle: &Handle,
                      s: TcpStream,
-                     _: SocketAddr,
                      conf: Rc<ServerConfig>,
-                     dns_resolver: DnsResolver)
+                     dns_resolver: DnsResolver,
+                     udp_conf: UdpConfig)
                      -> io::Result<()> {
         let cloned_handle = handle.clone();
         let client_addr = try!(s.peer_addr());
@@ -176,11 +179,24 @@ impl Socks5RelayLocal {
                         boxed_future(fut)
                     }
                     socks5::Command::UdpAssociate => {
-                        warn!("UDP Associate is not supported");
-                        let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
-                            .write_to(w)
-                            .map(|_| ());
-                        boxed_future(fut)
+                        if udp_conf.enable_udp {
+                            info!("UDP ASSOCIATE {}", addr);
+                            let fut = TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                             From::from((&*udp_conf.client_addr).clone()))
+                                .write_to(w)
+                                .and_then(|_| {
+                                    // Hold the connection until it ends by its own
+                                    ignore_until_end(r).map(|_| ())
+                                });
+
+                            boxed_future(fut)
+                        } else {
+                            warn!("UDP Associate is not enabled");
+                            let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                                .write_to(w)
+                                .map(|_| ());
+                            boxed_future(fut)
+                        }
                     }
                 }
             });
@@ -206,14 +222,19 @@ impl Socks5RelayLocal {
                handle: Handle,
                dns_resolver: DnsResolver)
                -> Box<Future<Item = (), Error = io::Error>> {
-        let listener = {
+        let (listener, local_addr) = {
             let local_addr = config.local.as_ref().unwrap();
             let listener = TcpListener::bind(local_addr, &handle).unwrap();
             info!("ShadowSocks TCP Listening on {}", local_addr);
-            listener
+            (listener, local_addr.clone())
         };
 
         let dns_resolver = dns_resolver.clone();
+
+        let udp_conf = UdpConfig {
+            enable_udp: cfg!(feature = "enable_udp") && config.enable_udp,
+            client_addr: Rc::new(local_addr),
+        };
 
         let mut servers = RoundRobin::new(&*config);
         let listening = listener.incoming()
@@ -222,7 +243,7 @@ impl Socks5RelayLocal {
                 trace!("Got connection, addr: {}", addr);
                 trace!("Picked proxy server: {:?}", server_cfg);
                 let dns_resolver = dns_resolver.clone();
-                Socks5RelayLocal::handle_client(&handle, socket, addr, server_cfg, dns_resolver)
+                Socks5RelayLocal::handle_client(&handle, socket, server_cfg, dns_resolver, udp_conf.clone())
             });
 
         Box::new(listening.map_err(|err| {
