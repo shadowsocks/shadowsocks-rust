@@ -50,17 +50,25 @@ pub mod local;
 pub mod server;
 mod stream;
 mod http;
+pub mod client;
 
+/// Directions in the tunnel
 #[derive(Debug, Copy, Clone)]
 pub enum TunnelDirection {
+    /// Client -> Server
     Client2Server,
+    /// Client <- Server
     Server2Client,
 }
 
+/// ReadHalf of TcpStream with decryption
 pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
+/// WriteHalf of TcpStream with encryption
 pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
+/// Boxed future of DecryptedHalf
 pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
+/// Boxed future of EncryptedHalf
 pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(handle: &Handle,
@@ -302,7 +310,18 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
         }
     });
 
-    Box::new(c2s.join(s2c).map(|_| ()))
+    let fut = c2s.select(s2c)
+        .and_then(|(dir, _)| {
+            match dir {
+                TunnelDirection::Server2Client => trace!("client <- server is closed, abort connection"),
+                TunnelDirection::Client2Server => trace!("server -> client is closed, abort connection"),
+            }
+
+            Ok(())
+        })
+        .map_err(|(err, _)| err);
+
+    boxed_future(fut)
 }
 
 /// Read until EOF, and ignore

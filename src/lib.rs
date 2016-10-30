@@ -44,6 +44,7 @@ extern crate tokio_core;
 
 extern crate libc;
 
+/// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub mod config;

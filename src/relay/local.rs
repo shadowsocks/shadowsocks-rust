@@ -37,8 +37,6 @@ use config::Config;
 /// Relay server running under local environment.
 ///
 /// ```no_run
-/// use std::net::SocketAddr;
-///
 /// use shadowsocks::relay::RelayLocal;
 /// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
 /// use shadowsocks::crypto::CipherType;
@@ -51,7 +49,7 @@ use config::Config;
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 /// }];
-/// RelayLocal::run(config);
+/// RelayLocal::run(config).unwrap();
 /// ```
 #[derive(Clone)]
 pub struct RelayLocal;

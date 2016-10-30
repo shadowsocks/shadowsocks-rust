@@ -19,6 +19,10 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+//! Socks5 protocol definition (RFC1928)
+//!
+//! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
+
 #![allow(dead_code)]
 
 use std::fmt::{self, Debug, Formatter};
@@ -61,11 +65,14 @@ const SOCKS5_REPLY_TTL_EXPIRED: u8 = 0x06;
 const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED: u8 = 0x07;
 const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED: u8 = 0x08;
 
-#[allow(dead_code)]
+/// SOCKS5 command
 #[derive(Clone, Debug, Copy)]
 pub enum Command {
+    /// CONNECT command (TCP tunnel)
     TcpConnect,
+    /// BIND command (Not supported in ShadowSocks)
     TcpBind,
+    /// UDP ASSOCIATE command
     UdpAssociate,
 }
 
@@ -90,6 +97,7 @@ impl Command {
     }
 }
 
+/// SOCKS5 reply code
 #[derive(Clone, Debug, Copy)]
 pub enum Reply {
     Succeeded,
@@ -139,9 +147,29 @@ impl Reply {
     }
 }
 
+impl fmt::Display for Reply {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Reply::Succeeded => write!(f, "Succeeded"),
+            Reply::AddressTypeNotSupported => write!(f, "Address type not supported"),
+            Reply::CommandNotSupported => write!(f, "Command not supported"),
+            Reply::ConnectionNotAllowed => write!(f, "Connection not allowed"),
+            Reply::ConnectionRefused => write!(f, "Connection refused"),
+            Reply::GeneralFailure => write!(f, "General failure"),
+            Reply::HostUnreachable => write!(f, "Host unreachable"),
+            Reply::NetworkUnreachable => write!(f, "Network unreachable"),
+            Reply::OtherReply(u) => write!(f, "Other reply ({})", u),
+            Reply::TtlExpired => write!(f, "TTL expired"),
+        }
+    }
+}
+
+/// SOCKS5 protocol error
 #[derive(Clone)]
 pub struct Error {
+    /// Reply code
     pub reply: Reply,
+    /// Error message
     pub message: String,
 }
 
@@ -191,9 +219,12 @@ impl From<Error> for io::Error {
     }
 }
 
+/// SOCKS5 address type
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Address {
+    /// Socket address (IP Address)
     SocketAddress(SocketAddr),
+    /// Domain name address
     DomainNameAddress(String, u16),
 }
 
@@ -250,13 +281,23 @@ impl From<SocketAddr> for Address {
     }
 }
 
+impl From<(String, u16)> for Address {
+    fn from((dn, port): (String, u16)) -> Address {
+        Address::DomainNameAddress(dn, port)
+    }
+}
+
+/// TCP request header after handshake
 #[derive(Clone, Debug)]
 pub struct TcpRequestHeader {
+    /// SOCKS5 command
     pub command: Command,
+    /// Remote address
     pub address: Address,
 }
 
 impl TcpRequestHeader {
+    /// Creates a request header
     pub fn new(cmd: Command, addr: Address) -> TcpRequestHeader {
         TcpRequestHeader {
             command: cmd,
@@ -264,6 +305,7 @@ impl TcpRequestHeader {
         }
     }
 
+    /// Read from a reader
     pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
@@ -295,6 +337,7 @@ impl TcpRequestHeader {
         Box::new(fut)
     }
 
+    /// Write data into a writer
     pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
         let addr = self.address.clone();
 
@@ -304,19 +347,24 @@ impl TcpRequestHeader {
         Box::new(fut)
     }
 
+    /// Length in bytes
     #[inline]
     pub fn len(&self) -> usize {
         self.address.len() + 3
     }
 }
 
+/// TCP response header
 #[derive(Clone, Debug)]
 pub struct TcpResponseHeader {
+    /// SOCKS5 reply
     pub reply: Reply,
+    /// Reply address
     pub address: Address,
 }
 
 impl TcpResponseHeader {
+    /// Creates a response header
     pub fn new(reply: Reply, address: Address) -> TcpResponseHeader {
         TcpResponseHeader {
             reply: reply,
@@ -324,6 +372,7 @@ impl TcpResponseHeader {
         }
     }
 
+    /// Read from a reader
     pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
@@ -351,6 +400,7 @@ impl TcpResponseHeader {
         Box::new(fut)
     }
 
+    /// Write to a writer
     pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
         let addr = self.address.clone();
         let fut = write_all(w, [SOCKS5_VERSION, self.reply.as_u8(), 0x00])
@@ -360,6 +410,7 @@ impl TcpResponseHeader {
         Box::new(fut)
     }
 
+    /// Length in bytes
     #[inline]
     pub fn len(&self) -> usize {
         self.address.len() + 3
@@ -507,21 +558,25 @@ fn get_addr_len(atyp: &Address) -> usize {
     }
 }
 
-// +----+----------+----------+
-// |VER | NMETHODS | METHODS  |
-// +----+----------+----------+
-// | 5  |    1     | 1 to 255 |
-// +----+----------+----------|
+/// SOCKS5 handshake request packet
+///
+/// +----+----------+----------+
+/// |VER | NMETHODS | METHODS  |
+/// +----+----------+----------+
+/// | 5  |    1     | 1 to 255 |
+/// +----+----------+----------|
 #[derive(Clone, Debug)]
 pub struct HandshakeRequest {
     pub methods: Vec<u8>,
 }
 
 impl HandshakeRequest {
+    /// Creates a handshake request
     pub fn new(methods: Vec<u8>) -> HandshakeRequest {
         HandshakeRequest { methods: methods }
     }
 
+    /// Read from a reader
     pub fn read_from<R: Read + 'static>(r: R) -> BoxIoFuture<(R, HandshakeRequest)> {
         let fut = read_exact(r, [0u8, 0u8])
             .and_then(|(r, buf)| {
@@ -541,6 +596,7 @@ impl HandshakeRequest {
         Box::new(fut)
     }
 
+    /// Write to a writer
     pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
         let fut = write_all(w, [SOCKS5_VERSION, self.methods.len() as u8])
             .and_then(move |(w, _)| write_all(w, self.methods))
@@ -550,21 +606,25 @@ impl HandshakeRequest {
     }
 }
 
-// +----+--------+
-// |VER | METHOD |
-// +----+--------+
-// | 1  |   1    |
-// +----+--------+
+/// SOCKS5 handshake response packet
+///
+/// +----+--------+
+/// |VER | METHOD |
+/// +----+--------+
+/// | 1  |   1    |
+/// +----+--------+
 #[derive(Clone, Debug, Copy)]
 pub struct HandshakeResponse {
     pub chosen_method: u8,
 }
 
 impl HandshakeResponse {
+    /// Creates a handshake response
     pub fn new(cm: u8) -> HandshakeResponse {
         HandshakeResponse { chosen_method: cm }
     }
 
+    /// Read from a reader
     pub fn read_from<R: Read + 'static>(r: R) -> BoxIoFuture<(R, HandshakeResponse)> {
         let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
             let ver = buf[0];
@@ -579,18 +639,25 @@ impl HandshakeResponse {
         Box::new(fut)
     }
 
+    /// Write to a writer
     pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
         Box::new(write_all(w, [SOCKS5_VERSION, self.chosen_method]).map(|(w, _)| w))
     }
 }
 
+/// UDP ASSOCIATE request header
 #[derive(Clone, Debug)]
 pub struct UdpAssociateHeader {
+    /// Fragment
+    ///
+    /// ShadowSocks does not support fragment, so this frag must be 0x00
     pub frag: u8,
+    /// Remote address
     pub address: Address,
 }
 
 impl UdpAssociateHeader {
+    /// Creates a header
     pub fn new(frag: u8, address: Address) -> UdpAssociateHeader {
         UdpAssociateHeader {
             frag: frag,
@@ -598,6 +665,7 @@ impl UdpAssociateHeader {
         }
     }
 
+    /// Read from a reader
     pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
@@ -611,6 +679,7 @@ impl UdpAssociateHeader {
         Box::new(fut)
     }
 
+    /// Write to a writer
     pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
         let addr = self.address.clone();
         let fut = write_all(w, [0x00, 0x00, self.frag])
@@ -619,6 +688,8 @@ impl UdpAssociateHeader {
         Box::new(fut)
     }
 
+    /// Length in bytes
+    #[inline]
     pub fn len(&self) -> usize {
         3 + self.address.len()
     }

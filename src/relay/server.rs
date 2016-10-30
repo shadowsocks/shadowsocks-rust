@@ -34,8 +34,6 @@ use config::Config;
 /// Relay server running on server side.
 ///
 /// ```no_run
-/// use std::net::SocketAddr;
-///
 /// use shadowsocks::relay::RelayServer;
 /// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
 /// use shadowsocks::crypto::CipherType;
@@ -47,7 +45,7 @@ use config::Config;
 ///     method: CipherType::Aes256Cfb,
 ///     timeout: None,
 /// }];
-/// RelayServer::run(config);
+/// RelayServer::run(config).unwrap();
 /// ```
 ///
 #[derive(Clone)]

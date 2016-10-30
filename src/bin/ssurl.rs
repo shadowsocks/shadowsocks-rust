@@ -13,6 +13,7 @@ use clap::{App, Arg};
 
 use qrcode::QrCode;
 
+use shadowsocks::VERSION;
 use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
@@ -103,6 +104,7 @@ fn main() {
     let app = App::new("ssurl")
         .author("Y. T. Chung <zonyitoo@gmail.com>")
         .about("Encode and decode ShadowSocks URL")
+        .version(VERSION)
         .arg(Arg::with_name("ENCODE")
             .short("e")
             .long("encode")

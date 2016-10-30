@@ -133,6 +133,7 @@ impl ServerAddr {
     }
 }
 
+/// Parse ServerAddr error
 #[derive(Debug)]
 pub struct ServerAddrError;
 
@@ -169,13 +170,18 @@ impl Display for ServerAddr {
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
+    /// Server address
     pub addr: ServerAddr,
+    /// Encryption password (key)
     pub password: String,
+    /// Encryption type (method)
     pub method: CipherType,
+    /// Connection timeout
     pub timeout: Option<Duration>,
 }
 
 impl ServerConfig {
+    /// Create a basic config
     pub fn basic(addr: SocketAddr, password: String, method: CipherType) -> ServerConfig {
         ServerConfig {
             addr: ServerAddr::SocketAddr(addr),
@@ -206,9 +212,14 @@ impl json::ToJson for ServerConfig {
 /// Listening address
 pub type ClientConfig = SocketAddr;
 
+/// Server config type
 #[derive(Clone, Copy)]
 pub enum ConfigType {
+    /// Config for local
+    ///
+    /// Requires `local` configuration
     Local,
+    /// Config for server
     Server,
 }
 
@@ -230,6 +241,7 @@ impl Default for Config {
     }
 }
 
+/// Configuration parsing error kind
 #[derive(Copy, Clone)]
 pub enum ErrorKind {
     MissingField,
