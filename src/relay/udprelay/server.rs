@@ -27,7 +27,6 @@ use std::io::{self, Cursor};
 use std::cell::RefCell;
 
 use futures::{self, Future};
-use futures::stream::Stream;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::UdpSocket;
@@ -43,8 +42,8 @@ use relay::socks5::Address;
 use crypto::cipher::{self, Cipher};
 use crypto::CryptoMode;
 
-use super::MAXIMUM_ASSOCIATE_MAP_SIZE;
-use super::{send_to, udp_incoming};
+use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
+use super::{send_to, recv_from};
 
 #[derive(Debug, Clone)]
 struct Associate {
@@ -54,10 +53,118 @@ struct Associate {
 
 type AssociateMap = LruCache<SocketAddr, Associate>;
 
-/// UDP relay proxy server
-pub struct UdpRelayServer;
+struct Client {
+    assoc: Rc<RefCell<AssociateMap>>,
+    svr_cfg: Rc<ServerConfig>,
+    dns_resolver: DnsResolver,
+    socket: UdpSocket,
+}
 
-impl UdpRelayServer {
+impl Client {
+    fn handle_once(self) -> BoxIoFuture<Client> {
+        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
+        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
+            .and_then(move |(socket, buf, n, src)| {
+                let cloned_assoc = assoc.clone();
+
+                let buf = &buf[..n];
+
+                let fut = match assoc.borrow_mut().remove(&src) {
+                    None => {
+                        // Client -> Remote
+                        let iv_len = svr_cfg.method().iv_size();
+                        if buf.len() < iv_len {
+                            error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
+                                   iv_len,
+                                   buf.len());
+                            let err = io::Error::new(io::ErrorKind::Other, "early eof");
+                            return Err(err);
+                        }
+
+                        let iv = &buf[..iv_len];
+                        let mut cipher = cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
+
+                        let mut payload = Vec::with_capacity(buf.len());
+                        try!(cipher.update(&buf[iv_len..], &mut payload));
+                        try!(cipher.finalize(&mut payload));
+
+                        let reader = Cursor::new(payload);
+                        let fut = Address::read_from(reader).map_err(From::from).and_then(move |(r, addr)| {
+                            let header_len = r.position() as usize;
+                            let mut payload = r.into_inner();
+                            payload.drain(..header_len);
+                            let body = payload;
+
+                            trace!("Got packet to {}, payload length {}", addr, body.len());
+
+                            let assoc = cloned_assoc.clone();
+                            let cloned_addr = addr.clone();
+                            Client::resolve_remote_addr(addr, dns_resolver.clone())
+                                .and_then(move |remote_addr| {
+                                    // Record association
+                                    let mut assoc = cloned_assoc.borrow_mut();
+                                    assoc.insert(remote_addr.clone(),
+                                                 Associate {
+                                                     address: cloned_addr,
+                                                     client_addr: src,
+                                                 });
+
+                                    send_to(socket, body, remote_addr)
+                                })
+                                .map(move |(socket, body, len)| {
+                                    trace!("Sent body {} bytes, actual {} bytes", body.len(), len);
+                                    Client {
+                                        assoc: assoc,
+                                        svr_cfg: svr_cfg,
+                                        dns_resolver: dns_resolver,
+                                        socket: socket,
+                                    }
+                                })
+                        });
+
+                        boxed_future(fut)
+                    }
+                    Some(Associate { address, client_addr }) => {
+                        // Client <- Remote
+                        let mut iv = svr_cfg.method().gen_init_vec();
+                        let mut cipher = cipher::with_type(svr_cfg.method(),
+                                                           svr_cfg.key(),
+                                                           &iv[..],
+                                                           CryptoMode::Encrypt);
+
+                        let mut buf = buf.to_vec();
+                        let fut = address.write_to(Vec::new())
+                            .map(move |mut send_buf| {
+                                send_buf.append(&mut buf);
+                                send_buf
+                            })
+                            .and_then(move |send_buf| -> io::Result<_> {
+                                try!(cipher.update(&send_buf[..], &mut iv));
+                                try!(cipher.finalize(&mut iv));
+                                Ok(iv)
+                            })
+                            .and_then(move |final_buf| send_to(socket, final_buf, client_addr))
+                            .map(|(socket, buf, len)| {
+                                trace!("Sent body {} actual {}", buf.len(), len);
+                                Client {
+                                    assoc: cloned_assoc,
+                                    svr_cfg: svr_cfg,
+                                    dns_resolver: dns_resolver,
+                                    socket: socket,
+                                }
+                            });
+
+                        boxed_future(fut)
+                    }
+                };
+
+                Ok(fut)
+            })
+            .and_then(|fut| fut);
+
+        boxed_future(fut)
+    }
+
     fn resolve_remote_addr(addr: Address, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(s) => boxed_future(futures::finished(s)),
@@ -73,110 +180,28 @@ impl UdpRelayServer {
             }
         }
     }
+}
+
+/// UDP relay proxy server
+pub struct UdpRelayServer;
+
+impl UdpRelayServer {
+    fn handle_client(c: Client) -> BoxIoFuture<()> {
+        let fut = c.handle_once().and_then(|c| UdpRelayServer::handle_client(c));
+        boxed_future(fut)
+    }
 
     fn run_server(svr_cfg: Rc<ServerConfig>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let c_svr_cfg = svr_cfg.clone();
-        let c_handle = handle.clone();
-        let fut = futures::lazy(move || UdpSocket::bind(c_svr_cfg.addr().listen_addr(), &c_handle))
-            .and_then(move |l| {
-                let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
-
-                udp_incoming(l).for_each(move |(mut buf, conn_addr)| {
-                    let dns_resolver = dns_resolver.clone();
-                    let assoc_clone = assoc.clone();
-                    let handle = handle.clone();
-                    let cloned_handle = handle.clone();
-                    let svr_cfg = svr_cfg.clone();
-                    let cloned_conn_addr = conn_addr.clone();
-
-                    match assoc.borrow_mut().remove(&conn_addr) {
-                        None => {
-                            // Client -> Remote
-                            let iv_len = svr_cfg.method().iv_size();
-                            if buf.len() < iv_len {
-                                error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
-                                       iv_len,
-                                       buf.len());
-                                let err = io::Error::new(io::ErrorKind::Other, "early eof");
-                                return Err(err);
-                            }
-
-                            let iv = &buf[..iv_len];
-                            let mut cipher =
-                                cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
-
-                            let mut payload = Vec::with_capacity(buf.len());
-                            try!(cipher.update(&buf[iv_len..], &mut payload));
-                            try!(cipher.finalize(&mut payload));
-
-                            let reader = Cursor::new(payload);
-                            let fut = Address::read_from(reader).map_err(From::from).and_then(move |(r, addr)| {
-                                let header_len = r.position() as usize;
-                                let mut payload = r.into_inner();
-                                payload.drain(..header_len);
-                                let body = payload;
-
-                                trace!("Got packet to {}, payload length {}", addr, body.len());
-
-                                let cloned_addr = addr.clone();
-                                UdpRelayServer::resolve_remote_addr(addr, dns_resolver)
-                                    .and_then(move |remote_addr| {
-                                        // Record association
-                                        let mut assoc = assoc_clone.borrow_mut();
-                                        assoc.insert(remote_addr.clone(),
-                                                     Associate {
-                                                         address: cloned_addr,
-                                                         client_addr: cloned_conn_addr,
-                                                     });
-
-                                        let svr_addr = svr_cfg.addr().listen_addr();
-                                        let l = try!(UdpSocket::bind(svr_addr, &handle));
-                                        Ok((l, remote_addr))
-                                    })
-                                    .and_then(move |(l, raddr)| send_to(l, body, raddr))
-                                    .map(|_| ())
-                            });
-
-                            cloned_handle.spawn(fut.map_err(|err| {
-                                error!("Failed to handle client: {}", err);
-                            }));
-                        }
-                        Some(Associate { address, client_addr }) => {
-                            // Client <- Remote
-                            let mut iv = svr_cfg.method().gen_init_vec();
-                            let mut cipher = cipher::with_type(svr_cfg.method(),
-                                                               svr_cfg.key(),
-                                                               &iv[..],
-                                                               CryptoMode::Encrypt);
-
-                            let fut = address.write_to(Vec::new())
-                                .map(move |mut send_buf| {
-                                    send_buf.append(&mut buf);
-                                    send_buf
-                                })
-                                .and_then(move |send_buf| -> io::Result<_> {
-                                    try!(cipher.update(&send_buf[..], &mut iv));
-                                    try!(cipher.finalize(&mut iv));
-                                    Ok(iv)
-                                })
-                                .and_then(move |final_buf| {
-                                    let svr_addr = svr_cfg.addr().listen_addr();
-                                    let l = try!(UdpSocket::bind(svr_addr, &handle));
-                                    Ok((l, final_buf))
-                                })
-                                .and_then(move |(l, final_buf)| send_to(l, final_buf, client_addr))
-                                .map(|_| ());
-
-                            cloned_handle.spawn(fut.map_err(|err| {
-                                error!("Failed to handle client: {}", err);
-                            }));
-                        }
-                    }
-
-                    Ok(())
-                })
-            });
-
+        let listen_addr = svr_cfg.addr().listen_addr().clone();
+        let fut = futures::lazy(move || UdpSocket::bind(&listen_addr, &handle)).and_then(|socket| {
+            let c = Client {
+                assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
+                dns_resolver: dns_resolver,
+                svr_cfg: svr_cfg,
+                socket: socket,
+            };
+            UdpRelayServer::handle_client(c)
+        });
         boxed_future(fut)
     }
 

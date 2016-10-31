@@ -38,7 +38,7 @@ use config::Config;
 ///
 /// ```no_run
 /// use shadowsocks::relay::RelayServer;
-/// use shadowsocks::config::{Config, ServerConfig, ServerAddr};
+/// use shadowsocks::config::{Config, ServerConfig};
 /// use shadowsocks::crypto::CipherType;
 ///
 /// let mut config = Config::new();

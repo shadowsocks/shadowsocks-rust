@@ -62,7 +62,6 @@ use std::io::{self, Cursor};
 use std::cell::RefCell;
 
 use futures::{self, Future};
-use futures::stream::Stream;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::UdpSocket;
@@ -79,48 +78,32 @@ use relay::socks5::{Address, UdpAssociateHeader};
 use crypto::cipher::{self, Cipher};
 use crypto::CryptoMode;
 
-use super::MAXIMUM_ASSOCIATE_MAP_SIZE;
-use super::{send_to, udp_incoming};
+use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
+use super::{send_to, recv_from};
 
 type AssociateMap = LruCache<Address, SocketAddr>;
 type ServerCache = LruCache<SocketAddr, Rc<ServerConfig>>;
 
-/// UDP relay local server
-pub struct UdpRelayLocal;
+struct Client {
+    assoc: Rc<RefCell<AssociateMap>>,
+    server_picker: Rc<RefCell<RoundRobin>>,
+    servers: Rc<RefCell<ServerCache>>,
+    dns_resolver: DnsResolver,
+    socket: UdpSocket,
+}
 
-impl UdpRelayLocal {
-    fn resolve_server_addr(svr_cfg: Rc<ServerConfig>, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
-        match svr_cfg.addr() {
-            &ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
-            &ServerAddr::DomainName(ref dname, port) => {
-                let fut = dns_resolver.resolve(dname)
-                    .map(move |sockaddr| {
-                        match sockaddr {
-                            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                        }
-                    });
-                boxed_future(fut)
-            }
-        }
-    }
+impl Client {
+    fn handle_once(self) -> BoxIoFuture<Client> {
+        let Client { assoc, server_picker, servers, dns_resolver, socket } = self;
 
-    fn run_server(config: Rc<Config>, l: UdpSocket, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let fut = futures::lazy(move || {
-            let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
-            let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
-            let servers: Rc<RefCell<ServerCache>> = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
+        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
+            .and_then(move |(socket, buf, n, src)| {
+                let buf = &buf[..n];
 
-            let cloned_handle = handle.clone();
-            udp_incoming(l).for_each(move |(buf, addr)| {
-                let server_picker = server_picker.clone();
-                let dns_resolver = dns_resolver.clone();
-                let handle = handle.clone();
-                let assoc = assoc.clone();
-                let servers_clone = servers.clone();
-                let config = config.clone();
+                let cloned_servers = servers.clone();
+                let cloned_assoc = assoc.clone();
 
-                match servers.borrow_mut().get_mut(&addr) {
+                let fut = match servers.borrow_mut().get_mut(&src) {
                     Some(svr_cfg) => {
                         // Proxy -> Client
 
@@ -147,11 +130,16 @@ impl UdpRelayLocal {
                         let reader = Cursor::new(payload);
                         let fut = Address::read_from(reader).map_err(From::from).and_then(move |(r, addr)| {
                             let header_len = r.position() as usize;
-                            let mut payload = r.into_inner();
-                            payload.drain(..header_len);
-                            let body = payload;
+                            let payload = r.into_inner();
+                            let body = &payload[header_len..];
 
                             trace!("Got packet from {}, payload length {}", addr, body.len());
+
+                            // Will always success
+                            let mut reply_body =
+                                UdpAssociateHeader::new(0, addr.clone()).write_to(Vec::new()).wait().unwrap();
+                            reply_body.extend_from_slice(body);
+
                             let mut assoc = assoc.borrow_mut();
                             match assoc.remove(&addr) {
                                 None => {
@@ -160,28 +148,28 @@ impl UdpRelayLocal {
                                     boxed_future(futures::failed(err))
                                 }
                                 Some(client_addr) => {
-                                    let fut = futures::lazy(move || {
-                                            let local_addr = config.local.as_ref().unwrap();
-                                            UdpSocket::bind(local_addr, &handle)
-                                        })
-                                        .and_then(move |socket| send_to(socket, body, client_addr))
-                                        .map(|(_, body, len)| {
-                                            trace!("Body size: {}, sent packet size: {}", body.len(), len);
-                                        });
+                                    let fut = send_to(socket, reply_body, client_addr).map(move |(socket, _, _)| {
+                                        Client {
+                                            assoc: cloned_assoc,
+                                            servers: cloned_servers,
+                                            dns_resolver: dns_resolver,
+                                            server_picker: server_picker,
+                                            socket: socket,
+                                        }
+                                    });
+
                                     boxed_future(fut)
                                 }
                             }
                         });
 
-                        cloned_handle.spawn(fut.map_err(|err| {
-                            error!("Failed to handle client: {}", err);
-                        }));
+                        boxed_future(fut)
                     }
 
                     None => {
                         // Client -> Proxy
 
-                        let reader = Cursor::new(buf);
+                        let reader = Cursor::new(buf.to_vec());
                         let fut = UdpAssociateHeader::read_from(reader)
                             .map_err(From::from)
                             .and_then(move |(r, header)| {
@@ -201,7 +189,7 @@ impl UdpRelayLocal {
                                 let mut assoc = assoc.borrow_mut();
 
                                 let svr_cfg = server_picker.borrow_mut().pick_server();
-                                assoc.insert(assoc_addr.clone(), addr);
+                                assoc.insert(assoc_addr.clone(), src);
 
                                 // Client -> Proxy
                                 let fut = futures::lazy(move || {
@@ -227,36 +215,82 @@ impl UdpRelayLocal {
                                     })
                                     .map_err(From::from)
                                     .and_then(move |(svr_cfg, payload)| {
-                                        UdpRelayLocal::resolve_server_addr(svr_cfg.clone(), dns_resolver)
+                                        UdpRelayLocal::resolve_server_addr(svr_cfg.clone(), dns_resolver.clone())
                                             .and_then(move |addr| {
                                                 // And we have to know the proxy servers' addresses
-                                                let mut servers = servers_clone.borrow_mut();
-                                                servers.insert(addr.clone(), svr_cfg.clone());
+                                                let servers = cloned_servers.clone();
+                                                let mut svrs_ref = cloned_servers.borrow_mut();
+                                                svrs_ref.insert(addr.clone(), svr_cfg.clone());
 
-                                                let fut = futures::lazy(move || {
-                                                        let local_addr = config.local.as_ref().unwrap();
-                                                        UdpSocket::bind(local_addr, &handle)
-                                                    })
-                                                    .and_then(move |socket| send_to(socket, payload, addr))
-                                                    .map(|(_, body, len)| {
-                                                        trace!("Body size: {}, sent packet size: {}", body.len(), len);
-                                                    });
+                                                let fut = send_to(socket, payload, addr).map(|(socket, body, len)| {
+                                                    trace!("Body size: {}, sent packet size: {}", body.len(), len);
+                                                    Client {
+                                                        assoc: cloned_assoc,
+                                                        server_picker: server_picker,
+                                                        servers: servers,
+                                                        dns_resolver: dns_resolver,
+                                                        socket: socket,
+                                                    }
+                                                });
+
                                                 boxed_future(fut)
                                             })
                                     });
                                 boxed_future(fut)
                             });
 
-                        cloned_handle.spawn(fut.map_err(|err| {
-                            error!("Failed to handle client: {}", err);
-                        }));
+                        boxed_future(fut)
                     }
-                }
-                Ok(())
+                };
+
+                Ok(fut)
             })
-        });
+            .and_then(|fut| fut);
 
         boxed_future(fut)
+    }
+}
+
+/// UDP relay local server
+pub struct UdpRelayLocal;
+
+impl UdpRelayLocal {
+    fn resolve_server_addr(svr_cfg: Rc<ServerConfig>, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
+        match svr_cfg.addr() {
+            &ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
+            &ServerAddr::DomainName(ref dname, port) => {
+                let fut = dns_resolver.resolve(dname)
+                    .map(move |sockaddr| {
+                        match sockaddr {
+                            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                        }
+                    });
+                boxed_future(fut)
+            }
+        }
+    }
+
+    fn handle_client(client: Client) -> BoxIoFuture<()> {
+        let fut = client.handle_once()
+            .and_then(|c| UdpRelayLocal::handle_client(c));
+        boxed_future(fut)
+    }
+
+    fn run_server(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+        let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
+        let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
+        let servers: Rc<RefCell<ServerCache>> = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
+
+        let c = Client {
+            assoc: assoc,
+            server_picker: server_picker,
+            servers: servers,
+            dns_resolver: dns_resolver,
+            socket: l,
+        };
+
+        boxed_future(UdpRelayLocal::handle_client(c))
     }
 
     /// Starts a UDP local server
@@ -267,9 +301,9 @@ impl UdpRelayLocal {
                     info!("ShadowSocks UDP Listening on {}", local_addr);
                     try!(UdpSocket::bind(local_addr, &handle))
                 };
-                Ok((config, l, handle))
+                Ok((config, l))
             })
-            .and_then(move |(config, l, handle)| UdpRelayLocal::run_server(config, l, handle, dns_resolver));
+            .and_then(move |(config, l)| UdpRelayLocal::run_server(config, l, dns_resolver));
 
         boxed_future(fut)
     }

@@ -27,7 +27,6 @@ use std::io;
 
 use tokio_core::net::UdpSocket;
 
-use futures::stream::Stream;
 use futures::{Future, Poll, Async};
 
 pub mod local;
@@ -43,25 +42,41 @@ pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
 /// Maximum associations to maintain
 pub const MAXIMUM_ASSOCIATE_MAP_SIZE: usize = 65536;
 
-/// UDP incoming stream
-pub struct Incoming {
-    socket: UdpSocket,
+/// Future for `recv_from`
+pub enum RecvFromUdpSocket<B: AsMut<[u8]>> {
+    Pending { socket: UdpSocket, buf: B },
+    Empty,
 }
 
-impl Stream for Incoming {
-    type Item = (Vec<u8>, SocketAddr);
+impl<B: AsMut<[u8]>> Future for RecvFromUdpSocket<B> {
+    type Item = (UdpSocket, B, usize, SocketAddr);
     type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        let (n, addr) = try_nb!(self.socket.recv_from(&mut buf));
-        Ok(Some((buf[..n].to_vec(), addr)).into())
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let (length, src) = match self {
+            &mut RecvFromUdpSocket::Empty => panic!("poll after RecvFromUdpSocket is finished"),
+            &mut RecvFromUdpSocket::Pending { ref socket, ref mut buf } => {
+                if socket.poll_read().is_not_ready() {
+                    return Ok(Async::NotReady);
+                }
+
+                try_nb!(socket.recv_from(buf.as_mut()))
+            }
+        };
+
+        match mem::replace(self, RecvFromUdpSocket::Empty) {
+            RecvFromUdpSocket::Pending { socket, buf } => Ok((socket, buf, length, src).into()),
+            RecvFromUdpSocket::Empty => unreachable!(),
+        }
     }
 }
 
-/// Handle UDP connections as stream
-pub fn udp_incoming(socket: UdpSocket) -> Incoming {
-    Incoming { socket: socket }
+/// Receive from UdpSocket
+pub fn recv_from<B: AsMut<[u8]>>(socket: UdpSocket, buf: B) -> RecvFromUdpSocket<B> {
+    RecvFromUdpSocket::Pending {
+        socket: socket,
+        buf: buf,
+    }
 }
 
 /// Future for `send_to`
