@@ -12,7 +12,7 @@ It is **unstable**! If you encounter any problems, please open an issue.
 ## Dependencies
 
 * libcrypto (OpenSSL)
-* libsodium
+* <del>libsodium</del>
 
 ## Usage
 
@@ -101,7 +101,7 @@ List all available arguments with `-h`.
 It supports the following features:
 
 - [x] Socks5 CONNECT command
-- [ ] UDP ASSOCIATE command (partial)
+- [x] UDP ASSOCIATE command (partial)
 - [x] HTTP Proxy protocol
 - [x] Various crypto algorithms
 - [x] Load balancing (multiple servers)
