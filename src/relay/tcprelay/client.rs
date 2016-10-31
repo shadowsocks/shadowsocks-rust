@@ -26,6 +26,7 @@ use std::net::SocketAddr;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpStream;
+use tokio_core::io::flush;
 
 use futures::{self, Future};
 
@@ -51,6 +52,7 @@ impl Socks5Client {
                 trace!("Client connected, going to send handshake: {:?}", hs);
 
                 hs.write_to(s)
+                    .and_then(flush)
                     .and_then(|s| HandshakeResponse::read_from(s))
                     .and_then(|(s, rsp)| {
                         trace!("Got handshake response: {:?}", rsp);
@@ -63,6 +65,7 @@ impl Socks5Client {
                 let h = TcpRequestHeader::new(Command::TcpConnect, From::from(addr));
                 trace!("Going to connect, req: {:?}", h);
                 h.write_to(s)
+                    .and_then(flush)
                     .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
                     .and_then(|(s, rsp)| {
                         trace!("Got response: {:?}", rsp);
@@ -76,6 +79,49 @@ impl Socks5Client {
                     })
             })
             .map(|s| Socks5Client { stream: s });
+
+        boxed_future(fut)
+    }
+
+    /// UDP Associate `addr` via `proxy`
+    pub fn udp_associate<A>(addr: A, proxy: SocketAddr, handle: Handle) -> BoxIoFuture<(Socks5Client, Address)>
+        where Address: From<A>,
+              A: 'static
+    {
+        let fut = futures::lazy(move || TcpStream::connect(&proxy, &handle))
+            .and_then(move |s| {
+                // 1. Handshake
+                let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
+                trace!("Client connected, going to send handshake: {:?}", hs);
+
+                hs.write_to(s)
+                    .and_then(flush)
+                    .and_then(|s| HandshakeResponse::read_from(s))
+                    .and_then(|(s, rsp)| {
+                        trace!("Got handshake response: {:?}", rsp);
+                        assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
+                        Ok(s)
+                    })
+            })
+            .and_then(move |s| {
+                // 2. Send request header
+                let h = TcpRequestHeader::new(Command::UdpAssociate, From::from(addr));
+                trace!("Going to connect, req: {:?}", h);
+                h.write_to(s)
+                    .and_then(flush)
+                    .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
+                    .and_then(|(s, rsp)| {
+                        trace!("Got response: {:?}", rsp);
+                        match rsp.reply {
+                            Reply::Succeeded => Ok((s, rsp.address)),
+                            r => {
+                                let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
+                                Err(err)
+                            }
+                        }
+                    })
+            })
+            .map(|(s, a)| (Socks5Client { stream: s }, a));
 
         boxed_future(fut)
     }

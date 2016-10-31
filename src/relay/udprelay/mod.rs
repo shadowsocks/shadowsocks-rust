@@ -31,7 +31,7 @@ use futures::stream::Stream;
 use futures::{Future, Poll, Async};
 
 pub mod local;
-// pub mod server;
+pub mod server;
 
 /// The maximum UDP payload size (defined in the original shadowsocks Python)
 ///
@@ -53,15 +53,9 @@ impl Stream for Incoming {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        if self.socket.poll_read().is_not_ready() {
-            return Ok(Async::NotReady);
-        }
-
         let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        match self.socket.recv_from(&mut buf) {
-            Ok((n, addr)) => Ok(Some((buf[..n].to_vec(), addr)).into()),
-            Err(err) => Err(err),
-        }
+        let (n, addr) = try_nb!(self.socket.recv_from(&mut buf));
+        Ok(Some((buf[..n].to_vec(), addr)).into())
     }
 }
 

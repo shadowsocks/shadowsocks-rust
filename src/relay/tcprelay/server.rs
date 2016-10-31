@@ -168,9 +168,10 @@ pub struct TcpRelayServer;
 
 impl TcpRelayServer {
     /// Runs the server
-    pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
-        let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
-
+    pub fn run(config: Rc<Config>,
+               handle: Handle,
+               dns_resolver: DnsResolver)
+               -> Box<Future<Item = (), Error = io::Error>> {
         let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
         let ref forbidden_ip = config.forbidden_ip;

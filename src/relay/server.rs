@@ -26,9 +26,12 @@ use std::io;
 
 use tokio_core::reactor::Core;
 
-// #[cfg(feature = "enable-udp")]
-// use relay::udprelay::server::UdpRelayServer;
+use futures::{self, Future};
+
+use relay::udprelay::server::UdpRelayServer;
 use relay::tcprelay::server::TcpRelayServer;
+use relay::dns_resolver::DnsResolver;
+use relay::boxed_future;
 use config::Config;
 
 /// Relay server running on server side.
@@ -52,9 +55,20 @@ pub struct RelayServer;
 impl RelayServer {
     pub fn run(config: Config) -> io::Result<()> {
         let mut lp = try!(Core::new());
+
         let handle = lp.handle();
         let config = Rc::new(config);
-        let tcp_fut = TcpRelayServer::run(config, handle);
-        lp.run(tcp_fut)
+
+        let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
+
+        let tcp_fut = TcpRelayServer::run(config.clone(), handle.clone(), dns_resolver.clone());
+
+        let udp_fut = if config.enable_udp {
+            UdpRelayServer::run(config, handle, dns_resolver)
+        } else {
+            boxed_future(futures::finished(()))
+        };
+
+        lp.run(tcp_fut.join(udp_fut).map(|_| ()))
     }
 }

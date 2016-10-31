@@ -185,6 +185,7 @@ impl Socks5RelayLocal {
                             let fut = TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                              From::from((&*udp_conf.client_addr).clone()))
                                 .write_to(w)
+                                .and_then(flush)
                                 .and_then(|_| {
                                     // Hold the connection until it ends by its own
                                     ignore_until_end(r).map(|_| ())
@@ -233,7 +234,7 @@ impl Socks5RelayLocal {
         let dns_resolver = dns_resolver.clone();
 
         let udp_conf = UdpConfig {
-            enable_udp: cfg!(feature = "enable_udp") && config.enable_udp,
+            enable_udp: config.enable_udp,
             client_addr: Rc::new(local_addr),
         };
 
