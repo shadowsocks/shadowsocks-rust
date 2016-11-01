@@ -106,7 +106,6 @@ impl Client {
                 let fut = match servers.borrow_mut().get_mut(&src) {
                     Some(svr_cfg) => {
                         // Proxy -> Client
-
                         trace!("Got packet from server {}, length {}",
                                svr_cfg.addr(),
                                buf.len());
@@ -129,6 +128,7 @@ impl Client {
 
                         let reader = Cursor::new(payload);
                         let fut = Address::read_from(reader).map_err(From::from).and_then(move |(r, addr)| {
+
                             let header_len = r.position() as usize;
                             let payload = r.into_inner();
                             let body = &payload[header_len..];
@@ -148,6 +148,11 @@ impl Client {
                                     boxed_future(futures::failed(err))
                                 }
                                 Some(client_addr) => {
+                                    info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
+                                          client_addr,
+                                          addr,
+                                          body.len());
+
                                     let fut = send_to(socket, reply_body, client_addr).map(move |(socket, _, _)| {
                                         Client {
                                             assoc: cloned_assoc,
@@ -183,6 +188,11 @@ impl Client {
                                 let header_len = r.position() as usize;
                                 let payload = r.into_inner();
                                 let assoc_addr = header.address;
+
+                                info!("UDP ASSOCIATE {} -> {}, payload length {} bytes",
+                                      src,
+                                      assoc_addr,
+                                      &payload[header_len..].len());
 
                                 // If we have recorded address, then it is a return packet from server
                                 // Proxy -> Client

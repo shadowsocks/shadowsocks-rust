@@ -95,7 +95,10 @@ impl Client {
                             payload.drain(..header_len);
                             let body = payload;
 
-                            trace!("Got packet to {}, payload length {}", addr, body.len());
+                            info!("UDP ASSOCIATE {} -> {}, payload length {} bytes",
+                                  src,
+                                  addr,
+                                  body.len());
 
                             let assoc = cloned_assoc.clone();
                             let cloned_addr = addr.clone();
@@ -125,6 +128,11 @@ impl Client {
                         boxed_future(fut)
                     }
                     Some(Associate { address, client_addr }) => {
+                        info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
+                              client_addr,
+                              address,
+                              buf.len());
+
                         // Client <- Remote
                         let mut iv = svr_cfg.method().gen_init_vec();
                         let mut cipher = cipher::with_type(svr_cfg.method(),
@@ -193,6 +201,7 @@ impl UdpRelayServer {
 
     fn run_server(svr_cfg: Rc<ServerConfig>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
         let listen_addr = svr_cfg.addr().listen_addr().clone();
+        info!("ShadowSocks UDP listening on {}", listen_addr);
         let fut = futures::lazy(move || UdpSocket::bind(&listen_addr, &handle)).and_then(|socket| {
             let c = Client {
                 assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
