@@ -1,8 +1,12 @@
 [package]
-
 name = "shadowsocks-rust"
 version = "0.9.15"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
+description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
+repository = "https://github.com/zonyitoo/shadowsocks-rust"
+documentation = "https://docs.rs/shadowsocks-rust"
+keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
+license = "MIT"
 
 [lib]
 
@@ -24,37 +28,34 @@ cipher-chacha20 = []
 cipher-salsa20 = []
 
 [[bin]]
-
 name = "sslocal"
 path = "src/bin/local.rs"
 
 [[bin]]
-
 name = "ssserver"
 path = "src/bin/server.rs"
 
 [[bin]]
-
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
 [dependencies]
-rustc-serialize = "^0.3.15"
-log = "^0.3.1"
-byteorder = "^0.5.0"
-rand = "^0.3.9"
-time = "^0.1.32"
-clap = "^1.1.6"
-qrcode = "^0.1.6"
-env_logger = "^0.3.2"
-rust-crypto = "^0.2.34"
-ip = "1.0.0"
-openssl = "^0.8"
-lru-cache = "0.0.7"
-libc = "^0.2.7"
+rustc-serialize = "0.3"
+log = "0.3"
+byteorder = "0.5"
+rand = "0.3"
+time = "0.1"
+clap = "2"
+qrcode = "0.2"
+env_logger = "0.3"
+rust-crypto = "0.2"
+ip = "1"
+openssl = "0.8"
+lru-cache = "0.1"
+libc = "0.2"
 hyper = "0.9"
-url = "^1.2"
-httparse = "^1.1"
+url = "1.2"
+httparse = "1.1"
 futures = "0.1"
 futures-cpupool = "0.1"
 tokio-core = "0.1"
