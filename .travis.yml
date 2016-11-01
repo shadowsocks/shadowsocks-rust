@@ -1,5 +1,7 @@
 language: rust
 rust:
+    - stable
+    - beta
     - nightly
 
 cache: cargo
@@ -12,5 +14,4 @@ addons:
             - libssl-dev
 
 script:
-    - cargo build -v
-    - cargo test -v
+    - cargo test -v --no-fail-fast

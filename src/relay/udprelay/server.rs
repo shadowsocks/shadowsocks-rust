@@ -61,109 +61,137 @@ struct Client {
 }
 
 impl Client {
-    fn handle_once(self) -> BoxIoFuture<Client> {
+    /// Handles Client to Remote
+    ///
+    /// Extract and send the actual request body and associate remote with client
+    fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<Client> {
         let Client { assoc, svr_cfg, dns_resolver, socket } = self;
-        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
-            .and_then(move |(socket, buf, n, src)| {
-                let cloned_assoc = assoc.clone();
 
+        // Client -> Remote
+        let fut = futures::lazy(move || {
                 let buf = &buf[..n];
 
-                let fut = match assoc.borrow_mut().remove(&src) {
-                    None => {
-                        // Client -> Remote
-                        let iv_len = svr_cfg.method().iv_size();
-                        if buf.len() < iv_len {
-                            error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
-                                   iv_len,
-                                   buf.len());
-                            let err = io::Error::new(io::ErrorKind::Other, "early eof");
-                            return Err(err);
-                        }
+                let iv_len = svr_cfg.method().iv_size();
+                if buf.len() < iv_len {
+                    error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
+                           iv_len,
+                           buf.len());
+                    let err = io::Error::new(io::ErrorKind::Other, "early eof");
+                    return Err(err);
+                }
 
-                        let iv = &buf[..iv_len];
-                        let mut cipher = cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
+                let iv = &buf[..iv_len];
+                let mut cipher = cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
 
-                        let mut payload = Vec::with_capacity(buf.len());
-                        try!(cipher.update(&buf[iv_len..], &mut payload));
-                        try!(cipher.finalize(&mut payload));
+                // Decrypt payload from Client
+                let mut payload = Vec::with_capacity(buf.len());
+                try!(cipher.update(&buf[iv_len..], &mut payload));
+                try!(cipher.finalize(&mut payload));
 
-                        let reader = Cursor::new(payload);
-                        let fut = Address::read_from(reader).map_err(From::from).and_then(move |(r, addr)| {
-                            let header_len = r.position() as usize;
-                            let mut payload = r.into_inner();
-                            payload.drain(..header_len);
-                            let body = payload;
+                Ok((payload, svr_cfg))
+            })
+            .and_then(move |(payload, svr_cfg)| {
+                // Read Address in the front (ShadowSocks protocol)
+                Address::read_from(Cursor::new(payload)).map_err(From::from).and_then(move |(r, addr)| {
+                    let header_len = r.position() as usize;
+                    let mut payload = r.into_inner();
+                    payload.drain(..header_len);
+                    let body = payload;
 
-                            info!("UDP ASSOCIATE {} -> {}, payload length {} bytes",
-                                  src,
-                                  addr,
-                                  body.len());
+                    info!("UDP ASSOCIATE {} -> {}, payload length {} bytes",
+                          src,
+                          addr,
+                          body.len());
 
-                            let assoc = cloned_assoc.clone();
-                            let cloned_addr = addr.clone();
-                            Client::resolve_remote_addr(addr, dns_resolver.clone())
-                                .and_then(move |remote_addr| {
-                                    // Record association
-                                    let mut assoc = cloned_assoc.borrow_mut();
-                                    assoc.insert(remote_addr.clone(),
-                                                 Associate {
-                                                     address: cloned_addr,
-                                                     client_addr: src,
-                                                 });
+                    let cloned_assoc = assoc.clone();
+                    let cloned_addr = addr.clone();
+                    Client::resolve_remote_addr(addr, dns_resolver.clone())
+                        .and_then(move |remote_addr| {
+                            // Associate client address with remote
+                            let mut assoc = cloned_assoc.borrow_mut();
+                            assoc.insert(remote_addr.clone(),
+                                         Associate {
+                                             address: cloned_addr,
+                                             client_addr: src,
+                                         });
 
-                                    send_to(socket, body, remote_addr)
-                                })
-                                .map(move |(socket, body, len)| {
-                                    trace!("Sent body {} bytes, actual {} bytes", body.len(), len);
-                                    Client {
-                                        assoc: assoc,
-                                        svr_cfg: svr_cfg,
-                                        dns_resolver: dns_resolver,
-                                        socket: socket,
-                                    }
-                                })
-                        });
+                            send_to(socket, body, remote_addr)
+                        })
+                        .map(move |(socket, body, len)| {
+                            trace!("Sent body {} bytes, actual {} bytes", body.len(), len);
+                            Client {
+                                assoc: assoc,
+                                svr_cfg: svr_cfg,
+                                dns_resolver: dns_resolver,
+                                socket: socket,
+                            }
+                        })
+                })
+            });
+        boxed_future(fut)
+    }
 
-                        boxed_future(fut)
-                    }
-                    Some(Associate { address, client_addr }) => {
-                        info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
-                              client_addr,
-                              address,
-                              buf.len());
+    /// Handle Remote to Client
+    ///
+    /// Return packet to Client with encryption
+    fn handle_s2c(self, Associate { address, client_addr }: Associate, buf: Vec<u8>, n: usize) -> BoxIoFuture<Client> {
+        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
 
-                        // Client <- Remote
-                        let mut iv = svr_cfg.method().gen_init_vec();
-                        let mut cipher = cipher::with_type(svr_cfg.method(),
-                                                           svr_cfg.key(),
-                                                           &iv[..],
-                                                           CryptoMode::Encrypt);
+        let buf_len = buf[..n].len();
+        info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
+              client_addr,
+              address,
+              buf_len);
 
-                        let mut buf = buf.to_vec();
-                        let fut = address.write_to(Vec::new())
-                            .map(move |mut send_buf| {
-                                send_buf.append(&mut buf);
-                                send_buf
-                            })
-                            .and_then(move |send_buf| -> io::Result<_> {
-                                try!(cipher.update(&send_buf[..], &mut iv));
-                                try!(cipher.finalize(&mut iv));
-                                Ok(iv)
-                            })
-                            .and_then(move |final_buf| send_to(socket, final_buf, client_addr))
-                            .map(|(socket, buf, len)| {
-                                trace!("Sent body {} actual {}", buf.len(), len);
-                                Client {
-                                    assoc: cloned_assoc,
-                                    svr_cfg: svr_cfg,
-                                    dns_resolver: dns_resolver,
-                                    socket: socket,
-                                }
-                            });
+        // Client <- Remote
+        let mut iv = svr_cfg.method().gen_init_vec();
+        let mut cipher = cipher::with_type(svr_cfg.method(),
+                                           svr_cfg.key(),
+                                           &iv[..],
+                                           CryptoMode::Encrypt);
 
-                        boxed_future(fut)
-                    }
+        // Append Address in front of body (ShadowSocks protocol)
+        let fut = address.write_to(Vec::with_capacity(buf_len))
+            .map(move |mut send_buf| {
+                send_buf.extend_from_slice(&buf[..n]);
+                send_buf
+            })
+            .and_then(move |send_buf| -> io::Result<_> {
+                try!(cipher.update(&send_buf[..], &mut iv));
+                try!(cipher.finalize(&mut iv));
+                Ok(iv)
+            })
+            .and_then(move |final_buf| send_to(socket, final_buf, client_addr))
+            .map(|(socket, buf, len)| {
+                trace!("Sent body {} actual {}", buf.len(), len);
+                Client {
+                    assoc: assoc,
+                    svr_cfg: svr_cfg,
+                    dns_resolver: dns_resolver,
+                    socket: socket,
+                }
+            });
+
+        boxed_future(fut)
+    }
+
+    // Handle one packet
+    fn handle_once(self) -> BoxIoFuture<Client> {
+        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
+
+        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
+            .and_then(move |(socket, buf, n, src)| {
+                let c = Client {
+                    assoc: assoc.clone(),
+                    svr_cfg: svr_cfg,
+                    dns_resolver: dns_resolver,
+                    socket: socket,
+                };
+
+                let mut assoc = assoc.borrow_mut();
+                let fut = match assoc.remove(&src) {
+                    None => c.handle_c2s(buf, n, src),
+                    Some(cassoc) => c.handle_s2c(cassoc, buf, n),
                 };
 
                 Ok(fut)

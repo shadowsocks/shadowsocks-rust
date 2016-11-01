@@ -25,9 +25,9 @@
 //!
 //! ## Usage
 //!
-//! Build shadowsocks and you will got at least 2 binaries: `sslocal` and `ssserver`
+//! Build shadowsocks and you will get at least 2 binaries: `sslocal` and `ssserver`
 //!
-//! Write your servers in a configuration file, which is defined in
+//! Write your servers in a configuration file. Format is defined in
 //! [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki)
 //!
 //! For example:
