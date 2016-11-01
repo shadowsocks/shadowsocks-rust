@@ -40,7 +40,7 @@
 //!    "local_port": 1080,
 //!    "password": "mypassword",
 //!    "timeout": 300,
-//!    "method": "aes-256-cfb",
+//!    "method": "aes-256-cfb"
 //! }
 //! ```
 //!
