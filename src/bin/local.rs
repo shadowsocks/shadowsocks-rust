@@ -41,8 +41,7 @@ use std::env;
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
-use shadowsocks::config::{self, Config, ServerConfig, ServerAddr};
-use shadowsocks::relay::RelayLocal;
+use shadowsocks::{Config, ServerConfig, ServerAddr, ConfigType, run_local};
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -152,7 +151,7 @@ fn main() {
 
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => {
-            match Config::load_from_file(cpath, config::ConfigType::Local) {
+            match Config::load_from_file(cpath, ConfigType::Local) {
                 Ok(cfg) => {
                     has_provided_config = true;
                     cfg
@@ -228,5 +227,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    RelayLocal::run(config).unwrap();
+    run_local(config).unwrap();
 }

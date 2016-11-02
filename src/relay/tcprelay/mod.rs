@@ -47,9 +47,10 @@ use ip::IpAddr;
 use self::stream::{EncryptedWriter, DecryptedReader};
 
 pub mod local;
+mod socks5_local;
+mod http_local;
 pub mod server;
 mod stream;
-mod http;
 pub mod client;
 
 /// Directions in the tunnel

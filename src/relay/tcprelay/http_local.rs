@@ -26,6 +26,7 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::mem;
 use std::str;
 use std::fmt;
+use std::rc::Rc;
 
 use hyper::uri::RequestUri;
 use hyper::header::{Header, HeaderFormat, Headers, ContentLength};
@@ -42,11 +43,23 @@ use url::Host;
 use ip::IpAddr;
 
 use futures::{self, Future, Poll};
+use futures::stream::Stream;
 
-use tokio_core::io::{write_all, flush};
+use tokio_core::net::{TcpStream, TcpListener};
+use tokio_core::reactor::Handle;
+use tokio_core::io::Io;
+use tokio_core::io::{ReadHalf, WriteHalf};
+use tokio_core::io::{flush, write_all, copy};
+
+use config::{Config, ServerConfig};
 
 use relay::socks5::Address;
+use relay::loadbalancing::server::RoundRobin;
+use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
+use relay::dns_resolver::DnsResolver;
+
+use super::tunnel;
 use super::stream::EncryptedWriter;
 
 #[derive(Debug)]
@@ -435,4 +448,218 @@ pub fn should_keep_alive(req: &HttpRequest) -> bool {
         }
         None => default_keep_alive,
     }
+}
+
+fn handle_connect(handle: Handle,
+                  (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                  req: HttpRequest,
+                  addr: Address,
+                  remains: Vec<u8>,
+                  svr_cfg: Rc<ServerConfig>,
+                  dns_resolver: DnsResolver)
+                  -> Box<Future<Item = (), Error = io::Error>> {
+    let cloned_addr = addr.clone();
+    let http_version = req.version;
+    let cloned_svr_cfg = svr_cfg.clone();
+
+    let fut = super::connect_proxy_server(&handle, svr_cfg, dns_resolver)
+        .and_then(move |svr_s| {
+            trace!("Proxy server connected");
+
+            // Tell the client that we are ready
+            let handshake_resp = format!("{} 200 Connection Established\r\n\r\n", http_version);
+            trace!("Sending HTTP tunnel handshake response");
+            write_all(w, handshake_resp.into_bytes())
+                .and_then(|(w, _)| flush(w))
+                .map(|w| (svr_s, w))
+        })
+        .and_then(move |(svr_s, w)| {
+            super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+                let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+                let whalf = svr_w.and_then(move |svr_w| svr_w.write_all_encrypted(remains))
+                    .and_then(move |(svr_w, _)| svr_w.copy_from_encrypted(r));
+
+                tunnel(cloned_addr, whalf, rhalf)
+            })
+        });
+
+    Box::new(fut)
+}
+
+fn handle_http_keepalive(r: ReadHalf<TcpStream>, svr_w: super::EncryptedHalf, req_remains: Vec<u8>) -> BoxIoFuture<()> {
+    let fut = HttpRequestFut::with_buf(r, req_remains).then(|res| {
+        match res {
+            Ok((r, req, remains)) => {
+                let should_keep_alive = should_keep_alive(&req);
+                trace!("Going to proxy request: {:?}", req);
+                trace!("Should keep alive? {}", should_keep_alive);
+
+                let fut = proxy_request_encrypted((r, svr_w), None, req, remains)
+                    .and_then(move |(r, svr_w, req_remains)| {
+                        if should_keep_alive {
+                            handle_http_keepalive(r, svr_w, req_remains)
+                        } else {
+                            futures::finished(()).boxed()
+                        }
+                    });
+                Box::new(fut) as BoxIoFuture<()>
+            }
+            Err(err) => {
+                let fut = futures::lazy(|| {
+                    use std::io::ErrorKind;
+                    match err.kind() {
+                        // It is Ok for client to close connection
+                        ErrorKind::UnexpectedEof | ErrorKind::BrokenPipe => Ok(()),
+                        _ => Err(err),
+                    }
+                });
+                Box::new(fut) as BoxIoFuture<()>
+            }
+        }
+    });
+    Box::new(fut)
+}
+
+fn handle_http_proxy(handle: Handle,
+                     (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                     client_addr: &SocketAddr,
+                     req: HttpRequest,
+                     addr: Address,
+                     remains: Vec<u8>,
+                     svr_cfg: Rc<ServerConfig>,
+                     dns_resolver: DnsResolver)
+                     -> Box<Future<Item = (), Error = io::Error>> {
+    trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
+
+    let should_keep_alive = should_keep_alive(&req);
+    let fut = super::connect_proxy_server(&handle, svr_cfg.clone(), dns_resolver).and_then(move |svr_s| {
+        trace!("Proxy server connected");
+
+        let cloned_addr = addr.clone();
+        super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
+            // Just proxy anything to client
+            let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+            let whalf = svr_w.and_then(move |svr_w| {
+                // Send the first request to server
+                trace!("Going to proxy request: {:?}", req);
+                trace!("Should keep alive? {}", should_keep_alive);
+                proxy_request_encrypted((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
+                    if should_keep_alive {
+                        handle_http_keepalive(r, svr_w, req_remains)
+                    } else {
+                        futures::finished(()).boxed()
+                    }
+                })
+            });
+
+            rhalf.join(whalf)
+                .then(move |_| {
+                    trace!("Relay to {} is finished", cloned_addr);
+                    Ok(())
+                })
+        })
+    });
+
+    Box::new(fut)
+}
+
+fn handle_client(handle: &Handle,
+                 socket: TcpStream,
+                 _: SocketAddr,
+                 svr_cfg: Rc<ServerConfig>,
+                 dns_resolver: DnsResolver)
+                 -> io::Result<()> {
+    let cloned_handle = handle.clone();
+    let client_addr = try!(socket.peer_addr());
+    let fut = futures::lazy(|| Ok(socket.split()))
+        .and_then(|(r, w)| {
+            // Process the first request to see whether client wants CONNECT tunnel or normal HTTP proxy
+
+            HttpRequestFut::new(r).and_then(move |(r, mut req, remains)| {
+                trace!("Got HTTP Request, version: {}, method: {}, uri: {}",
+                       req.version,
+                       req.method,
+                       req.request_uri);
+
+                match req.get_address() {
+                    Ok(addr) => {
+                        req.clear_request_uri_host();
+                        boxed_future(futures::finished((r, w, req, addr, remains)))
+                    }
+                    Err(status_code) => {
+                        error!("Invalid Uri: {}", req.request_uri);
+                        let fut = write_response(w, req.version, status_code).then(|_| {
+                            let err = io::Error::new(io::ErrorKind::Other, "Invalid Uri");
+                            Err(err)
+                        });
+                        boxed_future(fut)
+                    }
+                }
+            })
+        })
+        .and_then(move |(r, w, req, addr, remains)| {
+            match req.method.clone() {
+                Method::Connect => {
+                    info!("CONNECT (Http) {}", addr);
+                    handle_connect(cloned_handle,
+                                   (r, w),
+                                   req,
+                                   addr,
+                                   remains,
+                                   svr_cfg,
+                                   dns_resolver)
+                }
+                met => {
+                    info!("{} (Http) {}", met, addr);
+                    handle_http_proxy(cloned_handle,
+                                      (r, w),
+                                      &client_addr,
+                                      req,
+                                      addr,
+                                      remains,
+                                      svr_cfg,
+                                      dns_resolver)
+                }
+            }
+        });
+
+    handle.spawn(fut.then(|res| {
+        match res {
+            Ok(..) => Ok(()),
+            Err(err) => {
+                if err.kind() != io::ErrorKind::BrokenPipe {
+                    error!("Failed to handle client: {}", err);
+                }
+
+                Err(())
+            }
+        }
+    }));
+
+    Ok(())
+}
+
+/// TCP local server using HTTP proxy protocol
+pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box<Future<Item = (), Error = io::Error>> {
+    let listener = {
+        let local_addr = config.http_proxy.as_ref().unwrap();
+        let listener = TcpListener::bind(local_addr, &handle).unwrap();
+        info!("ShadowSocks HTTP Listening on {}", local_addr);
+        listener
+    };
+
+    let mut servers = RoundRobin::new(&*config);
+    let listening = listener.incoming()
+        .for_each(move |(socket, addr)| {
+            let server_cfg = servers.pick_server();
+            trace!("Got connection, addr: {}", addr);
+            trace!("Picked proxy server: {:?}", server_cfg);
+            let dns_resolver = dns_resolver.clone();
+            handle_client(&handle, socket, addr, server_cfg, dns_resolver)
+        });
+
+    Box::new(listening.map_err(|err| {
+        error!("HTTP server run failed: {}", err);
+        err
+    }))
 }

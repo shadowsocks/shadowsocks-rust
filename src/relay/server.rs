@@ -28,8 +28,8 @@ use tokio_core::reactor::Core;
 
 use futures::{self, Future};
 
-use relay::udprelay::server::UdpRelayServer;
-use relay::tcprelay::server::TcpRelayServer;
+use relay::udprelay::server::run as run_udp;
+use relay::tcprelay::server::run as run_tcp;
 use relay::dns_resolver::DnsResolver;
 use relay::boxed_future;
 use config::Config;
@@ -37,7 +37,7 @@ use config::Config;
 /// Relay server running on server side.
 ///
 /// ```no_run
-/// use shadowsocks::relay::RelayServer;
+/// use shadowsocks::relay::server::run;
 /// use shadowsocks::config::{Config, ServerConfig};
 /// use shadowsocks::crypto::CipherType;
 ///
@@ -46,29 +46,24 @@ use config::Config;
 ///     ServerConfig::basic("127.0.0.1:8388".parse().unwrap(),
 ///                         "server-password".to_string(),
 ///                         CipherType::Aes256Cfb)];
-/// RelayServer::run(config).unwrap();
+/// run(config).unwrap();
 /// ```
 ///
-#[derive(Clone)]
-pub struct RelayServer;
+pub fn run(config: Config) -> io::Result<()> {
+    let mut lp = try!(Core::new());
 
-impl RelayServer {
-    pub fn run(config: Config) -> io::Result<()> {
-        let mut lp = try!(Core::new());
+    let handle = lp.handle();
+    let config = Rc::new(config);
 
-        let handle = lp.handle();
-        let config = Rc::new(config);
+    let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
 
-        let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
+    let tcp_fut = run_tcp(config.clone(), handle.clone(), dns_resolver.clone());
 
-        let tcp_fut = TcpRelayServer::run(config.clone(), handle.clone(), dns_resolver.clone());
+    let udp_fut = if config.enable_udp {
+        run_udp(config, handle, dns_resolver)
+    } else {
+        boxed_future(futures::finished(()))
+    };
 
-        let udp_fut = if config.enable_udp {
-            UdpRelayServer::run(config, handle, dns_resolver)
-        } else {
-            boxed_future(futures::finished(()))
-        };
-
-        lp.run(tcp_fut.join(udp_fut).map(|_| ()))
-    }
+    lp.run(tcp_fut.join(udp_fut).map(|_| ()))
 }

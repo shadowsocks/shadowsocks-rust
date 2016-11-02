@@ -44,7 +44,8 @@ use ip::IpAddr;
 
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
 
-struct TcpRelayClientHandshake {
+/// Context for doing handshake with client
+pub struct TcpRelayClientHandshake {
     handle: Handle,
     dns_resolver: DnsResolver,
     s: TcpStream,
@@ -53,11 +54,11 @@ struct TcpRelayClientHandshake {
 }
 
 impl TcpRelayClientHandshake {
-    fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
-        let handle = self.handle;
-        let forbidden_ip = self.forbidden_ip;
-        let dns_resolver = self.dns_resolver;
-        let fut = proxy_handshake(self.s, self.svr_cfg).and_then(|(r_fut, w_fut)| {
+    /// Doing handshake with client
+    pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
+        let TcpRelayClientHandshake { handle, forbidden_ip, dns_resolver, s, svr_cfg } = self;
+
+        let fut = proxy_handshake(s, svr_cfg).and_then(|(r_fut, w_fut)| {
             r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
                 .map(move |(r, addr)| {
                     TcpRelayClientPending {
@@ -74,7 +75,8 @@ impl TcpRelayClientHandshake {
     }
 }
 
-struct TcpRelayClientPending {
+/// Context for connecting remote
+pub struct TcpRelayClientPending {
     handle: Handle,
     r: DecryptedHalf,
     addr: Address,
@@ -84,6 +86,7 @@ struct TcpRelayClientPending {
 }
 
 impl TcpRelayClientPending {
+    /// Resolve Address to SocketAddr
     fn resolve_address(addr: Address, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
@@ -100,6 +103,8 @@ impl TcpRelayClientPending {
         }
     }
 
+    /// Resolve remote address to SocketAddr
+    /// Report failure if the SocketAddr is forbidden by `forbidden_ip`
     fn resolve_remote(dns_resolver: DnsResolver,
                       addr: Address,
                       forbidden_ip: Rc<HashSet<IpAddr>>)
@@ -122,6 +127,7 @@ impl TcpRelayClientPending {
         Box::new(fut)
     }
 
+    /// Connect to the remote server
     fn connect_remote(dns_resolver: DnsResolver,
                       handle: Handle,
                       addr: Address,
@@ -132,7 +138,8 @@ impl TcpRelayClientPending {
             .and_then(move |addr| TcpStream::connect(&addr, &handle)))
     }
 
-    fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
+    /// Connect to the remote server
+    pub fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
         let fut = TcpRelayClientPending::connect_remote(self.dns_resolver, self.handle, self.addr, self.forbidden_ip)
@@ -147,14 +154,16 @@ impl TcpRelayClientPending {
     }
 }
 
-struct TcpRelayClientConnected {
+/// Context for extablishing tunnel
+pub struct TcpRelayClientConnected {
     server: (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
     client: (DecryptedHalf, EncryptedHalfFut),
     addr: Address,
 }
 
 impl TcpRelayClientConnected {
-    fn tunnel(self) -> BoxIoFuture<()> {
+    /// Establish tunnel
+    pub fn tunnel(self) -> BoxIoFuture<()> {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;
         tunnel(self.addr,
@@ -163,71 +172,63 @@ impl TcpRelayClientConnected {
     }
 }
 
-/// TCP Relay backend
-pub struct TcpRelayServer;
+/// Runs the server
+pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box<Future<Item = (), Error = io::Error>> {
+    let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
-impl TcpRelayServer {
-    /// Runs the server
-    pub fn run(config: Rc<Config>,
-               handle: Handle,
-               dns_resolver: DnsResolver)
-               -> Box<Future<Item = (), Error = io::Error>> {
-        let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
+    let ref forbidden_ip = config.forbidden_ip;
+    let forbidden_ip = Rc::new(forbidden_ip.clone());
 
-        let ref forbidden_ip = config.forbidden_ip;
-        let forbidden_ip = Rc::new(forbidden_ip.clone());
+    for svr_cfg in &config.server {
+        let listener = {
+            let addr = svr_cfg.addr();
+            let addr = addr.listen_addr();
+            let listener = TcpListener::bind(addr, &handle).unwrap();
+            trace!("ShadowSocks TCP Listening on {}", addr);
+            listener
+        };
 
-        for svr_cfg in &config.server {
-            let listener = {
-                let addr = svr_cfg.addr();
-                let addr = addr.listen_addr();
-                let listener = TcpListener::bind(addr, &handle).unwrap();
-                trace!("ShadowSocks TCP Listening on {}", addr);
-                listener
-            };
+        let svr_cfg = Rc::new(svr_cfg.clone());
+        let handle = handle.clone();
+        let dns_resolver = dns_resolver.clone();
+        let forbidden_ip = forbidden_ip.clone();
+        let listening = listener.incoming()
+            .for_each(move |(socket, addr)| {
+                let server_cfg = svr_cfg.clone();
+                let forbidden_ip = forbidden_ip.clone();
+                let dns_resolver = dns_resolver.clone();
 
-            let svr_cfg = Rc::new(svr_cfg.clone());
-            let handle = handle.clone();
-            let dns_resolver = dns_resolver.clone();
-            let forbidden_ip = forbidden_ip.clone();
-            let listening = listener.incoming()
-                .for_each(move |(socket, addr)| {
-                    let server_cfg = svr_cfg.clone();
-                    let forbidden_ip = forbidden_ip.clone();
-                    let dns_resolver = dns_resolver.clone();
+                trace!("Got connection, addr: {}", addr);
+                trace!("Picked proxy server: {:?}", server_cfg);
 
-                    trace!("Got connection, addr: {}", addr);
-                    trace!("Picked proxy server: {:?}", server_cfg);
+                let client = TcpRelayClientHandshake {
+                    handle: handle.clone(),
+                    dns_resolver: dns_resolver,
+                    s: socket,
+                    svr_cfg: server_cfg,
+                    forbidden_ip: forbidden_ip,
+                };
 
-                    let client = TcpRelayClientHandshake {
-                        handle: handle.clone(),
-                        dns_resolver: dns_resolver,
-                        s: socket,
-                        svr_cfg: server_cfg,
-                        forbidden_ip: forbidden_ip,
-                    };
+                let fut = client.handshake()
+                    .and_then(|c| c.connect())
+                    .and_then(|c| c.tunnel())
+                    .map_err(move |err| {
+                        error!("Failed to handle client ({}): {}", addr, err);
+                    });
 
-                    let fut = client.handshake()
-                        .and_then(|c| c.connect())
-                        .and_then(|c| c.tunnel())
-                        .map_err(move |err| {
-                            error!("Failed to handle client ({}): {}", addr, err);
-                        });
-
-                    handle.spawn(fut);
-                    Ok(())
-                })
-                .map_err(|err| {
-                    error!("Server run failed: {}", err);
-                    err
-                });
-
-            fut = Some(match fut.take() {
-                Some(fut) => Box::new(fut.join(listening).map(|_| ())) as Box<Future<Item = (), Error = io::Error>>,
-                None => Box::new(listening) as Box<Future<Item = (), Error = io::Error>>,
+                handle.spawn(fut);
+                Ok(())
             })
-        }
+            .map_err(|err| {
+                error!("Server run failed: {}", err);
+                err
+            });
 
-        fut.expect("Must have at least one server")
+        fut = Some(match fut.take() {
+            Some(fut) => Box::new(fut.join(listening).map(|_| ())) as Box<Future<Item = (), Error = io::Error>>,
+            None => Box::new(listening) as Box<Future<Item = (), Error = io::Error>>,
+        })
     }
+
+    fut.expect("Must have at least one server")
 }

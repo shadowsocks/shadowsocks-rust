@@ -21,9 +21,6 @@
 
 //! Relay server in local and server side implementations.
 
-pub use self::local::RelayLocal;
-pub use self::server::RelayServer;
-
 use std::io;
 
 use futures::Future;
@@ -36,6 +33,7 @@ mod loadbalancing;
 mod dns_resolver;
 pub mod socks5;
 
+/// Alias for Boxed Future without Send
 pub type BoxIoFuture<T> = Box<Future<Item = T, Error = io::Error>>;
 
 fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E>>

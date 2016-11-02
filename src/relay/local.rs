@@ -28,8 +28,8 @@ use tokio_core::reactor::Core;
 
 use futures::{self, Future};
 
-use relay::tcprelay::local::TcpRelayLocal;
-use relay::udprelay::local::UdpRelayLocal;
+use relay::tcprelay::local::run as run_tcp;
+use relay::udprelay::local::run as run_udp;
 use relay::dns_resolver::DnsResolver;
 use relay::boxed_future;
 use config::Config;
@@ -37,7 +37,7 @@ use config::Config;
 /// Relay server running under local environment.
 ///
 /// ```no_run
-/// use shadowsocks::relay::RelayLocal;
+/// use shadowsocks::relay::local::run;
 /// use shadowsocks::config::{Config, ServerConfig};
 /// use shadowsocks::crypto::CipherType;
 ///
@@ -47,28 +47,23 @@ use config::Config;
 ///     ServerConfig::basic("127.0.0.1:8388".parse().unwrap(),
 ///                         "server-password".to_string(),
 ///                         CipherType::Aes256Cfb)];
-/// RelayLocal::run(config).unwrap();
+/// run(config).unwrap();
 /// ```
-#[derive(Clone)]
-pub struct RelayLocal;
+pub fn run(config: Config) -> io::Result<()> {
+    let mut lp = try!(Core::new());
+    let handle = lp.handle();
+    let config = Rc::new(config);
+    let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
 
-impl RelayLocal {
-    pub fn run(config: Config) -> io::Result<()> {
-        let mut lp = try!(Core::new());
-        let handle = lp.handle();
-        let config = Rc::new(config);
-        let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
+    let tcp_fut = run_tcp(config.clone(), handle.clone(), dns_resolver.clone());
 
-        let tcp_fut = TcpRelayLocal::run(config.clone(), handle.clone(), dns_resolver.clone());
+    let udp_fut = if config.enable_udp {
+        run_udp(config, handle, dns_resolver)
+    } else {
+        boxed_future(futures::finished(()))
+    };
 
-        let udp_fut = if config.enable_udp {
-            UdpRelayLocal::run(config, handle, dns_resolver)
-        } else {
-            boxed_future(futures::finished(()))
-        };
+    let join = tcp_fut.join(udp_fut).map(|_| ());
 
-        let join = tcp_fut.join(udp_fut).map(|_| ());
-
-        lp.run(join)
-    }
+    lp.run(join)
 }

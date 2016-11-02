@@ -53,19 +53,20 @@ struct Associate {
 
 type AssociateMap = LruCache<SocketAddr, Associate>;
 
-struct Client {
+/// Context for handling a UDP packet
+pub struct ConnectionContext {
     assoc: Rc<RefCell<AssociateMap>>,
     svr_cfg: Rc<ServerConfig>,
     dns_resolver: DnsResolver,
     socket: UdpSocket,
 }
 
-impl Client {
+impl ConnectionContext {
     /// Handles Client to Remote
     ///
     /// Extract and send the actual request body and associate remote with client
-    fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<Client> {
-        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
+    fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<ConnectionContext> {
+        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
 
         // Client -> Remote
         let fut = futures::lazy(move || {
@@ -105,7 +106,7 @@ impl Client {
 
                     let cloned_assoc = assoc.clone();
                     let cloned_addr = addr.clone();
-                    Client::resolve_remote_addr(addr, dns_resolver.clone())
+                    ConnectionContext::resolve_remote_addr(addr, dns_resolver.clone())
                         .and_then(move |remote_addr| {
                             // Associate client address with remote
                             let mut assoc = cloned_assoc.borrow_mut();
@@ -119,7 +120,7 @@ impl Client {
                         })
                         .map(move |(socket, body, len)| {
                             trace!("Sent body {} bytes, actual {} bytes", body.len(), len);
-                            Client {
+                            ConnectionContext {
                                 assoc: assoc,
                                 svr_cfg: svr_cfg,
                                 dns_resolver: dns_resolver,
@@ -134,8 +135,12 @@ impl Client {
     /// Handle Remote to Client
     ///
     /// Return packet to Client with encryption
-    fn handle_s2c(self, Associate { address, client_addr }: Associate, buf: Vec<u8>, n: usize) -> BoxIoFuture<Client> {
-        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
+    fn handle_s2c(self,
+                  Associate { address, client_addr }: Associate,
+                  buf: Vec<u8>,
+                  n: usize)
+                  -> BoxIoFuture<ConnectionContext> {
+        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
 
         let buf_len = buf[..n].len();
         info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
@@ -164,7 +169,7 @@ impl Client {
             .and_then(move |final_buf| send_to(socket, final_buf, client_addr))
             .map(|(socket, buf, len)| {
                 trace!("Sent body {} actual {}", buf.len(), len);
-                Client {
+                ConnectionContext {
                     assoc: assoc,
                     svr_cfg: svr_cfg,
                     dns_resolver: dns_resolver,
@@ -176,12 +181,12 @@ impl Client {
     }
 
     // Handle one packet
-    fn handle_once(self) -> BoxIoFuture<Client> {
-        let Client { assoc, svr_cfg, dns_resolver, socket } = self;
+    fn handle_once(self) -> BoxIoFuture<ConnectionContext> {
+        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
 
         let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
             .and_then(move |(socket, buf, n, src)| {
-                let c = Client {
+                let c = ConnectionContext {
                     assoc: assoc.clone(),
                     svr_cfg: svr_cfg,
                     dns_resolver: dns_resolver,
@@ -218,43 +223,41 @@ impl Client {
     }
 }
 
-/// UDP relay proxy server
-pub struct UdpRelayServer;
+fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
+    let fut = c.handle_once().and_then(|c| handle_client(c));
+    boxed_future(fut)
+}
 
-impl UdpRelayServer {
-    fn handle_client(c: Client) -> BoxIoFuture<()> {
-        let fut = c.handle_once().and_then(|c| UdpRelayServer::handle_client(c));
-        boxed_future(fut)
+fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+    let listen_addr = svr_cfg.addr().listen_addr().clone();
+    info!("ShadowSocks UDP listening on {}", listen_addr);
+    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr, &handle)).and_then(|socket| {
+        let c = ConnectionContext {
+            assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
+            dns_resolver: dns_resolver,
+            svr_cfg: svr_cfg,
+            socket: socket,
+        };
+        handle_client(c)
+    });
+    boxed_future(fut)
+}
+
+/// Starts a UDP relay server
+pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+    let mut fut = None;
+
+    for svr in &config.server {
+        let handle = handle.clone();
+        let dns_resolver = dns_resolver.clone();
+        let svr_cfg = Rc::new(svr.clone());
+
+        let svr_fut = listen(svr_cfg, handle, dns_resolver);
+        fut = match fut {
+            None => Some(svr_fut),
+            Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
+        };
     }
 
-    fn run_server(svr_cfg: Rc<ServerConfig>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let listen_addr = svr_cfg.addr().listen_addr().clone();
-        info!("ShadowSocks UDP listening on {}", listen_addr);
-        let fut = futures::lazy(move || UdpSocket::bind(&listen_addr, &handle)).and_then(|socket| {
-            let c = Client {
-                assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
-                dns_resolver: dns_resolver,
-                svr_cfg: svr_cfg,
-                socket: socket,
-            };
-            UdpRelayServer::handle_client(c)
-        });
-        boxed_future(fut)
-    }
-
-    /// Starts a UDP relay server
-    pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let mut fut = boxed_future(futures::finished(()));
-
-        for svr in &config.server {
-            let handle = handle.clone();
-            let dns_resolver = dns_resolver.clone();
-            let svr_cfg = Rc::new(svr.clone());
-
-            let svr_fut = fut.join(UdpRelayServer::run_server(svr_cfg, handle, dns_resolver));
-            fut = boxed_future(svr_fut.map(|_| ()));
-        }
-
-        fut
-    }
+    fut.expect("Should have at least one server")
 }

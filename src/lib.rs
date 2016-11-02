@@ -66,6 +66,27 @@
 //! addresses.
 //!
 //! Of course, you can also use `cargo install` to install binaries.
+//!
+//! ## API Usage
+//!
+//! Example to write a local server
+//!
+//! ```no_run
+//! use shadowsocks::{Config, ConfigType, run_local};
+//!
+//! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
+//! run_local(config).unwrap();
+//! ```
+//!
+//! That's all! And let me show you how to run a proxy server
+//!
+//! ```no_run
+//! use shadowsocks::{Config, ConfigType, run_server};
+//!
+//! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
+//! run_server(config).unwrap();
+//! ```
+//!
 
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
@@ -94,6 +115,11 @@ extern crate libc;
 
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+pub use self::config::{Config, ServerConfig, ServerAddr, ClientConfig, ConfigType};
+pub use self::relay::local::run as run_local;
+pub use self::relay::server::run as run_server;
+pub use self::relay::tcprelay::client::Socks5Client;
 
 pub mod config;
 pub mod relay;

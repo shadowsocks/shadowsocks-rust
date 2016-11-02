@@ -310,47 +310,42 @@ impl Client {
     }
 }
 
-/// UDP relay local server
-pub struct UdpRelayLocal;
+// Recursive method for handling clients
+// Handle one by one
+fn handle_client(client: Client) -> BoxIoFuture<()> {
+    let fut = client.handle_once()
+        .and_then(|c| handle_client(c));
+    boxed_future(fut)
+}
 
-impl UdpRelayLocal {
-    // Recursive method for handling clients
-    // Handle one by one
-    fn handle_client(client: Client) -> BoxIoFuture<()> {
-        let fut = client.handle_once()
-            .and_then(|c| UdpRelayLocal::handle_client(c));
-        boxed_future(fut)
-    }
+fn listen(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+    let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
+    let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
+    let servers: Rc<RefCell<ServerCache>> = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
 
-    fn run_server(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
-        let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
-        let servers: Rc<RefCell<ServerCache>> = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
+    let c = Client {
+        assoc: assoc,
+        server_picker: server_picker,
+        servers: servers,
+        dns_resolver: dns_resolver,
+        socket: l,
+    };
 
-        let c = Client {
-            assoc: assoc,
-            server_picker: server_picker,
-            servers: servers,
-            dns_resolver: dns_resolver,
-            socket: l,
-        };
+    // Starts to handle all connections after initialization
+    handle_client(c)
+}
 
-        // Starts to handle all connections after initialization
-        boxed_future(UdpRelayLocal::handle_client(c))
-    }
+/// Starts a UDP local server
+pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+    let fut = futures::lazy(move || {
+            let l = {
+                let local_addr = config.local.as_ref().unwrap();
+                info!("ShadowSocks UDP Listening on {}", local_addr);
+                try!(UdpSocket::bind(local_addr, &handle))
+            };
+            Ok((config, l))
+        })
+        .and_then(move |(config, l)| listen(config, l, dns_resolver));
 
-    /// Starts a UDP local server
-    pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-        let fut = futures::lazy(move || {
-                let l = {
-                    let local_addr = config.local.as_ref().unwrap();
-                    info!("ShadowSocks UDP Listening on {}", local_addr);
-                    try!(UdpSocket::bind(local_addr, &handle))
-                };
-                Ok((config, l))
-            })
-            .and_then(move |(config, l)| UdpRelayLocal::run_server(config, l, dns_resolver));
-
-        boxed_future(fut)
-    }
+    boxed_future(fut)
 }

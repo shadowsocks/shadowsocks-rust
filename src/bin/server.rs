@@ -42,8 +42,7 @@ use clap::{App, Arg};
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
-use shadowsocks::config::{self, Config, ServerConfig, ServerAddr};
-use shadowsocks::relay::RelayServer;
+use shadowsocks::{Config, ServerConfig, ServerAddr, ConfigType, run_server};
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -157,7 +156,7 @@ fn main() {
     let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => {
-            match Config::load_from_file(cpath, config::ConfigType::Server) {
+            match Config::load_from_file(cpath, ConfigType::Server) {
                 Ok(cfg) => {
                     has_provided_config = true;
                     cfg
@@ -224,5 +223,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    RelayServer::run(config).unwrap();
+    run_server(config).unwrap();
 }

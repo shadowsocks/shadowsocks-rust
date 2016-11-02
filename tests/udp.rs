@@ -20,8 +20,8 @@ use futures::Future;
 use shadowsocks::relay::tcprelay::client::Socks5Client;
 use shadowsocks::config::{Config, ServerConfig};
 use shadowsocks::crypto::CipherType;
-use shadowsocks::relay::{RelayLocal, RelayServer};
 use shadowsocks::relay::socks5::{Address, UdpAssociateHeader};
+use shadowsocks::{run_local, run_server};
 
 const SERVER_ADDR: &'static str = "127.0.0.1:8093";
 const LOCAL_ADDR: &'static str = "127.0.0.1:8291";
@@ -48,7 +48,7 @@ fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
         drop(env_logger::init());
         bar.wait();
-        RelayServer::run(get_config()).unwrap();
+        run_server(get_config()).unwrap();
     });
 }
 
@@ -56,7 +56,7 @@ fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
         drop(env_logger::init());
         bar.wait();
-        RelayLocal::run(get_config()).unwrap();
+        run_local(get_config()).unwrap();
     });
 }
 
