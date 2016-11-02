@@ -26,12 +26,11 @@ use std::io;
 
 use tokio_core::reactor::Core;
 
-use futures::{self, Future};
+use futures::Future;
 
 use relay::tcprelay::local::run as run_tcp;
 use relay::udprelay::local::run as run_udp;
 use relay::dns_resolver::DnsResolver;
-use relay::boxed_future;
 use config::Config;
 
 /// Relay server running under local environment.
@@ -57,13 +56,9 @@ pub fn run(config: Config) -> io::Result<()> {
 
     let tcp_fut = run_tcp(config.clone(), handle.clone(), dns_resolver.clone());
 
-    let udp_fut = if config.enable_udp {
-        run_udp(config, handle, dns_resolver)
+    if config.enable_udp {
+        lp.run(tcp_fut.join(run_udp(config, handle, dns_resolver)).map(|_| ()))
     } else {
-        boxed_future(futures::finished(()))
-    };
-
-    let join = tcp_fut.join(udp_fut).map(|_| ());
-
-    lp.run(join)
+        lp.run(tcp_fut)
+    }
 }
