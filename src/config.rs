@@ -584,6 +584,16 @@ impl Config {
 
         config.dns_cache_capacity = dns_cache_capacity;
 
+        if let Some(udp_enable) = o.get("enable_udp") {
+            match udp_enable.as_boolean() {
+                None => {
+                    let err = Error::new(ErrorKind::Malformed, "`enable_udp` should be boolean", None);
+                    return Err(err);
+                }
+                Some(enable_udp) => config.enable_udp = enable_udp,
+            }
+        }
+
         Ok(config)
     }
 

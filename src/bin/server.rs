@@ -212,12 +212,7 @@ fn main() {
         return;
     }
 
-    config.enable_udp = matches.is_present("ENABLE_UDP");
-
-    if !cfg!(feature = "enable-udp") && config.enable_udp {
-        error!("Please compile shadowsocks with --cfg feature=\"enable-udp\"");
-        panic!("UDP relay is disabled");
-    }
+    config.enable_udp |= matches.is_present("ENABLE_UDP");
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 

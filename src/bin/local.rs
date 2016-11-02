@@ -221,7 +221,7 @@ fn main() {
         return;
     }
 
-    config.enable_udp = matches.is_present("ENABLE_UDP");
+    config.enable_udp |= matches.is_present("ENABLE_UDP");
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
