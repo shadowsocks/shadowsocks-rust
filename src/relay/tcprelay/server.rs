@@ -133,7 +133,7 @@ impl TcpRelayClientPending {
                       addr: Address,
                       forbidden_ip: Rc<HashSet<IpAddr>>)
                       -> BoxIoFuture<TcpStream> {
-        trace!("Connecting to remote {}", addr);
+        info!("Connecting to remote {}", addr);
         Box::new(TcpRelayClientPending::resolve_remote(dns_resolver, addr, forbidden_ip)
             .and_then(move |addr| TcpStream::connect(&addr, &handle)))
     }
@@ -184,7 +184,7 @@ pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box
             let addr = svr_cfg.addr();
             let addr = addr.listen_addr();
             let listener = TcpListener::bind(addr, &handle).unwrap();
-            trace!("ShadowSocks TCP Listening on {}", addr);
+            info!("ShadowSocks TCP Listening on {}", addr);
             listener
         };
 
