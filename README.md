@@ -2,6 +2,7 @@
 
 [![Build Status](https://img.shields.io/travis/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
+[![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
@@ -16,7 +17,15 @@ It is **unstable**! If you encounter any problems, please open an issue.
 
 ## Usage
 
-Build with [Cargo](http://doc.crates.io):
+Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
+
+```bash
+cargo install shadowsocks-rust
+```
+
+then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
+
+or you can also build with [Cargo](http://doc.crates.io):
 
 ```bash
 cargo build
