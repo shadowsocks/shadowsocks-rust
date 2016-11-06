@@ -40,7 +40,7 @@ pub struct DecryptedReader<R>
     sent_final: bool,
 }
 
-const BUFFER_SIZE: usize = 2048;
+const BUFFER_SIZE: usize = 4096;
 
 impl<R> DecryptedReader<R>
     where R: Read
@@ -275,7 +275,7 @@ impl<R: Read, W: Write> Future for EncryptedCopy<R, W> {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut local_buf = [0u8; 2048];
+        let mut local_buf = [0u8; BUFFER_SIZE];
         loop {
             // If our buffer is empty, then we need to read some data to
             // continue.

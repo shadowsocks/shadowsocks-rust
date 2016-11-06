@@ -474,13 +474,12 @@ fn handle_connect(handle: Handle,
                 .map(|w| (svr_s, w))
         })
         .and_then(move |(svr_s, w)| {
-            super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
-                let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                let whalf = svr_w.and_then(move |svr_w| svr_w.write_all_encrypted(remains))
-                    .and_then(move |(svr_w, _)| svr_w.copy_from_encrypted(r));
+            let (svr_r, svr_w) = super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr);
+            let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+            let whalf = svr_w.and_then(move |svr_w| svr_w.write_all_encrypted(remains))
+                .and_then(move |(svr_w, _)| svr_w.copy_from_encrypted(r));
 
-                tunnel(cloned_addr, whalf, rhalf)
-            })
+            tunnel(cloned_addr, whalf, rhalf)
         });
 
     Box::new(fut)
@@ -535,28 +534,28 @@ fn handle_http_proxy(handle: Handle,
         trace!("Proxy server connected");
 
         let cloned_addr = addr.clone();
-        super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
-            // Just proxy anything to client
-            let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-            let whalf = svr_w.and_then(move |svr_w| {
-                // Send the first request to server
-                trace!("Going to proxy request: {:?}", req);
-                trace!("Should keep alive? {}", should_keep_alive);
-                proxy_request_encrypted((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
-                    if should_keep_alive {
-                        handle_http_keepalive(r, svr_w, req_remains)
-                    } else {
-                        futures::finished(()).boxed()
-                    }
-                })
-            });
+        let (svr_r, svr_w) = super::proxy_server_handshake(svr_s, svr_cfg, addr);
 
-            rhalf.join(whalf)
-                .then(move |_| {
-                    trace!("Relay to {} is finished", cloned_addr);
-                    Ok(())
-                })
-        })
+        // Just proxy anything to client
+        let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
+        let whalf = svr_w.and_then(move |svr_w| {
+            // Send the first request to server
+            trace!("Going to proxy request: {:?}", req);
+            trace!("Should keep alive? {}", should_keep_alive);
+            proxy_request_encrypted((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
+                if should_keep_alive {
+                    handle_http_keepalive(r, svr_w, req_remains)
+                } else {
+                    futures::finished(()).boxed()
+                }
+            })
+        });
+
+        rhalf.join(whalf)
+            .then(move |_| {
+                trace!("Relay to {} is finished", cloned_addr);
+                Ok(())
+            })
     });
 
     Box::new(fut)
