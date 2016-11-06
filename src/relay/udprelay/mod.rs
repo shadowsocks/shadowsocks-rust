@@ -27,6 +27,8 @@ use std::io;
 
 use tokio_core::net::UdpSocket;
 
+use net2::UdpBuilder;
+
 use futures::{Future, Poll, Async};
 
 pub mod local;
@@ -119,4 +121,15 @@ pub fn send_to<B: AsRef<[u8]>>(socket: UdpSocket, buf: B, target: SocketAddr) ->
         buf: buf,
         target_addr: target,
     }
+}
+
+#[cfg(unix)]
+fn reuse_port(builder: &UdpBuilder) -> io::Result<&UdpBuilder> {
+    use net2::unix::UnixUdpBuilderExt;
+    builder.reuse_port(true)
+}
+
+#[cfg(windows)]
+fn reuse_port(builder: &UdpBuilder) -> io::Result<&UdpBuilder> {
+    Ok(builder)
 }

@@ -110,8 +110,11 @@ extern crate futures;
 extern crate futures_cpupool;
 #[macro_use]
 extern crate tokio_core;
+extern crate net2;
 
 extern crate libc;
+#[macro_use]
+extern crate lazy_static;
 
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");

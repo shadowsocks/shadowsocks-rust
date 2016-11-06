@@ -66,6 +66,8 @@ use futures::{self, Future};
 use tokio_core::reactor::Handle;
 use tokio_core::net::UdpSocket;
 
+use net2::UdpBuilder;
+
 use lru_cache::LruCache;
 
 use ip::IpAddr;
@@ -88,19 +90,19 @@ struct Client {
     assoc: Rc<RefCell<AssociateMap>>,
     server_picker: Rc<RefCell<RoundRobin>>,
     servers: Rc<RefCell<ServerCache>>,
-    dns_resolver: DnsResolver,
     socket: UdpSocket,
 }
 
 impl Client {
     /// Resolves server address to SocketAddr
-    fn resolve_server_addr(svr_cfg: Rc<ServerConfig>, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
+    fn resolve_server_addr(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<SocketAddr> {
         match svr_cfg.addr() {
             // Return directly if it is a SocketAddr
             &ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
             // Resolve domain name to SocketAddr
             &ServerAddr::DomainName(ref dname, port) => {
-                let fut = dns_resolver.resolve(dname)
+                let fut = DnsResolver::get_instance()
+                    .resolve(dname)
                     .map(move |sockaddr| {
                         match sockaddr {
                             IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
@@ -117,7 +119,7 @@ impl Client {
     /// Extract actual body from payload
     /// Appends a SOCKS5 UDP Associate header in front of the body, and send it to client
     fn handle_s2c(self, svr_cfg: Rc<ServerConfig>, buf: Vec<u8>, n: usize) -> BoxIoFuture<Client> {
-        let Client { assoc, server_picker, servers, dns_resolver, socket } = self;
+        let Client { assoc, server_picker, servers, socket } = self;
 
         let fut = futures::lazy(move || {
                 let buf = &buf[..n];
@@ -184,7 +186,6 @@ impl Client {
                             Client {
                                 assoc: assoc,
                                 servers: servers,
-                                dns_resolver: dns_resolver,
                                 server_picker: server_picker,
                                 socket: socket,
                             }
@@ -199,7 +200,7 @@ impl Client {
     ///
     /// Appends a Address header in front of the packet, and send it to proxy after encryption
     fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<Client> {
-        let Client { assoc, server_picker, servers, dns_resolver, socket } = self;
+        let Client { assoc, server_picker, servers, socket } = self;
 
         let fut = futures::lazy(move || {
                 // Extract UDP associate header in the front (SOCKS5 protocol)
@@ -260,7 +261,7 @@ impl Client {
                     .map_err(From::from)
                     .and_then(move |(svr_cfg, payload)| {
                         // Select one server
-                        Client::resolve_server_addr(svr_cfg.clone(), dns_resolver.clone()).and_then(move |addr| {
+                        Client::resolve_server_addr(svr_cfg.clone()).and_then(move |addr| {
                             {
                                 // Record server's address in ServerCache, so we can know which packets
                                 // are from proxy servers
@@ -274,7 +275,6 @@ impl Client {
                                     assoc: assoc,
                                     server_picker: server_picker,
                                     servers: servers,
-                                    dns_resolver: dns_resolver,
                                     socket: socket,
                                 }
                             })
@@ -287,7 +287,7 @@ impl Client {
 
     /// Handle Client after `recv_from`
     fn handle_once(self) -> BoxIoFuture<Client> {
-        let Client { assoc, server_picker, servers, dns_resolver, socket } = self;
+        let Client { assoc, server_picker, servers, socket } = self;
 
         let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE]).and_then(move |(socket, buf, n, src)| {
             // Reassemble Client
@@ -295,7 +295,6 @@ impl Client {
                 assoc: assoc,
                 server_picker: server_picker,
                 servers: servers.clone(),
-                dns_resolver: dns_resolver,
                 socket: socket,
             };
 
@@ -318,7 +317,7 @@ fn handle_client(client: Client) -> BoxIoFuture<()> {
     boxed_future(fut)
 }
 
-fn listen(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+fn listen(config: Rc<Config>, l: UdpSocket) -> BoxIoFuture<()> {
     let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
     let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
     let servers: Rc<RefCell<ServerCache>> = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
@@ -327,7 +326,6 @@ fn listen(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoF
         assoc: assoc,
         server_picker: server_picker,
         servers: servers,
-        dns_resolver: dns_resolver,
         socket: l,
     };
 
@@ -336,16 +334,27 @@ fn listen(config: Rc<Config>, l: UdpSocket, dns_resolver: DnsResolver) -> BoxIoF
 }
 
 /// Starts a UDP local server
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+pub fn run(config: Rc<Config>, handle: Handle) -> BoxIoFuture<()> {
     let fut = futures::lazy(move || {
             let l = {
                 let local_addr = config.local.as_ref().unwrap();
+                let udp_builder = match local_addr {
+                        &SocketAddr::V4(..) => UdpBuilder::new_v4(),
+                        &SocketAddr::V6(..) => UdpBuilder::new_v6(),
+                    }
+                    .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
+
+                super::reuse_port(&udp_builder)
+                    .and_then(|b| b.reuse_address(true))
+                    .unwrap_or_else(|err| panic!("Failed to set reuse {}, {}", local_addr, err));
+
                 info!("ShadowSocks UDP Listening on {}", local_addr);
-                try!(UdpSocket::bind(local_addr, &handle))
+
+                try!(udp_builder.bind(local_addr).and_then(|s| UdpSocket::from_socket(s, &handle)))
             };
             Ok((config, l))
         })
-        .and_then(move |(config, l)| listen(config, l, dns_resolver));
+        .and_then(move |(config, l)| listen(config, l));
 
     boxed_future(fut)
 }

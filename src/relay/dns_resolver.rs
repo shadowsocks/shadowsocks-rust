@@ -32,6 +32,10 @@ use futures_cpupool::CpuPool;
 
 use ip::IpAddr;
 
+lazy_static! {
+    pub static ref GLOBAL_DNS_RESOLVER: DnsResolver = DnsResolver::new(1024);
+}
+
 fn socket_addr_to_ip(addr: SocketAddr) -> IpAddr {
     match addr {
         SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
@@ -46,8 +50,13 @@ pub struct DnsResolver {
 }
 
 impl DnsResolver {
+    /// Gets a global DNS resolver instance
+    pub fn get_instance() -> &'static DnsResolver {
+        &*GLOBAL_DNS_RESOLVER
+    }
+
     /// Creates an DNS resolver
-    pub fn new(cache_size: usize) -> DnsResolver {
+    fn new(cache_size: usize) -> DnsResolver {
         DnsResolver {
             cpu_pool: CpuPool::new_num_cpus(),
             dns_cache: Arc::new(Mutex::new(LruCache::new(cache_size))),

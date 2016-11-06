@@ -30,17 +30,16 @@ use tokio_core::reactor::Handle;
 use config::Config;
 
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
 
 use super::socks5_local;
 use super::http_local;
 
 /// Starts a TCP local server
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
-    let tcp_fut = socks5_local::run(config.clone(), handle.clone(), dns_resolver.clone());
+pub fn run(config: Rc<Config>, handle: Handle) -> BoxIoFuture<()> {
+    let tcp_fut = socks5_local::run(config.clone(), handle.clone());
     match &config.http_proxy {
         &Some(..) => {
-            let http_fut = http_local::run(config, handle, dns_resolver);
+            let http_fut = http_local::run(config, handle);
             boxed_future(tcp_fut.join(http_fut)
                 .map(|_| ()))
         }

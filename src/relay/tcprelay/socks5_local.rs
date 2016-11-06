@@ -34,6 +34,8 @@ use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::{flush, copy};
 
+use net2::TcpBuilder;
+
 use config::{Config, ServerConfig};
 
 use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address};
@@ -41,7 +43,6 @@ use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
 
 use super::{tunnel, ignore_until_end};
 
@@ -55,12 +56,11 @@ fn handle_socks5_connect(handle: &Handle,
                          (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                          client_addr: SocketAddr,
                          addr: Address,
-                         svr_cfg: Rc<ServerConfig>,
-                         dns_resolver: DnsResolver)
+                         svr_cfg: Rc<ServerConfig>)
                          -> BoxIoFuture<()> {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
-    let fut = super::connect_proxy_server(handle, svr_cfg, dns_resolver)
+    let fut = super::connect_proxy_server(handle, svr_cfg)
         .and_then(move |svr_s| {
             trace!("Proxy server connected");
 
@@ -85,12 +85,7 @@ fn handle_socks5_connect(handle: &Handle,
     Box::new(fut)
 }
 
-fn handle_socks5_client(handle: &Handle,
-                        s: TcpStream,
-                        conf: Rc<ServerConfig>,
-                        dns_resolver: DnsResolver,
-                        udp_conf: UdpConfig)
-                        -> io::Result<()> {
+fn handle_socks5_client(handle: &Handle, s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
     let cloned_handle = handle.clone();
     let client_addr = try!(s.peer_addr());
     let cloned_client_addr = client_addr.clone();
@@ -140,12 +135,7 @@ fn handle_socks5_client(handle: &Handle,
             match header.command {
                 socks5::Command::TcpConnect => {
                     info!("CONNECT {}", addr);
-                    handle_socks5_connect(&cloned_handle,
-                                          (r, w),
-                                          cloned_client_addr,
-                                          addr,
-                                          conf,
-                                          dns_resolver)
+                    handle_socks5_connect(&cloned_handle, (r, w), cloned_client_addr, addr, conf)
                 }
                 socks5::Command::TcpBind => {
                     warn!("BIND is not supported");
@@ -195,15 +185,28 @@ fn handle_socks5_client(handle: &Handle,
 }
 
 /// Starts a TCP local server with Socks5 proxy protocol
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box<Future<Item = (), Error = io::Error>> {
+pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
     let (listener, local_addr) = {
         let local_addr = config.local.as_ref().unwrap();
-        let listener = TcpListener::bind(local_addr, &handle).unwrap();
+
+        let tcp_builder = match local_addr {
+                &SocketAddr::V4(..) => TcpBuilder::new_v4(),
+                &SocketAddr::V6(..) => TcpBuilder::new_v6(),
+            }
+            .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
+
+        super::reuse_port(&tcp_builder)
+            .and_then(|builder| builder.reuse_address(true))
+            .and_then(|builder| builder.bind(local_addr))
+            .unwrap_or_else(|err| panic!("Failed to bind {}, {}", local_addr, err));
+
+        let listener = tcp_builder.listen(1024)
+            .and_then(|l| TcpListener::from_listener(l, local_addr, &handle))
+            .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+
         info!("ShadowSocks TCP Listening on {}", local_addr);
         (listener, local_addr.clone())
     };
-
-    let dns_resolver = dns_resolver.clone();
 
     let udp_conf = UdpConfig {
         enable_udp: config.enable_udp,
@@ -216,8 +219,7 @@ pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box
             let server_cfg = servers.pick_server();
             trace!("Got connection, addr: {}", addr);
             trace!("Picked proxy server: {:?}", server_cfg);
-            let dns_resolver = dns_resolver.clone();
-            handle_socks5_client(&handle, socket, server_cfg, dns_resolver, udp_conf.clone())
+            handle_socks5_client(&handle, socket, server_cfg, udp_conf.clone())
         });
 
     Box::new(listening.map_err(|err| {

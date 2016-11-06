@@ -40,6 +40,8 @@ use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::io::{Io, ReadHalf, WriteHalf};
 use tokio_core::io::copy;
 
+use net2::TcpBuilder;
+
 use ip::IpAddr;
 
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
@@ -47,7 +49,6 @@ use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
     handle: Handle,
-    dns_resolver: DnsResolver,
     s: TcpStream,
     svr_cfg: Rc<ServerConfig>,
     forbidden_ip: Rc<HashSet<IpAddr>>,
@@ -56,7 +57,7 @@ pub struct TcpRelayClientHandshake {
 impl TcpRelayClientHandshake {
     /// Doing handshake with client
     pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
-        let TcpRelayClientHandshake { handle, forbidden_ip, dns_resolver, s, svr_cfg } = self;
+        let TcpRelayClientHandshake { handle, forbidden_ip, s, svr_cfg } = self;
 
         let fut = proxy_handshake(s, svr_cfg).and_then(|(r_fut, w_fut)| {
             r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
@@ -67,7 +68,6 @@ impl TcpRelayClientHandshake {
                         addr: addr,
                         w: w_fut,
                         forbidden_ip: forbidden_ip,
-                        dns_resolver: dns_resolver,
                     }
                 })
         });
@@ -82,16 +82,16 @@ pub struct TcpRelayClientPending {
     addr: Address,
     w: EncryptedHalfFut,
     forbidden_ip: Rc<HashSet<IpAddr>>,
-    dns_resolver: DnsResolver,
 }
 
 impl TcpRelayClientPending {
     /// Resolve Address to SocketAddr
-    fn resolve_address(addr: Address, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
+    fn resolve_address(addr: Address) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
             Address::DomainNameAddress(dname, port) => {
-                let fut = dns_resolver.resolve(&dname[..])
+                let fut = DnsResolver::get_instance()
+                    .resolve(&dname[..])
                     .and_then(move |ipaddr| {
                         Ok(match ipaddr {
                             IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
@@ -105,11 +105,8 @@ impl TcpRelayClientPending {
 
     /// Resolve remote address to SocketAddr
     /// Report failure if the SocketAddr is forbidden by `forbidden_ip`
-    fn resolve_remote(dns_resolver: DnsResolver,
-                      addr: Address,
-                      forbidden_ip: Rc<HashSet<IpAddr>>)
-                      -> BoxIoFuture<SocketAddr> {
-        let fut = TcpRelayClientPending::resolve_address(addr, dns_resolver).and_then(move |addr| {
+    fn resolve_remote(addr: Address, forbidden_ip: Rc<HashSet<IpAddr>>) -> BoxIoFuture<SocketAddr> {
+        let fut = TcpRelayClientPending::resolve_address(addr).and_then(move |addr| {
             trace!("Resolved address as {}", addr);
             let ipaddr = match addr.clone() {
                 SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
@@ -128,13 +125,9 @@ impl TcpRelayClientPending {
     }
 
     /// Connect to the remote server
-    fn connect_remote(dns_resolver: DnsResolver,
-                      handle: Handle,
-                      addr: Address,
-                      forbidden_ip: Rc<HashSet<IpAddr>>)
-                      -> BoxIoFuture<TcpStream> {
+    fn connect_remote(handle: Handle, addr: Address, forbidden_ip: Rc<HashSet<IpAddr>>) -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(TcpRelayClientPending::resolve_remote(dns_resolver, addr, forbidden_ip)
+        Box::new(TcpRelayClientPending::resolve_remote(addr, forbidden_ip)
             .and_then(move |addr| TcpStream::connect(&addr, &handle)))
     }
 
@@ -142,14 +135,13 @@ impl TcpRelayClientPending {
     pub fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
-        let fut = TcpRelayClientPending::connect_remote(self.dns_resolver, self.handle, self.addr, self.forbidden_ip)
-            .map(|stream| {
-                TcpRelayClientConnected {
-                    server: stream.split(),
-                    client: client_pair,
-                    addr: addr,
-                }
-            });
+        let fut = TcpRelayClientPending::connect_remote(self.handle, self.addr, self.forbidden_ip).map(|stream| {
+            TcpRelayClientConnected {
+                server: stream.split(),
+                client: client_pair,
+                addr: addr,
+            }
+        });
         Box::new(fut)
     }
 }
@@ -173,7 +165,7 @@ impl TcpRelayClientConnected {
 }
 
 /// Runs the server
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box<Future<Item = (), Error = io::Error>> {
+pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
     let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
     let ref forbidden_ip = config.forbidden_ip;
@@ -183,27 +175,39 @@ pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box
         let listener = {
             let addr = svr_cfg.addr();
             let addr = addr.listen_addr();
-            let listener = TcpListener::bind(addr, &handle).unwrap();
+
+            let tcp_builder = match addr {
+                    &SocketAddr::V4(..) => TcpBuilder::new_v4(),
+                    &SocketAddr::V6(..) => TcpBuilder::new_v6(),
+                }
+                .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
+
+            super::reuse_port(&tcp_builder)
+                .and_then(|builder| builder.reuse_address(true))
+                .and_then(|builder| builder.bind(addr))
+                .unwrap_or_else(|err| panic!("Failed to bind {}, {}", addr, err));
+
+            let listener = tcp_builder.listen(1024)
+                .and_then(|l| TcpListener::from_listener(l, addr, &handle))
+                .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+
             info!("ShadowSocks TCP Listening on {}", addr);
             listener
         };
 
         let svr_cfg = Rc::new(svr_cfg.clone());
         let handle = handle.clone();
-        let dns_resolver = dns_resolver.clone();
         let forbidden_ip = forbidden_ip.clone();
         let listening = listener.incoming()
             .for_each(move |(socket, addr)| {
                 let server_cfg = svr_cfg.clone();
                 let forbidden_ip = forbidden_ip.clone();
-                let dns_resolver = dns_resolver.clone();
 
                 trace!("Got connection, addr: {}", addr);
                 trace!("Picked proxy server: {:?}", server_cfg);
 
                 let client = TcpRelayClientHandshake {
                     handle: handle.clone(),
-                    dns_resolver: dns_resolver,
                     s: socket,
                     svr_cfg: server_cfg,
                     forbidden_ip: forbidden_ip,

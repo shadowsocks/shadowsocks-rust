@@ -35,6 +35,8 @@ use lru_cache::LruCache;
 
 use ip::IpAddr;
 
+use net2::UdpBuilder;
+
 use config::{Config, ServerConfig};
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
@@ -57,7 +59,6 @@ type AssociateMap = LruCache<SocketAddr, Associate>;
 pub struct ConnectionContext {
     assoc: Rc<RefCell<AssociateMap>>,
     svr_cfg: Rc<ServerConfig>,
-    dns_resolver: DnsResolver,
     socket: UdpSocket,
 }
 
@@ -66,7 +67,7 @@ impl ConnectionContext {
     ///
     /// Extract and send the actual request body and associate remote with client
     fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket } = self;
 
         // Client -> Remote
         let fut = futures::lazy(move || {
@@ -106,7 +107,7 @@ impl ConnectionContext {
 
                     let cloned_assoc = assoc.clone();
                     let cloned_addr = addr.clone();
-                    ConnectionContext::resolve_remote_addr(addr, dns_resolver.clone())
+                    ConnectionContext::resolve_remote_addr(addr)
                         .and_then(move |remote_addr| {
                             // Associate client address with remote
                             let mut assoc = cloned_assoc.borrow_mut();
@@ -123,7 +124,6 @@ impl ConnectionContext {
                             ConnectionContext {
                                 assoc: assoc,
                                 svr_cfg: svr_cfg,
-                                dns_resolver: dns_resolver,
                                 socket: socket,
                             }
                         })
@@ -140,7 +140,7 @@ impl ConnectionContext {
                   buf: Vec<u8>,
                   n: usize)
                   -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket } = self;
 
         let buf_len = buf[..n].len();
         info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
@@ -172,7 +172,6 @@ impl ConnectionContext {
                 ConnectionContext {
                     assoc: assoc,
                     svr_cfg: svr_cfg,
-                    dns_resolver: dns_resolver,
                     socket: socket,
                 }
             });
@@ -182,14 +181,13 @@ impl ConnectionContext {
 
     // Handle one packet
     fn handle_once(self) -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, dns_resolver, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket } = self;
 
         let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
             .and_then(move |(socket, buf, n, src)| {
                 let c = ConnectionContext {
                     assoc: assoc.clone(),
                     svr_cfg: svr_cfg,
-                    dns_resolver: dns_resolver,
                     socket: socket,
                 };
 
@@ -206,11 +204,12 @@ impl ConnectionContext {
         boxed_future(fut)
     }
 
-    fn resolve_remote_addr(addr: Address, dns_resolver: DnsResolver) -> BoxIoFuture<SocketAddr> {
+    fn resolve_remote_addr(addr: Address) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(s) => boxed_future(futures::finished(s)),
             Address::DomainNameAddress(ref dname, port) => {
-                let fut = dns_resolver.resolve(dname)
+                let fut = DnsResolver::get_instance()
+                    .resolve(dname)
                     .map(move |sockaddr| {
                         match sockaddr {
                             IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
@@ -228,31 +227,42 @@ fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
     boxed_future(fut)
 }
 
-fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle) -> BoxIoFuture<()> {
     let listen_addr = svr_cfg.addr().listen_addr().clone();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr, &handle)).and_then(|socket| {
-        let c = ConnectionContext {
-            assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
-            dns_resolver: dns_resolver,
-            svr_cfg: svr_cfg,
-            socket: socket,
-        };
-        handle_client(c)
-    });
+    let fut = futures::lazy(move || {
+            let udp_builder = match &listen_addr {
+                    &SocketAddr::V4(..) => UdpBuilder::new_v4(),
+                    &SocketAddr::V6(..) => UdpBuilder::new_v6(),
+                }
+                .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
+
+            super::reuse_port(&udp_builder)
+                .and_then(|b| b.reuse_address(true))
+                .unwrap_or_else(|err| panic!("Failed to set reuse {}, {}", listen_addr, err));
+
+            udp_builder.bind(listen_addr).and_then(|s| UdpSocket::from_socket(s, &handle))
+        })
+        .and_then(|socket| {
+            let c = ConnectionContext {
+                assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
+                svr_cfg: svr_cfg,
+                socket: socket,
+            };
+            handle_client(c)
+        });
     boxed_future(fut)
 }
 
 /// Starts a UDP relay server
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> BoxIoFuture<()> {
+pub fn run(config: Rc<Config>, handle: Handle) -> BoxIoFuture<()> {
     let mut fut = None;
 
     for svr in &config.server {
         let handle = handle.clone();
-        let dns_resolver = dns_resolver.clone();
         let svr_cfg = Rc::new(svr.clone());
 
-        let svr_fut = listen(svr_cfg, handle, dns_resolver);
+        let svr_fut = listen(svr_cfg, handle);
         fut = match fut {
             None => Some(svr_fut),
             Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),

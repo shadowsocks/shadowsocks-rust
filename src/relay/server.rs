@@ -30,7 +30,6 @@ use futures::Future;
 
 use relay::udprelay::server::run as run_udp;
 use relay::tcprelay::server::run as run_tcp;
-use relay::dns_resolver::DnsResolver;
 use config::Config;
 
 /// Relay server running on server side.
@@ -54,12 +53,10 @@ pub fn run(config: Config) -> io::Result<()> {
     let handle = lp.handle();
     let config = Rc::new(config);
 
-    let dns_resolver = DnsResolver::new(config.dns_cache_capacity);
-
-    let tcp_fut = run_tcp(config.clone(), handle.clone(), dns_resolver.clone());
+    let tcp_fut = run_tcp(config.clone(), handle.clone());
 
     if config.enable_udp {
-        lp.run(tcp_fut.join(run_udp(config, handle, dns_resolver)).map(|_| ()))
+        lp.run(tcp_fut.join(run_udp(config, handle)).map(|_| ()))
     } else {
         lp.run(tcp_fut)
     }

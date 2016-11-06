@@ -32,11 +32,13 @@ extern crate shadowsocks;
 extern crate log;
 extern crate env_logger;
 extern crate time;
+extern crate num_cpus;
 
 use clap::{App, Arg};
 
 use std::net::SocketAddr;
 use std::env;
+use std::thread;
 
 use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
@@ -81,6 +83,11 @@ fn main() {
             .long("encrypt-method")
             .takes_value(true)
             .help("Encryption method"))
+        .arg(Arg::with_name("THREADS")
+            .short("t")
+            .long("threads")
+            .takes_value(true)
+            .help("Number of worker threads (defaults to number of CPUs)"))
         .get_matches();
 
     let mut log_builder = LogBuilder::new();
@@ -226,6 +233,14 @@ fn main() {
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
     debug!("Config: {:?}", config);
+
+    let threads = matches.value_of("THREADS").map(|m| m.parse::<usize>().unwrap()).unwrap_or(num_cpus::get());
+    debug!("Threads: {}", threads);
+
+    for _ in 1..threads {
+        let cloned_config = config.clone();
+        thread::spawn(move || run_local(cloned_config).unwrap());
+    }
 
     run_local(config).unwrap();
 }

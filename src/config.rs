@@ -32,8 +32,7 @@
 //!     "password": "the-password",
 //!     "timeout": 300,
 //!     "method": "aes-256-cfb",
-//!     "local_address": "127.0.0.1",
-//!     "dns_cache_capacity": 65536
+//!     "local_address": "127.0.0.1"
 //! }
 //! ```
 //!
@@ -48,7 +47,6 @@
 //!             "port": 1080,
 //!             "password": "hellofuck",
 //!             "method": "bf-cfb"
-//!             "dns_cache_capacity": 65536,
 //!         },
 //!         {
 //!             "address": "127.0.0.1",
@@ -82,9 +80,6 @@ use std::str::FromStr;
 use ip::IpAddr;
 
 use crypto::cipher::CipherType;
-
-/// Default DNS cache capacity
-pub const DEFAULT_DNS_CACHE_CAPACITY: usize = 128;
 
 /// Server address
 #[derive(Clone, Debug)]
@@ -268,7 +263,6 @@ pub struct Config {
     pub enable_udp: bool,
     pub timeout: Option<Duration>,
     pub forbidden_ip: HashSet<IpAddr>,
-    pub dns_cache_capacity: usize,
 }
 
 impl Default for Config {
@@ -353,7 +347,6 @@ impl Config {
             enable_udp: false,
             timeout: None,
             forbidden_ip: HashSet::new(),
-            dns_cache_capacity: DEFAULT_DNS_CACHE_CAPACITY,
         }
     }
 
@@ -572,18 +565,6 @@ impl Config {
             }));
         }
 
-        let dns_cache_capacity = match o.get("dns_cache_capacity") {
-            Some(t) => {
-                try!(t.as_u64()
-                    .ok_or(Error::new(ErrorKind::Malformed,
-                                      "`dns_cache_capacity` should be an integer",
-                                      None))) as usize
-            }
-            None => DEFAULT_DNS_CACHE_CAPACITY,
-        };
-
-        config.dns_cache_capacity = dns_cache_capacity;
-
         if let Some(udp_enable) = o.get("enable_udp") {
             match udp_enable.as_boolean() {
                 None => {
@@ -657,8 +638,6 @@ impl json::ToJson for Config {
         }
 
         obj.insert("enable_udp".to_owned(), Json::Boolean(self.enable_udp));
-        obj.insert("dns_cache_capacity".to_owned(),
-                   Json::U64(self.dns_cache_capacity as u64));
 
         Json::Object(obj)
     }

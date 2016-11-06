@@ -42,6 +42,8 @@ use tokio_core::io::Io;
 
 use futures::{self, Future, Poll};
 
+use net2::TcpBuilder;
+
 use ip::IpAddr;
 
 use self::stream::{EncryptedWriter, DecryptedReader};
@@ -72,15 +74,13 @@ pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
 /// Boxed future of EncryptedHalf
 pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
-fn connect_proxy_server(handle: &Handle,
-                        svr_cfg: Rc<ServerConfig>,
-                        dns_resolver: DnsResolver)
-                        -> BoxIoFuture<TcpStream> {
+fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
     match svr_cfg.addr() {
         &ServerAddr::SocketAddr(ref addr) => Box::new(TcpStream::connect(addr, handle)),
         &ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
-            let fut = dns_resolver.resolve(&domain[..])
+            let fut = DnsResolver::get_instance()
+                .resolve(&domain[..])
                 .and_then(move |sockaddr| {
                     let sockaddr = match sockaddr {
                         IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
@@ -361,4 +361,15 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
 /// Ignore all data from the reader
 pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
     IgnoreUntilEnd::Pending { r: r, amt: 0 }
+}
+
+#[cfg(unix)]
+fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
+    use net2::unix::UnixTcpBuilderExt;
+    builder.reuse_port(true)
+}
+
+#[cfg(windows)]
+fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
+    Ok(builder)
 }

@@ -51,13 +51,14 @@ use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::{flush, write_all, copy};
 
+use net2::TcpBuilder;
+
 use config::{Config, ServerConfig};
 
 use relay::socks5::Address;
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
 
 use super::tunnel;
 use super::stream::EncryptedWriter;
@@ -455,14 +456,13 @@ fn handle_connect(handle: Handle,
                   req: HttpRequest,
                   addr: Address,
                   remains: Vec<u8>,
-                  svr_cfg: Rc<ServerConfig>,
-                  dns_resolver: DnsResolver)
+                  svr_cfg: Rc<ServerConfig>)
                   -> Box<Future<Item = (), Error = io::Error>> {
     let cloned_addr = addr.clone();
     let http_version = req.version;
     let cloned_svr_cfg = svr_cfg.clone();
 
-    let fut = super::connect_proxy_server(&handle, svr_cfg, dns_resolver)
+    let fut = super::connect_proxy_server(&handle, svr_cfg)
         .and_then(move |svr_s| {
             trace!("Proxy server connected");
 
@@ -526,13 +526,12 @@ fn handle_http_proxy(handle: Handle,
                      req: HttpRequest,
                      addr: Address,
                      remains: Vec<u8>,
-                     svr_cfg: Rc<ServerConfig>,
-                     dns_resolver: DnsResolver)
+                     svr_cfg: Rc<ServerConfig>)
                      -> Box<Future<Item = (), Error = io::Error>> {
     trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
 
     let should_keep_alive = should_keep_alive(&req);
-    let fut = super::connect_proxy_server(&handle, svr_cfg.clone(), dns_resolver).and_then(move |svr_s| {
+    let fut = super::connect_proxy_server(&handle, svr_cfg.clone()).and_then(move |svr_s| {
         trace!("Proxy server connected");
 
         let cloned_addr = addr.clone();
@@ -563,12 +562,7 @@ fn handle_http_proxy(handle: Handle,
     Box::new(fut)
 }
 
-fn handle_client(handle: &Handle,
-                 socket: TcpStream,
-                 _: SocketAddr,
-                 svr_cfg: Rc<ServerConfig>,
-                 dns_resolver: DnsResolver)
-                 -> io::Result<()> {
+fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Rc<ServerConfig>) -> io::Result<()> {
     let cloned_handle = handle.clone();
     let client_addr = try!(socket.peer_addr());
     let fut = futures::lazy(|| Ok(socket.split()))
@@ -601,13 +595,7 @@ fn handle_client(handle: &Handle,
             match req.method.clone() {
                 Method::Connect => {
                     info!("CONNECT (Http) {}", addr);
-                    handle_connect(cloned_handle,
-                                   (r, w),
-                                   req,
-                                   addr,
-                                   remains,
-                                   svr_cfg,
-                                   dns_resolver)
+                    handle_connect(cloned_handle, (r, w), req, addr, remains, svr_cfg)
                 }
                 met => {
                     info!("{} (Http) {}", met, addr);
@@ -617,8 +605,7 @@ fn handle_client(handle: &Handle,
                                       req,
                                       addr,
                                       remains,
-                                      svr_cfg,
-                                      dns_resolver)
+                                      svr_cfg)
                 }
             }
         });
@@ -640,10 +627,24 @@ fn handle_client(handle: &Handle,
 }
 
 /// TCP local server using HTTP proxy protocol
-pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box<Future<Item = (), Error = io::Error>> {
+pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
     let listener = {
         let local_addr = config.http_proxy.as_ref().unwrap();
-        let listener = TcpListener::bind(local_addr, &handle).unwrap();
+
+        let tcp_builder = match local_addr {
+                &SocketAddr::V4(..) => TcpBuilder::new_v4(),
+                &SocketAddr::V6(..) => TcpBuilder::new_v6(),
+            }
+            .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
+
+        super::reuse_port(&tcp_builder)
+            .and_then(|builder| builder.reuse_address(true))
+            .and_then(|builder| builder.bind(local_addr))
+            .unwrap_or_else(|err| panic!("Failed to bind {}, {}", local_addr, err));
+
+        let listener = tcp_builder.listen(1024)
+            .and_then(|l| TcpListener::from_listener(l, local_addr, &handle))
+            .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
         info!("ShadowSocks HTTP Listening on {}", local_addr);
         listener
     };
@@ -654,8 +655,7 @@ pub fn run(config: Rc<Config>, handle: Handle, dns_resolver: DnsResolver) -> Box
             let server_cfg = servers.pick_server();
             trace!("Got connection, addr: {}", addr);
             trace!("Picked proxy server: {:?}", server_cfg);
-            let dns_resolver = dns_resolver.clone();
-            handle_client(&handle, socket, addr, server_cfg, dns_resolver)
+            handle_client(&handle, socket, addr, server_cfg)
         });
 
     Box::new(listening.map_err(|err| {
