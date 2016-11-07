@@ -59,17 +59,18 @@ impl TcpRelayClientHandshake {
     pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
         let TcpRelayClientHandshake { handle, forbidden_ip, s, svr_cfg } = self;
 
-        let (r_fut, w_fut) = proxy_handshake(s, svr_cfg);
-        let fut = r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
-            .map(move |(r, addr)| {
-                TcpRelayClientPending {
-                    handle: handle,
-                    r: r,
-                    addr: addr,
-                    w: w_fut,
-                    forbidden_ip: forbidden_ip,
-                }
-            });
+        let fut = proxy_handshake(s, svr_cfg).and_then(|(r_fut, w_fut)| {
+            r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
+                .map(move |(r, addr)| {
+                    TcpRelayClientPending {
+                        handle: handle,
+                        r: r,
+                        addr: addr,
+                        w: w_fut,
+                        forbidden_ip: forbidden_ip,
+                    }
+                })
+        });
         boxed_future(fut)
     }
 }

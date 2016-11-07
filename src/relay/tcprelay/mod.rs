@@ -40,7 +40,7 @@ use tokio_core::io::{read_exact, write_all};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
-use futures::{Future, Poll};
+use futures::{self, Future, Poll};
 
 use net2::TcpBuilder;
 
@@ -97,66 +97,74 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
 pub fn proxy_server_handshake(remote_stream: TcpStream,
                               svr_cfg: Rc<ServerConfig>,
                               relay_addr: Address)
-                              -> (DecryptedHalfFut, EncryptedHalfFut) {
-    let (r_fut, w_fut) = proxy_handshake(remote_stream, svr_cfg);
-    let w_fut = w_fut.and_then(move |enc_w| {
-        trace!("Got encrypt stream and going to send addr: {:?}",
-               relay_addr);
+                              -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+    let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {;
+        let w_fut = w_fut.and_then(move |enc_w| {
+            trace!("Got encrypt stream and going to send addr: {:?}",
+                   relay_addr);
 
-        // Send relay address to remote
-        let local_buf = Vec::new();
-        relay_addr.write_to(local_buf)
-            .and_then(|buf| enc_w.write_all_encrypted(buf))
-            .map(|(w, _)| w)
+            // Send relay address to remote
+            let local_buf = Vec::new();
+            relay_addr.write_to(local_buf)
+                .and_then(|buf| enc_w.write_all_encrypted(buf))
+                .map(|(w, _)| w)
+        });
+
+        Ok((r_fut, boxed_future(w_fut)))
     });
-
-    (r_fut, boxed_future(w_fut))
+    boxed_future(fut)
 }
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>) -> (DecryptedHalfFut, EncryptedHalfFut) {
-    let (r, w) = remote_stream.split();
+pub fn proxy_handshake(remote_stream: TcpStream,
+                       svr_cfg: Rc<ServerConfig>)
+                       -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+    let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(|(r, w)| {
 
-    let svr_cfg_cloned = svr_cfg.clone();
 
-    let enc = {
-        // Encrypt data to remote server
+        let svr_cfg_cloned = svr_cfg.clone();
 
-        // Send initialize vector to remote and create encryptor
+        let enc = {
+            // Encrypt data to remote server
 
-        let local_iv = svr_cfg.method().gen_init_vec();
-        trace!("Going to send initialize vector: {:?}", local_iv);
+            // Send initialize vector to remote and create encryptor
 
-        write_all(w, local_iv).and_then(move |(w, local_iv)| {
-            let encryptor = cipher::with_type(svr_cfg.method(),
-                                              svr_cfg.key(),
-                                              &local_iv[..],
-                                              CryptoMode::Encrypt);
+            let local_iv = svr_cfg.method().gen_init_vec();
+            trace!("Going to send initialize vector: {:?}", local_iv);
 
-            Ok(EncryptedWriter::new(w, encryptor))
-        })
-    };
+            write_all(w, local_iv).and_then(move |(w, local_iv)| {
+                let encryptor = cipher::with_type(svr_cfg.method(),
+                                                  svr_cfg.key(),
+                                                  &local_iv[..],
+                                                  CryptoMode::Encrypt);
 
-    let dec = {
-        let svr_cfg = svr_cfg_cloned;
+                Ok(EncryptedWriter::new(w, encryptor))
+            })
+        };
 
-        // Decrypt data from remote server
-        let iv_len = svr_cfg.method().iv_size();
-        read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
-            trace!("Got initialize vector {:?}", remote_iv);
+        let dec = {
+            let svr_cfg = svr_cfg_cloned;
 
-            let decryptor = cipher::with_type(svr_cfg.method(),
-                                              svr_cfg.key(),
-                                              &remote_iv[..],
-                                              CryptoMode::Decrypt);
-            let decrypt_stream = DecryptedReader::new(r, decryptor);
+            // Decrypt data from remote server
+            let iv_len = svr_cfg.method().iv_size();
+            read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
+                trace!("Got initialize vector {:?}", remote_iv);
 
-            Ok(decrypt_stream)
-        })
-    };
+                let decryptor = cipher::with_type(svr_cfg.method(),
+                                                  svr_cfg.key(),
+                                                  &remote_iv[..],
+                                                  CryptoMode::Decrypt);
+                let decrypt_stream = DecryptedReader::new(r, decryptor);
 
-    (boxed_future(dec), boxed_future(enc))
+                Ok(decrypt_stream)
+            })
+        };
+
+        Ok((boxed_future(dec), boxed_future(enc)))
+    });
+
+    boxed_future(fut)
 }
 
 /// Copy exactly N bytes by encryption
