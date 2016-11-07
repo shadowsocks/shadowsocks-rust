@@ -79,15 +79,13 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
         &ServerAddr::SocketAddr(ref addr) => TcpStream::connect(addr, handle).boxed(),
         &ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
-            let fut = DnsResolver::get_instance()
-                .resolve(&domain[..])
-                .and_then(move |sockaddr| {
-                    let sockaddr = match sockaddr {
-                        IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                        IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                    };
-                    TcpStream::connect(&sockaddr, &handle)
-                });
+            let fut = DnsResolver::resolve(&domain[..]).and_then(move |sockaddr| {
+                let sockaddr = match sockaddr {
+                    IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                    IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                };
+                TcpStream::connect(&sockaddr, &handle)
+            });
             Box::new(fut)
         }
     }

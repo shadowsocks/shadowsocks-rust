@@ -90,14 +90,12 @@ impl TcpRelayClientPending {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
             Address::DomainNameAddress(dname, port) => {
-                let fut = DnsResolver::get_instance()
-                    .resolve(&dname[..])
-                    .and_then(move |ipaddr| {
-                        Ok(match ipaddr {
-                            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                        })
-                    });
+                let fut = DnsResolver::resolve(&dname[..]).and_then(move |ipaddr| {
+                    Ok(match ipaddr {
+                        IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                        IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                    })
+                });
                 Box::new(fut)
             }
         }

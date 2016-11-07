@@ -20,20 +20,15 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
 use std::io;
 
-use relay::BoxIoFuture;
-
-use lru_cache::LruCache;
-
-use futures::{self, Future};
-use futures_cpupool::CpuPool;
+use futures;
+use futures_cpupool::{CpuPool, CpuFuture};
 
 use ip::IpAddr;
 
 lazy_static! {
-    pub static ref GLOBAL_DNS_RESOLVER: DnsResolver = DnsResolver::new(1024);
+    pub static ref GLOBAL_DNS_RESOLVER: DnsResolver = DnsResolver::new();
 }
 
 fn socket_addr_to_ip(addr: SocketAddr) -> IpAddr {
@@ -46,50 +41,28 @@ fn socket_addr_to_ip(addr: SocketAddr) -> IpAddr {
 #[derive(Clone)]
 pub struct DnsResolver {
     cpu_pool: CpuPool,
-    dns_cache: Arc<Mutex<LruCache<String, IpAddr>>>,
 }
 
 impl DnsResolver {
-    /// Gets a global DNS resolver instance
-    pub fn get_instance() -> &'static DnsResolver {
-        &*GLOBAL_DNS_RESOLVER
-    }
-
     /// Creates an DNS resolver
-    fn new(cache_size: usize) -> DnsResolver {
-        DnsResolver {
-            cpu_pool: CpuPool::new_num_cpus(),
-            dns_cache: Arc::new(Mutex::new(LruCache::new(cache_size))),
-        }
+    fn new() -> DnsResolver {
+        DnsResolver { cpu_pool: CpuPool::new_num_cpus() }
     }
 
     /// Resolves address asynchronously
-    pub fn resolve(&self, addr: &str) -> BoxIoFuture<IpAddr> {
-        let dns_cache = self.dns_cache.clone();
-
-        let mut guard = self.dns_cache.lock().unwrap();
-        match guard.get_mut(addr) {
-            Some(addr) => futures::finished(addr.clone()).boxed(),
-            None => {
-                let addr = addr.to_owned();
-                self.cpu_pool
-                    .spawn(futures::lazy(move || {
-                        let mixed_addr = format!("{}:0", addr);
-                        match try!(mixed_addr.to_socket_addrs()).next() {
-                            Some(sock_addr) => {
-                                let mut guard = dns_cache.lock().unwrap();
-                                let ipaddr = socket_addr_to_ip(sock_addr);
-                                guard.insert(addr, ipaddr);
-                                Ok(ipaddr)
-                            }
-                            None => {
-                                let err = io::Error::new(io::ErrorKind::Other, "Failed to resolve address");
-                                Err(err)
-                            }
-                        }
-                    }))
-                    .boxed()
+    pub fn resolve(addr: &str) -> CpuFuture<IpAddr, io::Error> {
+        let mixed_addr = format!("{}:0", addr);
+        GLOBAL_DNS_RESOLVER.cpu_pool.spawn(futures::lazy(move || {
+            match try!(mixed_addr.to_socket_addrs()).next() {
+                Some(sock_addr) => {
+                    let ipaddr = socket_addr_to_ip(sock_addr);
+                    Ok(ipaddr)
+                }
+                None => {
+                    let err = io::Error::new(io::ErrorKind::Other, "Failed to resolve address");
+                    Err(err)
+                }
             }
-        }
+        }))
     }
 }

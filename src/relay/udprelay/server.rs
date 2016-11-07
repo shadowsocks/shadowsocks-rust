@@ -208,14 +208,12 @@ impl ConnectionContext {
         match addr {
             Address::SocketAddress(s) => boxed_future(futures::finished(s)),
             Address::DomainNameAddress(ref dname, port) => {
-                let fut = DnsResolver::get_instance()
-                    .resolve(dname)
-                    .map(move |sockaddr| {
-                        match sockaddr {
-                            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                        }
-                    });
+                let fut = DnsResolver::resolve(dname).map(move |sockaddr| {
+                    match sockaddr {
+                        IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                        IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                    }
+                });
                 boxed_future(fut)
             }
         }
