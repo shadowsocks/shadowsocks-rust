@@ -338,11 +338,16 @@ impl TcpRequestHeader {
     }
 
     /// Write data into a writer
-    pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
-        let addr = self.address.clone();
-
-        let fut = write_all(w, [SOCKS5_VERSION, self.command.as_u8(), 0x00])
-            .and_then(move |(conn, _)| addr.write_to(conn));
+    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = Vec::with_capacity(self.len());
+        let TcpRequestHeader { address, command } = self;
+        let fut = futures::lazy(move || {
+                buf.write_all(&[SOCKS5_VERSION, command.as_u8(), 0x00])?;
+                Ok(buf)
+            })
+            .and_then(|buf| address.write_to(buf))
+            .and_then(|buf| write_all(w, buf))
+            .map(|(w, _)| w);
 
         Box::new(fut)
     }
@@ -401,11 +406,16 @@ impl TcpResponseHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
-        let addr = self.address.clone();
-        let fut = write_all(w, [SOCKS5_VERSION, self.reply.as_u8(), 0x00])
-            .map(From::from)
-            .and_then(move |(w, _)| addr.write_to(w));
+    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = Vec::with_capacity(self.len());
+        let TcpResponseHeader { reply, address } = self;
+        let fut = futures::lazy(move || {
+                buf.write_all(&[SOCKS5_VERSION, reply.as_u8(), 0x00])?;
+                Ok(buf)
+            })
+            .and_then(|buf| address.write_to(buf))
+            .and_then(|buf| write_all(w, buf))
+            .map(|(w, _)| w);
 
         Box::new(fut)
     }
@@ -426,11 +436,11 @@ fn parse_request_header<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, A
                     let v4addr = read_exact(conn, [0u8; 6]).map_err(From::from);
                     let fut = v4addr.and_then(|(conn, v4addr)| {
                         let mut stream = Cursor::new(v4addr);
-                        let v4addr = Ipv4Addr::new(try!(stream.read_u8()),
-                                                   try!(stream.read_u8()),
-                                                   try!(stream.read_u8()),
-                                                   try!(stream.read_u8()));
-                        let port = try!(stream.read_u16::<BigEndian>());
+                        let v4addr = Ipv4Addr::new(stream.read_u8()?,
+                                                   stream.read_u8()?,
+                                                   stream.read_u8()?,
+                                                   stream.read_u8()?);
+                        let port = stream.read_u16::<BigEndian>()?;
 
                         Ok((conn, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
                     });
@@ -440,15 +450,15 @@ fn parse_request_header<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, A
                     let v6addr = read_exact(conn, [0u8; 18]).map_err(From::from);
                     let fut = v6addr.and_then(|(conn, v6addr)| {
                         let mut stream = Cursor::new(v6addr);
-                        let v6addr = Ipv6Addr::new(try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()),
-                                                   try!(stream.read_u16::<BigEndian>()));
-                        let port = try!(stream.read_u16::<BigEndian>());
+                        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?,
+                                                   stream.read_u16::<BigEndian>()?);
+                        let port = stream.read_u16::<BigEndian>()?;
 
                         Ok((conn, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
                     });
@@ -492,50 +502,42 @@ fn parse_request_header<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, A
 fn write_addr<W: Write + 'static>(addr: Address, w: W) -> BoxIoFuture<W> {
     match addr {
         Address::SocketAddress(addr) => {
-            let write_addr = match addr {
+            match addr {
                 SocketAddr::V4(addr) => {
-                    let fut = write_all(w, [SOCKS5_ADDR_TYPE_IPV4])
-                        .and_then(move |(w, _)| write_all(w, addr.ip().octets()))
+                    let fut = futures::lazy(move || {
+                            let mut buf = Vec::with_capacity(1 + 4 + 2);
+                            buf.write_u8(SOCKS5_ADDR_TYPE_IPV4)?; // Address type
+                            buf.write_all(&addr.ip().octets())?; // Ipv4 bytes
+                            buf.write_u16::<BigEndian>(addr.port())?;
+                            Ok(buf)
+                        })
+                        .and_then(|buf| write_all(w, buf))
                         .map(|(conn, _)| conn);
                     Box::new(fut) as BoxIoFuture<W>
                 }
                 SocketAddr::V6(addr) => {
-                    let fut = write_all(w, [SOCKS5_ADDR_TYPE_IPV6])
-                        .and_then(move |(w, _)| {
-                            let mut rbuf = [0u8; 16];
-                            {
-                                let mut buf = Cursor::new(&mut rbuf[..]);
-                                for seg in &addr.ip().segments() {
-                                    try!(buf.write_u16::<BigEndian>(*seg));
-                                }
+                    let fut = futures::lazy(move || {
+                            let mut buf = Vec::with_capacity(1 + 16 + 2);
+                            buf.write_u8(SOCKS5_ADDR_TYPE_IPV6)?;
+                            for seg in &addr.ip().segments() {
+                                buf.write_u16::<BigEndian>(*seg)?;
                             }
-                            Ok((w, rbuf))
+                            buf.write_u16::<BigEndian>(addr.port())?;
+                            Ok(buf)
                         })
-                        .and_then(|(w, rbuf)| write_all(w, rbuf))
+                        .and_then(|rbuf| write_all(w, rbuf))
                         .map(|(conn, _)| conn);
                     Box::new(fut) as BoxIoFuture<W>
                 }
-            };
-
-            let fut = write_addr.and_then(move |w| {
-                    let mut rbuf = [0u8; 2];
-                    {
-                        let mut buf = Cursor::new(&mut rbuf[..]);
-                        try!(buf.write_u16::<BigEndian>(addr.port()));
-                    }
-                    Ok((w, rbuf))
-                })
-                .and_then(|(w, rbuf)| write_all(w, rbuf))
-                .map(|(conn, _)| conn);
-            Box::new(fut) as BoxIoFuture<W>
+            }
         }
         Address::DomainNameAddress(dnaddr, port) => {
             let fut = futures::lazy(move || {
-                    let mut buf = Vec::with_capacity(dnaddr.len() + 4);
-                    try!(buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME));
-                    try!(buf.write_u8(dnaddr.len() as u8));
-                    try!(buf.write_all(dnaddr[..].as_bytes()));
-                    try!(buf.write_u16::<BigEndian>(port));
+                    let mut buf = Vec::with_capacity(1 + 1 + dnaddr.len() + 2);
+                    buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME)?;
+                    buf.write_u8(dnaddr.len() as u8)?;
+                    buf.write_all(dnaddr[..].as_bytes())?;
+                    buf.write_u16::<BigEndian>(port)?;
                     Ok(buf)
                 })
                 .and_then(|buf| write_all(w, buf))
@@ -598,8 +600,14 @@ impl HandshakeRequest {
 
     /// Write to a writer
     pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        let fut = write_all(w, [SOCKS5_VERSION, self.methods.len() as u8])
-            .and_then(move |(w, _)| write_all(w, self.methods))
+        let mut buf = Vec::with_capacity(2 + self.methods.len());
+        let HandshakeRequest { methods } = self;
+        let fut = futures::lazy(move || {
+                buf.write_all(&[SOCKS5_VERSION, methods.len() as u8])?;
+                buf.write_all(&methods[..])?;
+                Ok(buf)
+            })
+            .and_then(|buf| write_all(w, buf))
             .map(|(w, _)| w);
 
         Box::new(fut)
@@ -680,11 +688,16 @@ impl UdpAssociateHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(&self, w: W) -> BoxIoFuture<W> {
-        let addr = self.address.clone();
-        let fut = write_all(w, [0x00, 0x00, self.frag])
-            .map_err(From::from)
-            .and_then(move |(w, _)| addr.write_to(w));
+    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = Vec::with_capacity(self.len());
+        let UdpAssociateHeader { frag, address } = self;
+        let fut = futures::lazy(move || {
+                buf.write_all(&[0x00, 0x00, frag])?;
+                Ok(buf)
+            })
+            .and_then(|buf| address.write_to(buf))
+            .and_then(|buf| write_all(w, buf))
+            .map(|(w, _)| w);
         Box::new(fut)
     }
 

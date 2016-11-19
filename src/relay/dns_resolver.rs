@@ -59,7 +59,8 @@ impl DnsResolver {
                     Ok(ipaddr)
                 }
                 None => {
-                    let err = io::Error::new(io::ErrorKind::Other, "Failed to resolve address");
+                    let err = io::Error::new(io::ErrorKind::Other,
+                                             format!("Failed to resolve \"{}\"", mixed_addr));
                     Err(err)
                 }
             }
