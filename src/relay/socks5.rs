@@ -505,10 +505,14 @@ fn write_addr<W: Write + 'static>(addr: Address, w: W) -> BoxIoFuture<W> {
             match addr {
                 SocketAddr::V4(addr) => {
                     let fut = futures::lazy(move || {
-                            let mut buf = Vec::with_capacity(1 + 4 + 2);
-                            buf.write_u8(SOCKS5_ADDR_TYPE_IPV4)?; // Address type
-                            buf.write_all(&addr.ip().octets())?; // Ipv4 bytes
-                            buf.write_u16::<BigEndian>(addr.port())?;
+                            let mut buf = [0u8; 1 + 4 + 2];
+                            {
+                                let mut cur = Cursor::new(&mut buf[..]);
+                                cur.write_u8(SOCKS5_ADDR_TYPE_IPV4)?; // Address type
+                                cur.write_all(&addr.ip().octets())?; // Ipv4 bytes
+                                cur.write_u16::<BigEndian>(addr.port())?;
+                            }
+
                             Ok(buf)
                         })
                         .and_then(|buf| write_all(w, buf))
@@ -517,12 +521,17 @@ fn write_addr<W: Write + 'static>(addr: Address, w: W) -> BoxIoFuture<W> {
                 }
                 SocketAddr::V6(addr) => {
                     let fut = futures::lazy(move || {
-                            let mut buf = Vec::with_capacity(1 + 16 + 2);
-                            buf.write_u8(SOCKS5_ADDR_TYPE_IPV6)?;
-                            for seg in &addr.ip().segments() {
-                                buf.write_u16::<BigEndian>(*seg)?;
+                            let mut buf = [0u8; 1 + 16 + 2];
+
+                            {
+                                let mut cur = Cursor::new(&mut buf[..]);
+                                cur.write_u8(SOCKS5_ADDR_TYPE_IPV6)?;
+                                for seg in &addr.ip().segments() {
+                                    cur.write_u16::<BigEndian>(*seg)?;
+                                }
+                                cur.write_u16::<BigEndian>(addr.port())?;
                             }
-                            buf.write_u16::<BigEndian>(addr.port())?;
+
                             Ok(buf)
                         })
                         .and_then(|rbuf| write_all(w, rbuf))
