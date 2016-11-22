@@ -60,7 +60,12 @@ impl TcpRelayClientHandshake {
         let TcpRelayClientHandshake { handle, forbidden_ip, s, svr_cfg } = self;
 
         let fut = proxy_handshake(s, svr_cfg).and_then(|(r_fut, w_fut)| {
-            r_fut.and_then(|r| Address::read_from(r).map_err(From::from))
+            r_fut.and_then(|r| {
+                    Address::read_from(r).map_err(|_| {
+                        io::Error::new(io::ErrorKind::Other,
+                                       "failed to decode Address, may be wrong method or key")
+                    })
+                })
                 .map(move |(r, addr)| {
                     TcpRelayClientPending {
                         handle: handle,
