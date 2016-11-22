@@ -21,9 +21,9 @@
 
 //! Rc4Md5 cipher definition
 
-use crypto::openssl::{OpenSSLCrypto, OpenSSLDigest};
+use crypto::openssl::OpenSSLCrypto;
 use crypto::cipher::{Cipher, CipherType, CipherResult};
-use crypto::digest::{Digest, DigestType};
+use crypto::digest::{self, Digest, DigestType};
 use crypto::CryptoMode;
 
 /// Rc4Md5 Cipher
@@ -33,14 +33,13 @@ pub struct Rc4Md5Cipher {
 
 impl Rc4Md5Cipher {
     pub fn new(key: &[u8], iv: &[u8], mode: CryptoMode) -> Rc4Md5Cipher {
-        let mut md5_digest = OpenSSLDigest::new(DigestType::Md5);
+        let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
         md5_digest.update(iv);
-        let key = md5_digest.digest();
+        let mut key = Vec::new();
+        md5_digest.digest(&mut key);
 
-        Rc4Md5Cipher {
-            crypto: OpenSSLCrypto::new(CipherType::Rc4, &key[..], b"", mode)
-        }
+        Rc4Md5Cipher { crypto: OpenSSLCrypto::new(CipherType::Rc4, &key[..], b"", mode) }
     }
 }
 
@@ -73,14 +72,14 @@ mod test {
         let mut enc = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Encrypt);
         let mut encrypted_msg = Vec::new();
         enc.update(msg, &mut encrypted_msg)
-           .and_then(|_| enc.finalize(&mut encrypted_msg))
-           .unwrap();
+            .and_then(|_| enc.finalize(&mut encrypted_msg))
+            .unwrap();
 
         let mut dec = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Decrypt);
         let mut decrypted_msg = Vec::new();
         dec.update(&encrypted_msg[..], &mut decrypted_msg)
-           .and_then(|_| dec.finalize(&mut decrypted_msg))
-           .unwrap();
+            .and_then(|_| dec.finalize(&mut decrypted_msg))
+            .unwrap();
 
         assert_eq!(msg, &decrypted_msg[..]);
     }

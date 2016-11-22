@@ -22,17 +22,13 @@
 //! Cipher defined with Rust binding for libcrypto (OpenSSL)
 
 use std::convert::From;
-use std::io::Write;
 
 use crypto::cipher::{Cipher, CipherType, CipherResult};
 use crypto::cipher;
 
-use crypto::digest::Digest;
-use crypto::digest;
 use crypto::CryptoMode;
 
 use openssl::crypto::symm;
-use openssl::crypto::hash;
 
 /// Core cipher of OpenSSL
 pub struct OpenSSLCrypto {
@@ -146,36 +142,5 @@ impl Cipher for OpenSSLCipher {
 
     fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
         self.worker.finalize(out)
-    }
-}
-
-/// Digest provided by OpenSSL
-pub struct OpenSSLDigest {
-    inner: hash::Hasher,
-}
-
-impl OpenSSLDigest {
-    /// Creates by type
-    pub fn new(t: digest::DigestType) -> OpenSSLDigest {
-        let t = match t {
-            digest::DigestType::Md5 => hash::Type::MD5,
-            digest::DigestType::Sha => hash::Type::SHA512,
-            digest::DigestType::Sha1 => hash::Type::SHA1,
-        };
-
-        OpenSSLDigest { inner: hash::Hasher::new(t).unwrap() }
-    }
-}
-
-unsafe impl Send for OpenSSLDigest {}
-
-impl Digest for OpenSSLDigest {
-    fn update(&mut self, data: &[u8]) {
-        let _ = self.inner.write(data);
-    }
-
-    fn digest(&mut self) -> Vec<u8> {
-        // TODO: Check error
-        self.inner.finish().unwrap()
     }
 }

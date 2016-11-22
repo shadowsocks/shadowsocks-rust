@@ -24,8 +24,7 @@
 use std::io::BufReader;
 
 use crypto::cipher::{Cipher, CipherResult};
-use crypto::digest;
-use crypto::digest::DigestType;
+use crypto::digest::{self, DigestType, Digest};
 use crypto::CryptoMode;
 
 use byteorder::{ReadBytesExt, LittleEndian};
@@ -42,7 +41,8 @@ impl TableCipher {
     pub fn new(key: &[u8], mode: CryptoMode) -> TableCipher {
         let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
-        let key_digest = md5_digest.digest();
+        let mut key_digest = Vec::new();
+        md5_digest.digest(&mut key_digest);
 
         let mut bufr = BufReader::new(&key_digest[..]);
         let a = bufr.read_u64::<LittleEndian>().unwrap();

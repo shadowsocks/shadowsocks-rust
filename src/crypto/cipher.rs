@@ -34,7 +34,7 @@ use crypto::rc4_md5;
 use crypto::dummy;
 use crypto::crypto::CryptoCipher;
 
-use crypto::digest::{self, DigestType};
+use crypto::digest::{self, DigestType, Digest};
 
 use openssl::crypto::symm;
 
@@ -225,31 +225,31 @@ impl CipherType {
 
     /// Extends key to match the required key length
     pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
-        let iv_len = self.block_size();
+        let iv_len = self.iv_size();
         let key_len = self.key_size();
 
-        let mut m: Vec<Vec<u8>> = Vec::with_capacity((key_len + iv_len) / DigestType::Md5.digest_len() + 1);
-        let mut i = 0;
-        while m.len() * DigestType::Md5.digest_len() < (key_len + iv_len) {
-            let mut md5 = digest::with_type(DigestType::Md5);
-            if i > 0 {
-                let mut vkey = m[i - 1].clone();
-                vkey.extend_from_slice(key);
-                md5.update(&vkey[..]);
-            } else {
-                md5.update(key);
-            }
+        let mut digest = digest::with_type(DigestType::Md5);
 
-            m.push(md5.digest());
-            i += 1
+        let mut result = Vec::new();
+        let mut m = Vec::new();
+        let mut loop_count = 0;
+        while loop_count * digest.digest_len() < (key_len + iv_len) {
+            let mut vkey = m.clone();
+            vkey.extend_from_slice(key);
+
+            digest.update(&vkey);
+
+            m.clear();
+            digest.digest(&mut m);
+            loop_count += 1;
+
+            digest.reset();
+
+            result.extend_from_slice(&m[..]);
         }
 
-        let whole = m.iter().fold(Vec::new(), |mut a, b| {
-            a.extend_from_slice(b);
-            a
-        });
-        let key = whole[0..key_len].to_vec();
-        key
+        result.resize(key_len, 0);
+        result
     }
 
     /// Symmetric crypto initialize vector size
