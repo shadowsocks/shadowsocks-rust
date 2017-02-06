@@ -238,7 +238,7 @@ impl<R, W> Future for CopyExactEncrypted<R, W>
 
                     // If our buffer has some data, let's write it out!
                     while *pos < *cap {
-                        let i = try_nb!(writer.write(&enc_buf[*pos..*cap]).and_then(|x| writer.flush().map(|_| x)));
+                        let i = try_nb!(writer.write(&enc_buf[*pos..*cap]));
                         *pos += i;
                     }
 
