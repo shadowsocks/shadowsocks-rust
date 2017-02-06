@@ -75,6 +75,16 @@ impl HttpRequest {
     pub fn from_raw<'headers, 'buf: 'headers>(req: &Request<'headers, 'buf>,
                                               headers: &'headers [httparse::Header])
                                               -> hyper::Result<HttpRequest> {
+
+        let mut he = Headers::new();
+        for h in headers.iter() {
+            if h.name.len() == 0 {
+                break;
+            }
+
+            he.append_raw(h.name.to_owned(), h.value.to_vec());
+        }
+
         Ok(HttpRequest {
             version: if req.version.unwrap() == 1 {
                 HttpVersion::Http11
@@ -83,7 +93,7 @@ impl HttpRequest {
             },
             method: try!(req.method.unwrap().parse::<Method>()),
             request_uri: try!(req.path.unwrap().parse::<RequestUri>()),
-            headers: try!(Headers::from_raw(headers)),
+            headers: he,
         })
     }
 
