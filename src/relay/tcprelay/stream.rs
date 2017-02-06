@@ -24,10 +24,16 @@
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 use std::mem;
+use std::time::Duration;
 
 use crypto::{Cipher, CipherVariant};
 
-use futures::{Future, Poll};
+use futures::{self, Future, Poll};
+
+use tokio_core::io::{read, write_all};
+use tokio_core::reactor::Handle;
+
+use super::{BUFFER_SIZE, BoxIoFuture, try_timeout, boxed_future};
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader<R>
@@ -39,8 +45,6 @@ pub struct DecryptedReader<R>
     pos: usize,
     sent_final: bool,
 }
-
-const BUFFER_SIZE: usize = 4096;
 
 impl<R> DecryptedReader<R>
     where R: Read
@@ -131,14 +135,14 @@ impl<R> Read for DecryptedReader<R>
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
-    where W: Write
+    where W: Write + 'static
 {
     writer: W,
     cipher: CipherVariant,
 }
 
 impl<W> EncryptedWriter<W>
-    where W: Write
+    where W: Write + 'static
 {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, cipher: CipherVariant) -> EncryptedWriter<W> {
@@ -196,10 +200,39 @@ impl<W> EncryptedWriter<W>
             buf: Vec::new(),
         }
     }
+
+    /// Copy all data from reader with timeout
+    pub fn copy_from_encrypted_timeout<R>(mut self, r: R, timeout: Option<Duration>, handle: Handle) -> BoxIoFuture<u64>
+        where R: Read + 'static
+    {
+        let buf = try_timeout(read(r, vec![0u8; BUFFER_SIZE]), timeout.clone(), &handle)
+            .and_then(move |(r, buf, n)| {
+                let mut enc_buf = Vec::new();
+                let cont = if n == 0 {
+                    try!(self.cipher_finalize(&mut enc_buf));
+                    false
+                } else {
+                    try!(self.cipher_update(&buf[..n], &mut enc_buf));
+                    true
+                };
+
+                Ok((r, self, enc_buf, n, cont))
+            })
+            .and_then(move |(r, w, buf, n, cont)| {
+                write_all(w, buf).and_then(move |(w, _)| {
+                    if cont {
+                        boxed_future(w.copy_from_encrypted_timeout(r, timeout, handle).map(move |x| x + n as u64))
+                    } else {
+                        boxed_future(futures::finished(n as u64))
+                    }
+                })
+            });
+        boxed_future(buf)
+    }
 }
 
 impl<W> Write for EncryptedWriter<W>
-    where W: Write
+    where W: Write + 'static
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.writer.write(buf)
@@ -212,7 +245,7 @@ impl<W> Write for EncryptedWriter<W>
 
 /// write_all and encrypt data
 pub enum EncryptedWriteAll<W, B>
-    where W: Write,
+    where W: Write + 'static,
           B: AsRef<[u8]>
 {
     Writing {
@@ -260,7 +293,7 @@ impl<W, B> Future for EncryptedWriteAll<W, B>
 }
 
 /// Encrypted copy
-pub struct EncryptedCopy<R: Read, W: Write> {
+pub struct EncryptedCopy<R: Read, W: Write + 'static> {
     reader: R,
     writer: EncryptedWriter<W>,
     read_done: bool,

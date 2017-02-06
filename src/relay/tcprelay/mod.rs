@@ -21,10 +21,11 @@
 
 //! TcpRelay implementation
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
+use std::time::Duration;
 
 use crypto::cipher;
 use crypto::CryptoMode;
@@ -34,8 +35,8 @@ use relay::dns_resolver::DnsResolver;
 use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
-use tokio_core::reactor::Handle;
-use tokio_core::io::{read_exact, write_all};
+use tokio_core::reactor::{Handle, Timeout};
+use tokio_core::io::{read_exact, write_all, read};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
@@ -52,6 +53,8 @@ mod socks5_local;
 pub mod server;
 mod stream;
 pub mod client;
+
+const BUFFER_SIZE: usize = 4096;
 
 /// Directions in the tunnel
 #[derive(Debug, Copy, Clone)]
@@ -73,18 +76,22 @@ pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
 pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
+    let timeout = svr_cfg.timeout().clone();
+    trace!("Connecting to proxy {:?}, timeout: {:?}",
+           svr_cfg.addr(),
+           timeout);
     match svr_cfg.addr() {
-        &ServerAddr::SocketAddr(ref addr) => TcpStream::connect(addr, handle).boxed(),
+        &ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr, handle), timeout, handle),
         &ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
-            let fut = DnsResolver::resolve(&domain[..]).and_then(move |sockaddr| {
+            let fut = try_timeout(DnsResolver::resolve(&domain[..]), timeout, &handle).and_then(move |sockaddr| {
                 let sockaddr = match sockaddr {
                     IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
                     IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
                 };
-                TcpStream::connect(&sockaddr, &handle)
+                try_timeout(TcpStream::connect(&sockaddr, &handle), timeout, &handle)
             });
-            Box::new(fut)
+            boxed_future(fut)
         }
     }
 }
@@ -92,9 +99,11 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
 /// Handshake logic for ShadowSocks Client
 pub fn proxy_server_handshake(remote_stream: TcpStream,
                               svr_cfg: Rc<ServerConfig>,
-                              relay_addr: Address)
+                              relay_addr: Address,
+                              handle: Handle)
                               -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    let fut = proxy_handshake(remote_stream, svr_cfg).and_then(|(r_fut, w_fut)| {;
+    let timeout = svr_cfg.timeout().clone();
+    let fut = proxy_handshake(remote_stream, svr_cfg, handle.clone()).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
             trace!("Got encrypt stream and going to send addr: {:?}",
                    relay_addr);
@@ -102,7 +111,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(|buf| enc_w.write_all_encrypted(buf))
+                .and_then(move |buf| try_timeout(enc_w.write_all_encrypted(buf), timeout, &handle))
                 .map(|(w, _)| w)
         });
 
@@ -114,10 +123,12 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
 pub fn proxy_handshake(remote_stream: TcpStream,
-                       svr_cfg: Rc<ServerConfig>)
+                       svr_cfg: Rc<ServerConfig>,
+                       handle: Handle)
                        -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(|(r, w)| {
+    let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
 
+        let timeout = svr_cfg.timeout().clone();
 
         let svr_cfg_cloned = svr_cfg.clone();
 
@@ -129,7 +140,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             let local_iv = svr_cfg.method().gen_init_vec();
             trace!("Going to send initialize vector: {:?}", local_iv);
 
-            write_all(w, local_iv).and_then(move |(w, local_iv)| {
+            try_timeout(write_all(w, local_iv), timeout.clone(), &handle).and_then(move |(w, local_iv)| {
                 let encryptor = cipher::with_type(svr_cfg.method(),
                                                   svr_cfg.key(),
                                                   &local_iv[..],
@@ -144,7 +155,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
             // Decrypt data from remote server
             let iv_len = svr_cfg.method().iv_size();
-            read_exact(r, vec![0u8; iv_len]).and_then(move |(r, remote_iv)| {
+            try_timeout(read_exact(r, vec![0u8; iv_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
                 trace!("Got initialize vector {:?}", remote_iv);
 
                 let decryptor = cipher::with_type(svr_cfg.method(),
@@ -266,4 +277,48 @@ fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
 #[cfg(windows)]
 fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
     Ok(builder)
+}
+
+fn try_timeout<T, F>(fut: F, dur: Option<Duration>, handle: &Handle) -> BoxIoFuture<T>
+    where F: Future<Item = T, Error = io::Error> + 'static,
+          T: 'static
+{
+    match dur {
+        Some(dur) => io_timeout(fut, dur, handle),
+        None => boxed_future(fut),
+    }
+}
+
+fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
+    where F: Future<Item = T, Error = io::Error> + 'static,
+          T: 'static
+{
+    let fut = fut.select(Timeout::new(dur, handle)
+            .unwrap() // It must be succeeded!
+            .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timeout"))))
+        .then(|res| {
+            match res {
+                Ok((t, _)) => Ok(t),
+                Err((err, _)) => Err(err),
+            }
+        });
+    boxed_future(fut)
+}
+
+fn copy_timeout<R, W>(r: R, w: W, timeout: Option<Duration>, handle: Handle) -> BoxIoFuture<u64>
+    where R: Read + 'static,
+          W: Write + 'static
+{
+    let fut = try_timeout(read(r, vec![0u8; BUFFER_SIZE]), timeout.clone(), &handle)
+        .and_then(move |(r, mut buf, n)| {
+            if n == 0 {
+                boxed_future(futures::finished(n as u64))
+            } else {
+                buf.resize(n, 0);
+                let fut = try_timeout(write_all(w, buf), timeout.clone(), &handle)
+                    .and_then(move |(w, _)| copy_timeout(r, w, timeout, handle).map(move |x| x + n as u64));
+                boxed_future(fut)
+            }
+        });
+    boxed_future(fut)
 }

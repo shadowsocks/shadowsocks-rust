@@ -32,7 +32,7 @@ use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::reactor::Handle;
 use tokio_core::io::Io;
 use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::{flush, copy};
+use tokio_core::io::flush;
 
 use net2::TcpBuilder;
 
@@ -44,7 +44,7 @@ use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
 
-use super::{tunnel, ignore_until_end};
+use super::{tunnel, ignore_until_end, try_timeout};
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -60,6 +60,9 @@ fn handle_socks5_connect(handle: &Handle,
                          -> BoxIoFuture<()> {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
+    let cloned_handle = handle.clone();
+    let cloned_handle2 = handle.clone();
+    let timeout = svr_cfg.timeout().clone();
     let fut = super::connect_proxy_server(handle, svr_cfg)
         .and_then(move |svr_s| {
             trace!("Proxy server connected");
@@ -68,15 +71,23 @@ fn handle_socks5_connect(handle: &Handle,
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded,
                                                 Address::SocketAddress(client_addr));
             trace!("Send header: {:?}", header);
+            let handle = cloned_handle;
 
-            header.write_to(w)
-                .and_then(flush)
-                .map(move |w| (svr_s, w))
+            let fut = try_timeout(header.write_to(w), timeout.clone(), &handle);
+            let fut = try_timeout(fut.and_then(flush), timeout, &handle);
+            fut.map(move |w| (svr_s, w))
         })
         .and_then(move |(svr_s, w)| {
-            super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(|(svr_r, svr_w)| {
-                let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                let whalf = svr_w.and_then(move |svr_w| svr_w.copy_from_encrypted(r));
+            let handle = cloned_handle2;
+            let svr_cfg = cloned_svr_cfg;
+            let timeout = svr_cfg.timeout().clone();
+            super::proxy_server_handshake(svr_s, svr_cfg, addr, handle.clone()).and_then(move |(svr_r, svr_w)| {
+                let cloned_handle = handle.clone();
+                let cloned_timeout = timeout.clone();
+
+                let rhalf = svr_r.and_then(move |svr_r| super::copy_timeout(svr_r, w, timeout, handle));
+                let whalf =
+                    svr_w.and_then(move |svr_w| svr_w.copy_from_encrypted_timeout(r, cloned_timeout, cloned_handle));
 
                 tunnel(cloned_addr, whalf, rhalf)
             })

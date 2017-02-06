@@ -25,6 +25,7 @@ use std::io;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::collections::HashSet;
+use std::time::Duration;
 
 use config::{Config, ServerConfig};
 
@@ -38,13 +39,12 @@ use futures::stream::Stream;
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::io::{Io, ReadHalf, WriteHalf};
-use tokio_core::io::copy;
 
 use net2::TcpBuilder;
 
 use ip::IpAddr;
 
-use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut};
+use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut, try_timeout, copy_timeout};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
@@ -59,12 +59,17 @@ impl TcpRelayClientHandshake {
     pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
         let TcpRelayClientHandshake { handle, forbidden_ip, s, svr_cfg } = self;
 
-        let fut = proxy_handshake(s, svr_cfg).and_then(|(r_fut, w_fut)| {
-            r_fut.and_then(|r| {
-                    Address::read_from(r).map_err(|_| {
-                        io::Error::new(io::ErrorKind::Other,
-                                       "failed to decode Address, may be wrong method or key")
-                    })
+        let timeout = svr_cfg.timeout().clone();
+        let cloned_handle = handle.clone();
+        let fut = proxy_handshake(s, svr_cfg, handle.clone()).and_then(move |(r_fut, w_fut)| {
+            r_fut.and_then(move |r| {
+                    let handle = cloned_handle;
+                    try_timeout(Address::read_from(r).map_err(|_| {
+                                    io::Error::new(io::ErrorKind::Other,
+                                                   "failed to decode Address, may be wrong method or key")
+                                }),
+                                timeout,
+                                &handle)
                 })
                 .map(move |(r, addr)| {
                     TcpRelayClientPending {
@@ -73,6 +78,7 @@ impl TcpRelayClientHandshake {
                         addr: addr,
                         w: w_fut,
                         forbidden_ip: forbidden_ip,
+                        timeout: timeout,
                     }
                 })
         });
@@ -87,15 +93,16 @@ pub struct TcpRelayClientPending {
     addr: Address,
     w: EncryptedHalfFut,
     forbidden_ip: Rc<HashSet<IpAddr>>,
+    timeout: Option<Duration>,
 }
 
 impl TcpRelayClientPending {
     /// Resolve Address to SocketAddr
-    fn resolve_address(addr: Address) -> BoxIoFuture<SocketAddr> {
+    fn resolve_address(handle: Handle, addr: Address, timeout: Option<Duration>) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
             Address::DomainNameAddress(dname, port) => {
-                let fut = DnsResolver::resolve(&dname[..]).and_then(move |ipaddr| {
+                let fut = try_timeout(DnsResolver::resolve(&dname[..]), timeout, &handle).and_then(move |ipaddr| {
                     Ok(match ipaddr {
                         IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
                         IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
@@ -108,8 +115,12 @@ impl TcpRelayClientPending {
 
     /// Resolve remote address to SocketAddr
     /// Report failure if the SocketAddr is forbidden by `forbidden_ip`
-    fn resolve_remote(addr: Address, forbidden_ip: Rc<HashSet<IpAddr>>) -> BoxIoFuture<SocketAddr> {
-        let fut = TcpRelayClientPending::resolve_address(addr).and_then(move |addr| {
+    fn resolve_remote(handle: Handle,
+                      addr: Address,
+                      forbidden_ip: Rc<HashSet<IpAddr>>,
+                      timeout: Option<Duration>)
+                      -> BoxIoFuture<SocketAddr> {
+        let fut = TcpRelayClientPending::resolve_address(handle, addr, timeout).and_then(move |addr| {
             trace!("Resolved address as {}", addr);
             let ipaddr = match addr.clone() {
                 SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
@@ -128,23 +139,32 @@ impl TcpRelayClientPending {
     }
 
     /// Connect to the remote server
-    fn connect_remote(handle: Handle, addr: Address, forbidden_ip: Rc<HashSet<IpAddr>>) -> BoxIoFuture<TcpStream> {
+    fn connect_remote(handle: Handle,
+                      addr: Address,
+                      forbidden_ip: Rc<HashSet<IpAddr>>,
+                      timeout: Option<Duration>)
+                      -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(TcpRelayClientPending::resolve_remote(addr, forbidden_ip)
-            .and_then(move |addr| TcpStream::connect(&addr, &handle)))
+        Box::new(TcpRelayClientPending::resolve_remote(handle.clone(), addr, forbidden_ip, timeout.clone())
+            .and_then(move |addr| try_timeout(TcpStream::connect(&addr, &handle), timeout, &handle)))
     }
 
     /// Connect to the remote server
     pub fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
-        let fut = TcpRelayClientPending::connect_remote(self.handle, self.addr, self.forbidden_ip).map(|stream| {
-            TcpRelayClientConnected {
-                server: stream.split(),
-                client: client_pair,
-                addr: addr,
-            }
-        });
+        let timeout = self.timeout.clone();
+        let handle = self.handle.clone();
+        let fut = TcpRelayClientPending::connect_remote(self.handle, self.addr, self.forbidden_ip, self.timeout)
+            .map(move |stream| {
+                TcpRelayClientConnected {
+                    server: stream.split(),
+                    client: client_pair,
+                    addr: addr,
+                    timeout: timeout,
+                    handle: handle,
+                }
+            });
         Box::new(fut)
     }
 }
@@ -154,6 +174,8 @@ pub struct TcpRelayClientConnected {
     server: (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
     client: (DecryptedHalf, EncryptedHalfFut),
     addr: Address,
+    timeout: Option<Duration>,
+    handle: Handle,
 }
 
 impl TcpRelayClientConnected {
@@ -161,9 +183,11 @@ impl TcpRelayClientConnected {
     pub fn tunnel(self) -> BoxIoFuture<()> {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;
+        let timeout = self.timeout.clone();
+        let handle = self.handle.clone();
         tunnel(self.addr,
-               copy(r, svr_w),
-               w_fut.and_then(|w| w.copy_from_encrypted(svr_r)))
+               copy_timeout(r, svr_w, self.timeout, self.handle),
+               w_fut.and_then(move |w| w.copy_from_encrypted_timeout(svr_r, timeout, handle)))
     }
 }
 

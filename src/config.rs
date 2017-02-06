@@ -219,6 +219,11 @@ impl ServerConfig {
     pub fn method(&self) -> CipherType {
         self.method
     }
+
+    /// Get timeout
+    pub fn timeout(&self) -> &Option<Duration> {
+        &self.timeout
+    }
 }
 
 impl ServerConfig {
@@ -257,7 +262,6 @@ pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
-    pub timeout: Option<Duration>,
     pub forbidden_ip: HashSet<IpAddr>,
 }
 
@@ -340,7 +344,6 @@ impl Config {
             server: Vec::new(),
             local: None,
             enable_udp: false,
-            timeout: None,
             forbidden_ip: HashSet::new(),
         }
     }
@@ -425,15 +428,6 @@ impl Config {
 
     fn parse_json_object(o: &Map<String, Value>, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
-
-        config.timeout = match o.get("timeout") {
-            Some(t_str) => {
-                let val = try!(t_str.as_u64()
-                    .ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None)));
-                Some(Duration::from_secs(val))
-            }
-            None => None,
-        };
 
         if o.contains_key("servers") {
             let server_list = try!(o.get("servers")
