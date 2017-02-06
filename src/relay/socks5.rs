@@ -288,6 +288,14 @@ impl From<(String, u16)> for Address {
 }
 
 /// TCP request header after handshake
+///
+/// ```plain
+/// +----+-----+-------+------+----------+----------+
+/// |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+/// +----+-----+-------+------+----------+----------+
+/// | 1  |  1  | X'00' |  1   | Variable |    2     |
+/// +----+-----+-------+------+----------+----------+
+/// ```
 #[derive(Clone, Debug)]
 pub struct TcpRequestHeader {
     /// SOCKS5 command
@@ -360,6 +368,14 @@ impl TcpRequestHeader {
 }
 
 /// TCP response header
+///
+/// ```plain
+/// +----+-----+-------+------+----------+----------+
+/// |VER | REP |  RSV  | ATYP | BND.ADDR | BND.PORT |
+/// +----+-----+-------+------+----------+----------+
+/// | 1  |  1  | X'00' |  1   | Variable |    2     |
+/// +----+-----+-------+------+----------+----------+
+/// ```
 #[derive(Clone, Debug)]
 pub struct TcpResponseHeader {
     /// SOCKS5 reply
@@ -571,11 +587,13 @@ fn get_addr_len(atyp: &Address) -> usize {
 
 /// SOCKS5 handshake request packet
 ///
+/// ```plain
 /// +----+----------+----------+
 /// |VER | NMETHODS | METHODS  |
 /// +----+----------+----------+
 /// | 5  |    1     | 1 to 255 |
 /// +----+----------+----------|
+/// ```
 #[derive(Clone, Debug)]
 pub struct HandshakeRequest {
     pub methods: Vec<u8>,
@@ -625,11 +643,13 @@ impl HandshakeRequest {
 
 /// SOCKS5 handshake response packet
 ///
+/// ```plain
 /// +----+--------+
 /// |VER | METHOD |
 /// +----+--------+
 /// | 1  |   1    |
 /// +----+--------+
+/// ```
 #[derive(Clone, Debug, Copy)]
 pub struct HandshakeResponse {
     pub chosen_method: u8,
@@ -663,6 +683,14 @@ impl HandshakeResponse {
 }
 
 /// UDP ASSOCIATE request header
+///
+/// ```plain
+/// +----+------+------+----------+----------+----------+
+/// |RSV | FRAG | ATYP | DST.ADDR | DST.PORT |   DATA   |
+/// +----+------+------+----------+----------+----------+
+/// | 2  |  1   |  1   | Variable |    2     | Variable |
+/// +----+------+------+----------+----------+----------+
+/// ```
 #[derive(Clone, Debug)]
 pub struct UdpAssociateHeader {
     /// Fragment
