@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.0.3"
+version = "1.1.0"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -52,9 +52,6 @@ ip = "1"
 openssl = "0.9"
 lru-cache = "0.1"
 libc = "0.2"
-hyper = "0.10"
-url = "1.4"
-httparse = "1.2"
 futures = "0.1"
 futures-cpupool = "0.1"
 tokio-core = "0.1"

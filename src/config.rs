@@ -256,7 +256,6 @@ pub enum ConfigType {
 pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
-    pub http_proxy: Option<ClientConfig>,
     pub enable_udp: bool,
     pub timeout: Option<Duration>,
     pub forbidden_ip: HashSet<IpAddr>,
@@ -340,7 +339,6 @@ impl Config {
         Config {
             server: Vec::new(),
             local: None,
-            http_proxy: None,
             enable_udp: false,
             timeout: None,
             forbidden_ip: HashSet::new(),
@@ -495,45 +493,6 @@ impl Config {
                 };
             } else if has_local_address ^ has_local_port {
                 panic!("You have to provide `local_address` and `local_port` together");
-            }
-
-            let has_proxy_addr = o.contains_key("local_http_address");
-            let has_proxy_port = o.contains_key("local_http_port");
-
-            if has_proxy_addr && has_proxy_port {
-                config.http_proxy = match o.get("local_http_address") {
-                    Some(local_addr) => {
-                        let addr_str = try!(local_addr.as_str()
-                            .ok_or(Error::new(ErrorKind::Malformed,
-                                              "`local_http_address` should be a string",
-                                              None)));
-
-                        let port = try!(o.get("local_http_port")
-                            .unwrap()
-                            .as_u64()
-                            .ok_or(Error::new(ErrorKind::Malformed,
-                                              "`local_http_port` should be an integer",
-                                              None))) as u16;
-
-                        match addr_str.parse::<Ipv4Addr>() {
-                            Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => {
-                                match addr_str.parse::<Ipv6Addr>() {
-                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                    Err(..) => {
-                                        return Err(Error::new(ErrorKind::Malformed,
-                                                              "`local_http_address` is not a valid IP \
-                                                               address",
-                                                              None))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    None => None,
-                };
-            } else if has_proxy_addr ^ has_proxy_port {
-                panic!("You have to provide `local_http_address` and `local_http_port` together");
             }
         }
 

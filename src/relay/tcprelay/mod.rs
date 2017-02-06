@@ -21,11 +21,10 @@
 
 //! TcpRelay implementation
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
-use std::cmp;
 
 use crypto::cipher;
 use crypto::CryptoMode;
@@ -50,7 +49,6 @@ use self::stream::{EncryptedWriter, DecryptedReader};
 
 pub mod local;
 mod socks5_local;
-mod http_local;
 pub mod server;
 mod stream;
 pub mod client;
@@ -163,109 +161,6 @@ pub fn proxy_handshake(remote_stream: TcpStream,
     });
 
     boxed_future(fut)
-}
-
-/// Copy exactly N bytes by encryption
-pub enum CopyExactEncrypted<R, W>
-    where R: Read,
-          W: Write
-{
-    Pending {
-        reader: R,
-        writer: EncryptedWriter<W>,
-        buf: [u8; 4096],
-        remain: usize,
-        pos: usize,
-        cap: usize,
-        enc_buf: Vec<u8>,
-    },
-    Empty,
-}
-
-impl<R, W> CopyExactEncrypted<R, W>
-    where R: Read,
-          W: Write
-{
-    pub fn new(r: R, w: EncryptedWriter<W>, amt: usize) -> CopyExactEncrypted<R, W> {
-        CopyExactEncrypted::Pending {
-            reader: r,
-            writer: w,
-            buf: [0u8; 4096],
-            remain: amt,
-            pos: 0,
-            cap: 0,
-            enc_buf: Vec::new(),
-        }
-    }
-}
-
-impl<R, W> Future for CopyExactEncrypted<R, W>
-    where R: Read,
-          W: Write
-{
-    type Item = (R, EncryptedWriter<W>);
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            &mut CopyExactEncrypted::Empty => panic!("poll after CopyExactEncrypted is finished"),
-            &mut CopyExactEncrypted::Pending { ref mut reader,
-                                               ref mut writer,
-                                               ref mut buf,
-                                               ref mut remain,
-                                               ref mut pos,
-                                               ref mut cap,
-                                               ref mut enc_buf } => {
-                loop {
-                    // If our buffer is empty, then we need to read some data to
-                    // continue.
-                    if *pos == *cap && *remain != 0 {
-                        let buf_len = cmp::min(*remain, buf.len());
-                        let n = try_nb!(reader.read(&mut buf[..buf_len]));
-                        if n == 0 {
-                            // Unexpected EOF!
-                            let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
-                            return Err(err);
-                        } else {
-                            *pos = 0;
-                            *remain -= n;
-
-                            enc_buf.clear();
-                            try!(writer.cipher_update(&buf[..n], enc_buf));
-                            *cap = enc_buf.len();
-                        }
-                    }
-
-                    // If our buffer has some data, let's write it out!
-                    while *pos < *cap {
-                        let i = try_nb!(writer.write(&enc_buf[*pos..*cap]));
-                        *pos += i;
-                    }
-
-                    // If we've written al the data and we've seen EOF, flush out the
-                    // data and finish the transfer.
-                    // done with the entire transfer.
-                    if *pos == *cap && *remain == 0 {
-                        try_nb!(writer.flush());
-                        break; // The only path to execute the following logic
-                    }
-                }
-            }
-        }
-
-        match mem::replace(self, CopyExactEncrypted::Empty) {
-            CopyExactEncrypted::Pending { reader, writer, .. } => Ok((reader, writer).into()),
-            CopyExactEncrypted::Empty => unreachable!(),
-        }
-    }
-}
-
-/// Copy all bytes from reader and write all encrypted data into writer
-pub fn copy_exact_encrypted<R, W>(r: R, w: EncryptedWriter<W>, amt: usize) -> CopyExactEncrypted<R, W>
-    where R: Read,
-          W: Write
-{
-    CopyExactEncrypted::new(r, w, amt)
 }
 
 /// Establish tunnel between server and client
