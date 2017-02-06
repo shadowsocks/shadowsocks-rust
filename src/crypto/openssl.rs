@@ -28,11 +28,11 @@ use crypto::cipher;
 
 use crypto::CryptoMode;
 
-use openssl::crypto::symm;
+use openssl::symm;
 
 /// Core cipher of OpenSSL
 pub struct OpenSSLCrypto {
-    cipher: symm::Type,
+    cipher: symm::Cipher,
     inner: symm::Crypter,
 }
 
@@ -41,20 +41,20 @@ impl OpenSSLCrypto {
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let t = match cipher_type {
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128,
+            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128(),
             #[cfg(feature = "cipher-aes-cfb1")]
-            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1,
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1(),
             #[cfg(feature = "cipher-aes-cfb128")]
-            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128,
+            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128,
+            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
             #[cfg(feature = "cipher-aes-cfb1")]
-            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1,
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
             #[cfg(feature = "cipher-aes-cfb128")]
-            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128,
+            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
             #[cfg(feature = "cipher-rc4")]
-            CipherType::Rc4 => symm::Type::RC4_128,
+            CipherType::Rc4 => symm::Cipher::rc4(),
             _ => {
                 panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
                        cipher_type)

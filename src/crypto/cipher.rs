@@ -36,7 +36,7 @@ use crypto::crypto::CryptoCipher;
 
 use crypto::digest::{self, DigestType, Digest};
 
-use openssl::crypto::symm;
+use openssl::symm;
 
 /// Basic operation of Cipher, which is a Symmetric Cipher.
 ///
@@ -168,24 +168,24 @@ impl CipherType {
             CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.block_size(),
+            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.block_size(),
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.block_size(),
+            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.block_size(),
+            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.block_size(),
+            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.block_size(),
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.block_size(),
+            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().block_size(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.block_size(),
+            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().block_size(),
 
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.block_size(),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.block_size(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().block_size(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().block_size(),
 
             #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
@@ -199,24 +199,24 @@ impl CipherType {
             CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.key_len(),
+            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.key_len(),
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.key_len(),
+            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.key_len(),
+            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.key_len(),
+            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.key_len(),
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.key_len(),
+            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.key_len(),
+            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
 
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.key_len(),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.key_len(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().key_len(),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
             #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
@@ -259,24 +259,24 @@ impl CipherType {
             CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb => symm::Type::AES_128_CFB128.iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb1 => symm::Type::AES_128_CFB1.iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb8 => symm::Type::AES_128_CFB8.iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb128 => symm::Type::AES_128_CFB128.iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb => symm::Type::AES_256_CFB128.iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb1 => symm::Type::AES_256_CFB1.iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb8 => symm::Type::AES_256_CFB8.iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len().unwrap_or(0),
             #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb128 => symm::Type::AES_256_CFB128.iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
 
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Type::RC4_128.iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Type::RC4_128.iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().iv_len().unwrap_or(0),
+            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().iv_len().unwrap_or(0),
 
             #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
             #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,

@@ -24,7 +24,7 @@
 
 use std::convert::From;
 
-use openssl::crypto::symm;
+use openssl::symm;
 
 pub use self::cipher::{CipherType, Cipher, CipherVariant, CipherResult};
 

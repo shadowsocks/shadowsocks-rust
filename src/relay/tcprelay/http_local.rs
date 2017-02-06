@@ -21,7 +21,7 @@
 
 /// Http Proxy
 
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::mem;
 use std::str;
@@ -293,14 +293,14 @@ impl HeaderFormat for XRealIp {
 
 /// Future for reading HttpRequest
 pub enum HttpRequestFut<R>
-    where R: Read
+    where R: BufRead
 {
     Pending { r: R, buf: Vec<u8> },
     Empty,
 }
 
 impl<R> HttpRequestFut<R>
-    where R: Read
+    where R: BufRead
 {
     pub fn new(r: R) -> HttpRequestFut<R> {
         HttpRequestFut::with_buf(r, Vec::new())
@@ -312,21 +312,29 @@ impl<R> HttpRequestFut<R>
 }
 
 impl<R> Future for HttpRequestFut<R>
-    where R: Read
+    where R: BufRead
 {
-    type Item = (R, HttpRequest, Vec<u8>);
+    type Item = (R, HttpRequest);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut lbuf = [0u8; 4096];
-        let (req, len) = match self {
+        let req = match self {
             &mut HttpRequestFut::Pending { ref mut r, ref mut buf } => {
                 // FIXME: Compiler force me to do this!
                 let http_req: Option<HttpRequest>;
-                let total_len: usize;
                 loop {
-                    let n = try_nb!(r.read(&mut lbuf));
-                    buf.extend_from_slice(&lbuf[..n]);
+                    let mut is_eof = false;
+                    loop {
+                        let n = try_nb!(r.read_until(b'\n', buf));
+                        if n == 0 {
+                            is_eof = true;
+                            break;
+                        }
+
+                        if buf.ends_with(b"\r\n\r\n") {
+                            break;
+                        }
+                    }
 
                     // Maximum 128 headers
                     let mut headers = [httparse::EMPTY_HEADER; 128];
@@ -334,14 +342,13 @@ impl<R> Future for HttpRequestFut<R>
                     let mut req = Request::new(&mut headers);
                     match req.parse(&mut buf[..]) {
                         Ok(httparse::Status::Partial) => {
-                            if n == 0 {
+                            if is_eof {
                                 // Already EOF!
                                 let err = io::Error::new(io::ErrorKind::UnexpectedEof, "Unexpected Eof");
                                 return Err(err);
                             }
                         }
-                        Ok(httparse::Status::Complete(len)) => {
-                            total_len = len;
+                        Ok(httparse::Status::Complete(..)) => {
 
                             // Make borrow checker happy
                             let headers_ref = unsafe { &*headers_ptr };
@@ -364,13 +371,13 @@ impl<R> Future for HttpRequestFut<R>
                     }
                 }
 
-                (http_req.unwrap(), total_len)
+                http_req.unwrap()
             }
             &mut HttpRequestFut::Empty => panic!("poll a HttpRequestFut after it's done"),
         };
 
         match mem::replace(self, HttpRequestFut::Empty) {
-            HttpRequestFut::Pending { r, buf } => Ok((r, req, buf[len..].to_vec()).into()),
+            HttpRequestFut::Pending { r, .. } => Ok((r, req).into()),
             HttpRequestFut::Empty => unreachable!(),
         }
     }
@@ -383,15 +390,8 @@ fn socket_to_ip(addr: &SocketAddr) -> IpAddr {
     }
 }
 
-/// Proxy this HTTP Request to writer
-pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
-                                     client_addr: Option<&SocketAddr>,
-                                     mut req: HttpRequest,
-                                     mut remains: Vec<u8>)
-                                     -> BoxIoFuture<(R, EncryptedWriter<W>, Vec<u8>)>
-    where R: Read + 'static,
-          W: Write + 'static
-{
+fn preprocess_request(client_addr: Option<&SocketAddr>, req: &mut HttpRequest) -> usize {
+    // Gets content length for body
     let content_length = req.headers.get::<ContentLength>().unwrap_or(&ContentLength(0)).0 as usize;
 
     if let Some(client_addr) = client_addr {
@@ -414,23 +414,22 @@ pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
     // Clears host, which only for proxy
     req.clear_request_uri_host();
 
+    content_length
+}
+
+/// Proxy this HTTP Request to writer
+pub fn proxy_request_encrypted<R, W>((r, w): (R, EncryptedWriter<W>),
+                                     client_addr: Option<&SocketAddr>,
+                                     mut req: HttpRequest)
+                                     -> BoxIoFuture<(R, EncryptedWriter<W>)>
+    where R: BufRead + 'static,
+          W: Write + 'static
+{
+    let content_length = preprocess_request(client_addr, &mut req);
+
     let fut = req.write_to_encrypted(w)
         .and_then(|w| flush(w))
-        .and_then(move |w| {
-            if content_length == 0 {
-                boxed_future(futures::finished((r, w, remains)))
-            } else if content_length <= remains.len() {
-                let after_that = remains.split_off(content_length);
-                boxed_future(w.write_all_encrypted(remains).map(|(w, _)| (r, w, after_that)))
-            } else {
-                let missing_bytes = content_length - remains.len();
-                let fut = w.write_all_encrypted(remains)
-                    .and_then(move |(w, _)| {
-                        super::copy_exact_encrypted(r, w, missing_bytes).map(|(r, w)| (r, w, vec![]))
-                    });
-                boxed_future(fut)
-            }
-        });
+        .and_then(move |w| super::copy_exact_encrypted(r, w, content_length));
     Box::new(fut)
 }
 
@@ -452,10 +451,9 @@ pub fn should_keep_alive(req: &HttpRequest) -> bool {
 }
 
 fn handle_connect(handle: Handle,
-                  (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                  (r, w): (BufReader<ReadHalf<TcpStream>>, WriteHalf<TcpStream>),
                   req: HttpRequest,
                   addr: Address,
-                  remains: Vec<u8>,
                   svr_cfg: Rc<ServerConfig>)
                   -> Box<Future<Item = (), Error = io::Error>> {
     let cloned_addr = addr.clone();
@@ -474,11 +472,9 @@ fn handle_connect(handle: Handle,
                 .map(|w| (svr_s, w))
         })
         .and_then(move |(svr_s, w)| {
-            super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(|(svr_r, svr_w)| {
+            super::proxy_server_handshake(svr_s, cloned_svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                 let rhalf = svr_r.and_then(move |svr_r| copy(svr_r, w));
-                let whalf = svr_w.and_then(move |svr_w| svr_w.write_all_encrypted(remains))
-                    .and_then(move |(svr_w, _)| svr_w.copy_from_encrypted(r));
-
+                let whalf = svr_w.and_then(move |svr_w| svr_w.copy_from_encrypted(r));
                 tunnel(cloned_addr, whalf, rhalf)
             })
         });
@@ -486,22 +482,21 @@ fn handle_connect(handle: Handle,
     Box::new(fut)
 }
 
-fn handle_http_keepalive(r: ReadHalf<TcpStream>, svr_w: super::EncryptedHalf, req_remains: Vec<u8>) -> BoxIoFuture<()> {
-    let fut = HttpRequestFut::with_buf(r, req_remains).then(|res| {
+fn handle_http_keepalive(r: BufReader<ReadHalf<TcpStream>>, svr_w: super::EncryptedHalf) -> BoxIoFuture<()> {
+    let fut = HttpRequestFut::new(r).then(|res| {
         match res {
-            Ok((r, req, remains)) => {
+            Ok((r, req)) => {
                 let should_keep_alive = should_keep_alive(&req);
                 trace!("Going to proxy request: {:?}", req);
                 trace!("Should keep alive? {}", should_keep_alive);
 
-                let fut = proxy_request_encrypted((r, svr_w), None, req, remains)
-                    .and_then(move |(r, svr_w, req_remains)| {
-                        if should_keep_alive {
-                            handle_http_keepalive(r, svr_w, req_remains)
-                        } else {
-                            futures::finished(()).boxed()
-                        }
-                    });
+                let fut = proxy_request_encrypted((r, svr_w), None, req).and_then(move |(r, svr_w)| {
+                    if should_keep_alive {
+                        handle_http_keepalive(r, svr_w)
+                    } else {
+                        futures::finished(()).boxed()
+                    }
+                });
                 Box::new(fut) as BoxIoFuture<()>
             }
             Err(err) => {
@@ -521,11 +516,10 @@ fn handle_http_keepalive(r: ReadHalf<TcpStream>, svr_w: super::EncryptedHalf, re
 }
 
 fn handle_http_proxy(handle: Handle,
-                     (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                     (r, w): (BufReader<ReadHalf<TcpStream>>, WriteHalf<TcpStream>),
                      client_addr: &SocketAddr,
                      req: HttpRequest,
                      addr: Address,
-                     remains: Vec<u8>,
                      svr_cfg: Rc<ServerConfig>)
                      -> Box<Future<Item = (), Error = io::Error>> {
     trace!("Using HTTP Proxy for {} -> {}", client_addr, addr);
@@ -543,20 +537,22 @@ fn handle_http_proxy(handle: Handle,
                 // Send the first request to server
                 trace!("Going to proxy request: {:?}", req);
                 trace!("Should keep alive? {}", should_keep_alive);
-                proxy_request_encrypted((r, svr_w), None, req, remains).and_then(move |(r, svr_w, req_remains)| {
+
+                proxy_request_encrypted((r, svr_w), None, req).and_then(move |(r, svr_w)| {
                     if should_keep_alive {
-                        handle_http_keepalive(r, svr_w, req_remains)
+                        handle_http_keepalive(r, svr_w)
                     } else {
                         futures::finished(()).boxed()
                     }
                 })
             });
 
-            rhalf.join(whalf)
+            let fut = rhalf.join(whalf)
                 .then(move |_| {
                     trace!("Relay to {} is finished", cloned_addr);
                     Ok(())
-                })
+                });
+            boxed_future(fut)
         })
     });
 
@@ -570,7 +566,9 @@ fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Rc<
         .and_then(|(r, w)| {
             // Process the first request to see whether client wants CONNECT tunnel or normal HTTP proxy
 
-            HttpRequestFut::new(r).and_then(move |(r, mut req, remains)| {
+            let r = BufReader::new(r);
+
+            HttpRequestFut::new(r).and_then(move |(r, mut req)| {
                 trace!("Got HTTP Request, version: {}, method: {}, uri: {}",
                        req.version,
                        req.method,
@@ -579,7 +577,7 @@ fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Rc<
                 match req.get_address() {
                     Ok(addr) => {
                         req.clear_request_uri_host();
-                        boxed_future(futures::finished((r, w, req, addr, remains)))
+                        boxed_future(futures::finished((r, w, req, addr)))
                     }
                     Err(status_code) => {
                         error!("Invalid Uri: {}", req.request_uri);
@@ -592,21 +590,15 @@ fn handle_client(handle: &Handle, socket: TcpStream, _: SocketAddr, svr_cfg: Rc<
                 }
             })
         })
-        .and_then(move |(r, w, req, addr, remains)| {
+        .and_then(move |(r, w, req, addr)| {
             match req.method.clone() {
                 Method::Connect => {
                     info!("CONNECT (Http) {}", addr);
-                    handle_connect(cloned_handle, (r, w), req, addr, remains, svr_cfg)
+                    handle_connect(cloned_handle, (r, w), req, addr, svr_cfg)
                 }
                 met => {
                     info!("{} (Http) {}", met, addr);
-                    handle_http_proxy(cloned_handle,
-                                      (r, w),
-                                      &client_addr,
-                                      req,
-                                      addr,
-                                      remains,
-                                      svr_cfg)
+                    handle_http_proxy(cloned_handle, (r, w), &client_addr, req, addr, svr_cfg)
                 }
             }
         });
