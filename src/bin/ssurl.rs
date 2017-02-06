@@ -1,16 +1,14 @@
-extern crate rustc_serialize;
 extern crate clap;
 extern crate shadowsocks;
 extern crate qrcode;
-
-use std::str;
-
-use rustc_serialize::base64::{FromBase64, ToBase64, URL_SAFE};
-use rustc_serialize::json::{ToJson, as_pretty_json};
+extern crate serde_json;
+extern crate base64;
 
 use clap::{App, Arg};
 
 use qrcode::QrCode;
+
+use base64::Base64Mode;
 
 use shadowsocks::VERSION;
 use shadowsocks::config::{Config, ConfigType, ServerConfig, ServerAddr};
@@ -23,7 +21,8 @@ fn encode_url(svr: &ServerConfig) -> String {
                       svr.method().to_string(),
                       svr.password(),
                       svr.addr());
-    format!("ss://{}", url.as_bytes().to_base64(URL_SAFE))
+    format!("ss://{}",
+            base64::encode_mode(url.as_bytes(), Base64Mode::UrlSafe))
 }
 
 fn print_qrcode(encoded: &str) {
@@ -69,8 +68,8 @@ fn decode(encoded: &str, need_qrcode: bool) {
         panic!("Malformed input: {:?}", encoded);
     }
 
-    let decoded = encoded[5..].from_base64().unwrap();
-    let decoded = str::from_utf8(&decoded).unwrap();
+    let decoded = base64::decode_mode(&encoded[5..], Base64Mode::UrlSafe).unwrap();
+    let decoded = String::from_utf8(decoded).unwrap();
 
     let mut sp1 = decoded.split('@');
     let (account, addr) = match (sp1.next(), sp1.next()) {
@@ -95,7 +94,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     config.server.push(svrconfig);
 
     let config_json = config.to_json();
-    println!("{}", as_pretty_json(&config_json));
+    println!("{}", serde_json::to_string_pretty(&config_json).unwrap());
 
     if need_qrcode {
         print_qrcode(encoded);

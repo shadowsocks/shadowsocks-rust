@@ -63,8 +63,6 @@
 //! These defined server will be used with a load balancing algorithm.
 //!
 
-use serialize::json;
-
 use std::fs::OpenOptions;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
 use std::string::ToString;
@@ -78,6 +76,8 @@ use std::convert::From;
 use std::str::FromStr;
 
 use ip::IpAddr;
+
+use serde_json::{self, Value, Map};
 
 use crypto::cipher::CipherType;
 
@@ -100,30 +100,28 @@ impl ServerAddr {
         }
     }
 
-    fn to_json_object_inner(&self, obj: &mut json::Object, addr_key: &str, port_key: &str) {
-        use serialize::json::Json;
-
+    fn to_json_object_inner(&self, obj: &mut Map<String, Value>, addr_key: &str, port_key: &str) {
         match self {
             &ServerAddr::SocketAddr(SocketAddr::V4(ref v4)) => {
-                obj.insert(addr_key.to_owned(), Json::String(v4.ip().to_string()));
-                obj.insert(port_key.to_owned(), Json::U64(v4.port() as u64));
+                obj.insert(addr_key.to_owned(), Value::String(v4.ip().to_string()));
+                obj.insert(port_key.to_owned(), Value::Number(From::from(v4.port())));
             }
             &ServerAddr::SocketAddr(SocketAddr::V6(ref v6)) => {
-                obj.insert(addr_key.to_owned(), Json::String(v6.ip().to_string()));
-                obj.insert(port_key.to_owned(), Json::U64(v6.port() as u64));
+                obj.insert(addr_key.to_owned(), Value::String(v6.ip().to_string()));
+                obj.insert(port_key.to_owned(), Value::Number(From::from(v6.port())));
             }
             &ServerAddr::DomainName(ref domain, port) => {
-                obj.insert(addr_key.to_owned(), Json::String(domain.to_owned()));
-                obj.insert(port_key.to_owned(), Json::U64(port as u64));
+                obj.insert(addr_key.to_owned(), Value::String(domain.to_owned()));
+                obj.insert(port_key.to_owned(), Value::Number(From::from(port)));
             }
         }
     }
 
-    fn to_json_object(&self, obj: &mut json::Object) {
+    fn to_json_object(&self, obj: &mut Map<String, Value>) {
         self.to_json_object_inner(obj, "address", "port")
     }
 
-    fn to_json_object_old(&self, obj: &mut json::Object) {
+    fn to_json_object_old(&self, obj: &mut Map<String, Value>) {
         self.to_json_object_inner(obj, "server", "server_port")
     }
 }
@@ -223,20 +221,19 @@ impl ServerConfig {
     }
 }
 
-impl json::ToJson for ServerConfig {
-    fn to_json(&self) -> json::Json {
-        use serialize::json::Json;
-        let mut obj = json::Object::new();
+impl ServerConfig {
+    pub fn to_json(&self) -> Value {
+        let mut obj = Map::new();
 
         self.addr.to_json_object(&mut obj);
 
-        obj.insert("password".to_owned(), Json::String(self.password.clone()));
-        obj.insert("method".to_owned(), Json::String(self.method.to_string()));
+        obj.insert("password".to_owned(), Value::String(self.password.clone()));
+        obj.insert("method".to_owned(), Value::String(self.method.to_string()));
         if let Some(t) = self.timeout {
-            obj.insert("timeout".to_owned(), Json::U64(t.as_secs()));
+            obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
         }
 
-        Json::Object(obj)
+        Value::Object(obj)
     }
 }
 
@@ -311,7 +308,7 @@ macro_rules! impl_from {
 impl_from!(::std::io::Error,
            ErrorKind::IoError,
            "error while reading file");
-impl_from!(json::BuilderError,
+impl_from!(serde_json::Error,
            ErrorKind::JsonParsingError,
            "Json parse error");
 
@@ -350,11 +347,11 @@ impl Config {
         }
     }
 
-    fn parse_server(server: &json::Object) -> Result<ServerConfig, Error> {
+    fn parse_server(server: &Map<String, Value>) -> Result<ServerConfig, Error> {
         let method = server.get("method")
             .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
             .and_then(|method_o| {
-                method_o.as_string()
+                method_o.as_str()
                     .ok_or_else(|| Error::new(ErrorKind::Malformed, "`method` should be a string", None))
             })
             .and_then(|method_str| {
@@ -391,7 +388,7 @@ impl Config {
                            None)
             })
             .and_then(|addr_o| {
-                addr_o.as_string()
+                addr_o.as_str()
                     .ok_or_else(|| Error::new(ErrorKind::Malformed, "`address` should be a string", None))
             })
             .and_then(|addr_str| {
@@ -409,7 +406,7 @@ impl Config {
         let password = server.get("password")
             .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
             .and_then(|pwd_o| {
-                pwd_o.as_string()
+                pwd_o.as_str()
                     .ok_or_else(|| Error::new(ErrorKind::Malformed, "`password` should be a string", None))
                     .map(|s| s.to_string())
             });
@@ -428,7 +425,7 @@ impl Config {
         Ok(ServerConfig::new(addr, password, method, timeout))
     }
 
-    fn parse_json_object(o: &json::Object, require_local_info: bool) -> Result<Config, Error> {
+    fn parse_json_object(o: &Map<String, Value>, require_local_info: bool) -> Result<Config, Error> {
         let mut config = Config::new();
 
         config.timeout = match o.get("timeout") {
@@ -467,7 +464,7 @@ impl Config {
             if has_local_address && has_local_port {
                 config.local = match o.get("local_address") {
                     Some(local_addr) => {
-                        let addr_str = try!(local_addr.as_string()
+                        let addr_str = try!(local_addr.as_str()
                             .ok_or(Error::new(ErrorKind::Malformed,
                                               "`local_address` should be a string",
                                               None)));
@@ -506,7 +503,7 @@ impl Config {
             if has_proxy_addr && has_proxy_port {
                 config.http_proxy = match o.get("local_http_address") {
                     Some(local_addr) => {
-                        let addr_str = try!(local_addr.as_string()
+                        let addr_str = try!(local_addr.as_str()
                             .ok_or(Error::new(ErrorKind::Malformed,
                                               "`local_http_address` should be a string",
                                               None)));
@@ -546,7 +543,7 @@ impl Config {
                                   "`forbidden_ip` should be a list",
                                   None)));
             config.forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
-                let x = match x.as_string() {
+                let x = match x.as_str() {
                     Some(x) => x,
                     None => {
                         error!("Forbidden IP should be a string, but found {:?}, skipping",
@@ -566,7 +563,7 @@ impl Config {
         }
 
         if let Some(udp_enable) = o.get("enable_udp") {
-            match udp_enable.as_boolean() {
+            match udp_enable.as_bool() {
                 None => {
                     let err = Error::new(ErrorKind::Malformed, "`enable_udp` should be boolean", None);
                     return Err(err);
@@ -579,7 +576,7 @@ impl Config {
     }
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let object = try!(json::Json::from_str(s));
+        let object = try!(serde_json::from_str::<Value>(s));
         let json_object = except!(object.as_object(),
                                   ErrorKind::JsonParsingError,
                                   "root is not a JsonObject");
@@ -592,7 +589,7 @@ impl Config {
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let reader = &mut try!(OpenOptions::new().read(true).open(&Path::new(filename)));
-        let object = try!(json::Json::from_reader(reader));
+        let object = try!(serde_json::from_reader::<_, Value>(reader));
         let json_object = except!(object.as_object(),
                                   ErrorKind::JsonParsingError,
                                   "root is not a JsonObject");
@@ -604,11 +601,9 @@ impl Config {
     }
 }
 
-impl json::ToJson for Config {
-    fn to_json(&self) -> json::Json {
-        use serialize::json::Json;
-
-        let mut obj = json::Object::new();
+impl Config {
+    pub fn to_json(&self) -> Value {
+        let mut obj = Map::new();
         if self.server.len() == 1 {
             // Official format
 
@@ -616,15 +611,15 @@ impl json::ToJson for Config {
             server.addr.to_json_object_old(&mut obj);
 
             obj.insert("password".to_owned(),
-                       Json::String(self.server[0].password.clone()));
+                       Value::String(self.server[0].password.clone()));
             obj.insert("method".to_owned(),
-                       Json::String(self.server[0].method.to_string()));
+                       Value::String(self.server[0].method.to_string()));
             if let Some(t) = self.server[0].timeout {
-                obj.insert("timeout".to_owned(), Json::U64(t.as_secs()));
+                obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
             }
         } else {
-            let arr: json::Array = self.server.iter().map(|s| s.to_json()).collect();
-            obj.insert("servers".to_owned(), Json::Array(arr));
+            let arr: Vec<Value> = self.server.iter().map(|s| s.to_json()).collect();
+            obj.insert("servers".to_owned(), Value::Array(arr));
         }
 
         if let Some(ref l) = self.local {
@@ -633,20 +628,19 @@ impl json::ToJson for Config {
                 &SocketAddr::V6(ref v6) => v6.ip().to_string(),
             };
 
-            obj.insert("local_address".to_owned(), Json::String(ip_str));
-            obj.insert("local_port".to_owned(), Json::U64(l.port() as u64));
+            obj.insert("local_address".to_owned(), Value::String(ip_str));
+            obj.insert("local_port".to_owned(),
+                       Value::Number(From::from(l.port() as u64)));
         }
 
-        obj.insert("enable_udp".to_owned(), Json::Boolean(self.enable_udp));
+        obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));
 
-        Json::Object(obj)
+        Value::Object(obj)
     }
 }
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use serialize::json::ToJson;
-
         write!(f, "{}", self.to_json())
     }
 }

@@ -40,7 +40,6 @@ name = "ssurl"
 path = "src/bin/ssurl.rs"
 
 [dependencies]
-rustc-serialize = "0.3"
 log = "0.3"
 byteorder = "1.0"
 rand = "0.3"
@@ -62,3 +61,5 @@ tokio-core = "0.1"
 net2 = "0.2"
 num_cpus = "1.1"
 lazy_static = "0.2"
+serde_json = "0.9"
+base64 = "0.3"

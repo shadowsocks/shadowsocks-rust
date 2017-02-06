@@ -91,7 +91,7 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-extern crate rustc_serialize as serialize;
+extern crate serde_json;
 #[macro_use]
 extern crate log;
 extern crate lru_cache;
