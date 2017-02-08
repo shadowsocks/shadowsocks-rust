@@ -36,11 +36,11 @@ use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
-use tokio_core::io::{read_exact, write_all, read};
+use tokio_core::io::{read_exact, write_all, copy};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
-use futures::{self, Future, Poll};
+use futures::{self, Future, Poll, Async};
 
 use net2::TcpBuilder;
 
@@ -305,20 +305,140 @@ fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
     boxed_future(fut)
 }
 
+pub struct CopyTimeout<R, W>
+    where R: Read + 'static,
+          W: Write + 'static
+{
+    r: R,
+    w: W,
+    timeout: Duration,
+    handle: Handle,
+    amt: u64,
+    timer: Option<Timeout>,
+    buf: [u8; BUFFER_SIZE],
+    pos: usize,
+    cap: usize,
+}
+
+impl<R, W> CopyTimeout<R, W>
+    where R: Read + 'static,
+          W: Write + 'static
+{
+    fn new(r: R, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<R, W> {
+        CopyTimeout {
+            r: r,
+            w: w,
+            timeout: timeout,
+            handle: handle,
+            amt: 0,
+            timer: None,
+            buf: [0u8; BUFFER_SIZE],
+            pos: 0,
+            cap: 0,
+        }
+    }
+
+    fn try_poll_timeout(&mut self) -> io::Result<()> {
+        match self.timer.as_mut() {
+            None => Ok(()),
+            Some(t) => {
+                match t.poll() {
+                    Err(err) => Err(err),
+                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "timeout")),
+                    Ok(Async::NotReady) => Ok(()),
+                }
+            }
+        }
+    }
+
+    fn clear_timer(&mut self) {
+        let _ = self.timer.take();
+    }
+
+    fn read_or_set_timeout(&mut self) -> io::Result<usize> {
+        // First, return if timeout
+        try!(self.try_poll_timeout());
+
+        // Then, unset the previous timeout
+        self.clear_timer();
+
+        match self.r.read(&mut self.buf) {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    fn write_or_set_timeout(&mut self, beg: usize, end: usize) -> io::Result<usize> {
+        // First, return if timeout
+        try!(self.try_poll_timeout());
+
+        // Then, unset the previous timeout
+        self.clear_timer();
+
+        match self.w.write(&self.buf[beg..end]) {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
+                }
+                return Err(e);
+            }
+        }
+    }
+}
+
+impl<R, W> Future for CopyTimeout<R, W>
+    where R: Read + 'static,
+          W: Write + 'static
+{
+    type Item = u64;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            if self.pos == self.cap {
+                let n = try_nb!(self.read_or_set_timeout());
+
+                if n == 0 {
+                    // If we've written al the data and we've seen EOF, flush out the
+                    // data and finish the transfer.
+                    // done with the entire transfer.
+                    try_nb!(self.w.flush());
+                    return Ok(self.amt.into());
+                }
+
+                self.pos = 0;
+                self.cap = n;
+
+                // Clear it before write
+                self.clear_timer();
+            }
+
+            // If our buffer has some data, let's write it out!
+            while self.pos < self.cap {
+                let (pos, cap) = (self.pos, self.cap);
+                let i = try_nb!(self.write_or_set_timeout(pos, cap));
+                self.pos += i;
+                self.amt += i as u64;
+            }
+
+            // Clear it before read
+            self.clear_timer();
+        }
+    }
+}
+
 fn copy_timeout<R, W>(r: R, w: W, timeout: Option<Duration>, handle: Handle) -> BoxIoFuture<u64>
     where R: Read + 'static,
           W: Write + 'static
 {
-    let fut = try_timeout(read(r, vec![0u8; BUFFER_SIZE]), timeout.clone(), &handle)
-        .and_then(move |(r, mut buf, n)| {
-            if n == 0 {
-                boxed_future(futures::finished(n as u64))
-            } else {
-                buf.resize(n, 0);
-                let fut = try_timeout(write_all(w, buf), timeout.clone(), &handle)
-                    .and_then(move |(w, _)| copy_timeout(r, w, timeout, handle).map(move |x| x + n as u64));
-                boxed_future(fut)
-            }
-        });
-    boxed_future(fut)
+    match timeout {
+        None => boxed_future(copy(r, w)),
+        Some(timeout) => boxed_future(CopyTimeout::new(r, w, timeout, handle)),
+    }
 }
