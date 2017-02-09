@@ -134,14 +134,14 @@ impl<R> Read for DecryptedReader<R>
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
-    where W: Write + 'static
+    where W: Write
 {
     writer: W,
     cipher: CipherVariant,
 }
 
 impl<W> EncryptedWriter<W>
-    where W: Write + 'static
+    where W: Write
 {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, cipher: CipherVariant) -> EncryptedWriter<W> {
@@ -199,10 +199,14 @@ impl<W> EncryptedWriter<W>
             buf: Vec::new(),
         }
     }
+}
 
+impl<W> EncryptedWriter<W>
+    where W: Write + 'static
+{
     /// Copy all data from reader with timeout
     pub fn copy_from_encrypted_timeout<R>(self, r: R, timeout: Option<Duration>, handle: Handle) -> BoxIoFuture<u64>
-        where R: Read + Send + 'static
+        where R: Read + 'static
     {
         match timeout {
             Some(timeout) => boxed_future(EncryptedCopyTimeout::new(r, self, timeout, handle)),
@@ -212,7 +216,7 @@ impl<W> EncryptedWriter<W>
 }
 
 impl<W> Write for EncryptedWriter<W>
-    where W: Write + 'static
+    where W: Write
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.writer.write(buf)
@@ -225,7 +229,7 @@ impl<W> Write for EncryptedWriter<W>
 
 /// write_all and encrypt data
 pub enum EncryptedWriteAll<W, B>
-    where W: Write + 'static,
+    where W: Write,
           B: AsRef<[u8]>
 {
     Writing {
@@ -273,7 +277,7 @@ impl<W, B> Future for EncryptedWriteAll<W, B>
 }
 
 /// Encrypted copy
-pub struct EncryptedCopy<R: Read + 'static, W: Write + 'static> {
+pub struct EncryptedCopy<R: Read, W: Write> {
     reader: R,
     writer: EncryptedWriter<W>,
     read_done: bool,
@@ -283,7 +287,7 @@ pub struct EncryptedCopy<R: Read + 'static, W: Write + 'static> {
     buf: Vec<u8>,
 }
 
-impl<R: Read + 'static, W: Write + 'static> Future for EncryptedCopy<R, W> {
+impl<R: Read, W: Write> Future for EncryptedCopy<R, W> {
     type Item = u64;
     type Error = io::Error;
 
@@ -324,7 +328,7 @@ impl<R: Read + 'static, W: Write + 'static> Future for EncryptedCopy<R, W> {
 }
 
 /// Encrypted copy
-pub struct EncryptedCopyTimeout<R: Read + 'static, W: Write + 'static> {
+pub struct EncryptedCopyTimeout<R: Read, W: Write> {
     reader: R,
     writer: EncryptedWriter<W>,
     read_done: bool,
@@ -338,7 +342,7 @@ pub struct EncryptedCopyTimeout<R: Read + 'static, W: Write + 'static> {
     read_buf: [u8; BUFFER_SIZE],
 }
 
-impl<R: Read + 'static, W: Write + 'static> EncryptedCopyTimeout<R, W> {
+impl<R: Read, W: Write> EncryptedCopyTimeout<R, W> {
     fn new(r: R, w: EncryptedWriter<W>, dur: Duration, handle: Handle) -> EncryptedCopyTimeout<R, W> {
         EncryptedCopyTimeout {
             reader: r,

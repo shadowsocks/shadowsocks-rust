@@ -306,8 +306,8 @@ fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
 }
 
 pub struct CopyTimeout<R, W>
-    where R: Read + 'static,
-          W: Write + 'static
+    where R: Read,
+          W: Write
 {
     r: R,
     w: W,
@@ -321,8 +321,8 @@ pub struct CopyTimeout<R, W>
 }
 
 impl<R, W> CopyTimeout<R, W>
-    where R: Read + 'static,
-          W: Write + 'static
+    where R: Read,
+          W: Write
 {
     fn new(r: R, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<R, W> {
         CopyTimeout {
@@ -393,8 +393,8 @@ impl<R, W> CopyTimeout<R, W>
 }
 
 impl<R, W> Future for CopyTimeout<R, W>
-    where R: Read + 'static,
-          W: Write + 'static
+    where R: Read,
+          W: Write
 {
     type Item = u64;
     type Error = io::Error;
