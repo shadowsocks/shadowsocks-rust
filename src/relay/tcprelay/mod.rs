@@ -54,7 +54,7 @@ pub mod server;
 mod stream;
 pub mod client;
 
-const BUFFER_SIZE: usize = 4096;
+const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
 
 /// Directions in the tunnel
 #[derive(Debug, Copy, Clone)]
@@ -111,7 +111,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(move |buf| try_timeout(enc_w.write_all_encrypted(buf), timeout, &handle))
+                .and_then(move |buf| try_timeout(write_all(enc_w, buf), timeout, &handle))
                 .map(|(w, _)| w)
         });
 
