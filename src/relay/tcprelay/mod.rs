@@ -47,12 +47,14 @@ use net2::TcpBuilder;
 use ip::IpAddr;
 
 use self::stream::{EncryptedWriter, DecryptedReader};
+pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
 pub mod local;
 mod socks5_local;
 pub mod server;
 mod stream;
 pub mod client;
+mod crypto_io;
 
 const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
 
@@ -111,7 +113,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(move |buf| try_timeout(enc_w.write_all_encrypted(buf), timeout, &handle))
+                .and_then(move |buf| try_timeout(enc_w.write_all(buf), timeout, &handle))
                 .map(|(w, _)| w)
         });
 

@@ -32,6 +32,7 @@ use config::{Config, ServerConfig};
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
+use relay::tcprelay::crypto_io::EncryptedWrite;
 
 use futures::{self, Future};
 use futures::stream::Stream;
@@ -187,7 +188,7 @@ impl TcpRelayClientConnected {
         let handle = self.handle.clone();
         tunnel(self.addr,
                copy_timeout(r, svr_w, self.timeout, self.handle),
-               w_fut.and_then(move |w| w.copy_from_encrypted_timeout(svr_r, timeout, handle)))
+               w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout, handle)))
     }
 }
 
