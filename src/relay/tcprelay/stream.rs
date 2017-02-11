@@ -156,8 +156,7 @@ impl<W> EncryptedWriter<W>
         self.cipher.update(data, buf).map_err(From::from)
     }
 
-    #[doc(hidden)]
-    pub fn cipher_finalize(&mut self, buf: &mut Vec<u8>) -> io::Result<()> {
+    fn cipher_finalize(&mut self, buf: &mut Vec<u8>) -> io::Result<()> {
         self.cipher.finalize(buf).map_err(From::from)
     }
 
@@ -206,6 +205,19 @@ impl<W> EncryptedWriter<W>
         match timeout {
             Some(timeout) => boxed_future(EncryptedCopyTimeout::new(r, self, timeout, handle)),
             None => boxed_future(self.copy_from_encrypted(r)),
+        }
+    }
+}
+
+impl<W> Drop for EncryptedWriter<W>
+    where W: Write
+{
+    fn drop(&mut self) {
+        let mut buf = Vec::new();
+        if let Ok(..) = self.cipher_finalize(&mut buf) {
+            if !buf.is_empty() {
+                let _ = self.write_raw(&buf);
+            }
         }
     }
 }
@@ -284,7 +296,6 @@ impl<R: Read, W: Write> Future for EncryptedCopy<R, W> {
                 self.buf.clear();
                 if n == 0 {
                     self.read_done = true;
-                    try!(self.writer.cipher_finalize(&mut self.buf));
                 } else {
                     try!(self.writer.cipher_update(&local_buf[..n], &mut self.buf));
                 }
@@ -369,8 +380,7 @@ impl<R: Read, W: Write> EncryptedCopyTimeout<R, W> {
         self.write_buf.clear();
         match self.reader.read(&mut self.read_buf) {
             Ok(0) => {
-                self.writer.cipher_finalize(&mut self.write_buf)?;
-                self.cap = self.write_buf.len();
+                self.cap = 0;
                 self.pos = 0;
                 Ok(0)
             }
