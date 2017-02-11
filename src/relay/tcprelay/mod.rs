@@ -111,7 +111,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(move |buf| try_timeout(write_all(enc_w, buf), timeout, &handle))
+                .and_then(move |buf| try_timeout(enc_w.write_all_encrypted(buf), timeout, &handle))
                 .map(|(w, _)| w)
         });
 
