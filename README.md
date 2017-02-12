@@ -111,7 +111,7 @@ It supports the following features:
 
 - [x] Socks5 CONNECT command
 - [x] UDP ASSOCIATE command (partial)
-- [x] HTTP Proxy protocol
+- [ ] <del>HTTP Proxy protocol</del> Deprecated, use `privoxy` instead.
 - [x] Various crypto algorithms
 - [x] Load balancing (multiple servers)
 
@@ -123,7 +123,10 @@ It supports the following features:
 - [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 - [x] Windows support. <del>(Depending on mio and coio-rs)</del>
 - [x] Build with stable. <del>(Depending on coio)</del>
-- [x] Support HTTP Proxy protocol
+- [ ] <del>Support HTTP Proxy protocol</del> (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
+- [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
+- [ ] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
+
 
 ## License
 
