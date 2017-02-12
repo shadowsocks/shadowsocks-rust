@@ -65,18 +65,40 @@ fn handle_socks5_connect(handle: &Handle,
     let cloned_handle2 = handle.clone();
     let timeout = svr_cfg.timeout().clone();
     let fut = super::connect_proxy_server(handle, svr_cfg)
-        .and_then(move |svr_s| {
-            trace!("Proxy server connected");
-
-            // Tell the client that we are ready
-            let header = TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                Address::SocketAddress(client_addr));
-            trace!("Send header: {:?}", header);
+        .then(move |res| {
             let handle = cloned_handle;
+            match res {
+                Ok(svr_s) => {
+                    trace!("Proxy server connected");
 
-            let fut = try_timeout(header.write_to(w), timeout.clone(), &handle);
-            let fut = try_timeout(fut.and_then(flush), timeout, &handle);
-            fut.map(move |w| (svr_s, w))
+                    // Tell the client that we are ready
+                    let header = TcpResponseHeader::new(socks5::Reply::Succeeded,
+                                                        Address::SocketAddress(client_addr));
+                    trace!("Send header: {:?}", header);
+
+                    let fut = try_timeout(header.write_to(w), timeout, &handle);
+                    let fut = try_timeout(fut.and_then(flush), timeout, &handle);
+                    boxed_future(fut.map(move |w| (svr_s, w)))
+                }
+                Err(err) => {
+                    use std::io::ErrorKind;
+                    use relay::socks5::Reply;
+
+                    error!("Failed to connect remote server, {:?}", err);
+
+                    let reply = match err.kind() {
+                        ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
+                        ErrorKind::ConnectionAborted => Reply::HostUnreachable,
+                        _ => Reply::NetworkUnreachable,
+                    };
+
+                    let header = TcpResponseHeader::new(reply, Address::SocketAddress(client_addr));
+                    trace!("Send header: {:?}", header);
+                    let fut = try_timeout(header.write_to(w), timeout, &handle);
+                    let fut = try_timeout(fut.and_then(flush), timeout, &handle);
+                    boxed_future(fut.and_then(|_| Err(err)))
+                }
+            }
         })
         .and_then(move |(svr_s, w)| {
             let handle = cloned_handle2;
