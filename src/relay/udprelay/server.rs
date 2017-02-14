@@ -111,7 +111,7 @@ impl ConnectionContext {
                         .and_then(move |remote_addr| {
                             // Associate client address with remote
                             let mut assoc = cloned_assoc.borrow_mut();
-                            assoc.insert(remote_addr.clone(),
+                            assoc.insert(remote_addr,
                                          Associate {
                                              address: cloned_addr,
                                              client_addr: src,
@@ -221,17 +221,17 @@ impl ConnectionContext {
 }
 
 fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
-    let fut = c.handle_once().and_then(|c| handle_client(c));
+    let fut = c.handle_once().and_then(handle_client);
     boxed_future(fut)
 }
 
 fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle) -> BoxIoFuture<()> {
-    let listen_addr = svr_cfg.addr().listen_addr().clone();
+    let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
     let fut = futures::lazy(move || {
-            let udp_builder = match &listen_addr {
-                    &SocketAddr::V4(..) => UdpBuilder::new_v4(),
-                    &SocketAddr::V6(..) => UdpBuilder::new_v6(),
+            let udp_builder = match listen_addr {
+                    SocketAddr::V4(..) => UdpBuilder::new_v4(),
+                    SocketAddr::V6(..) => UdpBuilder::new_v6(),
                 }
                 .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
 

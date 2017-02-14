@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! UdpRelay implementation
+//! Relay for UDP implementation
 
 use std::net::SocketAddr;
 use std::mem;
@@ -55,9 +55,9 @@ impl<B: AsMut<[u8]>> Future for RecvFromUdpSocket<B> {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (length, src) = match self {
-            &mut RecvFromUdpSocket::Empty => panic!("poll after RecvFromUdpSocket is finished"),
-            &mut RecvFromUdpSocket::Pending { ref socket, ref mut buf } => {
+        let (length, src) = match *self {
+            RecvFromUdpSocket::Empty => panic!("poll after RecvFromUdpSocket is finished"),
+            RecvFromUdpSocket::Pending { ref socket, ref mut buf } => {
                 if socket.poll_read().is_not_ready() {
                     return Ok(Async::NotReady);
                 }
@@ -114,7 +114,7 @@ impl<B: AsRef<[u8]>> Future for SendToUdpSocket<B> {
     }
 }
 
-/// Send data to UdpSocket
+/// Send data to `UdpSocket`
 pub fn send_to<B: AsRef<[u8]>>(socket: UdpSocket, buf: B, target: SocketAddr) -> SendToUdpSocket<B> {
     SendToUdpSocket::Pending {
         socket: socket,

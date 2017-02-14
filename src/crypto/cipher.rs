@@ -59,20 +59,20 @@ pub enum Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Error::UnknownCipherType => write!(f, "UnknownCipherType"),
-            &Error::OpenSSLError(ref err) => write!(f, "{:?}", err),
-            &Error::IoError(ref err) => write!(f, "{:?}", err),
+        match *self {
+            Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            Error::OpenSSLError(ref err) => write!(f, "{:?}", err),
+            Error::IoError(ref err) => write!(f, "{:?}", err),
         }
     }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Error::UnknownCipherType => write!(f, "UnknownCipherType"),
-            &Error::OpenSSLError(ref err) => write!(f, "{}", err),
-            &Error::IoError(ref err) => write!(f, "{}", err),
+        match *self {
+            Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            Error::OpenSSLError(ref err) => write!(f, "{}", err),
+            Error::IoError(ref err) => write!(f, "{}", err),
         }
     }
 }
@@ -164,8 +164,7 @@ impl CipherType {
     /// Symmetric crypto block size
     pub fn block_size(&self) -> usize {
         match *self {
-            CipherType::Table => 0,
-            CipherType::Dummy => 0,
+            CipherType::Table | CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().block_size(),
@@ -195,8 +194,7 @@ impl CipherType {
     /// Symmetric crypto key size
     pub fn key_size(&self) -> usize {
         match *self {
-            CipherType::Table => 0,
-            CipherType::Dummy => 0,
+            CipherType::Table | CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().key_len(),
@@ -255,8 +253,7 @@ impl CipherType {
     /// Symmetric crypto initialize vector size
     pub fn iv_size(&self) -> usize {
         match *self {
-            CipherType::Table => 0,
-            CipherType::Dummy => 0,
+            CipherType::Table | CipherType::Dummy => 0,
 
             #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
@@ -432,8 +429,7 @@ pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Ciph
         CipherType::Dummy => CipherVariant::new(dummy::DummyCipher),
 
         #[cfg(feature = "cipher-chacha20")]
-        CipherType::ChaCha20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),
-        #[cfg(feature = "cipher-salsa20")]
+        CipherType::ChaCha20 |
         CipherType::Salsa20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),
 
         #[cfg(feature = "cipher-rc4")]

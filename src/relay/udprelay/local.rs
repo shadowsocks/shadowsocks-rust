@@ -96,11 +96,11 @@ struct Client {
 impl Client {
     /// Resolves server address to SocketAddr
     fn resolve_server_addr(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<SocketAddr> {
-        match svr_cfg.addr() {
+        match *svr_cfg.addr() {
             // Return directly if it is a SocketAddr
-            &ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
+            ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
             // Resolve domain name to SocketAddr
-            &ServerAddr::DomainName(ref dname, port) => {
+            ServerAddr::DomainName(ref dname, port) => {
                 let fut = DnsResolver::resolve(dname).map(move |sockaddr| {
                     match sockaddr {
                         IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
@@ -264,7 +264,7 @@ impl Client {
                                 // Record server's address in ServerCache, so we can know which packets
                                 // are from proxy servers
                                 let mut svrs_ref = servers.borrow_mut();
-                                svrs_ref.insert(addr.clone(), svr_cfg.clone());
+                                svrs_ref.insert(addr, svr_cfg.clone());
                             }
 
                             send_to(socket, payload, addr).map(|(socket, body, len)| {
@@ -311,7 +311,7 @@ impl Client {
 // Handle one by one
 fn handle_client(client: Client) -> BoxIoFuture<()> {
     let fut = client.handle_once()
-        .and_then(|c| handle_client(c));
+        .and_then(handle_client);
     boxed_future(fut)
 }
 
@@ -336,9 +336,9 @@ pub fn run(config: Rc<Config>, handle: Handle) -> BoxIoFuture<()> {
     let fut = futures::lazy(move || {
             let l = {
                 let local_addr = config.local.as_ref().unwrap();
-                let udp_builder = match local_addr {
-                        &SocketAddr::V4(..) => UdpBuilder::new_v4(),
-                        &SocketAddr::V6(..) => UdpBuilder::new_v6(),
+                let udp_builder = match *local_addr {
+                        SocketAddr::V4(..) => UdpBuilder::new_v4(),
+                        SocketAddr::V6(..) => UdpBuilder::new_v6(),
                     }
                     .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
 

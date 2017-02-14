@@ -77,7 +77,7 @@ impl<R> DecryptedReader<R>
 impl<R> BufRead for DecryptedReader<R>
     where R: Read
 {
-    fn fill_buf<'b>(&'b mut self) -> io::Result<&'b [u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         while self.pos >= self.buffer.len() {
             if self.sent_final {
                 return Ok(&[]);

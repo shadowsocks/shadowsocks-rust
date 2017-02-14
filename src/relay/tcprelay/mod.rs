@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! TcpRelay implementation
+//! Relay for TCP implementation
 
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -67,18 +67,18 @@ pub enum TunnelDirection {
     Server2Client,
 }
 
-/// ReadHalf of TcpStream with decryption
+/// `ReadHalf `of `TcpStream` with decryption
 pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
-/// WriteHalf of TcpStream with encryption
+/// `WriteHalf` of `TcpStream` with encryption
 pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
 
-/// Boxed future of DecryptedHalf
+/// Boxed future of `DecryptedHalf`
 pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
-/// Boxed future of EncryptedHalf
+/// Boxed future of `EncryptedHalf`
 pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
-    let timeout = svr_cfg.timeout().clone();
+    let timeout = *svr_cfg.timeout();
     trace!("Connecting to proxy {:?}, timeout: {:?}",
            svr_cfg.addr(),
            timeout);
@@ -104,7 +104,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                               relay_addr: Address,
                               handle: Handle)
                               -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    let timeout = svr_cfg.timeout().clone();
+    let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg, handle.clone()).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
             trace!("Got encrypt stream and going to send addr: {:?}",
@@ -142,7 +142,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             let local_iv = svr_cfg.method().gen_init_vec();
             trace!("Going to send initialize vector: {:?}", local_iv);
 
-            try_timeout(write_all(w, local_iv), timeout.clone(), &handle).and_then(move |(w, local_iv)| {
+            try_timeout(write_all(w, local_iv), timeout, &handle).and_then(move |(w, local_iv)| {
                 let encryptor = cipher::with_type(svr_cfg.method(),
                                                   svr_cfg.key(),
                                                   &local_iv[..],
@@ -243,9 +243,9 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            &mut IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
-            &mut IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
+        match *self {
+            IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
+            IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
                 let mut buf = [0u8; 4096];
                 loop {
                     let n = try_nb!(r.read(&mut buf));
@@ -370,7 +370,7 @@ impl<R, W> CopyTimeout<R, W>
                 if e.kind() == io::ErrorKind::WouldBlock {
                     self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
                 }
-                return Err(e);
+                Err(e)
             }
         }
     }
@@ -388,7 +388,7 @@ impl<R, W> CopyTimeout<R, W>
                 if e.kind() == io::ErrorKind::WouldBlock {
                     self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
                 }
-                return Err(e);
+                Err(e)
             }
         }
     }

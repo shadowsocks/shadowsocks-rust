@@ -47,7 +47,7 @@ impl LoadBalancer for RoundRobin {
             panic!("No server");
         }
 
-        let ref s = server[self.index];
+        let s = &server[self.index];
         self.index = (self.index + 1) % server.len();
         s.clone()
     }

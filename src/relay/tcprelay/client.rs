@@ -53,7 +53,7 @@ impl Socks5Client {
 
                 hs.write_to(s)
                     .and_then(flush)
-                    .and_then(|s| HandshakeResponse::read_from(s))
+                    .and_then(HandshakeResponse::read_from)
                     .and_then(|(s, rsp)| {
                         trace!("Got handshake response: {:?}", rsp);
                         assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
@@ -96,7 +96,7 @@ impl Socks5Client {
 
                 hs.write_to(s)
                     .and_then(flush)
-                    .and_then(|s| HandshakeResponse::read_from(s))
+                    .and_then(HandshakeResponse::read_from)
                     .and_then(|(s, rsp)| {
                         trace!("Got handshake response: {:?}", rsp);
                         assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);

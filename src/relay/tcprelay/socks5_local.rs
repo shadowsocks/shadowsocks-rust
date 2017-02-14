@@ -63,7 +63,7 @@ fn handle_socks5_connect(handle: &Handle,
     let cloned_svr_cfg = svr_cfg.clone();
     let cloned_handle = handle.clone();
     let cloned_handle2 = handle.clone();
-    let timeout = svr_cfg.timeout().clone();
+    let timeout = *svr_cfg.timeout();
     let fut = super::connect_proxy_server(handle, svr_cfg)
         .then(move |res| {
             let handle = cloned_handle;
@@ -103,10 +103,10 @@ fn handle_socks5_connect(handle: &Handle,
         .and_then(move |(svr_s, w)| {
             let handle = cloned_handle2;
             let svr_cfg = cloned_svr_cfg;
-            let timeout = svr_cfg.timeout().clone();
+            let timeout = *svr_cfg.timeout();
             super::proxy_server_handshake(svr_s, svr_cfg, addr, handle.clone()).and_then(move |(svr_r, svr_w)| {
                 let cloned_handle = handle.clone();
-                let cloned_timeout = timeout.clone();
+                let cloned_timeout = timeout;
 
                 let rhalf = svr_r.and_then(move |svr_r| super::copy_timeout(svr_r, w, timeout, handle));
                 let whalf = svr_w.and_then(move |svr_w| svr_w.copy_timeout_opt(r, cloned_timeout, cloned_handle));
@@ -121,7 +121,7 @@ fn handle_socks5_connect(handle: &Handle,
 fn handle_socks5_client(handle: &Handle, s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
     let cloned_handle = handle.clone();
     let client_addr = try!(s.peer_addr());
-    let cloned_client_addr = client_addr.clone();
+    let cloned_client_addr = client_addr;
     let fut = futures::lazy(|| Ok(s.split()))
         .and_then(|(r, w)| {
             // Socks5 handshakes
@@ -181,7 +181,7 @@ fn handle_socks5_client(handle: &Handle, s: TcpStream, conf: Rc<ServerConfig>, u
                     if udp_conf.enable_udp {
                         info!("UDP ASSOCIATE {}", addr);
                         let fut = TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                         From::from((&*udp_conf.client_addr).clone()))
+                                                         From::from((*(&*udp_conf.client_addr))))
                             .write_to(w)
                             .and_then(flush)
                             .and_then(|_| {
@@ -222,9 +222,9 @@ pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = 
     let (listener, local_addr) = {
         let local_addr = config.local.as_ref().unwrap();
 
-        let tcp_builder = match local_addr {
-                &SocketAddr::V4(..) => TcpBuilder::new_v4(),
-                &SocketAddr::V6(..) => TcpBuilder::new_v6(),
+        let tcp_builder = match *local_addr {
+                SocketAddr::V4(..) => TcpBuilder::new_v4(),
+                SocketAddr::V6(..) => TcpBuilder::new_v6(),
             }
             .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
 
@@ -238,7 +238,7 @@ pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = 
             .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
         info!("ShadowSocks TCP Listening on {}", local_addr);
-        (listener, local_addr.clone())
+        (listener, *local_addr)
     };
 
     let udp_conf = UdpConfig {

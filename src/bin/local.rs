@@ -208,19 +208,18 @@ fn main() {
         panic!("`server-addr`, `method` and `password` should be provided together");
     }
 
-    let mut has_provided_local_config = false;
-
-    if matches.value_of("LOCAL_ADDR").is_some() {
+    let has_provided_local_config = if matches.value_of("LOCAL_ADDR").is_some() {
         let local_addr = matches.value_of("LOCAL_ADDR")
             .unwrap();
 
         let local_addr: SocketAddr = local_addr.parse()
-            .ok()
             .expect("`local-addr` is not a valid IP address");
 
         config.local = Some(local_addr);
-        has_provided_local_config = true;
-    }
+        true
+    } else {
+        false
+    };
 
     if !has_provided_config && !(has_provided_server_config && has_provided_local_config) {
         println!("You have to specify a configuration file or pass arguments by argument list");
@@ -234,7 +233,7 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    let threads = matches.value_of("THREADS").map(|m| m.parse::<usize>().unwrap()).unwrap_or(num_cpus::get());
+    let threads = matches.value_of("THREADS").map(|m| m.parse::<usize>().unwrap()).unwrap_or_else(num_cpus::get);
     debug!("Threads: {}", threads);
 
     for _ in 1..threads {

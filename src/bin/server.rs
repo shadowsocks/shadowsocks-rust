@@ -225,7 +225,7 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    let threads = matches.value_of("THREADS").map(|m| m.parse::<usize>().unwrap()).unwrap_or(num_cpus::get());
+    let threads = matches.value_of("THREADS").map(|m| m.parse::<usize>().unwrap()).unwrap_or_else(num_cpus::get);
     debug!("Threads: {}", threads);
 
     for _ in 1..threads {

@@ -33,8 +33,8 @@ lazy_static! {
 
 fn socket_addr_to_ip(addr: SocketAddr) -> IpAddr {
     match addr {
-        SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
-        SocketAddr::V6(v6) => IpAddr::V6(v6.ip().clone()),
+        SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
+        SocketAddr::V6(v6) => IpAddr::V6(*v6.ip()),
     }
 }
 

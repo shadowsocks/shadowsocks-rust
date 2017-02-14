@@ -65,43 +65,43 @@ impl Digest for DigestVariant {
     fn update(&mut self, data: &[u8]) {
         use rust_crypto::digest::Digest;
 
-        match self {
-            &mut DigestVariant::Md5(ref mut d) => d.input(data),
-            &mut DigestVariant::Sha1(ref mut d) => d.input(data),
+        match *self {
+            DigestVariant::Md5(ref mut d) => d.input(data),
+            DigestVariant::Sha1(ref mut d) => d.input(data),
         }
     }
 
     fn digest(&mut self, buf: &mut Vec<u8>) {
         use rust_crypto::digest::Digest;
 
-        let output_bytes = match &*self {
-            &DigestVariant::Md5(ref d) => d.output_bytes(),
-            &DigestVariant::Sha1(ref d) => d.output_bytes(),
+        let output_bytes = match *self {
+            DigestVariant::Md5(ref d) => d.output_bytes(),
+            DigestVariant::Sha1(ref d) => d.output_bytes(),
         };
 
         let orig_len = buf.len();
         buf.resize(orig_len + output_bytes, 0);
-        match self {
-            &mut DigestVariant::Md5(ref mut d) => d.result(&mut buf[orig_len..]),
-            &mut DigestVariant::Sha1(ref mut d) => d.result(&mut buf[orig_len..]),
+        match *self {
+            DigestVariant::Md5(ref mut d) => d.result(&mut buf[orig_len..]),
+            DigestVariant::Sha1(ref mut d) => d.result(&mut buf[orig_len..]),
         }
     }
 
     fn digest_len(&self) -> usize {
         use rust_crypto::digest::Digest;
 
-        match self {
-            &DigestVariant::Md5(ref d) => d.output_bytes(),
-            &DigestVariant::Sha1(ref d) => d.output_bytes(),
+        match *self {
+            DigestVariant::Md5(ref d) => d.output_bytes(),
+            DigestVariant::Sha1(ref d) => d.output_bytes(),
         }
     }
 
     fn reset(&mut self) {
         use rust_crypto::digest::Digest;
 
-        match self {
-            &mut DigestVariant::Md5(ref mut d) => d.reset(),
-            &mut DigestVariant::Sha1(ref mut d) => d.reset(),
+        match *self {
+            DigestVariant::Md5(ref mut d) => d.reset(),
+            DigestVariant::Sha1(ref mut d) => d.reset(),
         }
     }
 }

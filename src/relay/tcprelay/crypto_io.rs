@@ -58,7 +58,7 @@ pub trait EncryptedWrite: Sized {
     }
 }
 
-/// write_all and encrypt data
+/// Write all data encrypted
 pub enum EncryptedWriteAll<W, B>
     where W: EncryptedWrite,
           B: AsRef<[u8]>
@@ -230,7 +230,7 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
                 if e.kind() == io::ErrorKind::WouldBlock {
                     self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
                 }
-                return Err(e);
+                Err(e)
             }
         }
     }
@@ -251,7 +251,7 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
                 if e.kind() == io::ErrorKind::WouldBlock {
                     self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
                 }
-                return Err(e);
+                Err(e)
             }
         }
     }

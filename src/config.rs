@@ -94,23 +94,23 @@ impl ServerAddr {
     /// Get address for server listener
     /// Panic if address is domain name
     pub fn listen_addr(&self) -> &SocketAddr {
-        match self {
-            &ServerAddr::SocketAddr(ref s) => s,
+        match *self {
+            ServerAddr::SocketAddr(ref s) => s,
             _ => panic!("Cannot use domain name as server listen address"),
         }
     }
 
     fn to_json_object_inner(&self, obj: &mut Map<String, Value>, addr_key: &str, port_key: &str) {
-        match self {
-            &ServerAddr::SocketAddr(SocketAddr::V4(ref v4)) => {
+        match *self {
+            ServerAddr::SocketAddr(SocketAddr::V4(ref v4)) => {
                 obj.insert(addr_key.to_owned(), Value::String(v4.ip().to_string()));
                 obj.insert(port_key.to_owned(), Value::Number(From::from(v4.port())));
             }
-            &ServerAddr::SocketAddr(SocketAddr::V6(ref v6)) => {
+            ServerAddr::SocketAddr(SocketAddr::V6(ref v6)) => {
                 obj.insert(addr_key.to_owned(), Value::String(v6.ip().to_string()));
                 obj.insert(port_key.to_owned(), Value::Number(From::from(v6.port())));
             }
-            &ServerAddr::DomainName(ref domain, port) => {
+            ServerAddr::DomainName(ref domain, port) => {
                 obj.insert(addr_key.to_owned(), Value::String(domain.to_owned()));
                 obj.insert(port_key.to_owned(), Value::Number(From::from(port)));
             }
@@ -126,7 +126,7 @@ impl ServerAddr {
     }
 }
 
-/// Parse ServerAddr error
+/// Parse `ServerAddr` error
 #[derive(Debug)]
 pub struct ServerAddrError;
 
@@ -153,9 +153,9 @@ impl FromStr for ServerAddr {
 
 impl Display for ServerAddr {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            &ServerAddr::SocketAddr(ref a) => write!(f, "{}", a),
-            &ServerAddr::DomainName(ref d, port) => write!(f, "{}:{}", d, port),
+        match *self {
+            ServerAddr::SocketAddr(ref a) => write!(f, "{}", a),
+            ServerAddr::DomainName(ref d, port) => write!(f, "{}:{}", d, port),
         }
     }
 }
@@ -509,7 +509,7 @@ impl Config {
                     Ok(sock) => Some(sock),
                     Err(err) => {
                         error!("Invalid forbidden IP {}, {:?}, skipping", x, err);
-                        return None;
+                        None
                     }
                 }
             }));
@@ -576,9 +576,9 @@ impl Config {
         }
 
         if let Some(ref l) = self.local {
-            let ip_str = match l {
-                &SocketAddr::V4(ref v4) => v4.ip().to_string(),
-                &SocketAddr::V6(ref v6) => v6.ip().to_string(),
+            let ip_str = match *l {
+                SocketAddr::V4(ref v4) => v4.ip().to_string(),
+                SocketAddr::V6(ref v6) => v6.ip().to_string(),
             };
 
             obj.insert("local_address".to_owned(), Value::String(ip_str));

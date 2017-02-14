@@ -19,7 +19,7 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! TcpRelay server that running on the server side
+//! Relay for TCP server that running on the server side
 
 use std::io;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -60,7 +60,7 @@ impl TcpRelayClientHandshake {
     pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
         let TcpRelayClientHandshake { handle, forbidden_ip, s, svr_cfg } = self;
 
-        let timeout = svr_cfg.timeout().clone();
+        let timeout = *svr_cfg.timeout();
         let cloned_handle = handle.clone();
         let fut = proxy_handshake(s, svr_cfg, handle.clone()).and_then(move |(r_fut, w_fut)| {
             r_fut.and_then(move |r| {
@@ -123,9 +123,9 @@ impl TcpRelayClientPending {
                       -> BoxIoFuture<SocketAddr> {
         let fut = TcpRelayClientPending::resolve_address(handle, addr, timeout).and_then(move |addr| {
             trace!("Resolved address as {}", addr);
-            let ipaddr = match addr.clone() {
-                SocketAddr::V4(v4) => IpAddr::V4(v4.ip().clone()),
-                SocketAddr::V6(v6) => IpAddr::V6(v6.ip().clone()),
+            let ipaddr = match addr {
+                SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
+                SocketAddr::V6(v6) => IpAddr::V6(*v6.ip()),
             };
 
             if forbidden_ip.contains(&ipaddr) {
@@ -146,7 +146,7 @@ impl TcpRelayClientPending {
                       timeout: Option<Duration>)
                       -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(TcpRelayClientPending::resolve_remote(handle.clone(), addr, forbidden_ip, timeout.clone())
+        Box::new(TcpRelayClientPending::resolve_remote(handle.clone(), addr, forbidden_ip, timeout)
             .and_then(move |addr| try_timeout(TcpStream::connect(&addr, &handle), timeout, &handle)))
     }
 
@@ -154,7 +154,7 @@ impl TcpRelayClientPending {
     pub fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
         let handle = self.handle.clone();
         let fut = TcpRelayClientPending::connect_remote(self.handle, self.addr, self.forbidden_ip, self.timeout)
             .map(move |stream| {
@@ -184,7 +184,7 @@ impl TcpRelayClientConnected {
     pub fn tunnel(self) -> BoxIoFuture<()> {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
         let handle = self.handle.clone();
         tunnel(self.addr,
                copy_timeout(r, svr_w, self.timeout, self.handle),
@@ -196,7 +196,7 @@ impl TcpRelayClientConnected {
 pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = io::Error>> {
     let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
 
-    let ref forbidden_ip = config.forbidden_ip;
+    let forbidden_ip = &config.forbidden_ip;
     let forbidden_ip = Rc::new(forbidden_ip.clone());
 
     for svr_cfg in &config.server {
@@ -204,9 +204,9 @@ pub fn run(config: Rc<Config>, handle: Handle) -> Box<Future<Item = (), Error = 
             let addr = svr_cfg.addr();
             let addr = addr.listen_addr();
 
-            let tcp_builder = match addr {
-                    &SocketAddr::V4(..) => TcpBuilder::new_v4(),
-                    &SocketAddr::V6(..) => TcpBuilder::new_v6(),
+            let tcp_builder = match *addr {
+                    SocketAddr::V4(..) => TcpBuilder::new_v4(),
+                    SocketAddr::V6(..) => TcpBuilder::new_v6(),
                 }
                 .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
 

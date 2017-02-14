@@ -574,14 +574,10 @@ fn write_addr<W: Write + 'static>(addr: Address, w: W) -> BoxIoFuture<W> {
 
 #[inline]
 fn get_addr_len(atyp: &Address) -> usize {
-    match atyp {
-        &Address::SocketAddress(addr) => {
-            match addr {
-                SocketAddr::V4(..) => 1 + 4 + 2,
-                SocketAddr::V6(..) => 1 + 8 * 2 + 2,
-            }
-        }
-        &Address::DomainNameAddress(ref dmname, _) => 1 + 1 + dmname.len() + 2,
+    match *atyp {
+        Address::SocketAddress(SocketAddr::V4(..)) => 1 + 4 + 2,
+        Address::SocketAddress(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
+        Address::DomainNameAddress(ref dmname, _) => 1 + 1 + dmname.len() + 2,
     }
 }
 
