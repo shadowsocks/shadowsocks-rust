@@ -23,7 +23,7 @@
 
 use std::convert::From;
 
-use crypto::cipher::{Cipher, CipherType, CipherResult};
+use crypto::cipher::{StreamCipher, CipherType, CipherResult};
 use crypto::cipher;
 
 use crypto::CryptoMode;
@@ -135,7 +135,7 @@ impl OpenSSLCipher {
 
 unsafe impl Send for OpenSSLCipher {}
 
-impl Cipher for OpenSSLCipher {
+impl StreamCipher for OpenSSLCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         self.worker.update(data, out)
     }

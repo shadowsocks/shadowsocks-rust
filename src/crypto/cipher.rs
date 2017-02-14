@@ -42,7 +42,7 @@ use openssl::symm;
 ///
 /// The `update` method could be called multiple times, and the `finalize` method will
 /// encrypt the last block
-pub trait Cipher {
+pub trait StreamCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()>;
     fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()>;
 }
@@ -368,29 +368,29 @@ impl Display for CipherType {
     }
 }
 
-macro_rules! define_ciphers {
+macro_rules! define_stream_ciphers {
     ($($name:ident => $cipher:ty,)+) => {
         /// Variant cipher which contains all possible ciphers
-        pub enum CipherVariant {
+        pub enum StreamCipherVariant {
             $(
                 $name($cipher),
             )+
         }
 
-        impl CipherVariant {
+        impl StreamCipherVariant {
             /// Creates from an actual cipher
-            pub fn new<C>(cipher: C) -> CipherVariant
-                where CipherVariant: From<C>
+            pub fn new<C>(cipher: C) -> StreamCipherVariant
+                where StreamCipherVariant: From<C>
             {
                 From::from(cipher)
             }
         }
 
-        impl Cipher for CipherVariant {
+        impl StreamCipher for StreamCipherVariant {
             fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
                 match *self {
                     $(
-                        CipherVariant::$name(ref mut cipher) => cipher.update(data, out),
+                        StreamCipherVariant::$name(ref mut cipher) => cipher.update(data, out),
                     )+
                 }
             }
@@ -398,23 +398,23 @@ macro_rules! define_ciphers {
             fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
                 match *self {
                     $(
-                        CipherVariant::$name(ref mut cipher) => cipher.finalize(out),
+                        StreamCipherVariant::$name(ref mut cipher) => cipher.finalize(out),
                     )+
                 }
             }
         }
 
         $(
-            impl From<$cipher> for CipherVariant {
-                fn from(cipher: $cipher) -> CipherVariant {
-                    CipherVariant::$name(cipher)
+            impl From<$cipher> for StreamCipherVariant {
+                fn from(cipher: $cipher) -> StreamCipherVariant {
+                    StreamCipherVariant::$name(cipher)
                 }
             }
         )+
     }
 }
 
-define_ciphers! {
+define_stream_ciphers! {
     TableCipher => table::TableCipher,
     DummyCipher => dummy::DummyCipher,
     Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
@@ -423,19 +423,19 @@ define_ciphers! {
 }
 
 /// Generate a specific Cipher with key and initialize vector
-pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> CipherVariant {
+pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
     match t {
-        CipherType::Table => CipherVariant::new(table::TableCipher::new(key, mode)),
-        CipherType::Dummy => CipherVariant::new(dummy::DummyCipher),
+        CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
+        CipherType::Dummy => StreamCipherVariant::new(dummy::DummyCipher),
 
         #[cfg(feature = "cipher-chacha20")]
         CipherType::ChaCha20 |
-        CipherType::Salsa20 => CipherVariant::new(CryptoCipher::new(t, key, iv)),
+        CipherType::Salsa20 => StreamCipherVariant::new(CryptoCipher::new(t, key, iv)),
 
         #[cfg(feature = "cipher-rc4")]
-        CipherType::Rc4Md5 => CipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
+        CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
-        _ => CipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+        _ => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
     }
 }
 

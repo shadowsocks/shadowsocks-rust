@@ -26,7 +26,7 @@ use std::convert::From;
 
 use openssl::symm;
 
-pub use self::cipher::{CipherType, Cipher, CipherVariant, CipherResult};
+pub use self::cipher::{CipherType, StreamCipher, StreamCipherVariant, CipherResult};
 
 pub mod cipher;
 pub mod openssl;

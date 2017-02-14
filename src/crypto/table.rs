@@ -23,7 +23,7 @@
 
 use std::io::BufReader;
 
-use crypto::cipher::{Cipher, CipherResult};
+use crypto::cipher::{StreamCipher, CipherResult};
 use crypto::digest::{self, DigestType, Digest};
 use crypto::CryptoMode;
 
@@ -78,7 +78,7 @@ impl TableCipher {
     }
 }
 
-impl Cipher for TableCipher {
+impl StreamCipher for TableCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         self.process(data, out)
     }

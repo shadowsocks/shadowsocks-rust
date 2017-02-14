@@ -22,7 +22,7 @@
 //! Rc4Md5 cipher definition
 
 use crypto::openssl::OpenSSLCrypto;
-use crypto::cipher::{Cipher, CipherType, CipherResult};
+use crypto::cipher::{StreamCipher, CipherType, CipherResult};
 use crypto::digest::{self, Digest, DigestType};
 use crypto::CryptoMode;
 
@@ -43,7 +43,7 @@ impl Rc4Md5Cipher {
     }
 }
 
-impl Cipher for Rc4Md5Cipher {
+impl StreamCipher for Rc4Md5Cipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         self.crypto.update(data, out)
     }

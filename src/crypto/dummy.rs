@@ -21,14 +21,14 @@
 
 //! Dummy cipher, encrypt and decrypt nothing
 
-use super::{Cipher, CipherResult};
+use super::{StreamCipher, CipherResult};
 
 /// Dummy cipher
 ///
 /// Copies data directly to output, very dummy
 pub struct DummyCipher;
 
-impl Cipher for DummyCipher {
+impl StreamCipher for DummyCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         out.extend_from_slice(data);
         Ok(())

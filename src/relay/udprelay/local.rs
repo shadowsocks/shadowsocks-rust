@@ -77,7 +77,7 @@ use relay::{BoxIoFuture, boxed_future};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::dns_resolver::DnsResolver;
 use relay::socks5::{Address, UdpAssociateHeader};
-use crypto::cipher::{self, Cipher};
+use crypto::cipher::{self, StreamCipher};
 use crypto::CryptoMode;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};

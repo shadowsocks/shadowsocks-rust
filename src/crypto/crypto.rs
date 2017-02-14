@@ -25,7 +25,7 @@ use rust_crypto::symmetriccipher::SynchronousStreamCipher;
 use rust_crypto::chacha20::ChaCha20;
 use rust_crypto::salsa20::Salsa20;
 
-use crypto::cipher::{Cipher, CipherType, CipherResult};
+use crypto::cipher::{StreamCipher, CipherType, CipherResult};
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -44,7 +44,7 @@ impl CryptoCipher {
     }
 }
 
-impl Cipher for CryptoCipher {
+impl StreamCipher for CryptoCipher {
     fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
         out.reserve(data.len());
         let orig_len = out.len();
