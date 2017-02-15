@@ -59,7 +59,7 @@ pub mod client;
 mod crypto_io;
 mod aead;
 
-const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
+const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
 /// Directions in the tunnel
 #[derive(Debug, Copy, Clone)]
