@@ -36,7 +36,7 @@ use std::io::{self, Read, Write, BufRead, Cursor};
 use std::cmp;
 use std::u16;
 
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 use crypto::{self, CipherType, AeadEncryptor, AeadDecryptor};
 
@@ -134,8 +134,12 @@ impl<R> DecryptedReader<R>
                 let mut len_buf = [0u8; 2];
                 self.cipher.decrypt(data, &mut len_buf, tag)?;
 
-                let len = ((len_buf[0] as u16) << 8) | (len_buf[1] as u16);
-                self.read_step = ReadingStep::DataAndTag(u16::from_be(len) as usize);
+                let len = {
+                    let mut cur = Cursor::new(&mut len_buf);
+                    cur.read_u16::<BigEndian>().unwrap() as usize
+                };
+
+                self.read_step = ReadingStep::DataAndTag(len);
             }
             self.buffer.clear();
         }
@@ -167,8 +171,14 @@ impl<R> DecryptedReader<R>
         while !self.sent_final {
             match self.read_step {
                 ReadingStep::DataLength => self.read_length()?,
-                ReadingStep::DataAndTag(dlen) => self.read_data(dlen)?,
-                ReadingStep::DataDone => self.read_step = ReadingStep::DataLength,
+                ReadingStep::DataAndTag(dlen) => {
+                    self.read_data(dlen)?;
+                    break; // Read finished! Break out
+                }
+                ReadingStep::DataDone => {
+                    self.read_step = ReadingStep::DataLength;
+                    self.data.clear();
+                }
             }
         }
         Ok(())
@@ -194,7 +204,7 @@ impl<R> BufRead for DecryptedReader<R>
     }
 
     fn consume(&mut self, amt: usize) {
-        self.pos = cmp::min(self.pos + amt, self.buffer.len());
+        self.pos = cmp::min(self.pos + amt, self.data.len());
     }
 }
 
@@ -270,7 +280,9 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         buf.reserve(data.len() + self.tag_size);
         buf.resize(orig_buf_len + data.len(), 0);
         self.cipher.encrypt(data, &mut buf[orig_buf_len..], &mut tag_buf);
+
         buf.append(&mut tag_buf);
+
 
         Ok(())
     }

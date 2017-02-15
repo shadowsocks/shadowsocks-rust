@@ -21,6 +21,8 @@
 
 //! Cipher defined with Rust-Crypto
 
+use std::mem;
+
 use rust_crypto::symmetriccipher::SynchronousStreamCipher;
 use rust_crypto::chacha20::ChaCha20;
 use rust_crypto::salsa20::Salsa20;
@@ -76,13 +78,23 @@ pub enum CryptoAeadCryptoVariant {
 
 pub struct CryptoAeadCrypto {
     cipher: CryptoAeadCryptoVariant,
+    cipher_type: CipherType,
+    key: Vec<u8>,
+    nounce: Vec<u8>,
 }
-
-
 
 impl CryptoAeadCrypto {
     pub fn new(t: CipherType, key: &[u8], nounce: &[u8]) -> CryptoAeadCrypto {
-        let var = match t {
+        CryptoAeadCrypto {
+            cipher: CryptoAeadCrypto::new_variant(t, key, nounce),
+            cipher_type: t,
+            key: key.to_owned(),
+            nounce: nounce.to_owned(),
+        }
+    }
+
+    fn new_variant(t: CipherType, key: &[u8], nounce: &[u8]) -> CryptoAeadCryptoVariant {
+        match t {
             CipherType::Aes128Gcm => {
                 CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize128, key, nounce, &[]))
             }
@@ -94,9 +106,12 @@ impl CryptoAeadCrypto {
             }
 
             _ => panic!("Unsupported {:?}", t),
-        };
+        }
+    }
 
-        CryptoAeadCrypto { cipher: var }
+    fn reset(&mut self) {
+        let var = CryptoAeadCrypto::new_variant(self.cipher_type, &self.key, &self.nounce);
+        mem::replace(&mut self.cipher, var);
     }
 }
 
@@ -104,12 +119,16 @@ impl AeadEncryptor for CryptoAeadCrypto {
     fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]) {
         use rust_crypto::aead::AeadEncryptor;
 
-        let CryptoAeadCrypto { ref mut cipher, .. } = *self;
-        match *cipher {
-            CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
-                gcm.encrypt(input, output, tag);
+        {
+            let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+            match *cipher {
+                CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                    gcm.encrypt(input, output, tag);
+                }
             }
         }
+
+        self.reset();
     }
 }
 
@@ -117,16 +136,22 @@ impl AeadDecryptor for CryptoAeadCrypto {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
         use rust_crypto::aead::AeadDecryptor;
 
-        let CryptoAeadCrypto { ref mut cipher, .. } = *self;
-        match *cipher {
-            CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
-                if !gcm.decrypt(input, output, tag) {
-                    Err(Error::AeadDecryptFailed)
-                } else {
-                    Ok(())
+        let r = {
+            let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+            match *cipher {
+                CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                    if !gcm.decrypt(input, output, tag) {
+                        Err(Error::AeadDecryptFailed)
+                    } else {
+                        Ok(())
+                    }
                 }
             }
-        }
+        };
+
+        self.reset();
+
+        r
     }
 }
 

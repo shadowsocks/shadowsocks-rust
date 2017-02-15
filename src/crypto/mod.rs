@@ -26,7 +26,7 @@ use std::convert::From;
 
 use openssl::symm;
 
-pub use self::cipher::{CipherType, CipherResult};
+pub use self::cipher::{CipherType, CipherCategory, CipherResult};
 pub use self::stream::{StreamCipher, StreamCipherVariant, new_stream};
 pub use self::aead::{AeadEncryptor, AeadDecryptor, new_aead_encryptor, new_aead_decryptor};
 

@@ -12,7 +12,7 @@ use super::BUFFER_SIZE;
 
 pub trait DecryptedRead: BufRead {}
 
-pub trait EncryptedWrite: Sized {
+pub trait EncryptedWrite {
     /// Writes raw bytes directly to the writer directly
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize>;
     /// Flush the writer
@@ -21,7 +21,9 @@ pub trait EncryptedWrite: Sized {
     fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()>;
 
     /// Encrypt data in `buf` and write all to the writer
-    fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<Self, B> {
+    fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<Self, B>
+        where Self: Sized
+    {
         EncryptedWriteAll::Writing {
             writer: self,
             buf: buf,
@@ -32,7 +34,9 @@ pub trait EncryptedWrite: Sized {
     }
 
     /// Copies all data from `r`
-    fn copy<R: Read>(self, r: R) -> EncryptedCopy<R, Self> {
+    fn copy<R: Read>(self, r: R) -> EncryptedCopy<R, Self>
+        where Self: Sized
+    {
         EncryptedCopy {
             reader: r,
             writer: self,
@@ -45,12 +49,16 @@ pub trait EncryptedWrite: Sized {
     }
 
     /// Copies all data from `r` with timeout
-    fn copy_timeout<R: Read>(self, r: R, timeout: Duration, handle: Handle) -> EncryptedCopyTimeout<R, Self> {
+    fn copy_timeout<R: Read>(self, r: R, timeout: Duration, handle: Handle) -> EncryptedCopyTimeout<R, Self>
+        where Self: Sized
+    {
         EncryptedCopyTimeout::new(r, self, timeout, handle)
     }
 
     /// Copies all data from `r` with optional timeout
-    fn copy_timeout_opt<R: Read>(self, r: R, timeout: Option<Duration>, handle: Handle) -> EncryptedCopyOpt<R, Self> {
+    fn copy_timeout_opt<R: Read>(self, r: R, timeout: Option<Duration>, handle: Handle) -> EncryptedCopyOpt<R, Self>
+        where Self: Sized
+    {
         match timeout {
             Some(t) => EncryptedCopyOpt::CopyTimeout(self.copy_timeout(r, t, handle)),
             None => EncryptedCopyOpt::Copy(self.copy(r)),

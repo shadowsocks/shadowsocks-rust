@@ -21,14 +21,14 @@
 
 //! Relay for TCP implementation
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Write, BufRead};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
 
 use crypto;
-use crypto::CryptoMode;
+use crypto::{CryptoMode, CipherCategory};
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
@@ -46,8 +46,10 @@ use net2::TcpBuilder;
 
 use ip::IpAddr;
 
-use self::stream::{EncryptedWriter, DecryptedReader};
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
+
+use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
+use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
 
 pub mod local;
 mod socks5_local;
@@ -68,12 +70,94 @@ pub enum TunnelDirection {
     Server2Client,
 }
 
-// TODO: `DecryptedHalf` and `EncryptedHalf` should be `Box<DecryptedRead>` and `Box<EncryptedWrite>`
+type TcpReadHalf = ReadHalf<TcpStream>;
+type TcpWriteHalf = WriteHalf<TcpStream>;
 
 /// `ReadHalf `of `TcpStream` with decryption
-pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
+pub enum DecryptedHalf {
+    Stream(StreamDecryptedReader<TcpReadHalf>),
+    Aead(AeadDecryptedReader<TcpReadHalf>),
+}
+
+impl Read for DecryptedHalf {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.read(buf),
+            DecryptedHalf::Aead(ref mut d) => d.read(buf),
+        }
+    }
+}
+
+impl DecryptedRead for DecryptedHalf {}
+
+impl BufRead for DecryptedHalf {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.fill_buf(),
+            DecryptedHalf::Aead(ref mut d) => d.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.consume(amt),
+            DecryptedHalf::Aead(ref mut d) => d.consume(amt),
+        }
+    }
+}
+
+impl From<StreamDecryptedReader<TcpReadHalf>> for DecryptedHalf {
+    fn from(r: StreamDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+        DecryptedHalf::Stream(r)
+    }
+}
+
+impl From<AeadDecryptedReader<TcpReadHalf>> for DecryptedHalf {
+    fn from(r: AeadDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+        DecryptedHalf::Aead(r)
+    }
+}
+
 /// `WriteHalf` of `TcpStream` with encryption
-pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
+pub enum EncryptedHalf {
+    Stream(StreamEncryptedWriter<TcpWriteHalf>),
+    Aead(AeadEncryptedWriter<TcpWriteHalf>),
+}
+
+impl EncryptedWrite for EncryptedHalf {
+    fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.write_raw(data),
+            EncryptedHalf::Aead(ref mut e) => e.write_raw(data),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.flush(),
+            EncryptedHalf::Aead(ref mut e) => e.flush(),
+        }
+    }
+
+    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.encrypt(data, buf),
+            EncryptedHalf::Aead(ref mut e) => e.encrypt(data, buf),
+        }
+    }
+}
+
+impl From<StreamEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
+    fn from(d: StreamEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+        EncryptedHalf::Stream(d)
+    }
+}
+
+impl From<AeadEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
+    fn from(d: AeadEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+        EncryptedHalf::Aead(d)
+    }
+}
 
 /// Boxed future of `DecryptedHalf`
 pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
@@ -116,7 +200,10 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(move |buf| try_timeout(enc_w.write_all(buf), timeout, &handle))
+                .and_then(move |buf| {
+                    trace!("Sending address buffer as {:?}", buf);
+                    try_timeout(enc_w.write_all(buf), timeout, &handle)
+                })
                 .map(|(w, _)| w)
         });
 
@@ -146,14 +233,20 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             trace!("Going to send initialize vector: {:?}", local_iv);
 
             try_timeout(write_all(w, local_iv), timeout, &handle).and_then(move |(w, local_iv)| {
-                // TODO: If crypto type is Aead, returns `aead::EncryptedWriter` instead
+                match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        let encryptor = crypto::new_stream(svr_cfg.method(),
+                                                           svr_cfg.key(),
+                                                           &local_iv[..],
+                                                           CryptoMode::Encrypt);
 
-                let encryptor = crypto::new_stream(svr_cfg.method(),
-                                                   svr_cfg.key(),
-                                                   &local_iv[..],
-                                                   CryptoMode::Encrypt);
-
-                Ok(EncryptedWriter::new(w, encryptor))
+                        Ok(From::from(StreamEncryptedWriter::new(w, encryptor)))
+                    }
+                    CipherCategory::Aead => {
+                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv[..]);
+                        Ok(From::from(wtr))
+                    }
+                }
             })
         };
 
@@ -167,13 +260,21 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
                 trace!("Got initialize vector {:?}", remote_iv);
 
-                let decryptor = crypto::new_stream(svr_cfg.method(),
-                                                   svr_cfg.key(),
-                                                   &remote_iv[..],
-                                                   CryptoMode::Decrypt);
-                let decrypt_stream = DecryptedReader::new(r, decryptor);
+                match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        let decryptor = crypto::new_stream(svr_cfg.method(),
+                                                           svr_cfg.key(),
+                                                           &remote_iv[..],
+                                                           CryptoMode::Decrypt);
+                        let decrypt_stream = StreamDecryptedReader::new(r, decryptor);
 
-                Ok(decrypt_stream)
+                        Ok(From::from(decrypt_stream))
+                    }
+                    CipherCategory::Aead => {
+                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv[..]);
+                        Ok(From::from(dr))
+                    }
+                }
             })
         };
 
