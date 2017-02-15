@@ -93,10 +93,8 @@ impl OpenSSLCrypto {
 /// *Note: This behavior works just the same as the official version of shadowsocks.*
 ///
 /// ```rust
-/// use shadowsocks::crypto::CryptoMode;
-/// use shadowsocks::crypto::cipher::CipherType;
+/// use shadowsocks::crypto::{CryptoMode, StreamCipher, CipherType};
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
-/// use shadowsocks::crypto::cipher::Cipher;
 ///
 /// let method = CipherType::Aes128Cfb;
 ///

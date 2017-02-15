@@ -58,7 +58,7 @@ unsafe impl Send for Rc4Md5Cipher {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::cipher::{Cipher, CipherType};
+    use crypto::{StreamCipher, CipherType};
     use crypto::CryptoMode;
 
     #[test]

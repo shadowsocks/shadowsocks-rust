@@ -157,7 +157,7 @@ impl AeadDecryptor for CryptoAeadCrypto {
 
 #[cfg(test)]
 mod test {
-    use crypto::cipher::{Cipher, CipherType};
+    use crypto::{StreamCipher, CipherType};
     use super::*;
 
     #[test]

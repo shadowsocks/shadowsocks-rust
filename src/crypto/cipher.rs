@@ -341,21 +341,21 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::cipher::{Cipher, CipherType, with_type};
+    use crypto::{StreamCipher, CipherType, new_stream};
     use crypto::CryptoMode;
 
     #[test]
     fn test_get_cipher() {
         let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
         let iv = CipherType::Aes128Cfb.gen_init_vec();
-        let mut encryptor = with_type(CipherType::Aes128Cfb,
-                                      &key[0..],
-                                      &iv[0..],
-                                      CryptoMode::Encrypt);
-        let mut decryptor = with_type(CipherType::Aes128Cfb,
-                                      &key[0..],
-                                      &iv[0..],
-                                      CryptoMode::Decrypt);
+        let mut encryptor = new_stream(CipherType::Aes128Cfb,
+                                       &key[0..],
+                                       &iv[0..],
+                                       CryptoMode::Encrypt);
+        let mut decryptor = new_stream(CipherType::Aes128Cfb,
+                                       &key[0..],
+                                       &iv[0..],
+                                       CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();
