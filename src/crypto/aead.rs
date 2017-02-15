@@ -19,39 +19,42 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! Crypto methods for shadowsocks
+//! Aead Ciphers
 
+use crypto::cipher::{CipherType, CipherCategory, CipherResult};
 
-use std::convert::From;
+use crypto::crypto::CryptoAeadCrypto;
 
-use openssl::symm;
-
-pub use self::cipher::{CipherType, CipherResult};
-pub use self::stream::{StreamCipher, StreamCipherVariant, new_stream};
-pub use self::aead::{AeadEncryptor, AeadDecryptor, new_aead_encryptor, new_aead_decryptor};
-
-pub mod cipher;
-pub mod openssl;
-pub mod digest;
-pub mod table;
-pub mod rc4_md5;
-pub mod crypto;
-pub mod dummy;
-pub mod aead;
-pub mod stream;
-
-/// Crypto mode, encrypt or decrypt
-#[derive(Clone, Copy)]
-pub enum CryptoMode {
-    Encrypt,
-    Decrypt,
+pub trait AeadEncryptor {
+    fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]);
 }
 
-impl From<CryptoMode> for symm::Mode {
-    fn from(m: CryptoMode) -> symm::Mode {
-        match m {
-            CryptoMode::Encrypt => symm::Mode::Encrypt,
-            CryptoMode::Decrypt => symm::Mode::Decrypt,
-        }
+pub trait AeadDecryptor {
+    fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()>;
+}
+
+/// Generate a specific AEAD cipher encryptor
+pub fn new_aead_encryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadEncryptor> {
+    assert!(t.category() == CipherCategory::Aead);
+
+    match t {
+        CipherType::Aes128Gcm |
+        CipherType::Aes192Gcm |
+        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+
+        _ => unreachable!(),
+    }
+}
+
+/// Generate a specific AEAD cipher decryptor
+pub fn new_aead_decryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadDecryptor> {
+    assert!(t.category() == CipherCategory::Aead);
+
+    match t {
+        CipherType::Aes128Gcm |
+        CipherType::Aes192Gcm |
+        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+
+        _ => unreachable!(),
     }
 }

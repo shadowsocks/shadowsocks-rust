@@ -27,25 +27,11 @@ use std::io;
 use rand::{self, Rng};
 use std::convert::From;
 
-use crypto::openssl;
-use crypto::table;
-use crypto::CryptoMode;
-use crypto::rc4_md5;
-use crypto::dummy;
-use crypto::crypto::CryptoCipher;
-
 use crypto::digest::{self, DigestType, Digest};
 
 use openssl::symm;
 
-/// Basic operation of Cipher, which is a Symmetric Cipher.
-///
-/// The `update` method could be called multiple times, and the `finalize` method will
-/// encrypt the last block
-pub trait StreamCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()>;
-    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()>;
-}
+use sodiumoxide::crypto::pwhash::pwhash;
 
 /// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
@@ -55,6 +41,7 @@ pub enum Error {
     UnknownCipherType,
     OpenSSLError(::openssl::error::ErrorStack),
     IoError(io::Error),
+    AeadDecryptFailed,
 }
 
 impl Debug for Error {
@@ -63,6 +50,7 @@ impl Debug for Error {
             Error::UnknownCipherType => write!(f, "UnknownCipherType"),
             Error::OpenSSLError(ref err) => write!(f, "{:?}", err),
             Error::IoError(ref err) => write!(f, "{:?}", err),
+            Error::AeadDecryptFailed => write!(f, "AEAD decrypt failed"),
         }
     }
 }
@@ -73,6 +61,7 @@ impl Display for Error {
             Error::UnknownCipherType => write!(f, "UnknownCipherType"),
             Error::OpenSSLError(ref err) => write!(f, "{}", err),
             Error::IoError(ref err) => write!(f, "{}", err),
+            Error::AeadDecryptFailed => write!(f, "AeadDecryptFailed"),
         }
     }
 }
@@ -83,6 +72,7 @@ impl From<Error> for io::Error {
             Error::UnknownCipherType => io::Error::new(io::ErrorKind::Other, "Unknown Cipher type"),
             Error::OpenSSLError(err) => From::from(err),
             Error::IoError(err) => err,
+            Error::AeadDecryptFailed => io::Error::new(io::ErrorKind::Other, "AEAD decrypt error"),
         }
     }
 }
@@ -93,37 +83,29 @@ impl From<::openssl::error::ErrorStack> for Error {
     }
 }
 
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_128_CFB: &'static str = "aes-128-cfb";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_128_CFB_1: &'static str = "aes-128-cfb1";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_128_CFB_8: &'static str = "aes-128-cfb8";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_128_CFB_128: &'static str = "aes-128-cfb128";
 
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_256_CFB: &'static str = "aes-256-cfb";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_256_CFB_1: &'static str = "aes-256-cfb1";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_256_CFB_8: &'static str = "aes-256-cfb8";
-#[cfg(feature = "cipher-aes-cfb")]
 const CIPHER_AES_256_CFB_128: &'static str = "aes-256-cfb128";
 
-#[cfg(feature = "cipher-rc4")]
 const CIPHER_RC4: &'static str = "rc4";
-#[cfg(feature = "cipher-rc4")]
 const CIPHER_RC4_MD5: &'static str = "rc4-md5";
 
 const CIPHER_TABLE: &'static str = "table";
 
-#[cfg(feature = "cipher-chacha20")]
 const CIPHER_CHACHA20: &'static str = "chacha20";
-#[cfg(feature = "cipher-salsa20")]
 const CIPHER_SALSA20: &'static str = "salsa20";
 
 const CIPHER_DUMMY: &'static str = "dummy";
+
+const CIPHER_AES_128_GCM: &'static str = "aes-128-gcm";
+const CIPHER_AES_192_GCM: &'static str = "aes-192-gcm";
+const CIPHER_AES_256_GCM: &'static str = "aes-256-gcm";
 
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
@@ -131,100 +113,77 @@ pub enum CipherType {
     Table,
     Dummy,
 
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes128Cfb,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes128Cfb1,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes128Cfb8,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes128Cfb128,
 
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes256Cfb,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes256Cfb1,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes256Cfb8,
-    #[cfg(feature = "cipher-aes-cfb")]
     Aes256Cfb128,
 
-    #[cfg(feature = "cipher-rc4")]
     Rc4,
-    #[cfg(feature = "cipher-rc4")]
     Rc4Md5,
 
-    #[cfg(feature = "cipher-chacha20")]
     ChaCha20,
-    #[cfg(feature = "cipher-salsa20")]
     Salsa20,
+
+    Aes128Gcm,
+    Aes192Gcm,
+    Aes256Gcm,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum CipherCategory {
+    Stream,
+    Aead,
 }
 
 impl CipherType {
-    /// Symmetric crypto block size
-    pub fn block_size(&self) -> usize {
-        match *self {
-            CipherType::Table | CipherType::Dummy => 0,
-
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().block_size(),
-            #[cfg(feature = "cipher-aes-cfb")]
-            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().block_size(),
-
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().block_size(),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().block_size(),
-
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
-        }
-    }
-
     /// Symmetric crypto key size
     pub fn key_size(&self) -> usize {
         match *self {
             CipherType::Table | CipherType::Dummy => 0,
 
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
 
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().key_len(),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
+            CipherType::Rc4 => symm::Cipher::rc4().key_len(),
+            CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 32,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 32,
+            CipherType::ChaCha20 => 32,
+            CipherType::Salsa20 => 32,
+
+            CipherType::Aes128Gcm => 16,
+            CipherType::Aes192Gcm => 24,
+            CipherType::Aes256Gcm => 32,
         }
+    }
+
+    fn aead_key_derive(&self, key: &[u8]) -> Vec<u8> {
+        // We should use crypto_pwhash in libsodium
+        // Salt is b"shadowsocks hash"
+        // Already implemented in shadowsocks-libev
+        // Ref:  crypto_pwhash (key, nkey, (char*)pass, strlen(pass), salt,
+        //         crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        //         crypto_pwhash_ALG_DEFAULT);
+        // FIXME: sodiumoxide doesn't support crypto_pwhash (Argon2 algorithm)
+        unimplemented!()
     }
 
     /// Extends key to match the required key length
     pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
         let iv_len = self.iv_size();
         let key_len = self.key_size();
+
+        // TODO: if self.category() == CipherCategory::Aead, calls `aead_key_derive`.
 
         let mut digest = digest::with_type(DigestType::Md5);
 
@@ -255,28 +214,24 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Dummy => 0,
 
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
 
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4 => symm::Cipher::rc4().iv_len().unwrap_or(0),
-            #[cfg(feature = "cipher-rc4")] CipherType::Rc4Md5 => symm::Cipher::rc4().iv_len().unwrap_or(0),
+            CipherType::Rc4 => symm::Cipher::rc4().iv_len().unwrap_or(0),
+            CipherType::Rc4Md5 => symm::Cipher::rc4().iv_len().unwrap_or(0),
 
-            #[cfg(feature = "cipher-chacha20")] CipherType::ChaCha20 => 8,
-            #[cfg(feature = "cipher-salsa20")] CipherType::Salsa20 => 8,
+            CipherType::ChaCha20 => 8,
+            CipherType::Salsa20 => 8,
+
+            CipherType::Aes128Gcm |
+            CipherType::Aes192Gcm |
+            CipherType::Aes256Gcm => 12,
         }
     }
 
@@ -291,6 +246,29 @@ impl CipherType {
 
         iv
     }
+
+    /// Get category of cipher
+    pub fn category(&self) -> CipherCategory {
+        match *self {
+            CipherType::Aes128Gcm |
+            CipherType::Aes192Gcm |
+            CipherType::Aes256Gcm => CipherCategory::Aead,
+            _ => CipherCategory::Stream,
+        }
+    }
+
+    /// Get tag size for AEAD Ciphers
+    pub fn tag_size(&self) -> usize {
+        assert!(self.category() == CipherCategory::Aead);
+
+        match *self {
+            CipherType::Aes128Gcm |
+            CipherType::Aes192Gcm |
+            CipherType::Aes256Gcm => 16,
+
+            _ => panic!("Only support AEAD ciphers, found {:?}", self),
+        }
+    }
 }
 
 impl FromStr for CipherType {
@@ -299,33 +277,25 @@ impl FromStr for CipherType {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
             CIPHER_DUMMY => Ok(CipherType::Dummy),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB => Ok(CipherType::Aes128Cfb),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_1 => Ok(CipherType::Aes128Cfb1),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_8 => Ok(CipherType::Aes128Cfb8),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_128_CFB_128 => Ok(CipherType::Aes128Cfb128),
 
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB => Ok(CipherType::Aes256Cfb),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_1 => Ok(CipherType::Aes256Cfb1),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_8 => Ok(CipherType::Aes256Cfb8),
-            #[cfg(feature = "cipher-aes-cfb")]
             CIPHER_AES_256_CFB_128 => Ok(CipherType::Aes256Cfb128),
 
-            #[cfg(feature = "cipher-rc4")]
             CIPHER_RC4 => Ok(CipherType::Rc4),
-            #[cfg(feature = "cipher-rc4")]
             CIPHER_RC4_MD5 => Ok(CipherType::Rc4Md5),
 
-            #[cfg(feature = "cipher-chacha20")]
             CIPHER_CHACHA20 => Ok(CipherType::ChaCha20),
-            #[cfg(feature = "cipher-salsa20")]
             CIPHER_SALSA20 => Ok(CipherType::Salsa20),
+
+            CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
+            CIPHER_AES_192_GCM => Ok(CipherType::Aes192Gcm),
+            CIPHER_AES_256_GCM => Ok(CipherType::Aes256Gcm),
 
             _ => Err(Error::UnknownCipherType),
         }
@@ -337,105 +307,26 @@ impl Display for CipherType {
         match *self {
             CipherType::Table => write!(f, "{}", CIPHER_TABLE),
             CipherType::Dummy => write!(f, "{}", CIPHER_DUMMY),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => write!(f, "{}", CIPHER_AES_128_CFB),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb1 => write!(f, "{}", CIPHER_AES_128_CFB_1),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb8 => write!(f, "{}", CIPHER_AES_128_CFB_8),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb128 => write!(f, "{}", CIPHER_AES_128_CFB_128),
 
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb => write!(f, "{}", CIPHER_AES_256_CFB),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb1 => write!(f, "{}", CIPHER_AES_256_CFB_1),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb8 => write!(f, "{}", CIPHER_AES_256_CFB_8),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb128 => write!(f, "{}", CIPHER_AES_256_CFB_128),
 
-            #[cfg(feature = "cipher-rc4")]
             CipherType::Rc4 => write!(f, "{}", CIPHER_RC4),
-            #[cfg(feature = "cipher-rc4")]
             CipherType::Rc4Md5 => write!(f, "{}", CIPHER_RC4_MD5),
 
-            #[cfg(feature = "cipher-chacha20")]
             CipherType::ChaCha20 => write!(f, "{}", CIPHER_CHACHA20),
-            #[cfg(feature = "cipher-salsa20")]
             CipherType::Salsa20 => write!(f, "{}", CIPHER_SALSA20),
+
+            CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
+            CipherType::Aes192Gcm => write!(f, "{}", CIPHER_AES_192_GCM),
+            CipherType::Aes256Gcm => write!(f, "{}", CIPHER_AES_256_GCM),
         }
-    }
-}
-
-macro_rules! define_stream_ciphers {
-    ($($name:ident => $cipher:ty,)+) => {
-        /// Variant cipher which contains all possible ciphers
-        pub enum StreamCipherVariant {
-            $(
-                $name($cipher),
-            )+
-        }
-
-        impl StreamCipherVariant {
-            /// Creates from an actual cipher
-            pub fn new<C>(cipher: C) -> StreamCipherVariant
-                where StreamCipherVariant: From<C>
-            {
-                From::from(cipher)
-            }
-        }
-
-        impl StreamCipher for StreamCipherVariant {
-            fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-                match *self {
-                    $(
-                        StreamCipherVariant::$name(ref mut cipher) => cipher.update(data, out),
-                    )+
-                }
-            }
-
-            fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
-                match *self {
-                    $(
-                        StreamCipherVariant::$name(ref mut cipher) => cipher.finalize(out),
-                    )+
-                }
-            }
-        }
-
-        $(
-            impl From<$cipher> for StreamCipherVariant {
-                fn from(cipher: $cipher) -> StreamCipherVariant {
-                    StreamCipherVariant::$name(cipher)
-                }
-            }
-        )+
-    }
-}
-
-define_stream_ciphers! {
-    TableCipher => table::TableCipher,
-    DummyCipher => dummy::DummyCipher,
-    Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
-    OpenSSLCipher => openssl::OpenSSLCipher,
-    CryptoCipher => CryptoCipher,
-}
-
-/// Generate a specific Cipher with key and initialize vector
-pub fn with_type(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
-    match t {
-        CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
-        CipherType::Dummy => StreamCipherVariant::new(dummy::DummyCipher),
-
-        #[cfg(feature = "cipher-chacha20")]
-        CipherType::ChaCha20 |
-        CipherType::Salsa20 => StreamCipherVariant::new(CryptoCipher::new(t, key, iv)),
-
-        #[cfg(feature = "cipher-rc4")]
-        CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
-
-        _ => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
     }
 }
 

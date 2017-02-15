@@ -41,7 +41,7 @@ use config::{Config, ServerConfig};
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
 use relay::socks5::Address;
-use crypto::cipher::{self, StreamCipher};
+use crypto::{self, StreamCipher};
 use crypto::CryptoMode;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
@@ -83,7 +83,7 @@ impl ConnectionContext {
                 }
 
                 let iv = &buf[..iv_len];
-                let mut cipher = cipher::with_type(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
+                let mut cipher = crypto::new_stream(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
 
                 // Decrypt payload from Client
                 let mut payload = Vec::with_capacity(buf.len());
@@ -150,10 +150,10 @@ impl ConnectionContext {
 
         // Client <- Remote
         let mut iv = svr_cfg.method().gen_init_vec();
-        let mut cipher = cipher::with_type(svr_cfg.method(),
-                                           svr_cfg.key(),
-                                           &iv[..],
-                                           CryptoMode::Encrypt);
+        let mut cipher = crypto::new_stream(svr_cfg.method(),
+                                            svr_cfg.key(),
+                                            &iv[..],
+                                            CryptoMode::Encrypt);
 
         // Append Address in front of body (ShadowSocks protocol)
         let fut = address.write_to(Vec::with_capacity(buf_len))

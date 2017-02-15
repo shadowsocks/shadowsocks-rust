@@ -12,21 +12,6 @@ license = "MIT"
 
 name = "shadowsocks"
 
-[features]
-
-default = [
-    "cipher-aes-cfb",
-    "cipher-rc4",
-
-    "cipher-chacha20",
-    "cipher-salsa20",
-]
-
-cipher-aes-cfb = []
-cipher-rc4 = []
-cipher-chacha20 = []
-cipher-salsa20 = []
-
 [[bin]]
 name = "sslocal"
 path = "src/bin/local.rs"
@@ -60,3 +45,4 @@ num_cpus = "1.1"
 lazy_static = "0.2"
 serde_json = "0.9"
 base64 = "0.3"
+sodiumoxide = "0.0"

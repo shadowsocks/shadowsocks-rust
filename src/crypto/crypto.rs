@@ -24,8 +24,12 @@
 use rust_crypto::symmetriccipher::SynchronousStreamCipher;
 use rust_crypto::chacha20::ChaCha20;
 use rust_crypto::salsa20::Salsa20;
+use rust_crypto::aes_gcm::AesGcm;
+use rust_crypto::aes::KeySize;
 
-use crypto::cipher::{StreamCipher, CipherType, CipherResult};
+use crypto::{StreamCipher, CipherType, CipherResult};
+use crypto::{AeadDecryptor, AeadEncryptor};
+use crypto::cipher::Error;
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -63,6 +67,66 @@ impl StreamCipher for CryptoCipher {
 
     fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
         Ok(())
+    }
+}
+
+pub enum CryptoAeadCryptoVariant {
+    AesGcm(AesGcm<'static>),
+}
+
+pub struct CryptoAeadCrypto {
+    cipher: CryptoAeadCryptoVariant,
+}
+
+
+
+impl CryptoAeadCrypto {
+    pub fn new(t: CipherType, key: &[u8], nounce: &[u8]) -> CryptoAeadCrypto {
+        let var = match t {
+            CipherType::Aes128Gcm => {
+                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize128, key, nounce, &[]))
+            }
+            CipherType::Aes192Gcm => {
+                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize192, key, nounce, &[]))
+            }
+            CipherType::Aes256Gcm => {
+                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize256, key, nounce, &[]))
+            }
+
+            _ => panic!("Unsupported {:?}", t),
+        };
+
+        CryptoAeadCrypto { cipher: var }
+    }
+}
+
+impl AeadEncryptor for CryptoAeadCrypto {
+    fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]) {
+        use rust_crypto::aead::AeadEncryptor;
+
+        let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+        match *cipher {
+            CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                gcm.encrypt(input, output, tag);
+            }
+        }
+    }
+}
+
+impl AeadDecryptor for CryptoAeadCrypto {
+    fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
+        use rust_crypto::aead::AeadDecryptor;
+
+        let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+        match *cipher {
+            CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                if !gcm.decrypt(input, output, tag) {
+                    Err(Error::AeadDecryptFailed)
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 }
 

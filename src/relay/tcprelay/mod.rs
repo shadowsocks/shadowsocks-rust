@@ -27,7 +27,7 @@ use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
 
-use crypto::cipher;
+use crypto;
 use crypto::CryptoMode;
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
@@ -55,6 +55,7 @@ pub mod server;
 mod stream;
 pub mod client;
 mod crypto_io;
+mod aead;
 
 const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
 
@@ -66,6 +67,8 @@ pub enum TunnelDirection {
     /// Client <- Server
     Server2Client,
 }
+
+// TODO: `DecryptedHalf` and `EncryptedHalf` should be `Box<DecryptedRead>` and `Box<EncryptedWrite>`
 
 /// `ReadHalf `of `TcpStream` with decryption
 pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
@@ -143,10 +146,12 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             trace!("Going to send initialize vector: {:?}", local_iv);
 
             try_timeout(write_all(w, local_iv), timeout, &handle).and_then(move |(w, local_iv)| {
-                let encryptor = cipher::with_type(svr_cfg.method(),
-                                                  svr_cfg.key(),
-                                                  &local_iv[..],
-                                                  CryptoMode::Encrypt);
+                // TODO: If crypto type is Aead, returns `aead::EncryptedWriter` instead
+
+                let encryptor = crypto::new_stream(svr_cfg.method(),
+                                                   svr_cfg.key(),
+                                                   &local_iv[..],
+                                                   CryptoMode::Encrypt);
 
                 Ok(EncryptedWriter::new(w, encryptor))
             })
@@ -158,12 +163,14 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             // Decrypt data from remote server
             let iv_len = svr_cfg.method().iv_size();
             try_timeout(read_exact(r, vec![0u8; iv_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
+                // TODO: If crypto type is Aead, returns `aead::DecryptedReader` instead
+
                 trace!("Got initialize vector {:?}", remote_iv);
 
-                let decryptor = cipher::with_type(svr_cfg.method(),
-                                                  svr_cfg.key(),
-                                                  &remote_iv[..],
-                                                  CryptoMode::Decrypt);
+                let decryptor = crypto::new_stream(svr_cfg.method(),
+                                                   svr_cfg.key(),
+                                                   &remote_iv[..],
+                                                   CryptoMode::Decrypt);
                 let decrypt_stream = DecryptedReader::new(r, decryptor);
 
                 Ok(decrypt_stream)

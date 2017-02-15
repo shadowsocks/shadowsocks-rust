@@ -23,7 +23,7 @@
 
 use std::io::BufReader;
 
-use crypto::cipher::{StreamCipher, CipherResult};
+use crypto::{StreamCipher, CipherResult};
 use crypto::digest::{self, DigestType, Digest};
 use crypto::CryptoMode;
 

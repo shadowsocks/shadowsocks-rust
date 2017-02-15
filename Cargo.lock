@@ -20,6 +20,7 @@ dependencies = [
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sodiumoxide 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio-core 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -244,6 +245,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "libc"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "libsodium-sys"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pkg-config 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "linked-hash-map"
@@ -500,6 +510,16 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "sodiumoxide"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libsodium-sys 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "strsim"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -653,6 +673,7 @@ dependencies = [
 "checksum lazy_static 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6abe0ee2e758cd6bc8a2cd56726359007748fbf4128da998b65d0b70f881e19b"
 "checksum lazycell 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ce12306c4739d86ee97c23139f3a34ddf0387bbf181bc7929d287025a8c3ef6b"
 "checksum libc 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)" = "684f330624d8c3784fb9558ca46c4ce488073a8d22450415c5eb4f4cfb0d11b5"
+"checksum libsodium-sys 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "cbbc6e46017815abf8698de0ed4847fad45fd8cad2909ac38ac6de79673c1ad1"
 "checksum linked-hash-map 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "bda158e0dabeb97ee8a401f4d17e479d6b891a14de0bba79d5cc2d4d325b5e48"
 "checksum log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "ab83497bf8bf4ed2a74259c1c802351fcd67a65baa86394b6ba73c36f4838054"
 "checksum lru-cache 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "656fa4dfcb02bcf1063c592ba3ff6a5303ee1f2afe98c8a889e8b1a77c6dfdb7"
@@ -684,6 +705,7 @@ dependencies = [
 "checksum serde 0.9.7 (registry+https://github.com/rust-lang/crates.io-index)" = "1e0ed773960f90a78567fcfbe935284adf50c5d7cf119aa2cf43bb0b4afa69bb"
 "checksum serde_json 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)" = "e095e4e94e7382b76f48e93bd845ffddda62df8dfd4c163b1bfa93d40e22e13a"
 "checksum slab 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "17b4fcaed89ab08ef143da37bc52adbcc04d4a69014f4c1208d6b51f0c47bc23"
+"checksum sodiumoxide 0.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "bc02c0bc77ffed8e8eaef004399b825cf4fd8aa02d0af6e473225affd583ff4d"
 "checksum strsim 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b4d15c810519a91cf877e7e36e63fe068815c678181439f2f29e2562147c3694"
 "checksum term_size 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "71662702fe5cd2cf95edd4ad655eea42f24a87a0e44059cbaa4e55260b7bc331"
 "checksum thread-id 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4437c97558c70d129e40629a5b385b3fb1ffac301e63941335e4d354081ec14a"

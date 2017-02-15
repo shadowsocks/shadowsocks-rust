@@ -102,6 +102,7 @@ extern crate rand;
 extern crate crypto as rust_crypto;
 extern crate ip;
 extern crate openssl;
+extern crate sodiumoxide;
 
 extern crate futures;
 extern crate futures_cpupool;

@@ -23,7 +23,7 @@
 
 use std::convert::From;
 
-use crypto::cipher::{StreamCipher, CipherType, CipherResult};
+use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::cipher;
 
 use crypto::CryptoMode;
@@ -40,20 +40,13 @@ impl OpenSSLCrypto {
     /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let t = match cipher_type {
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128(),
-            #[cfg(feature = "cipher-aes-cfb1")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1(),
-            #[cfg(feature = "cipher-aes-cfb128")]
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
-            #[cfg(feature = "cipher-aes-cfb")]
             CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
-            #[cfg(feature = "cipher-aes-cfb1")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
-            #[cfg(feature = "cipher-aes-cfb128")]
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
-            #[cfg(feature = "cipher-rc4")]
             CipherType::Rc4 => symm::Cipher::rc4(),
             _ => {
                 panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
