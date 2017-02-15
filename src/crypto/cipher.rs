@@ -21,7 +21,7 @@
 
 //! Ciphers
 
-use std::str::FromStr;
+use std::str::{self, FromStr};
 use std::fmt::{self, Debug, Display};
 use std::io;
 use rand::{self, Rng};
@@ -31,7 +31,7 @@ use crypto::digest::{self, DigestType, Digest};
 
 use openssl::symm;
 
-use sodiumoxide::crypto::pwhash::pwhash;
+use argon2rs::{Argon2, Variant};
 
 /// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
@@ -174,39 +174,48 @@ impl CipherType {
         // Ref:  crypto_pwhash (key, nkey, (char*)pass, strlen(pass), salt,
         //         crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
         //         crypto_pwhash_ALG_DEFAULT);
-        // FIXME: sodiumoxide doesn't support crypto_pwhash (Argon2 algorithm)
-        unimplemented!()
+
+        const SALT: &'static [u8] = b"shadowsocks hash";
+
+        let key_len = self.key_size();
+        let mut buf = vec![0u8; key_len];
+        let a2 = Argon2::default(Variant::Argon2i); // NOTE, libsodium uses 2i as crypto_pwhash_ALG_DEFAULT
+        a2.hash(&mut buf, key, SALT, &[], &[]);
+        buf
     }
 
     /// Extends key to match the required key length
     pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
-        let iv_len = self.iv_size();
-        let key_len = self.key_size();
+        match self.category() {
+            CipherCategory::Aead => self.aead_key_derive(key),
+            CipherCategory::Stream => {
+                let iv_len = self.iv_size();
+                let key_len = self.key_size();
 
-        // TODO: if self.category() == CipherCategory::Aead, calls `aead_key_derive`.
+                let mut digest = digest::with_type(DigestType::Md5);
 
-        let mut digest = digest::with_type(DigestType::Md5);
+                let mut result = Vec::new();
+                let mut m = Vec::new();
+                let mut loop_count = 0;
+                while loop_count * digest.digest_len() < (key_len + iv_len) {
+                    let mut vkey = m.clone();
+                    vkey.extend_from_slice(key);
 
-        let mut result = Vec::new();
-        let mut m = Vec::new();
-        let mut loop_count = 0;
-        while loop_count * digest.digest_len() < (key_len + iv_len) {
-            let mut vkey = m.clone();
-            vkey.extend_from_slice(key);
+                    digest.update(&vkey);
 
-            digest.update(&vkey);
+                    m.clear();
+                    digest.digest(&mut m);
+                    loop_count += 1;
 
-            m.clear();
-            digest.digest(&mut m);
-            loop_count += 1;
+                    digest.reset();
 
-            digest.reset();
+                    result.extend_from_slice(&m[..]);
+                }
 
-            result.extend_from_slice(&m[..]);
+                result.resize(key_len, 0);
+                result
+            }
         }
-
-        result.resize(key_len, 0);
-        result
     }
 
     /// Symmetric crypto initialize vector size
