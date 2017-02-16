@@ -41,11 +41,9 @@ use config::{Config, ServerConfig};
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
 use relay::socks5::Address;
-use crypto::{self, StreamCipher};
-use crypto::CryptoMode;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
-use super::{send_to, recv_from};
+use super::crypto_io::{encrypt_payload, decrypt_payload};
 
 #[derive(Debug, Clone)]
 struct Associate {
@@ -72,25 +70,7 @@ impl ConnectionContext {
         // Client -> Remote
         let fut = futures::lazy(move || {
                 let buf = &buf[..n];
-
-                let iv_len = svr_cfg.method().iv_size();
-                if buf.len() < iv_len {
-                    error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
-                           iv_len,
-                           buf.len());
-                    let err = io::Error::new(io::ErrorKind::Other, "early eof");
-                    return Err(err);
-                }
-
-                let iv = &buf[..iv_len];
-                let mut cipher = crypto::new_stream(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
-
-                // Decrypt payload from Client
-                let mut payload = Vec::with_capacity(buf.len());
-                try!(cipher.update(&buf[iv_len..], &mut payload));
-                try!(cipher.finalize(&mut payload));
-
-                Ok((payload, svr_cfg))
+                decrypt_payload(svr_cfg.method(), svr_cfg.key(), buf).map(move |b| (b, svr_cfg))
             })
             .and_then(move |(payload, svr_cfg)| {
                 // Read Address in the front (ShadowSocks protocol)
@@ -117,10 +97,10 @@ impl ConnectionContext {
                                              client_addr: src,
                                          });
 
-                            send_to(socket, body, remote_addr)
+                            socket.send_dgram(body, remote_addr)
                         })
-                        .map(move |(socket, body, len)| {
-                            trace!("Sent body {} bytes, actual {} bytes", body.len(), len);
+                        .map(move |(socket, body)| {
+                            trace!("Sent body, len: {} bytes", body.len());
                             ConnectionContext {
                                 assoc: assoc,
                                 svr_cfg: svr_cfg,
@@ -149,26 +129,20 @@ impl ConnectionContext {
               buf_len);
 
         // Client <- Remote
-        let mut iv = svr_cfg.method().gen_init_vec();
-        let mut cipher = crypto::new_stream(svr_cfg.method(),
-                                            svr_cfg.key(),
-                                            &iv[..],
-                                            CryptoMode::Encrypt);
-
         // Append Address in front of body (ShadowSocks protocol)
+        let cloned_svr_cfg = svr_cfg.clone();
         let fut = address.write_to(Vec::with_capacity(buf_len))
             .map(move |mut send_buf| {
                 send_buf.extend_from_slice(&buf[..n]);
                 send_buf
             })
             .and_then(move |send_buf| -> io::Result<_> {
-                try!(cipher.update(&send_buf[..], &mut iv));
-                try!(cipher.finalize(&mut iv));
-                Ok(iv)
+                let svr_cfg = cloned_svr_cfg;
+                encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf)
             })
-            .and_then(move |final_buf| send_to(socket, final_buf, client_addr))
-            .map(|(socket, buf, len)| {
-                trace!("Sent body {} actual {}", buf.len(), len);
+            .and_then(move |final_buf| socket.send_dgram(final_buf, client_addr))
+            .map(|(socket, buf)| {
+                trace!("Sent body len: {}", buf.len());
                 ConnectionContext {
                     assoc: assoc,
                     svr_cfg: svr_cfg,
@@ -183,7 +157,7 @@ impl ConnectionContext {
     fn handle_once(self) -> BoxIoFuture<ConnectionContext> {
         let ConnectionContext { assoc, svr_cfg, socket } = self;
 
-        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
+        let fut = socket.recv_dgram(vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
             .and_then(move |(socket, buf, n, src)| {
                 let c = ConnectionContext {
                     assoc: assoc.clone(),

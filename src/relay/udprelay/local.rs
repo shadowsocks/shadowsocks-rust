@@ -77,11 +77,9 @@ use relay::{BoxIoFuture, boxed_future};
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::dns_resolver::DnsResolver;
 use relay::socks5::{Address, UdpAssociateHeader};
-use crypto::{self, StreamCipher};
-use crypto::CryptoMode;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
-use super::{send_to, recv_from};
+use super::crypto_io::{encrypt_payload, decrypt_payload};
 
 type AssociateMap = LruCache<Address, SocketAddr>;
 type ServerCache = LruCache<SocketAddr, Rc<ServerConfig>>;
@@ -126,24 +124,7 @@ impl Client {
                        svr_cfg.addr(),
                        buf.len());
 
-                let iv_len = svr_cfg.method().iv_size();
-                if buf.len() < iv_len {
-                    error!("Invalid ShadowSocks UDP packet, expected IV length {}, packet length {}",
-                           iv_len,
-                           buf.len());
-                    let err = io::Error::new(io::ErrorKind::Other, "early eof");
-                    return Err(err);
-                }
-
-                let iv = &buf[..iv_len];
-                let mut cipher = crypto::new_stream(svr_cfg.method(), svr_cfg.key(), iv, CryptoMode::Decrypt);
-
-                // Decrypt payload with cipher
-                let mut payload = Vec::with_capacity(buf.len());
-                try!(cipher.update(&buf[iv_len..], &mut payload));
-                try!(cipher.finalize(&mut payload));
-
-                Ok(payload)
+                decrypt_payload(svr_cfg.method(), svr_cfg.key(), buf)
             })
             .and_then(move |payload| {
                 // Get Address from the front of payload (ShadowSocks protocol)
@@ -180,7 +161,7 @@ impl Client {
                             })
                     })
                     .and_then(|(client_addr, assoc, reply_body)| {
-                        send_to(socket, reply_body, client_addr).map(move |(socket, _, _)| {
+                        socket.send_dgram(reply_body, client_addr).map(move |(socket, _)| {
                             Client {
                                 assoc: assoc,
                                 servers: servers,
@@ -235,26 +216,15 @@ impl Client {
                 let svr_cfg = server_picker.borrow_mut().pick_server();
 
                 // Client -> Proxy
-                let iv = svr_cfg.method().gen_init_vec();
-                let mut cipher = crypto::new_stream(svr_cfg.method(),
-                                                    svr_cfg.key(),
-                                                    &iv[..],
-                                                    CryptoMode::Encrypt);
-
-                let payload_buf = Vec::with_capacity(payload.len());
                 // Append Address to the front (ShadowSocks protocol)
-                assoc_addr.write_to(payload_buf)
+                assoc_addr.write_to(Vec::with_capacity(payload.len()))
                     .and_then(move |mut payload_buf| {
                         payload_buf.extend_from_slice(&payload[header_len..]);
                         Ok(payload_buf)
                     })
                     .and_then(move |payload| -> io::Result<_> {
                         // Encrypt the whole body as payload
-                        let mut send_payload = Vec::with_capacity(iv.len() + payload.len());
-                        send_payload.extend_from_slice(&iv[..]);
-                        try!(cipher.update(&payload[..], &mut send_payload));
-                        try!(cipher.finalize(&mut send_payload));
-                        Ok((svr_cfg, send_payload))
+                        encrypt_payload(svr_cfg.method(), svr_cfg.key(), &payload).map(move |b| (svr_cfg, b))
                     })
                     .map_err(From::from)
                     .and_then(move |(svr_cfg, payload)| {
@@ -267,8 +237,8 @@ impl Client {
                                 svrs_ref.insert(addr, svr_cfg.clone());
                             }
 
-                            send_to(socket, payload, addr).map(|(socket, body, len)| {
-                                trace!("Body size: {}, sent packet size: {}", body.len(), len);
+                            socket.send_dgram(payload, addr).map(|(socket, body)| {
+                                trace!("Sent body, size: {}", body.len());
                                 Client {
                                     assoc: assoc,
                                     server_picker: server_picker,
@@ -287,7 +257,7 @@ impl Client {
     fn handle_once(self) -> BoxIoFuture<Client> {
         let Client { assoc, server_picker, servers, socket } = self;
 
-        let fut = recv_from(socket, vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE]).and_then(move |(socket, buf, n, src)| {
+        let fut = socket.recv_dgram(vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE]).and_then(move |(socket, buf, n, src)| {
             // Reassemble Client
             let c = Client {
                 assoc: assoc,
