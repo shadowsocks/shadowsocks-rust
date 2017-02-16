@@ -1,16 +1,42 @@
 //! IO facilities for TCP relay
 
-use std::io::{self, Read, BufRead};
+use std::io::{self, Read, Write, BufRead};
 use std::mem;
 use std::time::Duration;
 
 use futures::{Future, Poll, Async};
 
 use tokio_core::reactor::{Handle, Timeout};
+use tokio_core::io::{copy, Copy};
 
 use super::BUFFER_SIZE;
+use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
 
-pub trait DecryptedRead: BufRead {}
+pub trait DecryptedRead: BufRead {
+    /// Copies all data to `w`
+    fn copy<W>(self, w: W) -> Copy<Self, W>
+        where Self: Sized,
+              W: Write
+    {
+        copy(self, w)
+    }
+
+    /// Copies all data to `w`, return `TimedOut` if timeout reaches
+    fn copy_timeout<W>(self, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<Self, W>
+        where Self: Sized,
+              W: Write
+    {
+        copy_timeout(self, w, timeout, handle)
+    }
+
+    /// The same as `copy_timeout`, but has optional `timeout`
+    fn copy_timeout_opt<W>(self, w: W, timeout: Option<Duration>, handle: Handle) -> CopyTimeoutOpt<Self, W>
+        where Self: Sized,
+              W: Write
+    {
+        copy_timeout_opt(self, w, timeout, handle)
+    }
+}
 
 pub trait EncryptedWrite {
     /// Writes raw bytes directly to the writer directly
