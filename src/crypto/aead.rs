@@ -25,6 +25,10 @@ use crypto::cipher::{CipherType, CipherCategory, CipherResult};
 
 use crypto::crypto::CryptoAeadCrypto;
 
+use rust_crypto::hkdf::{hkdf_expand, hkdf_extract};
+use rust_crypto::sha1::Sha1;
+use rust_crypto::digest::Digest;
+
 pub trait AeadEncryptor {
     fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]);
 }
@@ -57,4 +61,21 @@ pub fn new_aead_decryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadD
 
         _ => unreachable!(),
     }
+}
+
+const SUBKEY_INFO: &'static [u8] = b"ss-subkey";
+
+pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Vec<u8> {
+    assert!(t.category() == CipherCategory::Aead);
+
+    let sha1 = Sha1::new();
+    let output_bytes = sha1.output_bytes();
+
+    let mut prk = vec![0u8; output_bytes];
+    hkdf_extract(sha1, salt, key, &mut prk);
+
+    let mut skey = vec![0u8; key.len()];
+    hkdf_expand(Sha1::new(), &prk, SUBKEY_INFO, &mut skey);
+
+    skey
 }

@@ -102,6 +102,7 @@ extern crate rand;
 extern crate crypto as rust_crypto;
 extern crate ip;
 extern crate openssl;
+#[cfg(feature = "key-derive-argon2")]
 extern crate argon2rs;
 
 extern crate futures;

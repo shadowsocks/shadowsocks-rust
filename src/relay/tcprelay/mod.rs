@@ -230,12 +230,24 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
             // Send initialize vector to remote and create encryptor
 
-            let local_iv = svr_cfg.method().gen_init_vec();
-            trace!("Going to send initialize vector: {:?}", local_iv);
+            let method = svr_cfg.method();
+            let prev_buf = match method.category() {
+                CipherCategory::Stream => {
+                    let local_iv = method.gen_init_vec();
+                    trace!("Going to send initialize vector: {:?}", local_iv);
+                    local_iv
+                }
+                CipherCategory::Aead => {
+                    let local_salt = method.gen_salt();
+                    trace!("Going to send salt: {:?}", local_salt);
+                    local_salt
+                }
+            };
 
-            try_timeout(write_all(w, local_iv), timeout, &handle).and_then(move |(w, local_iv)| {
+            try_timeout(write_all(w, prev_buf), timeout, &handle).and_then(move |(w, prev_buf)| {
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
+                        let local_iv = prev_buf;
                         let encryptor = crypto::new_stream(svr_cfg.method(),
                                                            svr_cfg.key(),
                                                            &local_iv[..],
@@ -244,7 +256,8 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                         Ok(From::from(StreamEncryptedWriter::new(w, encryptor)))
                     }
                     CipherCategory::Aead => {
-                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv[..]);
+                        let local_salt = prev_buf;
+                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
                         Ok(From::from(wtr))
                     }
                 }
@@ -255,14 +268,21 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             let svr_cfg = svr_cfg_cloned;
 
             // Decrypt data from remote server
-            let iv_len = svr_cfg.method().iv_size();
-            try_timeout(read_exact(r, vec![0u8; iv_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
+
+            let method = svr_cfg.method();
+            let prev_len = match method.category() {
+                CipherCategory::Stream => method.iv_size(),
+                CipherCategory::Aead => method.salt_size(),
+            };
+
+            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
                 // TODO: If crypto type is Aead, returns `aead::DecryptedReader` instead
 
-                trace!("Got initialize vector {:?}", remote_iv);
 
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
+                        trace!("Got initialize vector  {:?}", remote_iv);
+
                         let decryptor = crypto::new_stream(svr_cfg.method(),
                                                            svr_cfg.key(),
                                                            &remote_iv[..],

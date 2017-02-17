@@ -273,6 +273,8 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         let mut encrypted_data_len = [0u8; 2];
         self.cipher.encrypt(&data_len_buf[..], &mut encrypted_data_len, &mut tag_buf[..]);
 
+        trace!("LENGTH TAG: {:?}", tag_buf);
+
         buf.extend_from_slice(&encrypted_data_len);
         buf.extend_from_slice(&tag_buf);
 
@@ -280,6 +282,8 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         buf.reserve(data.len() + self.tag_size);
         buf.resize(orig_buf_len + data.len(), 0);
         self.cipher.encrypt(data, &mut buf[orig_buf_len..], &mut tag_buf);
+
+        trace!("DATA TAG: {:?}", tag_buf);
 
         buf.append(&mut tag_buf);
 

@@ -32,6 +32,7 @@ use rust_crypto::aes::KeySize;
 use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::cipher::Error;
+use crypto::aead::make_skey;
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -80,37 +81,51 @@ pub struct CryptoAeadCrypto {
     cipher: CryptoAeadCryptoVariant,
     cipher_type: CipherType,
     key: Vec<u8>,
-    nounce: Vec<u8>,
+    nonce: Vec<u8>,
 }
 
 impl CryptoAeadCrypto {
-    pub fn new(t: CipherType, key: &[u8], nounce: &[u8]) -> CryptoAeadCrypto {
+    pub fn new(t: CipherType, key: &[u8], salt: &[u8]) -> CryptoAeadCrypto {
+        // TODO: Check if salt is duplicated
+
+        let nonce_size = t.iv_size();
+        let nonce = vec![0u8; nonce_size];
+        let skey = make_skey(t, key, salt);
+        let cipher = CryptoAeadCrypto::new_variant(t, &skey, &nonce);
         CryptoAeadCrypto {
-            cipher: CryptoAeadCrypto::new_variant(t, key, nounce),
+            cipher: cipher,
             cipher_type: t,
-            key: key.to_owned(),
-            nounce: nounce.to_owned(),
+            key: skey,
+            nonce: nonce,
         }
     }
 
-    fn new_variant(t: CipherType, key: &[u8], nounce: &[u8]) -> CryptoAeadCryptoVariant {
+    fn new_variant(t: CipherType, key: &[u8], nonce: &[u8]) -> CryptoAeadCryptoVariant {
         match t {
-            CipherType::Aes128Gcm => {
-                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize128, key, nounce, &[]))
-            }
-            CipherType::Aes192Gcm => {
-                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize192, key, nounce, &[]))
-            }
-            CipherType::Aes256Gcm => {
-                CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize256, key, nounce, &[]))
-            }
+            CipherType::Aes128Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize128, key, nonce, &[])),
+            CipherType::Aes192Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize192, key, nonce, &[])),
+            CipherType::Aes256Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize256, key, nonce, &[])),
 
             _ => panic!("Unsupported {:?}", t),
         }
     }
 
+    fn increase_nonce(&mut self) {
+        let mut adding = 1;
+        for v in self.nonce.iter_mut() {
+            if adding == 0 {
+                break;
+            }
+
+            let (r, overflow) = v.overflowing_add(adding);
+            *v = r;
+            adding = if overflow { 1 } else { 0 };
+        }
+    }
+
     fn reset(&mut self) {
-        let var = CryptoAeadCrypto::new_variant(self.cipher_type, &self.key, &self.nounce);
+        self.increase_nonce();
+        let var = CryptoAeadCrypto::new_variant(self.cipher_type, &self.key, &self.nonce);
         mem::replace(&mut self.cipher, var);
     }
 }
