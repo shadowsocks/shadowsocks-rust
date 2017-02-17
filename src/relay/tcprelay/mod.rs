@@ -21,14 +21,14 @@
 
 //! Relay for TCP implementation
 
-use std::io::{self, Read, Write};
+use std::io::{self, Read, BufRead};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
 
-use crypto::cipher;
-use crypto::CryptoMode;
+use crypto;
+use crypto::{CryptoMode, CipherCategory};
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
@@ -36,18 +36,20 @@ use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
-use tokio_core::io::{read_exact, write_all, copy};
+use tokio_core::io::{read_exact, write_all};
 use tokio_core::io::{ReadHalf, WriteHalf};
 use tokio_core::io::Io;
 
-use futures::{self, Future, Poll, Async};
+use futures::{self, Future, Poll};
 
 use net2::TcpBuilder;
 
 use ip::IpAddr;
 
-use self::stream::{EncryptedWriter, DecryptedReader};
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
+
+use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
+use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
 
 pub mod local;
 mod socks5_local;
@@ -55,8 +57,10 @@ pub mod server;
 mod stream;
 pub mod client;
 mod crypto_io;
+mod aead;
+mod utils;
 
-const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
+const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
 /// Directions in the tunnel
 #[derive(Debug, Copy, Clone)]
@@ -67,10 +71,94 @@ pub enum TunnelDirection {
     Server2Client,
 }
 
+type TcpReadHalf = ReadHalf<TcpStream>;
+type TcpWriteHalf = WriteHalf<TcpStream>;
+
 /// `ReadHalf `of `TcpStream` with decryption
-pub type DecryptedHalf = DecryptedReader<ReadHalf<TcpStream>>;
+pub enum DecryptedHalf {
+    Stream(StreamDecryptedReader<TcpReadHalf>),
+    Aead(AeadDecryptedReader<TcpReadHalf>),
+}
+
+impl Read for DecryptedHalf {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.read(buf),
+            DecryptedHalf::Aead(ref mut d) => d.read(buf),
+        }
+    }
+}
+
+impl DecryptedRead for DecryptedHalf {}
+
+impl BufRead for DecryptedHalf {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.fill_buf(),
+            DecryptedHalf::Aead(ref mut d) => d.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match *self {
+            DecryptedHalf::Stream(ref mut d) => d.consume(amt),
+            DecryptedHalf::Aead(ref mut d) => d.consume(amt),
+        }
+    }
+}
+
+impl From<StreamDecryptedReader<TcpReadHalf>> for DecryptedHalf {
+    fn from(r: StreamDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+        DecryptedHalf::Stream(r)
+    }
+}
+
+impl From<AeadDecryptedReader<TcpReadHalf>> for DecryptedHalf {
+    fn from(r: AeadDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+        DecryptedHalf::Aead(r)
+    }
+}
+
 /// `WriteHalf` of `TcpStream` with encryption
-pub type EncryptedHalf = EncryptedWriter<WriteHalf<TcpStream>>;
+pub enum EncryptedHalf {
+    Stream(StreamEncryptedWriter<TcpWriteHalf>),
+    Aead(AeadEncryptedWriter<TcpWriteHalf>),
+}
+
+impl EncryptedWrite for EncryptedHalf {
+    fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.write_raw(data),
+            EncryptedHalf::Aead(ref mut e) => e.write_raw(data),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.flush(),
+            EncryptedHalf::Aead(ref mut e) => e.flush(),
+        }
+    }
+
+    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+        match *self {
+            EncryptedHalf::Stream(ref mut e) => e.encrypt(data, buf),
+            EncryptedHalf::Aead(ref mut e) => e.encrypt(data, buf),
+        }
+    }
+}
+
+impl From<StreamEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
+    fn from(d: StreamEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+        EncryptedHalf::Stream(d)
+    }
+}
+
+impl From<AeadEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
+    fn from(d: AeadEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+        EncryptedHalf::Aead(d)
+    }
+}
 
 /// Boxed future of `DecryptedHalf`
 pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
@@ -113,7 +201,10 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let local_buf = Vec::new();
             relay_addr.write_to(local_buf)
-                .and_then(move |buf| try_timeout(enc_w.write_all(buf), timeout, &handle))
+                .and_then(move |buf| {
+                    trace!("Sending address buffer as {:?}", buf);
+                    try_timeout(enc_w.write_all(buf), timeout, &handle)
+                })
                 .map(|(w, _)| w)
         });
 
@@ -139,16 +230,37 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
             // Send initialize vector to remote and create encryptor
 
-            let local_iv = svr_cfg.method().gen_init_vec();
-            trace!("Going to send initialize vector: {:?}", local_iv);
+            let method = svr_cfg.method();
+            let prev_buf = match method.category() {
+                CipherCategory::Stream => {
+                    let local_iv = method.gen_init_vec();
+                    trace!("Going to send initialize vector: {:?}", local_iv);
+                    local_iv
+                }
+                CipherCategory::Aead => {
+                    let local_salt = method.gen_salt();
+                    trace!("Going to send salt: {:?}", local_salt);
+                    local_salt
+                }
+            };
 
-            try_timeout(write_all(w, local_iv), timeout, &handle).and_then(move |(w, local_iv)| {
-                let encryptor = cipher::with_type(svr_cfg.method(),
-                                                  svr_cfg.key(),
-                                                  &local_iv[..],
-                                                  CryptoMode::Encrypt);
+            try_timeout(write_all(w, prev_buf), timeout, &handle).and_then(move |(w, prev_buf)| {
+                match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        let local_iv = prev_buf;
+                        let encryptor = crypto::new_stream(svr_cfg.method(),
+                                                           svr_cfg.key(),
+                                                           &local_iv[..],
+                                                           CryptoMode::Encrypt);
 
-                Ok(EncryptedWriter::new(w, encryptor))
+                        Ok(From::from(StreamEncryptedWriter::new(w, encryptor)))
+                    }
+                    CipherCategory::Aead => {
+                        let local_salt = prev_buf;
+                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
+                        Ok(From::from(wtr))
+                    }
+                }
             })
         };
 
@@ -156,17 +268,34 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             let svr_cfg = svr_cfg_cloned;
 
             // Decrypt data from remote server
-            let iv_len = svr_cfg.method().iv_size();
-            try_timeout(read_exact(r, vec![0u8; iv_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
-                trace!("Got initialize vector {:?}", remote_iv);
 
-                let decryptor = cipher::with_type(svr_cfg.method(),
-                                                  svr_cfg.key(),
-                                                  &remote_iv[..],
-                                                  CryptoMode::Decrypt);
-                let decrypt_stream = DecryptedReader::new(r, decryptor);
+            let method = svr_cfg.method();
+            let prev_len = match method.category() {
+                CipherCategory::Stream => method.iv_size(),
+                CipherCategory::Aead => method.salt_size(),
+            };
 
-                Ok(decrypt_stream)
+            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
+                // TODO: If crypto type is Aead, returns `aead::DecryptedReader` instead
+
+
+                match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        trace!("Got initialize vector  {:?}", remote_iv);
+
+                        let decryptor = crypto::new_stream(svr_cfg.method(),
+                                                           svr_cfg.key(),
+                                                           &remote_iv[..],
+                                                           CryptoMode::Decrypt);
+                        let decrypt_stream = StreamDecryptedReader::new(r, decryptor);
+
+                        Ok(From::from(decrypt_stream))
+                    }
+                    CipherCategory::Aead => {
+                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv[..]);
+                        Ok(From::from(dr))
+                    }
+                }
             })
         };
 
@@ -305,142 +434,4 @@ fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
             }
         });
     boxed_future(fut)
-}
-
-pub struct CopyTimeout<R, W>
-    where R: Read,
-          W: Write
-{
-    r: R,
-    w: W,
-    timeout: Duration,
-    handle: Handle,
-    amt: u64,
-    timer: Option<Timeout>,
-    buf: [u8; BUFFER_SIZE],
-    pos: usize,
-    cap: usize,
-}
-
-impl<R, W> CopyTimeout<R, W>
-    where R: Read,
-          W: Write
-{
-    fn new(r: R, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<R, W> {
-        CopyTimeout {
-            r: r,
-            w: w,
-            timeout: timeout,
-            handle: handle,
-            amt: 0,
-            timer: None,
-            buf: [0u8; BUFFER_SIZE],
-            pos: 0,
-            cap: 0,
-        }
-    }
-
-    fn try_poll_timeout(&mut self) -> io::Result<()> {
-        match self.timer.as_mut() {
-            None => Ok(()),
-            Some(t) => {
-                match t.poll() {
-                    Err(err) => Err(err),
-                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "timeout")),
-                    Ok(Async::NotReady) => Ok(()),
-                }
-            }
-        }
-    }
-
-    fn clear_timer(&mut self) {
-        let _ = self.timer.take();
-    }
-
-    fn read_or_set_timeout(&mut self) -> io::Result<usize> {
-        // First, return if timeout
-        try!(self.try_poll_timeout());
-
-        // Then, unset the previous timeout
-        self.clear_timer();
-
-        match self.r.read(&mut self.buf) {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
-                }
-                Err(e)
-            }
-        }
-    }
-
-    fn write_or_set_timeout(&mut self, beg: usize, end: usize) -> io::Result<usize> {
-        // First, return if timeout
-        try!(self.try_poll_timeout());
-
-        // Then, unset the previous timeout
-        self.clear_timer();
-
-        match self.w.write(&self.buf[beg..end]) {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
-impl<R, W> Future for CopyTimeout<R, W>
-    where R: Read,
-          W: Write
-{
-    type Item = u64;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            if self.pos == self.cap {
-                let n = try_nb!(self.read_or_set_timeout());
-
-                if n == 0 {
-                    // If we've written al the data and we've seen EOF, flush out the
-                    // data and finish the transfer.
-                    // done with the entire transfer.
-                    try_nb!(self.w.flush());
-                    return Ok(self.amt.into());
-                }
-
-                self.pos = 0;
-                self.cap = n;
-
-                // Clear it before write
-                self.clear_timer();
-            }
-
-            // If our buffer has some data, let's write it out!
-            while self.pos < self.cap {
-                let (pos, cap) = (self.pos, self.cap);
-                let i = try_nb!(self.write_or_set_timeout(pos, cap));
-                self.pos += i;
-                self.amt += i as u64;
-            }
-
-            // Clear it before read
-            self.clear_timer();
-        }
-    }
-}
-
-fn copy_timeout<R, W>(r: R, w: W, timeout: Option<Duration>, handle: Handle) -> BoxIoFuture<u64>
-    where R: Read + 'static,
-          W: Write + 'static
-{
-    match timeout {
-        None => boxed_future(copy(r, w)),
-        Some(timeout) => boxed_future(CopyTimeout::new(r, w, timeout, handle)),
-    }
 }

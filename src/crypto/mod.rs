@@ -26,7 +26,9 @@ use std::convert::From;
 
 use openssl::symm;
 
-pub use self::cipher::{CipherType, StreamCipher, StreamCipherVariant, CipherResult};
+pub use self::cipher::{CipherType, CipherCategory, CipherResult};
+pub use self::stream::{StreamCipher, StreamCipherVariant, new_stream};
+pub use self::aead::{AeadEncryptor, AeadDecryptor, new_aead_encryptor, new_aead_decryptor};
 
 pub mod cipher;
 pub mod openssl;
@@ -35,6 +37,8 @@ pub mod table;
 pub mod rc4_md5;
 pub mod crypto;
 pub mod dummy;
+pub mod aead;
+pub mod stream;
 
 /// Crypto mode, encrypt or decrypt
 #[derive(Clone, Copy)]

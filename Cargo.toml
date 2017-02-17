@@ -8,24 +8,12 @@ documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 
+[features]
+key-derive-argon2 = ["argon2rs"]
+
 [lib]
 
 name = "shadowsocks"
-
-[features]
-
-default = [
-    "cipher-aes-cfb",
-    "cipher-rc4",
-
-    "cipher-chacha20",
-    "cipher-salsa20",
-]
-
-cipher-aes-cfb = []
-cipher-rc4 = []
-cipher-chacha20 = []
-cipher-salsa20 = []
 
 [[bin]]
 name = "sslocal"
@@ -60,3 +48,7 @@ num_cpus = "1.1"
 lazy_static = "0.2"
 serde_json = "0.9"
 base64 = "0.3"
+
+[dependencies.argon2rs]
+version = "0.2"
+optional = true

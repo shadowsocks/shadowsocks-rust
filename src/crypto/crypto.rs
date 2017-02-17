@@ -21,11 +21,18 @@
 
 //! Cipher defined with Rust-Crypto
 
+use std::mem;
+
 use rust_crypto::symmetriccipher::SynchronousStreamCipher;
 use rust_crypto::chacha20::ChaCha20;
 use rust_crypto::salsa20::Salsa20;
+use rust_crypto::aes_gcm::AesGcm;
+use rust_crypto::aes::KeySize;
 
-use crypto::cipher::{StreamCipher, CipherType, CipherResult};
+use crypto::{StreamCipher, CipherType, CipherResult};
+use crypto::{AeadDecryptor, AeadEncryptor};
+use crypto::cipher::Error;
+use crypto::aead::make_skey;
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -66,9 +73,106 @@ impl StreamCipher for CryptoCipher {
     }
 }
 
+pub enum CryptoAeadCryptoVariant {
+    AesGcm(AesGcm<'static>),
+}
+
+pub struct CryptoAeadCrypto {
+    cipher: CryptoAeadCryptoVariant,
+    cipher_type: CipherType,
+    key: Vec<u8>,
+    nonce: Vec<u8>,
+}
+
+impl CryptoAeadCrypto {
+    pub fn new(t: CipherType, key: &[u8], salt: &[u8]) -> CryptoAeadCrypto {
+        // TODO: Check if salt is duplicated
+
+        let nonce_size = t.iv_size();
+        let nonce = vec![0u8; nonce_size];
+        let skey = make_skey(t, key, salt);
+        let cipher = CryptoAeadCrypto::new_variant(t, &skey, &nonce);
+        CryptoAeadCrypto {
+            cipher: cipher,
+            cipher_type: t,
+            key: skey,
+            nonce: nonce,
+        }
+    }
+
+    fn new_variant(t: CipherType, key: &[u8], nonce: &[u8]) -> CryptoAeadCryptoVariant {
+        match t {
+            CipherType::Aes128Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize128, key, nonce, &[])),
+            CipherType::Aes192Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize192, key, nonce, &[])),
+            CipherType::Aes256Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize256, key, nonce, &[])),
+
+            _ => panic!("Unsupported {:?}", t),
+        }
+    }
+
+    fn increase_nonce(&mut self) {
+        let mut adding = 1;
+        for v in self.nonce.iter_mut() {
+            if adding == 0 {
+                break;
+            }
+
+            let (r, overflow) = v.overflowing_add(adding);
+            *v = r;
+            adding = if overflow { 1 } else { 0 };
+        }
+    }
+
+    fn reset(&mut self) {
+        self.increase_nonce();
+        let var = CryptoAeadCrypto::new_variant(self.cipher_type, &self.key, &self.nonce);
+        mem::replace(&mut self.cipher, var);
+    }
+}
+
+impl AeadEncryptor for CryptoAeadCrypto {
+    fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]) {
+        use rust_crypto::aead::AeadEncryptor;
+
+        {
+            let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+            match *cipher {
+                CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                    gcm.encrypt(input, output, tag);
+                }
+            }
+        }
+
+        self.reset();
+    }
+}
+
+impl AeadDecryptor for CryptoAeadCrypto {
+    fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
+        use rust_crypto::aead::AeadDecryptor;
+
+        let r = {
+            let CryptoAeadCrypto { ref mut cipher, .. } = *self;
+            match *cipher {
+                CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
+                    if !gcm.decrypt(input, output, tag) {
+                        Err(Error::AeadDecryptFailed)
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+        };
+
+        self.reset();
+
+        r
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crypto::cipher::{Cipher, CipherType};
+    use crypto::{StreamCipher, CipherType};
     use super::*;
 
     #[test]

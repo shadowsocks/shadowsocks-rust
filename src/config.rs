@@ -179,6 +179,7 @@ impl ServerConfig {
     /// Creates a new ServerConfig
     pub fn new(addr: ServerAddr, pwd: String, method: CipherType, timeout: Option<Duration>) -> ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
+        trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
         ServerConfig {
             addr: addr,
             password: pwd,

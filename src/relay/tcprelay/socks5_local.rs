@@ -43,7 +43,7 @@ use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
 use relay::loadbalancing::server::RoundRobin;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
-use relay::tcprelay::crypto_io::EncryptedWrite;
+use relay::tcprelay::crypto_io::{EncryptedWrite, DecryptedRead};
 
 use super::{tunnel, ignore_until_end, try_timeout};
 
@@ -108,7 +108,7 @@ fn handle_socks5_connect(handle: &Handle,
                 let cloned_handle = handle.clone();
                 let cloned_timeout = timeout;
 
-                let rhalf = svr_r.and_then(move |svr_r| super::copy_timeout(svr_r, w, timeout, handle));
+                let rhalf = svr_r.and_then(move |svr_r| svr_r.copy_timeout_opt(w, timeout, handle));
                 let whalf = svr_w.and_then(move |svr_w| svr_w.copy_timeout_opt(r, cloned_timeout, cloned_handle));
 
                 tunnel(cloned_addr, whalf, rhalf)
