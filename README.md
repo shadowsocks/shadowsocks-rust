@@ -125,7 +125,7 @@ It supports the following features:
 - [x] Build with stable. <del>(Depending on coio)</del>
 - [ ] <del>Support HTTP Proxy protocol</del> (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
 - [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
-- [ ] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
+- [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 
 
 ## License
