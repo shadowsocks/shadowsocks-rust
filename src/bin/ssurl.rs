@@ -8,7 +8,7 @@ use clap::{App, Arg};
 
 use qrcode::QrCode;
 
-use base64::Base64Mode;
+use base64::{encode_config, decode_config, URL_SAFE_NO_PAD};
 
 use shadowsocks::VERSION;
 use shadowsocks::config::{Config, ConfigType, ServerConfig, ServerAddr};
@@ -21,8 +21,7 @@ fn encode_url(svr: &ServerConfig) -> String {
                       svr.method().to_string(),
                       svr.password(),
                       svr.addr());
-    format!("ss://{}",
-            base64::encode_mode(url.as_bytes(), Base64Mode::UrlSafe))
+    format!("ss://{}", encode_config(url.as_bytes(), URL_SAFE_NO_PAD))
 }
 
 fn print_qrcode(encoded: &str) {
@@ -68,7 +67,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
         panic!("Malformed input: {:?}", encoded);
     }
 
-    let decoded = base64::decode_mode(&encoded[5..], Base64Mode::UrlSafe).unwrap();
+    let decoded = decode_config(&encoded[5..], URL_SAFE_NO_PAD).unwrap();
     let decoded = String::from_utf8(decoded).unwrap();
 
     let mut sp1 = decoded.split('@');

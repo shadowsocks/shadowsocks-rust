@@ -47,7 +47,7 @@ net2 = "0.2"
 num_cpus = "1.1"
 lazy_static = "0.2"
 serde_json = "0.9"
-base64 = "0.3"
+base64 = "0.4"
 
 [dependencies.argon2rs]
 version = "0.2"
