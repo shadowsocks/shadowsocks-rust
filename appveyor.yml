@@ -1,16 +1,12 @@
 environment:
-  OPENSSL_INCLUDE_DIR: C:\OpenSSL\include
-  OPENSSL_LIB_DIR: C:\OpenSSL\lib
-  OPENSSL_LIBS: ssleay32:libeay32
+  SSL_CERT_FILE: "C:\\OpenSSL\\cacert.pem"
 
   matrix:
       - TARGET: x86_64-pc-windows-msvc
         BITS: 64
         OPENSSL_VERSION: 1_1_0e
         MSYS2: 1
-      # - TARGET: i686-pc-windows-msvc
-      #   BITS: 32
-      #   OPENSSL_VERSION: 1_1_0b
+        OPENSSL_DIR: C:\OpenSSL
       - TARGET: i686-pc-windows-gnu
         BITS: 32
         OPENSSL_VERSION: 1_1_0e
