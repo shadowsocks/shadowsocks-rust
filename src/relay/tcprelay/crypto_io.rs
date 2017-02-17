@@ -12,6 +12,10 @@ use tokio_core::io::{copy, Copy};
 use super::BUFFER_SIZE;
 use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
 
+/// Reader to read data from ShadowSocks protocol
+///
+/// This trait requires `BufRead`, because obviously this reader has to contain a buffer inside,
+/// which stores the decrypted data.
 pub trait DecryptedRead: BufRead {
     /// Copies all data to `w`
     fn copy<W>(self, w: W) -> Copy<Self, W>
@@ -38,8 +42,12 @@ pub trait DecryptedRead: BufRead {
     }
 }
 
+/// Writer that encrypt data and write it as ShadowSocks protocol
+///
+/// The writer cannot implement `io::Write`, because you cannot ensure that you can write all the data in a batch
+/// in non-blocking I/O environment.
 pub trait EncryptedWrite {
-    /// Writes raw bytes directly to the writer directly
+    /// Writes raw bytes directly to the writer
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize>;
     /// Flush the writer
     fn flush(&mut self) -> io::Result<()>;

@@ -1,14 +1,13 @@
 # shadowsocks-rust
 
 [![Build Status](https://img.shields.io/travis/zonyitoo/shadowsocks-rust.svg)](https://travis-ci.org/zonyitoo/shadowsocks-rust)
+[![Build status](https://ci.appveyor.com/api/projects/status/l703ewkke5tkqctl?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
-
-It is **unstable**! If you encounter any problems, please open an issue.
 
 ## Dependencies
 
@@ -33,12 +32,6 @@ cargo build
 
 Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries in
 the official ShadowSocks' implementation.
-
-Enable more crypto algorithms by passing the name `cipher-[name]` via command line argument `--features`
-
-```bash
-cargo build --features "cipher-aes-ctr"
-```
 
 Read `Cargo.toml` for more details.
 

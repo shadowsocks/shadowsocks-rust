@@ -73,10 +73,14 @@ impl StreamCipher for CryptoCipher {
     }
 }
 
+/// AEAD ciphers provided by Rust-Crypto
 pub enum CryptoAeadCryptoVariant {
     AesGcm(AesGcm<'static>),
 }
 
+/// AEAD Cipher context
+///
+/// According to SIP004, the `nounce` has to incr 1 after each encrypt/decrypt.
 pub struct CryptoAeadCrypto {
     cipher: CryptoAeadCryptoVariant,
     cipher_type: CipherType,
@@ -85,6 +89,7 @@ pub struct CryptoAeadCrypto {
 }
 
 impl CryptoAeadCrypto {
+    /// Initialize context
     pub fn new(t: CipherType, key: &[u8], salt: &[u8]) -> CryptoAeadCrypto {
         // TODO: Check if salt is duplicated
 

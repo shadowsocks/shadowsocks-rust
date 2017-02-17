@@ -135,9 +135,12 @@ pub enum CipherType {
     Aes256Gcm,
 }
 
+/// Category of ciphers
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CipherCategory {
+    /// Stream ciphers is used for OLD ShadowSocks protocol, which uses stream ciphers to encrypt data payloads
     Stream,
+    /// AEAD ciphers is used in modern ShadowSocks protocol, which sends data in separate packets
     Aead,
 }
 
