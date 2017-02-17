@@ -45,12 +45,12 @@ fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
 }
 
 fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
-    let mut iv = t.gen_init_vec();
+    let mut salt = t.gen_salt();
     let tag_size = t.tag_size();
-    let mut cipher = crypto::new_aead_encryptor(t, key, &iv);
+    let mut cipher = crypto::new_aead_encryptor(t, key, &salt);
 
-    let mut send_payload = Vec::with_capacity(iv.len() + payload.len() + tag_size);
-    send_payload.append(&mut iv);
+    let mut send_payload = Vec::with_capacity(salt.len() + payload.len() + tag_size);
+    send_payload.append(&mut salt);
     let start_pos = send_payload.len();
     send_payload.resize(start_pos + payload.len(), 0);
 
@@ -92,19 +92,19 @@ fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
 
 fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
     let tag_size = t.tag_size();
-    let iv_size = t.iv_size();
+    let salt_size = t.salt_size();
 
-    if payload.len() < tag_size + iv_size {
+    if payload.len() < tag_size + salt_size {
         let err = io::Error::new(io::ErrorKind::Other, "udp packet too short");
         return Err(err);
     }
 
-    let nounce = &payload[..iv_size];
-    let data = &payload[iv_size..payload.len() - tag_size];
+    let salt = &payload[..salt_size];
+    let data = &payload[salt_size..payload.len() - tag_size];
     let tag = &payload[payload.len() - tag_size..];
-    let data_length = payload.len() - tag_size - iv_size;
+    let data_length = payload.len() - tag_size - salt_size;
 
-    let mut cipher = crypto::new_aead_decryptor(t, key, nounce);
+    let mut cipher = crypto::new_aead_decryptor(t, key, salt);
 
     let mut recv_payload = vec![0u8; data_length];
     try!(cipher.decrypt(data, &mut recv_payload, tag));
