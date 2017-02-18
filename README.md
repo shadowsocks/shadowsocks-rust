@@ -47,10 +47,7 @@ Create a ShadowSocks' configuration file. Example
     "local_port": 1080,
     "password": "mypassword",
     "timeout": 300,
-    "method": "aes-256-cfb",
-
-    "local_http_port": 10240,
-    "local_http_address": "127.0.0.1"
+    "method": "aes-256-cfb"
 }
 ```
 
@@ -76,10 +73,7 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
         }
     ],
     "local_port": 8388,
-    "local_address": "127.0.0.1",
-
-    "local_http_port": 10240,
-    "local_http_address": "127.0.0.1"
+    "local_address": "127.0.0.1"
 }
 ```
 
@@ -93,6 +87,15 @@ cargo run --bin ssserver -- -c config.json
 ```
 
 List all available arguments with `-h`.
+
+## Supported Ciphers
+
+* `aes-128-cfb`, `aes-256-cfb`
+* `rc4`, `rc4-md5`
+* `chacha20`, `salsa20`
+* `dummy` (No encryption, just for debugging)
+* `aes-128-gcm`, `aes-192-gcm`, `aes-256-gcm`
+* `chacha20-ietf-poly1305`
 
 ## Useful Tools
 

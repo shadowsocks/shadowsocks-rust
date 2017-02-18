@@ -18,7 +18,5 @@
             "password": "password-svr3",
             "method": "rc4-md5"
         }
-    ],
-    "local_port": 1080,
-    "local_address": "127.0.0.1"
+    ]
 }

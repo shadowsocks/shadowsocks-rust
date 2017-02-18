@@ -18,6 +18,7 @@ pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration, handle: Handle) -> CopyTime
     CopyTimeout::new(r, w, dur, handle)
 }
 
+/// Copies all data from `r` to `w`, abort if timeout reaches
 pub struct CopyTimeout<R, W>
     where R: Read,
           W: Write
