@@ -26,11 +26,12 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
+use std::net::IpAddr;
 
 use crypto::CipherCategory;
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
+use relay::dns_resolver::resolve;
 use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
@@ -42,8 +43,6 @@ use tokio_core::io::Io;
 use futures::{self, Future, Poll};
 
 use net2::TcpBuilder;
-
-use ip::IpAddr;
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
@@ -173,7 +172,7 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
         ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr, handle), timeout, handle),
         ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
-            let fut = try_timeout(DnsResolver::resolve(&domain[..]), timeout, &handle).and_then(move |sockaddr| {
+            let fut = try_timeout(resolve(&domain[..], &handle), timeout, &handle).and_then(move |sockaddr| {
                 let sockaddr = match sockaddr {
                     IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
                     IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),

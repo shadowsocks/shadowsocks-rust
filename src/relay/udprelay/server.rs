@@ -22,10 +22,9 @@
 //! UDP relay proxy server
 
 use std::rc::Rc;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr};
 use std::io::{self, Cursor};
 use std::cell::RefCell;
-
 use futures::{self, Future};
 
 use tokio_core::reactor::Handle;
@@ -33,13 +32,11 @@ use tokio_core::net::UdpSocket;
 
 use lru_cache::LruCache;
 
-use ip::IpAddr;
-
 use net2::UdpBuilder;
 
 use config::{Config, ServerConfig};
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
+use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
@@ -58,6 +55,7 @@ pub struct ConnectionContext {
     assoc: Rc<RefCell<AssociateMap>>,
     svr_cfg: Rc<ServerConfig>,
     socket: UdpSocket,
+    handle: Handle,
 }
 
 impl ConnectionContext {
@@ -65,7 +63,7 @@ impl ConnectionContext {
     ///
     /// Extract and send the actual request body and associate remote with client
     fn handle_c2s(self, buf: Vec<u8>, n: usize, src: SocketAddr) -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket, handle } = self;
 
         // Client -> Remote
         let fut = futures::lazy(move || {
@@ -87,7 +85,7 @@ impl ConnectionContext {
 
                     let cloned_assoc = assoc.clone();
                     let cloned_addr = addr.clone();
-                    ConnectionContext::resolve_remote_addr(addr)
+                    ConnectionContext::resolve_remote_addr(addr, &handle)
                         .and_then(move |remote_addr| {
                             // Associate client address with remote
                             let mut assoc = cloned_assoc.borrow_mut();
@@ -105,6 +103,7 @@ impl ConnectionContext {
                                 assoc: assoc,
                                 svr_cfg: svr_cfg,
                                 socket: socket,
+                                handle: handle,
                             }
                         })
                 })
@@ -120,7 +119,7 @@ impl ConnectionContext {
                   buf: Vec<u8>,
                   n: usize)
                   -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket, handle } = self;
 
         let buf_len = buf[..n].len();
         info!("UDP ASSOCIATE {} <- {}, payload length {} bytes",
@@ -147,6 +146,7 @@ impl ConnectionContext {
                     assoc: assoc,
                     svr_cfg: svr_cfg,
                     socket: socket,
+                    handle: handle,
                 }
             });
 
@@ -155,7 +155,7 @@ impl ConnectionContext {
 
     // Handle one packet
     fn handle_once(self) -> BoxIoFuture<ConnectionContext> {
-        let ConnectionContext { assoc, svr_cfg, socket } = self;
+        let ConnectionContext { assoc, svr_cfg, socket, handle } = self;
 
         let fut = socket.recv_dgram(vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE])
             .and_then(move |(socket, buf, n, src)| {
@@ -163,6 +163,7 @@ impl ConnectionContext {
                     assoc: assoc.clone(),
                     svr_cfg: svr_cfg,
                     socket: socket,
+                    handle: handle,
                 };
 
                 let mut assoc = assoc.borrow_mut();
@@ -178,11 +179,11 @@ impl ConnectionContext {
         boxed_future(fut)
     }
 
-    fn resolve_remote_addr(addr: Address) -> BoxIoFuture<SocketAddr> {
+    fn resolve_remote_addr(addr: Address, handle: &Handle) -> BoxIoFuture<SocketAddr> {
         match addr {
             Address::SocketAddress(s) => boxed_future(futures::finished(s)),
             Address::DomainNameAddress(ref dname, port) => {
-                let fut = DnsResolver::resolve(dname).map(move |sockaddr| {
+                let fut = resolve(dname, handle).map(move |sockaddr| {
                     match sockaddr {
                         IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
                         IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
@@ -202,6 +203,7 @@ fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
 fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle) -> BoxIoFuture<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
+    let cloned_handle = handle.clone();
     let fut = futures::lazy(move || {
             let udp_builder = match listen_addr {
                     SocketAddr::V4(..) => UdpBuilder::new_v4(),
@@ -220,6 +222,7 @@ fn listen(svr_cfg: Rc<ServerConfig>, handle: Handle) -> BoxIoFuture<()> {
                 assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
                 svr_cfg: svr_cfg,
                 socket: socket,
+                handle: cloned_handle,
             };
             handle_client(c)
         });

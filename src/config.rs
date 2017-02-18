@@ -74,8 +74,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 use std::convert::From;
 use std::str::FromStr;
-
-use ip::IpAddr;
+use std::net::IpAddr;
 
 use serde_json::{self, Value, Map};
 

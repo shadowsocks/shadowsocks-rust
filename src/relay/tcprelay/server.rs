@@ -26,12 +26,13 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::collections::HashSet;
 use std::time::Duration;
+use std::net::IpAddr;
 
 use config::{Config, ServerConfig};
 
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::DnsResolver;
+use relay::dns_resolver::resolve;
 use relay::tcprelay::crypto_io::{EncryptedWrite, DecryptedRead};
 
 use futures::{self, Future};
@@ -42,8 +43,6 @@ use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::io::{Io, ReadHalf, WriteHalf};
 
 use net2::TcpBuilder;
-
-use ip::IpAddr;
 
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut, try_timeout};
 
@@ -103,7 +102,7 @@ impl TcpRelayClientPending {
         match addr {
             Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
             Address::DomainNameAddress(dname, port) => {
-                let fut = try_timeout(DnsResolver::resolve(&dname[..]), timeout, &handle).and_then(move |ipaddr| {
+                let fut = try_timeout(resolve(&dname[..], &handle), timeout, &handle).and_then(move |ipaddr| {
                     Ok(match ipaddr {
                         IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
                         IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
@@ -122,7 +121,6 @@ impl TcpRelayClientPending {
                       timeout: Option<Duration>)
                       -> BoxIoFuture<SocketAddr> {
         let fut = TcpRelayClientPending::resolve_address(handle, addr, timeout).and_then(move |addr| {
-            trace!("Resolved address as {}", addr);
             let ipaddr = match addr {
                 SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
                 SocketAddr::V6(v6) => IpAddr::V6(*v6.ip()),

@@ -19,51 +19,41 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use std::net::{SocketAddr, ToSocketAddrs};
 use std::io;
 
-use futures;
-use futures_cpupool::{CpuPool, CpuFuture};
+use futures::{Future, BoxFuture};
 
-use ip::IpAddr;
+use tokio_core::reactor::Handle;
 
-lazy_static! {
-    pub static ref GLOBAL_DNS_RESOLVER: DnsResolver = DnsResolver::new();
-}
+use domain::resolv::Resolver;
+use domain::resolv::lookup::{lookup_host, LookupHost};
+use domain::bits::DNameBuf;
 
-fn socket_addr_to_ip(addr: SocketAddr) -> IpAddr {
-    match addr {
-        SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
-        SocketAddr::V6(v6) => IpAddr::V6(*v6.ip()),
-    }
-}
+use std::net::IpAddr;
 
-#[derive(Clone)]
-pub struct DnsResolver {
-    cpu_pool: CpuPool,
-}
+pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
+    let dname = addr.parse::<DNameBuf>().unwrap();
+    let resolv = Resolver::new(handle).unwrap();
+    resolv.spawn(move |task| {
+        trace!("Going to resolve \"{}\"", dname);
 
-impl DnsResolver {
-    /// Creates an DNS resolver
-    fn new() -> DnsResolver {
-        DnsResolver { cpu_pool: CpuPool::new_num_cpus() }
-    }
-
-    /// Resolves address asynchronously
-    pub fn resolve(addr: &str) -> CpuFuture<IpAddr, io::Error> {
-        let mixed_addr = format!("{}:0", addr);
-        GLOBAL_DNS_RESOLVER.cpu_pool.spawn(futures::lazy(move || {
-            match try!(mixed_addr.to_socket_addrs()).next() {
-                Some(sock_addr) => {
-                    let ipaddr = socket_addr_to_ip(sock_addr);
-                    Ok(ipaddr)
+        let hst: BoxFuture<LookupHost, io::Error> = lookup_host(task, &dname);
+        // FIXME: rustc may not treat BoxFuture as a Future .. BUG?
+        <BoxFuture<LookupHost, io::Error> as Future>::map_err(hst, |err| {
+                io::Error::new(io::ErrorKind::Other, err.to_string())
+            })
+            .and_then(move |hosts| {
+                match hosts.iter().next() {
+                    Some(addr) => {
+                        trace!("Resolved \"{}\" as {}", dname, addr);
+                        Ok(addr)
+                    }
+                    None => {
+                        let err = io::Error::new(io::ErrorKind::Other,
+                                                 format!("Failed to resolve \"{}\"", dname));
+                        Err(err)
+                    }
                 }
-                None => {
-                    let err = io::Error::new(io::ErrorKind::Other,
-                                             format!("Failed to resolve \"{}\"", mixed_addr));
-                    Err(err)
-                }
-            }
-        }))
-    }
+            })
+    })
 }

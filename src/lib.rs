@@ -100,16 +100,15 @@ extern crate byteorder;
 extern crate rand;
 
 extern crate crypto as rust_crypto;
-extern crate ip;
 extern crate openssl;
 #[cfg(feature = "key-derive-argon2")]
 extern crate argon2rs;
 
 extern crate futures;
-extern crate futures_cpupool;
 #[macro_use]
 extern crate tokio_core;
 extern crate net2;
+extern crate domain;
 
 extern crate libc;
 #[macro_use]
