@@ -170,9 +170,9 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
     trace!("Connecting to proxy {:?}, timeout: {:?}",
            svr_cfg.addr(),
            timeout);
-    match svr_cfg.addr() {
-        &ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr, handle), timeout, handle),
-        &ServerAddr::DomainName(ref domain, port) => {
+    match *svr_cfg.addr() {
+        ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr, handle), timeout, handle),
+        ServerAddr::DomainName(ref domain, port) => {
             let handle = handle.clone();
             let fut = try_timeout(DnsResolver::resolve(&domain[..]), timeout, &handle).and_then(move |sockaddr| {
                 let sockaddr = match sockaddr {

@@ -150,19 +150,19 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Dummy => 0,
 
-            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().key_len(),
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().key_len(),
+            CipherType::Aes128Cfb |
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().key_len(),
-            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().key_len(),
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().key_len(),
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
+            CipherType::Aes256Cfb |
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
 
-            CipherType::Rc4 => symm::Cipher::rc4().key_len(),
+            CipherType::Rc4 |
             CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
-            CipherType::ChaCha20 => 32,
+            CipherType::ChaCha20 |
             CipherType::Salsa20 => 32,
 
             CipherType::Aes128Gcm => 16,
@@ -259,19 +259,19 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Dummy => 0,
 
-            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len().unwrap_or(0),
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb |
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
-            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len().unwrap_or(0),
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb |
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
 
-            CipherType::Rc4 => symm::Cipher::rc4().iv_len().unwrap_or(0),
+            CipherType::Rc4 |
             CipherType::Rc4Md5 => symm::Cipher::rc4().iv_len().unwrap_or(0),
 
-            CipherType::ChaCha20 => 8,
+            CipherType::ChaCha20 |
             CipherType::Salsa20 => 8,
 
             CipherType::Aes128Gcm |

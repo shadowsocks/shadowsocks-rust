@@ -96,7 +96,7 @@ impl Client {
     fn resolve_server_addr(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<SocketAddr> {
         match *svr_cfg.addr() {
             // Return directly if it is a SocketAddr
-            ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(addr.clone())),
+            ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
             // Resolve domain name to SocketAddr
             ServerAddr::DomainName(ref dname, port) => {
                 let fut = DnsResolver::resolve(dname).map(move |sockaddr| {

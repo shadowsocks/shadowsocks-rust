@@ -32,7 +32,7 @@ use rust_crypto::aes::KeySize;
 use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::cipher::Error;
-use crypto::aead::make_skey;
+use crypto::aead::{make_skey, increase_nonce};
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -116,16 +116,7 @@ impl CryptoAeadCrypto {
     }
 
     fn increase_nonce(&mut self) {
-        let mut adding = 1;
-        for v in self.nonce.iter_mut() {
-            if adding == 0 {
-                break;
-            }
-
-            let (r, overflow) = v.overflowing_add(adding);
-            *v = r;
-            adding = if overflow { 1 } else { 0 };
-        }
+        increase_nonce(&mut self.nonce);
     }
 
     fn reset(&mut self) {

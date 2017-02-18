@@ -43,9 +43,9 @@ use crypto::{self, CipherType, AeadEncryptor, AeadDecryptor};
 use super::{EncryptedWrite, DecryptedRead, BUFFER_SIZE};
 
 enum ReadingStep {
-    DataLength,
+    Length,
     DataAndTag(usize),
-    DataDone,
+    Done,
 }
 
 /// Reader wrapper that will decrypt data automatically
@@ -74,7 +74,7 @@ impl<R> DecryptedReader<R>
             pos: 0,
             sent_final: false,
             tag_size: t.tag_size(),
-            read_step: ReadingStep::DataLength,
+            read_step: ReadingStep::Length,
         }
     }
 
@@ -160,7 +160,7 @@ impl<R> DecryptedReader<R>
                 self.cipher.decrypt(data, &mut self.data, tag)?;
             }
 
-            self.read_step = ReadingStep::DataDone;
+            self.read_step = ReadingStep::Done;
             self.buffer.clear();
         }
 
@@ -170,13 +170,13 @@ impl<R> DecryptedReader<R>
     fn read_some(&mut self) -> io::Result<()> {
         while !self.sent_final {
             match self.read_step {
-                ReadingStep::DataLength => self.read_length()?,
+                ReadingStep::Length => self.read_length()?,
                 ReadingStep::DataAndTag(dlen) => {
                     self.read_data(dlen)?;
                     break; // Read finished! Break out
                 }
-                ReadingStep::DataDone => {
-                    self.read_step = ReadingStep::DataLength;
+                ReadingStep::Done => {
+                    self.read_step = ReadingStep::Length;
                     self.data.clear();
                 }
             }
@@ -195,7 +195,7 @@ impl<R> BufRead for DecryptedReader<R>
             }
 
             self.read_some()?;
-            if let ReadingStep::DataDone = self.read_step {
+            if let ReadingStep::Done = self.read_step {
                 self.pos = 0;
             }
         }

@@ -180,8 +180,7 @@ fn handle_socks5_client(handle: &Handle, s: TcpStream, conf: Rc<ServerConfig>, u
                 socks5::Command::UdpAssociate => {
                     if udp_conf.enable_udp {
                         info!("UDP ASSOCIATE {}", addr);
-                        let fut = TcpResponseHeader::new(socks5::Reply::Succeeded,
-                                                         From::from((*(&*udp_conf.client_addr))))
+                        let fut = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(*udp_conf.client_addr))
                             .write_to(w)
                             .and_then(flush)
                             .and_then(|_| {
