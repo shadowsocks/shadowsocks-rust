@@ -27,8 +27,7 @@ use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
 
-use crypto;
-use crypto::{CryptoMode, CipherCategory};
+use crypto::CipherCategory;
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::DnsResolver;
@@ -248,12 +247,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
                         let local_iv = prev_buf;
-                        let encryptor = crypto::new_stream(svr_cfg.method(),
-                                                           svr_cfg.key(),
-                                                           &local_iv[..],
-                                                           CryptoMode::Encrypt);
-
-                        Ok(From::from(StreamEncryptedWriter::new(w, encryptor)))
+                        Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
                     }
                     CipherCategory::Aead => {
                         let local_salt = prev_buf;
@@ -282,16 +276,11 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
                         trace!("Got initialize vector  {:?}", remote_iv);
-
-                        let decryptor = crypto::new_stream(svr_cfg.method(),
-                                                           svr_cfg.key(),
-                                                           &remote_iv[..],
-                                                           CryptoMode::Decrypt);
-                        let decrypt_stream = StreamDecryptedReader::new(r, decryptor);
-
+                        let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                         Ok(From::from(decrypt_stream))
                     }
                     CipherCategory::Aead => {
+                        trace!("Got salt {:?}", remote_iv);
                         let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv[..]);
                         Ok(From::from(dr))
                     }

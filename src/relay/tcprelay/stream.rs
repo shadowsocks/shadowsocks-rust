@@ -22,7 +22,7 @@
 use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 
-use crypto::{StreamCipher, StreamCipherVariant};
+use crypto::{CipherType, StreamCipher, StreamCipherVariant, CryptoMode, new_stream};
 
 use super::BUFFER_SIZE;
 use super::{EncryptedWrite, DecryptedRead};
@@ -41,11 +41,11 @@ pub struct DecryptedReader<R>
 impl<R> DecryptedReader<R>
     where R: Read
 {
-    pub fn new(r: R, cipher: StreamCipherVariant) -> DecryptedReader<R> {
+    pub fn new(r: R, t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
             buffer: Vec::new(),
-            cipher: cipher,
+            cipher: new_stream(t, key, iv, CryptoMode::Decrypt),
             pos: 0,
             sent_final: false,
         }
@@ -139,10 +139,10 @@ impl<W> EncryptedWriter<W>
     where W: Write
 {
     /// Creates a new EncryptedWriter
-    pub fn new(w: W, cipher: StreamCipherVariant) -> EncryptedWriter<W> {
+    pub fn new(w: W, t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
-            cipher: cipher,
+            cipher: new_stream(t, key, iv, CryptoMode::Encrypt),
         }
     }
 
