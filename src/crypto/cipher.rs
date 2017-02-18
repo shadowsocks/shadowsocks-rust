@@ -108,6 +108,8 @@ const CIPHER_AES_128_GCM: &'static str = "aes-128-gcm";
 const CIPHER_AES_192_GCM: &'static str = "aes-192-gcm";
 const CIPHER_AES_256_GCM: &'static str = "aes-256-gcm";
 
+const CIPHER_CHACHA20_IETF_POLY1305: &'static str = "chacha20-ietf-poly1305";
+
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
 pub enum CipherType {
@@ -133,6 +135,8 @@ pub enum CipherType {
     Aes128Gcm,
     Aes192Gcm,
     Aes256Gcm,
+
+    ChaCha20IetfPoly1305,
 }
 
 /// Category of ciphers
@@ -163,11 +167,13 @@ impl CipherType {
             CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
             CipherType::ChaCha20 |
-            CipherType::Salsa20 => 32,
+            CipherType::Salsa20 |
+            CipherType::ChaCha20IetfPoly1305 => 32,
 
             CipherType::Aes128Gcm => 16,
             CipherType::Aes192Gcm => 24,
             CipherType::Aes256Gcm => 32,
+
         }
     }
 
@@ -276,7 +282,8 @@ impl CipherType {
 
             CipherType::Aes128Gcm |
             CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => 12,
+            CipherType::Aes256Gcm |
+            CipherType::ChaCha20IetfPoly1305 => 12,
         }
     }
 
@@ -301,7 +308,8 @@ impl CipherType {
         match *self {
             CipherType::Aes128Gcm |
             CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => CipherCategory::Aead,
+            CipherType::Aes256Gcm |
+            CipherType::ChaCha20IetfPoly1305 => CipherCategory::Aead,
             _ => CipherCategory::Stream,
         }
     }
@@ -313,7 +321,8 @@ impl CipherType {
         match *self {
             CipherType::Aes128Gcm |
             CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => 16,
+            CipherType::Aes256Gcm |
+            CipherType::ChaCha20IetfPoly1305 => 16,
 
             _ => panic!("Only support AEAD ciphers, found {:?}", self),
         }
@@ -357,6 +366,8 @@ impl FromStr for CipherType {
             CIPHER_AES_192_GCM => Ok(CipherType::Aes192Gcm),
             CIPHER_AES_256_GCM => Ok(CipherType::Aes256Gcm),
 
+            CIPHER_CHACHA20_IETF_POLY1305 => Ok(CipherType::ChaCha20IetfPoly1305),
+
             _ => Err(Error::UnknownCipherType),
         }
     }
@@ -386,6 +397,8 @@ impl Display for CipherType {
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
             CipherType::Aes192Gcm => write!(f, "{}", CIPHER_AES_192_GCM),
             CipherType::Aes256Gcm => write!(f, "{}", CIPHER_AES_256_GCM),
+
+            CipherType::ChaCha20IetfPoly1305 => write!(f, "{}", CIPHER_CHACHA20_IETF_POLY1305),
         }
     }
 }

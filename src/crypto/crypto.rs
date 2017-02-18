@@ -28,6 +28,7 @@ use rust_crypto::chacha20::ChaCha20;
 use rust_crypto::salsa20::Salsa20;
 use rust_crypto::aes_gcm::AesGcm;
 use rust_crypto::aes::KeySize;
+use rust_crypto::chacha20poly1305::ChaCha20Poly1305;
 
 use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::{AeadDecryptor, AeadEncryptor};
@@ -76,6 +77,7 @@ impl StreamCipher for CryptoCipher {
 /// AEAD ciphers provided by Rust-Crypto
 pub enum CryptoAeadCryptoVariant {
     AesGcm(AesGcm<'static>),
+    ChaCha20Poly1305(ChaCha20Poly1305),
 }
 
 /// AEAD Cipher context
@@ -111,6 +113,10 @@ impl CryptoAeadCrypto {
             CipherType::Aes192Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize192, key, nonce, &[])),
             CipherType::Aes256Gcm => CryptoAeadCryptoVariant::AesGcm(AesGcm::new(KeySize::KeySize256, key, nonce, &[])),
 
+            CipherType::ChaCha20IetfPoly1305 => {
+                CryptoAeadCryptoVariant::ChaCha20Poly1305(ChaCha20Poly1305::new(key, nonce, &[]))
+            }
+
             _ => panic!("Unsupported {:?}", t),
         }
     }
@@ -136,6 +142,9 @@ impl AeadEncryptor for CryptoAeadCrypto {
                 CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
                     gcm.encrypt(input, output, tag);
                 }
+                CryptoAeadCryptoVariant::ChaCha20Poly1305(ref mut cha) => {
+                    cha.encrypt(input, output, tag);
+                }
             }
         }
 
@@ -152,6 +161,13 @@ impl AeadDecryptor for CryptoAeadCrypto {
             match *cipher {
                 CryptoAeadCryptoVariant::AesGcm(ref mut gcm) => {
                     if !gcm.decrypt(input, output, tag) {
+                        Err(Error::AeadDecryptFailed)
+                    } else {
+                        Ok(())
+                    }
+                }
+                CryptoAeadCryptoVariant::ChaCha20Poly1305(ref mut cha) => {
+                    if !cha.decrypt(input, output, tag) {
                         Err(Error::AeadDecryptFailed)
                     } else {
                         Ok(())
