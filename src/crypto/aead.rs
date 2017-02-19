@@ -27,8 +27,7 @@ pub fn new_aead_encryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadE
     match t {
         CipherType::Aes128Gcm |
         CipherType::Aes192Gcm |
-        CipherType::Aes256Gcm |
-        CipherType::ChaCha20IetfPoly1305 => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
 
         _ => unreachable!(),
     }
@@ -41,8 +40,7 @@ pub fn new_aead_decryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadD
     match t {
         CipherType::Aes128Gcm |
         CipherType::Aes192Gcm |
-        CipherType::Aes256Gcm |
-        CipherType::ChaCha20IetfPoly1305 => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
 
         _ => unreachable!(),
     }

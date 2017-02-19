@@ -90,12 +90,12 @@ List all available arguments with `-h`.
 
 ## Supported Ciphers
 
-* `aes-128-cfb`, `aes-256-cfb`
+* `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
+* `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
 * `rc4`, `rc4-md5`
 * `chacha20`, `salsa20`
 * `dummy` (No encryption, just for debugging)
 * `aes-128-gcm`, `aes-192-gcm`, `aes-256-gcm`
-* `chacha20-ietf-poly1305`
 
 ## Useful Tools
 
