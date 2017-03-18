@@ -21,6 +21,8 @@ use tokio_core::io::Io;
 
 use futures::{self, Future, Poll};
 
+use bytes::BufMut;
+
 use net2::TcpBuilder;
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
@@ -66,7 +68,14 @@ impl Read for DecryptedHalf {
     }
 }
 
-impl DecryptedRead for DecryptedHalf {}
+impl DecryptedRead for DecryptedHalf {
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        match *self {
+            DecryptedHalf::Stream(ref e) => e.buffer_size(data),
+            DecryptedHalf::Aead(ref e) => e.buffer_size(data),
+        }
+    }
+}
 
 impl BufRead for DecryptedHalf {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
@@ -117,10 +126,17 @@ impl EncryptedWrite for EncryptedHalf {
         }
     }
 
-    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         match *self {
             EncryptedHalf::Stream(ref mut e) => e.encrypt(data, buf),
             EncryptedHalf::Aead(ref mut e) => e.encrypt(data, buf),
+        }
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        match *self {
+            EncryptedHalf::Stream(ref e) => e.buffer_size(data),
+            EncryptedHalf::Aead(ref e) => e.buffer_size(data),
         }
     }
 }
@@ -176,7 +192,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                    relay_addr);
 
             // Send relay address to remote
-            let local_buf = Vec::new();
+            let local_buf = Vec::with_capacity(128); // 128Bytes should be enough for most Addresses
             relay_addr.write_to(local_buf)
                 .and_then(move |buf| {
                     trace!("Sending address buffer as {:?}", buf);

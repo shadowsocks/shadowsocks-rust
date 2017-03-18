@@ -5,6 +5,8 @@ use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::digest::{self, Digest, DigestType};
 use crypto::CryptoMode;
 
+use bytes::BufMut;
+
 /// Rc4Md5 Cipher
 pub struct Rc4Md5Cipher {
     crypto: OpenSSLCrypto,
@@ -23,12 +25,16 @@ impl Rc4Md5Cipher {
 }
 
 impl StreamCipher for Rc4Md5Cipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
         self.crypto.update(data, out)
     }
 
-    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+    fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
         self.crypto.finalize(out)
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        self.crypto.buffer_size(data)
     }
 }
 

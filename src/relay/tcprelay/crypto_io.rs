@@ -9,14 +9,21 @@ use futures::{Future, Poll, Async};
 use tokio_core::reactor::{Handle, Timeout};
 use tokio_core::io::{copy, Copy};
 
+use bytes::{BufMut, BytesMut};
+
 use super::BUFFER_SIZE;
 use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
+
+static DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
 /// Reader to read data from ShadowSocks protocol
 ///
 /// This trait requires `BufRead`, because obviously this reader has to contain a buffer inside,
 /// which stores the decrypted data.
 pub trait DecryptedRead: BufRead {
+    /// Decrypt buffer size
+    fn buffer_size(&self, data: &[u8]) -> usize;
+
     /// Copies all data to `w`
     fn copy<W>(self, w: W) -> Copy<Self, W>
         where Self: Sized,
@@ -52,34 +59,22 @@ pub trait EncryptedWrite {
     /// Flush the writer
     fn flush(&mut self) -> io::Result<()>;
     /// Encrypt data into buffer for writing
-    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()>;
+    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()>;
+    /// Encrypt buffer size
+    fn buffer_size(&self, data: &[u8]) -> usize;
 
     /// Encrypt data in `buf` and write all to the writer
     fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<Self, B>
         where Self: Sized
     {
-        EncryptedWriteAll::Writing {
-            writer: self,
-            buf: buf,
-            pos: 0,
-            enc_buf: Vec::new(),
-            encrypted: false,
-        }
+        EncryptedWriteAll::new(self, buf)
     }
 
     /// Copies all data from `r`
     fn copy<R: Read>(self, r: R) -> EncryptedCopy<R, Self>
         where Self: Sized
     {
-        EncryptedCopy {
-            reader: r,
-            writer: self,
-            read_done: false,
-            amt: 0,
-            pos: 0,
-            cap: 0,
-            buf: Vec::new(),
-        }
+        EncryptedCopy::new(r, self)
     }
 
     /// Copies all data from `r` with timeout
@@ -109,10 +104,26 @@ pub enum EncryptedWriteAll<W, B>
         writer: W,
         buf: B,
         pos: usize,
-        enc_buf: Vec<u8>,
+        enc_buf: BytesMut,
         encrypted: bool,
     },
     Empty,
+}
+
+impl<W, B> EncryptedWriteAll<W, B>
+    where W: EncryptedWrite,
+          B: AsRef<[u8]>
+{
+    fn new(w: W, buf: B) -> EncryptedWriteAll<W, B> {
+        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
+        EncryptedWriteAll::Writing {
+            writer: w,
+            buf: buf,
+            pos: 0,
+            enc_buf: BytesMut::with_capacity(buffer_size),
+            encrypted: false,
+        }
+    }
 }
 
 impl<W, B> Future for EncryptedWriteAll<W, B>
@@ -128,6 +139,11 @@ impl<W, B> Future for EncryptedWriteAll<W, B>
             EncryptedWriteAll::Writing { ref mut writer, ref buf, ref mut pos, ref mut enc_buf, ref mut encrypted } => {
                 if !*encrypted {
                     *encrypted = true;
+
+                    // Ensure buffer has enough space
+                    let buffer_len = writer.buffer_size(buf.as_ref());
+                    enc_buf.reserve(buffer_len);
+
                     writer.encrypt(buf.as_ref(), enc_buf)?;
                 }
 
@@ -157,7 +173,25 @@ pub struct EncryptedCopy<R: Read, W: EncryptedWrite> {
     amt: u64,
     pos: usize,
     cap: usize,
-    buf: Vec<u8>,
+    buf: BytesMut,
+}
+
+impl<R, W> EncryptedCopy<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
+    fn new(r: R, w: W) -> EncryptedCopy<R, W> {
+        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
+        EncryptedCopy {
+            reader: r,
+            writer: w,
+            read_done: false,
+            amt: 0,
+            pos: 0,
+            cap: 0,
+            buf: BytesMut::with_capacity(buffer_size),
+        }
+    }
 }
 
 impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
@@ -175,7 +209,12 @@ impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
                 if n == 0 {
                     self.read_done = true;
                 } else {
-                    self.writer.encrypt(&local_buf[..n], &mut self.buf)?;
+                    let data = &local_buf[..n];
+                    // Ensure we have enough space
+                    let buffer_len = self.writer.buffer_size(data);
+                    self.buf.reserve(buffer_len);
+
+                    self.writer.encrypt(data, &mut self.buf)?;
                 }
                 self.pos = 0;
                 self.cap = self.buf.len();
@@ -211,11 +250,12 @@ pub struct EncryptedCopyTimeout<R: Read, W: EncryptedWrite> {
     handle: Handle,
     timer: Option<Timeout>,
     read_buf: [u8; BUFFER_SIZE],
-    write_buf: Vec<u8>,
+    write_buf: BytesMut,
 }
 
 impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
     fn new(r: R, w: W, dur: Duration, handle: Handle) -> EncryptedCopyTimeout<R, W> {
+        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
         EncryptedCopyTimeout {
             reader: r,
             writer: w,
@@ -227,7 +267,7 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
             handle: handle,
             timer: None,
             read_buf: [0u8; BUFFER_SIZE],
-            write_buf: Vec::new(),
+            write_buf: BytesMut::with_capacity(buffer_size),
         }
     }
 
@@ -263,7 +303,12 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
                 Ok(0)
             }
             Ok(n) => {
-                self.writer.encrypt(&self.read_buf[..n], &mut self.write_buf)?;
+                let data = &self.read_buf[..n];
+                // Ensoure we have enough space
+                let buffer_len = self.writer.buffer_size(data);
+                self.write_buf.reserve(buffer_len);
+
+                self.writer.encrypt(data, &mut self.write_buf)?;
                 self.cap = self.write_buf.len();
                 self.pos = 0;
                 Ok(n)

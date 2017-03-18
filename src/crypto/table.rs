@@ -7,6 +7,7 @@ use crypto::digest::{self, DigestType, Digest};
 use crypto::CryptoMode;
 
 use byteorder::{ReadBytesExt, LittleEndian};
+use bytes::{BufMut, BytesMut};
 
 const TABLE_SIZE: usize = 256usize;
 
@@ -48,22 +49,30 @@ impl TableCipher {
         }
     }
 
-    fn process(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-        out.reserve(data.len());
-        for d in data.iter() {
-            out.push(self.table[*d as usize]);
+    fn process<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+        let mut buf = BytesMut::with_capacity(self.buffer_size(data));
+        unsafe {
+            buf.set_len(self.buffer_size(data)); // Set length
         }
+        for (idx, d) in data.iter().enumerate() {
+            buf[idx] = self.table[*d as usize];
+        }
+        out.put(buf);
         Ok(())
     }
 }
 
 impl StreamCipher for TableCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
         Ok(())
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        data.len()
     }
 }
 

@@ -88,6 +88,7 @@ extern crate futures;
 extern crate tokio_core;
 extern crate net2;
 extern crate domain;
+extern crate bytes;
 
 extern crate libc;
 #[macro_use]

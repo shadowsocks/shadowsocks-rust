@@ -2,18 +2,24 @@
 
 use super::{StreamCipher, CipherResult};
 
+use bytes::BufMut;
+
 /// Dummy cipher
 ///
 /// Copies data directly to output, very dummy
 pub struct DummyCipher;
 
 impl StreamCipher for DummyCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-        out.extend_from_slice(data);
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+        out.put_slice(data);
         Ok(())
     }
 
-    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
         Ok(())
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        data.len()
     }
 }

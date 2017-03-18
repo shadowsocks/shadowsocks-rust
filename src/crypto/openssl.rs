@@ -8,6 +8,7 @@ use crypto::cipher;
 use crypto::CryptoMode;
 
 use openssl::symm;
+use bytes::{BufMut, BytesMut};
 
 /// Core cipher of OpenSSL
 pub struct OpenSSLCrypto {
@@ -43,23 +44,35 @@ impl OpenSSLCrypto {
     }
 
     /// Update data
-    pub fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-        let orig_length = out.len();
+    pub fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
         let least_reserved = data.len() + self.cipher.block_size();
-        out.resize(orig_length + least_reserved, 0);
-        let length = try!(self.inner.update(data, &mut out[orig_length..]));
-        out.resize(orig_length + length, 0);
+        let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
+        unsafe {
+            buf.set_len(least_reserved);
+        }
+        let length = self.inner.update(data, &mut *buf)?;
+        buf.truncate(length);
+        out.put(buf);
         Ok(())
     }
 
     /// Generate the final block
-    pub fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
-        let orig_length = out.len();
+    pub fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
         let least_reserved = self.cipher.block_size();
-        out.resize(orig_length + least_reserved, 0);
-        let length = try!(self.inner.finalize(&mut out[orig_length..]));
-        out.resize(orig_length + length, 0);
+        let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
+        unsafe {
+            buf.set_len(least_reserved);
+        }
+
+        let length = self.inner.finalize(&mut *buf)?;
+        buf.truncate(length);
+        out.put(buf);
         Ok(())
+    }
+
+    /// Gets output buffer size based on data
+    pub fn buffer_size(&self, data: &[u8]) -> usize {
+        self.cipher.block_size() + data.len()
     }
 }
 
@@ -106,11 +119,15 @@ impl OpenSSLCipher {
 unsafe impl Send for OpenSSLCipher {}
 
 impl StreamCipher for OpenSSLCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
         self.worker.update(data, out)
     }
 
-    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+    fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
         self.worker.finalize(out)
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        self.worker.buffer_size(data)
     }
 }

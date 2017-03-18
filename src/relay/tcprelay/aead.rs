@@ -36,7 +36,7 @@ use std::io::{self, Read, Write, BufRead, Cursor};
 use std::cmp;
 use std::u16;
 
-use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
+use bytes::{Buf, BufMut, BytesMut, BigEndian};
 
 use crypto::{self, CipherType, AeadEncryptor, AeadDecryptor};
 
@@ -53,8 +53,8 @@ pub struct DecryptedReader<R>
     where R: Read
 {
     reader: R,
-    buffer: Vec<u8>,
-    data: Vec<u8>,
+    buffer: BytesMut,
+    data: BytesMut,
     cipher: Box<AeadDecryptor>,
     pos: usize,
     sent_final: bool,
@@ -68,8 +68,8 @@ impl<R> DecryptedReader<R>
     pub fn new(r: R, t: CipherType, key: &[u8], nounce: &[u8]) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
-            buffer: Vec::new(),
-            data: Vec::new(),
+            buffer: BytesMut::with_capacity(BUFFER_SIZE),
+            data: BytesMut::with_capacity(BUFFER_SIZE),
             cipher: crypto::new_aead_decryptor(t, key, nounce),
             pos: 0,
             sent_final: false,
@@ -102,6 +102,7 @@ impl<R> DecryptedReader<R>
 
     fn read_exact(&mut self, expect_length: usize, ignore_final: bool) -> io::Result<()> {
         let mut incoming = [0u8; BUFFER_SIZE];
+        self.buffer.reserve(expect_length);
 
         while self.buffer.len() < expect_length {
             let remain = expect_length - self.buffer.len();
@@ -115,7 +116,7 @@ impl<R> DecryptedReader<R>
 
                     return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"));
                 }
-                Ok(n) => self.buffer.extend_from_slice(&incoming[..n]),
+                Ok(n) => self.buffer.put_slice(&incoming[..n]),
                 Err(e) => return Err(e),
             }
         }
@@ -131,12 +132,11 @@ impl<R> DecryptedReader<R>
             {
                 let data = &self.buffer[..2];
                 let tag = &self.buffer[2..];
-                let mut len_buf = [0u8; 2];
-                self.cipher.decrypt(data, &mut len_buf, tag)?;
 
                 let len = {
-                    let mut cur = Cursor::new(&mut len_buf);
-                    cur.read_u16::<BigEndian>().unwrap() as usize
+                    let mut len_buf = [0u8; 2];
+                    self.cipher.decrypt(data, &mut len_buf, tag)?;
+                    Cursor::new(len_buf).get_u16::<BigEndian>() as usize
                 };
 
                 self.read_step = ReadingStep::DataAndTag(len);
@@ -156,8 +156,12 @@ impl<R> DecryptedReader<R>
                 // Ok, got data
                 let data = &self.buffer[..dlen];
                 let tag = &self.buffer[dlen..];
-                self.data.resize(dlen, 0);
-                self.cipher.decrypt(data, &mut self.data, tag)?;
+                self.data.clear();
+                self.data.reserve(dlen);
+                unsafe {
+                    self.data.set_len(dlen); // Decrypted data has exactly the same length
+                }
+                self.cipher.decrypt(data, &mut *self.data, tag)?;
             }
 
             self.read_step = ReadingStep::Done;
@@ -221,7 +225,14 @@ impl<R> Read for DecryptedReader<R>
     }
 }
 
-impl<R> DecryptedRead for DecryptedReader<R> where R: Read {}
+impl<R> DecryptedRead for DecryptedReader<R>
+    where R: Read
+{
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        2 + self.tag_size // len and len_tag
+        + data.len() + self.tag_size // data and data_tag
+    }
+}
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
@@ -256,38 +267,44 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         self.writer.flush()
     }
 
-    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         // Data.Len is a 16-bit big-endian integer indicating the length of Data. It should be smaller than 0x3FFF.
         assert!(data.len() <= 0x3FFF);
 
         let data_length = data.len() as u16;
 
-        let mut data_len_buf = [0u8; 2];
-        {
-            let mut cur = Cursor::new(&mut data_len_buf[..]);
-            let _ = cur.write_u16::<BigEndian>(data_length);
+        let mut data_len_buf = BytesMut::with_capacity(2);
+        data_len_buf.put_u16::<BigEndian>(data_length);
+
+        let mut tag_buf = BytesMut::with_capacity(self.tag_size);
+        unsafe {
+            tag_buf.set_len(self.tag_size);
         }
 
-        let mut tag_buf = vec![0u8; self.tag_size];
-
         let mut encrypted_data_len = [0u8; 2];
-        self.cipher.encrypt(&data_len_buf[..], &mut encrypted_data_len, &mut tag_buf[..]);
+        self.cipher.encrypt(&data_len_buf, &mut encrypted_data_len, &mut *tag_buf);
 
         trace!("LENGTH TAG: {:?}", tag_buf);
 
-        buf.extend_from_slice(&encrypted_data_len);
-        buf.extend_from_slice(&tag_buf);
+        buf.put(&encrypted_data_len[..]);
+        buf.put_slice(&tag_buf);
 
-        let orig_buf_len = buf.len();
-        buf.reserve(data.len() + self.tag_size);
-        buf.resize(orig_buf_len + data.len(), 0);
-        self.cipher.encrypt(data, &mut buf[orig_buf_len..], &mut tag_buf);
+        let mut data_buf = BytesMut::with_capacity(data.len());
+        unsafe {
+            data_buf.set_len(data.len());
+        }
+        self.cipher.encrypt(data, &mut *data_buf, &mut *tag_buf);
 
         trace!("DATA TAG: {:?}", tag_buf);
 
-        buf.append(&mut tag_buf);
-
+        buf.put(data_buf);
+        buf.put(tag_buf);
 
         Ok(())
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        2 + self.tag_size // len and len_tag
+        + data.len() + self.tag_size // data and data_tag
     }
 }

@@ -8,13 +8,16 @@ use crypto::rc4_md5;
 use crypto::dummy;
 use crypto::crypto::CryptoCipher;
 
+use bytes::BufMut;
+
 /// Basic operation of Cipher, which is a Symmetric Cipher.
 ///
 /// The `update` method could be called multiple times, and the `finalize` method will
 /// encrypt the last block
 pub trait StreamCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()>;
-    fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()>;
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()>;
+    fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()>;
+    fn buffer_size(&self, data: &[u8]) -> usize;
 }
 
 macro_rules! define_stream_ciphers {
@@ -36,7 +39,7 @@ macro_rules! define_stream_ciphers {
         }
 
         impl StreamCipher for StreamCipherVariant {
-            fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
+            fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
                 match *self {
                     $(
                         StreamCipherVariant::$name(ref mut cipher) => cipher.update(data, out),
@@ -44,10 +47,18 @@ macro_rules! define_stream_ciphers {
                 }
             }
 
-            fn finalize(&mut self, out: &mut Vec<u8>) -> CipherResult<()> {
+            fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
                 match *self {
                     $(
                         StreamCipherVariant::$name(ref mut cipher) => cipher.finalize(out),
+                    )+
+                }
+            }
+
+            fn buffer_size(&self, data: &[u8]) -> usize {
+                match *self {
+                    $(
+                        StreamCipherVariant::$name(ref cipher) => cipher.buffer_size(data),
                     )+
                 }
             }

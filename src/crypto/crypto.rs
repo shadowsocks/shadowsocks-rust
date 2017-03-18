@@ -13,6 +13,8 @@ use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::cipher::Error;
 use crypto::aead::{make_skey, increase_nonce};
 
+use bytes::{BytesMut, BufMut};
+
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
     ChaCha20(ChaCha20),
@@ -31,24 +33,25 @@ impl CryptoCipher {
 }
 
 impl StreamCipher for CryptoCipher {
-    fn update(&mut self, data: &[u8], out: &mut Vec<u8>) -> CipherResult<()> {
-        out.reserve(data.len());
-        let orig_len = out.len();
-        unsafe {
-            out.set_len(orig_len + data.len());
-        }
-        let mut out = &mut out[orig_len..];
-
+    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+        let mut buf = BytesMut::with_capacity(self.buffer_size(data));
+        unsafe { buf.set_len(self.buffer_size(data)) }; // NOTE: Set length
+        assert_eq!(buf.len(), data.len());
         match *self {
-            CryptoCipher::ChaCha20(ref mut cipher) => cipher.process(data, out),
-            CryptoCipher::Salsa20(ref mut cipher) => cipher.process(data, out),
+            CryptoCipher::ChaCha20(ref mut cipher) => cipher.process(data, &mut *buf),
+            CryptoCipher::Salsa20(ref mut cipher) => cipher.process(data, &mut *buf),
         }
+        out.put(buf);
 
         Ok(())
     }
 
-    fn finalize(&mut self, _: &mut Vec<u8>) -> CipherResult<()> {
+    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
         Ok(())
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        data.len()
     }
 }
 

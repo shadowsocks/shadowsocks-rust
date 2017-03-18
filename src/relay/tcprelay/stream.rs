@@ -4,16 +4,19 @@ use std::io::{self, Read, BufRead, Write};
 use std::cmp;
 
 use crypto::{CipherType, StreamCipher, StreamCipherVariant, CryptoMode, new_stream};
+use bytes::{BufMut, BytesMut};
 
 use super::BUFFER_SIZE;
 use super::{EncryptedWrite, DecryptedRead};
+
+const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader<R>
     where R: Read
 {
     reader: R,
-    buffer: Vec<u8>,
+    buffer: BytesMut,
     cipher: StreamCipherVariant,
     pos: usize,
     sent_final: bool,
@@ -23,10 +26,12 @@ impl<R> DecryptedReader<R>
     where R: Read
 {
     pub fn new(r: R, t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader<R> {
+        let cipher = new_stream(t, key, iv, CryptoMode::Decrypt);
+        let buffer_size = cipher.buffer_size(&DUMMY_BUFFER);
         DecryptedReader {
             reader: r,
-            buffer: Vec::new(),
-            cipher: new_stream(t, key, iv, CryptoMode::Decrypt),
+            buffer: BytesMut::with_capacity(buffer_size),
+            cipher: cipher,
             pos: 0,
             sent_final: false,
         }
@@ -68,14 +73,24 @@ impl<R> BufRead for DecryptedReader<R>
             self.buffer.clear();
             match self.reader.read(&mut incoming) {
                 Ok(0) => {
+                    // Ensure we have enough space
+                    let buffer_len = self.buffer_size(&[]);
+                    self.buffer.reserve(buffer_len);
+
                     // EOF
                     try!(self.cipher
                         .finalize(&mut self.buffer));
                     self.sent_final = true;
                 }
                 Ok(l) => {
+                    let data = &incoming[..l];
+
+                    // Ensure we have enough space
+                    let buffer_len = self.buffer_size(data);
+                    self.buffer.reserve(buffer_len);
+
                     try!(self.cipher
-                        .update(&incoming[..l], &mut self.buffer));
+                        .update(data, &mut self.buffer));
                 }
                 Err(err) => {
                     return Err(err);
@@ -106,7 +121,13 @@ impl<R> Read for DecryptedReader<R>
     }
 }
 
-impl<R> DecryptedRead for DecryptedReader<R> where R: Read {}
+impl<R> DecryptedRead for DecryptedReader<R>
+    where R: Read
+{
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        self.cipher.buffer_size(data)
+    }
+}
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
@@ -127,11 +148,11 @@ impl<W> EncryptedWriter<W>
         }
     }
 
-    fn cipher_update(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+    fn cipher_update<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         self.cipher.update(data, buf).map_err(From::from)
     }
 
-    fn cipher_finalize(&mut self, buf: &mut Vec<u8>) -> io::Result<()> {
+    fn cipher_finalize<B: BufMut>(&mut self, buf: &mut B) -> io::Result<()> {
         self.cipher.finalize(buf).map_err(From::from)
     }
 }
@@ -160,7 +181,11 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         self.writer.flush()
     }
 
-    fn encrypt(&mut self, data: &[u8], buf: &mut Vec<u8>) -> io::Result<()> {
+    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         self.cipher_update(data, buf)
+    }
+
+    fn buffer_size(&self, data: &[u8]) -> usize {
+        self.cipher.buffer_size(data)
     }
 }
