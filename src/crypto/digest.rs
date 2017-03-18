@@ -3,13 +3,15 @@
 use rust_crypto::md5::Md5;
 use rust_crypto::sha1::Sha1;
 
+use bytes::{BufMut, BytesMut};
+
 /// Digest trait
 pub trait Digest: Send {
     /// Update data
     fn update(&mut self, data: &[u8]);
 
     /// Generates digest
-    fn digest(&mut self, buf: &mut Vec<u8>);
+    fn digest<B: BufMut>(&mut self, buf: &mut B);
 
     /// Length of digest
     fn digest_len(&self) -> usize;
@@ -50,20 +52,20 @@ impl Digest for DigestVariant {
         }
     }
 
-    fn digest(&mut self, buf: &mut Vec<u8>) {
+    fn digest<B: BufMut>(&mut self, buf: &mut B) {
         use rust_crypto::digest::Digest;
 
-        let output_bytes = match *self {
-            DigestVariant::Md5(ref d) => d.output_bytes(),
-            DigestVariant::Sha1(ref d) => d.output_bytes(),
-        };
-
-        let orig_len = buf.len();
-        buf.resize(orig_len + output_bytes, 0);
-        match *self {
-            DigestVariant::Md5(ref mut d) => d.result(&mut buf[orig_len..]),
-            DigestVariant::Sha1(ref mut d) => d.result(&mut buf[orig_len..]),
+        let mut local_buf = BytesMut::with_capacity(self.digest_len());
+        unsafe {
+            local_buf.set_len(self.digest_len());
         }
+
+        match *self {
+            DigestVariant::Md5(ref mut d) => d.result(&mut local_buf),
+            DigestVariant::Sha1(ref mut d) => d.result(&mut local_buf),
+        }
+
+        buf.put(local_buf)
     }
 
     fn digest_len(&self) -> usize {

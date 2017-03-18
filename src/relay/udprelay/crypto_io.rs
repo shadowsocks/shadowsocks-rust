@@ -34,23 +34,23 @@ pub fn encrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<
 }
 
 fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
-    let mut iv = t.gen_init_vec();
+    let iv = t.gen_init_vec();
     let mut cipher = crypto::new_stream(t, key, &iv, CryptoMode::Encrypt);
 
     let mut send_payload = Vec::with_capacity(iv.len() + payload.len());
-    send_payload.append(&mut iv);
+    send_payload.extend_from_slice(&iv);
     try!(cipher.update(&payload[..], &mut send_payload));
     try!(cipher.finalize(&mut send_payload));
     Ok(send_payload)
 }
 
 fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
-    let mut salt = t.gen_salt();
+    let salt = t.gen_salt();
     let tag_size = t.tag_size();
     let mut cipher = crypto::new_aead_encryptor(t, key, &salt);
 
     let mut send_payload = Vec::with_capacity(salt.len() + payload.len() + tag_size);
-    send_payload.append(&mut salt);
+    send_payload.extend_from_slice(&salt);
     let start_pos = send_payload.len();
     send_payload.resize(start_pos + payload.len(), 0);
 

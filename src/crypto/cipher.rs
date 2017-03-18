@@ -5,8 +5,11 @@ use std::fmt::{self, Debug, Display};
 use std::io;
 use rand::{self, Rng};
 use std::convert::From;
+use std::mem;
 
 use crypto::digest::{self, DigestType, Digest};
+
+use bytes::{BufMut, Bytes, BytesMut};
 
 use openssl::symm;
 
@@ -151,38 +154,45 @@ impl CipherType {
         }
     }
 
-    /// Extends key to match the required key length
-    #[cfg(not(feature = "key-derive-argon2"))]
-    pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
+    fn classic_bytes_to_key(&self, key: &[u8]) -> Bytes {
         let iv_len = self.iv_size();
         let key_len = self.key_size();
 
-        let mut digest = digest::with_type(DigestType::Md5);
-
-        let mut result = Vec::new();
-        let mut m = Vec::new();
-        let mut loop_count = 0;
-        while loop_count * digest.digest_len() < (key_len + iv_len) {
-            let mut vkey = m.clone();
-            vkey.extend_from_slice(key);
-
-            digest.update(&vkey);
-
-            m.clear();
-            digest.digest(&mut m);
-            loop_count += 1;
-
-            digest.reset();
-
-            result.extend_from_slice(&m[..]);
+        if iv_len + key_len == 0 {
+            return Bytes::new();
         }
 
-        result.resize(key_len, 0);
-        result
+        let mut digest = digest::with_type(DigestType::Md5);
+
+        let total_loop = (key_len + iv_len + digest.digest_len() - 1) / digest.digest_len();
+        let m_length = digest.digest_len() + key.len();
+
+        let mut result = BytesMut::with_capacity(total_loop * digest.digest_len());
+        let mut m = BytesMut::with_capacity(key.len());
+
+        for _ in 0..total_loop {
+            let mut vkey = mem::replace(&mut m, BytesMut::with_capacity(m_length));
+            vkey.put(key);
+
+            digest.update(&vkey);
+            digest.digest(&mut m);
+            digest.reset();
+
+            result.put_slice(&m);
+        }
+
+        result.truncate(key_len);
+        result.freeze()
+    }
+
+    /// Extends key to match the required key length
+    #[cfg(not(feature = "key-derive-argon2"))]
+    pub fn bytes_to_key(&self, key: &[u8]) -> Bytes {
+        self.classic_bytes_to_key(key)
     }
 
     #[cfg(feature = "key-derive-argon2")]
-    fn aead_key_derive(&self, key: &[u8]) -> Vec<u8> {
+    fn aead_key_derive(&self, key: &[u8]) -> Bytes {
         // We should use crypto_pwhash in libsodium
         // Salt is b"shadowsocks hash"
         // Already implemented in shadowsocks-libev
@@ -193,10 +203,13 @@ impl CipherType {
         const SALT: &'static [u8] = b"shadowsocks hash";
 
         let key_len = self.key_size();
-        let mut buf = vec![0u8; key_len];
+        let mut buf = BytesMut::with_capacity(key_len);
+        unsafe {
+            buf.set_len(key_len);
+        }
         let a2 = Argon2::default(Variant::Argon2i); // NOTE, libsodium uses 2i as crypto_pwhash_ALG_DEFAULT
         a2.hash(&mut buf, key, SALT, &[], &[]);
-        buf
+        buf.freeze()
     }
 
     /// Extends key to match the required key length
@@ -204,33 +217,7 @@ impl CipherType {
     pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
         match self.category() {
             CipherCategory::Aead => self.aead_key_derive(key),
-            CipherCategory::Stream => {
-                let iv_len = self.iv_size();
-                let key_len = self.key_size();
-
-                let mut digest = digest::with_type(DigestType::Md5);
-
-                let mut result = Vec::new();
-                let mut m = Vec::new();
-                let mut loop_count = 0;
-                while loop_count * digest.digest_len() < (key_len + iv_len) {
-                    let mut vkey = m.clone();
-                    vkey.extend_from_slice(key);
-
-                    digest.update(&vkey);
-
-                    m.clear();
-                    digest.digest(&mut m);
-                    loop_count += 1;
-
-                    digest.reset();
-
-                    result.extend_from_slice(&m[..]);
-                }
-
-                result.resize(key_len, 0);
-                result
-            }
+            CipherCategory::Stream => self.classic_bytes_to_key(key),
         }
     }
 
@@ -260,18 +247,17 @@ impl CipherType {
         }
     }
 
-    fn gen_random_bytes(len: usize) -> Vec<u8> {
-        let mut iv = Vec::with_capacity(len);
+    fn gen_random_bytes(len: usize) -> Bytes {
+        let mut iv = BytesMut::with_capacity(len);
         unsafe {
             iv.set_len(len);
         }
-        rand::thread_rng().fill_bytes(iv.as_mut_slice());
-
-        iv
+        rand::thread_rng().fill_bytes(&mut iv);
+        iv.freeze()
     }
 
     /// Generate a random initialize vector for this cipher
-    pub fn gen_init_vec(&self) -> Vec<u8> {
+    pub fn gen_init_vec(&self) -> Bytes {
         let iv_len = self.iv_size();
         CipherType::gen_random_bytes(iv_len)
     }
@@ -306,7 +292,7 @@ impl CipherType {
     }
 
     /// Get salt for AEAD ciphers
-    pub fn gen_salt(&self) -> Vec<u8> {
+    pub fn gen_salt(&self) -> Bytes {
         CipherType::gen_random_bytes(self.salt_size())
     }
 }

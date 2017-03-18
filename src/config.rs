@@ -59,6 +59,8 @@ use serde_json::{self, Value, Map};
 
 use crypto::cipher::CipherType;
 
+use bytes::Bytes;
+
 /// Server address
 #[derive(Clone, Debug)]
 pub enum ServerAddr {
@@ -150,7 +152,7 @@ pub struct ServerConfig {
     /// Connection timeout
     timeout: Option<Duration>,
     /// Encryption key
-    enc_key: Vec<u8>,
+    enc_key: Bytes,
 }
 
 impl ServerConfig {

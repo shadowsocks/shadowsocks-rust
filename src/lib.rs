@@ -91,7 +91,6 @@ extern crate domain;
 extern crate bytes;
 
 extern crate libc;
-#[macro_use]
 extern crate lazy_static;
 
 /// ShadowSocks version
