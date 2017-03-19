@@ -83,8 +83,9 @@ impl Client {
                         trace!("Got packet from {}, payload length {}", addr, body.len());
 
                         // Append header in front of the actual body (SOCKS5 protocol)
+                        let buf = Cursor::new(Vec::new());
                         let mut reply_body =
-                            UdpAssociateHeader::new(0, addr.clone()).write_to(Vec::new()).wait().unwrap();
+                            UdpAssociateHeader::new(0, addr.clone()).write_to(buf).wait().unwrap().into_inner();
                         reply_body.extend_from_slice(body);
 
                         // Get associated client's SocketAddr
@@ -162,8 +163,10 @@ impl Client {
 
                 // Client -> Proxy
                 // Append Address to the front (ShadowSocks protocol)
-                assoc_addr.write_to(Vec::with_capacity(payload.len()))
-                    .and_then(move |mut payload_buf| {
+                let buf = Cursor::new(Vec::with_capacity(payload.len()));
+                assoc_addr.write_to(buf)
+                    .and_then(move |payload_buf| {
+                        let mut payload_buf = payload_buf.into_inner();
                         payload_buf.extend_from_slice(&payload[header_len..]);
                         Ok(payload_buf)
                     })

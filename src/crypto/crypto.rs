@@ -13,7 +13,7 @@ use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::cipher::Error;
 use crypto::aead::{make_skey, increase_nonce};
 
-use bytes::{BytesMut, BufMut};
+use bytes::{BytesMut, BufMut, Bytes};
 
 /// Cipher provided by Rust-Crypto
 pub enum CryptoCipher {
@@ -66,8 +66,8 @@ pub enum CryptoAeadCryptoVariant {
 pub struct CryptoAeadCrypto {
     cipher: CryptoAeadCryptoVariant,
     cipher_type: CipherType,
-    key: Vec<u8>,
-    nonce: Vec<u8>,
+    key: Bytes,
+    nonce: BytesMut,
 }
 
 impl CryptoAeadCrypto {
@@ -76,7 +76,11 @@ impl CryptoAeadCrypto {
         // TODO: Check if salt is duplicated
 
         let nonce_size = t.iv_size();
-        let nonce = vec![0u8; nonce_size];
+        let mut nonce = BytesMut::with_capacity(nonce_size);
+        for _ in 0..nonce_size {
+            nonce.put_u8(0);
+        }
+
         let skey = make_skey(t, key, salt);
         let cipher = CryptoAeadCrypto::new_variant(t, &skey, &nonce);
         CryptoAeadCrypto {

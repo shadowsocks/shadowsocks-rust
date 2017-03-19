@@ -15,13 +15,13 @@ use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
-use tokio_core::io::{read_exact, write_all};
-use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::Io;
+use tokio_io::AsyncRead;
+use tokio_io::io::{read_exact, write_all};
+use tokio_io::io::{ReadHalf, WriteHalf};
 
 use futures::{self, Future, Poll};
 
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut};
 
 use net2::TcpBuilder;
 
@@ -76,6 +76,8 @@ impl DecryptedRead for DecryptedHalf {
         }
     }
 }
+
+impl AsyncRead for DecryptedHalf {}
 
 impl BufRead for DecryptedHalf {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
@@ -192,13 +194,10 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                    relay_addr);
 
             // Send relay address to remote
-            let local_buf = Vec::with_capacity(128); // 128Bytes should be enough for most Addresses
-            relay_addr.write_to(local_buf)
-                .and_then(move |buf| {
-                    trace!("Sending address buffer as {:?}", buf);
-                    try_timeout(enc_w.write_all(buf), timeout, &handle)
-                })
-                .map(|(w, _)| w)
+            let mut buf = BytesMut::with_capacity(relay_addr.len());
+            relay_addr.write_to_buf(&mut buf);
+            trace!("Sending address buffer as {:?}", buf);
+            try_timeout(enc_w.write_all(buf), timeout, &handle).map(|(w, _)| w)
         });
 
         Ok((r_fut, boxed_future(w_fut)))
@@ -264,9 +263,6 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             };
 
             try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
-                // TODO: If crypto type is Aead, returns `aead::DecryptedReader` instead
-
-
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
                         trace!("Got initialize vector  {:?}", remote_iv);
@@ -289,20 +285,18 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 }
 
 /// Establish tunnel between server and client
-pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
-    where CF: Future<Item = u64, Error = io::Error> + 'static,
-          SF: Future<Item = u64, Error = io::Error> + 'static
+pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
+    where CF: Future<Item = CFI, Error = io::Error> + 'static,
+          SF: Future<Item = SFI, Error = io::Error> + 'static
 {
     let addr = Rc::new(addr);
 
     let cloned_addr = addr.clone();
     let c2s = c2s.then(move |res| {
         match res {
-            Ok(amt) => {
+            Ok(..) => {
                 // Continue reading response from remote server
-                trace!("Relay {} client -> server is finished, relayed {} bytes",
-                       cloned_addr,
-                       amt);
+                trace!("Relay {} client -> server is finished", cloned_addr);
 
                 Ok(TunnelDirection::Client2Server)
             }
@@ -316,10 +310,8 @@ pub fn tunnel<CF, SF>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
     let cloned_addr = addr.clone();
     let s2c = s2c.then(move |res| {
         match res {
-            Ok(amt) => {
-                trace!("Relay {} client <- server is finished, relayed {} bytes",
-                       cloned_addr,
-                       amt);
+            Ok(..) => {
+                trace!("Relay {} client <- server is finished", cloned_addr);
 
                 Ok(TunnelDirection::Server2Client)
             }

@@ -2,10 +2,12 @@
 
 extern crate shadowsocks;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate bytes;
 
 use std::thread;
 use std::net::SocketAddr;
@@ -14,8 +16,9 @@ use std::time::Duration;
 use std::io::Cursor;
 
 use tokio_core::reactor::Core;
-use tokio_core::io::{read_to_end, write_all, flush};
+use tokio_io::io::{read_to_end, write_all, flush};
 use futures::Future;
+use bytes::{BufMut, BytesMut};
 
 use shadowsocks::relay::tcprelay::client::Socks5Client;
 use shadowsocks::config::{Config, ServerConfig};
@@ -122,14 +125,14 @@ fn udp_relay() {
 
     let l = UdpSocket::bind(UDP_LOCAL_ADDR).unwrap();
 
-    let mut buf = UdpAssociateHeader::new(0, remote_addr)
-        .write_to(Vec::new())
-        .wait()
-        .unwrap();
+    let header = UdpAssociateHeader::new(0, remote_addr);
+    let mut buf = BytesMut::with_capacity(header.len());
+    header.write_to_buf(&mut buf);
 
     let payload = b"HEllo WORld";
 
-    buf.extend_from_slice(payload);
+    buf.reserve(payload.len());
+    buf.put_slice(payload);
 
     let local_addr = LOCAL_ADDR.parse::<SocketAddr>().unwrap();
     l.send_to(&buf[..], &local_addr).unwrap();

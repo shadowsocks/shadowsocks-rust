@@ -19,7 +19,8 @@ use futures::stream::Stream;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener};
-use tokio_core::io::{Io, ReadHalf, WriteHalf};
+use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::AsyncRead;
 
 use net2::TcpBuilder;
 

@@ -1,10 +1,11 @@
 //! Utility functions
 
-use std::io::{self, Read, Write};
+use std::io;
 use std::time::Duration;
 
 use tokio_core::reactor::{Handle, Timeout};
-use tokio_core::io::{Copy, copy};
+use tokio_io::io::{Copy, copy};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use futures::{Future, Poll, Async};
 
@@ -12,19 +13,19 @@ use super::BUFFER_SIZE;
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration, handle: Handle) -> CopyTimeout<R, W>
-    where R: Read,
-          W: Write
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     CopyTimeout::new(r, w, dur, handle)
 }
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub struct CopyTimeout<R, W>
-    where R: Read,
-          W: Write
+    where R: AsyncRead,
+          W: AsyncWrite
 {
-    r: R,
-    w: W,
+    r: Option<R>,
+    w: Option<W>,
     timeout: Duration,
     handle: Handle,
     amt: u64,
@@ -35,13 +36,13 @@ pub struct CopyTimeout<R, W>
 }
 
 impl<R, W> CopyTimeout<R, W>
-    where R: Read,
-          W: Write
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     fn new(r: R, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<R, W> {
         CopyTimeout {
-            r: r,
-            w: w,
+            r: Some(r),
+            w: Some(w),
             timeout: timeout,
             handle: handle,
             amt: 0,
@@ -76,7 +77,7 @@ impl<R, W> CopyTimeout<R, W>
         // Then, unset the previous timeout
         self.clear_timer();
 
-        match self.r.read(&mut self.buf) {
+        match self.r.as_mut().unwrap().read(&mut self.buf) {
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -94,7 +95,7 @@ impl<R, W> CopyTimeout<R, W>
         // Then, unset the previous timeout
         self.clear_timer();
 
-        match self.w.write(&self.buf[beg..end]) {
+        match self.w.as_mut().unwrap().write(&self.buf[beg..end]) {
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
@@ -107,10 +108,10 @@ impl<R, W> CopyTimeout<R, W>
 }
 
 impl<R, W> Future for CopyTimeout<R, W>
-    where R: Read,
-          W: Write
+    where R: AsyncRead,
+          W: AsyncWrite
 {
-    type Item = u64;
+    type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -122,8 +123,8 @@ impl<R, W> Future for CopyTimeout<R, W>
                     // If we've written al the data and we've seen EOF, flush out the
                     // data and finish the transfer.
                     // done with the entire transfer.
-                    try_nb!(self.w.flush());
-                    return Ok(self.amt.into());
+                    try_nb!(self.w.as_mut().unwrap().flush());
+                    return Ok((self.amt, self.r.take().unwrap(), self.w.take().unwrap()).into());
                 }
 
                 self.pos = 0;
@@ -149,8 +150,8 @@ impl<R, W> Future for CopyTimeout<R, W>
 
 /// Copies all data from `r` to `w` with optional timeout param
 pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>, handle: Handle) -> CopyTimeoutOpt<R, W>
-    where R: Read,
-          W: Write
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     match dur {
         Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d, handle)),
@@ -159,13 +160,13 @@ pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>, handle: Handle)
 }
 
 /// Copies all data from `R` to `W`
-pub enum CopyTimeoutOpt<R: Read, W: Write> {
+pub enum CopyTimeoutOpt<R: AsyncRead, W: AsyncWrite> {
     Copy(Copy<R, W>),
     CopyTimeout(CopyTimeout<R, W>),
 }
 
-impl<R: Read, W: Write> Future for CopyTimeoutOpt<R, W> {
-    type Item = u64;
+impl<R: AsyncRead, W: AsyncWrite> Future for CopyTimeoutOpt<R, W> {
+    type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {

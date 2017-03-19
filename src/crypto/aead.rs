@@ -8,6 +8,8 @@ use rust_crypto::hkdf::{hkdf_expand, hkdf_extract};
 use rust_crypto::sha1::Sha1;
 use rust_crypto::digest::Digest;
 
+use bytes::{BytesMut, Bytes};
+
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {
     /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()`.
@@ -75,19 +77,27 @@ const SUBKEY_INFO: &'static [u8] = b"ss-subkey";
 /// 3. Send salt
 /// 4. For each chunk, encrypt and authenticate payload using SK with a counting nonce (starting from 0 and increment by 1 after each use)
 /// 5. Send encrypted chunk
-pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Vec<u8> {
+pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
     assert!(t.category() == CipherCategory::Aead);
 
     let sha1 = Sha1::new();
     let output_bytes = sha1.output_bytes();
 
-    let mut prk = vec![0u8; output_bytes];
+    let mut prk = BytesMut::with_capacity(output_bytes);
+    unsafe {
+        prk.set_len(output_bytes);
+    }
+
     hkdf_extract(sha1, salt, key, &mut prk);
 
-    let mut skey = vec![0u8; key.len()];
+    let mut skey = BytesMut::with_capacity(key.len());
+    unsafe {
+        skey.set_len(key.len());
+    }
+
     hkdf_expand(Sha1::new(), &prk, SUBKEY_INFO, &mut skey);
 
-    skey
+    skey.freeze()
 }
 
 /// Increase nonce by 1

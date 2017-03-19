@@ -32,11 +32,12 @@
 //! +--------------+---------------+--------------+------------+
 //! ```
 
-use std::io::{self, Read, Write, BufRead, Cursor};
+use std::io::{self, Read, BufRead, Cursor};
 use std::cmp;
 use std::u16;
 
 use bytes::{Buf, BufMut, BytesMut, BigEndian};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use crypto::{self, CipherType, AeadEncryptor, AeadDecryptor};
 
@@ -50,7 +51,7 @@ enum ReadingStep {
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     reader: R,
     buffer: BytesMut,
@@ -63,7 +64,7 @@ pub struct DecryptedReader<R>
 }
 
 impl<R> DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     pub fn new(r: R, t: CipherType, key: &[u8], nounce: &[u8]) -> DecryptedReader<R> {
         DecryptedReader {
@@ -190,7 +191,7 @@ impl<R> DecryptedReader<R>
 }
 
 impl<R> BufRead for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         while self.pos >= self.data.len() {
@@ -213,7 +214,7 @@ impl<R> BufRead for DecryptedReader<R>
 }
 
 impl<R> Read for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
@@ -226,7 +227,7 @@ impl<R> Read for DecryptedReader<R>
 }
 
 impl<R> DecryptedRead for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn buffer_size(&self, data: &[u8]) -> usize {
         2 + self.tag_size // len and len_tag
@@ -234,9 +235,11 @@ impl<R> DecryptedRead for DecryptedReader<R>
     }
 }
 
+impl<R> AsyncRead for DecryptedReader<R> where R: AsyncRead {}
+
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     writer: W,
     cipher: Box<AeadEncryptor>,
@@ -244,7 +247,7 @@ pub struct EncryptedWriter<W>
 }
 
 impl<W> EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, t: CipherType, key: &[u8], nounce: &[u8]) -> EncryptedWriter<W> {
@@ -257,7 +260,7 @@ impl<W> EncryptedWriter<W>
 }
 
 impl<W> EncryptedWrite for EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
         self.writer.write(data)

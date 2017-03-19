@@ -1,13 +1,14 @@
 //! IO facilities for TCP relay
 
-use std::io::{self, Read, Write, BufRead};
+use std::io::{self, Read, BufRead};
 use std::mem;
 use std::time::Duration;
 
 use futures::{Future, Poll, Async};
 
 use tokio_core::reactor::{Handle, Timeout};
-use tokio_core::io::{copy, Copy};
+use tokio_io::io::{copy, Copy};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use bytes::{BufMut, BytesMut};
 
@@ -20,14 +21,14 @@ static DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 ///
 /// This trait requires `BufRead`, because obviously this reader has to contain a buffer inside,
 /// which stores the decrypted data.
-pub trait DecryptedRead: BufRead {
+pub trait DecryptedRead: BufRead + AsyncRead {
     /// Decrypt buffer size
     fn buffer_size(&self, data: &[u8]) -> usize;
 
     /// Copies all data to `w`
     fn copy<W>(self, w: W) -> Copy<Self, W>
         where Self: Sized,
-              W: Write
+              W: AsyncWrite
     {
         copy(self, w)
     }
@@ -35,7 +36,7 @@ pub trait DecryptedRead: BufRead {
     /// Copies all data to `w`, return `TimedOut` if timeout reaches
     fn copy_timeout<W>(self, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<Self, W>
         where Self: Sized,
-              W: Write
+              W: AsyncWrite
     {
         copy_timeout(self, w, timeout, handle)
     }
@@ -43,7 +44,7 @@ pub trait DecryptedRead: BufRead {
     /// The same as `copy_timeout`, but has optional `timeout`
     fn copy_timeout_opt<W>(self, w: W, timeout: Option<Duration>, handle: Handle) -> CopyTimeoutOpt<Self, W>
         where Self: Sized,
-              W: Write
+              W: AsyncWrite
     {
         copy_timeout_opt(self, w, timeout, handle)
     }

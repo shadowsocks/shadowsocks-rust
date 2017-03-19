@@ -5,7 +5,7 @@ use crypto::{StreamCipher, CipherType, CipherResult};
 use crypto::digest::{self, Digest, DigestType};
 use crypto::CryptoMode;
 
-use bytes::BufMut;
+use bytes::{BufMut, BytesMut};
 
 /// Rc4Md5 Cipher
 pub struct Rc4Md5Cipher {
@@ -17,7 +17,7 @@ impl Rc4Md5Cipher {
         let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
         md5_digest.update(iv);
-        let mut key = Vec::new();
+        let mut key = BytesMut::with_capacity(md5_digest.digest_len());
         md5_digest.digest(&mut key);
 
         Rc4Md5Cipher { crypto: OpenSSLCrypto::new(CipherType::Rc4, &key[..], b"", mode) }

@@ -1,6 +1,6 @@
 //! This module implements the `table` cipher for fallback compatibility
 
-use std::io::BufReader;
+use std::io::Cursor;
 
 use crypto::{StreamCipher, CipherResult};
 use crypto::digest::{self, DigestType, Digest};
@@ -12,34 +12,40 @@ use bytes::{BufMut, BytesMut};
 const TABLE_SIZE: usize = 256usize;
 
 /// Table cipher
-#[derive(Clone)]
 pub struct TableCipher {
-    table: Vec<u8>,
+    table: [u8; TABLE_SIZE],
 }
 
 impl TableCipher {
     pub fn new(key: &[u8], mode: CryptoMode) -> TableCipher {
         let mut md5_digest = digest::with_type(DigestType::Md5);
         md5_digest.update(key);
-        let mut key_digest = Vec::new();
+        let mut key_digest = BytesMut::with_capacity(md5_digest.digest_len());
         md5_digest.digest(&mut key_digest);
 
-        let mut bufr = BufReader::new(&key_digest[..]);
+        let mut bufr = Cursor::new(&key_digest[..]);
         let a = bufr.read_u64::<LittleEndian>().unwrap();
-        let mut table = (0..TABLE_SIZE).map(|idx| idx as u64).collect::<Vec<u64>>();
+
+        let mut table = [0u64; TABLE_SIZE];
+        for i in 0..TABLE_SIZE {
+            table[i] = i as u64;
+        }
 
         for i in 1..1024 {
-            table.as_mut_slice().sort_by(|x, y| (a % (*x + i)).cmp(&(a % (*y + i))))
+            table.sort_by(|x, y| (a % (*x + i)).cmp(&(a % (*y + i))))
         }
 
         TableCipher {
             table: match mode {
-                CryptoMode::Encrypt => table.into_iter().map(|x| x as u8).collect(),
-                CryptoMode::Decrypt => {
-                    let mut t = Vec::with_capacity(table.len());
-                    unsafe {
-                        t.set_len(table.len());
+                CryptoMode::Encrypt => {
+                    let mut t = [0u8; TABLE_SIZE];
+                    for i in 0..TABLE_SIZE {
+                        t[i] = table[i] as u8;
                     }
+                    t
+                }
+                CryptoMode::Decrypt => {
+                    let mut t = [0u8; TABLE_SIZE];
                     for (idx, &item) in table.iter().enumerate() {
                         t[item as usize] = idx as u8;
                     }

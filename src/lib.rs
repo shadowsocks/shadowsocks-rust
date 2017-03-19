@@ -84,8 +84,9 @@ extern crate openssl;
 extern crate argon2rs;
 
 extern crate futures;
-#[macro_use]
 extern crate tokio_core;
+#[macro_use]
+extern crate tokio_io;
 extern crate net2;
 extern crate domain;
 extern crate bytes;

@@ -9,9 +9,9 @@ use futures::stream::Stream;
 
 use tokio_core::net::{TcpStream, TcpListener};
 use tokio_core::reactor::Handle;
-use tokio_core::io::Io;
-use tokio_core::io::{ReadHalf, WriteHalf};
-use tokio_core::io::flush;
+use tokio_io::AsyncRead;
+use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::io::flush;
 
 use net2::TcpBuilder;
 

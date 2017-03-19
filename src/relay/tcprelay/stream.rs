@@ -1,10 +1,11 @@
 //! Stream protocol implementation
 
-use std::io::{self, Read, BufRead, Write};
+use std::io::{self, Read, BufRead};
 use std::cmp;
 
 use crypto::{CipherType, StreamCipher, StreamCipherVariant, CryptoMode, new_stream};
 use bytes::{BufMut, BytesMut};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use super::BUFFER_SIZE;
 use super::{EncryptedWrite, DecryptedRead};
@@ -13,7 +14,7 @@ const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     reader: R,
     buffer: BytesMut,
@@ -23,7 +24,7 @@ pub struct DecryptedReader<R>
 }
 
 impl<R> DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     pub fn new(r: R, t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader<R> {
         let cipher = new_stream(t, key, iv, CryptoMode::Decrypt);
@@ -61,7 +62,7 @@ impl<R> DecryptedReader<R>
 }
 
 impl<R> BufRead for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         while self.pos >= self.buffer.len() {
@@ -109,7 +110,7 @@ impl<R> BufRead for DecryptedReader<R>
 }
 
 impl<R> Read for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
@@ -122,23 +123,25 @@ impl<R> Read for DecryptedReader<R>
 }
 
 impl<R> DecryptedRead for DecryptedReader<R>
-    where R: Read
+    where R: AsyncRead
 {
     fn buffer_size(&self, data: &[u8]) -> usize {
         self.cipher.buffer_size(data)
     }
 }
 
+impl<R> AsyncRead for DecryptedReader<R> where R: AsyncRead {}
+
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     writer: W,
     cipher: StreamCipherVariant,
 }
 
 impl<W> EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter<W> {
@@ -158,7 +161,7 @@ impl<W> EncryptedWriter<W>
 }
 
 impl<W> Drop for EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     fn drop(&mut self) {
         let mut buf = Vec::new();
@@ -171,7 +174,7 @@ impl<W> Drop for EncryptedWriter<W>
 }
 
 impl<W> EncryptedWrite for EncryptedWriter<W>
-    where W: Write
+    where W: AsyncWrite
 {
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
         self.writer.write(data)

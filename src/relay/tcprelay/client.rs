@@ -5,9 +5,10 @@ use std::net::SocketAddr;
 
 use tokio_core::reactor::Handle;
 use tokio_core::net::TcpStream;
-use tokio_core::io::flush;
+use tokio_io::io::flush;
+use tokio_io::{AsyncRead, AsyncWrite};
 
-use futures::{self, Future};
+use futures::{self, Future, Poll, Async};
 
 use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address, TcpRequestHeader, TcpResponseHeader, Command,
                     Reply};
@@ -119,5 +120,13 @@ impl Write for Socks5Client {
 
     fn flush(&mut self) -> io::Result<()> {
         self.stream.flush()
+    }
+}
+
+impl AsyncRead for Socks5Client {}
+impl AsyncWrite for Socks5Client {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        // FIXME: Finalize the internal cipher
+        Ok(Async::Ready(()))
     }
 }

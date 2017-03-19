@@ -1,7 +1,7 @@
 extern crate shadowsocks;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate futures;
-#[macro_use]
 extern crate log;
 extern crate env_logger;
 
@@ -10,7 +10,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 
 use tokio_core::reactor::Core;
-use tokio_core::io::{read_to_end, write_all, flush};
+use tokio_io::io::{read_to_end, write_all, flush};
 use futures::Future;
 
 use shadowsocks::relay::tcprelay::client::Socks5Client;

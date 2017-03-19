@@ -109,8 +109,9 @@ impl ConnectionContext {
         // Client <- Remote
         // Append Address in front of body (ShadowSocks protocol)
         let cloned_svr_cfg = svr_cfg.clone();
-        let fut = address.write_to(Vec::with_capacity(buf_len))
-            .map(move |mut send_buf| {
+        let fut = address.write_to(Cursor::new(Vec::with_capacity(buf_len)))
+            .map(move |send_buf| {
+                let mut send_buf = send_buf.into_inner();
                 send_buf.extend_from_slice(&buf[..n]);
                 send_buf
             })

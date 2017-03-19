@@ -6,16 +6,19 @@
 
 use std::fmt::{self, Debug, Formatter};
 use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::io::{self, Cursor, Read, Write};
+use std::io::{self, Cursor, Write};
 use std::vec;
 use std::error;
 use std::convert::From;
+use std::u8;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
+use bytes::{BufMut, BytesMut};
 
 use futures::{self, Future};
 
-use tokio_core::io::{read_exact, write_all};
+use tokio_io::io::{read_exact, write_all};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use relay::BoxIoFuture;
 
@@ -209,13 +212,22 @@ pub enum Address {
 
 impl Address {
     #[inline]
-    pub fn read_from<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
+    pub fn read_from<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
         parse_request_header(stream)
     }
 
+    /// Writes to writer
     #[inline]
-    pub fn write_to<W: Write + 'static>(self, writer: W) -> BoxIoFuture<W> {
-        write_addr(self, writer)
+    pub fn write_to<W: AsyncWrite + 'static>(self, writer: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(writer, buf).map(|(w, _)| w))
+    }
+
+    /// Writes to buffer
+    #[inline]
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        write_addr(self, buf)
     }
 
     #[inline]
@@ -293,7 +305,7 @@ impl TcpRequestHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
             .and_then(|(r, buf)| {
@@ -325,18 +337,18 @@ impl TcpRequestHeader {
     }
 
     /// Write data into a writer
-    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        let mut buf = Vec::with_capacity(self.len());
-        let TcpRequestHeader { address, command } = self;
-        let fut = futures::lazy(move || {
-                buf.write_all(&[SOCKS5_VERSION, command.as_u8(), 0x00])?;
-                Ok(buf)
-            })
-            .and_then(|buf| address.write_to(buf))
-            .and_then(|buf| write_all(w, buf))
-            .map(|(w, _)| w);
+    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(w, buf).map(|(w, _)| w))
+    }
 
-        Box::new(fut)
+    /// Writes to buffer
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        let TcpRequestHeader { ref address, ref command } = *self;
+
+        buf.put_slice(&[SOCKS5_VERSION, command.as_u8(), 0x00]);
+        address.write_to_buf(buf);
     }
 
     /// Length in bytes
@@ -373,7 +385,7 @@ impl TcpResponseHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
             .and_then(|(r, buf)| {
@@ -401,18 +413,17 @@ impl TcpResponseHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        let mut buf = Vec::with_capacity(self.len());
-        let TcpResponseHeader { reply, address } = self;
-        let fut = futures::lazy(move || {
-                buf.write_all(&[SOCKS5_VERSION, reply.as_u8(), 0x00])?;
-                Ok(buf)
-            })
-            .and_then(|buf| address.write_to(buf))
-            .and_then(|buf| write_all(w, buf))
-            .map(|(w, _)| w);
+    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(w, buf).map(|(w, _)| w))
+    }
 
-        Box::new(fut)
+    /// Writes to buffer
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        let TcpResponseHeader { ref reply, ref address } = *self;
+        buf.put_slice(&[SOCKS5_VERSION, reply.as_u8(), 0x00]);
+        address.write_to_buf(buf);
     }
 
     /// Length in bytes
@@ -422,7 +433,7 @@ impl TcpResponseHeader {
     }
 }
 
-fn parse_request_header<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
+fn parse_request_header<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
     let fut = read_exact(stream, [0u8])
         .map_err(|_| Error::new(Reply::GeneralFailure, "Error while reading address type"))
         .and_then(|(conn, atyp)| {
@@ -494,59 +505,45 @@ fn parse_request_header<R: Read + 'static>(stream: R) -> Box<Future<Item = (R, A
     Box::new(fut)
 }
 
-fn write_addr<W: Write + 'static>(addr: Address, w: W) -> BoxIoFuture<W> {
-    match addr {
-        Address::SocketAddress(addr) => {
-            match addr {
-                SocketAddr::V4(addr) => {
-                    let fut = futures::lazy(move || {
-                            let mut buf = [0u8; 1 + 4 + 2];
-                            {
-                                let mut cur = Cursor::new(&mut buf[..]);
-                                cur.write_u8(SOCKS5_ADDR_TYPE_IPV4)?; // Address type
-                                cur.write_all(&addr.ip().octets())?; // Ipv4 bytes
-                                cur.write_u16::<BigEndian>(addr.port())?;
-                            }
-
-                            Ok(buf)
-                        })
-                        .and_then(|buf| write_all(w, buf))
-                        .map(|(conn, _)| conn);
-                    Box::new(fut) as BoxIoFuture<W>
+fn write_addr<B: BufMut>(addr: &Address, buf: &mut B) {
+    match *addr {
+        Address::SocketAddress(ref addr) => {
+            match *addr {
+                SocketAddr::V4(ref addr) => {
+                    let mut dbuf = [0u8; 1 + 4 + 2];
+                    {
+                        let mut cur = Cursor::new(&mut dbuf[..]);
+                        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV4); // Address type
+                        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
+                        let _ = cur.write_u16::<BigEndian>(addr.port());
+                    }
+                    buf.put_slice(&dbuf[..]);
                 }
-                SocketAddr::V6(addr) => {
-                    let fut = futures::lazy(move || {
-                            let mut buf = [0u8; 1 + 16 + 2];
+                SocketAddr::V6(ref addr) => {
+                    let mut dbuf = [0u8; 1 + 16 + 2];
 
-                            {
-                                let mut cur = Cursor::new(&mut buf[..]);
-                                cur.write_u8(SOCKS5_ADDR_TYPE_IPV6)?;
-                                for seg in &addr.ip().segments() {
-                                    cur.write_u16::<BigEndian>(*seg)?;
-                                }
-                                cur.write_u16::<BigEndian>(addr.port())?;
-                            }
+                    {
+                        let mut cur = Cursor::new(&mut dbuf[..]);
+                        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV6);
+                        for seg in &addr.ip().segments() {
+                            let _ = cur.write_u16::<BigEndian>(*seg);
+                        }
+                        let _ = cur.write_u16::<BigEndian>(addr.port());
+                    }
 
-                            Ok(buf)
-                        })
-                        .and_then(|rbuf| write_all(w, rbuf))
-                        .map(|(conn, _)| conn);
-                    Box::new(fut) as BoxIoFuture<W>
+                    buf.put_slice(&dbuf[..]);
                 }
             }
         }
-        Address::DomainNameAddress(dnaddr, port) => {
-            let fut = futures::lazy(move || {
-                    let mut buf = Vec::with_capacity(1 + 1 + dnaddr.len() + 2);
-                    buf.write_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME)?;
-                    buf.write_u8(dnaddr.len() as u8)?;
-                    buf.write_all(dnaddr[..].as_bytes())?;
-                    buf.write_u16::<BigEndian>(port)?;
-                    Ok(buf)
-                })
-                .and_then(|buf| write_all(w, buf))
-                .map(|(conn, _)| conn);
-            Box::new(fut) as BoxIoFuture<W>
+        Address::DomainNameAddress(ref dnaddr, ref port) => {
+            use bytes::BigEndian;
+
+            assert!(dnaddr.len() <= u8::max_value() as usize);
+
+            buf.put_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME);
+            buf.put_u8(dnaddr.len() as u8);
+            buf.put_slice(dnaddr[..].as_bytes());
+            buf.put_u16::<BigEndian>(*port);
         }
     }
 }
@@ -581,7 +578,7 @@ impl HandshakeRequest {
     }
 
     /// Read from a reader
-    pub fn read_from<R: Read + 'static>(r: R) -> BoxIoFuture<(R, HandshakeRequest)> {
+    pub fn read_from<R: AsyncRead + 'static>(r: R) -> BoxIoFuture<(R, HandshakeRequest)> {
         let fut = read_exact(r, [0u8, 0u8])
             .and_then(|(r, buf)| {
                 let ver = buf[0];
@@ -601,18 +598,22 @@ impl HandshakeRequest {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        let mut buf = Vec::with_capacity(2 + self.methods.len());
-        let HandshakeRequest { methods } = self;
-        let fut = futures::lazy(move || {
-                buf.write_all(&[SOCKS5_VERSION, methods.len() as u8])?;
-                buf.write_all(&methods[..])?;
-                Ok(buf)
-            })
-            .and_then(|buf| write_all(w, buf))
-            .map(|(w, _)| w);
+    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(w, buf).map(|(w, _)| w))
+    }
 
-        Box::new(fut)
+    /// Write to buffer
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        let HandshakeRequest { ref methods } = *self;
+        buf.put_slice(&[SOCKS5_VERSION, methods.len() as u8]);
+        buf.put_slice(&methods);
+    }
+
+    /// Get length of bytes
+    pub fn len(&self) -> usize {
+        2 + self.methods.len()
     }
 }
 
@@ -637,7 +638,7 @@ impl HandshakeResponse {
     }
 
     /// Read from a reader
-    pub fn read_from<R: Read + 'static>(r: R) -> BoxIoFuture<(R, HandshakeResponse)> {
+    pub fn read_from<R: AsyncRead + 'static>(r: R) -> BoxIoFuture<(R, HandshakeResponse)> {
         let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
             let ver = buf[0];
             let met = buf[1];
@@ -652,8 +653,20 @@ impl HandshakeResponse {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        Box::new(write_all(w, [SOCKS5_VERSION, self.chosen_method]).map(|(w, _)| w))
+    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(w, buf).map(|(w, _)| w))
+    }
+
+    /// Write to buffer
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        buf.put_slice(&[SOCKS5_VERSION, self.chosen_method]);
+    }
+
+    /// Length in bytes
+    pub fn len(&self) -> usize {
+        2
     }
 }
 
@@ -686,7 +699,7 @@ impl UdpAssociateHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: Read + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error>> {
         let fut = read_exact(r, [0u8; 3])
             .map_err(From::from)
             .and_then(|(r, buf)| {
@@ -700,17 +713,17 @@ impl UdpAssociateHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: Write + 'static>(self, w: W) -> BoxIoFuture<W> {
-        let mut buf = Vec::with_capacity(self.len());
-        let UdpAssociateHeader { frag, address } = self;
-        let fut = futures::lazy(move || {
-                buf.write_all(&[0x00, 0x00, frag])?;
-                Ok(buf)
-            })
-            .and_then(|buf| address.write_to(buf))
-            .and_then(|buf| write_all(w, buf))
-            .map(|(w, _)| w);
-        Box::new(fut)
+    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+        let mut buf = BytesMut::with_capacity(self.len());
+        self.write_to_buf(&mut buf);
+        Box::new(write_all(w, buf).map(|(w, _)| w))
+    }
+
+    /// Write to buffer
+    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        let UdpAssociateHeader { ref frag, ref address } = *self;
+        buf.put_slice(&[0x00, 0x00, *frag]);
+        address.write_to_buf(buf);
     }
 
     /// Length in bytes
