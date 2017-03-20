@@ -196,7 +196,6 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
             // Send relay address to remote
             let mut buf = BytesMut::with_capacity(relay_addr.len());
             relay_addr.write_to_buf(&mut buf);
-            trace!("Sending address buffer as {:?}", buf);
             try_timeout(enc_w.write_all(buf), timeout, &handle).map(|(w, _)| w)
         });
 
@@ -265,7 +264,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, &handle).and_then(move |(r, remote_iv)| {
                 match svr_cfg.method().category() {
                     CipherCategory::Stream => {
-                        trace!("Got initialize vector  {:?}", remote_iv);
+                        trace!("Got initialize vector {:?}", remote_iv);
                         let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                         Ok(From::from(decrypt_stream))
                     }
