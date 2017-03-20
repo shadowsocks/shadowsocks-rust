@@ -271,7 +271,7 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                     }
                     CipherCategory::Aead => {
                         trace!("Got salt {:?}", remote_iv);
-                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv[..]);
+                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                         Ok(From::from(dr))
                     }
                 }
@@ -323,10 +323,16 @@ pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<
     });
 
     let fut = c2s.select(s2c)
-        .and_then(|(dir, _)| {
+        .and_then(move |(dir, _)| {
             match dir {
-                TunnelDirection::Server2Client => trace!("client <- server is closed, abort connection"),
-                TunnelDirection::Client2Server => trace!("server -> client is closed, abort connection"),
+                TunnelDirection::Server2Client => {
+                    trace!("Relay {} client <- server is closed, abort connection",
+                           addr)
+                }
+                TunnelDirection::Client2Server => {
+                    trace!("Relay {} server -> client is closed, abort connection",
+                           addr)
+                }
             }
 
             Ok(())

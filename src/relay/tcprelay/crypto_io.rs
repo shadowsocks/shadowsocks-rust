@@ -167,9 +167,12 @@ impl<W, B> Future for EncryptedWriteAll<W, B>
 }
 
 /// Encrypted copy
-pub struct EncryptedCopy<R: Read, W: EncryptedWrite> {
-    reader: R,
-    writer: W,
+pub struct EncryptedCopy<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
+    reader: Option<R>,
+    writer: Option<W>,
     read_done: bool,
     amt: u64,
     pos: usize,
@@ -184,8 +187,8 @@ impl<R, W> EncryptedCopy<R, W>
     fn new(r: R, w: W) -> EncryptedCopy<R, W> {
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
         EncryptedCopy {
-            reader: r,
-            writer: w,
+            reader: Some(r),
+            writer: Some(w),
             read_done: false,
             amt: 0,
             pos: 0,
@@ -195,8 +198,11 @@ impl<R, W> EncryptedCopy<R, W>
     }
 }
 
-impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
-    type Item = u64;
+impl<R, W> Future for EncryptedCopy<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
+    type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -205,17 +211,17 @@ impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
             // If our buffer is empty, then we need to read some data to
             // continue.
             if self.pos == self.cap && !self.read_done {
-                let n = try_nb!(self.reader.read(&mut local_buf[..]));
+                let n = try_nb!(self.reader.as_mut().unwrap().read(&mut local_buf[..]));
                 self.buf.clear();
                 if n == 0 {
                     self.read_done = true;
                 } else {
                     let data = &local_buf[..n];
                     // Ensure we have enough space
-                    let buffer_len = self.writer.buffer_size(data);
+                    let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
                     self.buf.reserve(buffer_len);
 
-                    self.writer.encrypt(data, &mut self.buf)?;
+                    self.writer.as_mut().unwrap().encrypt(data, &mut self.buf)?;
                 }
                 self.pos = 0;
                 self.cap = self.buf.len();
@@ -223,7 +229,7 @@ impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
 
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
-                let i = try_nb!(self.writer.write_raw(&self.buf[self.pos..self.cap]));
+                let i = try_nb!(self.writer.as_mut().unwrap().write_raw(&self.buf[self.pos..self.cap]));
                 self.pos += i;
                 self.amt += i as u64;
             }
@@ -232,17 +238,20 @@ impl<R: Read, W: EncryptedWrite> Future for EncryptedCopy<R, W> {
             // data and finish the transfer.
             // done with the entire transfer.
             if self.pos == self.cap && self.read_done {
-                try_nb!(self.writer.flush());
-                return Ok(self.amt.into());
+                try_nb!(self.writer.as_mut().unwrap().flush());
+                return Ok((self.amt, self.reader.take().unwrap(), self.writer.take().unwrap()).into());
             }
         }
     }
 }
 
 /// Encrypted copy
-pub struct EncryptedCopyTimeout<R: Read, W: EncryptedWrite> {
-    reader: R,
-    writer: W,
+pub struct EncryptedCopyTimeout<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
+    reader: Option<R>,
+    writer: Option<W>,
     read_done: bool,
     amt: u64,
     pos: usize,
@@ -254,12 +263,15 @@ pub struct EncryptedCopyTimeout<R: Read, W: EncryptedWrite> {
     write_buf: BytesMut,
 }
 
-impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
+impl<R, W> EncryptedCopyTimeout<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
     fn new(r: R, w: W, dur: Duration, handle: Handle) -> EncryptedCopyTimeout<R, W> {
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
         EncryptedCopyTimeout {
-            reader: r,
-            writer: w,
+            reader: Some(r),
+            writer: Some(w),
             read_done: false,
             amt: 0,
             pos: 0,
@@ -291,13 +303,13 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
 
     fn read_or_set_timeout(&mut self) -> io::Result<usize> {
         // First, return if timeout
-        try!(self.try_poll_timeout());
+        self.try_poll_timeout()?;
 
         // Then, unset the previous timeout
         self.clear_timer();
 
         self.write_buf.clear();
-        match self.reader.read(&mut self.read_buf) {
+        match self.reader.as_mut().unwrap().read(&mut self.read_buf) {
             Ok(0) => {
                 self.cap = 0;
                 self.pos = 0;
@@ -306,10 +318,10 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
             Ok(n) => {
                 let data = &self.read_buf[..n];
                 // Ensoure we have enough space
-                let buffer_len = self.writer.buffer_size(data);
+                let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
                 self.write_buf.reserve(buffer_len);
 
-                self.writer.encrypt(data, &mut self.write_buf)?;
+                self.writer.as_mut().unwrap().encrypt(data, &mut self.write_buf)?;
                 self.cap = self.write_buf.len();
                 self.pos = 0;
                 Ok(n)
@@ -325,12 +337,12 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
 
     fn write_or_set_timeout(&mut self) -> io::Result<usize> {
         // First, return if timeout
-        try!(self.try_poll_timeout());
+        self.try_poll_timeout()?;
 
         // Then, unset the previous timeout
         self.clear_timer();
 
-        match self.writer.write_raw(&self.write_buf[self.pos..self.cap]) {
+        match self.writer.as_mut().unwrap().write_raw(&self.write_buf[self.pos..self.cap]) {
             Ok(n) => {
                 self.pos += n;
                 Ok(n)
@@ -345,8 +357,11 @@ impl<R: Read, W: EncryptedWrite> EncryptedCopyTimeout<R, W> {
     }
 }
 
-impl<R: Read, W: EncryptedWrite> Future for EncryptedCopyTimeout<R, W> {
-    type Item = u64;
+impl<R, W> Future for EncryptedCopyTimeout<R, W>
+    where R: Read,
+          W: EncryptedWrite
+{
+    type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -375,8 +390,8 @@ impl<R: Read, W: EncryptedWrite> Future for EncryptedCopyTimeout<R, W> {
             // data and finish the transfer.
             // done with the entire transfer.
             if self.pos == self.cap && self.read_done {
-                try_nb!(self.writer.flush());
-                return Ok(self.amt.into());
+                try_nb!(self.writer.as_mut().unwrap().flush());
+                return Ok((self.amt, self.reader.take().unwrap(), self.writer.take().unwrap()).into());
             }
         }
     }
@@ -395,7 +410,7 @@ impl<R, W> Future for EncryptedCopyOpt<R, W>
     where R: Read,
           W: EncryptedWrite
 {
-    type Item = u64;
+    type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {

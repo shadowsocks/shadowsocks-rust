@@ -22,30 +22,37 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 use relay::BoxIoFuture;
 
-const SOCKS5_VERSION: u8 = 0x05;
+pub use self::consts::{SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_PASSWORD,
+                       SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
+use self::consts::*;
 
-pub const SOCKS5_AUTH_METHOD_NONE: u8 = 0x00;
-pub const SOCKS5_AUTH_METHOD_GSSAPI: u8 = 0x01;
-pub const SOCKS5_AUTH_METHOD_PASSWORD: u8 = 0x02;
-pub const SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE: u8 = 0xff;
+#[cfg_attr(rustfmt, rustfmt_skip)]
+mod consts {
+    pub const SOCKS5_VERSION:                          u8 = 0x05;
 
-const SOCKS5_CMD_TCP_CONNECT: u8 = 0x01;
-const SOCKS5_CMD_TCP_BIND: u8 = 0x02;
-const SOCKS5_CMD_UDP_ASSOCIATE: u8 = 0x03;
+    pub const SOCKS5_AUTH_METHOD_NONE:                 u8 = 0x00;
+    pub const SOCKS5_AUTH_METHOD_GSSAPI:               u8 = 0x01;
+    pub const SOCKS5_AUTH_METHOD_PASSWORD:             u8 = 0x02;
+    pub const SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE:       u8 = 0xff;
 
-const SOCKS5_ADDR_TYPE_IPV4: u8 = 0x01;
-const SOCKS5_ADDR_TYPE_DOMAIN_NAME: u8 = 0x03;
-const SOCKS5_ADDR_TYPE_IPV6: u8 = 0x04;
+    pub const SOCKS5_CMD_TCP_CONNECT:                  u8 = 0x01;
+    pub const SOCKS5_CMD_TCP_BIND:                     u8 = 0x02;
+    pub const SOCKS5_CMD_UDP_ASSOCIATE:                u8 = 0x03;
 
-const SOCKS5_REPLY_SUCCEEDED: u8 = 0x00;
-const SOCKS5_REPLY_GENERAL_FAILURE: u8 = 0x01;
-const SOCKS5_REPLY_CONNECTION_NOT_ALLOWED: u8 = 0x02;
-const SOCKS5_REPLY_NETWORK_UNREACHABLE: u8 = 0x03;
-const SOCKS5_REPLY_HOST_UNREACHABLE: u8 = 0x04;
-const SOCKS5_REPLY_CONNECTION_REFUSED: u8 = 0x05;
-const SOCKS5_REPLY_TTL_EXPIRED: u8 = 0x06;
-const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED: u8 = 0x07;
-const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED: u8 = 0x08;
+    pub const SOCKS5_ADDR_TYPE_IPV4:                   u8 = 0x01;
+    pub const SOCKS5_ADDR_TYPE_DOMAIN_NAME:            u8 = 0x03;
+    pub const SOCKS5_ADDR_TYPE_IPV6:                   u8 = 0x04;
+
+    pub const SOCKS5_REPLY_SUCCEEDED:                  u8 = 0x00;
+    pub const SOCKS5_REPLY_GENERAL_FAILURE:            u8 = 0x01;
+    pub const SOCKS5_REPLY_CONNECTION_NOT_ALLOWED:     u8 = 0x02;
+    pub const SOCKS5_REPLY_NETWORK_UNREACHABLE:        u8 = 0x03;
+    pub const SOCKS5_REPLY_HOST_UNREACHABLE:           u8 = 0x04;
+    pub const SOCKS5_REPLY_CONNECTION_REFUSED:         u8 = 0x05;
+    pub const SOCKS5_REPLY_TTL_EXPIRED:                u8 = 0x06;
+    pub const SOCKS5_REPLY_COMMAND_NOT_SUPPORTED:      u8 = 0x07;
+    pub const SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED: u8 = 0x08;
+}
 
 /// SOCKS5 command
 #[derive(Clone, Debug, Copy)]
@@ -60,21 +67,23 @@ pub enum Command {
 
 impl Command {
     #[inline]
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     fn as_u8(&self) -> u8 {
         match *self {
-            Command::TcpConnect => SOCKS5_CMD_TCP_CONNECT,
-            Command::TcpBind => SOCKS5_CMD_TCP_BIND,
+            Command::TcpConnect   => SOCKS5_CMD_TCP_CONNECT,
+            Command::TcpBind      => SOCKS5_CMD_TCP_BIND,
             Command::UdpAssociate => SOCKS5_CMD_UDP_ASSOCIATE,
         }
     }
 
     #[inline]
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     fn from_u8(code: u8) -> Option<Command> {
         match code {
-            SOCKS5_CMD_TCP_CONNECT => Some(Command::TcpConnect),
-            SOCKS5_CMD_TCP_BIND => Some(Command::TcpBind),
+            SOCKS5_CMD_TCP_CONNECT   => Some(Command::TcpConnect),
+            SOCKS5_CMD_TCP_BIND      => Some(Command::TcpBind),
             SOCKS5_CMD_UDP_ASSOCIATE => Some(Command::UdpAssociate),
-            _ => None,
+            _                        => None,
         }
     }
 }
@@ -97,51 +106,54 @@ pub enum Reply {
 
 impl Reply {
     #[inline]
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     fn as_u8(&self) -> u8 {
         match *self {
-            Reply::Succeeded => SOCKS5_REPLY_SUCCEEDED,
-            Reply::GeneralFailure => SOCKS5_REPLY_GENERAL_FAILURE,
-            Reply::ConnectionNotAllowed => SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
-            Reply::NetworkUnreachable => SOCKS5_REPLY_NETWORK_UNREACHABLE,
-            Reply::HostUnreachable => SOCKS5_REPLY_HOST_UNREACHABLE,
-            Reply::ConnectionRefused => SOCKS5_REPLY_CONNECTION_REFUSED,
-            Reply::TtlExpired => SOCKS5_REPLY_TTL_EXPIRED,
-            Reply::CommandNotSupported => SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+            Reply::Succeeded               => SOCKS5_REPLY_SUCCEEDED,
+            Reply::GeneralFailure          => SOCKS5_REPLY_GENERAL_FAILURE,
+            Reply::ConnectionNotAllowed    => SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
+            Reply::NetworkUnreachable      => SOCKS5_REPLY_NETWORK_UNREACHABLE,
+            Reply::HostUnreachable         => SOCKS5_REPLY_HOST_UNREACHABLE,
+            Reply::ConnectionRefused       => SOCKS5_REPLY_CONNECTION_REFUSED,
+            Reply::TtlExpired              => SOCKS5_REPLY_TTL_EXPIRED,
+            Reply::CommandNotSupported     => SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
             Reply::AddressTypeNotSupported => SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
-            Reply::OtherReply(c) => c,
+            Reply::OtherReply(c)           => c,
         }
     }
 
     #[inline]
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     fn from_u8(code: u8) -> Reply {
         match code {
-            SOCKS5_REPLY_SUCCEEDED => Reply::Succeeded,
-            SOCKS5_REPLY_GENERAL_FAILURE => Reply::GeneralFailure,
-            SOCKS5_REPLY_CONNECTION_NOT_ALLOWED => Reply::ConnectionNotAllowed,
-            SOCKS5_REPLY_NETWORK_UNREACHABLE => Reply::NetworkUnreachable,
-            SOCKS5_REPLY_HOST_UNREACHABLE => Reply::HostUnreachable,
-            SOCKS5_REPLY_CONNECTION_REFUSED => Reply::ConnectionRefused,
-            SOCKS5_REPLY_TTL_EXPIRED => Reply::TtlExpired,
-            SOCKS5_REPLY_COMMAND_NOT_SUPPORTED => Reply::CommandNotSupported,
+            SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
+            SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
+            SOCKS5_REPLY_CONNECTION_NOT_ALLOWED     => Reply::ConnectionNotAllowed,
+            SOCKS5_REPLY_NETWORK_UNREACHABLE        => Reply::NetworkUnreachable,
+            SOCKS5_REPLY_HOST_UNREACHABLE           => Reply::HostUnreachable,
+            SOCKS5_REPLY_CONNECTION_REFUSED         => Reply::ConnectionRefused,
+            SOCKS5_REPLY_TTL_EXPIRED                => Reply::TtlExpired,
+            SOCKS5_REPLY_COMMAND_NOT_SUPPORTED      => Reply::CommandNotSupported,
             SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Reply::AddressTypeNotSupported,
-            _ => Reply::OtherReply(code),
+            _                                       => Reply::OtherReply(code),
         }
     }
 }
 
 impl fmt::Display for Reply {
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Reply::Succeeded => write!(f, "Succeeded"),
+            Reply::Succeeded               => write!(f, "Succeeded"),
             Reply::AddressTypeNotSupported => write!(f, "Address type not supported"),
-            Reply::CommandNotSupported => write!(f, "Command not supported"),
-            Reply::ConnectionNotAllowed => write!(f, "Connection not allowed"),
-            Reply::ConnectionRefused => write!(f, "Connection refused"),
-            Reply::GeneralFailure => write!(f, "General failure"),
-            Reply::HostUnreachable => write!(f, "Host unreachable"),
-            Reply::NetworkUnreachable => write!(f, "Network unreachable"),
-            Reply::OtherReply(u) => write!(f, "Other reply ({})", u),
-            Reply::TtlExpired => write!(f, "TTL expired"),
+            Reply::CommandNotSupported     => write!(f, "Command not supported"),
+            Reply::ConnectionNotAllowed    => write!(f, "Connection not allowed"),
+            Reply::ConnectionRefused       => write!(f, "Connection refused"),
+            Reply::GeneralFailure          => write!(f, "General failure"),
+            Reply::HostUnreachable         => write!(f, "Host unreachable"),
+            Reply::NetworkUnreachable      => write!(f, "Network unreachable"),
+            Reply::OtherReply(u)           => write!(f, "Other reply ({})", u),
+            Reply::TtlExpired              => write!(f, "TTL expired"),
         }
     }
 }
@@ -213,7 +225,7 @@ pub enum Address {
 impl Address {
     #[inline]
     pub fn read_from<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
-        parse_request_header(stream)
+        parse_address(stream)
     }
 
     /// Writes to writer
@@ -227,7 +239,7 @@ impl Address {
     /// Writes to buffer
     #[inline]
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        write_addr(self, buf)
+        write_address(self, buf)
     }
 
     #[inline]
@@ -433,67 +445,79 @@ impl TcpResponseHeader {
     }
 }
 
-fn parse_request_header<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
+fn parse_ipv4_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
+    where R: AsyncRead + 'static
+{
+    let v4addr = read_exact(conn, [0u8; 6]).map_err(From::from);
+    let fut = v4addr.and_then(|(conn, v4addr)| {
+        let mut stream = Cursor::new(v4addr);
+        let v4addr = Ipv4Addr::new(stream.read_u8()?,
+                                   stream.read_u8()?,
+                                   stream.read_u8()?,
+                                   stream.read_u8()?);
+        let port = stream.read_u16::<BigEndian>()?;
+
+        Ok((conn, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
+    });
+    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
+}
+
+fn parse_ipv6_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
+    where R: AsyncRead + 'static
+{
+    let v6addr = read_exact(conn, [0u8; 18]).map_err(From::from);
+    let fut = v6addr.and_then(|(conn, v6addr)| {
+        let mut stream = Cursor::new(v6addr);
+        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?);
+        let port = stream.read_u16::<BigEndian>()?;
+
+        Ok((conn, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
+    });
+    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
+}
+
+fn parse_domain_name_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
+    where R: AsyncRead + 'static
+{
+    let addr_len = read_exact(conn, [0u8]).map_err(From::from);
+    let fut = addr_len.and_then(|(conn, addr_len)| {
+        let addr_len = addr_len[0] as usize;
+        let raw_addr = read_exact(conn, vec![0u8; addr_len]).map_err(From::from);
+        raw_addr.and_then(|(conn, raw_addr)| {
+            let port = read_exact(conn, [0u8; 2]).map_err(From::from);
+            port.and_then(|(conn, port)| {
+                let mut stream = Cursor::new(port);
+                let port = stream.read_u16::<BigEndian>()?;
+
+                let addr = match String::from_utf8(raw_addr) {
+                    Ok(addr) => addr,
+                    Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
+                };
+
+                Ok((conn, Address::DomainNameAddress(addr, port)))
+            })
+        })
+    });
+    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
+}
+
+fn parse_address<R>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>>
+    where R: AsyncRead + 'static
+{
     let fut = read_exact(stream, [0u8])
         .map_err(|_| Error::new(Reply::GeneralFailure, "Error while reading address type"))
         .and_then(|(conn, atyp)| {
             match atyp[0] {
-                SOCKS5_ADDR_TYPE_IPV4 => {
-                    let v4addr = read_exact(conn, [0u8; 6]).map_err(From::from);
-                    let fut = v4addr.and_then(|(conn, v4addr)| {
-                        let mut stream = Cursor::new(v4addr);
-                        let v4addr = Ipv4Addr::new(stream.read_u8()?,
-                                                   stream.read_u8()?,
-                                                   stream.read_u8()?,
-                                                   stream.read_u8()?);
-                        let port = stream.read_u16::<BigEndian>()?;
-
-                        Ok((conn, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
-                    });
-                    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-                }
-                SOCKS5_ADDR_TYPE_IPV6 => {
-                    let v6addr = read_exact(conn, [0u8; 18]).map_err(From::from);
-                    let fut = v6addr.and_then(|(conn, v6addr)| {
-                        let mut stream = Cursor::new(v6addr);
-                        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?,
-                                                   stream.read_u16::<BigEndian>()?);
-                        let port = stream.read_u16::<BigEndian>()?;
-
-                        Ok((conn, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
-                    });
-                    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-                }
-                SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-                    let addr_len = read_exact(conn, [0u8]).map_err(From::from);
-                    let fut = addr_len.and_then(|(conn, addr_len)| {
-                        let addr_len = addr_len[0] as usize;
-                        let raw_addr = read_exact(conn, vec![0u8; addr_len]).map_err(From::from);
-                        raw_addr.and_then(|(conn, raw_addr)| {
-                            let port = read_exact(conn, [0u8; 2]).map_err(From::from);
-                            port.and_then(|(conn, port)| {
-                                let mut stream = Cursor::new(port);
-                                let port = try!(stream.read_u16::<BigEndian>());
-
-                                let addr = match String::from_utf8(raw_addr) {
-                                    Ok(addr) => addr,
-                                    Err(..) => {
-                                        return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding"))
-                                    }
-                                };
-
-                                Ok((conn, Address::DomainNameAddress(addr, port)))
-                            })
-                        })
-                    });
-                    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-                }
+                SOCKS5_ADDR_TYPE_IPV4 => parse_ipv4_address(conn),
+                SOCKS5_ADDR_TYPE_IPV6 => parse_ipv6_address(conn),
+                SOCKS5_ADDR_TYPE_DOMAIN_NAME => parse_domain_name_address(conn),
                 _ => {
                     // Address type not supported
                     let fut = futures::failed(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"));
@@ -505,46 +529,54 @@ fn parse_request_header<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = 
     Box::new(fut)
 }
 
-fn write_addr<B: BufMut>(addr: &Address, buf: &mut B) {
+fn write_ipv4_address<B: BufMut>(addr: &SocketAddrV4, buf: &mut B) {
+    let mut dbuf = [0u8; 1 + 4 + 2];
+    {
+        let mut cur = Cursor::new(&mut dbuf[..]);
+        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV4); // Address type
+        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
+        let _ = cur.write_u16::<BigEndian>(addr.port());
+    }
+    buf.put_slice(&dbuf[..]);
+}
+
+fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
+    let mut dbuf = [0u8; 1 + 16 + 2];
+
+    {
+        let mut cur = Cursor::new(&mut dbuf[..]);
+        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV6);
+        for seg in &addr.ip().segments() {
+            let _ = cur.write_u16::<BigEndian>(*seg);
+        }
+        let _ = cur.write_u16::<BigEndian>(addr.port());
+    }
+
+    buf.put_slice(&dbuf[..]);
+}
+
+fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
+    use bytes::BigEndian;
+
+    assert!(dnaddr.len() <= u8::max_value() as usize);
+
+    buf.put_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME);
+    buf.put_u8(dnaddr.len() as u8);
+    buf.put_slice(dnaddr[..].as_bytes());
+    buf.put_u16::<BigEndian>(port);
+}
+
+fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {
     match *addr {
-        Address::SocketAddress(ref addr) => {
-            match *addr {
-                SocketAddr::V4(ref addr) => {
-                    let mut dbuf = [0u8; 1 + 4 + 2];
-                    {
-                        let mut cur = Cursor::new(&mut dbuf[..]);
-                        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV4); // Address type
-                        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
-                        let _ = cur.write_u16::<BigEndian>(addr.port());
-                    }
-                    buf.put_slice(&dbuf[..]);
-                }
-                SocketAddr::V6(ref addr) => {
-                    let mut dbuf = [0u8; 1 + 16 + 2];
+        SocketAddr::V4(ref addr) => write_ipv4_address(addr, buf),
+        SocketAddr::V6(ref addr) => write_ipv6_address(addr, buf),
+    }
+}
 
-                    {
-                        let mut cur = Cursor::new(&mut dbuf[..]);
-                        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV6);
-                        for seg in &addr.ip().segments() {
-                            let _ = cur.write_u16::<BigEndian>(*seg);
-                        }
-                        let _ = cur.write_u16::<BigEndian>(addr.port());
-                    }
-
-                    buf.put_slice(&dbuf[..]);
-                }
-            }
-        }
-        Address::DomainNameAddress(ref dnaddr, ref port) => {
-            use bytes::BigEndian;
-
-            assert!(dnaddr.len() <= u8::max_value() as usize);
-
-            buf.put_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME);
-            buf.put_u8(dnaddr.len() as u8);
-            buf.put_slice(dnaddr[..].as_bytes());
-            buf.put_u16::<BigEndian>(*port);
-        }
+fn write_address<B: BufMut>(addr: &Address, buf: &mut B) {
+    match *addr {
+        Address::SocketAddress(ref addr) => write_socket_address(addr, buf),
+        Address::DomainNameAddress(ref dnaddr, ref port) => write_domain_name_address(dnaddr, *port, buf),
     }
 }
 
