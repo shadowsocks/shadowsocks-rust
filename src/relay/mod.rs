@@ -11,6 +11,7 @@ pub mod server;
 mod loadbalancing;
 mod dns_resolver;
 pub mod socks5;
+mod utils;
 
 /// Alias for Boxed Future without Send
 pub type BoxIoFuture<T> = Box<Future<Item = T, Error = io::Error>>;

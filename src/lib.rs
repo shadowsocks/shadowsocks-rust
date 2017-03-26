@@ -83,6 +83,7 @@ extern crate openssl;
 #[cfg(feature = "key-derive-argon2")]
 extern crate argon2rs;
 
+#[macro_use]
 extern crate futures;
 extern crate tokio_core;
 #[macro_use]

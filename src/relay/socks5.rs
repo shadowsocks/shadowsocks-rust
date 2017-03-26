@@ -2,29 +2,28 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-#![allow(dead_code)]
-
 use std::fmt::{self, Debug, Formatter};
 use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::io::{self, Cursor, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::vec;
 use std::error;
 use std::convert::From;
 use std::u8;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, BytesMut, Bytes, IntoBuf};
 
-use futures::{self, Future};
+use futures::{Future, Poll, Async};
 
-use tokio_io::io::{read_exact, write_all};
+use tokio_io::io::read_exact;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use relay::BoxIoFuture;
 
 pub use self::consts::{SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_PASSWORD,
                        SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
-use self::consts::*;
+
+use super::utils::{WriteBytes, write_bytes};
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 mod consts {
@@ -70,9 +69,9 @@ impl Command {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn as_u8(&self) -> u8 {
         match *self {
-            Command::TcpConnect   => SOCKS5_CMD_TCP_CONNECT,
-            Command::TcpBind      => SOCKS5_CMD_TCP_BIND,
-            Command::UdpAssociate => SOCKS5_CMD_UDP_ASSOCIATE,
+            Command::TcpConnect   => consts::SOCKS5_CMD_TCP_CONNECT,
+            Command::TcpBind      => consts::SOCKS5_CMD_TCP_BIND,
+            Command::UdpAssociate => consts::SOCKS5_CMD_UDP_ASSOCIATE,
         }
     }
 
@@ -80,10 +79,10 @@ impl Command {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn from_u8(code: u8) -> Option<Command> {
         match code {
-            SOCKS5_CMD_TCP_CONNECT   => Some(Command::TcpConnect),
-            SOCKS5_CMD_TCP_BIND      => Some(Command::TcpBind),
-            SOCKS5_CMD_UDP_ASSOCIATE => Some(Command::UdpAssociate),
-            _                        => None,
+            consts::SOCKS5_CMD_TCP_CONNECT   => Some(Command::TcpConnect),
+            consts::SOCKS5_CMD_TCP_BIND      => Some(Command::TcpBind),
+            consts::SOCKS5_CMD_UDP_ASSOCIATE => Some(Command::UdpAssociate),
+            _                                => None,
         }
     }
 }
@@ -109,15 +108,15 @@ impl Reply {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn as_u8(&self) -> u8 {
         match *self {
-            Reply::Succeeded               => SOCKS5_REPLY_SUCCEEDED,
-            Reply::GeneralFailure          => SOCKS5_REPLY_GENERAL_FAILURE,
-            Reply::ConnectionNotAllowed    => SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
-            Reply::NetworkUnreachable      => SOCKS5_REPLY_NETWORK_UNREACHABLE,
-            Reply::HostUnreachable         => SOCKS5_REPLY_HOST_UNREACHABLE,
-            Reply::ConnectionRefused       => SOCKS5_REPLY_CONNECTION_REFUSED,
-            Reply::TtlExpired              => SOCKS5_REPLY_TTL_EXPIRED,
-            Reply::CommandNotSupported     => SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
-            Reply::AddressTypeNotSupported => SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
+            Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
+            Reply::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
+            Reply::ConnectionNotAllowed    => consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
+            Reply::NetworkUnreachable      => consts::SOCKS5_REPLY_NETWORK_UNREACHABLE,
+            Reply::HostUnreachable         => consts::SOCKS5_REPLY_HOST_UNREACHABLE,
+            Reply::ConnectionRefused       => consts::SOCKS5_REPLY_CONNECTION_REFUSED,
+            Reply::TtlExpired              => consts::SOCKS5_REPLY_TTL_EXPIRED,
+            Reply::CommandNotSupported     => consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+            Reply::AddressTypeNotSupported => consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
             Reply::OtherReply(c)           => c,
         }
     }
@@ -126,16 +125,16 @@ impl Reply {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn from_u8(code: u8) -> Reply {
         match code {
-            SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
-            SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
-            SOCKS5_REPLY_CONNECTION_NOT_ALLOWED     => Reply::ConnectionNotAllowed,
-            SOCKS5_REPLY_NETWORK_UNREACHABLE        => Reply::NetworkUnreachable,
-            SOCKS5_REPLY_HOST_UNREACHABLE           => Reply::HostUnreachable,
-            SOCKS5_REPLY_CONNECTION_REFUSED         => Reply::ConnectionRefused,
-            SOCKS5_REPLY_TTL_EXPIRED                => Reply::TtlExpired,
-            SOCKS5_REPLY_COMMAND_NOT_SUPPORTED      => Reply::CommandNotSupported,
-            SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Reply::AddressTypeNotSupported,
-            _                                       => Reply::OtherReply(code),
+            consts::SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
+            consts::SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
+            consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED     => Reply::ConnectionNotAllowed,
+            consts::SOCKS5_REPLY_NETWORK_UNREACHABLE        => Reply::NetworkUnreachable,
+            consts::SOCKS5_REPLY_HOST_UNREACHABLE           => Reply::HostUnreachable,
+            consts::SOCKS5_REPLY_CONNECTION_REFUSED         => Reply::ConnectionRefused,
+            consts::SOCKS5_REPLY_TTL_EXPIRED                => Reply::TtlExpired,
+            consts::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED      => Reply::CommandNotSupported,
+            consts::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => Reply::AddressTypeNotSupported,
+            _                                               => Reply::OtherReply(code),
         }
     }
 }
@@ -224,16 +223,16 @@ pub enum Address {
 
 impl Address {
     #[inline]
-    pub fn read_from<R: AsyncRead + 'static>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>> {
-        parse_address(stream)
+    pub fn read_from<R: AsyncRead>(stream: R) -> ReadAddress<R> {
+        ReadAddress::new(stream)
     }
 
     /// Writes to writer
     #[inline]
-    pub fn write_to<W: AsyncWrite + 'static>(self, writer: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, writer: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(writer, buf).map(|(w, _)| w))
+        write_bytes(writer, buf.freeze())
     }
 
     /// Writes to buffer
@@ -290,6 +289,244 @@ impl From<(String, u16)> for Address {
     }
 }
 
+pub struct ReadAddress<R>
+    where R: AsyncRead
+{
+    reader: Option<R>,
+    state: ReadAddressState,
+    buf: Option<BytesMut>,
+    already_read: usize,
+}
+
+enum ReadAddressState {
+    ReadingType,
+    ReadingIpv4,
+    ReadingIpv6,
+    ReadingDomainNameLength,
+    ReadingDomainName,
+}
+
+impl<R> Future for ReadAddress<R>
+    where R: AsyncRead
+{
+    type Item = (R, Address);
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        debug_assert!(self.reader.is_some());
+
+        loop {
+            match self.state {
+                ReadAddressState::ReadingType => {
+                    try_ready!(self.read_addr_type());
+                }
+                ReadAddressState::ReadingIpv4 => {
+                    let addr = try_ready!(self.read_ipv4());
+                    let reader = self.reader.take().unwrap();
+                    return Ok((reader, addr).into());
+                }
+                ReadAddressState::ReadingIpv6 => {
+                    let addr = try_ready!(self.read_ipv6());
+                    let reader = self.reader.take().unwrap();
+                    return Ok((reader, addr).into());
+                }
+                ReadAddressState::ReadingDomainNameLength => {
+                    try_ready!(self.read_domain_name_length());
+                }
+                ReadAddressState::ReadingDomainName => {
+                    let addr = try_ready!(self.read_domain_name());
+                    let reader = self.reader.take().unwrap();
+                    return Ok((reader, addr).into());
+                }
+            };
+        }
+    }
+}
+
+impl<R> ReadAddress<R>
+    where R: AsyncRead
+{
+    fn new(r: R) -> ReadAddress<R> {
+        ReadAddress {
+            reader: Some(r),
+            state: ReadAddressState::ReadingType,
+            buf: None,
+            already_read: 0,
+        }
+    }
+
+    fn read_addr_type(&mut self) -> Poll<(), Error> {
+        let addr_type = try_nb!(self.reader.as_mut().unwrap().read_u8());
+        match addr_type {
+            consts::SOCKS5_ADDR_TYPE_IPV4 => {
+                self.state = ReadAddressState::ReadingIpv4;
+                self.alloc_buf(6);
+            }
+            consts::SOCKS5_ADDR_TYPE_IPV6 => {
+                self.state = ReadAddressState::ReadingIpv6;
+                self.alloc_buf(18);
+            }
+            consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                self.state = ReadAddressState::ReadingDomainNameLength;
+            }
+            _ => {
+                error!("Invalid address type {}", addr_type);
+                return Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"));
+            }
+        };
+
+        Ok(Async::Ready(()))
+    }
+
+    fn read_ipv4(&mut self) -> Poll<Address, Error> {
+        try_ready!(self.read_data());
+        let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
+        let v4addr = Ipv4Addr::new(stream.read_u8()?,
+                                   stream.read_u8()?,
+                                   stream.read_u8()?,
+                                   stream.read_u8()?);
+        let port = stream.read_u16::<BigEndian>()?;
+        let addr = Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)));
+        Ok(Async::Ready(addr))
+    }
+
+    fn read_ipv6(&mut self) -> Poll<Address, Error> {
+        try_ready!(self.read_data());
+        let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
+        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?);
+        let port = stream.read_u16::<BigEndian>()?;
+
+        let addr = Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)));
+        Ok(Async::Ready(addr))
+    }
+
+    fn read_domain_name_length(&mut self) -> Poll<(), Error> {
+        let length = try_nb!(self.reader.as_mut().unwrap().read_u8());
+        self.state = ReadAddressState::ReadingDomainName;
+        self.alloc_buf(length as usize + 2);
+        Ok(Async::Ready(()))
+    }
+
+    fn read_domain_name(&mut self) -> Poll<Address, Error> {
+        try_ready!(self.read_data());
+        let buf = self.freeze_buf();
+        let addr_len = buf.len() - 2;
+        let mut stream: Cursor<Bytes> = buf.into_buf();
+
+        let mut raw_addr = Vec::with_capacity(addr_len);
+        unsafe {
+            raw_addr.set_len(addr_len);
+        }
+        stream.read_exact(&mut raw_addr)?;
+
+        let addr = match String::from_utf8(raw_addr) {
+            Ok(addr) => addr,
+            Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
+        };
+        let port = stream.read_u16::<BigEndian>()?;
+
+        let addr = Address::DomainNameAddress(addr, port);
+        Ok(Async::Ready(addr))
+    }
+
+    fn alloc_buf(&mut self, size: usize) {
+        let mut buf = BytesMut::with_capacity(size);
+        unsafe {
+            buf.set_len(size);
+        }
+        self.buf = Some(buf);
+    }
+
+    fn read_data(&mut self) -> Poll<(), io::Error> {
+        let buf = self.buf.as_mut().unwrap();
+
+        while self.already_read < buf.len() {
+            match self.reader.as_mut().unwrap().read(&mut buf[self.already_read..]) {
+                Ok(0) => {
+                    let err = io::Error::new(io::ErrorKind::Other, "Unexpected EOF");
+                    return Err(err);
+                }
+                Ok(n) => self.already_read += n,
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(Async::Ready(()))
+    }
+
+    fn freeze_buf(&mut self) -> Bytes {
+        let buf = self.buf.take().unwrap();
+        buf.freeze()
+    }
+}
+
+fn write_ipv4_address<B: BufMut>(addr: &SocketAddrV4, buf: &mut B) {
+    let mut dbuf = [0u8; 1 + 4 + 2];
+    {
+        let mut cur = Cursor::new(&mut dbuf[..]);
+        let _ = cur.write_u8(consts::SOCKS5_ADDR_TYPE_IPV4); // Address type
+        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
+        let _ = cur.write_u16::<BigEndian>(addr.port());
+    }
+    buf.put_slice(&dbuf[..]);
+}
+
+fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
+    let mut dbuf = [0u8; 1 + 16 + 2];
+
+    {
+        let mut cur = Cursor::new(&mut dbuf[..]);
+        let _ = cur.write_u8(consts::SOCKS5_ADDR_TYPE_IPV6);
+        for seg in &addr.ip().segments() {
+            let _ = cur.write_u16::<BigEndian>(*seg);
+        }
+        let _ = cur.write_u16::<BigEndian>(addr.port());
+    }
+
+    buf.put_slice(&dbuf[..]);
+}
+
+fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
+    use bytes::BigEndian;
+
+    assert!(dnaddr.len() <= u8::max_value() as usize);
+
+    buf.put_u8(consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
+    buf.put_u8(dnaddr.len() as u8);
+    buf.put_slice(dnaddr[..].as_bytes());
+    buf.put_u16::<BigEndian>(port);
+}
+
+fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {
+    match *addr {
+        SocketAddr::V4(ref addr) => write_ipv4_address(addr, buf),
+        SocketAddr::V6(ref addr) => write_ipv6_address(addr, buf),
+    }
+}
+
+fn write_address<B: BufMut>(addr: &Address, buf: &mut B) {
+    match *addr {
+        Address::SocketAddress(ref addr) => write_socket_address(addr, buf),
+        Address::DomainNameAddress(ref dnaddr, ref port) => write_domain_name_address(dnaddr, *port, buf),
+    }
+}
+
+#[inline]
+fn get_addr_len(atyp: &Address) -> usize {
+    match *atyp {
+        Address::SocketAddress(SocketAddr::V4(..)) => 1 + 4 + 2,
+        Address::SocketAddress(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
+        Address::DomainNameAddress(ref dmname, _) => 1 + 1 + dmname.len() + 2,
+    }
+}
+
 /// TCP request header after handshake
 ///
 /// ```plain
@@ -322,7 +559,7 @@ impl TcpRequestHeader {
             .map_err(From::from)
             .and_then(|(r, buf)| {
                 let ver = buf[0];
-                if ver != SOCKS5_VERSION {
+                if ver != consts::SOCKS5_VERSION {
                     return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
                 }
 
@@ -349,17 +586,17 @@ impl TcpRequestHeader {
     }
 
     /// Write data into a writer
-    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(w, buf).map(|(w, _)| w))
+        write_bytes(w, buf.freeze())
     }
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let TcpRequestHeader { ref address, ref command } = *self;
 
-        buf.put_slice(&[SOCKS5_VERSION, command.as_u8(), 0x00]);
+        buf.put_slice(&[consts::SOCKS5_VERSION, command.as_u8(), 0x00]);
         address.write_to_buf(buf);
     }
 
@@ -404,7 +641,7 @@ impl TcpResponseHeader {
                 let ver = buf[0];
                 let reply_code = buf[1];
 
-                if ver != SOCKS5_VERSION {
+                if ver != consts::SOCKS5_VERSION {
                     return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
                 }
 
@@ -425,16 +662,16 @@ impl TcpResponseHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(w, buf).map(|(w, _)| w))
+        write_bytes(w, buf.freeze())
     }
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let TcpResponseHeader { ref reply, ref address } = *self;
-        buf.put_slice(&[SOCKS5_VERSION, reply.as_u8(), 0x00]);
+        buf.put_slice(&[consts::SOCKS5_VERSION, reply.as_u8(), 0x00]);
         address.write_to_buf(buf);
     }
 
@@ -442,150 +679,6 @@ impl TcpResponseHeader {
     #[inline]
     pub fn len(&self) -> usize {
         self.address.len() + 3
-    }
-}
-
-fn parse_ipv4_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
-    where R: AsyncRead + 'static
-{
-    let v4addr = read_exact(conn, [0u8; 6]).map_err(From::from);
-    let fut = v4addr.and_then(|(conn, v4addr)| {
-        let mut stream = Cursor::new(v4addr);
-        let v4addr = Ipv4Addr::new(stream.read_u8()?,
-                                   stream.read_u8()?,
-                                   stream.read_u8()?,
-                                   stream.read_u8()?);
-        let port = stream.read_u16::<BigEndian>()?;
-
-        Ok((conn, Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)))))
-    });
-    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-}
-
-fn parse_ipv6_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
-    where R: AsyncRead + 'static
-{
-    let v6addr = read_exact(conn, [0u8; 18]).map_err(From::from);
-    let fut = v6addr.and_then(|(conn, v6addr)| {
-        let mut stream = Cursor::new(v6addr);
-        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?);
-        let port = stream.read_u16::<BigEndian>()?;
-
-        Ok((conn, Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)))))
-    });
-    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-}
-
-fn parse_domain_name_address<R>(conn: R) -> Box<Future<Item = (R, Address), Error = Error>>
-    where R: AsyncRead + 'static
-{
-    let addr_len = read_exact(conn, [0u8]).map_err(From::from);
-    let fut = addr_len.and_then(|(conn, addr_len)| {
-        let addr_len = addr_len[0] as usize;
-        let raw_addr = read_exact(conn, vec![0u8; addr_len]).map_err(From::from);
-        raw_addr.and_then(|(conn, raw_addr)| {
-            let port = read_exact(conn, [0u8; 2]).map_err(From::from);
-            port.and_then(|(conn, port)| {
-                let mut stream = Cursor::new(port);
-                let port = stream.read_u16::<BigEndian>()?;
-
-                let addr = match String::from_utf8(raw_addr) {
-                    Ok(addr) => addr,
-                    Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
-                };
-
-                Ok((conn, Address::DomainNameAddress(addr, port)))
-            })
-        })
-    });
-    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-}
-
-fn parse_address<R>(stream: R) -> Box<Future<Item = (R, Address), Error = Error>>
-    where R: AsyncRead + 'static
-{
-    let fut = read_exact(stream, [0u8])
-        .map_err(|_| Error::new(Reply::GeneralFailure, "Error while reading address type"))
-        .and_then(|(conn, atyp)| {
-            match atyp[0] {
-                SOCKS5_ADDR_TYPE_IPV4 => parse_ipv4_address(conn),
-                SOCKS5_ADDR_TYPE_IPV6 => parse_ipv6_address(conn),
-                SOCKS5_ADDR_TYPE_DOMAIN_NAME => parse_domain_name_address(conn),
-                _ => {
-                    // Address type not supported
-                    let fut = futures::failed(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"));
-                    Box::new(fut) as Box<Future<Item = (R, Address), Error = Error>>
-                }
-            }
-        });
-
-    Box::new(fut)
-}
-
-fn write_ipv4_address<B: BufMut>(addr: &SocketAddrV4, buf: &mut B) {
-    let mut dbuf = [0u8; 1 + 4 + 2];
-    {
-        let mut cur = Cursor::new(&mut dbuf[..]);
-        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV4); // Address type
-        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
-        let _ = cur.write_u16::<BigEndian>(addr.port());
-    }
-    buf.put_slice(&dbuf[..]);
-}
-
-fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
-    let mut dbuf = [0u8; 1 + 16 + 2];
-
-    {
-        let mut cur = Cursor::new(&mut dbuf[..]);
-        let _ = cur.write_u8(SOCKS5_ADDR_TYPE_IPV6);
-        for seg in &addr.ip().segments() {
-            let _ = cur.write_u16::<BigEndian>(*seg);
-        }
-        let _ = cur.write_u16::<BigEndian>(addr.port());
-    }
-
-    buf.put_slice(&dbuf[..]);
-}
-
-fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
-    use bytes::BigEndian;
-
-    assert!(dnaddr.len() <= u8::max_value() as usize);
-
-    buf.put_u8(SOCKS5_ADDR_TYPE_DOMAIN_NAME);
-    buf.put_u8(dnaddr.len() as u8);
-    buf.put_slice(dnaddr[..].as_bytes());
-    buf.put_u16::<BigEndian>(port);
-}
-
-fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {
-    match *addr {
-        SocketAddr::V4(ref addr) => write_ipv4_address(addr, buf),
-        SocketAddr::V6(ref addr) => write_ipv6_address(addr, buf),
-    }
-}
-
-fn write_address<B: BufMut>(addr: &Address, buf: &mut B) {
-    match *addr {
-        Address::SocketAddress(ref addr) => write_socket_address(addr, buf),
-        Address::DomainNameAddress(ref dnaddr, ref port) => write_domain_name_address(dnaddr, *port, buf),
-    }
-}
-
-#[inline]
-fn get_addr_len(atyp: &Address) -> usize {
-    match *atyp {
-        Address::SocketAddress(SocketAddr::V4(..)) => 1 + 4 + 2,
-        Address::SocketAddress(SocketAddr::V6(..)) => 1 + 8 * 2 + 2,
-        Address::DomainNameAddress(ref dmname, _) => 1 + 1 + dmname.len() + 2,
     }
 }
 
@@ -616,7 +709,7 @@ impl HandshakeRequest {
                 let ver = buf[0];
                 let nmet = buf[1];
 
-                if ver != SOCKS5_VERSION {
+                if ver != consts::SOCKS5_VERSION {
                     return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
                 }
 
@@ -630,16 +723,16 @@ impl HandshakeRequest {
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(w, buf).map(|(w, _)| w))
+        write_bytes(w, buf.freeze())
     }
 
     /// Write to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let HandshakeRequest { ref methods } = *self;
-        buf.put_slice(&[SOCKS5_VERSION, methods.len() as u8]);
+        buf.put_slice(&[consts::SOCKS5_VERSION, methods.len() as u8]);
         buf.put_slice(&methods);
     }
 
@@ -675,7 +768,7 @@ impl HandshakeResponse {
             let ver = buf[0];
             let met = buf[1];
 
-            if ver != SOCKS5_VERSION {
+            if ver != consts::SOCKS5_VERSION {
                 Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
             } else {
                 Ok((r, HandshakeResponse { chosen_method: met }))
@@ -685,15 +778,15 @@ impl HandshakeResponse {
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(w, buf).map(|(w, _)| w))
+        write_bytes(w, buf.freeze())
     }
 
     /// Write to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        buf.put_slice(&[SOCKS5_VERSION, self.chosen_method]);
+        buf.put_slice(&[consts::SOCKS5_VERSION, self.chosen_method]);
     }
 
     /// Length in bytes
@@ -745,10 +838,10 @@ impl UdpAssociateHeader {
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite + 'static>(self, w: W) -> BoxIoFuture<W> {
+    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
         let mut buf = BytesMut::with_capacity(self.len());
         self.write_to_buf(&mut buf);
-        Box::new(write_all(w, buf).map(|(w, _)| w))
+        write_bytes(w, buf.freeze())
     }
 
     /// Write to buffer
