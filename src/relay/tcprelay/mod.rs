@@ -1,11 +1,9 @@
 //! Relay for TCP implementation
 
 use std::io::{self, Read, BufRead};
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
-use std::net::IpAddr;
 
 use crypto::CipherCategory;
 use relay::socks5::Address;
