@@ -1,20 +1,18 @@
 //! Relay for TCP implementation
 
 use std::io::{self, Read, BufRead};
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::rc::Rc;
 use std::mem;
 use std::time::Duration;
-use std::net::IpAddr;
 
 use crypto::CipherCategory;
 use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::resolve;
 use config::{ServerConfig, ServerAddr};
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
+use tokio_dns::tcp_connect;
 use tokio_io::AsyncRead;
 use tokio_io::io::{read_exact, write_all};
 use tokio_io::io::{ReadHalf, WriteHalf};
@@ -168,15 +166,10 @@ fn connect_proxy_server(handle: &Handle, svr_cfg: Rc<ServerConfig>) -> BoxIoFutu
     match *svr_cfg.addr() {
         ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr, handle), timeout, handle),
         ServerAddr::DomainName(ref domain, port) => {
-            let handle = handle.clone();
-            let fut = try_timeout(resolve(&domain[..], &handle), timeout, &handle).and_then(move |sockaddr| {
-                let sockaddr = match sockaddr {
-                    IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                    IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                };
-                try_timeout(TcpStream::connect(&sockaddr, &handle), timeout, &handle)
-            });
-            boxed_future(fut)
+            try_timeout(tcp_connect(format!("{}:{}", domain, port).as_str(),
+                                    handle.remote().clone()),
+                        timeout,
+                        handle)
         }
     }
 }
@@ -235,19 +228,19 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 }
             };
 
-            try_timeout(write_all(w, prev_buf), timeout, &handle).and_then(move |(w, prev_buf)| {
-                match svr_cfg.method().category() {
-                    CipherCategory::Stream => {
-                        let local_iv = prev_buf;
-                        Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
-                    }
-                    CipherCategory::Aead => {
-                        let local_salt = prev_buf;
-                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
-                        Ok(From::from(wtr))
-                    }
-                }
-            })
+            try_timeout(write_all(w, prev_buf), timeout, &handle).and_then(move |(w, prev_buf)| match svr_cfg
+                                                                                     .method()
+                                                                                     .category() {
+                                                                               CipherCategory::Stream => {
+                let local_iv = prev_buf;
+                Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
+            }
+                                                                               CipherCategory::Aead => {
+                let local_salt = prev_buf;
+                let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
+                Ok(From::from(wtr))
+            }
+                                                                           })
         };
 
         let dec = {
@@ -307,19 +300,17 @@ pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<
     });
 
     let cloned_addr = addr.clone();
-    let s2c = s2c.then(move |res| {
-        match res {
-            Ok(..) => {
-                trace!("Relay {} client <- server is finished", cloned_addr);
+    let s2c = s2c.then(move |res| match res {
+                           Ok(..) => {
+        trace!("Relay {} client <- server is finished", cloned_addr);
 
-                Ok(TunnelDirection::Server2Client)
-            }
-            Err(err) => {
-                error!("Relay {} client <- server aborted: {}", cloned_addr, err);
-                Err(err)
-            }
-        }
-    });
+        Ok(TunnelDirection::Server2Client)
+    }
+                           Err(err) => {
+        error!("Relay {} client <- server aborted: {}", cloned_addr, err);
+        Err(err)
+    }
+                       });
 
     let fut = c2s.select(s2c)
         .and_then(move |(dir, _)| {
@@ -354,7 +345,10 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
             IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
-            IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
+            IgnoreUntilEnd::Pending {
+                ref mut r,
+                ref mut amt,
+            } => {
                 let mut buf = [0u8; 4096];
                 loop {
                     let n = try_nb!(r.read(&mut buf));
@@ -407,11 +401,9 @@ fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
     let fut = fut.select(Timeout::new(dur, handle)
             .unwrap() // It must be succeeded!
             .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timeout"))))
-        .then(|res| {
-            match res {
-                Ok((t, _)) => Ok(t),
-                Err((err, _)) => Err(err),
-            }
-        });
+        .then(|res| match res {
+                  Ok((t, _)) => Ok(t),
+                  Err((err, _)) => Err(err),
+              });
     boxed_future(fut)
 }
