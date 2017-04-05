@@ -20,16 +20,18 @@ pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
 
     lookup_host(resolv, &dname)
         .map_err(From::from)
-        .and_then(move |hosts| match hosts.iter().next() {
-                      Some(addr) => {
-            trace!("Resolved \"{}\" as {}", dname, addr);
-            Ok(addr)
-        }
-                      None => {
-            let err = io::Error::new(io::ErrorKind::Other,
-                                     format!("Failed to resolve \"{}\"", dname));
-            Err(err)
-        }
-                  })
+        .and_then(move |hosts| {
+            match hosts.iter().next() {
+                Some(addr) => {
+                    trace!("Resolved \"{}\" as {}", dname, addr);
+                    Ok(addr)
+                }
+                None => {
+                    let err = io::Error::new(io::ErrorKind::Other,
+                                             format!("Failed to resolve \"{}\"", dname));
+                    Err(err)
+                }
+            }
+        })
         .boxed()
 }
