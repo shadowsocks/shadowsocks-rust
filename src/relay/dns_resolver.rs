@@ -3,6 +3,7 @@
 use std::io;
 
 use futures::{Future, BoxFuture};
+use futures::future;
 
 use tokio_core::reactor::Handle;
 
@@ -13,7 +14,11 @@ use domain::bits::DNameBuf;
 use std::net::IpAddr;
 
 pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
-    let dname = addr.parse::<DNameBuf>().unwrap();
+    let dname = match addr.parse::<DNameBuf>() {
+        Ok(dname) => dname,
+        Err(err) => return future::err(io::Error::new(io::ErrorKind::Other, err))
+            .boxed()
+    };
     let resolv = Resolver::new(handle);
 
     trace!("Going to resolve \"{}\"", dname);
