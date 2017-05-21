@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code, unused_imports,blacklisted_name)]
 
 extern crate shadowsocks;
 extern crate tokio_core;

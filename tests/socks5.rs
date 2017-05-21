@@ -38,7 +38,7 @@ impl Socks5TestServer {
         let local_addr = local_addr.to_socket_addrs().unwrap().next().unwrap();
 
         Socks5TestServer {
-            local_addr: local_addr.clone(),
+            local_addr: local_addr,
             config: {
                 let mut cfg = Config::new();
                 cfg.local = Some(local_addr);
