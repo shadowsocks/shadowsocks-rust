@@ -3,20 +3,22 @@
 use std::io;
 use std::time::Duration;
 
-use tokio_core::reactor::{Handle, Timeout};
+use tokio_core::reactor::Timeout;
 use tokio_io::io::{Copy, copy};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use futures::{Future, Poll, Async};
 
+use relay::Context;
+
 use super::BUFFER_SIZE;
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
-pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration, handle: Handle) -> CopyTimeout<R, W>
+pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration) -> CopyTimeout<R, W>
     where R: AsyncRead,
           W: AsyncWrite
 {
-    CopyTimeout::new(r, w, dur, handle)
+    CopyTimeout::new(r, w, dur)
 }
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
@@ -27,7 +29,6 @@ pub struct CopyTimeout<R, W>
     r: Option<R>,
     w: Option<W>,
     timeout: Duration,
-    handle: Handle,
     amt: u64,
     timer: Option<Timeout>,
     buf: [u8; BUFFER_SIZE],
@@ -39,12 +40,11 @@ impl<R, W> CopyTimeout<R, W>
     where R: AsyncRead,
           W: AsyncWrite
 {
-    fn new(r: R, w: W, timeout: Duration, handle: Handle) -> CopyTimeout<R, W> {
+    fn new(r: R, w: W, timeout: Duration) -> CopyTimeout<R, W> {
         CopyTimeout {
             r: Some(r),
             w: Some(w),
             timeout: timeout,
-            handle: handle,
             amt: 0,
             timer: None,
             buf: [0u8; BUFFER_SIZE],
@@ -81,7 +81,7 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
+                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
                 }
                 Err(e)
             }
@@ -99,7 +99,7 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Timeout::new(self.timeout, &self.handle).unwrap());
+                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
                 }
                 Err(e)
             }
@@ -149,12 +149,12 @@ impl<R, W> Future for CopyTimeout<R, W>
 }
 
 /// Copies all data from `r` to `w` with optional timeout param
-pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>, handle: Handle) -> CopyTimeoutOpt<R, W>
+pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>) -> CopyTimeoutOpt<R, W>
     where R: AsyncRead,
           W: AsyncWrite
 {
     match dur {
-        Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d, handle)),
+        Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d)),
         None => CopyTimeoutOpt::Copy(copy(r, w)),
     }
 }

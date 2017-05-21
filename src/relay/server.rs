@@ -1,6 +1,5 @@
 //! Server side
 
-use std::rc::Rc;
 use std::io;
 
 use tokio_core::reactor::Core;
@@ -10,6 +9,7 @@ use futures::Future;
 use relay::udprelay::server::run as run_udp;
 use relay::tcprelay::server::run as run_tcp;
 use config::Config;
+use relay::Context;
 
 /// Relay server running on server side.
 ///
@@ -28,15 +28,26 @@ use config::Config;
 ///
 pub fn run(config: Config) -> io::Result<()> {
     let mut lp = try!(Core::new());
-
     let handle = lp.handle();
-    let config = Rc::new(config);
 
-    let tcp_fut = run_tcp(config.clone(), handle.clone());
+    // let config = Rc::new(config);
 
-    if config.enable_udp {
-        lp.run(tcp_fut.join(run_udp(config, handle)).map(|_| ()))
+    // let tcp_fut = run_tcp(config.clone(), handle.clone());
+
+    // if config.enable_udp {
+    //     lp.run(tcp_fut.join(run_udp(config, handle)).map(|_| ()))
+    // } else {
+    //     lp.run(tcp_fut)
+    // }
+
+    let enable_udp = config.enable_udp;
+    let context = Context::new(handle, config);
+    Context::set(&context, move || if enable_udp {
+        let tcp_fut = run_tcp();
+        let udp_fut = run_udp();
+        lp.run(tcp_fut.join(udp_fut).map(|_| ()))
     } else {
+        let tcp_fut = run_tcp();
         lp.run(tcp_fut)
-    }
+    })
 }

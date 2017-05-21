@@ -50,6 +50,7 @@ serde_json = "0.9"
 base64 = "0.4"
 domain = "0.2"
 bytes = "0.4"
+scoped-tls = "0.1"
 
 [dependencies.argon2rs]
 version = "0.2"

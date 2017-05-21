@@ -1,6 +1,5 @@
 //! Local side
 
-use std::rc::Rc;
 use std::io;
 
 use tokio_core::reactor::Core;
@@ -9,6 +8,7 @@ use futures::Future;
 
 use relay::tcprelay::local::run as run_tcp;
 use relay::udprelay::local::run as run_udp;
+use relay::Context;
 use config::Config;
 
 /// Relay server running under local environment.
@@ -29,13 +29,16 @@ use config::Config;
 pub fn run(config: Config) -> io::Result<()> {
     let mut lp = try!(Core::new());
     let handle = lp.handle();
-    let config = Rc::new(config);
 
-    let tcp_fut = run_tcp(config.clone(), handle.clone());
+    let enable_udp = config.enable_udp;
 
-    if config.enable_udp {
-        lp.run(tcp_fut.join(run_udp(config, handle)).map(|_| ()))
+    let context = Context::new(handle, config);
+    Context::set(&context, move || if enable_udp {
+        let tcp_fut = run_tcp();
+        let udp_fut = run_udp();
+        lp.run(tcp_fut.join(udp_fut).map(|_| ()))
     } else {
+        let tcp_fut = run_tcp();
         lp.run(tcp_fut)
-    }
+    })
 }

@@ -3,6 +3,8 @@
 use std::io;
 
 use futures::Future;
+use tokio_core::reactor::Handle;
+use config::Config;
 
 pub mod tcprelay;
 pub mod udprelay;
@@ -20,4 +22,48 @@ fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E>>
     where F: Future<Item = T, Error = E> + 'static
 {
     Box::new(f)
+}
+
+scoped_thread_local!(static CONTEXT: Context);
+
+/// Local server running context
+pub struct Context {
+    handle: Handle,
+    config: Config,
+}
+
+impl Context {
+    #[doc(hidden)]
+    /// Creates a new Context
+    pub fn new(handle: Handle, config: Config) -> Context {
+        Context {
+            handle: handle,
+            config: config,
+        }
+    }
+
+    /// Get the value in this context
+    pub fn with<F, R>(f: F) -> R
+        where F: FnOnce(&Context) -> R
+    {
+        CONTEXT.with(f)
+    }
+
+    #[doc(hidden)]
+    pub fn set<F, R>(ctx: &Context, f: F) -> R
+        where F: FnOnce() -> R
+    {
+        CONTEXT.set(ctx, f)
+    }
+
+
+    /// Get Core handle
+    pub fn handle(&self) -> &Handle {
+        &self.handle
+    }
+
+    /// Get config
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
 }

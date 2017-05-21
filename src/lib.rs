@@ -95,6 +95,8 @@ extern crate bytes;
 
 extern crate libc;
 extern crate lazy_static;
+#[macro_use]
+extern crate scoped_tls;
 
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
