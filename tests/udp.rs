@@ -1,11 +1,9 @@
-#![allow(dead_code, unused_imports,blacklisted_name)]
+#![cfg_attr(clippy, allow(blacklisted_name))]
 
 extern crate shadowsocks;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate futures;
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 extern crate bytes;
 
@@ -16,7 +14,7 @@ use std::time::Duration;
 use std::io::Cursor;
 
 use tokio_core::reactor::Core;
-use tokio_io::io::{read_to_end, write_all, flush};
+use tokio_io::io::read_to_end;
 use futures::Future;
 use bytes::{BufMut, BytesMut};
 
@@ -49,18 +47,18 @@ fn get_client_addr() -> SocketAddr {
 
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
-        drop(env_logger::init());
-        bar.wait();
-        run_server(get_config()).unwrap();
-    });
+                      drop(env_logger::init());
+                      bar.wait();
+                      run_server(get_config()).unwrap();
+                  });
 }
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
-        drop(env_logger::init());
-        bar.wait();
-        run_local(get_config()).unwrap();
-    });
+                      drop(env_logger::init());
+                      bar.wait();
+                      run_local(get_config()).unwrap();
+                  });
 }
 
 fn start_udp_echo_server(bar: Arc<Barrier>) {
@@ -87,11 +85,11 @@ fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
 
         let c = Socks5Client::udp_associate(addr, get_client_addr(), handle);
         let fut = c.and_then(|(c, addr)| {
-            assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
+                                 assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
 
-            // Holds it forever
-            read_to_end(c, Vec::new()).map(|_| ())
-        });
+                                 // Holds it forever
+                                 read_to_end(c, Vec::new()).map(|_| ())
+                             });
 
         bar.wait();
 

@@ -1,8 +1,8 @@
 language: rust
 rust:
     - stable
-    - beta
-    - nightly
+    #- beta
+    #- nightly
 
 cache: cargo
 
