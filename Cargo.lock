@@ -14,6 +14,7 @@ dependencies = [
  "libc 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru-cache 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "net2 0.2.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "openssl 0.9.9 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -312,6 +313,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "linked-hash-map 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "lru_time_cache"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "lzw"
@@ -713,6 +719,7 @@ dependencies = [
 "checksum linked-hash-map 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "bda158e0dabeb97ee8a401f4d17e479d6b891a14de0bba79d5cc2d4d325b5e48"
 "checksum log 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)" = "5141eca02775a762cc6cd564d8d2c50f67c0ea3a372cbf1c51592b3e029e10ad"
 "checksum lru-cache 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "656fa4dfcb02bcf1063c592ba3ff6a5303ee1f2afe98c8a889e8b1a77c6dfdb7"
+"checksum lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4bf17862cdf1a87c7cc0cccc498552f3e564d2ae61069f83d2279a932af4a00c"
 "checksum lzw 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d947cbb889ed21c2a84be6ffbaebf5b4e0f4340638cba0444907e38b56be084"
 "checksum memchr 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1dbccc0e46f1ea47b9f17e6d67c5a96bd27030519c519c9c91327e31275a47b4"
 "checksum mio 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)" = "aa30e3753079b08ce3d75cf3b44783e36fe0e1f64065f65c1d894d1688fb2580"
