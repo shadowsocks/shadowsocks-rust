@@ -120,7 +120,7 @@ impl<R, W> Future for CopyTimeout<R, W>
                 let n = try_nb!(self.read_or_set_timeout());
 
                 if n == 0 {
-                    // If we've written al the data and we've seen EOF, flush out the
+                    // If we've written all the data and we've seen EOF, flush out the
                     // data and finish the transfer.
                     // done with the entire transfer.
                     try_nb!(self.w.as_mut().unwrap().flush());
