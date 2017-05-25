@@ -214,7 +214,7 @@ impl CipherType {
 
     /// Extends key to match the required key length
     #[cfg(feature = "key-derive-argon2")]
-    pub fn bytes_to_key(&self, key: &[u8]) -> Vec<u8> {
+    pub fn bytes_to_key(&self, key: &[u8]) -> Bytes {
         match self.category() {
             CipherCategory::Aead => self.aead_key_derive(key),
             CipherCategory::Stream => self.classic_bytes_to_key(key),
