@@ -20,7 +20,7 @@ impl Rc4Md5Cipher {
         let mut key = BytesMut::with_capacity(md5_digest.digest_len());
         md5_digest.digest(&mut key);
 
-        Rc4Md5Cipher { crypto: OpenSSLCrypto::new(CipherType::Rc4, &key[..], b"", mode) }
+        Rc4Md5Cipher { crypto: OpenSSLCrypto::new(CipherType::Rc4, &key, b"", mode) }
     }
 }
 

@@ -226,17 +226,45 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Dummy => 0,
 
-            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len().unwrap_or(0),
-            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb1 => {
+                symm::Cipher::aes_128_cfb1()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
+            CipherType::Aes128Cfb8 => {
+                symm::Cipher::aes_128_cfb8()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
             CipherType::Aes128Cfb |
-            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().iv_len().unwrap_or(0),
-            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len().unwrap_or(0),
-            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len().unwrap_or(0),
+            CipherType::Aes128Cfb128 => {
+                symm::Cipher::aes_128_cfb128()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
+            CipherType::Aes256Cfb1 => {
+                symm::Cipher::aes_256_cfb1()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
+            CipherType::Aes256Cfb8 => {
+                symm::Cipher::aes_256_cfb8()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
             CipherType::Aes256Cfb |
-            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().iv_len().unwrap_or(0),
+            CipherType::Aes256Cfb128 => {
+                symm::Cipher::aes_256_cfb128()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
 
-            CipherType::Rc4 |
-            CipherType::Rc4Md5 => symm::Cipher::rc4().iv_len().unwrap_or(0),
+            CipherType::Rc4 => {
+                symm::Cipher::rc4()
+                    .iv_len()
+                    .expect("iv_len should not be None")
+            }
+            CipherType::Rc4Md5 => 16,
 
             CipherType::ChaCha20 |
             CipherType::Salsa20 => 8,
@@ -376,10 +404,21 @@ mod test_cipher {
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();
-        encryptor.update(message.as_bytes(), &mut encrypted_msg).unwrap();
+        encryptor
+            .update(message.as_bytes(), &mut encrypted_msg)
+            .unwrap();
         let mut decrypted_msg = Vec::new();
-        decryptor.update(&encrypted_msg[..], &mut decrypted_msg).unwrap();
+        decryptor
+            .update(&encrypted_msg[..], &mut decrypted_msg)
+            .unwrap();
 
         assert!(message.as_bytes() == &decrypted_msg[..]);
+    }
+
+    #[test]
+    fn test_rc4_md5_key_iv() {
+        let ty = CipherType::Rc4Md5;
+        assert_eq!(ty.key_size(), 16);
+        assert_eq!(ty.iv_size(), 16);
     }
 }
