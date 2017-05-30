@@ -24,8 +24,6 @@ use futures::{self, Future, Poll};
 
 use bytes::{BufMut, BytesMut};
 
-use net2::TcpBuilder;
-
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
 use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
@@ -194,10 +192,7 @@ fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
 }
 
 /// Handshake logic for ShadowSocks Client
-pub fn proxy_server_handshake(remote_stream: TcpStream,
-                              svr_cfg: Rc<ServerConfig>,
-                              relay_addr: Address)
-                              -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+pub fn proxy_server_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>, relay_addr: Address) -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
@@ -218,9 +213,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake(remote_stream: TcpStream,
-                       svr_cfg: Rc<ServerConfig>)
-                       -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+pub fn proxy_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
 
         let timeout = svr_cfg.timeout().clone();
@@ -247,22 +240,17 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             };
 
             Context::with(|ctx| {
-                try_timeout(write_all(w, prev_buf), timeout, ctx.handle())
-                    .and_then(move |(w, prev_buf)| match svr_cfg.method().category() {
-                                  CipherCategory::Stream => {
-                                      let local_iv = prev_buf;
-                                      Ok(From::from(StreamEncryptedWriter::new(w,
-                                                                               svr_cfg.method(),
-                                                                               svr_cfg.key(),
-                                                                               &local_iv)))
-                                  }
-                                  CipherCategory::Aead => {
-                                      let local_salt = prev_buf;
-                                      let wtr =
-                                          AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
-                                      Ok(From::from(wtr))
-                                  }
-                              })
+                try_timeout(write_all(w, prev_buf), timeout, ctx.handle()).and_then(move |(w, prev_buf)| match svr_cfg.method().category() {
+                                                                                        CipherCategory::Stream => {
+                                                                                            let local_iv = prev_buf;
+                                                                                            Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
+                                                                                        }
+                                                                                        CipherCategory::Aead => {
+                                                                                            let local_salt = prev_buf;
+                                                                                            let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
+                                                                                            Ok(From::from(wtr))
+                                                                                        }
+                                                                                    })
             })
         };
 
@@ -278,20 +266,18 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             };
 
             Context::with(|ctx| {
-                try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle())
-                    .and_then(move |(r, remote_iv)| match svr_cfg.method().category() {
-                                  CipherCategory::Stream => {
-                                      trace!("Got initialize vector {:?}", remote_iv);
-                                      let decrypt_stream =
-                                          StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                                      Ok(From::from(decrypt_stream))
-                                  }
-                                  CipherCategory::Aead => {
-                                      trace!("Got salt {:?}", remote_iv);
-                                      let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                                      Ok(From::from(dr))
-                                  }
-                              })
+                try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle()).and_then(move |(r, remote_iv)| match svr_cfg.method().category() {
+                                                                                                    CipherCategory::Stream => {
+                                                                                                        trace!("Got initialize vector {:?}", remote_iv);
+                                                                                                        let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                                                                                                        Ok(From::from(decrypt_stream))
+                                                                                                    }
+                                                                                                    CipherCategory::Aead => {
+                                                                                                        trace!("Got salt {:?}", remote_iv);
+                                                                                                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                                                                                                        Ok(From::from(dr))
+                                                                                                    }
+                                                                                                })
             })
         };
 
@@ -396,17 +382,6 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
 /// Ignore all data from the reader
 pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
     IgnoreUntilEnd::Pending { r: r, amt: 0 }
-}
-
-#[cfg(unix)]
-fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
-    use net2::unix::UnixTcpBuilderExt;
-    builder.reuse_port(true)
-}
-
-#[cfg(windows)]
-fn reuse_port(builder: &TcpBuilder) -> io::Result<&TcpBuilder> {
-    Ok(builder)
 }
 
 fn try_timeout<T, F>(fut: F, dur: Option<Duration>, handle: &Handle) -> BoxIoFuture<T>

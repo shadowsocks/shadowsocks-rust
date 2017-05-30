@@ -10,8 +10,6 @@ use tokio_core::net::UdpSocket;
 
 use lru_cache::LruCache;
 
-use net2::UdpBuilder;
-
 use config::ServerConfig;
 use relay::{BoxIoFuture, boxed_future};
 use relay::dns_resolver::resolve;
@@ -104,7 +102,7 @@ impl ConnectionContext {
                   }: Associate,
                   buf: Vec<u8>,
                   n: usize)
-                  -> BoxIoFuture<ConnectionContext> {
+-> BoxIoFuture<ConnectionContext>{
         let ConnectionContext {
             assoc,
             svr_cfg,
@@ -197,31 +195,15 @@ fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
 fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || {
-        let udp_builder = match listen_addr {
-                SocketAddr::V4(..) => UdpBuilder::new_v4(),
-                SocketAddr::V6(..) => UdpBuilder::new_v6(),
-            }
-            .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
-
-        super::reuse_port(&udp_builder)
-            .and_then(|b| b.reuse_address(true))
-            .unwrap_or_else(|err| panic!("Failed to set reuse {}, {}", listen_addr, err));
-
-        Context::with(|ctx| {
-                          udp_builder
-                              .bind(listen_addr)
-                              .and_then(|s| UdpSocket::from_socket(s, ctx.handle()))
-                      })
-    })
-            .and_then(|socket| {
-                          let c = ConnectionContext {
-                              assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
-                              svr_cfg: svr_cfg,
-                              socket: socket,
-                          };
-                          handle_client(c)
-                      });
+    let fut = futures::lazy(move || Context::with(|ctx| UdpSocket::bind(&listen_addr, ctx.handle())))
+        .and_then(|socket| {
+                      let c = ConnectionContext {
+                          assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
+                          svr_cfg: svr_cfg,
+                          socket: socket,
+                      };
+                      handle_client(c)
+                  });
     boxed_future(fut)
 }
 

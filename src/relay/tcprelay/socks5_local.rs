@@ -12,8 +12,6 @@ use tokio_io::AsyncRead;
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::io::flush;
 
-use net2::TcpBuilder;
-
 use config::ServerConfig;
 
 use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address};
@@ -106,12 +104,11 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
 
                 if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
                     let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-                    let fut = resp.write_to(w)
-                        .then(|_| {
-                                  warn!("Currently shadowsocks-rust does not support authentication");
-                                  Err(io::Error::new(io::ErrorKind::Other,
-                                                     "Currently shadowsocks-rust does not support authentication"))
-                              });
+                    let fut = resp.write_to(w).then(|_| {
+                                                        warn!("Currently shadowsocks-rust does not support authentication");
+                                                        Err(io::Error::new(io::ErrorKind::Other,
+                                                                           "Currently shadowsocks-rust does not support authentication"))
+                                                    });
                     boxed_future(fut)
                 } else {
                     // Reply to client
@@ -193,53 +190,16 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
 
 /// Starts a TCP local server with Socks5 proxy protocol
 pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
-    // let (listener, local_addr) = {
-    //     let local_addr = config.local.as_ref().unwrap();
-
-    //     let tcp_builder = match *local_addr {
-    //             SocketAddr::V4(..) => TcpBuilder::new_v4(),
-    //             SocketAddr::V6(..) => TcpBuilder::new_v6(),
-    //         }
-    //         .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
-
-    //     super::reuse_port(&tcp_builder)
-    //         .and_then(|builder| builder.reuse_address(true))
-    //         .and_then(|builder| builder.bind(local_addr))
-    //         .unwrap_or_else(|err| panic!("Failed to bind {}, {}", local_addr, err));
-
-    //     let listener = tcp_builder
-    //         .listen(1024)
-    //         .and_then(|l| TcpListener::from_listener(l, local_addr, &handle))
-    //         .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
-
-    //     info!("ShadowSocks TCP Listening on {}", local_addr);
-    //     (listener, *local_addr)
-    // };
-
     let (listener, local_addr) = Context::with(|ctx| {
         let config = &ctx.config;
         let handle = &ctx.handle;
 
         let local_addr = config.local.as_ref().unwrap();
 
-        let tcp_builder = match *local_addr {
-                SocketAddr::V4(..) => TcpBuilder::new_v4(),
-                SocketAddr::V6(..) => TcpBuilder::new_v6(),
-            }
-            .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
-
-        super::reuse_port(&tcp_builder)
-            .and_then(|builder| builder.reuse_address(true))
-            .and_then(|builder| builder.bind(local_addr))
-            .unwrap_or_else(|err| panic!("Failed to bind {}, {}", local_addr, err));
-
-        let listener = tcp_builder
-            .listen(1024)
-            .and_then(|l| TcpListener::from_listener(l, local_addr, &handle))
-            .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+        let l = TcpListener::bind(&local_addr, &handle).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
         info!("ShadowSocks TCP Listening on {}", local_addr);
-        (listener, *local_addr)
+        (l, *local_addr)
     });
 
     let udp_conf = UdpConfig {
@@ -248,14 +208,12 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
     };
 
     let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
-    let listening = listener
-        .incoming()
-        .for_each(move |(socket, addr)| {
-                      let server_cfg = servers.pick_server();
-                      trace!("Got connection, addr: {}", addr);
-                      trace!("Picked proxy server: {:?}", server_cfg);
-                      handle_socks5_client(socket, server_cfg, udp_conf.clone())
-                  });
+    let listening = listener.incoming().for_each(move |(socket, addr)| {
+                                                     let server_cfg = servers.pick_server();
+                                                     trace!("Got connection, addr: {}", addr);
+                                                     trace!("Picked proxy server: {:?}", server_cfg);
+                                                     handle_socks5_client(socket, server_cfg, udp_conf.clone())
+                                                 });
 
     Box::new(listening.map_err(|err| {
                                    error!("Socks5 server run failed: {}", err);

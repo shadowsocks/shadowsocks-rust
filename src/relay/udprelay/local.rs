@@ -10,8 +10,6 @@ use futures::{self, Future};
 
 use tokio_core::net::UdpSocket;
 
-use net2::UdpBuilder;
-
 use lru_cache::LruCache;
 
 use config::{ServerConfig, ServerAddr};
@@ -186,7 +184,8 @@ impl Client {
                                   })
                         .and_then(move |payload| -> io::Result<_> {
                                       // Encrypt the whole body as payload
-                                      encrypt_payload(svr_cfg.method(), svr_cfg.key(), &payload).map(move |b| (svr_cfg, b))
+                                      encrypt_payload(svr_cfg.method(), svr_cfg.key(), &payload)
+                                          .map(move |b| (svr_cfg, b))
                                   })
                         .map_err(From::from)
                         .and_then(move |(svr_cfg, payload)| {
@@ -199,17 +198,15 @@ impl Client {
                                     svrs_ref.insert(addr, svr_cfg.clone());
                                 }
 
-                                socket
-                                    .send_dgram(payload, addr)
-                                    .map(|(socket, body)| {
-                                        trace!("Sent body, size: {}", body.len());
-                                        Client {
-                                            assoc: assoc,
-                                            server_picker: server_picker,
-                                            servers: servers,
-                                            socket: socket,
-                                        }
-                                    })
+                                socket.send_dgram(payload, addr).map(|(socket, body)| {
+                                    trace!("Sent body, size: {}", body.len());
+                                    Client {
+                                        assoc: assoc,
+                                        server_picker: server_picker,
+                                        servers: servers,
+                                        socket: socket,
+                                    }
+                                })
                             })
                         })
                 });
@@ -258,12 +255,13 @@ fn handle_client(client: Client) -> BoxIoFuture<()> {
 fn listen(l: UdpSocket) -> BoxIoFuture<()> {
     let assoc = Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE)));
 
-    let (server_picker, servers) = Context::with(|ctx| {
-                                                     let config = ctx.config();
-                                                     let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
-                                                     let servers = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
-                                                     (server_picker, servers)
-                                                 });
+    let (server_picker, servers) =
+        Context::with(|ctx| {
+                          let config = ctx.config();
+                          let server_picker = Rc::new(RefCell::new(RoundRobin::new(&*config)));
+                          let servers = Rc::new(RefCell::new(ServerCache::new(config.server.len())));
+                          (server_picker, servers)
+                      });
 
 
     let c = Client {
@@ -280,25 +278,13 @@ fn listen(l: UdpSocket) -> BoxIoFuture<()> {
 /// Starts a UDP local server
 pub fn run() -> BoxIoFuture<()> {
     let fut = futures::lazy(|| {
-        Context::with(|ctx| {
-            let local_addr = ctx.config().local.as_ref().unwrap();
-            let udp_builder = match *local_addr {
-                    SocketAddr::V4(..) => UdpBuilder::new_v4(),
-                    SocketAddr::V6(..) => UdpBuilder::new_v6(),
-                }
-                .unwrap_or_else(|err| panic!("Failed to create socket, {}", err));
+                                Context::with(|ctx| {
+                                                  let local_addr = ctx.config().local.as_ref().unwrap();
+                                                  info!("ShadowSocks UDP Listening on {}", local_addr);
 
-            super::reuse_port(&udp_builder)
-                .and_then(|b| b.reuse_address(true))
-                .unwrap_or_else(|err| panic!("Failed to set reuse {}, {}", local_addr, err));
-
-            info!("ShadowSocks UDP Listening on {}", local_addr);
-
-            udp_builder
-                .bind(local_addr)
-                .and_then(|s| UdpSocket::from_socket(s, ctx.handle()))
-        })
-    })
+                                                  UdpSocket::bind(local_addr, ctx.handle())
+                                              })
+                            })
             .and_then(|l| listen(l));
 
 

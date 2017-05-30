@@ -37,10 +37,6 @@
 //! | Fixed |   Variable   |
 //! +-------+--------------+
 
-use std::io;
-
-use net2::UdpBuilder;
-
 pub mod local;
 pub mod server;
 
@@ -55,14 +51,3 @@ pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
 
 /// Maximum associations to maintain
 pub const MAXIMUM_ASSOCIATE_MAP_SIZE: usize = 65536;
-
-#[cfg(unix)]
-fn reuse_port(builder: &UdpBuilder) -> io::Result<&UdpBuilder> {
-    use net2::unix::UnixUdpBuilderExt;
-    builder.reuse_port(true)
-}
-
-#[cfg(windows)]
-fn reuse_port(builder: &UdpBuilder) -> io::Result<&UdpBuilder> {
-    Ok(builder)
-}

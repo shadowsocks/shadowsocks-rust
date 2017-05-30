@@ -89,7 +89,6 @@ extern crate futures;
 extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
-extern crate net2;
 extern crate domain;
 extern crate bytes;
 

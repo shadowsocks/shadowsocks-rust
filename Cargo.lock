@@ -1,6 +1,6 @@
 [root]
 name = "shadowsocks-rust"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "argon2rs 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -15,7 +15,6 @@ dependencies = [
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "net2 0.2.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "openssl 0.9.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "qrcode 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",

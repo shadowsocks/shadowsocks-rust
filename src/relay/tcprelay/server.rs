@@ -21,8 +21,6 @@ use tokio_core::net::{TcpStream, TcpListener};
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::AsyncRead;
 
-use net2::TcpBuilder;
-
 use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut, try_timeout};
 
 /// Context for doing handshake with client
@@ -174,21 +172,7 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
                 let addr = svr_cfg.addr();
                 let addr = addr.listen_addr();
 
-                let tcp_builder = match *addr {
-                        SocketAddr::V4(..) => TcpBuilder::new_v4(),
-                        SocketAddr::V6(..) => TcpBuilder::new_v6(),
-                    }
-                    .unwrap_or_else(|err| panic!("Failed to create listener, {}", err));
-
-                super::reuse_port(&tcp_builder)
-                    .and_then(|builder| builder.reuse_address(true))
-                    .and_then(|builder| builder.bind(addr))
-                    .unwrap_or_else(|err| panic!("Failed to bind {}, {}", addr, err));
-
-                let listener = tcp_builder
-                    .listen(1024)
-                    .and_then(|l| TcpListener::from_listener(l, addr, ctx.handle()))
-                    .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                let listener = TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
                 info!("ShadowSocks TCP Listening on {}", addr);
                 listener
