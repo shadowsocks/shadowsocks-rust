@@ -1,9 +1,9 @@
 //! Message digest algorithm
 
-use rust_crypto::md5::Md5;
-use rust_crypto::sha1::Sha1;
+use ring::digest::{ SHA1_OUTPUT_LEN, SHA1, Context, };
+use md5::Md5;
 
-use bytes::{BufMut, BytesMut};
+use bytes::BufMut;
 
 /// Digest trait
 pub trait Digest: Send {
@@ -31,58 +31,50 @@ pub enum DigestType {
 /// Create digest with type
 pub fn with_type(t: DigestType) -> DigestVariant {
     match t {
-        DigestType::Md5 => DigestVariant::Md5(Md5::new()),
-        DigestType::Sha1 | DigestType::Sha => DigestVariant::Sha1(Sha1::new()),
+        DigestType::Md5 => DigestVariant::Md5(Md5::default()),
+        DigestType::Sha1 | DigestType::Sha => DigestVariant::Sha1(Context::new(&SHA1)),
     }
 }
 
 /// Variant of supported digest
 pub enum DigestVariant {
     Md5(Md5),
-    Sha1(Sha1),
+    Sha1(Context),
 }
 
 impl Digest for DigestVariant {
     fn update(&mut self, data: &[u8]) {
-        use rust_crypto::digest::Digest;
+        use md5::Digest;
 
         match *self {
             DigestVariant::Md5(ref mut d) => d.input(data),
-            DigestVariant::Sha1(ref mut d) => d.input(data),
+            DigestVariant::Sha1(ref mut d) => d.update(data),
         }
     }
 
     fn digest<B: BufMut>(&mut self, buf: &mut B) {
-        use rust_crypto::digest::Digest;
-
-        let mut local_buf = BytesMut::with_capacity(self.digest_len());
-        unsafe {
-            local_buf.set_len(self.digest_len());
-        }
+        use md5::Digest;
 
         match *self {
-            DigestVariant::Md5(ref mut d) => d.result(&mut local_buf),
-            DigestVariant::Sha1(ref mut d) => d.result(&mut local_buf),
+            DigestVariant::Md5(ref d) => buf.put(&*d.clone().result()),
+            DigestVariant::Sha1(ref d) => buf.put(d.clone().finish().as_ref()),
         }
-
-        buf.put(local_buf)
     }
 
     fn digest_len(&self) -> usize {
-        use rust_crypto::digest::Digest;
+        use typenum::Unsigned;
+        use md5::Digest;
 
         match *self {
-            DigestVariant::Md5(ref d) => d.output_bytes(),
-            DigestVariant::Sha1(ref d) => d.output_bytes(),
+            DigestVariant::Md5(_) => <Md5 as Digest>::OutputSize::to_usize(),
+            DigestVariant::Sha1(_) => SHA1_OUTPUT_LEN,
         }
     }
 
     fn reset(&mut self) {
-        use rust_crypto::digest::Digest;
-
         match *self {
-            DigestVariant::Md5(ref mut d) => d.reset(),
-            DigestVariant::Sha1(ref mut d) => d.reset(),
+            DigestVariant::Md5(ref mut d) => d.clone_from(&Md5::default()),
+            DigestVariant::Sha1(ref mut d) => d.clone_from(&Context::new(&SHA1)),
         }
     }
 }

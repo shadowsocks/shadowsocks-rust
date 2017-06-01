@@ -7,6 +7,7 @@ use rand::{self, Rng};
 use std::convert::From;
 use std::mem;
 
+use ring::aead::{ AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305 };
 use crypto::digest::{self, DigestType, Digest};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -87,8 +88,9 @@ const CIPHER_SALSA20: &'static str = "salsa20";
 const CIPHER_DUMMY: &'static str = "dummy";
 
 const CIPHER_AES_128_GCM: &'static str = "aes-128-gcm";
-const CIPHER_AES_192_GCM: &'static str = "aes-192-gcm";
 const CIPHER_AES_256_GCM: &'static str = "aes-256-gcm";
+
+const CIPHER_CHACHA20_POLY1305: &'static str = "chacha20-poly1305";
 
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
@@ -113,8 +115,9 @@ pub enum CipherType {
     Salsa20,
 
     Aes128Gcm,
-    Aes192Gcm,
     Aes256Gcm,
+
+    ChaCha20Poly1305,
 }
 
 /// Category of ciphers
@@ -147,10 +150,10 @@ impl CipherType {
             CipherType::ChaCha20 |
             CipherType::Salsa20 => 32,
 
-            CipherType::Aes128Gcm => 16,
-            CipherType::Aes192Gcm => 24,
-            CipherType::Aes256Gcm => 32,
+            CipherType::Aes128Gcm => AES_128_GCM.key_len(),
+            CipherType::Aes256Gcm => AES_256_GCM.key_len(),
 
+            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.key_len()
         }
     }
 
@@ -269,9 +272,9 @@ impl CipherType {
             CipherType::ChaCha20 |
             CipherType::Salsa20 => 8,
 
-            CipherType::Aes128Gcm |
-            CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => 12,
+            CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
+            CipherType::Aes256Gcm => AES_256_GCM.nonce_len(),
+            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.nonce_len()
         }
     }
 
@@ -294,8 +297,8 @@ impl CipherType {
     pub fn category(&self) -> CipherCategory {
         match *self {
             CipherType::Aes128Gcm |
-            CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => CipherCategory::Aead,
+            CipherType::Aes256Gcm |
+            CipherType::ChaCha20Poly1305 => CipherCategory::Aead,
             _ => CipherCategory::Stream,
         }
     }
@@ -305,9 +308,9 @@ impl CipherType {
         assert!(self.category() == CipherCategory::Aead);
 
         match *self {
-            CipherType::Aes128Gcm |
-            CipherType::Aes192Gcm |
-            CipherType::Aes256Gcm => 16,
+            CipherType::Aes128Gcm => AES_128_GCM.tag_len(),
+            CipherType::Aes256Gcm => AES_256_GCM.tag_len(),
+            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.tag_len(),
 
             _ => panic!("Only support AEAD ciphers, found {:?}", self),
         }
@@ -348,8 +351,9 @@ impl FromStr for CipherType {
             CIPHER_SALSA20 => Ok(CipherType::Salsa20),
 
             CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
-            CIPHER_AES_192_GCM => Ok(CipherType::Aes192Gcm),
             CIPHER_AES_256_GCM => Ok(CipherType::Aes256Gcm),
+
+            CIPHER_CHACHA20_POLY1305 => Ok(CipherType::ChaCha20Poly1305),
 
             _ => Err(Error::UnknownCipherType),
         }
@@ -378,8 +382,8 @@ impl Display for CipherType {
             CipherType::Salsa20 => write!(f, "{}", CIPHER_SALSA20),
 
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
-            CipherType::Aes192Gcm => write!(f, "{}", CIPHER_AES_192_GCM),
             CipherType::Aes256Gcm => write!(f, "{}", CIPHER_AES_256_GCM),
+            CipherType::ChaCha20Poly1305 => write!(f, "{}", CIPHER_CHACHA20_POLY1305),
         }
     }
 }

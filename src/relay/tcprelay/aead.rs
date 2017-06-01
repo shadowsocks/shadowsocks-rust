@@ -250,10 +250,10 @@ impl<W> EncryptedWriter<W>
     where W: AsyncWrite
 {
     /// Creates a new EncryptedWriter
-    pub fn new(w: W, t: CipherType, key: &[u8], nounce: &[u8]) -> EncryptedWriter<W> {
+    pub fn new(w: W, t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter<W> {
         EncryptedWriter {
             writer: w,
-            cipher: crypto::new_aead_encryptor(t, key, nounce),
+            cipher: crypto::new_aead_encryptor(t, key, nonce),
             tag_size: t.tag_size(),
         }
     }

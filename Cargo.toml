@@ -9,6 +9,7 @@ keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 
 [features]
+default = ["rust-crypto"]
 key-derive-argon2 = ["argon2rs"]
 
 [lib]
@@ -35,7 +36,6 @@ time = "0.1"
 clap = "2"
 qrcode = "0.2"
 env_logger = "0.4"
-rust-crypto = "0.2"
 openssl = "0.9"
 lru-cache = "0.1"
 lru_time_cache = "0.6"
@@ -50,7 +50,14 @@ base64 = "0.4"
 domain = "0.2"
 bytes = "0.4"
 scoped-tls = "0.1"
+ring = "0.9"
+md-5 = "0.4"
+typenum = "1.5"
 
 [dependencies.argon2rs]
+version = "0.2"
+optional = true
+
+[dependencies.rust-crypto]
 version = "0.2"
 optional = true
