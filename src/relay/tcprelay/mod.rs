@@ -58,21 +58,33 @@ pub enum DecryptedHalf {
     Aead(AeadDecryptedReader<TcpReadHalf>),
 }
 
+macro_rules! ref_half_do {
+    ($self:expr,$t:ident,$m:ident$(,$p:expr)*) => {
+        match *$self {
+            $t::Stream(ref d) => d.$m($($p),*),
+            $t::Aead(ref d) => d.$m($($p),*),
+        }
+    }
+}
+
+macro_rules! mut_half_do {
+    ($self:expr,$t:ident,$m:ident$(,$p:expr)*) => {
+        match *$self {
+            $t::Stream(ref mut  d) => d.$m($($p),*),
+            $t::Aead(ref mut d) => d.$m($($p),*),
+        }
+    }
+}
+
 impl Read for DecryptedHalf {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match *self {
-            DecryptedHalf::Stream(ref mut d) => d.read(buf),
-            DecryptedHalf::Aead(ref mut d) => d.read(buf),
-        }
+        mut_half_do!(self, DecryptedHalf, read, buf)
     }
 }
 
 impl DecryptedRead for DecryptedHalf {
     fn buffer_size(&self, data: &[u8]) -> usize {
-        match *self {
-            DecryptedHalf::Stream(ref e) => e.buffer_size(data),
-            DecryptedHalf::Aead(ref e) => e.buffer_size(data),
-        }
+        ref_half_do!(self, DecryptedHalf, buffer_size, data)
     }
 }
 
@@ -80,17 +92,11 @@ impl AsyncRead for DecryptedHalf {}
 
 impl BufRead for DecryptedHalf {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match *self {
-            DecryptedHalf::Stream(ref mut d) => d.fill_buf(),
-            DecryptedHalf::Aead(ref mut d) => d.fill_buf(),
-        }
+        mut_half_do!(self, DecryptedHalf, fill_buf)
     }
 
     fn consume(&mut self, amt: usize) {
-        match *self {
-            DecryptedHalf::Stream(ref mut d) => d.consume(amt),
-            DecryptedHalf::Aead(ref mut d) => d.consume(amt),
-        }
+        mut_half_do!(self, DecryptedHalf, consume, amt)
     }
 }
 
@@ -114,31 +120,19 @@ pub enum EncryptedHalf {
 
 impl EncryptedWrite for EncryptedHalf {
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
-        match *self {
-            EncryptedHalf::Stream(ref mut e) => e.write_raw(data),
-            EncryptedHalf::Aead(ref mut e) => e.write_raw(data),
-        }
+        mut_half_do!(self, EncryptedHalf, write_raw, data)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match *self {
-            EncryptedHalf::Stream(ref mut e) => e.flush(),
-            EncryptedHalf::Aead(ref mut e) => e.flush(),
-        }
+        mut_half_do!(self, EncryptedHalf, flush)
     }
 
     fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
-        match *self {
-            EncryptedHalf::Stream(ref mut e) => e.encrypt(data, buf),
-            EncryptedHalf::Aead(ref mut e) => e.encrypt(data, buf),
-        }
+        mut_half_do!(self, EncryptedHalf, encrypt, data, buf)
     }
 
     fn buffer_size(&self, data: &[u8]) -> usize {
-        match *self {
-            EncryptedHalf::Stream(ref e) => e.buffer_size(data),
-            EncryptedHalf::Aead(ref e) => e.buffer_size(data),
-        }
+        ref_half_do!(self,EncryptedHalf, buffer_size, data)
     }
 }
 
@@ -192,7 +186,10 @@ fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
 }
 
 /// Handshake logic for ShadowSocks Client
-pub fn proxy_server_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>, relay_addr: Address) -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+pub fn proxy_server_handshake(remote_stream: TcpStream,
+                              svr_cfg: Rc<ServerConfig>,
+                              relay_addr: Address)
+                              -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
@@ -213,7 +210,9 @@ pub fn proxy_server_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+pub fn proxy_handshake(remote_stream: TcpStream,
+                       svr_cfg: Rc<ServerConfig>)
+                       -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
 
         let timeout = svr_cfg.timeout().clone();
@@ -240,17 +239,22 @@ pub fn proxy_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>) -> B
             };
 
             Context::with(|ctx| {
-                try_timeout(write_all(w, prev_buf), timeout, ctx.handle()).and_then(move |(w, prev_buf)| match svr_cfg.method().category() {
-                                                                                        CipherCategory::Stream => {
-                                                                                            let local_iv = prev_buf;
-                                                                                            Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
-                                                                                        }
-                                                                                        CipherCategory::Aead => {
-                                                                                            let local_salt = prev_buf;
-                                                                                            let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
-                                                                                            Ok(From::from(wtr))
-                                                                                        }
-                                                                                    })
+                try_timeout(write_all(w, prev_buf), timeout, ctx.handle())
+                    .and_then(move |(w, prev_buf)| match svr_cfg.method().category() {
+                                  CipherCategory::Stream => {
+                                      let local_iv = prev_buf;
+                                      Ok(From::from(StreamEncryptedWriter::new(w,
+                                                                               svr_cfg.method(),
+                                                                               svr_cfg.key(),
+                                                                               &local_iv)))
+                                  }
+                                  CipherCategory::Aead => {
+                                      let local_salt = prev_buf;
+                                      let wtr =
+                                          AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
+                                      Ok(From::from(wtr))
+                                  }
+                              })
             })
         };
 
@@ -266,18 +270,20 @@ pub fn proxy_handshake(remote_stream: TcpStream, svr_cfg: Rc<ServerConfig>) -> B
             };
 
             Context::with(|ctx| {
-                try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle()).and_then(move |(r, remote_iv)| match svr_cfg.method().category() {
-                                                                                                    CipherCategory::Stream => {
-                                                                                                        trace!("Got initialize vector {:?}", remote_iv);
-                                                                                                        let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                                                                                                        Ok(From::from(decrypt_stream))
-                                                                                                    }
-                                                                                                    CipherCategory::Aead => {
-                                                                                                        trace!("Got salt {:?}", remote_iv);
-                                                                                                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                                                                                                        Ok(From::from(dr))
-                                                                                                    }
-                                                                                                })
+                try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle())
+                    .and_then(move |(r, remote_iv)| match svr_cfg.method().category() {
+                                  CipherCategory::Stream => {
+                                      trace!("Got initialize vector {:?}", remote_iv);
+                                      let decrypt_stream =
+                                          StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                                      Ok(From::from(decrypt_stream))
+                                  }
+                                  CipherCategory::Aead => {
+                                      trace!("Got salt {:?}", remote_iv);
+                                      let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                                      Ok(From::from(dr))
+                                  }
+                              })
             })
         };
 
@@ -399,8 +405,8 @@ fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
           T: 'static
 {
     let fut = fut.select(Timeout::new(dur, handle)
-            .unwrap() // It must be succeeded!
-            .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timeout"))))
+                         .unwrap() // It must be succeeded!
+                         .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timeout"))))
         .then(|res| match res {
                   Ok((t, _)) => Ok(t),
                   Err((err, _)) => Err(err),
