@@ -7,6 +7,7 @@ extern crate base64;
 use clap::{App, Arg};
 
 use qrcode::QrCode;
+use qrcode::types::Color;
 
 use base64::{encode_config, decode_config, URL_SAFE_NO_PAD};
 
@@ -35,7 +36,10 @@ fn print_qrcode(encoded: &str) {
     for y in 0..qrcode.width() {
         print!("{}", WHITE);
         for x in 0..qrcode.width() {
-            let color = if qrcode[(x, y)] { BLACK } else { WHITE };
+            let color = match qrcode[(x, y)] {
+                Color::Light => WHITE,
+                Color::Dark => BLACK
+            };
 
             print!("{}", color);
         }
