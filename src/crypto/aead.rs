@@ -2,7 +2,7 @@
 
 use crypto::cipher::{CipherType, CipherCategory, CipherResult};
 
-use crypto::crypto::CryptoAeadCrypto;
+use crypto::ring::RingAeadCipher;
 
 use ring::digest::SHA1;
 use ring::hmac::SigningKey;
@@ -23,26 +23,26 @@ pub trait AeadDecryptor {
 }
 
 /// Generate a specific AEAD cipher encryptor
-pub fn new_aead_encryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadEncryptor> {
+pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadEncryptor> {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {
         CipherType::Aes128Gcm |
         CipherType::Aes256Gcm |
-        CipherType::ChaCha20Poly1305 => Box::new(CryptoAeadCrypto::new(t, key, nounce, true)),
+        CipherType::ChaCha20Poly1305 => Box::new(RingAeadCipher::new(t, key, nonce, true)),
 
         _ => unreachable!(),
     }
 }
 
 /// Generate a specific AEAD cipher decryptor
-pub fn new_aead_decryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadDecryptor> {
+pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadDecryptor> {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {
         CipherType::Aes128Gcm |
         CipherType::Aes256Gcm |
-        CipherType::ChaCha20Poly1305 => Box::new(CryptoAeadCrypto::new(t, key, nounce, false)),
+        CipherType::ChaCha20Poly1305 => Box::new(RingAeadCipher::new(t, key, nonce, false)),
 
         _ => unreachable!(),
     }
