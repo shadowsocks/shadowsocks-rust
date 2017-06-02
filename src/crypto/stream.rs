@@ -6,7 +6,8 @@ use crypto::table;
 use crypto::CryptoMode;
 use crypto::rc4_md5;
 use crypto::dummy;
-use crypto::crypto::CryptoCipher;
+#[cfg(feature = "sodiumoxide")]
+use crypto::sodium;
 
 use bytes::BufMut;
 
@@ -21,10 +22,11 @@ pub trait StreamCipher {
 }
 
 macro_rules! define_stream_ciphers {
-    ($($name:ident => $cipher:ty,)+) => {
+    ($( $(#[$attr:meta])* pub $name:ident => $cipher:ty, )+) => {
         /// Variant cipher which contains all possible ciphers
         pub enum StreamCipherVariant {
             $(
+                $(#[$attr])*
                 $name($cipher),
             )+
         }
@@ -42,6 +44,7 @@ macro_rules! define_stream_ciphers {
             fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
                 match *self {
                     $(
+                        $(#[$attr])*
                         StreamCipherVariant::$name(ref mut cipher) => cipher.update(data, out),
                     )+
                 }
@@ -50,6 +53,7 @@ macro_rules! define_stream_ciphers {
             fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
                 match *self {
                     $(
+                        $(#[$attr])*
                         StreamCipherVariant::$name(ref mut cipher) => cipher.finalize(out),
                     )+
                 }
@@ -58,6 +62,7 @@ macro_rules! define_stream_ciphers {
             fn buffer_size(&self, data: &[u8]) -> usize {
                 match *self {
                     $(
+                        $(#[$attr])*
                         StreamCipherVariant::$name(ref cipher) => cipher.buffer_size(data),
                     )+
                 }
@@ -65,6 +70,7 @@ macro_rules! define_stream_ciphers {
         }
 
         $(
+            $(#[$attr])*
             impl From<$cipher> for StreamCipherVariant {
                 fn from(cipher: $cipher) -> StreamCipherVariant {
                     StreamCipherVariant::$name(cipher)
@@ -75,11 +81,13 @@ macro_rules! define_stream_ciphers {
 }
 
 define_stream_ciphers! {
-    TableCipher => table::TableCipher,
-    DummyCipher => dummy::DummyCipher,
-    Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
-    OpenSSLCipher => openssl::OpenSSLCipher,
-    CryptoCipher => CryptoCipher,
+    pub TableCipher => table::TableCipher,
+    pub DummyCipher => dummy::DummyCipher,
+    pub Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
+    pub OpenSSLCipher => openssl::OpenSSLCipher,
+
+    #[cfg(feature = "sodiumoxide")]
+    pub SodiumCipher => sodium::SodiumCipher,
 }
 
 /// Generate a specific Cipher with key and initialize vector
@@ -91,8 +99,11 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Str
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
         CipherType::Dummy => StreamCipherVariant::new(dummy::DummyCipher),
 
+        #[cfg(feature = "sodiumoxide")]
         CipherType::ChaCha20 |
-        CipherType::Salsa20 => StreamCipherVariant::new(CryptoCipher::new(t, key, iv)),
+        CipherType::Salsa20 |
+        CipherType::XSalsa20 |
+        CipherType::Aes128Ctr => StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
 
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 

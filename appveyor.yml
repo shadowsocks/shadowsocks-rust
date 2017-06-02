@@ -4,12 +4,12 @@ environment:
   matrix:
       - TARGET: x86_64-pc-windows-msvc
         BITS: 64
-        OPENSSL_VERSION: 1_1_0e
+        OPENSSL_VERSION: 1_1_0f
         MSYS2: 1
         OPENSSL_DIR: C:\OpenSSL
       - TARGET: i686-pc-windows-gnu
         BITS: 32
-        OPENSSL_VERSION: 1_1_0e
+        OPENSSL_VERSION: 1_1_0f
         MSYS2: 1
 install:
   - ps: Start-FileDownload "http://slproweb.com/download/Win${env:BITS}OpenSSL-${env:OPENSSL_VERSION}.exe"
@@ -29,7 +29,7 @@ install:
 build: false
 
 test_script:
-  - cargo test -v --no-fail-fast
+  - cargo test -v --no-default-features --no-fail-fast
 
 cache:
   - target

@@ -78,9 +78,13 @@ extern crate lru_time_cache;
 
 extern crate byteorder;
 extern crate rand;
+extern crate typenum;
 
-extern crate crypto as rust_crypto;
+extern crate md_5 as md5;
+extern crate ring;
 extern crate openssl;
+#[cfg(feature = "sodiumoxide")]
+extern crate sodiumoxide;
 #[cfg(feature = "key-derive-argon2")]
 extern crate argon2rs;
 

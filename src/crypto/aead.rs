@@ -2,11 +2,11 @@
 
 use crypto::cipher::{CipherType, CipherCategory, CipherResult};
 
-use crypto::crypto::CryptoAeadCrypto;
+use crypto::ring::RingAeadCipher;
 
-use rust_crypto::hkdf::{hkdf_expand, hkdf_extract};
-use rust_crypto::sha1::Sha1;
-use rust_crypto::digest::Digest;
+use ring::digest::SHA1;
+use ring::hmac::SigningKey;
+use ring::hkdf;
 
 use bytes::{BytesMut, Bytes};
 
@@ -23,26 +23,26 @@ pub trait AeadDecryptor {
 }
 
 /// Generate a specific AEAD cipher encryptor
-pub fn new_aead_encryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadEncryptor> {
+pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadEncryptor> {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {
         CipherType::Aes128Gcm |
-        CipherType::Aes192Gcm |
-        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+        CipherType::Aes256Gcm |
+        CipherType::ChaCha20Poly1305 => Box::new(RingAeadCipher::new(t, key, nonce, true)),
 
         _ => unreachable!(),
     }
 }
 
 /// Generate a specific AEAD cipher decryptor
-pub fn new_aead_decryptor(t: CipherType, key: &[u8], nounce: &[u8]) -> Box<AeadDecryptor> {
+pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadDecryptor> {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {
         CipherType::Aes128Gcm |
-        CipherType::Aes192Gcm |
-        CipherType::Aes256Gcm => Box::new(CryptoAeadCrypto::new(t, key, nounce)),
+        CipherType::Aes256Gcm |
+        CipherType::ChaCha20Poly1305 => Box::new(RingAeadCipher::new(t, key, nonce, false)),
 
         _ => unreachable!(),
     }
@@ -80,22 +80,14 @@ const SUBKEY_INFO: &'static [u8] = b"ss-subkey";
 pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
     assert!(t.category() == CipherCategory::Aead);
 
-    let sha1 = Sha1::new();
-    let output_bytes = sha1.output_bytes();
-
-    let mut prk = BytesMut::with_capacity(output_bytes);
-    unsafe {
-        prk.set_len(output_bytes);
-    }
-
-    hkdf_extract(sha1, salt, key, &mut prk);
+    let salt = SigningKey::new(&SHA1, salt);
 
     let mut skey = BytesMut::with_capacity(key.len());
     unsafe {
         skey.set_len(key.len());
     }
 
-    hkdf_expand(Sha1::new(), &prk, SUBKEY_INFO, &mut skey);
+    hkdf::extract_and_expand(&salt, key, SUBKEY_INFO, &mut skey);
 
     skey.freeze()
 }

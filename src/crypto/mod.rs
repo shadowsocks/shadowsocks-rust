@@ -13,10 +13,13 @@ pub mod openssl;
 pub mod digest;
 pub mod table;
 pub mod rc4_md5;
-pub mod crypto;
+pub mod ring;
 pub mod dummy;
 pub mod aead;
 pub mod stream;
+
+#[cfg(feature = "sodiumoxide")]
+pub mod sodium;
 
 /// Crypto mode, encrypt or decrypt
 #[derive(Clone, Copy)]
