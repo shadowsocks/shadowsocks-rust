@@ -120,7 +120,7 @@ It supports the following features:
 - [x] Windows support. <del>(Depending on mio and coio-rs)</del>
 - [x] Build with stable. <del>(Depending on coio)</del>
 - [ ] <del>Support HTTP Proxy protocol</del> (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
-- [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
+- [ ] <del>One-time Auth.</del> (Already deprecated according to Shadowsocks' community)
 - [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 
 
