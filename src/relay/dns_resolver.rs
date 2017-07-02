@@ -23,6 +23,11 @@ thread_local!(static GLOBAL_DNS_CACHE: RefCell<LruCache<String, IpAddr>>
     = RefCell::new(LruCache::with_expiry_duration_and_capacity(Duration::from_secs(5 * 60), 128)));
 
 pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
+    // FIXME: Sometimes addr is actually an IpAddr!
+    if let Ok(addr) = addr.parse::<IpAddr>() {
+        return future::finished(addr).boxed();
+    }
+
     let cached_addr = GLOBAL_DNS_CACHE.with(|c| {
                                                 let mut xc = c.borrow_mut();
                                                 xc.get(addr).map(|x| *x)
