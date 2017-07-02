@@ -93,7 +93,7 @@ extern crate futures;
 extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
-extern crate domain;
+extern crate netdb;
 extern crate bytes;
 
 extern crate libc;

@@ -9,9 +9,7 @@ use futures::future;
 
 use tokio_core::reactor::Handle;
 
-use domain::resolv::Resolver;
-use domain::resolv::lookup::lookup_host;
-use domain::bits::DNameBuf;
+use netdb::hosts::poll_host_by_name;
 
 use lru_time_cache::LruCache;
 
@@ -29,40 +27,45 @@ pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
     }
 
     let cached_addr = GLOBAL_DNS_CACHE.with(|c| {
-                                                let mut xc = c.borrow_mut();
-                                                xc.get(addr).map(|x| *x)
-                                            });
+        let mut xc = c.borrow_mut();
+        xc.get(addr).map(|x| *x)
+    });
 
     if let Some(addr) = cached_addr {
         return future::finished(addr).boxed();
     }
 
-    let dname = match addr.parse::<DNameBuf>() {
-        Ok(dname) => dname,
-        Err(err) => return future::err(io::Error::new(io::ErrorKind::Other, err)).boxed(),
-    };
-    let resolv = Resolver::new(handle);
+    let owned_addr = addr.to_owned();
+    trace!("Going to resolve \"{}\"", owned_addr);
+    poll_host_by_name(addr, handle)
+        .and_then(move |hn| match hn {
+            None => {
+                let err = io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to resolve \"{}\"", owned_addr),
+                );
+                Err(err)
+            }
+            Some(hn) => {
+                let addrs = hn.addrs();
+                trace!("Resolved \"{}\" as {:?}", owned_addr, addrs);
 
-    trace!("Going to resolve \"{}\"", dname);
-
-    lookup_host(resolv, &dname)
-        .map_err(From::from)
-        .and_then(move |hosts| match hosts.iter().next() {
-                      Some(addr) => {
-                          trace!("Resolved \"{}\" as {}", dname, addr);
-
-                          GLOBAL_DNS_CACHE.with(|c| {
-                                                    let mut xc = c.borrow_mut();
-                                                    xc.insert(dname.to_string(), addr);
-                                                });
-
-                          Ok(addr)
-                      }
-                      None => {
-                          let err = io::Error::new(io::ErrorKind::Other,
-                                                   format!("Failed to resolve \"{}\"", dname));
-                          Err(err)
-                      }
-                  })
+                if addrs.is_empty() {
+                    let err = io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Failed to resolve \"{}\"", owned_addr),
+                    );
+                    Err(err)
+                } else {
+                    let addr = addrs[0];
+                    trace!("Resolved \"{}\" as {}", owned_addr, addr);
+                    GLOBAL_DNS_CACHE.with(|c| {
+                        let mut xc = c.borrow_mut();
+                        xc.insert(owned_addr, addr);
+                    });
+                    Ok(addr)
+                }
+            }
+        })
         .boxed()
 }
