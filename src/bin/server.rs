@@ -175,46 +175,37 @@ fn main() {
         None => Config::new(),
     };
 
-    let mut has_provided_server_config = false;
+    let has_provided_server_config = match (
+        matches.value_of("SERVER_ADDR"),
+        matches.value_of("PASSWORD"),
+        matches.value_of("ENCRYPT_METHOD"),
+    ) {
+        (Some(svr_addr), Some(password), Some(method)) => {
+            let method = match method.parse() {
+                Ok(m) => m,
+                Err(err) => {
+                    panic!("Does not support {:?} method: {:?}", method, err);
+                }
+            };
 
-    if matches.value_of("SERVER_ADDR").is_some() && matches.value_of("PASSWORD").is_some() &&
-        matches.value_of("ENCRYPT_METHOD").is_some()
-    {
-        let (svr_addr, password, method) = matches
-            .value_of("SERVER_ADDR")
-            .and_then(|svr_addr| {
-                matches.value_of("PASSWORD").map(|pwd| (svr_addr, pwd))
-            })
-            .and_then(|(svr_addr, pwd)| {
-                matches.value_of("ENCRYPT_METHOD").map(
-                    |m| (svr_addr, pwd, m),
-                )
-            })
-            .unwrap();
+            let sc = ServerConfig::new(
+                svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
+                password.to_owned(),
+                method,
+                None,
+            );
 
-        let method = match method.parse() {
-            Ok(m) => m,
-            Err(err) => {
-                panic!("Does not support {:?} method: {:?}", method, err);
-            }
-        };
-
-        let sc = ServerConfig::new(
-            svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
-            password.to_owned(),
-            method,
-            None,
-        );
-
-        config.server.push(sc);
-        has_provided_server_config = true;
-    } else if matches.value_of("SERVER_ADDR").is_none() && matches.value_of("PASSWORD").is_none() &&
-               matches.value_of("ENCRYPT_METHOD").is_none()
-    {
-        // Does not provide server config
-    } else {
-        panic!("`server-addr`, `method` and `password` should be provided together");
-    }
+            config.server.push(sc);
+            true
+        }
+        (None, None, None) => {
+            // Does not provide server config
+            false
+        }
+        _ => {
+            panic!("`server-addr`, `method` and `password` should be provided together");
+        }
+    };
 
     if !has_provided_config && !has_provided_server_config {
         println!("You have to specify a configuration file or pass arguments from argument list");

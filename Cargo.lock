@@ -1,6 +1,6 @@
 [root]
 name = "shadowsocks-rust"
-version = "1.5.0"
+version = "1.5.1"
 dependencies = [
  "argon2rs 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
