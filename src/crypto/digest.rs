@@ -1,6 +1,6 @@
 //! Message digest algorithm
 
-use ring::digest::{ SHA1_OUTPUT_LEN, SHA1, Context, };
+use ring::digest::{SHA1_OUTPUT_LEN, SHA1, Context};
 use md5::Md5;
 
 use bytes::BufMut;

@@ -2,11 +2,7 @@
 
 use std::mem;
 
-use ring::aead::{
-    AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305,
-    SealingKey, OpeningKey,
-    seal_in_place, open_in_place
-};
+use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, SealingKey, OpeningKey, seal_in_place, open_in_place};
 
 use crypto::{CipherType, CipherResult};
 use crypto::{AeadDecryptor, AeadEncryptor};
@@ -61,21 +57,27 @@ impl RingAeadCipher {
         }
 
         match t {
-            CipherType::Aes128Gcm => if is_seal {
-                seal_or_open!(Seal, SealingKey, AES_128_GCM)
-            } else {
-                seal_or_open!(Open, OpeningKey, AES_128_GCM)
-            },
-            CipherType::Aes256Gcm => if is_seal {
-                seal_or_open!(Seal, SealingKey, AES_256_GCM)
-            } else {
-                seal_or_open!(Open, OpeningKey, AES_256_GCM)
-            },
-            CipherType::ChaCha20Poly1305 => if is_seal {
-                seal_or_open!(Seal, SealingKey, CHACHA20_POLY1305)
-            } else {
-                seal_or_open!(Open, OpeningKey, CHACHA20_POLY1305)
-            },
+            CipherType::Aes128Gcm => {
+                if is_seal {
+                    seal_or_open!(Seal, SealingKey, AES_128_GCM)
+                } else {
+                    seal_or_open!(Open, OpeningKey, AES_128_GCM)
+                }
+            }
+            CipherType::Aes256Gcm => {
+                if is_seal {
+                    seal_or_open!(Seal, SealingKey, AES_256_GCM)
+                } else {
+                    seal_or_open!(Open, OpeningKey, AES_256_GCM)
+                }
+            }
+            CipherType::ChaCha20Poly1305 => {
+                if is_seal {
+                    seal_or_open!(Seal, SealingKey, CHACHA20_POLY1305)
+                } else {
+                    seal_or_open!(Open, OpeningKey, CHACHA20_POLY1305)
+                }
+            }
 
             _ => panic!("Unsupported {:?}", t),
         }
@@ -89,7 +91,7 @@ impl RingAeadCipher {
         self.increase_nonce();
         let is_seal = match self.cipher {
             RingAeadCryptoVariant::Seal(..) => true,
-            RingAeadCryptoVariant::Open(..) => false
+            RingAeadCryptoVariant::Open(..) => false,
         };
         let var = RingAeadCipher::new_variant(self.cipher_type, &self.key, &self.nonce, is_seal);
         mem::replace(&mut self.cipher, var);
@@ -128,8 +130,8 @@ impl AeadDecryptor for RingAeadCipher {
                 Ok(buf) => {
                     output.clone_from_slice(&buf[..input.len()]);
                     Ok(())
-                },
-                Err(_) => Err(Error::AeadDecryptFailed)
+                }
+                Err(_) => Err(Error::AeadDecryptFailed),
             }
         } else {
             panic!()

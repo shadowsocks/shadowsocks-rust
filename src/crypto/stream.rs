@@ -92,8 +92,10 @@ define_stream_ciphers! {
 
 /// Generate a specific Cipher with key and initialize vector
 pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
-    assert!(t.category() == CipherCategory::Stream,
-            "only allow initializing with stream cipher");
+    assert!(
+        t.category() == CipherCategory::Stream,
+        "only allow initializing with stream cipher"
+    );
 
     match t {
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),

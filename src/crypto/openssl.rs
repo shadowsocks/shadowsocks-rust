@@ -29,8 +29,10 @@ impl OpenSSLCrypto {
 
             CipherType::Rc4 => symm::Cipher::rc4(),
             _ => {
-                panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
-                       cipher_type)
+                panic!(
+                    "Cipher type {:?} does not supported by OpenSSLCrypt yet",
+                    cipher_type
+                )
             }
         };
 

@@ -18,10 +18,12 @@ const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let url = format!("{}:{}@{}",
-                      svr.method().to_string(),
-                      svr.password(),
-                      svr.addr());
+    let url = format!(
+        "{}:{}@{}",
+        svr.method().to_string(),
+        svr.password(),
+        svr.addr()
+    );
     format!("ss://{}", encode_config(url.as_bytes(), URL_SAFE_NO_PAD))
 }
 
@@ -38,7 +40,7 @@ fn print_qrcode(encoded: &str) {
         for x in 0..qrcode.width() {
             let color = match qrcode[(x, y)] {
                 Color::Light => WHITE,
-                Color::Dark => BLACK
+                Color::Dark => BLACK,
             };
 
             print!("{}", color);
@@ -109,21 +111,29 @@ fn main() {
         .author("Y. T. Chung <zonyitoo@gmail.com>")
         .about("Encode and decode ShadowSocks URL")
         .version(VERSION)
-        .arg(Arg::with_name("ENCODE")
-            .short("e")
-            .long("encode")
-            .takes_value(true)
-            .help("Encode the server configuration in the provided JSON file"))
-        .arg(Arg::with_name("DECODE")
-            .short("d")
-            .long("decode")
-            .takes_value(true)
-            .help("Decode the server configuration from the provide ShadowSocks URL"))
-        .arg(Arg::with_name("QRCODE")
-            .short("c")
-            .long("qrcode")
-            .takes_value(false)
-            .help("Generate the QRCode with the provided configuration"));
+        .arg(
+            Arg::with_name("ENCODE")
+                .short("e")
+                .long("encode")
+                .takes_value(true)
+                .help("Encode the server configuration in the provided JSON file"),
+        )
+        .arg(
+            Arg::with_name("DECODE")
+                .short("d")
+                .long("decode")
+                .takes_value(true)
+                .help(
+                    "Decode the server configuration from the provide ShadowSocks URL",
+                ),
+        )
+        .arg(
+            Arg::with_name("QRCODE")
+                .short("c")
+                .long("qrcode")
+                .takes_value(false)
+                .help("Generate the QRCode with the provided configuration"),
+        );
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");

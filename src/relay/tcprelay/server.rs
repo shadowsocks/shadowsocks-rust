@@ -38,20 +38,22 @@ impl TcpRelayClientHandshake {
         let fut = proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
             r_fut
                 .and_then(move |r| {
-                              let fut = Address::read_from(r).map_err(|_| {
-                                                                          io::Error::new(io::ErrorKind::Other,
-                                                                                         "failed to decode Address, may be wrong method or key")
-                                                                      });
-                              Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
-                          })
+                    let fut = Address::read_from(r).map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            "failed to decode Address, may be wrong method or key",
+                        )
+                    });
+                    Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
+                })
                 .map(move |(r, addr)| {
-                         TcpRelayClientPending {
-                             r: r,
-                             addr: addr,
-                             w: w_fut,
-                             timeout: timeout,
-                         }
-                     })
+                    TcpRelayClientPending {
+                        r: r,
+                        addr: addr,
+                        w: w_fut,
+                        timeout: timeout,
+                    }
+                })
         });
         boxed_future(fut)
     }
@@ -74,11 +76,11 @@ impl TcpRelayClientPending {
                 let fut = Context::with(|ctx| {
                     let h = ctx.handle();
                     try_timeout(resolve(&dname[..], h), timeout, h).and_then(move |ipaddr| {
-                                                                                 Ok(match ipaddr {
-                                                                                        IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                                                                                        IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                                                                                    })
-                                                                             })
+                        Ok(match ipaddr {
+                            IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                            IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                        })
+                    })
                 });
                 Box::new(fut)
             }
@@ -112,13 +114,17 @@ impl TcpRelayClientPending {
     /// Connect to the remote server
     fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
-                                                                                   Context::with(|ctx| {
-                                                                                                     try_timeout(TcpStream::connect(&addr, ctx.handle()),
-                                                                                                                 timeout,
-                                                                                                                 ctx.handle())
-                                                                                                 })
-                                                                               }))
+        Box::new(
+            TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
+                Context::with(|ctx| {
+                    try_timeout(
+                        TcpStream::connect(&addr, ctx.handle()),
+                        timeout,
+                        ctx.handle(),
+                    )
+                })
+            }),
+        )
     }
 
     /// Connect to the remote server
@@ -128,13 +134,13 @@ impl TcpRelayClientPending {
         let timeout = self.timeout;
         let fut = TcpRelayClientPending::connect_remote(self.addr, self.timeout);
         let fut = fut.map(move |stream| {
-                              TcpRelayClientConnected {
-                                  server: stream.split(),
-                                  client: client_pair,
-                                  addr: addr,
-                                  timeout: timeout,
-                              }
-                          });
+            TcpRelayClientConnected {
+                server: stream.split(),
+                client: client_pair,
+                addr: addr,
+                timeout: timeout,
+            }
+        });
         Box::new(fut)
     }
 }
@@ -154,9 +160,11 @@ impl TcpRelayClientConnected {
         let (r, w_fut) = self.client;
         let timeout = self.timeout;
 
-        tunnel(self.addr,
-               r.copy_timeout_opt(svr_w, self.timeout),
-               w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout)))
+        tunnel(
+            self.addr,
+            r.copy_timeout_opt(svr_w, self.timeout),
+            w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout)),
+        )
     }
 }
 
@@ -172,7 +180,8 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
                 let addr = svr_cfg.addr();
                 let addr = addr.listen_addr();
 
-                let listener = TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                let listener =
+                    TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
                 info!("ShadowSocks TCP Listening on {}", addr);
                 listener
@@ -197,21 +206,21 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
                         .and_then(|c| c.connect())
                         .and_then(|c| c.tunnel())
                         .map_err(move |err| {
-                                     error!("Failed to handle client ({}): {}", addr, err);
-                                 });
+                            error!("Failed to handle client ({}): {}", addr, err);
+                        });
 
                     Context::with(|ctx| ctx.handle().spawn(fut));
                     Ok(())
                 })
                 .map_err(|err| {
-                             error!("Server run failed: {}", err);
-                             err
-                         });
+                    error!("Server run failed: {}", err);
+                    err
+                });
 
             fut = Some(match fut.take() {
-                           Some(fut) => Box::new(fut.join(listening).map(|_| ())) as Box<Future<Item = (), Error = io::Error>>,
-                           None => Box::new(listening) as Box<Future<Item = (), Error = io::Error>>,
-                       })
+                Some(fut) => Box::new(fut.join(listening).map(|_| ())) as Box<Future<Item = (), Error = io::Error>>,
+                None => Box::new(listening) as Box<Future<Item = (), Error = io::Error>>,
+            })
         }
 
         fut.expect("Must have at least one server")

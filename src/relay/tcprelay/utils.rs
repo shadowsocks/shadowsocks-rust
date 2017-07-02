@@ -15,16 +15,18 @@ use super::BUFFER_SIZE;
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration) -> CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     CopyTimeout::new(r, w, dur)
 }
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub struct CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     r: Option<R>,
     w: Option<W>,
@@ -37,8 +39,9 @@ pub struct CopyTimeout<R, W>
 }
 
 impl<R, W> CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     fn new(r: R, w: W, timeout: Duration) -> CopyTimeout<R, W> {
         CopyTimeout {
@@ -81,7 +84,9 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Context::with(|ctx| {
+                        Some(Timeout::new(self.timeout, ctx.handle()).unwrap())
+                    });
                 }
                 Err(e)
             }
@@ -99,7 +104,9 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Context::with(|ctx| {
+                        Some(Timeout::new(self.timeout, ctx.handle()).unwrap())
+                    });
                 }
                 Err(e)
             }
@@ -108,8 +115,9 @@ impl<R, W> CopyTimeout<R, W>
 }
 
 impl<R, W> Future for CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     type Item = (u64, R, W);
     type Error = io::Error;
@@ -124,7 +132,9 @@ impl<R, W> Future for CopyTimeout<R, W>
                     // data and finish the transfer.
                     // done with the entire transfer.
                     try_nb!(self.w.as_mut().unwrap().flush());
-                    return Ok((self.amt, self.r.take().unwrap(), self.w.take().unwrap()).into());
+                    return Ok(
+                        (self.amt, self.r.take().unwrap(), self.w.take().unwrap()).into(),
+                    );
                 }
 
                 self.pos = 0;
@@ -150,8 +160,9 @@ impl<R, W> Future for CopyTimeout<R, W>
 
 /// Copies all data from `r` to `w` with optional timeout param
 pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>) -> CopyTimeoutOpt<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     match dur {
         Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d)),
