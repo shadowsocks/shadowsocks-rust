@@ -16,7 +16,6 @@ dependencies = [
  "lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "md-5 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "netdb 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "num_cpus 1.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "openssl 0.9.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "qrcode 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",

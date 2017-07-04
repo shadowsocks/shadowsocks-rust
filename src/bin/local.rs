@@ -11,7 +11,6 @@ extern crate shadowsocks;
 extern crate log;
 extern crate env_logger;
 extern crate time;
-extern crate num_cpus;
 
 use clap::{App, Arg};
 
