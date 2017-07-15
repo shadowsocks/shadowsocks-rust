@@ -85,7 +85,7 @@ const CIPHER_TABLE: &'static str = "table";
 const CIPHER_CHACHA20: &'static str = "chacha20";
 const CIPHER_SALSA20: &'static str = "salsa20";
 const CIPHER_XSALSA20: &'static str = "xsalsa20";
-const CIPHER_AES_128_CTR: &'static str = "aes128ctr";
+const CIPHER_AES_128_CTR: &'static str = "aes-128-ctr";
 
 const CIPHER_DUMMY: &'static str = "dummy";
 

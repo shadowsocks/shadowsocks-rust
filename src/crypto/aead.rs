@@ -22,8 +22,14 @@ pub trait AeadDecryptor {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()>;
 }
 
+/// Variant `AeadDecryptor`
+pub type BoxAeadDecryptor = Box<AeadDecryptor + Send>;
+
+/// Variant `AeadEncryptor`
+pub type BoxAeadEncryptor = Box<AeadEncryptor + Send>;
+
 /// Generate a specific AEAD cipher encryptor
-pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadEncryptor> {
+pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadEncryptor {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {
@@ -36,7 +42,7 @@ pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadEn
 }
 
 /// Generate a specific AEAD cipher decryptor
-pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> Box<AeadDecryptor> {
+pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadDecryptor {
     assert!(t.category() == CipherCategory::Aead);
 
     match t {

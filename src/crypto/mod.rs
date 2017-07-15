@@ -6,7 +6,8 @@ use openssl::symm;
 
 pub use self::cipher::{CipherType, CipherCategory, CipherResult};
 pub use self::stream::{StreamCipher, StreamCipherVariant, new_stream};
-pub use self::aead::{AeadEncryptor, AeadDecryptor, new_aead_encryptor, new_aead_decryptor};
+pub use self::aead::{AeadEncryptor, BoxAeadEncryptor, AeadDecryptor, BoxAeadDecryptor, new_aead_encryptor,
+                     new_aead_decryptor};
 
 pub mod cipher;
 pub mod openssl;

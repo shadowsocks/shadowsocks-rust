@@ -39,7 +39,7 @@ use std::u16;
 use bytes::{Buf, BufMut, BytesMut, BigEndian};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-use crypto::{self, CipherType, AeadEncryptor, AeadDecryptor};
+use crypto::{self, CipherType, BoxAeadEncryptor, BoxAeadDecryptor};
 
 use super::{EncryptedWrite, DecryptedRead, BUFFER_SIZE};
 
@@ -57,7 +57,7 @@ where
     reader: R,
     buffer: BytesMut,
     data: BytesMut,
-    cipher: Box<AeadDecryptor>,
+    cipher: BoxAeadDecryptor,
     pos: usize,
     sent_final: bool,
     tag_size: usize,
@@ -255,7 +255,7 @@ where
     W: AsyncWrite,
 {
     writer: W,
-    cipher: Box<AeadEncryptor>,
+    cipher: BoxAeadEncryptor,
     tag_size: usize,
 }
 
