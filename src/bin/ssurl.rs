@@ -1,8 +1,15 @@
+//! SIP002 URL Scheme
+//!
+//! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
+//! userinfo = websafe-base64-encode-utf8(method  ":" password)
+
 extern crate clap;
 extern crate shadowsocks;
 extern crate qrcode;
 extern crate serde_json;
 extern crate base64;
+extern crate serde_urlencoded;
+extern crate url;
 
 use clap::{App, Arg};
 
@@ -11,20 +18,33 @@ use qrcode::types::Color;
 
 use base64::{encode_config, decode_config, URL_SAFE_NO_PAD};
 
+use url::Url;
+
 use shadowsocks::VERSION;
 use shadowsocks::config::{Config, ConfigType, ServerConfig, ServerAddr};
+use shadowsocks::plugin::PluginConfig;
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let url = format!(
-        "{}:{}@{}",
-        svr.method().to_string(),
-        svr.password(),
-        svr.addr()
-    );
-    format!("ss://{}", encode_config(url.as_bytes(), URL_SAFE_NO_PAD))
+    let user_info = format!("{}:{}", svr.method().to_string(), svr.password());
+    let encoded_user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+
+    let mut url = format!("ss://{}@{}", encoded_user_info, svr.addr());
+    if let Some(c) = svr.plugin() {
+        let mut plugin = c.plugin.clone();
+        if let Some(ref opt) = c.plugin_opt {
+            plugin += ";";
+            plugin += opt;
+        }
+
+        let plugin_param = [("plugin", &plugin)];
+        url += "/?";
+        url += &serde_urlencoded::to_string(&plugin_param).unwrap();
+    }
+
+    url
 }
 
 fn print_qrcode(encoded: &str) {
@@ -73,14 +93,21 @@ fn decode(encoded: &str, need_qrcode: bool) {
         panic!("Malformed input: {:?}", encoded);
     }
 
-    let decoded = decode_config(&encoded[5..], URL_SAFE_NO_PAD).unwrap();
-    let decoded = String::from_utf8(decoded).unwrap();
+    let parsed = Url::parse(encoded).expect("Failed to parse url");
 
-    let mut sp1 = decoded.split('@');
-    let (account, addr) = match (sp1.next(), sp1.next()) {
-        (Some(account), Some(addr)) => (account, addr),
-        _ => panic!("Malformed input"),
-    };
+    if parsed.scheme() != "ss" {
+        panic!(
+            "Url must have scheme \"ss\", but found \"{}\"",
+            parsed.scheme()
+        );
+    }
+
+    let user_info = parsed.username();
+    let account = decode_config(user_info, URL_SAFE_NO_PAD).unwrap();
+    let account = String::from_utf8(account).expect("UserInfo is not UTF-8 encoded");
+    let host = parsed.host_str().expect("Url must have a host");
+    let port = parsed.port().unwrap_or(8388);
+    let addr = format!("{}:{}", host, port);
 
     let mut sp2 = account.split(':');
     let (method, pwd) = match (sp2.next(), sp2.next()) {
@@ -93,7 +120,30 @@ fn decode(encoded: &str, need_qrcode: bool) {
         Err(err) => panic!("Malformed input: {:?}", err),
     };
 
-    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None, None);
+    let mut plugin = None;
+    if let Some(q) = parsed.query() {
+        let query = serde_urlencoded::from_bytes::<Vec<(String, String)>>(q.as_bytes())
+            .expect("Failed to parse query string");
+
+        for (key, value) in query {
+            if key != "plugin" {
+                continue;
+            }
+
+            let mut vsp = value.splitn(2, ';');
+            match vsp.next() {
+                None => {}
+                Some(p) => {
+                    plugin = Some(PluginConfig {
+                        plugin: p.to_owned(),
+                        plugin_opt: vsp.next().map(ToOwned::to_owned),
+                    })
+                }
+            }
+        }
+    }
+
+    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None, plugin);
 
     let mut config = Config::new();
     config.server.push(svrconfig);

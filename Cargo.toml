@@ -53,6 +53,8 @@ md-5 = "0.4"
 typenum = "1.5"
 qrcode = { version = "0.4", default-features = false }
 subprocess = "0.1"
+serde_urlencoded = "0.5"
+url = "1.5"
 
 [dependencies.argon2rs]
 version = "0.2"

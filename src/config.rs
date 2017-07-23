@@ -261,6 +261,13 @@ impl ServerConfig {
             obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
         }
 
+        if let Some(ref p) = self.plugin {
+            obj.insert("plugin".to_owned(), Value::String(p.plugin.clone()));
+            if let Some(ref opt) = p.plugin_opt {
+                obj.insert("plugin_opts".to_owned(), Value::String(opt.clone()));
+            }
+        }
+
         Value::Object(obj)
     }
 }
@@ -656,15 +663,23 @@ impl Config {
 
             obj.insert(
                 "password".to_owned(),
-                Value::String(self.server[0].password.clone()),
+                Value::String(server.password.clone()),
             );
             obj.insert(
                 "method".to_owned(),
-                Value::String(self.server[0].method.to_string()),
+                Value::String(server.method.to_string()),
             );
-            if let Some(t) = self.server[0].timeout {
+            if let Some(t) = server.timeout {
                 obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
             }
+
+            if let Some(ref p) = server.plugin {
+                obj.insert("plugin".to_owned(), Value::String(p.plugin.clone()));
+                if let Some(ref opt) = p.plugin_opt {
+                    obj.insert("plugin_opts".to_owned(), Value::String(opt.clone()));
+                }
+            }
+
         } else {
             let arr: Vec<Value> = self.server.iter().map(|s| s.to_json()).collect();
             obj.insert("servers".to_owned(), Value::Array(arr));
