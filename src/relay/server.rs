@@ -10,6 +10,7 @@ use relay::udprelay::server::run as run_udp;
 use relay::tcprelay::server::run as run_tcp;
 use config::Config;
 use relay::Context;
+use plugin::{launch_plugin, PluginMode};
 
 /// Relay server running on server side.
 ///
@@ -26,7 +27,7 @@ use relay::Context;
 /// run(config).unwrap();
 /// ```
 ///
-pub fn run(config: Config) -> io::Result<()> {
+pub fn run(mut config: Config) -> io::Result<()> {
     let mut lp = try!(Core::new());
     let handle = lp.handle();
 
@@ -41,6 +42,10 @@ pub fn run(config: Config) -> io::Result<()> {
     // }
 
     let enable_udp = config.enable_udp;
+
+    // Hold it here, kill all plugins when Core is finished
+    let _plugins = launch_plugin(&mut config, PluginMode::Server)?;
+
     let context = Context::new(handle, config);
     Context::set(&context, move || if enable_udp {
         let tcp_fut = run_tcp();

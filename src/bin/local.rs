@@ -21,6 +21,7 @@ use env_logger::LogBuilder;
 use log::{LogRecord, LogLevelFilter};
 
 use shadowsocks::{Config, ServerConfig, ServerAddr, ConfigType, run_local};
+use shadowsocks::plugin::PluginConfig;
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -70,6 +71,18 @@ fn main() {
                 .long("encrypt-method")
                 .takes_value(true)
                 .help("Encryption method"),
+        )
+        .arg(
+            Arg::with_name("PLUGIN")
+                .long("plugin")
+                .takes_value(true)
+                .help("Enable SIP003 plugin. (Experimental)"),
+        )
+        .arg(
+            Arg::with_name("PLUGIN_OPT")
+                .long("plugin-opts")
+                .takes_value(true)
+                .help("Set SIP003 plugin options. (Experimental)"),
         )
         .get_matches();
 
@@ -185,6 +198,7 @@ fn main() {
                 password.to_owned(),
                 method,
                 None,
+                None,
             );
 
             config.server.push(sc);
@@ -218,6 +232,18 @@ fn main() {
     }
 
     config.enable_udp |= matches.is_present("ENABLE_UDP");
+
+    if let Some(p) = matches.value_of("PLUGIN") {
+        let plugin = PluginConfig {
+            plugin: p.to_owned(),
+            plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+        };
+
+        // Overrides config in file
+        for svr in config.server.iter_mut() {
+            svr.set_plugin(plugin.clone());
+        }
+    };
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 

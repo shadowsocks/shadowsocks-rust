@@ -10,6 +10,7 @@ use relay::tcprelay::local::run as run_tcp;
 use relay::udprelay::local::run as run_udp;
 use relay::Context;
 use config::Config;
+use plugin::{launch_plugin, PluginMode};
 
 /// Relay server running under local environment.
 ///
@@ -26,11 +27,14 @@ use config::Config;
 ///                         CipherType::Aes256Cfb)];
 /// run(config).unwrap();
 /// ```
-pub fn run(config: Config) -> io::Result<()> {
+pub fn run(mut config: Config) -> io::Result<()> {
     let mut lp = try!(Core::new());
     let handle = lp.handle();
 
     let enable_udp = config.enable_udp;
+
+    // Hold it here, kill all plugins when Core is finished
+    let _plugins = launch_plugin(&mut config, PluginMode::Client)?;
 
     let context = Context::new(handle, config);
     Context::set(&context, move || if enable_udp {

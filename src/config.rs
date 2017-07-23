@@ -61,6 +61,8 @@ use crypto::cipher::CipherType;
 
 use bytes::Bytes;
 
+use plugin::PluginConfig;
+
 /// Server address
 #[derive(Clone, Debug)]
 pub enum ServerAddr {
@@ -103,6 +105,22 @@ impl ServerAddr {
 
     fn to_json_object_old(&self, obj: &mut Map<String, Value>) {
         self.to_json_object_inner(obj, "server", "server_port")
+    }
+
+    /// Get string representation of domain
+    pub fn host(&self) -> String {
+        match *self {
+            ServerAddr::SocketAddr(ref s) => s.ip().to_string(),
+            ServerAddr::DomainName(ref dm, _) => dm.clone(),
+        }
+    }
+
+    /// Get port
+    pub fn port(&self) -> u16 {
+        match *self {
+            ServerAddr::SocketAddr(ref s) => s.port(),
+            ServerAddr::DomainName(_, p) => p,
+        }
     }
 }
 
@@ -153,11 +171,19 @@ pub struct ServerConfig {
     timeout: Option<Duration>,
     /// Encryption key
     enc_key: Bytes,
+    /// Plugin config
+    plugin: Option<PluginConfig>,
 }
 
 impl ServerConfig {
     /// Creates a new ServerConfig
-    pub fn new(addr: ServerAddr, pwd: String, method: CipherType, timeout: Option<Duration>) -> ServerConfig {
+    pub fn new(
+        addr: ServerAddr,
+        pwd: String,
+        method: CipherType,
+        timeout: Option<Duration>,
+        plugin: Option<PluginConfig>,
+    ) -> ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
         trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
         ServerConfig {
@@ -166,12 +192,13 @@ impl ServerConfig {
             method: method,
             timeout: timeout,
             enc_key: enc_key,
+            plugin: plugin,
         }
     }
 
     /// Create a basic config
     pub fn basic(addr: SocketAddr, password: String, method: CipherType) -> ServerConfig {
-        ServerConfig::new(ServerAddr::SocketAddr(addr), password, method, None)
+        ServerConfig::new(ServerAddr::SocketAddr(addr), password, method, None, None)
     }
 
     /// Set encryption method
@@ -179,6 +206,16 @@ impl ServerConfig {
         self.password = pwd;
         self.method = t;
         self.enc_key = t.bytes_to_key(self.password.as_bytes());
+    }
+
+    /// Set plugin
+    pub fn set_plugin(&mut self, p: PluginConfig) {
+        self.plugin = Some(p);
+    }
+
+    /// Set server addr
+    pub fn set_addr(&mut self, a: ServerAddr) {
+        self.addr = a;
     }
 
     /// Get server address
@@ -204,6 +241,11 @@ impl ServerConfig {
     /// Get timeout
     pub fn timeout(&self) -> &Option<Duration> {
         &self.timeout
+    }
+
+    /// Get plugin
+    pub fn plugin(&self) -> Option<&PluginConfig> {
+        self.plugin.as_ref()
     }
 }
 
@@ -352,9 +394,7 @@ impl Config {
                         Some(format!("`{}` is not a supported method", method_str)),
                     )
                 })
-            });
-
-        let method = try!(method);
+            })?;
 
         let port = server
             .get("port")
@@ -370,9 +410,7 @@ impl Config {
                 port_o.as_u64().map(|u| u as u16).ok_or_else(|| {
                     Error::new(ErrorKind::Malformed, "`port` should be an integer", None)
                 })
-            });
-
-        let port = try!(port);
+            })?;
 
         let addr = server
             .get("address")
@@ -401,9 +439,7 @@ impl Config {
                         })
                     })
                     .or_else(|_| Ok(ServerAddr::DomainName(addr_str.to_string(), port)))
-            });
-
-        let addr = try!(addr);
+            })?;
 
         let password = server
             .get("password")
@@ -417,23 +453,49 @@ impl Config {
                         Error::new(ErrorKind::Malformed, "`password` should be a string", None)
                     })
                     .map(|s| s.to_string())
-            });
-
-        let password = try!(password);
+            })?;
 
         let timeout = match server.get("timeout") {
             Some(t) => {
-                let val = try!(t.as_u64().ok_or(Error::new(
+                let val = t.as_u64().ok_or(Error::new(
                     ErrorKind::Malformed,
                     "`timeout` should be an integer",
                     None,
-                )));
+                ))?;
                 Some(Duration::from_secs(val))
             }
             None => None,
         };
 
-        Ok(ServerConfig::new(addr, password, method, timeout))
+        let plugin = match server.get("plugin") {
+            Some(p) => {
+                let plugin = p.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::Malformed, "`plugin` should be a string", None)
+                })?;
+
+                let opt = match server.get("plugin_opts") {
+                    None => None,
+                    Some(o) => {
+                        let o = o.as_str().ok_or_else(|| {
+                            Error::new(
+                                ErrorKind::Malformed,
+                                "`plugin_opts` should be a string",
+                                None,
+                            )
+                        })?;
+                        Some(o.to_owned())
+                    }
+                };
+
+                Some(PluginConfig {
+                    plugin: plugin.to_owned(),
+                    plugin_opt: opt,
+                })
+            }
+            None => None,
+        };
+
+        Ok(ServerConfig::new(addr, password, method, timeout, plugin))
     }
 
     fn parse_json_object(o: &Map<String, Value>, require_local_info: bool) -> Result<Config, Error> {

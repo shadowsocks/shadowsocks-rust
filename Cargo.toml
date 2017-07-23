@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.5.2"
+version = "1.6.0"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -52,6 +52,7 @@ ring = "0.9"
 md-5 = "0.4"
 typenum = "1.5"
 qrcode = { version = "0.4", default-features = false }
+subprocess = "0.1"
 
 [dependencies.argon2rs]
 version = "0.2"
