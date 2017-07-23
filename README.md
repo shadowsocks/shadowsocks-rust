@@ -110,6 +110,8 @@ It supports the following features:
 - [ ] <del>HTTP Proxy protocol</del> Deprecated, use `privoxy` instead.
 - [x] Various crypto algorithms
 - [x] Load balancing (multiple servers)
+- [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
+- [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
 
 ## TODO
 
