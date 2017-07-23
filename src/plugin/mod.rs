@@ -84,6 +84,13 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
                     svr_addr
                 }
             };
+
+            info!(
+                "Started plugin \"{}\" listening on {}",
+                c.plugin,
+                local_addr
+            );
+
             svr_addr_opt = Some(svr_addr); // Fuck borrow checker
         }
 
