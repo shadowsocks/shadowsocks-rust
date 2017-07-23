@@ -93,7 +93,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
         Err(err) => panic!("Malformed input: {:?}", err),
     };
 
-    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None);
+    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None, None);
 
     let mut config = Config::new();
     config.server.push(svrconfig);

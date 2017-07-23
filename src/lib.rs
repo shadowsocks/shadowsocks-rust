@@ -101,6 +101,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate scoped_tls;
 
+extern crate subprocess;
+
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -112,3 +114,4 @@ pub use self::relay::tcprelay::client::Socks5Client;
 pub mod config;
 pub mod relay;
 pub mod crypto;
+pub mod plugin;

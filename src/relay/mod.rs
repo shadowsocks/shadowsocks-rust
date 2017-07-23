@@ -19,7 +19,8 @@ mod utils;
 pub type BoxIoFuture<T> = Box<Future<Item = T, Error = io::Error>>;
 
 fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E>>
-    where F: Future<Item = T, Error = E> + 'static
+where
+    F: Future<Item = T, Error = E> + 'static,
 {
     Box::new(f)
 }
@@ -44,14 +45,16 @@ impl Context {
 
     /// Get the value in this context
     pub fn with<F, R>(f: F) -> R
-        where F: FnOnce(&Context) -> R
+    where
+        F: FnOnce(&Context) -> R,
     {
         CONTEXT.with(f)
     }
 
     #[doc(hidden)]
     pub fn set<F, R>(ctx: &Context, f: F) -> R
-        where F: FnOnce() -> R
+    where
+        F: FnOnce() -> R,
     {
         CONTEXT.set(ctx, f)
     }
