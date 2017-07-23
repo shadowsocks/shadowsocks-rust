@@ -3,15 +3,14 @@
 use std::str::{self, FromStr};
 use std::fmt::{self, Debug, Display};
 use std::io;
-use rand::{self, Rng};
 use std::convert::From;
 use std::mem;
+use std::cell::RefCell;
 
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 use crypto::digest::{self, DigestType, Digest};
-
+use rand::{Rng, OsRng};
 use bytes::{BufMut, Bytes, BytesMut};
-
 use openssl::symm;
 
 #[cfg(feature = "key-derive-argon2")]
@@ -286,12 +285,19 @@ impl CipherType {
     }
 
     fn gen_random_bytes(len: usize) -> Bytes {
-        let mut iv = BytesMut::with_capacity(len);
-        unsafe {
-            iv.set_len(len);
-        }
-        rand::thread_rng().fill_bytes(&mut iv);
-        iv.freeze()
+        thread_local!(static RNG: RefCell<OsRng> = RefCell::new(OsRng::new().unwrap()));
+
+        RNG.with(|rng| {
+            let mut brng = rng.borrow_mut();
+
+            let mut iv = BytesMut::with_capacity(len);
+            unsafe {
+                iv.set_len(len);
+            }
+
+            brng.fill_bytes(&mut iv);
+            iv.freeze()
+        })
     }
 
     /// Generate a random initialize vector for this cipher
