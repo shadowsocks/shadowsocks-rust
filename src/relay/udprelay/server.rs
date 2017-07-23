@@ -1,10 +1,10 @@
 //! UDP relay proxy server
 
-use std::rc::Rc;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr};
-use std::io::{self, Cursor};
-use std::cell::RefCell;
 use futures::{self, Future};
+use std::cell::RefCell;
+use std::io::{self, Cursor};
+use std::net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::rc::Rc;
 
 use tokio_core::net::UdpSocket;
 
@@ -12,12 +12,12 @@ use lru_cache::LruCache;
 
 use config::ServerConfig;
 use relay::{BoxIoFuture, boxed_future};
+use relay::Context;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
-use relay::Context;
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
-use super::crypto_io::{encrypt_payload, decrypt_payload};
+use super::crypto_io::{decrypt_payload, encrypt_payload};
 
 #[derive(Debug, Clone)]
 struct Associate {
@@ -59,12 +59,7 @@ impl ConnectionContext {
                     payload.drain(..header_len);
                     let body = payload;
 
-                    info!(
-                        "UDP ASSOCIATE {} -> {}, payload length {} bytes",
-                        src,
-                        addr,
-                        body.len()
-                    );
+                    info!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
 
                     let cloned_assoc = assoc.clone();
                     let cloned_addr = addr.clone();
@@ -114,12 +109,7 @@ impl ConnectionContext {
         } = self;
 
         let buf_len = buf[..n].len();
-        info!(
-            "UDP ASSOCIATE {} <- {}, payload length {} bytes",
-            client_addr,
-            address,
-            buf_len
-        );
+        info!("UDP ASSOCIATE {} <- {}, payload length {} bytes", client_addr, address, buf_len);
 
         // Client <- Remote
         // Append Address in front of body (ShadowSocks protocol)
@@ -201,16 +191,15 @@ fn handle_client(c: ConnectionContext) -> BoxIoFuture<()> {
 fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || {
-        Context::with(|ctx| UdpSocket::bind(&listen_addr, ctx.handle()))
-    }).and_then(|socket| {
-        let c = ConnectionContext {
-            assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
-            svr_cfg: svr_cfg,
-            socket: socket,
-        };
-        handle_client(c)
-    });
+    let fut = futures::lazy(move || Context::with(|ctx| UdpSocket::bind(&listen_addr, ctx.handle())))
+        .and_then(|socket| {
+            let c = ConnectionContext {
+                assoc: Rc::new(RefCell::new(AssociateMap::new(MAXIMUM_ASSOCIATE_MAP_SIZE))),
+                svr_cfg: svr_cfg,
+                socket: socket,
+            };
+            handle_client(c)
+        });
     boxed_future(fut)
 }
 

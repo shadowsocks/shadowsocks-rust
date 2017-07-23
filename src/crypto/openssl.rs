@@ -2,13 +2,13 @@
 
 use std::convert::From;
 
-use crypto::{StreamCipher, CipherType, CipherResult};
+use crypto::{CipherResult, CipherType, StreamCipher};
 use crypto::cipher;
 
 use crypto::CryptoMode;
 
-use openssl::symm;
 use bytes::{BufMut, BytesMut};
+use openssl::symm;
 
 /// Core cipher of OpenSSL
 pub struct OpenSSLCrypto {
@@ -28,12 +28,7 @@ impl OpenSSLCrypto {
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
             CipherType::Rc4 => symm::Cipher::rc4(),
-            _ => {
-                panic!(
-                    "Cipher type {:?} does not supported by OpenSSLCrypt yet",
-                    cipher_type
-                )
-            }
+            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
         };
 
         // Panic if error occurs

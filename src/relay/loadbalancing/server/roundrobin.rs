@@ -2,8 +2,8 @@
 
 use std::rc::Rc;
 
-use relay::loadbalancing::server::LoadBalancer;
 use config::{Config, ServerConfig};
+use relay::loadbalancing::server::LoadBalancer;
 
 #[derive(Clone)]
 pub struct RoundRobin {

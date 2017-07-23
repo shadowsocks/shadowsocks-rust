@@ -32,16 +32,16 @@
 //! +--------------+---------------+--------------+------------+
 //! ```
 
-use std::io::{self, Read, BufRead, Cursor};
 use std::cmp;
+use std::io::{self, BufRead, Cursor, Read};
 use std::u16;
 
-use bytes::{Buf, BufMut, BytesMut, BigEndian};
+use bytes::{BigEndian, Buf, BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-use crypto::{self, CipherType, BoxAeadEncryptor, BoxAeadDecryptor};
+use crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
-use super::{EncryptedWrite, DecryptedRead, BUFFER_SIZE};
+use super::{BUFFER_SIZE, DecryptedRead, EncryptedWrite};
 
 enum ReadingStep {
     Length,
@@ -117,10 +117,7 @@ where
                         return Ok(());
                     }
 
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "unexpected eof",
-                    ));
+                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"));
                 }
                 Ok(n) => self.buffer.put_slice(&incoming[..n]),
                 Err(e) => return Err(e),

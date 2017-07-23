@@ -1,24 +1,24 @@
 //! Relay for TCP implementation
 
-use std::io::{self, Read, BufRead};
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::rc::Rc;
+use std::io::{self, BufRead, Read};
 use std::mem;
-use std::time::Duration;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::IpAddr;
+use std::rc::Rc;
+use std::time::Duration;
 
+use config::{ServerAddr, ServerConfig};
 use crypto::CipherCategory;
-use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::resolve;
 use relay::Context;
-use config::{ServerConfig, ServerAddr};
+use relay::dns_resolver::resolve;
+use relay::socks5::Address;
 
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::{Handle, Timeout};
 use tokio_io::AsyncRead;
-use tokio_io::io::{read_exact, write_all};
 use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::io::{read_exact, write_all};
 
 use futures::{self, Future, Poll};
 
@@ -26,8 +26,8 @@ use bytes::{BufMut, BytesMut};
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
-use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
+use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
 pub mod local;
 mod socks5_local;
@@ -155,11 +155,7 @@ pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
 
 fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
     let timeout = *svr_cfg.timeout();
-    trace!(
-        "Connecting to proxy {:?}, timeout: {:?}",
-        svr_cfg.addr(),
-        timeout
-    );
+    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
     match *svr_cfg.addr() {
         ServerAddr::SocketAddr(ref addr) => {
             Context::with(|ctx| {
@@ -196,18 +192,13 @@ pub fn proxy_server_handshake(
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
-            trace!(
-                "Got encrypt stream and going to send addr: {:?}",
-                relay_addr
-            );
+            trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 
             // Send relay address to remote
             let mut buf = BytesMut::with_capacity(relay_addr.len());
             relay_addr.write_to_buf(&mut buf);
 
-            Context::with(|ctx| {
-                try_timeout(enc_w.write_all(buf), timeout, ctx.handle()).map(|(w, _)| w)
-            })
+            Context::with(|ctx| try_timeout(enc_w.write_all(buf), timeout, ctx.handle()).map(|(w, _)| w))
         });
 
         Ok((r_fut, boxed_future(w_fut)))
@@ -251,12 +242,7 @@ pub fn proxy_handshake(
                     .and_then(move |(w, prev_buf)| match svr_cfg.method().category() {
                         CipherCategory::Stream => {
                             let local_iv = prev_buf;
-                            Ok(From::from(StreamEncryptedWriter::new(
-                                w,
-                                svr_cfg.method(),
-                                svr_cfg.key(),
-                                &local_iv,
-                            )))
+                            Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
                         }
                         CipherCategory::Aead => {
                             let local_salt = prev_buf;
@@ -342,18 +328,8 @@ where
     let fut = c2s.select(s2c)
         .and_then(move |(dir, _)| {
             match dir {
-                TunnelDirection::Server2Client => {
-                    trace!(
-                        "Relay {} client <- server is closed, abort connection",
-                        addr
-                    )
-                }
-                TunnelDirection::Client2Server => {
-                    trace!(
-                        "Relay {} server -> client is closed, abort connection",
-                        addr
-                    )
-                }
+                TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
+                TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
             }
 
             Ok(())
@@ -423,7 +399,7 @@ where
     let fut = fut.select(
         Timeout::new(dur, handle)
                          .unwrap() // It must be succeeded!
-                         .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timeout"))),
+                         .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out"))),
     ).then(|res| match res {
             Ok((t, _)) => Ok(t),
             Err((err, _)) => Err(err),

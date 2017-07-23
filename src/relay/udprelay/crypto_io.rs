@@ -22,7 +22,7 @@
 
 use std::io;
 
-use crypto::{self, CipherType, CipherCategory, CryptoMode};
+use crypto::{self, CipherCategory, CipherType, CryptoMode};
 use crypto::StreamCipher;
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet

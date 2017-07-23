@@ -1,14 +1,14 @@
 //! Aead Ciphers
 
-use crypto::cipher::{CipherType, CipherCategory, CipherResult};
+use crypto::cipher::{CipherCategory, CipherResult, CipherType};
 
 use crypto::ring::RingAeadCipher;
 
 use ring::digest::SHA1;
-use ring::hmac::SigningKey;
 use ring::hkdf;
+use ring::hmac::SigningKey;
 
-use bytes::{BytesMut, Bytes};
+use bytes::{Bytes, BytesMut};
 
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {

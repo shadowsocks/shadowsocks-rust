@@ -1,14 +1,14 @@
 //! Stream protocol implementation
 
-use std::io::{self, Read, BufRead};
 use std::cmp;
+use std::io::{self, BufRead, Read};
 
-use crypto::{CipherType, StreamCipher, StreamCipherVariant, CryptoMode, new_stream};
 use bytes::{BufMut, BytesMut};
+use crypto::{CipherType, CryptoMode, StreamCipher, StreamCipherVariant, new_stream};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+use super::{DecryptedRead, EncryptedWrite};
 use super::BUFFER_SIZE;
-use super::{EncryptedWrite, DecryptedRead};
 
 const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 

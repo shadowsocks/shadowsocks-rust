@@ -4,10 +4,10 @@ use std::io;
 use std::time::Duration;
 
 use tokio_core::reactor::Timeout;
-use tokio_io::io::{Copy, copy};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::io::{Copy, copy};
 
-use futures::{Future, Poll, Async};
+use futures::{Async, Future, Poll};
 
 use relay::Context;
 
@@ -62,7 +62,7 @@ where
             Some(t) => {
                 match t.poll() {
                     Err(err) => Err(err),
-                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "timeout")),
+                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
                     Ok(Async::NotReady) => Ok(()),
                 }
             }
@@ -84,9 +84,7 @@ where
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| {
-                        Some(Timeout::new(self.timeout, ctx.handle()).unwrap())
-                    });
+                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
                 }
                 Err(e)
             }
@@ -104,9 +102,7 @@ where
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| {
-                        Some(Timeout::new(self.timeout, ctx.handle()).unwrap())
-                    });
+                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
                 }
                 Err(e)
             }
@@ -132,9 +128,7 @@ where
                     // data and finish the transfer.
                     // done with the entire transfer.
                     try_nb!(self.w.as_mut().unwrap().flush());
-                    return Ok(
-                        (self.amt, self.r.take().unwrap(), self.w.take().unwrap()).into(),
-                    );
+                    return Ok((self.amt, self.r.take().unwrap(), self.w.take().unwrap()).into());
                 }
 
                 self.pos = 0;

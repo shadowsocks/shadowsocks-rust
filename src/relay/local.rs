@@ -6,11 +6,11 @@ use tokio_core::reactor::Core;
 
 use futures::Future;
 
+use config::Config;
+use plugin::{PluginMode, launch_plugin};
+use relay::Context;
 use relay::tcprelay::local::run as run_tcp;
 use relay::udprelay::local::run as run_udp;
-use relay::Context;
-use config::Config;
-use plugin::{launch_plugin, PluginMode};
 
 /// Relay server running under local environment.
 ///

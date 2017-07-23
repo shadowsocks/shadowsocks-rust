@@ -6,11 +6,11 @@ use tokio_core::reactor::Core;
 
 use futures::Future;
 
-use relay::udprelay::server::run as run_udp;
-use relay::tcprelay::server::run as run_tcp;
 use config::Config;
+use plugin::{PluginMode, launch_plugin};
 use relay::Context;
-use plugin::{launch_plugin, PluginMode};
+use relay::tcprelay::server::run as run_tcp;
+use relay::udprelay::server::run as run_udp;
 
 /// Relay server running on server side.
 ///

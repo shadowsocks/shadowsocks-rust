@@ -7,22 +7,22 @@ use std::rc::Rc;
 use futures::{self, Future};
 use futures::stream::Stream;
 
-use tokio_core::net::{TcpStream, TcpListener};
+use tokio_core::net::{TcpListener, TcpStream};
 use tokio_io::AsyncRead;
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::io::flush;
 
 use config::ServerConfig;
 
-use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address};
-use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
-use relay::loadbalancing::server::RoundRobin;
-use relay::loadbalancing::server::LoadBalancer;
 use relay::{BoxIoFuture, boxed_future};
-use relay::tcprelay::crypto_io::{EncryptedWrite, DecryptedRead};
 use relay::Context;
+use relay::loadbalancing::server::LoadBalancer;
+use relay::loadbalancing::server::RoundRobin;
+use relay::socks5::{self, Address, HandshakeRequest, HandshakeResponse};
+use relay::socks5::{TcpRequestHeader, TcpResponseHeader};
+use relay::tcprelay::crypto_io::{DecryptedRead, EncryptedWrite};
 
-use super::{tunnel, ignore_until_end, try_timeout};
+use super::{ignore_until_end, try_timeout, tunnel};
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -46,10 +46,7 @@ fn handle_socks5_connect(
                     trace!("Proxy server connected");
 
                     // Tell the client that we are ready
-                    let header = TcpResponseHeader::new(
-                        socks5::Reply::Succeeded,
-                        Address::SocketAddress(client_addr),
-                    );
+                    let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(client_addr));
                     trace!("Send header: {:?}", header);
 
                     let fut = Context::with(|ctx| {

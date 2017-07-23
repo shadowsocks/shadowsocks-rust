@@ -104,7 +104,7 @@ extern crate subprocess;
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-pub use self::config::{Config, ServerConfig, ServerAddr, ClientConfig, ConfigType};
+pub use self::config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig};
 pub use self::relay::local::run as run_local;
 pub use self::relay::server::run as run_server;
 pub use self::relay::tcprelay::client::Socks5Client;

@@ -2,26 +2,26 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-use std::fmt::{self, Debug, Formatter};
-use std::net::{Ipv4Addr, Ipv6Addr, ToSocketAddrs, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::io::{self, Cursor, Read, Write};
-use std::vec;
-use std::error;
 use std::convert::From;
+use std::error;
+use std::fmt::{self, Debug, Formatter};
+use std::io::{self, Cursor, Read, Write};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
 use std::u8;
+use std::vec;
 
-use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian};
-use bytes::{BufMut, BytesMut, Bytes, IntoBuf};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 
-use futures::{Future, Poll, Async};
+use futures::{Async, Future, Poll};
 
-use tokio_io::io::read_exact;
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::io::read_exact;
 
 use relay::BoxIoFuture;
 
-pub use self::consts::{SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_PASSWORD,
-                       SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE};
+pub use self::consts::{SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
+                       SOCKS5_AUTH_METHOD_PASSWORD};
 
 use super::utils::{WriteBytes, write_bytes};
 
@@ -201,10 +201,7 @@ impl error::Error for Error {
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::new(
-            Reply::GeneralFailure,
-            <io::Error as error::Error>::description(&err),
-        )
+        Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
     }
 }
 
@@ -376,10 +373,7 @@ where
             }
             _ => {
                 error!("Invalid address type {}", addr_type);
-                return Err(Error::new(
-                    Reply::AddressTypeNotSupported,
-                    "Not supported address type",
-                ));
+                return Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"));
             }
         };
 
@@ -389,12 +383,7 @@ where
     fn read_ipv4(&mut self) -> Poll<Address, Error> {
         try_ready!(self.read_data());
         let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v4addr = Ipv4Addr::new(
-            stream.read_u8()?,
-            stream.read_u8()?,
-            stream.read_u8()?,
-            stream.read_u8()?,
-        );
+        let v4addr = Ipv4Addr::new(stream.read_u8()?, stream.read_u8()?, stream.read_u8()?, stream.read_u8()?);
         let port = stream.read_u16::<BigEndian>()?;
         let addr = Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)));
         Ok(Async::Ready(addr))
@@ -440,12 +429,7 @@ where
 
         let addr = match String::from_utf8(raw_addr) {
             Ok(addr) => addr,
-            Err(..) => {
-                return Err(Error::new(
-                    Reply::GeneralFailure,
-                    "Invalid address encoding",
-                ))
-            }
+            Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
         };
         let port = stream.read_u16::<BigEndian>()?;
 
@@ -579,21 +563,13 @@ impl TcpRequestHeader {
             .and_then(|(r, buf)| {
                 let ver = buf[0];
                 if ver != consts::SOCKS5_VERSION {
-                    return Err(Error::new(
-                        Reply::ConnectionRefused,
-                        "Unsupported Socks version",
-                    ));
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
                 }
 
                 let cmd = buf[1];
                 let command = match Command::from_u8(cmd) {
                     Some(c) => c,
-                    None => {
-                        return Err(Error::new(
-                            Reply::CommandNotSupported,
-                            "Unsupported command",
-                        ))
-                    }
+                    None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
                 };
 
                 Ok((r, command))
@@ -672,10 +648,7 @@ impl TcpResponseHeader {
                 let reply_code = buf[1];
 
                 if ver != consts::SOCKS5_VERSION {
-                    return Err(Error::new(
-                        Reply::ConnectionRefused,
-                        "Unsupported Socks version",
-                    ));
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
                 }
 
                 Ok((r, reply_code))
@@ -746,18 +719,17 @@ impl HandshakeRequest {
                 let nmet = buf[1];
 
                 if ver != consts::SOCKS5_VERSION {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Invalid Socks5 version",
-                    ));
+                    return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
                 }
 
                 Ok((r, nmet))
             })
             .and_then(|(r, nmet)| {
-                read_exact(r, vec![0u8; nmet as usize]).and_then(|(r, methods)| {
-                    Ok((r, HandshakeRequest { methods: methods }))
-                })
+                read_exact(r, vec![0u8; nmet as usize]).and_then(
+                    |(r, methods)| {
+                        Ok((r, HandshakeRequest { methods: methods }))
+                    },
+                )
             });
         Box::new(fut)
     }
@@ -809,10 +781,7 @@ impl HandshakeResponse {
             let met = buf[1];
 
             if ver != consts::SOCKS5_VERSION {
-                Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Invalid Socks5 version",
-                ))
+                Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
             } else {
                 Ok((r, HandshakeResponse { chosen_method: met }))
             }

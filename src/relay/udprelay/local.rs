@@ -1,10 +1,10 @@
 //! UDP relay local server
 
-use std::rc::Rc;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::io::{self, Cursor};
 use std::cell::RefCell;
+use std::io::{self, Cursor};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::IpAddr;
+use std::rc::Rc;
 
 use futures::{self, Future};
 
@@ -12,15 +12,15 @@ use tokio_core::net::UdpSocket;
 
 use lru_cache::LruCache;
 
-use config::{ServerConfig, ServerAddr};
+use config::{ServerAddr, ServerConfig};
 use relay::{BoxIoFuture, boxed_future};
-use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
-use relay::dns_resolver::resolve;
-use relay::socks5::{Address, UdpAssociateHeader};
 use relay::Context;
+use relay::dns_resolver::resolve;
+use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
+use relay::socks5::{Address, UdpAssociateHeader};
 
 use super::{MAXIMUM_ASSOCIATE_MAP_SIZE, MAXIMUM_UDP_PAYLOAD_SIZE};
-use super::crypto_io::{encrypt_payload, decrypt_payload};
+use super::crypto_io::{decrypt_payload, encrypt_payload};
 
 type AssociateMap = LruCache<Address, SocketAddr>;
 type ServerCache = LruCache<SocketAddr, Rc<ServerConfig>>;
@@ -65,11 +65,7 @@ impl Client {
         let fut = futures::lazy(move || {
             let buf = &buf[..n];
 
-            trace!(
-                "Got packet from server {}, length {}",
-                svr_cfg.addr(),
-                buf.len()
-            );
+            trace!("Got packet from server {}, length {}", svr_cfg.addr(), buf.len());
 
             decrypt_payload(svr_cfg.method(), svr_cfg.key(), buf)
         }).and_then(move |payload| {
@@ -104,12 +100,7 @@ impl Client {
                             io::Error::new(io::ErrorKind::Other, "unassociated packet")
                         })
                         .map(|client_addr| {
-                            info!(
-                                "UDP ASSOCIATE {} <- {}, payload length {} bytes",
-                                client_addr,
-                                addr,
-                                body.len()
-                            );
+                            info!("UDP ASSOCIATE {} <- {}, payload length {} bytes", client_addr, addr, body.len());
                             (client_addr, cloned_assoc, reply_body)
                         })
                 })
@@ -163,12 +154,7 @@ impl Client {
             .and_then(move |(payload, header, header_len)| {
                 let assoc_addr = header.address;
 
-                info!(
-                    "UDP ASSOCIATE {} -> {}, payload length {} bytes",
-                    src,
-                    assoc_addr,
-                    &payload[header_len..].len()
-                );
+                info!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, assoc_addr, &payload[header_len..].len());
 
                 {
                     // Record association: addr -> SocketAddr (Client)

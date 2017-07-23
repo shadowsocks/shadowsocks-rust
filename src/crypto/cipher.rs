@@ -1,17 +1,17 @@
 //! Ciphers
 
-use std::str::{self, FromStr};
+use std::cell::RefCell;
+use std::convert::From;
 use std::fmt::{self, Debug, Display};
 use std::io;
-use std::convert::From;
 use std::mem;
-use std::cell::RefCell;
+use std::str::{self, FromStr};
 
-use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
-use crypto::digest::{self, DigestType, Digest};
-use rand::{Rng, OsRng};
 use bytes::{BufMut, Bytes, BytesMut};
+use crypto::digest::{self, Digest, DigestType};
 use openssl::symm;
+use rand::{OsRng, Rng};
+use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 
 /// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
@@ -373,25 +373,15 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::{StreamCipher, CipherType, new_stream};
+    use crypto::{CipherType, StreamCipher, new_stream};
     use crypto::CryptoMode;
 
     #[test]
     fn test_get_cipher() {
         let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
         let iv = CipherType::Aes128Cfb.gen_init_vec();
-        let mut encryptor = new_stream(
-            CipherType::Aes128Cfb,
-            &key[0..],
-            &iv[0..],
-            CryptoMode::Encrypt,
-        );
-        let mut decryptor = new_stream(
-            CipherType::Aes128Cfb,
-            &key[0..],
-            &iv[0..],
-            CryptoMode::Decrypt,
-        );
+        let mut encryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
+        let mut decryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();

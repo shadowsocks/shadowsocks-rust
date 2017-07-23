@@ -3,16 +3,16 @@
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 
-use tokio_core::reactor::Handle;
 use tokio_core::net::TcpStream;
-use tokio_io::io::flush;
+use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::io::flush;
 
-use futures::{self, Future, Poll, Async};
+use futures::{self, Async, Future, Poll};
 
-use relay::socks5::{self, HandshakeRequest, HandshakeResponse, Address, TcpRequestHeader, TcpResponseHeader, Command,
-                    Reply};
 use relay::{BoxIoFuture, boxed_future};
+use relay::socks5::{self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader,
+                    TcpResponseHeader};
 
 /// Socks5 proxy client
 pub struct Socks5Client {

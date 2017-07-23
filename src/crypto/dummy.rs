@@ -1,6 +1,6 @@
 //! Dummy cipher, encrypt and decrypt nothing
 
-use super::{StreamCipher, CipherResult};
+use super::{CipherResult, StreamCipher};
 
 use bytes::BufMut;
 

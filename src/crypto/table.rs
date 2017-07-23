@@ -2,11 +2,11 @@
 
 use std::io::Cursor;
 
-use crypto::{StreamCipher, CipherResult};
-use crypto::digest::{self, DigestType, Digest};
+use crypto::{CipherResult, StreamCipher};
 use crypto::CryptoMode;
+use crypto::digest::{self, Digest, DigestType};
 
-use byteorder::{ReadBytesExt, LittleEndian};
+use byteorder::{LittleEndian, ReadBytesExt};
 use bytes::{BufMut, BytesMut};
 
 const TABLE_SIZE: usize = 256usize;

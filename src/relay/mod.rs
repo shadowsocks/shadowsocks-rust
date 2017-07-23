@@ -2,9 +2,9 @@
 
 use std::io;
 
+use config::Config;
 use futures::Future;
 use tokio_core::reactor::Handle;
-use config::Config;
 
 pub mod tcprelay;
 pub mod udprelay;

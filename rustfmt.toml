@@ -1,1 +1,6 @@
 max_width = 120
+fn_call_width = 120
+reorder_imports = true
+reorder_imports_in_group = true
+reorder_imported_names = true
+condense_wildcard_suffixes = true

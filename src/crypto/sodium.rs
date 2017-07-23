@@ -1,9 +1,9 @@
 //! Cipher defined with libsodium
 
 use bytes::BufMut;
-use sodiumoxide::crypto::stream::{chacha20, salsa20, xsalsa20, aes128ctr};
+use sodiumoxide::crypto::stream::{aes128ctr, chacha20, salsa20, xsalsa20};
 
-use crypto::{StreamCipher, CipherType, CipherResult};
+use crypto::{CipherResult, CipherType, StreamCipher};
 
 
 /// Cipher provided by Rust-Crypto
@@ -25,10 +25,7 @@ impl SodiumCipher {
                 )
             }
             CipherType::Salsa20 => {
-                SodiumCipher::Salsa20(
-                    salsa20::Key::from_slice(key).unwrap(),
-                    salsa20::Nonce::from_slice(iv).unwrap(),
-                )
+                SodiumCipher::Salsa20(salsa20::Key::from_slice(key).unwrap(), salsa20::Nonce::from_slice(iv).unwrap())
             }
             CipherType::XSalsa20 => {
                 SodiumCipher::XSalsa20(
@@ -72,8 +69,8 @@ impl StreamCipher for SodiumCipher {
 
 #[cfg(test)]
 mod test {
-    use crypto::{StreamCipher, CipherType};
     use super::*;
+    use crypto::{CipherType, StreamCipher};
 
     #[test]
     fn test_rust_crypto_cipher_chacha20() {

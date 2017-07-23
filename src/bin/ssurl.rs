@@ -16,12 +16,12 @@ use clap::{App, Arg};
 use qrcode::QrCode;
 use qrcode::types::Color;
 
-use base64::{encode_config, decode_config, URL_SAFE_NO_PAD};
+use base64::{URL_SAFE_NO_PAD, decode_config, encode_config};
 
 use url::Url;
 
 use shadowsocks::VERSION;
-use shadowsocks::config::{Config, ConfigType, ServerConfig, ServerAddr};
+use shadowsocks::config::{Config, ConfigType, ServerAddr, ServerConfig};
 use shadowsocks::plugin::PluginConfig;
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
@@ -96,10 +96,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     let parsed = Url::parse(encoded).expect("Failed to parse url");
 
     if parsed.scheme() != "ss" {
-        panic!(
-            "Url must have scheme \"ss\", but found \"{}\"",
-            parsed.scheme()
-        );
+        panic!("Url must have scheme \"ss\", but found \"{}\"", parsed.scheme());
     }
 
     let user_info = parsed.username();
@@ -158,7 +155,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
 fn main() {
     let app = App::new("ssurl")
-        .author("Y. T. Chung <zonyitoo@gmail.com>")
+        .author("Y. T. Chung")
         .about("Encode and decode ShadowSocks URL")
         .version(VERSION)
         .arg(
@@ -173,9 +170,7 @@ fn main() {
                 .short("d")
                 .long("decode")
                 .takes_value(true)
-                .help(
-                    "Decode the server configuration from the provide ShadowSocks URL",
-                ),
+                .help("Decode the server configuration from the provide ShadowSocks URL"),
         )
         .arg(
             Arg::with_name("QRCODE")

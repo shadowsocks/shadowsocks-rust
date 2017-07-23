@@ -2,26 +2,26 @@
 
 use std::io;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::IpAddr;
 use std::rc::Rc;
 use std::time::Duration;
-use std::net::IpAddr;
 
 use config::ServerConfig;
 
-use relay::socks5::Address;
 use relay::{BoxIoFuture, boxed_future};
-use relay::dns_resolver::resolve;
-use relay::tcprelay::crypto_io::{EncryptedWrite, DecryptedRead};
 use relay::Context;
+use relay::dns_resolver::resolve;
+use relay::socks5::Address;
+use relay::tcprelay::crypto_io::{DecryptedRead, EncryptedWrite};
 
 use futures::{self, Future};
 use futures::stream::Stream;
 
-use tokio_core::net::{TcpStream, TcpListener};
-use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_core::net::{TcpListener, TcpStream};
 use tokio_io::AsyncRead;
+use tokio_io::io::{ReadHalf, WriteHalf};
 
-use super::{tunnel, proxy_handshake, DecryptedHalf, EncryptedHalfFut, try_timeout};
+use super::{DecryptedHalf, EncryptedHalfFut, proxy_handshake, try_timeout, tunnel};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
@@ -39,10 +39,7 @@ impl TcpRelayClientHandshake {
             r_fut
                 .and_then(move |r| {
                     let fut = Address::read_from(r).map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::Other,
-                            "failed to decode Address, may be wrong method or key",
-                        )
+                        io::Error::new(io::ErrorKind::Other, "failed to decode Address, may be wrong method or key")
                     });
                     Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
                 })
@@ -114,17 +111,9 @@ impl TcpRelayClientPending {
     /// Connect to the remote server
     fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(
-            TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
-                Context::with(|ctx| {
-                    try_timeout(
-                        TcpStream::connect(&addr, ctx.handle()),
-                        timeout,
-                        ctx.handle(),
-                    )
-                })
-            }),
-        )
+        Box::new(TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
+            Context::with(|ctx| try_timeout(TcpStream::connect(&addr, ctx.handle()), timeout, ctx.handle()))
+        }))
     }
 
     /// Connect to the remote server

@@ -42,20 +42,20 @@
 //! These defined server will be used with a load balancing algorithm.
 //!
 
-use std::fs::OpenOptions;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
-use std::string::ToString;
-use std::option::Option;
-use std::default::Default;
-use std::fmt::{self, Display, Debug, Formatter};
-use std::path::Path;
 use std::collections::HashSet;
-use std::time::Duration;
 use std::convert::From;
-use std::str::FromStr;
+use std::default::Default;
+use std::fmt::{self, Debug, Display, Formatter};
+use std::fs::OpenOptions;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::IpAddr;
+use std::option::Option;
+use std::path::Path;
+use std::str::FromStr;
+use std::string::ToString;
+use std::time::Duration;
 
-use serde_json::{self, Value, Map};
+use serde_json::{self, Map, Value};
 
 use crypto::cipher::CipherType;
 
@@ -338,16 +338,8 @@ macro_rules! impl_from {
     )
 }
 
-impl_from!(
-    ::std::io::Error,
-    ErrorKind::IoError,
-    "error while reading file"
-);
-impl_from!(
-    serde_json::Error,
-    ErrorKind::JsonParsingError,
-    "Json parse error"
-);
+impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
+impl_from!(serde_json::Error, ErrorKind::JsonParsingError, "Json parse error");
 
 macro_rules! except {
     ($expr:expr,$kind:expr,$desc:expr) => (except!($expr,$kind,$desc,None));
@@ -385,9 +377,7 @@ impl Config {
     fn parse_server(server: &Map<String, Value>) -> Result<ServerConfig, Error> {
         let method = server
             .get("method")
-            .ok_or_else(|| {
-                Error::new(ErrorKind::MissingField, "need to specify a method", None)
-            })
+            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
             .and_then(|method_o| {
                 method_o.as_str().ok_or_else(|| {
                     Error::new(ErrorKind::Malformed, "`method` should be a string", None)
@@ -406,13 +396,7 @@ impl Config {
         let port = server
             .get("port")
             .or_else(|| server.get("server_port"))
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::MissingField,
-                    "need to specify a server port",
-                    None,
-                )
-            })
+            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server port", None))
             .and_then(|port_o| {
                 port_o.as_u64().map(|u| u as u16).ok_or_else(|| {
                     Error::new(ErrorKind::Malformed, "`port` should be an integer", None)
@@ -422,13 +406,7 @@ impl Config {
         let addr = server
             .get("address")
             .or_else(|| server.get("server"))
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::MissingField,
-                    "need to specify a server address",
-                    None,
-                )
-            })
+            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server address", None))
             .and_then(|addr_o| {
                 addr_o.as_str().ok_or_else(|| {
                     Error::new(ErrorKind::Malformed, "`address` should be a string", None)
@@ -437,9 +415,7 @@ impl Config {
             .and_then(|addr_str| {
                 addr_str
                     .parse::<Ipv4Addr>()
-                    .map(|v4| {
-                        ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port)))
-                    })
+                    .map(|v4| ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))))
                     .or_else(|_| {
                         addr_str.parse::<Ipv6Addr>().map(|v6| {
                             ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)))
@@ -450,15 +426,11 @@ impl Config {
 
         let password = server
             .get("password")
-            .ok_or_else(|| {
-                Error::new(ErrorKind::MissingField, "need to specify a password", None)
-            })
+            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
             .and_then(|pwd_o| {
                 pwd_o
                     .as_str()
-                    .ok_or_else(|| {
-                        Error::new(ErrorKind::Malformed, "`password` should be a string", None)
-                    })
+                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`password` should be a string", None))
                     .map(|s| s.to_string())
             })?;
 
@@ -484,11 +456,7 @@ impl Config {
                     None => None,
                     Some(o) => {
                         let o = o.as_str().ok_or_else(|| {
-                            Error::new(
-                                ErrorKind::Malformed,
-                                "`plugin_opts` should be a string",
-                                None,
-                            )
+                            Error::new(ErrorKind::Malformed, "`plugin_opts` should be a string", None)
                         })?;
                         Some(o.to_owned())
                     }
@@ -585,10 +553,7 @@ impl Config {
                         let x = match x.as_str() {
                             Some(x) => x,
                             None => {
-                                error!(
-                                    "Forbidden IP should be a string, but found {:?}, skipping",
-                                    x
-                                );
+                                error!("Forbidden IP should be a string, but found {:?}, skipping", x);
                                 return None;
                             }
                         };
@@ -620,11 +585,7 @@ impl Config {
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let object = try!(serde_json::from_str::<Value>(s));
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
+        let json_object = except!(object.as_object(), ErrorKind::JsonParsingError, "root is not a JsonObject");
         Config::parse_json_object(
             json_object,
             match config_type {
@@ -637,11 +598,7 @@ impl Config {
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let reader = &mut try!(OpenOptions::new().read(true).open(&Path::new(filename)));
         let object = try!(serde_json::from_reader::<_, Value>(reader));
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
+        let json_object = except!(object.as_object(), ErrorKind::JsonParsingError, "root is not a JsonObject");
         Config::parse_json_object(
             json_object,
             match config_type {
@@ -661,14 +618,8 @@ impl Config {
             let server = &self.server[0];
             server.addr.to_json_object_old(&mut obj);
 
-            obj.insert(
-                "password".to_owned(),
-                Value::String(server.password.clone()),
-            );
-            obj.insert(
-                "method".to_owned(),
-                Value::String(server.method.to_string()),
-            );
+            obj.insert("password".to_owned(), Value::String(server.password.clone()));
+            obj.insert("method".to_owned(), Value::String(server.method.to_string()));
             if let Some(t) = server.timeout {
                 obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
             }
@@ -692,10 +643,7 @@ impl Config {
             };
 
             obj.insert("local_address".to_owned(), Value::String(ip_str));
-            obj.insert(
-                "local_port".to_owned(),
-                Value::Number(From::from(l.port() as u64)),
-            );
+            obj.insert("local_port".to_owned(), Value::Number(From::from(l.port() as u64)));
         }
 
         obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));

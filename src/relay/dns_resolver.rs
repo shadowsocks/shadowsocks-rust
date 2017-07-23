@@ -1,10 +1,10 @@
 //! Asynchronous DNS resolver
 
+use std::cell::RefCell;
 use std::io;
 use std::time::Duration;
-use std::cell::RefCell;
 
-use futures::{Future, BoxFuture};
+use futures::{BoxFuture, Future};
 use futures::future;
 
 use tokio_core::reactor::Handle;
@@ -40,10 +40,7 @@ pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
     poll_host_by_name(addr, handle)
         .and_then(move |hn| match hn {
             None => {
-                let err = io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to resolve \"{}\"", owned_addr),
-                );
+                let err = io::Error::new(io::ErrorKind::Other, format!("Failed to resolve \"{}\"", owned_addr));
                 Err(err)
             }
             Some(hn) => {
@@ -51,10 +48,7 @@ pub fn resolve(addr: &str, handle: &Handle) -> BoxFuture<IpAddr, io::Error> {
                 trace!("Resolved \"{}\" as {:?}", owned_addr, addrs);
 
                 if addrs.is_empty() {
-                    let err = io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Failed to resolve \"{}\"", owned_addr),
-                    );
+                    let err = io::Error::new(io::ErrorKind::Other, format!("Failed to resolve \"{}\"", owned_addr));
                     Err(err)
                 } else {
                     let addr = addrs[0];

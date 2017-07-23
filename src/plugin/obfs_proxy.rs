@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
+use subprocess::{Exec, Popen};
 use subprocess::Result as PopenResult;
-use subprocess::{Popen, Exec};
 
 use config::ServerAddr;
 

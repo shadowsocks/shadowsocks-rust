@@ -1,7 +1,7 @@
 //! Relay for TCP server that running on local environment
 
-use relay::BoxIoFuture;
 use super::socks5_local;
+use relay::BoxIoFuture;
 
 /// Starts a TCP local server
 pub fn run() -> BoxIoFuture<()> {

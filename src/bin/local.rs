@@ -14,19 +14,19 @@ extern crate time;
 
 use clap::{App, Arg};
 
-use std::net::SocketAddr;
 use std::env;
+use std::net::SocketAddr;
 
 use env_logger::LogBuilder;
-use log::{LogRecord, LogLevelFilter};
+use log::{LogLevelFilter, LogRecord};
 
-use shadowsocks::{Config, ServerConfig, ServerAddr, ConfigType, run_local};
+use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_local};
 use shadowsocks::plugin::PluginConfig;
 
 fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
-        .author("Y. T. Chung <zonyitoo@gmail.com>")
+        .author("Y. T. Chung")
         .about("A fast tunnel proxy that helps you bypass firewalls.")
         .arg(Arg::with_name("VERBOSE").short("v").multiple(true).help(
             "Set the level of debug",
@@ -180,38 +180,35 @@ fn main() {
         None => Config::new(),
     };
 
-    let has_provided_server_config = match (
-        matches.value_of("SERVER_ADDR"),
-        matches.value_of("PASSWORD"),
-        matches.value_of("ENCRYPT_METHOD"),
-    ) {
-        (Some(svr_addr), Some(password), Some(method)) => {
-            let method = match method.parse() {
-                Ok(m) => m,
-                Err(err) => {
-                    panic!("Does not support {:?} method: {:?}", method, err);
-                }
-            };
+    let has_provided_server_config =
+        match (matches.value_of("SERVER_ADDR"), matches.value_of("PASSWORD"), matches.value_of("ENCRYPT_METHOD")) {
+            (Some(svr_addr), Some(password), Some(method)) => {
+                let method = match method.parse() {
+                    Ok(m) => m,
+                    Err(err) => {
+                        panic!("Does not support {:?} method: {:?}", method, err);
+                    }
+                };
 
-            let sc = ServerConfig::new(
-                svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
-                password.to_owned(),
-                method,
-                None,
-                None,
-            );
+                let sc = ServerConfig::new(
+                    svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
+                    password.to_owned(),
+                    method,
+                    None,
+                    None,
+                );
 
-            config.server.push(sc);
-            true
-        }
-        (None, None, None) => {
-            // Does not provide server config
-            false
-        }
-        _ => {
-            panic!("`server-addr`, `method` and `password` should be provided together");
-        }
-    };
+                config.server.push(sc);
+                true
+            }
+            (None, None, None) => {
+                // Does not provide server config
+                false
+            }
+            _ => {
+                panic!("`server-addr`, `method` and `password` should be provided together");
+            }
+        };
 
     let has_provided_local_config = match matches.value_of("LOCAL_ADDR") {
         Some(local_addr) => {

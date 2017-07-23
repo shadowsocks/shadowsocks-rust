@@ -2,14 +2,14 @@
 
 use std::mem;
 
-use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, SealingKey, OpeningKey, seal_in_place, open_in_place};
+use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey, open_in_place, seal_in_place};
 
-use crypto::{CipherType, CipherResult};
 use crypto::{AeadDecryptor, AeadEncryptor};
+use crypto::{CipherResult, CipherType};
+use crypto::aead::{increase_nonce, make_skey};
 use crypto::cipher::Error;
-use crypto::aead::{make_skey, increase_nonce};
 
-use bytes::{BytesMut, BufMut, Bytes};
+use bytes::{BufMut, Bytes, BytesMut};
 
 
 /// AEAD ciphers provided by Ring

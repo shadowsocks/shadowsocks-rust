@@ -1,9 +1,9 @@
 //! Rc4Md5 cipher definition
 
-use crypto::openssl::OpenSSLCrypto;
-use crypto::{StreamCipher, CipherType, CipherResult};
-use crypto::digest::{self, Digest, DigestType};
+use crypto::{CipherResult, CipherType, StreamCipher};
 use crypto::CryptoMode;
+use crypto::digest::{self, Digest, DigestType};
+use crypto::openssl::OpenSSLCrypto;
 
 use bytes::{BufMut, BytesMut};
 
@@ -43,7 +43,7 @@ unsafe impl Send for Rc4Md5Cipher {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::{StreamCipher, CipherType};
+    use crypto::{CipherType, StreamCipher};
     use crypto::CryptoMode;
 
     #[test]
