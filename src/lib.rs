@@ -85,8 +85,6 @@ extern crate ring;
 extern crate openssl;
 #[cfg(feature = "sodiumoxide")]
 extern crate sodiumoxide;
-#[cfg(feature = "key-derive-argon2")]
-extern crate argon2rs;
 
 #[macro_use]
 extern crate futures;

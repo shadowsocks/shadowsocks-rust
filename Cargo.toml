@@ -10,7 +10,6 @@ license = "MIT"
 
 [features]
 default = ["sodiumoxide"]
-key-derive-argon2 = ["argon2rs"]
 
 [lib]
 
@@ -55,10 +54,6 @@ qrcode = { version = "0.4", default-features = false }
 subprocess = "0.1"
 serde_urlencoded = "0.5"
 url = "1.5"
-
-[dependencies.argon2rs]
-version = "0.2"
-optional = true
 
 [dependencies.sodiumoxide]
 version = "0.0.15"

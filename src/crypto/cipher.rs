@@ -13,9 +13,6 @@ use rand::{Rng, OsRng};
 use bytes::{BufMut, Bytes, BytesMut};
 use openssl::symm;
 
-#[cfg(feature = "key-derive-argon2")]
-use argon2rs::{Argon2, Variant};
-
 /// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
 
@@ -193,39 +190,8 @@ impl CipherType {
     }
 
     /// Extends key to match the required key length
-    #[cfg(not(feature = "key-derive-argon2"))]
     pub fn bytes_to_key(&self, key: &[u8]) -> Bytes {
         self.classic_bytes_to_key(key)
-    }
-
-    #[cfg(feature = "key-derive-argon2")]
-    fn aead_key_derive(&self, key: &[u8]) -> Bytes {
-        // We should use crypto_pwhash in libsodium
-        // Salt is b"shadowsocks hash"
-        // Already implemented in shadowsocks-libev
-        // Ref:  crypto_pwhash (key, nkey, (char*)pass, strlen(pass), salt,
-        //         crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        //         crypto_pwhash_ALG_DEFAULT);
-
-        const SALT: &'static [u8] = b"shadowsocks hash";
-
-        let key_len = self.key_size();
-        let mut buf = BytesMut::with_capacity(key_len);
-        unsafe {
-            buf.set_len(key_len);
-        }
-        let a2 = Argon2::default(Variant::Argon2i); // NOTE, libsodium uses 2i as crypto_pwhash_ALG_DEFAULT
-        a2.hash(&mut buf, key, SALT, &[], &[]);
-        buf.freeze()
-    }
-
-    /// Extends key to match the required key length
-    #[cfg(feature = "key-derive-argon2")]
-    pub fn bytes_to_key(&self, key: &[u8]) -> Bytes {
-        match self.category() {
-            CipherCategory::Aead => self.aead_key_derive(key),
-            CipherCategory::Stream => self.classic_bytes_to_key(key),
-        }
     }
 
     /// Symmetric crypto initialize vector size
