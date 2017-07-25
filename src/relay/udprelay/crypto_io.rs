@@ -39,8 +39,8 @@ fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
 
     let mut send_payload = Vec::with_capacity(iv.len() + payload.len());
     send_payload.extend_from_slice(&iv);
-    try!(cipher.update(&payload[..], &mut send_payload));
-    try!(cipher.finalize(&mut send_payload));
+    cipher.update(&payload[..], &mut send_payload)?;
+    cipher.finalize(&mut send_payload)?;
     Ok(send_payload)
 }
 
@@ -84,8 +84,8 @@ fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
     let mut cipher = crypto::new_stream(t, key, iv, CryptoMode::Decrypt);
 
     let mut recv_payload = Vec::with_capacity(data.len());
-    try!(cipher.update(data, &mut recv_payload));
-    try!(cipher.finalize(&mut recv_payload));
+    cipher.update(data, &mut recv_payload)?;
+    cipher.finalize(&mut recv_payload)?;
 
     Ok(recv_payload)
 }
@@ -107,7 +107,7 @@ fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result
     let mut cipher = crypto::new_aead_decryptor(t, key, salt);
 
     let mut recv_payload = vec![0u8; data_length];
-    try!(cipher.decrypt(data, &mut recv_payload, tag));
+    cipher.decrypt(data, &mut recv_payload, tag)?;
 
     Ok(recv_payload)
 }

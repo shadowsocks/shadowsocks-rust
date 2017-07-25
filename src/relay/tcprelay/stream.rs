@@ -82,7 +82,7 @@ where
                     self.buffer.reserve(buffer_len);
 
                     // EOF
-                    try!(self.cipher.finalize(&mut self.buffer));
+                    self.cipher.finalize(&mut self.buffer)?;
                     self.sent_final = true;
                 }
                 Ok(l) => {
@@ -92,7 +92,7 @@ where
                     let buffer_len = self.buffer_size(data);
                     self.buffer.reserve(buffer_len);
 
-                    try!(self.cipher.update(data, &mut self.buffer));
+                    self.cipher.update(data, &mut self.buffer)?;
                 }
                 Err(err) => {
                     return Err(err);
@@ -116,8 +116,8 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
-            let mut available = try!(self.fill_buf());
-            try!(available.read(buf))
+            let mut available = self.fill_buf()?;
+            available.read(buf)?
         };
         self.consume(nread);
         Ok(nread)

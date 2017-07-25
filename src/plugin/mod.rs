@@ -76,9 +76,9 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
                 Ok(p) => {
                     let svr_addr = ServerAddr::SocketAddr(local_addr);
                     plugins.push(Plugin {
-                        addr: svr_addr.clone(),
-                        process: p,
-                    });
+                                     addr: svr_addr.clone(),
+                                     process: p,
+                                 });
 
                     // Replace addr with plugin
                     svr_addr
@@ -101,12 +101,11 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
     Ok(plugins)
 }
 
-fn start_plugin(
-    plugin: &PluginConfig,
-    remote: &ServerAddr,
-    local: &SocketAddr,
-    mode: PluginMode,
-) -> PopenResult<Popen> {
+fn start_plugin(plugin: &PluginConfig,
+                remote: &ServerAddr,
+                local: &SocketAddr,
+                mode: PluginMode)
+                -> PopenResult<Popen> {
     if plugin.plugin == "obfsproxy" {
         obfs_proxy::start_plugin(plugin, remote, local, mode)
     } else {

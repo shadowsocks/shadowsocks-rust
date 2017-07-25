@@ -222,8 +222,8 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
-            let mut available = try!(self.fill_buf());
-            try!(available.read(buf))
+            let mut available = self.fill_buf()?;
+            available.read(buf)?
         };
         self.consume(nread);
         Ok(nread)
@@ -297,11 +297,8 @@ where
         }
 
         let mut encrypted_data_len = [0u8; 2];
-        self.cipher.encrypt(
-            &data_len_buf,
-            &mut encrypted_data_len,
-            &mut *tag_buf,
-        );
+        self.cipher
+            .encrypt(&data_len_buf, &mut encrypted_data_len, &mut *tag_buf);
 
         buf.put(&encrypted_data_len[..]);
         buf.put_slice(&tag_buf);

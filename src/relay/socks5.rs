@@ -392,16 +392,14 @@ where
     fn read_ipv6(&mut self) -> Poll<Address, Error> {
         try_ready!(self.read_data());
         let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v6addr = Ipv6Addr::new(
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-        );
+        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?,
+                                   stream.read_u16::<BigEndian>()?);
         let port = stream.read_u16::<BigEndian>()?;
 
         let addr = Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)));
@@ -449,9 +447,10 @@ where
         let buf = self.buf.as_mut().unwrap();
 
         while self.already_read < buf.len() {
-            match self.reader.as_mut().unwrap().read(
-                &mut buf[self.already_read..],
-            ) {
+            match self.reader
+                        .as_mut()
+                        .unwrap()
+                        .read(&mut buf[self.already_read..]) {
                 Ok(0) => {
                     let err = io::Error::new(io::ErrorKind::Other, "Unexpected EOF");
                     return Err(err);
@@ -576,13 +575,13 @@ impl TcpRequestHeader {
             })
             .and_then(|(r, command)| {
                 Address::read_from(r).map(move |(conn, address)| {
-                    let header = TcpRequestHeader {
-                        command: command,
-                        address: address,
-                    };
+                                              let header = TcpRequestHeader {
+                                                  command: command,
+                                                  address: address,
+                                              };
 
-                    (conn, header)
-                })
+                                              (conn, header)
+                                          })
             });
 
         Box::new(fut)
@@ -655,13 +654,13 @@ impl TcpResponseHeader {
             })
             .and_then(|(r, reply_code)| {
                 Address::read_from(r).map(move |(r, address)| {
-                    let rep = TcpResponseHeader {
-                        reply: Reply::from_u8(reply_code),
-                        address: address,
-                    };
+                                              let rep = TcpResponseHeader {
+                                                  reply: Reply::from_u8(reply_code),
+                                                  address: address,
+                                              };
 
-                    (r, rep)
-                })
+                                              (r, rep)
+                                          })
             });
 
         Box::new(fut)
@@ -725,12 +724,9 @@ impl HandshakeRequest {
                 Ok((r, nmet))
             })
             .and_then(|(r, nmet)| {
-                read_exact(r, vec![0u8; nmet as usize]).and_then(
-                    |(r, methods)| {
-                        Ok((r, HandshakeRequest { methods: methods }))
-                    },
-                )
-            });
+                          read_exact(r, vec![0u8; nmet as usize])
+                              .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
+                      });
         Box::new(fut)
     }
 
@@ -837,15 +833,15 @@ impl UdpAssociateHeader {
 
     /// Read from a reader
     pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error>> {
-        let fut = read_exact(r, [0u8; 3]).map_err(From::from).and_then(
-            |(r, buf)| {
-                let frag = buf[2];
-                Address::read_from(r).map(move |(r, address)| {
-                    let h = UdpAssociateHeader::new(frag, address);
-                    (r, h)
-                })
-            },
-        );
+        let fut = read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                          let frag = buf[2];
+                          Address::read_from(r).map(move |(r, address)| {
+                                                        let h = UdpAssociateHeader::new(frag, address);
+                                                        (r, h)
+                                                    })
+                      });
         Box::new(fut)
     }
 

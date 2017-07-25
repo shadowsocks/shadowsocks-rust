@@ -19,25 +19,19 @@ impl SodiumCipher {
     pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> SodiumCipher {
         match t {
             CipherType::ChaCha20 => {
-                SodiumCipher::ChaCha20(
-                    chacha20::Key::from_slice(key).unwrap(),
-                    chacha20::Nonce::from_slice(iv).unwrap(),
-                )
+                SodiumCipher::ChaCha20(chacha20::Key::from_slice(key).unwrap(),
+                                       chacha20::Nonce::from_slice(iv).unwrap())
             }
             CipherType::Salsa20 => {
                 SodiumCipher::Salsa20(salsa20::Key::from_slice(key).unwrap(), salsa20::Nonce::from_slice(iv).unwrap())
             }
             CipherType::XSalsa20 => {
-                SodiumCipher::XSalsa20(
-                    xsalsa20::Key::from_slice(key).unwrap(),
-                    xsalsa20::Nonce::from_slice(iv).unwrap(),
-                )
+                SodiumCipher::XSalsa20(xsalsa20::Key::from_slice(key).unwrap(),
+                                       xsalsa20::Nonce::from_slice(iv).unwrap())
             }
             CipherType::Aes128Ctr => {
-                SodiumCipher::Aes128Ctr(
-                    aes128ctr::Key::from_slice(key).unwrap(),
-                    aes128ctr::Nonce::from_slice(iv).unwrap(),
-                )
+                SodiumCipher::Aes128Ctr(aes128ctr::Key::from_slice(key).unwrap(),
+                                        aes128ctr::Nonce::from_slice(iv).unwrap())
             }
             _ => panic!("Rust Crypto does not support {:?} cipher", t),
         }

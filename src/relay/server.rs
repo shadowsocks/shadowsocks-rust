@@ -28,7 +28,7 @@ use relay::udprelay::server::run as run_udp;
 /// ```
 ///
 pub fn run(mut config: Config) -> io::Result<()> {
-    let mut lp = try!(Core::new());
+    let mut lp = Core::new()?;
     let handle = lp.handle();
 
     // let config = Rc::new(config);

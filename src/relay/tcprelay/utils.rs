@@ -75,7 +75,7 @@ where
 
     fn read_or_set_timeout(&mut self) -> io::Result<usize> {
         // First, return if timeout
-        try!(self.try_poll_timeout());
+        self.try_poll_timeout()?;
 
         // Then, unset the previous timeout
         self.clear_timer();
@@ -93,7 +93,7 @@ where
 
     fn write_or_set_timeout(&mut self, beg: usize, end: usize) -> io::Result<usize> {
         // First, return if timeout
-        try!(self.try_poll_timeout());
+        self.try_poll_timeout()?;
 
         // Then, unset the previous timeout
         self.clear_timer();

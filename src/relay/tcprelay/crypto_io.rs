@@ -250,9 +250,10 @@ where
 
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
-                let i = try_nb!(self.writer.as_mut().unwrap().write_raw(
-                    &self.buf[self.pos..self.cap],
-                ));
+                let i = try_nb!(self.writer
+                                    .as_mut()
+                                    .unwrap()
+                                    .write_raw(&self.buf[self.pos..self.cap]));
                 self.pos += i;
                 self.amt += i as u64;
             }
@@ -344,10 +345,10 @@ where
                 let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
                 self.write_buf.reserve(buffer_len);
 
-                self.writer.as_mut().unwrap().encrypt(
-                    data,
-                    &mut self.write_buf,
-                )?;
+                self.writer
+                    .as_mut()
+                    .unwrap()
+                    .encrypt(data, &mut self.write_buf)?;
                 self.cap = self.write_buf.len();
                 self.pos = 0;
                 Ok(n)
@@ -368,10 +369,10 @@ where
         // Then, unset the previous timeout
         self.clear_timer();
 
-        match self.writer.as_mut().unwrap().write_raw(
-            &self.write_buf[self.pos..
-                                self.cap],
-        ) {
+        match self.writer
+                    .as_mut()
+                    .unwrap()
+                    .write_raw(&self.write_buf[self.pos..self.cap]) {
             Ok(n) => {
                 self.pos += n;
                 Ok(n)

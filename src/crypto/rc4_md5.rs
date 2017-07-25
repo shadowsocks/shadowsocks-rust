@@ -57,14 +57,14 @@ mod test {
         let mut enc = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Encrypt);
         let mut encrypted_msg = Vec::new();
         enc.update(msg, &mut encrypted_msg)
-            .and_then(|_| enc.finalize(&mut encrypted_msg))
-            .unwrap();
+           .and_then(|_| enc.finalize(&mut encrypted_msg))
+           .unwrap();
 
         let mut dec = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Decrypt);
         let mut decrypted_msg = Vec::new();
         dec.update(&encrypted_msg[..], &mut decrypted_msg)
-            .and_then(|_| dec.finalize(&mut decrypted_msg))
-            .unwrap();
+           .and_then(|_| dec.finalize(&mut decrypted_msg))
+           .unwrap();
 
         assert_eq!(msg, &decrypted_msg[..]);
     }

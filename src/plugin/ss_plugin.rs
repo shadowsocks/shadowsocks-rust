@@ -7,12 +7,11 @@ use config::ServerAddr;
 
 use super::{PluginConfig, PluginMode};
 
-pub fn start_plugin(
-    plugin: &PluginConfig,
-    remote: &ServerAddr,
-    local: &SocketAddr,
-    _mode: PluginMode,
-) -> PopenResult<Popen> {
+pub fn start_plugin(plugin: &PluginConfig,
+                    remote: &ServerAddr,
+                    local: &SocketAddr,
+                    _mode: PluginMode)
+                    -> PopenResult<Popen> {
     trace!("Start plugin \"{:?}\" remote: {}, local: {}", plugin, remote, local);
 
     let mut exec = Exec::cmd(&plugin.plugin)

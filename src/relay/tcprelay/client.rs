@@ -33,31 +33,31 @@ impl Socks5Client {
                 trace!("Client connected, going to send handshake: {:?}", hs);
 
                 hs.write_to(s)
-                    .and_then(flush)
-                    .and_then(HandshakeResponse::read_from)
-                    .and_then(|(s, rsp)| {
-                        trace!("Got handshake response: {:?}", rsp);
-                        assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
-                        Ok(s)
-                    })
+                  .and_then(flush)
+                  .and_then(HandshakeResponse::read_from)
+                  .and_then(|(s, rsp)| {
+                                trace!("Got handshake response: {:?}", rsp);
+                                assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
+                                Ok(s)
+                            })
             })
             .and_then(move |s| {
                 // 2. Send request header
                 let h = TcpRequestHeader::new(Command::TcpConnect, From::from(addr));
                 trace!("Going to connect, req: {:?}", h);
                 h.write_to(s)
-                    .and_then(flush)
-                    .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
-                    .and_then(|(s, rsp)| {
-                        trace!("Got response: {:?}", rsp);
-                        match rsp.reply {
-                            Reply::Succeeded => Ok(s),
-                            r => {
-                                let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
-                                Err(err)
-                            }
+                 .and_then(flush)
+                 .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
+                 .and_then(|(s, rsp)| {
+                    trace!("Got response: {:?}", rsp);
+                    match rsp.reply {
+                        Reply::Succeeded => Ok(s),
+                        r => {
+                            let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
+                            Err(err)
                         }
-                    })
+                    }
+                })
             })
             .map(|s| Socks5Client { stream: s });
 
@@ -77,31 +77,31 @@ impl Socks5Client {
                 trace!("Client connected, going to send handshake: {:?}", hs);
 
                 hs.write_to(s)
-                    .and_then(flush)
-                    .and_then(HandshakeResponse::read_from)
-                    .and_then(|(s, rsp)| {
-                        trace!("Got handshake response: {:?}", rsp);
-                        assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
-                        Ok(s)
-                    })
+                  .and_then(flush)
+                  .and_then(HandshakeResponse::read_from)
+                  .and_then(|(s, rsp)| {
+                                trace!("Got handshake response: {:?}", rsp);
+                                assert_eq!(rsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
+                                Ok(s)
+                            })
             })
             .and_then(move |s| {
                 // 2. Send request header
                 let h = TcpRequestHeader::new(Command::UdpAssociate, From::from(addr));
                 trace!("Going to connect, req: {:?}", h);
                 h.write_to(s)
-                    .and_then(flush)
-                    .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
-                    .and_then(|(s, rsp)| {
-                        trace!("Got response: {:?}", rsp);
-                        match rsp.reply {
-                            Reply::Succeeded => Ok((s, rsp.address)),
-                            r => {
-                                let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
-                                Err(err)
-                            }
+                 .and_then(flush)
+                 .and_then(|s| TcpResponseHeader::read_from(s).map_err(From::from))
+                 .and_then(|(s, rsp)| {
+                    trace!("Got response: {:?}", rsp);
+                    match rsp.reply {
+                        Reply::Succeeded => Ok((s, rsp.address)),
+                        r => {
+                            let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
+                            Err(err)
                         }
-                    })
+                    }
+                })
             })
             .map(|(s, a)| (Socks5Client { stream: s }, a));
 

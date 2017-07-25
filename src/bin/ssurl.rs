@@ -132,9 +132,9 @@ fn decode(encoded: &str, need_qrcode: bool) {
                 None => {}
                 Some(p) => {
                     plugin = Some(PluginConfig {
-                        plugin: p.to_owned(),
-                        plugin_opt: vsp.next().map(ToOwned::to_owned),
-                    })
+                                      plugin: p.to_owned(),
+                                      plugin_opt: vsp.next().map(ToOwned::to_owned),
+                                  })
                 }
             }
         }
@@ -158,27 +158,21 @@ fn main() {
         .author("Y. T. Chung")
         .about("Encode and decode ShadowSocks URL")
         .version(VERSION)
-        .arg(
-            Arg::with_name("ENCODE")
-                .short("e")
-                .long("encode")
-                .takes_value(true)
-                .help("Encode the server configuration in the provided JSON file"),
-        )
-        .arg(
-            Arg::with_name("DECODE")
-                .short("d")
-                .long("decode")
-                .takes_value(true)
-                .help("Decode the server configuration from the provide ShadowSocks URL"),
-        )
-        .arg(
-            Arg::with_name("QRCODE")
-                .short("c")
-                .long("qrcode")
-                .takes_value(false)
-                .help("Generate the QRCode with the provided configuration"),
-        );
+        .arg(Arg::with_name("ENCODE")
+                 .short("e")
+                 .long("encode")
+                 .takes_value(true)
+                 .help("Encode the server configuration in the provided JSON file"))
+        .arg(Arg::with_name("DECODE")
+                 .short("d")
+                 .long("decode")
+                 .takes_value(true)
+                 .help("Decode the server configuration from the provide ShadowSocks URL"))
+        .arg(Arg::with_name("QRCODE")
+                 .short("c")
+                 .long("qrcode")
+                 .takes_value(false)
+                 .help("Generate the QRCode with the provided configuration"));
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");

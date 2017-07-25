@@ -30,12 +30,11 @@ struct UdpConfig {
     client_addr: Rc<SocketAddr>,
 }
 
-fn handle_socks5_connect(
-    (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
-    client_addr: SocketAddr,
-    addr: Address,
-    svr_cfg: Rc<ServerConfig>,
-) -> BoxIoFuture<()> {
+fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+                         client_addr: SocketAddr,
+                         addr: Address,
+                         svr_cfg: Rc<ServerConfig>)
+                         -> BoxIoFuture<()> {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
     let timeout = *svr_cfg.timeout();
@@ -50,10 +49,10 @@ fn handle_socks5_connect(
                     trace!("Send header: {:?}", header);
 
                     let fut = Context::with(|ctx| {
-                        let handle = ctx.handle();
-                        let fut = try_timeout(header.write_to(w), timeout, &handle);
-                        try_timeout(fut.and_then(flush), timeout, &handle)
-                    });
+                                                let handle = ctx.handle();
+                                                let fut = try_timeout(header.write_to(w), timeout, &handle);
+                                                try_timeout(fut.and_then(flush), timeout, &handle)
+                                            });
 
                     boxed_future(fut.map(move |w| (svr_s, w)))
                 }
@@ -73,10 +72,10 @@ fn handle_socks5_connect(
                     trace!("Send header: {:?}", header);
 
                     let fut = Context::with(|ctx| {
-                        let handle = ctx.handle();
-                        let fut = try_timeout(header.write_to(w), timeout, &handle);
-                        try_timeout(fut.and_then(flush), timeout, &handle)
-                    });
+                                                let handle = ctx.handle();
+                                                let fut = try_timeout(header.write_to(w), timeout, &handle);
+                                                try_timeout(fut.and_then(flush), timeout, &handle)
+                                            });
 
                     boxed_future(fut.and_then(|_| Err(err)))
                 }
@@ -98,7 +97,7 @@ fn handle_socks5_connect(
 }
 
 fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
-    let client_addr = try!(s.peer_addr());
+    let client_addr = s.peer_addr()?;
     let cloned_client_addr = client_addr;
     let fut = futures::lazy(|| Ok(s.split()))
         .and_then(|(r, w)| {
@@ -110,10 +109,8 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
                     let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
                     let fut = resp.write_to(w).then(|_| {
                         warn!("Currently shadowsocks-rust does not support authentication");
-                        Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "Currently shadowsocks-rust does not support authentication",
-                        ))
+                        Err(io::Error::new(io::ErrorKind::Other,
+                                           "Currently shadowsocks-rust does not support authentication"))
                     });
                     boxed_future(fut)
                 } else {
@@ -128,15 +125,17 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
         .and_then(move |(r, w)| {
             // Fetch headers
             TcpRequestHeader::read_from(r).then(move |res| match res {
-                Ok((r, h)) => boxed_future(futures::finished((r, w, h))),
-                Err(err) => {
-                    error!("Failed to get TcpRequestHeader: {}", err);
-                    let fut = TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr))
-                        .write_to(w)
-                        .then(|_| Err(From::from(err)));
-                    boxed_future(fut)
-                }
-            })
+                                                    Ok((r, h)) => boxed_future(futures::finished((r, w, h))),
+                                                    Err(err) => {
+                                                        error!("Failed to get TcpRequestHeader: {}", err);
+                                                        let fut =
+                                                            TcpResponseHeader::new(err.reply,
+                                                                                   Address::SocketAddress(client_addr))
+                                                            .write_to(w)
+                                                            .then(|_| Err(From::from(err)));
+                                                        boxed_future(fut)
+                                                    }
+                                                })
         })
         .and_then(move |(r, w, header)| {
             trace!("Socks5 {:?}", header);
@@ -161,9 +160,9 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
                             .write_to(w)
                             .and_then(flush)
                             .and_then(|_| {
-                                // Hold the connection until it ends by its own
-                                ignore_until_end(r).map(|_| ())
-                            });
+                                          // Hold the connection until it ends by its own
+                                          ignore_until_end(r).map(|_| ())
+                                      });
 
                         boxed_future(fut)
                     } else {
@@ -181,14 +180,14 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
     Context::with(|ctx| {
         let handle = &ctx.handle;
         handle.spawn(fut.then(|res| match res {
-            Ok(..) => Ok(()),
-            Err(err) => {
-                if err.kind() != io::ErrorKind::BrokenPipe {
-                    error!("Failed to handle client: {}", err);
-                }
-                Err(())
-            }
-        }));
+                                  Ok(..) => Ok(()),
+                                  Err(err) => {
+                                      if err.kind() != io::ErrorKind::BrokenPipe {
+                                          error!("Failed to handle client: {}", err);
+                                      }
+                                      Err(())
+                                  }
+                              }));
     });
 
     Ok(())
@@ -215,14 +214,14 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
 
     let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
     let listening = listener.incoming().for_each(move |(socket, addr)| {
-        let server_cfg = servers.pick_server();
-        trace!("Got connection, addr: {}", addr);
-        trace!("Picked proxy server: {:?}", server_cfg);
-        handle_socks5_client(socket, server_cfg, udp_conf.clone())
-    });
+                                                     let server_cfg = servers.pick_server();
+                                                     trace!("Got connection, addr: {}", addr);
+                                                     trace!("Picked proxy server: {:?}", server_cfg);
+                                                     handle_socks5_client(socket, server_cfg, udp_conf.clone())
+                                                 });
 
     Box::new(listening.map_err(|err| {
-        error!("Socks5 server run failed: {}", err);
-        err
-    }))
+                                   error!("Socks5 server run failed: {}", err);
+                                   err
+                               }))
 }
