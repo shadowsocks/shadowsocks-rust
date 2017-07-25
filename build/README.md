@@ -1,4 +1,4 @@
-compile a completely static binary with no external dependencies.
+compile a completely static binary with no external dependencies, based on [`rust-musl-builder`](https://github.com/emk/rust-musl-builder):
 
 ```sh
 # build image use Dockerfile in build dir.
