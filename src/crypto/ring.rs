@@ -1,6 +1,7 @@
 //! Cipher defined with Ring
 
 use std::mem;
+use std::ptr;
 
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey, open_in_place, seal_in_place};
 
@@ -35,8 +36,9 @@ impl RingAeadCipher {
 
         let nonce_size = t.iv_size();
         let mut nonce = BytesMut::with_capacity(nonce_size);
-        for _ in 0..nonce_size {
-            nonce.put_u8(0);
+        unsafe {
+            nonce.set_len(nonce_size);
+            ptr::write_bytes(nonce.as_mut_ptr(), 0, nonce_size);
         }
 
         let skey = make_skey(t, key, salt);
@@ -79,7 +81,7 @@ impl RingAeadCipher {
                 }
             }
 
-            _ => panic!("Unsupported {:?}", t),
+            _ => panic!("unsupported cipher in ring {:?}", t),
         }
     }
 
@@ -101,18 +103,20 @@ impl RingAeadCipher {
 impl AeadEncryptor for RingAeadCipher {
     fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]) {
         let tag_len = tag.len();
+        let buf_len = input.len() + tag_len;
 
-        let mut buf = BytesMut::with_capacity(input.len() + tag_len);
+        let mut buf = BytesMut::with_capacity(buf_len);
         buf.put(input);
-        buf.put_slice(tag);
+        unsafe {
+            buf.set_len(buf_len);
+        }
 
         if let RingAeadCryptoVariant::Seal(ref key, ref nonce) = self.cipher {
             seal_in_place(key, nonce, &[], &mut buf, tag_len).unwrap();
-            let (ct, t) = buf.split_at(buf.len() - tag_len);
-            output.clone_from_slice(ct);
-            tag.clone_from_slice(t);
+            output.clone_from_slice(&buf[..input.len()]);
+            tag.clone_from_slice(&buf[input.len()..]);
         } else {
-            panic!();
+            unreachable!("encrypt is called on a non-seal cipher");
         }
 
         self.reset();
@@ -134,7 +138,7 @@ impl AeadDecryptor for RingAeadCipher {
                 Err(_) => Err(Error::AeadDecryptFailed),
             }
         } else {
-            panic!()
+            unreachable!("decrypt is called on a non-open cipher");
         };
 
         self.reset();
