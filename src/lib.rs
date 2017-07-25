@@ -81,6 +81,7 @@ extern crate rand;
 extern crate typenum;
 
 extern crate md_5 as md5;
+extern crate digest;
 extern crate ring;
 extern crate openssl;
 #[cfg(feature = "sodiumoxide")]

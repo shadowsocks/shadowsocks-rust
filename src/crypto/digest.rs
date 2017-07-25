@@ -63,10 +63,10 @@ impl Digest for DigestVariant {
 
     fn digest_len(&self) -> usize {
         use typenum::Unsigned;
-        use md5::Digest;
+        use digest::FixedOutput;
 
         match *self {
-            DigestVariant::Md5(_) => <Md5 as Digest>::OutputSize::to_usize(),
+            DigestVariant::Md5(_) => <Md5 as FixedOutput>::OutputSize::to_usize(),
             DigestVariant::Sha1(_) => SHA1_OUTPUT_LEN,
         }
     }
