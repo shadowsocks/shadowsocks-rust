@@ -70,8 +70,7 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
 
             let svr_addr = match start_plugin(c, svr.addr(), &local_addr, mode) {
                 Err(err) => {
-                    error!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
-                    continue;
+                    panic!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
                 }
                 Ok(p) => {
                     let svr_addr = ServerAddr::SocketAddr(local_addr);
