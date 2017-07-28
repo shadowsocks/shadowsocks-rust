@@ -16,6 +16,8 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
 ## Usage
 
+### **crates.io**
+
 Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
 
 ```bash
@@ -24,7 +26,7 @@ cargo install shadowsocks-rust
 
 then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
-or you can also build with [Cargo](http://doc.crates.io):
+### **Build from source**
 
 ```bash
 cargo build
@@ -32,6 +34,19 @@ cargo build
 
 Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries in
 the official ShadowSocks' implementation.
+
+### **Build standalone binaries**
+
+Requirements:
+
+* Linux x86_64
+* Docker
+
+```bash
+./build/build-release
+```
+
+Then `sslocal`, `ssserver` and `ssurl` will be packaged in `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`.
 
 Read `Cargo.toml` for more details.
 

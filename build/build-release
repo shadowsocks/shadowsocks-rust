@@ -1,0 +1,30 @@
+#!/bin/sh
+
+IMAGE='shadowsocks-rust:latest'
+CUR_DIR=$( cd $( dirname $0 ) && pwd )
+
+docker build -t "${IMAGE}" "$CUR_DIR"
+
+SRC_PATH="/home/rust/src"
+CARGO_TARGET_DIR="${SRC_PATH}/build/target"
+LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
+
+docker run \
+    --rm \
+    -it \
+    -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
+    -v "${CUR_DIR}"/..:"$SRC_PATH" \
+    "${IMAGE}" \
+    /bin/bash -c \
+    "sudo mkdir -p $CARGO_TARGET_DIR \
+        && sudo chown -R rust:rust $CARGO_TARGET_DIR \
+        && cargo build --release \
+        && sudo chown -R $LOCAL_USER $CARGO_TARGET_DIR"
+
+TARGET_NAME="x86_64-unknown-linux-musl"
+TARGET_DIR="$CUR_DIR/target/$TARGET_NAME/release/"
+cd "$TARGET_DIR"
+tar -czf "${CUR_DIR}/shadowsocks-latest-release.${TARGET_NAME}.tar.gz" \
+    "sslocal" \
+    "ssserver" \
+    "ssurl"
