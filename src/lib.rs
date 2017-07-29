@@ -101,6 +101,8 @@ extern crate lazy_static;
 extern crate scoped_tls;
 
 extern crate subprocess;
+#[cfg(unix)]
+extern crate tokio_signal;
 
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -114,3 +116,4 @@ pub mod config;
 pub mod relay;
 pub mod crypto;
 pub mod plugin;
+mod monitor;

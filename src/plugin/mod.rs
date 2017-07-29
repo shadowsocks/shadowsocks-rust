@@ -53,6 +53,7 @@ impl Plugin {
 
 impl Drop for Plugin {
     fn drop(&mut self) {
+        debug!("Killing Plugin {:?}", self.process);
         let _ = self.process.terminate();
     }
 }
