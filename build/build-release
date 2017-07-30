@@ -11,7 +11,6 @@ LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
 
 docker run \
     --rm \
-    -it \
     -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
     -v "${CUR_DIR}"/..:"$SRC_PATH" \
     "${IMAGE}" \
