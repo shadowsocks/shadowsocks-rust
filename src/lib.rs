@@ -104,6 +104,8 @@ extern crate subprocess;
 #[cfg(unix)]
 extern crate tokio_signal;
 
+extern crate byte_string;
+
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

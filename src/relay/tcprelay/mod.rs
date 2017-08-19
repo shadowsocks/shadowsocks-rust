@@ -24,6 +24,8 @@ use futures::{self, Future, Poll};
 
 use bytes::{BufMut, BytesMut};
 
+use byte_string::ByteStr;
+
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
 use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
@@ -191,11 +193,11 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {;
         let w_fut = w_fut.and_then(move |enc_w| {
-            trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
-
             // Send relay address to remote
             let mut buf = BytesMut::with_capacity(relay_addr.len());
             relay_addr.write_to_buf(&mut buf);
+
+            trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}", relay_addr, buf);
 
             Context::with(|ctx| try_timeout(enc_w.write_all(buf), timeout, ctx.handle()).map(|(w, _)| w))
         });
@@ -270,13 +272,13 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle())
                     .and_then(move |(r, remote_iv)| match svr_cfg.method().category() {
                                   CipherCategory::Stream => {
-                                      trace!("Got initialize vector {:?}", remote_iv);
+                                      trace!("Got initialize vector {:?}", ByteStr::new(&remote_iv));
                                       let decrypt_stream =
                                           StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                                       Ok(From::from(decrypt_stream))
                                   }
                                   CipherCategory::Aead => {
-                                      trace!("Got salt {:?}", remote_iv);
+                                      trace!("Got salt {:?}", ByteStr::new(&remote_iv));
                                       let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                                       Ok(From::from(dr))
                                   }

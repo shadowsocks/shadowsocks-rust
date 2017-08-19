@@ -55,6 +55,7 @@ qrcode = { version = "0.4", default-features = false }
 subprocess = "0.1"
 serde_urlencoded = "0.5"
 url = "1.5"
+byte_string = "1.0"
 
 [dependencies.sodiumoxide]
 version = "0.0.15"
