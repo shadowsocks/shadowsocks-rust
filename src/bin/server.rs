@@ -24,6 +24,18 @@ use log::{LogLevelFilter, LogRecord};
 use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_server};
 use shadowsocks::plugin::PluginConfig;
 
+fn log_time(record: &LogRecord) -> String {
+    format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
+}
+
+fn log_time_module(record: &LogRecord) -> String {
+    format!("[{}][{}] [{}] {}",
+            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+            record.level(),
+            record.location().module_path(),
+            record.args())
+}
+
 fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
@@ -84,53 +96,24 @@ fn main() {
     match debug_level {
         0 => {
             // Default filter
-            log_builder.format(|record: &LogRecord| {
-                                   format!("[{}][{}] {}",
-                                           time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                                           record.level(),
-                                           record.args())
-                               });
+            log_builder.format(log_time);
         }
         1 => {
-            let mut log_builder = log_builder.format(|record: &LogRecord| {
-                                                         format!("[{}][{}] [{}] {}",
-                                                                 time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                                                                 record.level(),
-                                                                 record.location().module_path(),
-                                                                 record.args())
-                                                     });
-            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug);
+            let mut log_builder = log_builder.format(log_time_module);
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
         }
         2 => {
-            let mut log_builder = log_builder.format(|record: &LogRecord| {
-                                                         format!("[{}][{}] [{}] {}",
-                                                                 time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                                                                 record.level(),
-                                                                 record.location().module_path(),
-                                                                 record.args())
-                                                     });
-            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug)
+            let mut log_builder = log_builder.format(log_time_module);
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         }
         3 => {
-            let mut log_builder = log_builder.format(|record: &LogRecord| {
-                                                         format!("[{}][{}] [{}] {}",
-                                                                 time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                                                                 record.level(),
-                                                                 record.location().module_path(),
-                                                                 record.args())
-                                                     });
-            log_builder.filter(Some("ssserver"), LogLevelFilter::Trace)
+            let mut log_builder = log_builder.format(log_time_module);
+            log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
                        .filter(Some("shadowsocks"), LogLevelFilter::Trace);
         }
         _ => {
-            let mut log_builder = log_builder.format(|record: &LogRecord| {
-                                                         format!("[{}][{}] [{}] {}",
-                                                                 time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(),
-                                                                 record.level(),
-                                                                 record.location().module_path(),
-                                                                 record.args())
-                                                     });
+            let mut log_builder = log_builder.format(log_time_module);
             log_builder.filter(None, LogLevelFilter::Trace);
         }
     }
