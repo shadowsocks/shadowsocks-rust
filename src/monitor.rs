@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use std::io;
 
 use libc;
@@ -35,6 +37,6 @@ pub fn monitor_signal(handle: &Handle) {
 }
 
 #[cfg(not(unix))]
-pub fn monitor_signal(handle: &Handle) {
+pub fn monitor_signal(_handle: &Handle) {
     // FIXME: Do nothing ...
 }
