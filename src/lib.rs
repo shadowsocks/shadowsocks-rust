@@ -73,7 +73,6 @@
 extern crate serde_json;
 #[macro_use]
 extern crate log;
-extern crate lru_cache;
 extern crate lru_time_cache;
 
 extern crate byteorder;
