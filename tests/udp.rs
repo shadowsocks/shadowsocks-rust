@@ -7,22 +7,22 @@ extern crate futures;
 extern crate env_logger;
 extern crate bytes;
 
-use std::thread;
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::sync::{Arc, Barrier};
+use std::thread;
 use std::time::Duration;
-use std::io::Cursor;
 
+use bytes::{BufMut, BytesMut};
+use futures::Future;
 use tokio_core::reactor::Core;
 use tokio_io::io::read_to_end;
-use futures::Future;
-use bytes::{BufMut, BytesMut};
 
-use shadowsocks::relay::tcprelay::client::Socks5Client;
+use shadowsocks::{run_local, run_server};
 use shadowsocks::config::{Config, ServerConfig};
 use shadowsocks::crypto::CipherType;
 use shadowsocks::relay::socks5::{Address, UdpAssociateHeader};
-use shadowsocks::{run_local, run_server};
+use shadowsocks::relay::tcprelay::client::Socks5Client;
 
 const SERVER_ADDR: &'static str = "127.0.0.1:8093";
 const LOCAL_ADDR: &'static str = "127.0.0.1:8291";
@@ -36,7 +36,9 @@ const METHOD: CipherType = CipherType::Aes128Cfb;
 fn get_config() -> Config {
     let mut cfg = Config::new();
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD)];
+    cfg.server = vec![
+        ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD),
+    ];
     cfg.enable_udp = true;
     cfg
 }
@@ -137,9 +139,12 @@ fn udp_relay() {
 
     let mut buf = [0u8; 65536];
     let (amt, _) = l.recv_from(&mut buf).unwrap();
+    println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
     let cur = Cursor::new(buf[..amt].to_vec());
-    let (cur, header) = UdpAssociateHeader::read_from(cur).wait().unwrap();
+    let (cur, header) = UdpAssociateHeader::read_from(cur)
+        .wait()
+        .expect("Invalid UDP header");
     println!("{:?}", header);
     let header_len = cur.position() as usize;
     let buf = cur.into_inner();

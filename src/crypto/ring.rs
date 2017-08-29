@@ -12,6 +12,8 @@ use crypto::cipher::Error;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
+use byte_string::ByteStr;
+
 
 /// AEAD ciphers provided by Ring
 pub enum RingAeadCryptoVariant {
@@ -135,7 +137,14 @@ impl AeadDecryptor for RingAeadCipher {
                     output.clone_from_slice(&buf[..input.len()]);
                     Ok(())
                 }
-                Err(_) => Err(Error::AeadDecryptFailed),
+                Err(err) => {
+                    error!("AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: {:?}",
+                           ByteStr::new(nonce),
+                           ByteStr::new(input),
+                           ByteStr::new(tag),
+                           err);
+                    Err(Error::AeadDecryptFailed)
+                }
             }
         } else {
             unreachable!("decrypt is called on a non-open cipher");
