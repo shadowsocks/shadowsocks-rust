@@ -5,7 +5,6 @@ use crypto::cipher::{CipherCategory, CipherResult, CipherType};
 use crypto::dummy;
 use crypto::openssl;
 use crypto::rc4_md5;
-#[cfg(feature = "sodiumoxide")]
 use crypto::sodium;
 use crypto::table;
 
@@ -85,8 +84,6 @@ define_stream_ciphers! {
     pub DummyCipher => dummy::DummyCipher,
     pub Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
     pub OpenSSLCipher => openssl::OpenSSLCipher,
-
-    #[cfg(feature = "sodiumoxide")]
     pub SodiumCipher => sodium::SodiumCipher,
 }
 
@@ -98,11 +95,11 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Str
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
         CipherType::Dummy => StreamCipherVariant::new(dummy::DummyCipher),
 
-        #[cfg(feature = "sodiumoxide")]
         CipherType::ChaCha20 |
         CipherType::Salsa20 |
         CipherType::XSalsa20 |
-        CipherType::Aes128Ctr => StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
+        CipherType::Aes128Ctr |
+        CipherType::ChaCha20Ietf => StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
 
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 

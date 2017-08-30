@@ -18,12 +18,10 @@ pub mod ring;
 pub mod dummy;
 pub mod aead;
 pub mod stream;
-
-#[cfg(feature = "sodiumoxide")]
 pub mod sodium;
 
 /// Crypto mode, encrypt or decrypt
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum CryptoMode {
     Encrypt,
     Decrypt,

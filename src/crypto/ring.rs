@@ -108,7 +108,7 @@ impl AeadEncryptor for RingAeadCipher {
         let buf_len = input.len() + tag_len;
 
         let mut buf = BytesMut::with_capacity(buf_len);
-        buf.put(input);
+        buf.put_slice(input);
         unsafe {
             buf.set_len(buf_len);
         }
@@ -128,8 +128,8 @@ impl AeadEncryptor for RingAeadCipher {
 impl AeadDecryptor for RingAeadCipher {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
         let mut buf = BytesMut::with_capacity(input.len() + tag.len());
-        buf.put(input);
-        buf.put(tag);
+        buf.put_slice(input);
+        buf.put_slice(tag);
 
         let r = if let RingAeadCryptoVariant::Open(ref key, ref nonce) = self.cipher {
             match open_in_place(key, nonce, &[], 0, &mut buf) {

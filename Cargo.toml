@@ -8,9 +8,6 @@ documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 
-[features]
-default = ["sodiumoxide"]
-
 [lib]
 name = "shadowsocks"
 
@@ -54,10 +51,7 @@ subprocess = "0.1"
 serde_urlencoded = "0.5"
 url = "1.5"
 byte_string = "1.0"
-
-[dependencies.sodiumoxide]
-version = "0.0.15"
-optional = true
+libsodium-ffi = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.1"
