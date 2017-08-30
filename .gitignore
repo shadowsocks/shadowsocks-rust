@@ -1,1 +1,5 @@
-/target
+target
+build/*.tar.gz
+dev
+*.log
+.vscode
