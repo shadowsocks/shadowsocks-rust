@@ -92,7 +92,7 @@ const CIPHER_DUMMY: &'static str = "dummy";
 
 const CIPHER_AES_128_GCM: &'static str = "aes-128-gcm";
 const CIPHER_AES_256_GCM: &'static str = "aes-256-gcm";
-const CIPHER_CHACHA20_POLY1305: &'static str = "chacha20-poly1305";
+const CIPHER_CHACHA20_POLY1305: &'static str = "chacha20-ietf-poly1305";
 
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
