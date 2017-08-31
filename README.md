@@ -12,7 +12,7 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 ## Dependencies
 
 * libcrypto (OpenSSL)
-* libsodium (Required for ciphers that are provided by libsodium)
+* libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
 ## Usage
 

@@ -1,6 +1,6 @@
 [root]
 name = "shadowsocks-rust"
-version = "1.6.2"
+version = "1.6.3"
 dependencies = [
  "base64 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "byte_string 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -12,7 +12,7 @@ dependencies = [
  "futures 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.30 (registry+https://github.com/rust-lang/crates.io-index)",
- "libsodium-ffi 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libsodium-ffi 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "md-5 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -273,7 +273,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "libsodium-ffi"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.30 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -785,7 +785,7 @@ dependencies = [
 "checksum lazy_static 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "3b37545ab726dd833ec6420aaba8231c5b320814b9029ad585555d2a03e94fbf"
 "checksum lazycell 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3b585b7a6811fb03aa10e74b278a0f00f8dd9b45dc681f148bb29fa5cb61859b"
 "checksum libc 0.2.30 (registry+https://github.com/rust-lang/crates.io-index)" = "2370ca07ec338939e356443dac2296f581453c35fe1e3a3ed06023c49435f915"
-"checksum libsodium-ffi 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "5fb58d1e29baea19145d12f3b17d2caf3e4da0ae2f181abb138e94fb226e43b6"
+"checksum libsodium-ffi 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "135fe5453bbdf2e3b8dfe102a0277538b2cfed9261d921a098a67bddfe393e13"
 "checksum log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "880f77541efa6e5cc74e76910c9884d9859683118839d6a1dc3b11e63512565b"
 "checksum lru_time_cache 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4bf17862cdf1a87c7cc0cccc498552f3e564d2ae61069f83d2279a932af4a00c"
 "checksum magenta 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "4bf0336886480e671965f794bc9b6fce88503563013d1bfb7a502c81fe3ac527"
