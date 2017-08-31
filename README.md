@@ -26,6 +26,14 @@ cargo install shadowsocks-rust
 
 then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
+### **Download release**
+
+Requirements:
+
+* Linux x86_64
+
+Download static-linked built from [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
+
 ### **Build from source**
 
 ```bash

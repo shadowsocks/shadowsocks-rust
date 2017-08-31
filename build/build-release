@@ -10,9 +10,9 @@ CARGO_TARGET_DIR="${SRC_PATH}/build/target"
 LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
 
 docker run \
-    --rm \
     -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
     -v "${CUR_DIR}"/..:"$SRC_PATH" \
+    -v "${CUR_DIR}/target/musl-builder/cargo-cache":/home/rust/.cargo/registry \
     "${IMAGE}" \
     /bin/bash -c \
     "sudo mkdir -p $CARGO_TARGET_DIR \
@@ -23,7 +23,13 @@ docker run \
 TARGET_NAME="x86_64-unknown-linux-musl"
 TARGET_DIR="$CUR_DIR/target/$TARGET_NAME/release/"
 cd "$TARGET_DIR"
-tar -czf "${CUR_DIR}/shadowsocks-latest-release.${TARGET_NAME}.tar.gz" \
+
+VERSION=${1:latest}
+tar -czf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.gz" \
+    "sslocal" \
+    "ssserver" \
+    "ssurl"
+tar -cJf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.xz" \
     "sslocal" \
     "ssserver" \
     "ssurl"
