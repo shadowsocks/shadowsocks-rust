@@ -1,14 +1,18 @@
 //! Cipher defined with libsodium
 
+use std::sync::{ONCE_INIT, Once};
+
 use bytes::{BufMut, BytesMut};
 
 use crypto::{CipherResult, CipherType, StreamCipher};
 
 use libc::c_ulonglong;
 use libsodium_ffi::{crypto_stream_aes128ctr_xor, crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic,
-                    crypto_stream_salsa20_xor_ic, crypto_stream_xsalsa20_xor_ic};
+                    crypto_stream_salsa20_xor_ic, crypto_stream_xsalsa20_xor_ic, sodium_init};
 
 use crypto::cipher::Error;
+
+static SODIUM_INIT_FLAG: Once = ONCE_INIT;
 
 /// Cipher provided by Rust-Crypto
 pub struct SodiumCipher {
@@ -31,6 +35,10 @@ impl SodiumCipher {
             CipherType::ChaCha20Ietf => {}
             _ => panic!("sodium cipher does not support {:?} cipher", t),
         }
+
+        SODIUM_INIT_FLAG.call_once(|| unsafe {
+                                       assert_eq!(sodium_init(), 0);
+                                   });
 
         SodiumCipher {
             cipher_type: t,
