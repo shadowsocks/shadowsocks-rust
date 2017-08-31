@@ -114,6 +114,7 @@ List all available arguments with `-h`.
 * `chacha20`, `salsa20`, `chacha20-ietf`
 * `dummy` (No encryption, just for debugging)
 * `aes-128-gcm`, `aes-192-gcm`, `aes-256-gcm`
+* `chacha20-poly1305`
 
 ## Useful Tools
 
