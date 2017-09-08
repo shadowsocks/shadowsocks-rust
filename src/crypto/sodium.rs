@@ -6,7 +6,7 @@ use bytes::{BufMut, BytesMut};
 
 use crypto::{CipherResult, CipherType, StreamCipher};
 
-use libc::c_ulonglong;
+use libc::{c_ulonglong, uint32_t};
 use libsodium_ffi::{crypto_stream_aes128ctr_xor, crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic,
                     crypto_stream_salsa20_xor_ic, crypto_stream_xsalsa20_xor_ic, sodium_init};
 
@@ -98,7 +98,7 @@ fn crypto_stream_xor_ic<B: BufMut>(t: CipherType,
                                                    data.as_ptr(),
                                                    data.len() as c_ulonglong,
                                                    iv.as_ptr(),
-                                                   ic as u32,
+                                                   ic as uint32_t,
                                                    key.as_ptr())
             }
             CipherType::Salsa20 => {

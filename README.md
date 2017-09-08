@@ -4,6 +4,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/h3ny0dov7v9xioa5?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust-0grjf)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
+[![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
@@ -30,33 +31,38 @@ then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
 Requirements:
 
-* Linux x86_64
+* Linux x86\_64
 
-Download static-linked built from [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
+Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
 ### **Build from source**
 
 ```bash
-cargo build
+cargo build --release
 ```
 
-NOTE: If you haven't installed libsodium in your system, you can set a environment variable `SODIUM_BUILD_STATIC=yes` to let `libsodium-ffi` to build from source, which requires you to have all the required build tools (including GCC, libtools, etc.).
+NOTE: If you haven't installed the correct version of `libsodium` in your system, you can set a environment variable `SODIUM_BUILD_STATIC=yes` to let `libsodium-ffi` to build `libsodium` from source, which requires you to have build tools (including GCC, libtools, etc.) installed.
 
-Then `sslocal` and `ssserver` will appear in `./target`, it works similarly as the two binaries in
-the official ShadowSocks' implementation.
+```bash
+SODIUM_BUILD_STATIC=yes cargo build --release
+```
+
+Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
 
 ### **Build standalone binaries**
 
 Requirements:
 
-* Linux x86_64
 * Docker
 
 ```bash
 ./build/build-release
 ```
 
-Then `sslocal`, `ssserver` and `ssurl` will be packaged in `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`.
+Then `sslocal`, `ssserver` and `ssurl` will be packaged in
+
+- `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`
+- `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.xz`
 
 Read `Cargo.toml` for more details.
 
@@ -115,12 +121,15 @@ List all available arguments with `-h`.
 
 ## Supported Ciphers
 
+### Stream Ciphers
 * `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
 * `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
 * `aes-128-ctr`
 * `rc4`, `rc4-md5`
 * `chacha20`, `salsa20`, `chacha20-ietf`
 * `dummy` (No encryption, just for debugging)
+
+### AEAD Ciphers
 * `aes-128-gcm`, `aes-192-gcm`, `aes-256-gcm`
 * `chacha20-ietf-poly1305`
 
