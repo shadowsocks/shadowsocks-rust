@@ -38,6 +38,12 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 ### **Build from source**
 
 ```bash
+make && make install
+```
+Then `sslocal`, `ssserver` and `ssurl` will be installed in "/usr/bin"
+Or use cargo to build
+
+```bash
 cargo build --release
 ```
 
@@ -111,7 +117,12 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
 The `sslocal` will use a load balancing algorithm to dispatch packages to all servers.
 
 Start local and server ShadowSocks with
-
+If you Build it with Makefile:
+```bash
+sslocal -c config.json
+ssserver -c config.json
+```
+If you Build it with Cargo:
 ```
 cargo run --bin sslocal -- -c config.json
 cargo run --bin ssserver -- -c config.json
