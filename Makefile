@@ -13,8 +13,8 @@ install:
 
 tar:
 	install -Dm 755 "target/release/sslocal" "${DESTDIR}/bin/sslocal"
-	install -Dm 755 "target/release/sslocal" "${DESTDIR}/bin/ssserver"
-	install -Dm 755 "target/release/sslocal" "${DESTDIR}/bin/ssurl"
+	install -Dm 755 "target/release/ssserver" "${DESTDIR}/bin/ssserver"
+	install -Dm 755 "target/release/ssurl" "${DESTDIR}/bin/ssurl"
 	install -Dm 644 README.md "${DESTDIR}/share/doc/shadowsocks-rust/README"
 	install -Dm 644 LICENSE "${DESTDIR}/share/licenses/shadowsocks-rust/COPYING"
 	tar cf - "shadowsocks-rust" | xz -zf > "shadowsocks-rust_$(version)_$(shell uname -m).tar.xz"
