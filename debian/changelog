@@ -1,3 +1,9 @@
+shadowsocks-rust (1.6.6) stable; urgency=medium
+
+  * Removed aes-128-ctr cipher
+
+ -- Y. T. Chung <zonyitoo@gmail.com> Wed, 4 Oct 2017 04:11:55 +0800
+
 shadowsocks-rust (1.6.5) unstable; urgency=medium
 
   * Initial Release.

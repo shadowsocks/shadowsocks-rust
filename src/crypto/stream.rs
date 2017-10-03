@@ -98,7 +98,6 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Str
         CipherType::ChaCha20 |
         CipherType::Salsa20 |
         CipherType::XSalsa20 |
-        CipherType::Aes128Ctr |
         CipherType::ChaCha20Ietf => StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
 
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),

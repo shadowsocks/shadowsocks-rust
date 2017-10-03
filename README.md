@@ -38,9 +38,10 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 ### **Build from source**
 
 ```bash
-make && make install
+make install
 ```
-Then `sslocal`, `ssserver` and `ssurl` will be installed in "/usr/bin"
+
+Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (By default)
 Or use cargo to build
 
 ```bash
@@ -135,7 +136,6 @@ List all available arguments with `-h`.
 ### Stream Ciphers
 * `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
 * `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
-* `aes-128-ctr`
 * `rc4`, `rc4-md5`
 * `chacha20`, `salsa20`, `chacha20-ietf`
 * `dummy` (No encryption, just for debugging)

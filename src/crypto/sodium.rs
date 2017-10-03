@@ -7,8 +7,8 @@ use bytes::{BufMut, BytesMut};
 use crypto::{CipherResult, CipherType, StreamCipher};
 
 use libc::{c_ulonglong, uint32_t};
-use libsodium_ffi::{crypto_stream_aes128ctr_xor, crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic,
-                    crypto_stream_salsa20_xor_ic, crypto_stream_xsalsa20_xor_ic, sodium_init};
+use libsodium_ffi::{crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic, crypto_stream_salsa20_xor_ic,
+                    crypto_stream_xsalsa20_xor_ic, sodium_init};
 
 use crypto::cipher::Error;
 
@@ -31,7 +31,6 @@ impl SodiumCipher {
             CipherType::ChaCha20 |
             CipherType::Salsa20 |
             CipherType::XSalsa20 |
-            CipherType::Aes128Ctr |
             CipherType::ChaCha20Ietf => {}
             _ => panic!("sodium cipher does not support {:?} cipher", t),
         }
@@ -117,13 +116,6 @@ fn crypto_stream_xor_ic<B: BufMut>(t: CipherType,
                                               ic as c_ulonglong,
                                               key.as_ptr())
             }
-            CipherType::Aes128Ctr => {
-                crypto_stream_aes128ctr_xor(out.bytes_mut().as_mut_ptr(),
-                                            data.as_ptr(),
-                                            data.len() as c_ulonglong,
-                                            iv.as_ptr(),
-                                            key.as_ptr())
-            }
             _ => unreachable!(),
         }
     };
@@ -192,11 +184,6 @@ mod test {
     #[test]
     fn test_rust_crypto_cipher_xsalsa20() {
         test_sodium(CipherType::XSalsa20);
-    }
-
-    #[test]
-    fn test_rust_crypto_cipher_aes128ctr() {
-        test_sodium(CipherType::Aes128Ctr);
     }
 
     #[test]

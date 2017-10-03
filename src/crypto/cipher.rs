@@ -85,7 +85,6 @@ const CIPHER_TABLE: &'static str = "table";
 const CIPHER_CHACHA20: &'static str = "chacha20";
 const CIPHER_SALSA20: &'static str = "salsa20";
 const CIPHER_XSALSA20: &'static str = "xsalsa20";
-const CIPHER_AES_128_CTR: &'static str = "aes-128-ctr";
 const CIPHER_CHACHA20_IETF: &'static str = "chacha20-ietf";
 
 const CIPHER_DUMMY: &'static str = "dummy";
@@ -116,7 +115,6 @@ pub enum CipherType {
     ChaCha20,
     Salsa20,
     XSalsa20,
-    Aes128Ctr,
     ChaCha20Ietf,
 
     Aes128Gcm,
@@ -156,7 +154,6 @@ impl CipherType {
             CipherType::Salsa20 |
             CipherType::XSalsa20 |
             CipherType::ChaCha20Ietf => 32,
-            CipherType::Aes128Ctr => 16,
 
             CipherType::Aes128Gcm => AES_128_GCM.key_len(),
             CipherType::Aes256Gcm => AES_256_GCM.key_len(),
@@ -249,7 +246,6 @@ impl CipherType {
             CipherType::ChaCha20 |
             CipherType::Salsa20 => 8,
             CipherType::XSalsa20 => 24,
-            CipherType::Aes128Ctr => 16,
             CipherType::ChaCha20Ietf => 12,
 
             CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
@@ -337,7 +333,6 @@ impl FromStr for CipherType {
             CIPHER_CHACHA20 => Ok(CipherType::ChaCha20),
             CIPHER_SALSA20 => Ok(CipherType::Salsa20),
             CIPHER_XSALSA20 => Ok(CipherType::XSalsa20),
-            CIPHER_AES_128_CTR => Ok(CipherType::Aes128Ctr),
             CIPHER_CHACHA20_IETF => Ok(CipherType::ChaCha20Ietf),
 
             CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
@@ -371,7 +366,6 @@ impl Display for CipherType {
             CipherType::ChaCha20 => write!(f, "{}", CIPHER_CHACHA20),
             CipherType::Salsa20 => write!(f, "{}", CIPHER_SALSA20),
             CipherType::XSalsa20 => write!(f, "{}", CIPHER_XSALSA20),
-            CipherType::Aes128Ctr => write!(f, "{}", CIPHER_AES_128_CTR),
             CipherType::ChaCha20Ietf => write!(f, "{}", CIPHER_CHACHA20_IETF),
 
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
