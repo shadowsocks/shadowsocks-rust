@@ -23,6 +23,9 @@ path = "src/bin/server.rs"
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
+[profile.release]
+lto = true
+
 [dependencies]
 log = "0.3"
 byteorder = "1.1"

@@ -24,16 +24,24 @@ use log::{LogLevelFilter, LogRecord};
 use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_server};
 use shadowsocks::plugin::PluginConfig;
 
-fn log_time(record: &LogRecord) -> String {
-    format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
+fn log_time(without_time: bool, record: &LogRecord) -> String {
+    if without_time {
+        format!("[{}] {}", record.level(), record.args())
+    } else {
+        format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
+    }
 }
 
-fn log_time_module(record: &LogRecord) -> String {
-    format!("[{}][{}] [{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-            record.level(),
-            record.location().module_path(),
-            record.args())
+fn log_time_module(without_time: bool, record: &LogRecord) -> String {
+    if without_time {
+        format!("[{}] [{}] {}", record.level(), record.location().module_path(), record.args())
+    } else {
+        format!("[{}][{}] [{}] {}",
+                time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+                record.level(),
+                record.location().module_path(),
+                record.args())
+    }
 }
 
 fn main() {
@@ -87,33 +95,38 @@ fn main() {
                  .long("plugin-opts")
                  .takes_value(true)
                  .help("Set SIP003 plugin options. (Experimental)"))
+        .arg(Arg::with_name("LOG_WITHOUT_TIME")
+                 .long("log-without-time")
+                 .help("Disable time in log"))
         .get_matches();
 
     let mut log_builder = LogBuilder::new();
     log_builder.filter(None, LogLevelFilter::Info);
 
+    let without_time = matches.is_present("LOG_WITHOUT_TIME");
+
     let debug_level = matches.occurrences_of("VERBOSE");
     match debug_level {
         0 => {
             // Default filter
-            log_builder.format(log_time);
+            log_builder.format(move |r| log_time(without_time, r));
         }
         1 => {
-            let mut log_builder = log_builder.format(log_time_module);
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
+            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug);
         }
         2 => {
-            let mut log_builder = log_builder.format(log_time_module);
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
+            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            log_builder.filter(Some("ssserver"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         }
         3 => {
-            let mut log_builder = log_builder.format(log_time_module);
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
+            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            log_builder.filter(Some("ssserver"), LogLevelFilter::Trace)
                        .filter(Some("shadowsocks"), LogLevelFilter::Trace);
         }
         _ => {
-            let mut log_builder = log_builder.format(log_time_module);
+            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(None, LogLevelFilter::Trace);
         }
     }
