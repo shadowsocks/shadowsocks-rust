@@ -3,7 +3,6 @@ FROM ekidd/rust-musl-builder
 # Build a static copy of libsodium.
 RUN VERS=1.0.15 && \
     cd /home/rust/libs && \
-    https_proxy="192.168.0.105:8118" \
     curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$VERS.tar.gz && \
     tar xzf libsodium-$VERS.tar.gz && cd libsodium-$VERS && \
     CC=musl-gcc ./configure --prefix=/usr/local/musl && \
