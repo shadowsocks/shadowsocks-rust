@@ -18,6 +18,7 @@ pub mod ring;
 pub mod dummy;
 pub mod aead;
 pub mod stream;
+#[cfg(feature = "sodium")]
 pub mod sodium;
 
 /// Crypto mode, encrypt or decrypt

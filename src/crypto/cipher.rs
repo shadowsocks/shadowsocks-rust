@@ -82,9 +82,13 @@ const CIPHER_RC4_MD5: &'static str = "rc4-md5";
 
 const CIPHER_TABLE: &'static str = "table";
 
+#[cfg(feature = "sodium")]
 const CIPHER_CHACHA20: &'static str = "chacha20";
+#[cfg(feature = "sodium")]
 const CIPHER_SALSA20: &'static str = "salsa20";
+#[cfg(feature = "sodium")]
 const CIPHER_XSALSA20: &'static str = "xsalsa20";
+#[cfg(feature = "sodium")]
 const CIPHER_CHACHA20_IETF: &'static str = "chacha20-ietf";
 
 const CIPHER_DUMMY: &'static str = "dummy";
@@ -112,9 +116,13 @@ pub enum CipherType {
     Rc4,
     Rc4Md5,
 
+    #[cfg(feature = "sodium")]
     ChaCha20,
+    #[cfg(feature = "sodium")]
     Salsa20,
+    #[cfg(feature = "sodium")]
     XSalsa20,
+    #[cfg(feature = "sodium")]
     ChaCha20Ietf,
 
     Aes128Gcm,
@@ -150,6 +158,7 @@ impl CipherType {
             CipherType::Rc4 |
             CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
+            #[cfg(feature = "sodium")]
             CipherType::ChaCha20 |
             CipherType::Salsa20 |
             CipherType::XSalsa20 |
@@ -243,9 +252,12 @@ impl CipherType {
             }
             CipherType::Rc4Md5 => 16,
 
+            #[cfg(feature = "sodium")]
             CipherType::ChaCha20 |
             CipherType::Salsa20 => 8,
+            #[cfg(feature = "sodium")]
             CipherType::XSalsa20 => 24,
+            #[cfg(feature = "sodium")]
             CipherType::ChaCha20Ietf => 12,
 
             CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
@@ -330,9 +342,13 @@ impl FromStr for CipherType {
             CIPHER_RC4 => Ok(CipherType::Rc4),
             CIPHER_RC4_MD5 => Ok(CipherType::Rc4Md5),
 
+            #[cfg(feature = "sodium")]
             CIPHER_CHACHA20 => Ok(CipherType::ChaCha20),
+            #[cfg(feature = "sodium")]
             CIPHER_SALSA20 => Ok(CipherType::Salsa20),
+            #[cfg(feature = "sodium")]
             CIPHER_XSALSA20 => Ok(CipherType::XSalsa20),
+            #[cfg(feature = "sodium")]
             CIPHER_CHACHA20_IETF => Ok(CipherType::ChaCha20Ietf),
 
             CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
@@ -363,9 +379,13 @@ impl Display for CipherType {
             CipherType::Rc4 => write!(f, "{}", CIPHER_RC4),
             CipherType::Rc4Md5 => write!(f, "{}", CIPHER_RC4_MD5),
 
+            #[cfg(feature = "sodium")]
             CipherType::ChaCha20 => write!(f, "{}", CIPHER_CHACHA20),
+            #[cfg(feature = "sodium")]
             CipherType::Salsa20 => write!(f, "{}", CIPHER_SALSA20),
+            #[cfg(feature = "sodium")]
             CipherType::XSalsa20 => write!(f, "{}", CIPHER_XSALSA20),
+            #[cfg(feature = "sodium")]
             CipherType::ChaCha20Ietf => write!(f, "{}", CIPHER_CHACHA20_IETF),
 
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),

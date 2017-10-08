@@ -10,8 +10,6 @@ use ring::hmac::SigningKey;
 
 use bytes::{Bytes, BytesMut};
 
-use libsodium_ffi::sodium_increment;
-
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {
     /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()`.
@@ -103,8 +101,21 @@ pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
 /// Increase nonce by 1
 ///
 /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
+#[cfg(feature = "sodium")]
 pub fn increase_nonce(nonce: &mut [u8]) {
+    use libsodium_ffi::sodium_increment;
+
     unsafe {
         sodium_increment(nonce.as_mut_ptr(), nonce.len());
+    }
+}
+
+#[cfg(not(feature = "sodium"))]
+pub fn increase_nonce(nonce: &mut [u8]) {
+    let mut prev: u16 = 0;
+    for i in nonce {
+        prev += *i as u16;
+        *i = prev as u8;
+        prev >>= 8;
     }
 }

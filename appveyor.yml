@@ -1,6 +1,5 @@
 environment:
   SSL_CERT_FILE: "C:\\OpenSSL\\cacert.pem"
-  SODIUM_BUILD_STATIC: yes
 
   matrix:
       - TARGET: x86_64-pc-windows-msvc

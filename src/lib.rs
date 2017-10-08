@@ -83,6 +83,7 @@ extern crate md_5 as md5;
 extern crate digest;
 extern crate ring;
 extern crate openssl;
+#[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
 
 #[macro_use]
@@ -99,7 +100,7 @@ extern crate lazy_static;
 extern crate scoped_tls;
 
 extern crate subprocess;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 extern crate tokio_signal;
 
 extern crate byte_string;
