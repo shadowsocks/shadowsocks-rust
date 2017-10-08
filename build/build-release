@@ -24,7 +24,11 @@ TARGET_NAME="x86_64-unknown-linux-musl"
 TARGET_DIR="$CUR_DIR/target/$TARGET_NAME/release/"
 cd "$TARGET_DIR"
 
-VERSION=${1:latest}
+VERSION=$1
+if [[ -z "$VERSION" ]]; then
+    VERSION="latest"
+fi
+
 tar -czf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.gz" \
     "sslocal" \
     "ssserver" \

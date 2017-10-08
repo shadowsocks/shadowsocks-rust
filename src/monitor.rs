@@ -86,26 +86,28 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
     use tokio_signal::windows::Event;
 
     let fut1 = Event::ctrl_c(handle)
-        .take(1)
-        .for_each(|_| {
-                      error!("Received Ctrl-C event");
-                      Ok(())
+        .and_then(|ev| {
+                      ev.take(1).for_each(|_| -> Result<(), io::Error> {
+                                              error!("Received Ctrl-C event");
+                                              Ok(())
+                                          })
                   })
         .map_err(|err| {
                      error!("Failed to monitor Ctrl-C event: {:?}", err);
                  });
 
     let fut2 = Event::ctrl_break(handle)
-        .take(1)
-        .for_each(|_| {
-                      error!("Received Ctrl-Break event");
-                      Ok(())
+        .and_then(|ev| {
+                      ev.take(1).for_each(|_| -> Result<(), io::Error> {
+                                              error!("Received Ctrl-Break event");
+                                              Ok(())
+                                          })
                   })
         .map_err(|err| {
                      error!("Failed to monitor Ctrl-Break event: {:?}", err);
                  });
 
-    let fut = fut1.select(fut2).then(|_| {
+    let fut = fut1.select(fut2).then(|_| -> Result<(), ()> {
                                          drop(plugins);
                                          process::exit(libc::EXIT_FAILURE);
                                      });
