@@ -44,8 +44,8 @@ pub fn run(mut config: Config) -> io::Result<()> {
     let enable_udp = config.enable_udp;
 
     // Hold it here, kill all plugins when Core is finished
-    let _plugins = launch_plugin(&mut config, PluginMode::Server)?;
-    ::monitor::monitor_signal(&handle);
+    let plugins = launch_plugin(&mut config, PluginMode::Server)?;
+    ::monitor::monitor_signal(&handle, plugins);
 
     let context = Context::new(handle, config);
     Context::set(&context, move || if enable_udp {
