@@ -33,7 +33,7 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
         .and_then(|sigterm| {
                       sigterm.take(1)
                              .for_each(|_| -> Result<(), io::Error> {
-                                           error!("Received SIGTERM, aborting process");
+                                           info!("Received SIGTERM, aborting process");
                                            Ok(())
                                        })
                              .map(|_| libc::SIGTERM)
@@ -108,6 +108,8 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
                  });
 
     let fut = fut1.select(fut2).then(|_| -> Result<(), ()> {
+                                         // Something happened ... killing all subprocesses
+                                         info!("Killing {} plugins and then exit", plugins.len());
                                          drop(plugins);
                                          process::exit(libc::EXIT_FAILURE);
                                      });
