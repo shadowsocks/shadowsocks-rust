@@ -33,7 +33,7 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
         .and_then(|sigterm| {
                       sigterm.take(1)
                              .for_each(|_| -> Result<(), io::Error> {
-                                           info!("Received SIGTERM, aborting process");
+                                           info!("Received SIGTERM, exiting.");
                                            Ok(())
                                        })
                              .map(|_| libc::SIGTERM)
@@ -47,7 +47,7 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
         .and_then(|sigint| {
                       sigint.take(1)
                             .for_each(|_| -> Result<(), io::Error> {
-                                          error!("Received SIGINT, aborting process");
+                                          info!("Received SIGINT, exiting.");
                                           Ok(())
                                       })
                             .map(|_| libc::SIGINT)
@@ -69,8 +69,8 @@ pub fn monitor_signal(handle: &Handle, plugins: Vec<Plugin>) {
         drop(plugins);
 
         match r {
-            Ok(exit_code) => {
-                process::exit(128 + exit_code);
+            Ok(_signo) => {
+                process::exit(0);
             }
             Err(..) => Err(()),
         }
