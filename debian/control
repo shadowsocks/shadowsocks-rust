@@ -1,15 +1,14 @@
 Source: shadowsocks-rust
-Section: unknown
+Section: net
 Priority: optional
-Maintainer: Shigure Moe <feng591892871@gmail.com>
-Build-Depends: debhelper (>=9)
+Maintainer: Y. T. Chung <zonyitoo@gmail.com>
+Build-Depends: debhelper (>=9), rustc, cargo, apg | pwgen, libcap2-bin [linux-any], libsodium-dev
 Standards-Version: 3.9.6
-Homepage: <insert the upstream URL, if relevant>
-#Vcs-Git: git://anonscm.debian.org/collab-maint/shadowsocks-rust.git
-#Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/shadowsocks-rust.git
+Homepage: https://github.com/shadowsocks/shadowsocks-rust
 
 Package: shadowsocks-rust
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Conflicts: shadowsocks
+Description: Rust port of shadowsocks.
+ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.

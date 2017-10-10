@@ -19,8 +19,8 @@ pub fn resolve(addr: &str) -> BoxIoFuture<Vec<IpAddr>> {
         return boxed_future(future::finished(vec![addr]));
     }
 
-    let owned_addr = addr.to_owned();
-    trace!("Going to resolve \"{}\"", owned_addr);
+    trace!("Going to resolve \"{}\"", addr);
+    let owned_addr = format!("{}:0", addr);
 
     let fut = GLOBAL_DNS_CPU_POOL.spawn_fn(move || {
         owned_addr.to_socket_addrs().and_then(|addr_iter| {

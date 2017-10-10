@@ -37,12 +37,7 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 
 ### **Build from source**
 
-```bash
-make install
-```
-
-Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (By default)
-Or use cargo to build
+Use cargo to build.
 
 ```bash
 cargo build --release
@@ -56,6 +51,12 @@ SODIUM_BUILD_STATIC=yes cargo build --release
 
 Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
 
+```bash
+make install
+```
+
+Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
+ 
 ### **Build standalone binaries**
 
 Requirements:

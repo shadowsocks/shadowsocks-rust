@@ -3,4 +3,5 @@
 /build/*.tar.xz
 /dev
 /*.log
+/debian/*.log
 /.vscode

@@ -1,8 +1,15 @@
+shadowsocks-rust (1.6.6+deb1) unstable; urgency=medium
+
+  * Add debian files.
+  * Add systemd files and default config.
+
+ -- Simon Shi <simonsmh@gmail.com>  Tue, 10 Oct 2017 10:01:14 +0800
+
 shadowsocks-rust (1.6.6) stable; urgency=medium
 
   * Removed aes-128-ctr cipher
 
- -- Y. T. Chung <zonyitoo@gmail.com> Wed, 4 Oct 2017 04:11:55 +0800
+ -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 4 Oct 2017 04:11:55 +0800
 
 shadowsocks-rust (1.6.5) unstable; urgency=medium
 

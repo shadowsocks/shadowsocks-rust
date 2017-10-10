@@ -1,39 +1,25 @@
-DESTDIR = /usr/local
-version = $(shell awk 'NR == 3 {print substr($$3, 2, length($$3)-2)}' Cargo.toml)
+PREFIX ?= /usr/local/bin
+TARGET ?= debug
 
-.PHONY: all
+.PHONY: all build install uninstall clean
 all: build
 
-.PHONY: build
 build:
+ifeq (${TARGET}, release)
 	cargo build --release
-
-.PHONY: build-dev
-build-dev:
+else
 	cargo build
+endif
 
-install: build
-	install -Dm 755 "target/release/sslocal" "${DESTDIR}/bin/sslocal"
-	install -Dm 755 "target/release/ssserver" "${DESTDIR}/bin/ssserver"
-	install -Dm 755 "target/release/ssurl" "${DESTDIR}/bin/ssurl"
-	install -Dm 644 README.md "${DESTDIR}/share/doc/shadowsocks-rust/README"
-	install -Dm 644 LICENSE "${DESTDIR}/share/licenses/shadowsocks-rust/COPYING"
+install:
+	install -Dm 755 target/${TARGET}/sslocal ${DESTDIR}${PREFIX}/sslocal
+	install -Dm 755 target/${TARGET}/ssserver ${DESTDIR}${PREFIX}/ssserver
+	install -Dm 755 target/${TARGET}/ssurl ${DESTDIR}${PREFIX}/ssurl
 
-install-dev: build-dev
-	install -Dm 755 "target/debug/sslocal" "${DESTDIR}/bin/sslocal"
-	install -Dm 755 "target/debug/ssserver" "${DESTDIR}/bin/ssserver"
-	install -Dm 755 "target/debug/ssurl" "${DESTDIR}/bin/ssurl"
-	install -Dm 644 README.md "${DESTDIR}/share/doc/shadowsocks-rust/README"
-	install -Dm 644 LICENSE "${DESTDIR}/share/licenses/shadowsocks-rust/COPYING"
-
-.PHONY: uninstall
 uninstall:
-	rm "${DESTDIR}/bin/sslocal"
-	rm "${DESTDIR}/bin/ssserver"
-	rm "${DESTDIR}/bin/ssurl"
-	rm "${DESTDIR}/share/doc/shadowsocks-rust/README"
-	rm "${DESTDIR}/share/licenses/shadowsocks-rust/COPYING"
+	rm ${DESTDIR}${PREFIX}/sslocal
+	rm ${DESTDIR}${PREFIX}/ssserver
+	rm ${DESTDIR}${PREFIX}/ssurl
 
-.PHONY: clean
 clean:
 	cargo clean
