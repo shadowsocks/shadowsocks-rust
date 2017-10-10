@@ -17,7 +17,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC=shadowsocks-rust        # Introduce a short description here
 NAME=shadowsocks-rust        # Introduce the short server's name here
 DAEMON=/usr/bin/ssserver     # Introduce the server's location here
-DAEMON_ARGS=""               # Arguments to run the daemon with
+DAEMON_ARGS="-u --log-without-time" # Arguments to run the daemon with
 PIDFILE=/var/run/$NAME/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 
