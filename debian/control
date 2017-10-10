@@ -2,13 +2,13 @@ Source: shadowsocks-rust
 Section: net
 Priority: optional
 Maintainer: Y. T. Chung <zonyitoo@gmail.com>
-Build-Depends: debhelper (>=9), rustc, cargo
+Build-Depends: debhelper (>=9), rustc, cargo, apg | pwgen, libcap2-bin [linux-any], libsodium-dev
 Standards-Version: 3.9.6
 Homepage: https://github.com/shadowsocks/shadowsocks-rust
 
 Package: shadowsocks-rust
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libsodium-dev
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Conflicts: shadowsocks
 Description: Rust port of shadowsocks.
  shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
