@@ -27,11 +27,15 @@ fn resolve_server_addr(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<SocketAddr> {
         ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
         // Resolve domain name to SocketAddr
         ServerAddr::DomainName(ref dname, port) => {
-            let fut = Context::with(|ctx| resolve(dname, ctx.handle()));
-            let fut = fut.map(move |sockaddr| match sockaddr {
-                                  IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                                  IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                              });
+            let fut = resolve(dname).map(move |vec_ipaddr| {
+                let ipaddr = vec_ipaddr.into_iter()
+                                       .next()
+                                       .expect("Resolved empty IP list");
+                match ipaddr {
+                    IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                    IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                }
+            });
             boxed_future(fut)
         }
     }

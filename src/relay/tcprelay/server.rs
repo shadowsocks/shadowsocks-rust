@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use config::ServerConfig;
 
-use relay::{BoxIoFuture, boxed_future};
+use relay::{boxed_future, BoxIoFuture};
 use relay::Context;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
@@ -21,7 +21,7 @@ use tokio_core::net::{TcpListener, TcpStream};
 use tokio_io::AsyncRead;
 use tokio_io::io::{ReadHalf, WriteHalf};
 
-use super::{DecryptedHalf, EncryptedHalfFut, proxy_handshake, try_timeout, tunnel};
+use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalfFut, TcpStreamConnect};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
@@ -37,9 +37,9 @@ impl TcpRelayClientHandshake {
         let timeout = *svr_cfg.timeout();
         let fut = proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
             r_fut.and_then(move |r| {
-                let fut = Address::read_from(r).map_err(|_| {
-                    io::Error::new(io::ErrorKind::Other, "failed to decode Address, may be wrong method or key")
-                });
+                let fut = Address::read_from(r).map_err(
+                    |_| io::Error::new(io::ErrorKind::Other, "failed to decode Address, may be wrong method or key"),
+                );
                 Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
             })
                  .map(move |(r, addr)| {
@@ -65,17 +65,57 @@ pub struct TcpRelayClientPending {
 
 impl TcpRelayClientPending {
     /// Resolve Address to SocketAddr
-    fn resolve_address(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<SocketAddr> {
+    fn resolve_address(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<Vec<SocketAddr>> {
+        use std::io::ErrorKind;
+
         match addr {
-            Address::SocketAddress(addr) => Box::new(futures::finished(addr)),
+            Address::SocketAddress(addr) => {
+                let result = Context::with(|ctx| {
+                    let config = ctx.config();
+                    let forbidden_ip = &config.forbidden_ip;
+
+                    if forbidden_ip.contains(&addr.ip()) {
+                        info!("{} has been forbidden", addr);
+                        let err = io::Error::new(ErrorKind::Other, format!("{} forbidden address", addr));
+                        Err(err)
+                    } else {
+                        Ok(vec![addr])
+                    }
+                });
+                boxed_future(futures::done(result))
+            }
             Address::DomainNameAddress(dname, port) => {
                 let fut = Context::with(|ctx| {
                     let h = ctx.handle();
-                    try_timeout(resolve(&dname[..], h), timeout, h).and_then(move |ipaddr| {
-                        Ok(match ipaddr {
-                               IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                               IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                           })
+                    try_timeout(resolve(&dname[..]), timeout, h).and_then(move |ip_addr| {
+                        Context::with(|ctx| {
+                            let config = ctx.config();
+                            let forbidden_ip = &config.forbidden_ip;
+
+                            let v = ip_addr.iter()
+                                           .filter(|ipaddr| if forbidden_ip.contains(ipaddr) {
+                                                       info!("{} has been forbidden", ipaddr);
+                                                       true
+                                                   } else {
+                                                       false
+                                                   })
+                                           .map(|ip| match *ip {
+                                                    IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                                                    IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                                                })
+                                           .collect::<Vec<SocketAddr>>();
+
+                            if v.is_empty() {
+                                let err = io::Error::new(ErrorKind::Other,
+                                                         format!("{}:{} all IPs has been filtered, {:?}",
+                                                                 dname,
+                                                                 port,
+                                                                 ip_addr));
+                                Err(err)
+                            } else {
+                                Ok(v)
+                            }
+                        })
                     })
                 });
                 Box::new(fut)
@@ -85,34 +125,21 @@ impl TcpRelayClientPending {
 
     /// Resolve remote address to SocketAddr
     /// Report failure if the SocketAddr is forbidden by `forbidden_ip`
-    fn resolve_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<SocketAddr> {
-        let fut = TcpRelayClientPending::resolve_address(addr, timeout).and_then(move |addr| {
-            let ipaddr = match addr {
-                SocketAddr::V4(v4) => IpAddr::V4(*v4.ip()),
-                SocketAddr::V6(v6) => IpAddr::V6(*v6.ip()),
-            };
-
-            Context::with(|ctx| {
-                let config = ctx.config();
-                let forbidden_ip = &config.forbidden_ip;
-                if forbidden_ip.contains(&ipaddr) {
-                    info!("{} has been forbidden", ipaddr);
-                    let err = io::Error::new(io::ErrorKind::Other, "Forbidden IP");
-                    Err(err)
-                } else {
-                    Ok(addr)
-                }
-            })
-        });
-        Box::new(fut)
+    #[inline]
+    fn resolve_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<Vec<SocketAddr>> {
+        TcpRelayClientPending::resolve_address(addr, timeout)
     }
 
     /// Connect to the remote server
     fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        Box::new(TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
-            Context::with(|ctx| try_timeout(TcpStream::connect(&addr, ctx.handle()), timeout, ctx.handle()))
-        }))
+        let fut = TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
+            Context::with(|ctx| {
+                              let conn = TcpStreamConnect::new(addr.into_iter(), ctx.handle());
+                              try_timeout(conn, timeout, ctx.handle())
+                          })
+        });
+        boxed_future(fut)
     }
 
     /// Connect to the remote server
@@ -166,8 +193,8 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
                 let addr = svr_cfg.addr();
                 let addr = addr.listen_addr();
 
-                let listener = TcpListener::bind(&addr, ctx.handle())
-                    .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                let listener =
+                    TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
                 info!("ShadowSocks TCP Listening on {}", addr);
                 listener
@@ -210,6 +237,5 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
         }
 
         fut.expect("Must have at least one server")
-
     })
 }

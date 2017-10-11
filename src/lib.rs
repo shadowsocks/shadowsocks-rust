@@ -70,32 +70,32 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-extern crate serde_json;
 #[macro_use]
 extern crate log;
-extern crate lru_time_cache;
+extern crate serde_json;
 
 extern crate byteorder;
 extern crate rand;
 extern crate typenum;
 
-extern crate md_5 as md5;
 extern crate digest;
-extern crate ring;
-extern crate openssl;
 #[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
+extern crate md_5 as md5;
+extern crate openssl;
+extern crate ring;
 
+extern crate bytes;
 #[macro_use]
 extern crate futures;
+extern crate futures_cpupool;
 extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
-extern crate netdb;
-extern crate bytes;
 
-extern crate libc;
+#[macro_use]
 extern crate lazy_static;
+extern crate libc;
 #[macro_use]
 extern crate scoped_tls;
 
