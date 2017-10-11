@@ -29,6 +29,9 @@ if [[ -z "$VERSION" ]]; then
     VERSION="latest"
 fi
 
+## Disable OS X ACL file
+export COPYFILE_DISABLE=1
+
 tar -czf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.gz" \
     "sslocal" \
     "ssserver" \
