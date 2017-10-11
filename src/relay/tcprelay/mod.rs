@@ -220,7 +220,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
             TcpStreamConnect::Connect { last_err, .. } => {
                 match last_err {
                     None => {
-                        let err = io::Error::new(ErrorKind::Other, "Connect without any addresses");
+                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
                         Err(err)
                     }
                     Some(err) => Err(err),
