@@ -12,9 +12,10 @@ else
 endif
 
 install:
-	install -Dm 755 target/${TARGET}/sslocal ${DESTDIR}${PREFIX}/sslocal
-	install -Dm 755 target/${TARGET}/ssserver ${DESTDIR}${PREFIX}/ssserver
-	install -Dm 755 target/${TARGET}/ssurl ${DESTDIR}${PREFIX}/ssurl
+	install -d ${DESTDIR}${PREFIX}
+	install -m 755 target/${TARGET}/sslocal ${DESTDIR}${PREFIX}/sslocal
+	install -m 755 target/${TARGET}/ssserver ${DESTDIR}${PREFIX}/ssserver
+	install -m 755 target/${TARGET}/ssurl ${DESTDIR}${PREFIX}/ssurl
 
 uninstall:
 	rm ${DESTDIR}${PREFIX}/sslocal
