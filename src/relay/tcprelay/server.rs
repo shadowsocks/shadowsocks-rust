@@ -94,7 +94,7 @@ impl TcpRelayClientPending {
 
                             let v = ip_addr.iter()
                                            .filter(|ipaddr| if forbidden_ip.contains(ipaddr) {
-                                                       info!("{} has been forbidden", ipaddr);
+                                                       info!("{} is forbidden", ipaddr);
                                                        false
                                                    } else {
                                                        true
