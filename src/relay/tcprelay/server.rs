@@ -65,7 +65,7 @@ impl TcpRelayClientPending {
     /// Connect to the remote server
     #[inline]
     fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
-        info!("Connecting to remote {}", addr);
+        debug!("Connecting to remote {}", addr);
 
         match addr {
             Address::SocketAddress(saddr) => {

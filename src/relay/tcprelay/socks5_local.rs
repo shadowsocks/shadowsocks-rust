@@ -143,7 +143,7 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
             let addr = header.address;
             match header.command {
                 socks5::Command::TcpConnect => {
-                    info!("CONNECT {}", addr);
+                    debug!("CONNECT {}", addr);
                     handle_socks5_connect((r, w), cloned_client_addr, addr, conf)
                 }
                 socks5::Command::TcpBind => {
@@ -155,7 +155,7 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
                 }
                 socks5::Command::UdpAssociate => {
                     if udp_conf.enable_udp {
-                        info!("UDP ASSOCIATE {}", addr);
+                        debug!("UDP ASSOCIATE {}", addr);
                         let fut = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(*udp_conf.client_addr))
                             .write_to(w)
                             .and_then(flush)
