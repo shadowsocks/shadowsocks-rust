@@ -8,10 +8,10 @@
 //! side.*
 
 extern crate clap;
-extern crate shadowsocks;
+extern crate env_logger;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+extern crate shadowsocks;
 extern crate time;
 
 use std::env;
@@ -21,7 +21,7 @@ use clap::{App, Arg};
 use env_logger::LogBuilder;
 use log::{LogLevelFilter, LogRecord};
 
-use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_server};
+use shadowsocks::{run_server, Config, ConfigType, ServerAddr, ServerConfig};
 use shadowsocks::plugin::PluginConfig;
 
 fn log_time(without_time: bool, record: &LogRecord) -> String {
@@ -112,21 +112,21 @@ fn main() {
             log_builder.format(move |r| log_time(without_time, r));
         }
         1 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("ssserver"), LogLevelFilter::Debug);
         }
         2 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("ssserver"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         }
         3 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("ssserver"), LogLevelFilter::Trace)
                        .filter(Some("shadowsocks"), LogLevelFilter::Trace);
         }
         _ => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(None, LogLevelFilter::Trace);
         }
     }

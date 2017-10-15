@@ -106,21 +106,21 @@ fn main() {
             log_builder.format(move |r| log_time(without_time, r));
         }
         1 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
         }
         2 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
                        .filter(Some("shadowsocks"), LogLevelFilter::Debug);
         }
         3 => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
                        .filter(Some("shadowsocks"), LogLevelFilter::Trace);
         }
         _ => {
-            let mut log_builder = log_builder.format(move |r| log_time_module(without_time, r));
+            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
             log_builder.filter(None, LogLevelFilter::Trace);
         }
     }
