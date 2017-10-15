@@ -3,8 +3,7 @@
 use std::io::{self, BufRead, Read};
 use std::iter::{IntoIterator, Iterator};
 use std::mem;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -242,22 +241,10 @@ fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
         }
         ServerAddr::DomainName(ref domain, port) => {
             let fut = Context::with(|ctx| {
-                                        let handle = ctx.handle();
-                                        try_timeout(resolve(&domain[..]), timeout, &handle)
-                                    }).and_then(move |vec_ipaddr| {
-                Context::with(|ctx| {
-                    let handle = ctx.handle();
-
-                    let it =
-                        vec_ipaddr.into_iter().map(move |ip| match ip {
-                                                       IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                                                       IpAddr::V6(v6) => {
-                                                           SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))
-                                                       }
-                                                   });
-
-                    let fut = TcpStreamConnect::new(it, handle);
-                    try_timeout(fut, timeout, handle)
+                let handle = ctx.handle().clone();
+                try_timeout(resolve(&domain[..], port, false), timeout, &handle).and_then(move |vec_ipaddr| {
+                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter(), &handle);
+                    try_timeout(fut, timeout, &handle)
                 })
             });
             boxed_future(fut)

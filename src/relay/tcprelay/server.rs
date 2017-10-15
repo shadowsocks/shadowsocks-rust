@@ -1,8 +1,6 @@
 //! Relay for TCP server that running on the server side
 
-use std::io;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::net::IpAddr;
+use std::io::{self, ErrorKind};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -38,7 +36,7 @@ impl TcpRelayClientHandshake {
         let fut = proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
             r_fut.and_then(move |r| {
                 let fut = Address::read_from(r).map_err(
-                    |_| io::Error::new(io::ErrorKind::Other, "failed to decode Address, may be wrong method or key"),
+                    |_| io::Error::new(ErrorKind::Other, "failed to decode Address, may be wrong method or key"),
                 );
                 Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
             })
@@ -64,82 +62,35 @@ pub struct TcpRelayClientPending {
 }
 
 impl TcpRelayClientPending {
-    /// Resolve Address to SocketAddr
-    fn resolve_address(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<Vec<SocketAddr>> {
-        use std::io::ErrorKind;
-
-        match addr {
-            Address::SocketAddress(addr) => {
-                let result = Context::with(|ctx| {
-                    let config = ctx.config();
-                    let forbidden_ip = &config.forbidden_ip;
-
-                    if forbidden_ip.contains(&addr.ip()) {
-                        info!("{} has been forbidden", addr);
-                        let err = io::Error::new(ErrorKind::Other, format!("{} is forbidden", addr));
-                        Err(err)
-                    } else {
-                        Ok(vec![addr])
-                    }
-                });
-                boxed_future(futures::done(result))
-            }
-            Address::DomainNameAddress(dname, port) => {
-                let fut = Context::with(|ctx| {
-                    let h = ctx.handle();
-                    try_timeout(resolve(&dname[..]), timeout, h).and_then(move |ip_addr| {
-                        Context::with(|ctx| {
-                            let config = ctx.config();
-                            let forbidden_ip = &config.forbidden_ip;
-
-                            let v = ip_addr.iter()
-                                           .filter(|ipaddr| if forbidden_ip.contains(ipaddr) {
-                                                       info!("{} is forbidden", ipaddr);
-                                                       false
-                                                   } else {
-                                                       true
-                                                   })
-                                           .map(|ip| match *ip {
-                                                    IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                                                    IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                                                })
-                                           .collect::<Vec<SocketAddr>>();
-
-                            if v.is_empty() {
-                                let err = io::Error::new(ErrorKind::Other,
-                                                         format!("{}:{} all IPs has been filtered, {:?}",
-                                                                 dname,
-                                                                 port,
-                                                                 ip_addr));
-                                Err(err)
-                            } else {
-                                Ok(v)
-                            }
-                        })
-                    })
-                });
-                Box::new(fut)
-            }
-        }
-    }
-
-    /// Resolve remote address to SocketAddr
-    /// Report failure if the SocketAddr is forbidden by `forbidden_ip`
-    #[inline]
-    fn resolve_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<Vec<SocketAddr>> {
-        TcpRelayClientPending::resolve_address(addr, timeout)
-    }
-
     /// Connect to the remote server
+    #[inline]
     fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
         info!("Connecting to remote {}", addr);
-        let fut = TcpRelayClientPending::resolve_remote(addr, timeout).and_then(move |addr| {
-            Context::with(|ctx| {
-                              let conn = TcpStreamConnect::new(addr.into_iter(), ctx.handle());
-                              try_timeout(conn, timeout, ctx.handle())
-                          })
-        });
-        boxed_future(fut)
+
+        match addr {
+            Address::SocketAddress(saddr) => {
+                Context::with(move |ctx| {
+                    if ctx.forbidden_ip().contains(&saddr.ip()) {
+                        let err = io::Error::new(ErrorKind::Other,
+                                                 format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr));
+                        return boxed_future(futures::done(Err(err)));
+                    }
+
+                    let conn = TcpStream::connect(&saddr, ctx.handle());
+                    try_timeout(conn, timeout, ctx.handle())
+                })
+            }
+            Address::DomainNameAddress(dname, port) => {
+                let fut = Context::with(move |ctx| {
+                    let handle = ctx.handle().clone();
+                    try_timeout(resolve(dname.as_str(), port, true), timeout, &handle).and_then(move |addrs| {
+                        let conn = TcpStreamConnect::new(addrs.into_iter(), &handle);
+                        try_timeout(conn, timeout, &handle)
+                    })
+                });
+                boxed_future(fut)
+            }
+        }
     }
 
     /// Connect to the remote server
@@ -170,6 +121,7 @@ pub struct TcpRelayClientConnected {
 
 impl TcpRelayClientConnected {
     /// Establish tunnel
+    #[inline]
     pub fn tunnel(self) -> BoxIoFuture<()> {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;

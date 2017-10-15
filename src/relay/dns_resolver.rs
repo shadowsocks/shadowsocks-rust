@@ -1,38 +1,70 @@
 //! Asynchronous DNS resolver
 
-use std::io;
-use std::net::{IpAddr, ToSocketAddrs};
+use std::io::{self, ErrorKind};
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 
-use futures::future;
+use futures::{future, Future};
 
 use futures_cpupool::CpuPool;
 
 use relay::{boxed_future, BoxIoFuture};
+use relay::Context;
 
 lazy_static! {
     static ref GLOBAL_DNS_CPU_POOL: CpuPool = CpuPool::new_num_cpus();
 }
 
-pub fn resolve(addr: &str) -> BoxIoFuture<Vec<IpAddr>> {
+pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<SocketAddr>> {
     // FIXME: Sometimes addr is actually an IpAddr!
     if let Ok(addr) = addr.parse::<IpAddr>() {
-        return boxed_future(future::finished(vec![addr]));
-    }
+        if !check_forbidden {
+            return boxed_future(future::finished(vec![SocketAddr::new(addr, port)]));
+        }
 
-    trace!("Going to resolve \"{}\"", addr);
-    let owned_addr = format!("{}:0", addr);
+        let result = Context::with(move |ctx| {
+            let forbidden_ip = &ctx.forbidden_ip();
 
-    let fut = GLOBAL_DNS_CPU_POOL.spawn_fn(move || {
-        owned_addr.to_socket_addrs().and_then(|addr_iter| {
-            let v = addr_iter.map(|addr| addr.ip()).collect::<Vec<IpAddr>>();
-            if v.is_empty() {
-                let err = io::Error::new(io::ErrorKind::Other, format!("Failed to resolve \"{}\"", owned_addr));
+            if forbidden_ip.contains(&addr) {
+                let err = io::Error::new(ErrorKind::Other, format!("{} is forbidden, all IPs are filtered", addr));
                 Err(err)
             } else {
-                trace!("Resolved \"{}\" => {:?}", owned_addr, v);
-                Ok(v)
+                Ok(vec![SocketAddr::new(addr, port)])
             }
-        })
+        });
+
+        return boxed_future(future::done(result));
+    }
+
+    trace!("Going to resolve \"{}:{}\"", addr, port);
+    let owned_addr = addr.to_owned();
+    let fut = GLOBAL_DNS_CPU_POOL.spawn_fn(move || {
+                                               (owned_addr.as_str(), port).to_socket_addrs()
+                                                                          .map(|a| (owned_addr, a))
+                                           })
+                                 .and_then(move |(owned_addr, addr_iter)| {
+        let v = if !check_forbidden {
+            addr_iter.collect::<Vec<SocketAddr>>()
+        } else {
+            Context::with(move |ctx| {
+                let forbidden_ip = ctx.forbidden_ip();
+                addr_iter.filter(|addr| {
+                                     let filtered = forbidden_ip.contains(&addr.ip());
+                                     if filtered {
+                                         error!("{} is forbidden", addr.ip());
+                                     }
+                                     !filtered
+                                 })
+                         .collect::<Vec<SocketAddr>>()
+            })
+        };
+
+        if v.is_empty() {
+            let err = io::Error::new(io::ErrorKind::Other, format!("failed to resolve \"{}:{}\"", owned_addr, port));
+            Err(err)
+        } else {
+            trace!("Resolved \"{}\" => {:?}", owned_addr, v);
+            Ok(v)
+        }
     });
 
     boxed_future(fut)

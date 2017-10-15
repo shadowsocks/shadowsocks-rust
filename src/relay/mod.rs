@@ -1,6 +1,8 @@
 //! Relay server in local and server side implementations.
 
+use std::collections::HashSet;
 use std::io;
+use std::net::IpAddr;
 
 use config::Config;
 use futures::Future;
@@ -68,5 +70,10 @@ impl Context {
     /// Get config
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Get forbidden IPs
+    pub fn forbidden_ip(&self) -> &HashSet<IpAddr> {
+        &self.config.forbidden_ip
     }
 }

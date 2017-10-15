@@ -1,7 +1,7 @@
 //! UDP relay proxy server
 
-use std::io::{self, Cursor};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::io::{self, Cursor, ErrorKind};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::rc::Rc;
 
 use futures::{self, Future, Stream};
@@ -20,43 +20,22 @@ use super::crypto_io::{decrypt_payload, encrypt_payload};
 
 fn resolve_remote_addr(addr: Address) -> BoxIoFuture<SocketAddr> {
     match addr {
-        Address::SocketAddress(s) => boxed_future(futures::finished(s)),
+        Address::SocketAddress(s) => {
+            Context::with(|ctx| {
+                if ctx.forbidden_ip().contains(&s.ip()) {
+                    let err =
+                        io::Error::new(ErrorKind::Other, format!("{} is forbidden, failed to connect {}", s.ip(), s));
+                    return boxed_future(futures::done(Err(err)));
+                }
+
+                boxed_future(futures::finished(s))
+            })
+        }
         Address::DomainNameAddress(dname, port) => {
-            let fut = resolve(&dname).and_then(move |vec_ipaddr| {
-                Context::with(|ctx| {
-                    use std::io::ErrorKind;
-
-                    let config = ctx.config();
-                    let forbidden_ip = &config.forbidden_ip;
-
-                    let mut ipaddr = None;
-
-                    for i in vec_ipaddr {
-                        if forbidden_ip.contains(&i) {
-                            info!("{} is forbidden", i);
-                            continue;
-                        }
-
-                        ipaddr = Some(i);
-                        break;
-                    }
-
-                    match ipaddr {
-                        None => {
-                            let err = io::Error::new(ErrorKind::Other,
-                                                     format!("{}:{} all IPs has been filtered", dname, port));
-                            Err(err)
-                        }
-                        Some(ipaddr) => {
-                            let saddr = match ipaddr {
-                                IpAddr::V4(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                                IpAddr::V6(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                            };
-                            Ok(saddr)
-                        }
-                    }
-                })
-            });
+            let fut = resolve(&dname, port, true).map(move |vec_ipaddr| {
+                                                          assert!(!vec_ipaddr.is_empty());
+                                                          vec_ipaddr[0]
+                                                      });
             boxed_future(fut)
         }
     }
