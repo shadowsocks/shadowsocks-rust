@@ -161,7 +161,7 @@ enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
     Connect {
         last_err: Option<io::Error>,
         addr_iter: I,
-        opt_stream_new: Option<TcpStreamNew>,
+        opt_stream_new: Option<(TcpStreamNew, SocketAddr)>,
         handle: Handle,
     },
 }
@@ -193,12 +193,14 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
             } => {
                 loop {
                     // 1. Poll before doing anything else
-                    if let Some(ref mut stream_new) = *opt_stream_new {
+                    if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
                         match stream_new.poll() {
                             Ok(Async::Ready(stream)) => return Ok(Async::Ready(stream)),
                             Ok(Async::NotReady) => return Ok(Async::NotReady),
                             Err(ref err) if err.kind() == ErrorKind::WouldBlock => return Ok(Async::NotReady),
                             Err(err) => {
+                                error!("Failed to connect {}: {}", addr, err);
+                                
                                 *last_err = Some(err);
                             }
                         }
@@ -207,7 +209,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
                     match addr_iter.next() {
                         None => break,
                         Some(addr) => {
-                            *opt_stream_new = Some(TcpStream::connect(&addr, &handle));
+                            *opt_stream_new = Some((TcpStream::connect(&addr, &handle), addr));
                         }
                     }
                 }

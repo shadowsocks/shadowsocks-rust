@@ -37,9 +37,12 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
 
     trace!("Going to resolve \"{}:{}\"", addr, port);
     let owned_addr = addr.to_owned();
-    let fut = GLOBAL_DNS_CPU_POOL.spawn_fn(move || {
-                                               (owned_addr.as_str(), port).to_socket_addrs()
-                                                                          .map(|a| (owned_addr, a))
+    let fut = GLOBAL_DNS_CPU_POOL.spawn_fn(move || match (owned_addr.as_str(), port).to_socket_addrs() {
+                                               Ok(a) => Ok((owned_addr, a)),
+                                               Err(err) => {
+                                                   error!("Failed to resolve {}, {}", owned_addr, err);
+                                                   Err(err)
+                                               }
                                            })
                                  .and_then(move |(owned_addr, addr_iter)| {
         let v = if !check_forbidden {
@@ -50,7 +53,7 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
                 addr_iter.filter(|addr| {
                                      let filtered = forbidden_ip.contains(&addr.ip());
                                      if filtered {
-                                         error!("{} is forbidden", addr.ip());
+                                         error!("{} is forbidden and ignored", addr.ip());
                                      }
                                      !filtered
                                  })
@@ -59,10 +62,11 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
         };
 
         if v.is_empty() {
-            let err = io::Error::new(io::ErrorKind::Other, format!("failed to resolve \"{}:{}\"", owned_addr, port));
+            let err =
+                io::Error::new(io::ErrorKind::Other, format!("resolved \"{}:{}\" to empty address", owned_addr, port));
             Err(err)
         } else {
-            trace!("Resolved \"{}\" => {:?}", owned_addr, v);
+            debug!("Resolved \"{}\" => {:?}", owned_addr, v);
             Ok(v)
         }
     });
