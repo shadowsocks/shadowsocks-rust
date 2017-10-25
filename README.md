@@ -15,6 +15,14 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 * libcrypto (OpenSSL)
 * libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
+```bash
+
+# macOS
+brew install libsodium
+brew install openssl
+
+```
+
 ## Usage
 
 ### **crates.io**
