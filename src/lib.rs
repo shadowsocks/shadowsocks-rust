@@ -73,18 +73,17 @@
 #[macro_use]
 extern crate log;
 extern crate serde_json;
-
+extern crate base64;
+extern crate serde_urlencoded;
 extern crate byteorder;
 extern crate rand;
 extern crate typenum;
-
 extern crate digest;
 #[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
 extern crate md_5 as md5;
 extern crate openssl;
 extern crate ring;
-
 extern crate bytes;
 #[macro_use]
 extern crate futures;
@@ -92,18 +91,16 @@ extern crate futures_cpupool;
 extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
-
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate scoped_tls;
-
 extern crate subprocess;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
-
 extern crate byte_string;
+extern crate url;
 
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");

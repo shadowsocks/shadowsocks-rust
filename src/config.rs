@@ -45,6 +45,7 @@
 use std::collections::HashSet;
 use std::convert::From;
 use std::default::Default;
+use std::error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::OpenOptions;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -55,12 +56,13 @@ use std::str::FromStr;
 use std::string::ToString;
 use std::time::Duration;
 
+use base64::{URL_SAFE_NO_PAD, decode_config, encode_config};
+use bytes::Bytes;
 use serde_json::{self, Map, Value};
+use serde_urlencoded;
+use url::{self, Url};
 
 use crypto::cipher::CipherType;
-
-use bytes::Bytes;
-
 use plugin::PluginConfig;
 
 /// Server address
@@ -245,6 +247,171 @@ impl ServerConfig {
     /// Get plugin
     pub fn plugin(&self) -> Option<&PluginConfig> {
         self.plugin.as_ref()
+    }
+
+    /// Get [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
+    pub fn to_url(&self) -> String {
+        let user_info = format!("{}:{}", self.method().to_string(), self.password());
+        let encoded_user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+
+        let mut url = format!("ss://{}@{}", encoded_user_info, self.addr());
+        if let Some(c) = self.plugin() {
+            let mut plugin = c.plugin.clone();
+            if let Some(ref opt) = c.plugin_opt {
+                plugin += ";";
+                plugin += opt;
+            }
+
+            let plugin_param = [("plugin", &plugin)];
+            url += "/?";
+            url += &serde_urlencoded::to_string(&plugin_param).unwrap();
+        }
+
+        url
+    }
+
+    /// Parse from [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
+    pub fn from_url(encoded: &str) -> Result<ServerConfig, UrlParseError> {
+        let parsed = Url::parse(encoded).map_err(UrlParseError::from)?;
+
+        if parsed.scheme() != "ss" {
+            return Err(UrlParseError::InvalidScheme);
+        }
+
+        let user_info = parsed.username();
+        let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
+            Ok(account) => {
+                match String::from_utf8(account) {
+                    Ok(ac) => ac,
+                    Err(..) => {
+                        return Err(UrlParseError::InvalidAuthInfo);
+                    }
+                }
+            }
+            Err(err) => {
+                error!("Failed to parse UserInfo with Base64, err: {}", err);
+                return Err(UrlParseError::InvalidUserInfo);
+            }
+        };
+
+        let host = match parsed.host_str() {
+            Some(host) => host,
+            None => return Err(UrlParseError::MissingHost),
+        };
+
+        let port = parsed.port().unwrap_or(8388);
+        let addr = format!("{}:{}", host, port);
+
+        let mut sp2 = account.split(':');
+        let (method, pwd) = match (sp2.next(), sp2.next()) {
+            (Some(m), Some(p)) => (m, p),
+            _ => panic!("Malformed input"),
+        };
+
+        let addr = match addr.parse::<ServerAddr>() {
+            Ok(a) => a,
+            Err(err) => {
+                error!("Failed to parse \"{}\" to ServerAddr, err: {:?}", addr, err);
+                return Err(UrlParseError::InvalidServerAddr);
+            }
+        };
+
+        let mut plugin = None;
+        if let Some(q) = parsed.query() {
+            let query = match serde_urlencoded::from_bytes::<Vec<(String, String)>>(q.as_bytes()) {
+                Ok(q) => q,
+                Err(err) => {
+                    error!("Failed to parse QueryString, err: {}", err);
+                    return Err(UrlParseError::InvalidQueryString);
+                }
+            };
+
+            for (key, value) in query {
+                if key != "plugin" {
+                    continue;
+                }
+
+                let mut vsp = value.splitn(2, ';');
+                match vsp.next() {
+                    None => {}
+                    Some(p) => {
+                        plugin = Some(PluginConfig {
+                                          plugin: p.to_owned(),
+                                          plugin_opt: vsp.next().map(ToOwned::to_owned),
+                                      })
+                    }
+                }
+            }
+        }
+
+        let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None, plugin);
+
+        Ok(svrconfig)
+    }
+}
+
+impl FromStr for ServerConfig {
+    type Err = UrlParseError;
+    fn from_str(s: &str) -> Result<ServerConfig, Self::Err> {
+        ServerConfig::from_url(s)
+    }
+}
+
+/// Shadowsocks URL parsing Error
+#[derive(Debug, Clone)]
+pub enum UrlParseError {
+    ParseError(url::ParseError),
+    InvalidScheme,
+    InvalidUserInfo,
+    MissingHost,
+    InvalidAuthInfo,
+    InvalidServerAddr,
+    InvalidQueryString,
+}
+
+impl From<url::ParseError> for UrlParseError {
+    fn from(err: url::ParseError) -> UrlParseError {
+        UrlParseError::ParseError(err)
+    }
+}
+
+impl fmt::Display for UrlParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            UrlParseError::ParseError(ref err) => fmt::Display::fmt(err, f),
+            UrlParseError::InvalidScheme => write!(f, "URL must have \"ss://\" scheme"),
+            UrlParseError::InvalidUserInfo => write!(f, "invalid user info"),
+            UrlParseError::MissingHost => write!(f, "missing host"),
+            UrlParseError::InvalidAuthInfo => write!(f, "invalid authentication info"),
+            UrlParseError::InvalidServerAddr => write!(f, "invalid server address"),
+            UrlParseError::InvalidQueryString => write!(f, "invalid query string"),
+        }
+    }
+}
+
+impl error::Error for UrlParseError {
+    fn description(&self) -> &str {
+        match *self {
+            UrlParseError::ParseError(ref err) => error::Error::description(err),
+            UrlParseError::InvalidScheme => "URL must have \"ss://\" scheme",
+            UrlParseError::InvalidUserInfo => "invalid user info",
+            UrlParseError::MissingHost => "missing host",
+            UrlParseError::InvalidAuthInfo => "invalid authentication info",
+            UrlParseError::InvalidServerAddr => "invalid server address",
+            UrlParseError::InvalidQueryString => "invalid query string",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            UrlParseError::ParseError(ref err) => Some(err as &error::Error),
+            UrlParseError::InvalidScheme => None,
+            UrlParseError::InvalidUserInfo => None,
+            UrlParseError::MissingHost => None,
+            UrlParseError::InvalidAuthInfo => None,
+            UrlParseError::InvalidServerAddr => None,
+            UrlParseError::InvalidQueryString => None,
+        }
     }
 }
 

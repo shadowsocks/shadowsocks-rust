@@ -15,7 +15,7 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 * libcrypto (OpenSSL)
 * libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
-## Usage
+## Build & Install
 
 ### **crates.io**
 
@@ -120,17 +120,45 @@ The `sslocal` will use a load balancing algorithm to dispatch packages to all se
 
 Start local and server ShadowSocks with
 If you Build it with Makefile:
+
 ```bash
-sslocal -c config.json
-ssserver -c config.json
+$ sslocal -c config.json
+$ ssserver -c config.json
 ```
+
 If you Build it with Cargo:
-```
-cargo run --bin sslocal -- -c config.json
-cargo run --bin ssserver -- -c config.json
+
+```bash
+$ cargo run --bin sslocal -- -c config.json
+$ cargo run --bin ssserver -- -c config.json
 ```
 
 List all available arguments with `-h`.
+
+## Usage
+
+Local client
+
+```bash
+# Read local client configuration from file
+$ sslocal -c /path/to/shadowsocks.json
+
+# Pass all parameters via command line
+$ sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
+
+# Pass server with SIP002 URL
+$ sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
+```
+
+Server
+
+```bash
+# Read server configuration from file
+$ ssserver -c /path/to/shadowsocks.json
+
+# Pass all parameters via command line
+$ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
+```
 
 ## Supported Ciphers
 

@@ -7,44 +7,20 @@ extern crate clap;
 extern crate shadowsocks;
 extern crate qrcode;
 extern crate serde_json;
-extern crate base64;
-extern crate serde_urlencoded;
-extern crate url;
 
 use clap::{App, Arg};
 
 use qrcode::QrCode;
 use qrcode::types::Color;
 
-use base64::{URL_SAFE_NO_PAD, decode_config, encode_config};
-
-use url::Url;
-
 use shadowsocks::VERSION;
-use shadowsocks::config::{Config, ConfigType, ServerAddr, ServerConfig};
-use shadowsocks::plugin::PluginConfig;
+use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
 fn encode_url(svr: &ServerConfig) -> String {
-    let user_info = format!("{}:{}", svr.method().to_string(), svr.password());
-    let encoded_user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
-
-    let mut url = format!("ss://{}@{}", encoded_user_info, svr.addr());
-    if let Some(c) = svr.plugin() {
-        let mut plugin = c.plugin.clone();
-        if let Some(ref opt) = c.plugin_opt {
-            plugin += ";";
-            plugin += opt;
-        }
-
-        let plugin_param = [("plugin", &plugin)];
-        url += "/?";
-        url += &serde_urlencoded::to_string(&plugin_param).unwrap();
-    }
-
-    url
+    svr.to_url()
 }
 
 fn print_qrcode(encoded: &str) {
@@ -89,58 +65,7 @@ fn encode(filename: &str, need_qrcode: bool) {
 }
 
 fn decode(encoded: &str, need_qrcode: bool) {
-    if !encoded.starts_with("ss://") {
-        panic!("Malformed input: {:?}", encoded);
-    }
-
-    let parsed = Url::parse(encoded).expect("Failed to parse url");
-
-    if parsed.scheme() != "ss" {
-        panic!("Url must have scheme \"ss\", but found \"{}\"", parsed.scheme());
-    }
-
-    let user_info = parsed.username();
-    let account = decode_config(user_info, URL_SAFE_NO_PAD).unwrap();
-    let account = String::from_utf8(account).expect("UserInfo is not UTF-8 encoded");
-    let host = parsed.host_str().expect("Url must have a host");
-    let port = parsed.port().unwrap_or(8388);
-    let addr = format!("{}:{}", host, port);
-
-    let mut sp2 = account.split(':');
-    let (method, pwd) = match (sp2.next(), sp2.next()) {
-        (Some(m), Some(p)) => (m, p),
-        _ => panic!("Malformed input"),
-    };
-
-    let addr = match addr.parse::<ServerAddr>() {
-        Ok(a) => a,
-        Err(err) => panic!("Malformed input: {:?}", err),
-    };
-
-    let mut plugin = None;
-    if let Some(q) = parsed.query() {
-        let query = serde_urlencoded::from_bytes::<Vec<(String, String)>>(q.as_bytes())
-            .expect("Failed to parse query string");
-
-        for (key, value) in query {
-            if key != "plugin" {
-                continue;
-            }
-
-            let mut vsp = value.splitn(2, ';');
-            match vsp.next() {
-                None => {}
-                Some(p) => {
-                    plugin = Some(PluginConfig {
-                                      plugin: p.to_owned(),
-                                      plugin_opt: vsp.next().map(ToOwned::to_owned),
-                                  })
-                }
-            }
-        }
-    }
-
-    let svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap(), None, plugin);
+    let svrconfig = ServerConfig::from_url(encoded).unwrap();
 
     let mut config = Config::new();
     config.server.push(svrconfig);
@@ -155,7 +80,6 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
 fn main() {
     let app = App::new("ssurl")
-        .author("Y. T. Chung")
         .about("Encode and decode ShadowSocks URL")
         .version(VERSION)
         .arg(Arg::with_name("ENCODE")

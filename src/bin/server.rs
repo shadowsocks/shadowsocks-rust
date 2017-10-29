@@ -21,7 +21,7 @@ use clap::{App, Arg};
 use env_logger::LogBuilder;
 use log::{LogLevelFilter, LogRecord};
 
-use shadowsocks::{run_server, Config, ConfigType, ServerAddr, ServerConfig};
+use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_server};
 use shadowsocks::plugin::PluginConfig;
 
 fn log_time(without_time: bool, record: &LogRecord) -> String {
@@ -47,7 +47,6 @@ fn log_time_module(without_time: bool, record: &LogRecord) -> String {
 fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
-        .author("Y. T. Chung")
         .about("A fast tunnel proxy that helps you bypass firewalls.")
         .arg(Arg::with_name("VERBOSE")
                  .short("v")
@@ -80,11 +79,11 @@ fn main() {
         .arg(Arg::with_name("PLUGIN")
                  .long("plugin")
                  .takes_value(true)
-                 .help("Enable SIP003 plugin. (Experimental)"))
+                 .help("Enable SIP003 plugin"))
         .arg(Arg::with_name("PLUGIN_OPT")
                  .long("plugin-opts")
                  .takes_value(true)
-                 .help("Set SIP003 plugin options. (Experimental)"))
+                 .help("Set SIP003 plugin options"))
         .arg(Arg::with_name("LOG_WITHOUT_TIME")
                  .long("log-without-time")
                  .help("Disable time in log"))
