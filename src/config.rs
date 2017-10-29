@@ -251,7 +251,7 @@ impl ServerConfig {
 
     /// Get [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
     pub fn to_url(&self) -> String {
-        let user_info = format!("{}:{}", self.method().to_string(), self.password());
+        let user_info = format!("{}:{}", self.method(), self.password());
         let encoded_user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
 
         let mut url = format!("ss://{}@{}", encoded_user_info, self.addr());
