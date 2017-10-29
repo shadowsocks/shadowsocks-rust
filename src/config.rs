@@ -302,7 +302,7 @@ impl ServerConfig {
         let port = parsed.port().unwrap_or(8388);
         let addr = format!("{}:{}", host, port);
 
-        let mut sp2 = account.split(':');
+        let mut sp2 = account.splitn(2, ':');
         let (method, pwd) = match (sp2.next(), sp2.next()) {
             (Some(m), Some(p)) => (m, p),
             _ => panic!("Malformed input"),
