@@ -67,35 +67,40 @@ impl From<::openssl::error::ErrorStack> for Error {
     }
 }
 
-const CIPHER_AES_128_CFB: &'static str = "aes-128-cfb";
-const CIPHER_AES_128_CFB_1: &'static str = "aes-128-cfb1";
-const CIPHER_AES_128_CFB_8: &'static str = "aes-128-cfb8";
-const CIPHER_AES_128_CFB_128: &'static str = "aes-128-cfb128";
+const CIPHER_AES_128_CFB: &str = "aes-128-cfb";
+const CIPHER_AES_128_CFB_1: &str = "aes-128-cfb1";
+const CIPHER_AES_128_CFB_8: &str = "aes-128-cfb8";
+const CIPHER_AES_128_CFB_128: &str = "aes-128-cfb128";
 
-const CIPHER_AES_256_CFB: &'static str = "aes-256-cfb";
-const CIPHER_AES_256_CFB_1: &'static str = "aes-256-cfb1";
-const CIPHER_AES_256_CFB_8: &'static str = "aes-256-cfb8";
-const CIPHER_AES_256_CFB_128: &'static str = "aes-256-cfb128";
+const CIPHER_AES_256_CFB: &str = "aes-256-cfb";
+const CIPHER_AES_256_CFB_1: &str = "aes-256-cfb1";
+const CIPHER_AES_256_CFB_8: &str = "aes-256-cfb8";
+const CIPHER_AES_256_CFB_128: &str = "aes-256-cfb128";
 
-const CIPHER_RC4: &'static str = "rc4";
-const CIPHER_RC4_MD5: &'static str = "rc4-md5";
+const CIPHER_RC4: &str = "rc4";
+const CIPHER_RC4_MD5: &str = "rc4-md5";
 
-const CIPHER_TABLE: &'static str = "table";
+const CIPHER_TABLE: &str = "table";
 
 #[cfg(feature = "sodium")]
-const CIPHER_CHACHA20: &'static str = "chacha20";
+const CIPHER_CHACHA20: &str = "chacha20";
 #[cfg(feature = "sodium")]
-const CIPHER_SALSA20: &'static str = "salsa20";
+const CIPHER_SALSA20: &str = "salsa20";
 #[cfg(feature = "sodium")]
-const CIPHER_XSALSA20: &'static str = "xsalsa20";
+const CIPHER_XSALSA20: &str = "xsalsa20";
 #[cfg(feature = "sodium")]
-const CIPHER_CHACHA20_IETF: &'static str = "chacha20-ietf";
+const CIPHER_CHACHA20_IETF: &str = "chacha20-ietf";
 
-const CIPHER_DUMMY: &'static str = "dummy";
+#[cfg(feature = "miscreant")]
+const CIPHER_AES_128_PMAC_SIV: &str = "aes-128-pmac-siv";
+#[cfg(feature = "miscreant")]
+const CIPHER_AES_256_PMAC_SIV: &str = "aes-256-pmac-siv";
 
-const CIPHER_AES_128_GCM: &'static str = "aes-128-gcm";
-const CIPHER_AES_256_GCM: &'static str = "aes-256-gcm";
-const CIPHER_CHACHA20_POLY1305: &'static str = "chacha20-ietf-poly1305";
+const CIPHER_DUMMY: &str = "dummy";
+
+const CIPHER_AES_128_GCM: &str = "aes-128-gcm";
+const CIPHER_AES_256_GCM: &str = "aes-256-gcm";
+const CIPHER_CHACHA20_POLY1305: &str = "chacha20-ietf-poly1305";
 
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
@@ -129,6 +134,11 @@ pub enum CipherType {
     Aes256Gcm,
 
     ChaCha20Poly1305,
+
+    #[cfg(feature = "miscreant")]
+    Aes128PmacSiv,
+    #[cfg(feature = "miscreant")]
+    Aes256PmacSiv,
 }
 
 /// Category of ciphers
@@ -168,6 +178,11 @@ impl CipherType {
             CipherType::Aes256Gcm => AES_256_GCM.key_len(),
 
             CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.key_len(),
+
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes128PmacSiv => 32,
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes256PmacSiv => 64,
         }
     }
 
@@ -263,6 +278,11 @@ impl CipherType {
             CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
             CipherType::Aes256Gcm => AES_256_GCM.nonce_len(),
             CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.nonce_len(),
+
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes128PmacSiv => 8,
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes256PmacSiv => 8,
         }
     }
 
@@ -356,6 +376,11 @@ impl FromStr for CipherType {
 
             CIPHER_CHACHA20_POLY1305 => Ok(CipherType::ChaCha20Poly1305),
 
+            #[cfg(feature = "miscreant")]
+            CIPHER_AES_128_PMAC_SIV => Ok(CipherType::Aes128PmacSiv),
+            #[cfg(feature = "miscreant")]
+            CIPHER_AES_256_PMAC_SIV => Ok(CipherType::Aes256PmacSiv),
+
             _ => Err(Error::UnknownCipherType),
         }
     }
@@ -391,6 +416,11 @@ impl Display for CipherType {
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
             CipherType::Aes256Gcm => write!(f, "{}", CIPHER_AES_256_GCM),
             CipherType::ChaCha20Poly1305 => write!(f, "{}", CIPHER_CHACHA20_POLY1305),
+
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes128PmacSiv => write!(f, "{}", CIPHER_AES_128_PMAC_SIV),
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes256PmacSiv => write!(f, "{}", CIPHER_AES_256_PMAC_SIV),
         }
     }
 }

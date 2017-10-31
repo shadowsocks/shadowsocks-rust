@@ -18,6 +18,8 @@ pub mod ring;
 pub mod dummy;
 pub mod aead;
 pub mod stream;
+#[cfg(feature = "miscreant")]
+pub mod siv;
 #[cfg(feature = "sodium")]
 pub mod sodium;
 
