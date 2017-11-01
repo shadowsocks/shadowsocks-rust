@@ -1,4 +1,4 @@
-//! This is a binary runing in the local environment
+//! This is a binary running in the local environment
 //!
 //! You have to provide all needed configuration attributes via command line parameters,
 //! or you could specify a configuration file. The format of configuration file is defined
