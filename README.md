@@ -56,7 +56,7 @@ make install
 ```
 
 Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
- 
+
 ### **Build standalone binaries**
 
 Requirements:
@@ -170,12 +170,13 @@ $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local
 * `dummy` (No encryption, just for debugging)
 
 ### AEAD Ciphers
-* `aes-128-gcm`, `aes-192-gcm`, `aes-256-gcm`
+* `aes-128-gcm`, `aes-256-gcm`
 * `chacha20-ietf-poly1305`
+* `aes-128-pmac-siv`, `aes-256-pmac-siv` (experimental)
 
 ## Useful Tools
 
-1. `ssurl` is for encoding and decoding ShadowSocks URLs (SIP002). Example: 
+1. `ssurl` is for encoding and decoding ShadowSocks URLs (SIP002). Example:
 
 ```plain
 ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
