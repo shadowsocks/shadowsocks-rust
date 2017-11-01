@@ -3,6 +3,7 @@
 use crypto::cipher::{CipherCategory, CipherResult, CipherType};
 
 use crypto::ring::RingAeadCipher;
+#[cfg(feature = "miscreant")]
 use crypto::siv::MiscreantCipher;
 
 use ring::digest::SHA1;
