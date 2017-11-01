@@ -79,6 +79,8 @@ extern crate byteorder;
 extern crate rand;
 extern crate typenum;
 extern crate digest;
+#[cfg(feature = "miscreant")]
+extern crate miscreant;
 #[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
 extern crate md_5 as md5;
