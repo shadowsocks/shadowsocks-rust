@@ -314,6 +314,11 @@ impl CipherType {
             CipherType::Aes128Gcm |
             CipherType::Aes256Gcm |
             CipherType::ChaCha20Poly1305 => CipherCategory::Aead,
+
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes128PmacSiv |
+            CipherType::Aes256PmacSiv => CipherCategory::Aead,
+
             _ => CipherCategory::Stream,
         }
     }
@@ -326,6 +331,10 @@ impl CipherType {
             CipherType::Aes128Gcm => AES_128_GCM.tag_len(),
             CipherType::Aes256Gcm => AES_256_GCM.tag_len(),
             CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.tag_len(),
+
+            #[cfg(feature = "miscreant")]
+            CipherType::Aes128PmacSiv |
+            CipherType::Aes256PmacSiv => 16,
 
             _ => panic!("Only support AEAD ciphers, found {:?}", self),
         }

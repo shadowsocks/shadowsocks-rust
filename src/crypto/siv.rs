@@ -1,4 +1,4 @@
-//! Miscreant
+//! Cipher defined with Miscreant
 
 use std::{iter, ptr};
 
@@ -14,19 +14,25 @@ use bytes::{BufMut, BytesMut};
 use byte_string::ByteStr;
 
 
-
+/// AEAD ciphers provided by Miscreant
 pub enum MiscreantCryptoVariant {
     Aes128(Aes128PmacSiv),
     Aes256(Aes256PmacSiv)
 }
 
+/// AEAD Cipher context
+///
+/// According to SIP004, the `nonce` has to incr 1 after each encrypt/decrypt.
 pub struct MiscreantCipher {
     cipher: MiscreantCryptoVariant,
     nonce: BytesMut
 }
 
 impl MiscreantCipher {
+    /// Initialize context
     pub fn new(t: CipherType, key: &[u8], salt: &[u8]) -> Self {
+        // NOTE: Don't need check salt is duplicated. :)
+
         let nonce_size = t.iv_size();
         let mut nonce = BytesMut::with_capacity(nonce_size);
         unsafe {
@@ -62,21 +68,21 @@ impl AeadEncryptor for MiscreantCipher {
         let buf_len = input.len() + tag_len;
 
         let mut buf = BytesMut::with_capacity(buf_len);
-        buf.put_slice(input);
         unsafe {
             buf.set_len(buf_len);
         }
+        buf[tag_len..].copy_from_slice(input);
 
         match self.cipher {
             MiscreantCryptoVariant::Aes128(ref mut cipher) => {
                 cipher.seal_in_place(iter::once(&self.nonce), &mut buf);
-                output.copy_from_slice(&buf[..input.len()]);
-                tag.copy_from_slice(&buf[input.len()..]);
+                tag.copy_from_slice(&buf[..tag_len]);
+                output.copy_from_slice(&buf[tag_len..]);
             },
             MiscreantCryptoVariant::Aes256(ref mut cipher) => {
                 cipher.seal_in_place(iter::once(&self.nonce), &mut buf);
-                output.copy_from_slice(&buf[..input.len()]);
-                tag.copy_from_slice(&buf[input.len()..]);
+                tag.copy_from_slice(&buf[..tag_len]);
+                output.copy_from_slice(&buf[tag_len..]);
             }
         }
 
@@ -87,8 +93,8 @@ impl AeadEncryptor for MiscreantCipher {
 impl AeadDecryptor for MiscreantCipher {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
         let mut buf = BytesMut::with_capacity(input.len() + tag.len());
-        buf.put_slice(input);
         buf.put_slice(tag);
+        buf.put_slice(input);
 
         let result = match self.cipher {
             MiscreantCryptoVariant::Aes128(ref mut cipher) =>
@@ -109,5 +115,42 @@ impl AeadDecryptor for MiscreantCipher {
                        ByteStr::new(tag));
                 Error::AeadDecryptFailed
             })
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crypto::{CipherType, AeadEncryptor, AeadDecryptor};
+
+    fn test_miscreant(ct: CipherType) {
+        let key = ct.bytes_to_key(b"PassWORD");
+        let message = b"message";
+
+        let iv = ct.gen_init_vec();
+
+        let mut enc = MiscreantCipher::new(ct, &key[..], &iv[..]);
+        let mut encrypted_msg = vec![0; message.len()];
+        let mut tag = [0; 16];
+        enc.encrypt(message, &mut encrypted_msg, &mut tag);
+
+        assert_ne!(message, &encrypted_msg[..]);
+
+        let mut dec = MiscreantCipher::new(ct, &key[..], &iv[..]);
+        let mut decrypted_msg = vec![0; encrypted_msg.len()];
+        dec.decrypt(&encrypted_msg[..], &mut decrypted_msg, &tag).unwrap();
+
+        assert_eq!(&decrypted_msg[..], message);
+    }
+
+    #[test]
+    fn test_rust_crypto_cipher_chacha20() {
+        test_miscreant(CipherType::Aes128PmacSiv);
+    }
+
+    #[test]
+    fn test_rust_crypto_cipher_salsa20() {
+        test_miscreant(CipherType::Aes256PmacSiv);
     }
 }
