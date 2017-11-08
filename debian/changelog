@@ -1,3 +1,9 @@
+shadowsocks-rust (1.6.8) unstable; urgency=medium
+
+  * Upstream bump version. 
+
+ -- Simon Shi <simonsmh@gmail.com>  Wed, 08 Nov 2017 14:27:18 +0800
+
 shadowsocks-rust (1.6.6+deb1) unstable; urgency=medium
 
   * Add debian files.
