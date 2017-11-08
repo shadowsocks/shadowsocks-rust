@@ -8,7 +8,9 @@ Homepage: https://github.com/shadowsocks/shadowsocks-rust
 
 Package: shadowsocks-rust
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, lsb-base
 Conflicts: shadowsocks
-Description: Rust port of shadowsocks.
- shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
+Description: Rust port of shadowsocks, a secure socks5 proxy
+ Shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
+ Shadowsocks-rust was inspired by Shadowsock (in Python). It's rewritten
+ in rust.
