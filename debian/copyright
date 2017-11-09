@@ -1,14 +1,13 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: shadowsocks-rust
-Source: <url://example.com>
+Source: https://github.com/shadowsocks/shadowsocks-rust
 
 Files: *
-Copyright: <years> <put author's name and email here>
-           <years> <likewise for another author>
+Copyright: 2014 Y. T. CHUNG <zonyitoo@gmail.com>
 License: MIT
 
 Files: debian/*
-Copyright: 2017 Shigure Moe <feng591892871@gmail.com>
+Copyright: 2017 Simon Shi <simonsmh@gmail.com>
 License: MIT
 
 License: MIT
@@ -30,7 +29,3 @@ License: MIT
  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
-# Please avoid picking licenses with terms that are more restrictive than the
-# packaged work, as it may make Debian's contributions unacceptable upstream.
