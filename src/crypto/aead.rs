@@ -122,7 +122,7 @@ pub fn increase_nonce(nonce: &mut [u8]) {
 
 #[cfg(not(feature = "sodium"))]
 pub fn increase_nonce(nonce: &mut [u8]) {
-    let mut prev: u16 = 0;
+    let mut prev: u16 = 1;
     for i in nonce {
         prev += *i as u16;
         *i = prev as u8;
