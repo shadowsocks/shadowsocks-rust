@@ -1,3 +1,9 @@
+shadowsocks-rust (1.6.9) unstable; urgency=medium
+
+  * Fixed increase_nonce without libsodium
+
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 26 Nov 2017 10:28:13 UTC
+
 shadowsocks-rust (1.6.8) unstable; urgency=medium
 
   * Upstream bump version. 
