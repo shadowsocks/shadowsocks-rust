@@ -41,7 +41,10 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 use crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
-use super::{BUFFER_SIZE, DecryptedRead, EncryptedWrite};
+use super::{DecryptedRead, EncryptedWrite, BUFFER_SIZE};
+
+/// AEAD packet payload must be smaller than 0x3FFF
+const MAX_PACKET_SIZE: usize = 0x3FFF;
 
 enum ReadingStep {
     Length,
@@ -141,6 +144,18 @@ where
                     self.cipher.decrypt(data, &mut len_buf, tag)?;
                     Cursor::new(len_buf).get_u16::<BigEndian>() as usize
                 };
+
+                if len > MAX_PACKET_SIZE {
+                    use std::io::{Error, ErrorKind};
+
+                    error!("AEAD packet size must be <= {}, but received length {}", MAX_PACKET_SIZE, len);
+
+                    let err = Error::new(
+                        ErrorKind::InvalidData,
+                        format!("AEAD packet size must be <= {}, but received length {}", MAX_PACKET_SIZE, len),
+                    );
+                    return Err(err);
+                }
 
                 self.read_step = ReadingStep::DataAndTag(len);
             }
@@ -284,7 +299,7 @@ where
 
     fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         // Data.Len is a 16-bit big-endian integer indicating the length of Data. It should be smaller than 0x3FFF.
-        assert!(data.len() <= 0x3FFF);
+        assert!(data.len() <= MAX_PACKET_SIZE);
 
         let data_length = data.len() as u16;
 
@@ -297,8 +312,7 @@ where
         }
 
         let mut encrypted_data_len = [0u8; 2];
-        self.cipher
-            .encrypt(&data_len_buf, &mut encrypted_data_len, &mut *tag_buf);
+        self.cipher.encrypt(&data_len_buf, &mut encrypted_data_len, &mut *tag_buf);
 
         buf.put(&encrypted_data_len[..]);
         buf.put_slice(&tag_buf);
