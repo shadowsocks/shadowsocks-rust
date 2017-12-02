@@ -1,5 +1,23 @@
 #!/bin/sh
 
+VERSION="latest"
+ENABLE_GZ=false
+
+while getopts "v:gh" opt; do
+    case $opt in
+        v)
+            VERSION=$OPTARG
+            ;;
+        g)
+            ENABLE_GZ=true
+            ;;
+        h|\?)
+            echo "$0 [-v VERSION] [-g] [-h]"
+            exit 0
+            ;;
+    esac
+done
+
 IMAGE='shadowsocks-rust:latest'
 CUR_DIR=$( cd $( dirname $0 ) && pwd )
 
@@ -9,6 +27,8 @@ SRC_PATH="/home/rust/src"
 CARGO_TARGET_DIR="${SRC_PATH}/build/target"
 LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
 
+TARGET_NAME="x86_64-unknown-linux-musl"
+
 docker run \
     -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
     -v "${CUR_DIR}"/..:"$SRC_PATH" \
@@ -17,25 +37,23 @@ docker run \
     /bin/bash -c \
     "sudo mkdir -p $CARGO_TARGET_DIR \
         && sudo chown -R rust:rust $CARGO_TARGET_DIR \
-        && cargo build --release \
+        && cargo build --release --target $TARGET_NAME \
         && sudo chown -R $LOCAL_USER $CARGO_TARGET_DIR"
 
-TARGET_NAME="x86_64-unknown-linux-musl"
+
 TARGET_DIR="$CUR_DIR/target/$TARGET_NAME/release/"
 cd "$TARGET_DIR"
-
-VERSION=$1
-if [[ -z "$VERSION" ]]; then
-    VERSION="latest"
-fi
 
 ## Disable OS X ACL file
 export COPYFILE_DISABLE=1
 
-tar -czf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.gz" \
-    "sslocal" \
-    "ssserver" \
-    "ssurl"
+if $ENABLE_GZ; then
+    tar -czf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.gz" \
+        "sslocal" \
+        "ssserver" \
+        "ssurl"
+fi
+
 tar -cJf "${CUR_DIR}/shadowsocks-${VERSION}-release.${TARGET_NAME}.tar.xz" \
     "sslocal" \
     "ssserver" \
