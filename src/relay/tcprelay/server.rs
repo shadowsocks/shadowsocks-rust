@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use config::ServerConfig;
 
-use relay::{boxed_future, BoxIoFuture};
+use relay::{BoxIoFuture, boxed_future};
 use relay::Context;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
@@ -19,7 +19,7 @@ use tokio_core::net::{TcpListener, TcpStream};
 use tokio_io::AsyncRead;
 use tokio_io::io::{ReadHalf, WriteHalf};
 
-use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalfFut, TcpStreamConnect};
+use super::{DecryptedHalf, EncryptedHalfFut, TcpStreamConnect, proxy_handshake, try_timeout, tunnel};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
@@ -32,12 +32,16 @@ impl TcpRelayClientHandshake {
     pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
         let TcpRelayClientHandshake { s, svr_cfg } = self;
 
+        let peer_addr = s.peer_addr().expect("Failed to get peer addr for client");
+        debug!("Handshaking with peer {}", peer_addr);
+
         let timeout = *svr_cfg.timeout();
         let fut = proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
             r_fut.and_then(move |r| {
-                let fut = Address::read_from(r).map_err(
-                    |_| io::Error::new(ErrorKind::Other, "failed to decode Address, may be wrong method or key"),
-                );
+                let fut = Address::read_from(r).map_err(move |_| {
+                    io::Error::new(ErrorKind::Other,
+                                   format!("failed to decode Address, may be wrong method or key, peer: {}", peer_addr))
+                });
                 Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
             })
                  .map(move |(r, addr)| {
@@ -145,8 +149,8 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
                 let addr = svr_cfg.addr();
                 let addr = addr.listen_addr();
 
-                let listener =
-                    TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                let listener = TcpListener::bind(&addr, ctx.handle())
+                    .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
                 info!("ShadowSocks TCP Listening on {}", addr);
                 listener
