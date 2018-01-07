@@ -15,30 +15,32 @@ extern crate time;
 use clap::{App, Arg};
 
 use std::env;
+use std::io::{self, Write};
 use std::net::SocketAddr;
 
-use env_logger::LogBuilder;
-use log::{LogLevelFilter, LogRecord};
+use env_logger::Builder;
+use env_logger::fmt::Formatter;
+use log::{LevelFilter, Record};
 
 use shadowsocks::{Config, ConfigType, ServerAddr, ServerConfig, run_local};
 use shadowsocks::plugin::PluginConfig;
 
-fn log_time(without_time: bool, record: &LogRecord) -> String {
+fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
-        format!("[{}] {}", record.level(), record.args())
+        write!(fmt, "[{}] {}", record.level(), record.args())
     } else {
-        format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
+        write!(fmt, "[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
     }
 }
 
-fn log_time_module(without_time: bool, record: &LogRecord) -> String {
+fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
-        format!("[{}] [{}] {}", record.level(), record.location().module_path(), record.args())
+        write!(fmt, "[{}] [{}] {}", record.level(), record.module_path().unwrap_or("*"), record.args())
     } else {
-        format!("[{}][{}] [{}] {}",
+        write!(fmt, "[{}][{}] [{}] {}",
                 time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
                 record.level(),
-                record.location().module_path(),
+                record.module_path().unwrap_or("*"),
                 record.args())
     }
 }
@@ -97,8 +99,8 @@ fn main() {
                  .help("Server address in SIP002 URL"))
         .get_matches();
 
-    let mut log_builder = LogBuilder::new();
-    log_builder.filter(None, LogLevelFilter::Info);
+    let mut log_builder = Builder::new();
+    log_builder.filter(None, LevelFilter::Info);
 
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
 
@@ -106,25 +108,25 @@ fn main() {
     match debug_level {
         0 => {
             // Default filter
-            log_builder.format(move |r| log_time(without_time, r));
+            log_builder.format(move |fmt, r| log_time(fmt, without_time, r));
         }
         1 => {
-            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug);
+            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
+            log_builder.filter(Some("sslocal"), LevelFilter::Debug);
         }
         2 => {
-            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Debug)
-                       .filter(Some("shadowsocks"), LogLevelFilter::Debug);
+            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
+            log_builder.filter(Some("sslocal"), LevelFilter::Debug)
+                       .filter(Some("shadowsocks"), LevelFilter::Debug);
         }
         3 => {
-            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
-            log_builder.filter(Some("sslocal"), LogLevelFilter::Trace)
-                       .filter(Some("shadowsocks"), LogLevelFilter::Trace);
+            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
+            log_builder.filter(Some("sslocal"), LevelFilter::Trace)
+                       .filter(Some("shadowsocks"), LevelFilter::Trace);
         }
         _ => {
-            let log_builder = log_builder.format(move |r| log_time_module(without_time, r));
-            log_builder.filter(None, LogLevelFilter::Trace);
+            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
+            log_builder.filter(None, LevelFilter::Trace);
         }
     }
 
@@ -132,7 +134,7 @@ fn main() {
         log_builder.parse(&env_conf);
     }
 
-    log_builder.init().unwrap();
+    log_builder.init();
 
     let mut has_provided_config = false;
 
