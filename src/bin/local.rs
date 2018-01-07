@@ -27,17 +27,17 @@ use shadowsocks::plugin::PluginConfig;
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
-        write!(fmt, "[{}] {}", record.level(), record.args())
+        writeln!(fmt, "[{}] {}", record.level(), record.args())
     } else {
-        write!(fmt, "[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
+        writeln!(fmt, "[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(), record.level(), record.args())
     }
 }
 
 fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
-        write!(fmt, "[{}] [{}] {}", record.level(), record.module_path().unwrap_or("*"), record.args())
+        writeln!(fmt, "[{}] [{}] {}", record.level(), record.module_path().unwrap_or("*"), record.args())
     } else {
-        write!(fmt, "[{}][{}] [{}] {}",
+        writeln!(fmt, "[{}][{}] [{}] {}",
                 time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
                 record.level(),
                 record.module_path().unwrap_or("*"),
