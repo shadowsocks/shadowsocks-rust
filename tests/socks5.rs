@@ -54,17 +54,13 @@ impl Socks5TestServer {
     }
 
     pub fn run(&self) {
-        drop(env_logger::init());
-
         let svr_cfg = self.config.clone();
         thread::spawn(move || {
-            drop(env_logger::init());
             run_server(svr_cfg).unwrap();
         });
 
         let client_cfg = self.config.clone();
         thread::spawn(move || {
-            drop(env_logger::init());
             run_local(client_cfg).unwrap();
         });
 

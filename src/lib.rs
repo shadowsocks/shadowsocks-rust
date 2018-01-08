@@ -83,7 +83,7 @@ extern crate digest;
 extern crate miscreant;
 #[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
-extern crate md_5 as md5;
+extern crate md5;
 extern crate openssl;
 extern crate ring;
 extern crate bytes;

@@ -49,7 +49,6 @@ fn get_client_addr() -> SocketAddr {
 
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
-                      drop(env_logger::init());
                       bar.wait();
                       run_server(get_config()).unwrap();
                   });
@@ -57,7 +56,6 @@ fn start_server(bar: Arc<Barrier>) {
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
-                      drop(env_logger::init());
                       bar.wait();
                       run_local(get_config()).unwrap();
                   });
@@ -67,8 +65,6 @@ fn start_udp_echo_server(bar: Arc<Barrier>) {
     use std::net::UdpSocket;
 
     thread::spawn(move || {
-        drop(env_logger::init());
-
         let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
 
         bar.wait();
