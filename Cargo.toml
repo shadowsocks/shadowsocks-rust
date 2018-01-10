@@ -31,34 +31,34 @@ default = ["sodium"]
 sodium = ["libsodium-ffi"]
 
 [dependencies]
-log = "0.3"
+log = "0.4"
 byteorder = "1.1"
-rand = "0.3"
+rand = "0.4"
 time = "0.1"
 clap = "2"
-env_logger = "0.4"
+env_logger = "0.5.0-rc.1"
 openssl = "0.9"
 libc = "0.2"
 futures = "0.1"
 tokio-core = "0.1"
 tokio-io = "0.1"
-lazy_static = "0.2"
+lazy_static = "1.0"
 serde_json = "1.0"
-base64 = "0.6"
+base64 = "0.9"
 bytes = "0.4"
 scoped-tls = "0.1"
-ring = "0.11"
-md-5 = "0.5"
-digest = "0.6"
+ring = "0.13.0-alpha"
+md-5 = "0.7"
+digest = "0.7"
 typenum = "1.9"
-qrcode = { version = "0.4", default-features = false }
+qrcode = { version = "0.5", default-features = false }
 subprocess = "0.1"
 serde_urlencoded = "0.5"
 url = "1.5"
 byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
 futures-cpupool = "0.1"
-miscreant = { version = "0.2", optional = true }
+miscreant = { version = "0.3", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.1"
