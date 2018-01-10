@@ -1,9 +1,9 @@
 FROM ekidd/rust-musl-builder
 
-#ENV HTTP_PROXY="http://192.168.0.104:8118"
-#ENV HTTPS_PROXY="http://192.168.0.104:8118"
+#ENV HTTP_PROXY="http://192.168.0.106:8118"
+#ENV HTTPS_PROXY="http://192.168.0.106:8118"
 
-ENV SODIUM_VERS="1.0.15"
+ENV SODIUM_VERS="1.0.16"
 
 # Build a static copy of libsodium.
 RUN cd /home/rust/libs && \
