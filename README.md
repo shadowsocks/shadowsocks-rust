@@ -157,7 +157,7 @@ Server
 $ ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-$ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
+$ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
 ```
 
 ## Supported Ciphers
