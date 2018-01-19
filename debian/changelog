@@ -1,3 +1,9 @@
+shadowsocks-rust (1.6.10) unstable; urgency=medium
+
+  * Check AEAD packet length before actually reading it.
+
+ -- Y. T. Chung <zonyitoo@gmail.com> Sat, 2, Dec 2017 11:56:00 +0800
+
 shadowsocks-rust (1.6.9) unstable; urgency=medium
 
   * Fixed increase_nonce without libsodium
