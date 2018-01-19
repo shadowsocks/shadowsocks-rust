@@ -28,16 +28,15 @@ impl OpenSSLCrypto {
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
             CipherType::Rc4 => symm::Cipher::rc4(),
-            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
+            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
+                        cipher_type),
         };
 
         // Panic if error occurs
         let cipher = symm::Crypter::new(t, From::from(mode), key, Some(iv)).unwrap();
 
-        OpenSSLCrypto {
-            cipher: t,
-            inner: cipher,
-        }
+        OpenSSLCrypto { cipher: t,
+                        inner: cipher, }
     }
 
     /// Update data
@@ -82,7 +81,7 @@ impl OpenSSLCrypto {
 /// *Note: This behavior works just the same as the official version of shadowsocks.*
 ///
 /// ```rust
-/// use shadowsocks::crypto::{CryptoMode, StreamCipher, CipherType};
+/// use shadowsocks::crypto::{CipherType, CryptoMode, StreamCipher};
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
 ///
 /// let method = CipherType::Aes128Cfb;
@@ -109,7 +108,7 @@ pub struct OpenSSLCipher {
 impl OpenSSLCipher {
     /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
-        OpenSSLCipher { worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode) }
+        OpenSSLCipher { worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode), }
     }
 }
 

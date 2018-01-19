@@ -22,14 +22,14 @@ fn resolve_remote_addr(addr: Address) -> BoxIoFuture<SocketAddr> {
     match addr {
         Address::SocketAddress(s) => {
             Context::with(|ctx| {
-                if ctx.forbidden_ip().contains(&s.ip()) {
-                    let err =
-                        io::Error::new(ErrorKind::Other, format!("{} is forbidden, failed to connect {}", s.ip(), s));
-                    return boxed_future(futures::done(Err(err)));
-                }
+                              if ctx.forbidden_ip().contains(&s.ip()) {
+                                  let err = io::Error::new(ErrorKind::Other,
+                                                           format!("{} is forbidden, failed to connect {}", s.ip(), s));
+                                  return boxed_future(futures::done(Err(err)));
+                              }
 
-                boxed_future(futures::finished(s))
-            })
+                              boxed_future(futures::finished(s))
+                          })
         }
         Address::DomainNameAddress(dname, port) => {
             let fut = resolve(&dname, port, true).map(move |vec_ipaddr| {
@@ -112,17 +112,17 @@ pub fn run() -> BoxIoFuture<()> {
     let mut fut = None;
 
     Context::with(|ctx| {
-        let config = ctx.config();
-        for svr in &config.server {
-            let svr_cfg = Rc::new(svr.clone());
+                      let config = ctx.config();
+                      for svr in &config.server {
+                          let svr_cfg = Rc::new(svr.clone());
 
-            let svr_fut = listen(svr_cfg);
-            fut = match fut {
-                None => Some(svr_fut),
-                Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
-            };
-        }
+                          let svr_fut = listen(svr_cfg);
+                          fut = match fut {
+                              None => Some(svr_fut),
+                              Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
+                          };
+                      }
 
-        fut.expect("Should have at least one server")
-    })
+                      fut.expect("Should have at least one server")
+                  })
 }

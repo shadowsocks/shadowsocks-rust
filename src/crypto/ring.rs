@@ -3,7 +3,7 @@
 use std::mem;
 use std::ptr;
 
-use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey, open_in_place, seal_in_place};
+use ring::aead::{open_in_place, seal_in_place, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey};
 
 use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::{CipherResult, CipherType};
@@ -13,7 +13,6 @@ use crypto::cipher::Error;
 use bytes::{BufMut, Bytes, BytesMut};
 
 use byte_string::ByteStr;
-
 
 /// AEAD ciphers provided by Ring
 pub enum RingAeadCryptoVariant {
@@ -45,12 +44,10 @@ impl RingAeadCipher {
 
         let skey = make_skey(t, key, salt);
         let cipher = RingAeadCipher::new_variant(t, &skey, &nonce, is_seal);
-        RingAeadCipher {
-            cipher: cipher,
-            cipher_type: t,
-            key: skey,
-            nonce: nonce,
-        }
+        RingAeadCipher { cipher: cipher,
+                         cipher_type: t,
+                         key: skey,
+                         nonce: nonce, }
     }
 
     fn new_variant(t: CipherType, key: &[u8], nonce: &[u8], is_seal: bool) -> RingAeadCryptoVariant {

@@ -91,17 +91,17 @@ define_stream_ciphers! {
 
 /// Generate a specific Cipher with key and initialize vector
 pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
-    assert!(t.category() == CipherCategory::Stream, "only allow initializing with stream cipher");
+    assert!(t.category() == CipherCategory::Stream,
+            "only allow initializing with stream cipher");
 
     match t {
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
-        CipherType::Dummy => StreamCipherVariant::new(dummy::DummyCipher),
+        CipherType::Plain => StreamCipherVariant::new(dummy::DummyCipher),
 
         #[cfg(feature = "sodium")]
-        CipherType::ChaCha20 |
-        CipherType::Salsa20 |
-        CipherType::XSalsa20 |
-        CipherType::ChaCha20Ietf => StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv)),
+        CipherType::ChaCha20 | CipherType::Salsa20 | CipherType::XSalsa20 | CipherType::ChaCha20Ietf => {
+            StreamCipherVariant::new(sodium::SodiumCipher::new(t, key, iv))
+        }
 
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 

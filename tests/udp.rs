@@ -1,11 +1,11 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
 
+extern crate bytes;
+extern crate env_logger;
+extern crate futures;
 extern crate shadowsocks;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate futures;
-extern crate env_logger;
-extern crate bytes;
 
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -36,9 +36,7 @@ const METHOD: CipherType = CipherType::Aes128Cfb;
 fn get_config() -> Config {
     let mut cfg = Config::new();
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![
-        ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD),
-    ];
+    cfg.server = vec![ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD)];
     cfg.enable_udp = true;
     cfg
 }
@@ -65,34 +63,34 @@ fn start_udp_echo_server(bar: Arc<Barrier>) {
     use std::net::UdpSocket;
 
     thread::spawn(move || {
-        let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
+                      let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
 
-        bar.wait();
+                      bar.wait();
 
-        let mut buf = [0u8; 65536];
-        let (amt, src) = l.recv_from(&mut buf).unwrap();
+                      let mut buf = [0u8; 65536];
+                      let (amt, src) = l.recv_from(&mut buf).unwrap();
 
-        l.send_to(&buf[..amt], &src).unwrap();
-    });
+                      l.send_to(&buf[..amt], &src).unwrap();
+                  });
 }
 
 fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
-        let mut lp = Core::new().unwrap();
-        let handle = lp.handle();
+                      let mut lp = Core::new().unwrap();
+                      let handle = lp.handle();
 
-        let c = Socks5Client::udp_associate(addr, get_client_addr(), handle);
-        let fut = c.and_then(|(c, addr)| {
-                                 assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
+                      let c = Socks5Client::udp_associate(addr, get_client_addr(), handle);
+                      let fut = c.and_then(|(c, addr)| {
+                                               assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
 
-                                 // Holds it forever
-                                 read_to_end(c, Vec::new()).map(|_| ())
-                             });
+                                               // Holds it forever
+                                               read_to_end(c, Vec::new()).map(|_| ())
+                                           });
 
-        bar.wait();
+                      bar.wait();
 
-        lp.run(fut).unwrap();
-    });
+                      lp.run(fut).unwrap();
+                  });
 }
 
 #[test]
@@ -138,9 +136,8 @@ fn udp_relay() {
     println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
     let cur = Cursor::new(buf[..amt].to_vec());
-    let (cur, header) = UdpAssociateHeader::read_from(cur)
-        .wait()
-        .expect("Invalid UDP header");
+    let (cur, header) = UdpAssociateHeader::read_from(cur).wait()
+                                                          .expect("Invalid UDP header");
     println!("{:?}", header);
     let header_len = cur.position() as usize;
     let buf = cur.into_inner();

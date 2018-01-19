@@ -51,7 +51,7 @@
 //! Example to write a local server
 //!
 //! ```no_run
-//! use shadowsocks::{Config, ConfigType, run_local};
+//! use shadowsocks::{run_local, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
 //! run_local(config).unwrap();
@@ -60,7 +60,7 @@
 //! That's all! And let me show you how to run a proxy server
 //!
 //! ```no_run
-//! use shadowsocks::{Config, ConfigType, run_server};
+//! use shadowsocks::{run_server, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
 //! run_server(config).unwrap();
@@ -70,38 +70,38 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
-#[macro_use]
-extern crate log;
-extern crate serde_json;
 extern crate base64;
-extern crate serde_urlencoded;
+extern crate byte_string;
 extern crate byteorder;
-extern crate rand;
-extern crate typenum;
-extern crate digest;
-#[cfg(feature = "miscreant")]
-extern crate miscreant;
-#[cfg(feature = "sodium")]
-extern crate libsodium_ffi;
-extern crate md5;
-extern crate openssl;
-extern crate ring;
 extern crate bytes;
+extern crate digest;
 #[macro_use]
 extern crate futures;
 extern crate futures_cpupool;
-extern crate tokio_core;
-#[macro_use]
-extern crate tokio_io;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
+#[cfg(feature = "sodium")]
+extern crate libsodium_ffi;
+#[macro_use]
+extern crate log;
+extern crate md5;
+#[cfg(feature = "miscreant")]
+extern crate miscreant;
+extern crate openssl;
+extern crate rand;
+extern crate ring;
 #[macro_use]
 extern crate scoped_tls;
+extern crate serde_json;
+extern crate serde_urlencoded;
 extern crate subprocess;
+extern crate tokio_core;
+#[macro_use]
+extern crate tokio_io;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
-extern crate byte_string;
+extern crate typenum;
 extern crate url;
 
 /// ShadowSocks version

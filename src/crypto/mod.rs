@@ -4,10 +4,10 @@ use std::convert::From;
 
 use openssl::symm;
 
-pub use self::aead::{AeadDecryptor, AeadEncryptor, BoxAeadDecryptor, BoxAeadEncryptor, new_aead_decryptor,
-                     new_aead_encryptor};
+pub use self::aead::{new_aead_decryptor, new_aead_encryptor, AeadDecryptor, AeadEncryptor, BoxAeadDecryptor,
+                     BoxAeadEncryptor};
 pub use self::cipher::{CipherCategory, CipherResult, CipherType};
-pub use self::stream::{StreamCipher, StreamCipherVariant, new_stream};
+pub use self::stream::{new_stream, StreamCipher, StreamCipherVariant};
 
 pub mod cipher;
 pub mod openssl;

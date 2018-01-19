@@ -168,12 +168,10 @@ enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
 
 impl<I: Iterator<Item = SocketAddr>> TcpStreamConnect<I> {
     fn new(iter: I, handle: &Handle) -> TcpStreamConnect<I> {
-        TcpStreamConnect::Connect {
-            last_err: None,
-            addr_iter: iter,
-            opt_stream_new: None,
-            handle: handle.clone(),
-        }
+        TcpStreamConnect::Connect { last_err: None,
+                                    addr_iter: iter,
+                                    opt_stream_new: None,
+                                    handle: handle.clone(), }
     }
 }
 
@@ -185,12 +183,10 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match *self {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect {
-                ref mut last_err,
-                ref mut addr_iter,
-                ref mut opt_stream_new,
-                ref handle,
-            } => {
+            TcpStreamConnect::Connect { ref mut last_err,
+                                        ref mut addr_iter,
+                                        ref mut opt_stream_new,
+                                        ref handle, } => {
                 loop {
                     // 1. Poll before doing anything else
                     if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
@@ -200,7 +196,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
                             Err(ref err) if err.kind() == ErrorKind::WouldBlock => return Ok(Async::NotReady),
                             Err(err) => {
                                 error!("Failed to connect {}: {}", addr, err);
-                                
+
                                 *last_err = Some(err);
                             }
                         }
@@ -218,22 +214,22 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => {
-                match last_err {
-                    None => {
-                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                        Err(err)
-                    }
-                    Some(err) => Err(err),
+            TcpStreamConnect::Connect { last_err, .. } => match last_err {
+                None => {
+                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                    Err(err)
                 }
-            }
+                Some(err) => Err(err),
+            },
         }
     }
 }
 
 fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
     let timeout = *svr_cfg.timeout();
-    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
+    trace!("Connecting to proxy {:?}, timeout: {:?}",
+           svr_cfg.addr(),
+           timeout);
     match *svr_cfg.addr() {
         ServerAddr::SocketAddr(ref addr) => {
             Context::with(|ctx| {
@@ -360,27 +356,26 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 
 /// Establish tunnel between server and client
 pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
-where
-    CF: Future<Item = CFI, Error = io::Error> + 'static,
-    SF: Future<Item = SFI, Error = io::Error> + 'static,
+    where CF: Future<Item = CFI, Error = io::Error> + 'static,
+          SF: Future<Item = SFI, Error = io::Error> + 'static
 {
     let addr = Rc::new(addr);
 
     let cloned_addr = addr.clone();
     let c2s = c2s.then(move |res| {
-        match res {
-            Ok(..) => {
-                // Continue reading response from remote server
-                trace!("Relay {} client -> server is finished", cloned_addr);
+                           match res {
+                               Ok(..) => {
+                                   // Continue reading response from remote server
+                                   trace!("Relay {} client -> server is finished", cloned_addr);
 
-                Ok(TunnelDirection::Client2Server)
-            }
-            Err(err) => {
-                error!("Relay {} client -> server aborted: {}", cloned_addr, err);
-                Err(err)
-            }
-        }
-    });
+                                   Ok(TunnelDirection::Client2Server)
+                               }
+                               Err(err) => {
+                                   error!("Relay {} client -> server aborted: {}", cloned_addr, err);
+                                   Err(err)
+                               }
+                           }
+                       });
 
     let cloned_addr = addr.clone();
     let s2c = s2c.then(move |res| match res {
@@ -395,15 +390,20 @@ where
                            }
                        });
 
-    let fut = c2s.select(s2c)
-                 .and_then(move |(dir, _)| {
-        match dir {
-            TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
-            TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
-        }
+    let fut = c2s.select(s2c).and_then(move |(dir, _)| {
+                               match dir {
+                                   TunnelDirection::Server2Client => {
+                                       trace!("Relay {} client <- server is closed, abort connection",
+                                              addr)
+                                   }
+                                   TunnelDirection::Client2Server => {
+                                       trace!("Relay {} server -> client is closed, abort connection",
+                                              addr)
+                                   }
+                               }
 
-        Ok(())
-    })
+                               Ok(())
+                           })
                  .map_err(|(err, _)| err);
 
     boxed_future(fut)
@@ -422,10 +422,8 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
             IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
-            IgnoreUntilEnd::Pending {
-                ref mut r,
-                ref mut amt,
-            } => {
+            IgnoreUntilEnd::Pending { ref mut r,
+                                      ref mut amt, } => {
                 let mut buf = [0u8; 4096];
                 loop {
                     let n = try_nb!(r.read(&mut buf));
@@ -451,9 +449,8 @@ pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
 }
 
 fn try_timeout<T, F>(fut: F, dur: Option<Duration>, handle: &Handle) -> BoxIoFuture<T>
-where
-    F: Future<Item = T, Error = io::Error> + 'static,
-    T: 'static,
+    where F: Future<Item = T, Error = io::Error> + 'static,
+          T: 'static
 {
     match dur {
         Some(dur) => io_timeout(fut, dur, handle),
@@ -462,9 +459,8 @@ where
 }
 
 fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
-where
-    F: Future<Item = T, Error = io::Error> + 'static,
-    T: 'static,
+    where F: Future<Item = T, Error = io::Error> + 'static,
+          T: 'static
 {
     let fut = fut.select(Timeout::new(dur, handle)
                          .unwrap() // It must be succeeded!

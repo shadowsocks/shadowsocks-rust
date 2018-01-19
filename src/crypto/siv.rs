@@ -2,7 +2,7 @@
 
 use std::ptr;
 
-use miscreant::aead::{Algorithm, Aes128PmacSiv, Aes256PmacSiv};
+use miscreant::aead::{Aes128PmacSiv, Aes256PmacSiv, Algorithm};
 
 use crypto::{AeadDecryptor, AeadEncryptor};
 use crypto::{CipherResult, CipherType};
@@ -12,7 +12,6 @@ use crypto::cipher::Error;
 use bytes::{BufMut, BytesMut};
 
 use byte_string::ByteStr;
-
 
 /// AEAD ciphers provided by Miscreant
 pub enum MiscreantCryptoVariant {
@@ -42,10 +41,8 @@ impl MiscreantCipher {
 
         let skey = make_skey(t, key, salt);
         let cipher = Self::new_variant(t, &skey);
-        MiscreantCipher {
-            cipher: cipher,
-            nonce: nonce,
-        }
+        MiscreantCipher { cipher: cipher,
+                          nonce: nonce, }
     }
 
     fn new_variant(t: CipherType, key: &[u8]) -> MiscreantCryptoVariant {
@@ -118,7 +115,6 @@ impl AeadDecryptor for MiscreantCipher {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -139,8 +135,7 @@ mod test {
 
         let mut dec = MiscreantCipher::new(ct, &key[..], &iv[..]);
         let mut decrypted_msg = vec![0; encrypted_msg.len()];
-        dec.decrypt(&encrypted_msg[..], &mut decrypted_msg, &tag)
-           .unwrap();
+        dec.decrypt(&encrypted_msg[..], &mut decrypted_msg, &tag).unwrap();
 
         assert_eq!(&decrypted_msg[..], message);
     }

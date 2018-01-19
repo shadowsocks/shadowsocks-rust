@@ -22,15 +22,17 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
         }
 
         let result = Context::with(move |ctx| {
-            let forbidden_ip = &ctx.forbidden_ip();
+                                       let forbidden_ip = &ctx.forbidden_ip();
 
-            if forbidden_ip.contains(&addr) {
-                let err = io::Error::new(ErrorKind::Other, format!("{} is forbidden, all IPs are filtered", addr));
-                Err(err)
-            } else {
-                Ok(vec![SocketAddr::new(addr, port)])
-            }
-        });
+                                       if forbidden_ip.contains(&addr) {
+                                           let err = io::Error::new(ErrorKind::Other,
+                                                                    format!("{} is forbidden, all IPs are filtered",
+                                                                            addr));
+                                           Err(err)
+                                       } else {
+                                           Ok(vec![SocketAddr::new(addr, port)])
+                                       }
+                                   });
 
         return boxed_future(future::done(result));
     }
@@ -45,31 +47,34 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
                                                }
                                            })
                                  .and_then(move |(owned_addr, addr_iter)| {
-        let v = if !check_forbidden {
-            addr_iter.collect::<Vec<SocketAddr>>()
-        } else {
-            Context::with(move |ctx| {
-                let forbidden_ip = ctx.forbidden_ip();
-                addr_iter.filter(|addr| {
-                                     let filtered = forbidden_ip.contains(&addr.ip());
-                                     if filtered {
-                                         error!("{} is forbidden and ignored", addr.ip());
-                                     }
-                                     !filtered
-                                 })
-                         .collect::<Vec<SocketAddr>>()
-            })
-        };
+                                               let v =
+                                                   if !check_forbidden {
+                                                       addr_iter.collect::<Vec<SocketAddr>>()
+                                                   } else {
+                                                       Context::with(move |ctx| {
+                                                           let forbidden_ip = ctx.forbidden_ip();
+                                                           addr_iter.filter(|addr| {
+                                                                  let filtered = forbidden_ip.contains(&addr.ip());
+                                                                  if filtered {
+                                                                      error!("{} is forbidden and ignored", addr.ip());
+                                                                  }
+                                                                  !filtered
+                                                              })
+                                                      .collect::<Vec<SocketAddr>>()
+                                                       })
+                                                   };
 
-        if v.is_empty() {
-            let err =
-                io::Error::new(io::ErrorKind::Other, format!("resolved \"{}:{}\" to empty address", owned_addr, port));
-            Err(err)
-        } else {
-            debug!("Resolved \"{}\" => {:?}", owned_addr, v);
-            Ok(v)
-        }
-    });
+                                               if v.is_empty() {
+                                                   let err =
+                                                       io::Error::new(io::ErrorKind::Other,
+                                                                      format!("resolved \"{}:{}\" to empty address",
+                                                                              owned_addr, port));
+                                                   Err(err)
+                                               } else {
+                                                   debug!("Resolved \"{}\" => {:?}", owned_addr, v);
+                                                   Ok(v)
+                                               }
+                                           });
 
     boxed_future(fut)
 }

@@ -1,14 +1,14 @@
 //! Cipher defined with libsodium
 
-use std::sync::{ONCE_INIT, Once};
+use std::sync::{Once, ONCE_INIT};
 
 use bytes::{BufMut, BytesMut};
 
 use crypto::{CipherResult, CipherType, StreamCipher};
 
 use libc::{c_ulonglong, uint32_t};
-use libsodium_ffi::{crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic, crypto_stream_salsa20_xor_ic,
-                    crypto_stream_xsalsa20_xor_ic, sodium_init};
+use libsodium_ffi::{sodium_init, crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic,
+                    crypto_stream_salsa20_xor_ic, crypto_stream_xsalsa20_xor_ic};
 
 use crypto::cipher::Error;
 
@@ -28,10 +28,7 @@ impl SodiumCipher {
     /// Creates an instance
     pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> SodiumCipher {
         match t {
-            CipherType::ChaCha20 |
-            CipherType::Salsa20 |
-            CipherType::XSalsa20 |
-            CipherType::ChaCha20Ietf => {}
+            CipherType::ChaCha20 | CipherType::Salsa20 | CipherType::XSalsa20 | CipherType::ChaCha20Ietf => {}
             _ => panic!("sodium cipher does not support {:?} cipher", t),
         }
 
@@ -39,12 +36,10 @@ impl SodiumCipher {
                                        assert_eq!(sodium_init(), 0);
                                    });
 
-        SodiumCipher {
-            cipher_type: t,
-            key: key.to_owned(),
-            iv: iv.to_owned(),
-            counter: 0,
-        }
+        SodiumCipher { cipher_type: t,
+                       key: key.to_owned(),
+                       iv: iv.to_owned(),
+                       counter: 0, }
     }
 
     fn padding_len(&self) -> usize {
@@ -84,38 +79,30 @@ fn crypto_stream_xor_ic<B: BufMut>(t: CipherType,
 
     let ret = unsafe {
         match t {
-            CipherType::ChaCha20 => {
-                crypto_stream_chacha20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                              data.as_ptr(),
-                                              data.len() as c_ulonglong,
-                                              iv.as_ptr(),
-                                              ic as c_ulonglong,
-                                              key.as_ptr())
-            }
-            CipherType::ChaCha20Ietf => {
-                crypto_stream_chacha20_ietf_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                                   data.as_ptr(),
-                                                   data.len() as c_ulonglong,
-                                                   iv.as_ptr(),
-                                                   ic as uint32_t,
-                                                   key.as_ptr())
-            }
-            CipherType::Salsa20 => {
-                crypto_stream_salsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                             data.as_ptr(),
-                                             data.len() as c_ulonglong,
-                                             iv.as_ptr(),
-                                             ic as c_ulonglong,
-                                             key.as_ptr())
-            }
-            CipherType::XSalsa20 => {
-                crypto_stream_xsalsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                              data.as_ptr(),
-                                              data.len() as c_ulonglong,
-                                              iv.as_ptr(),
-                                              ic as c_ulonglong,
-                                              key.as_ptr())
-            }
+            CipherType::ChaCha20 => crypto_stream_chacha20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                                                  data.as_ptr(),
+                                                                  data.len() as c_ulonglong,
+                                                                  iv.as_ptr(),
+                                                                  ic as c_ulonglong,
+                                                                  key.as_ptr()),
+            CipherType::ChaCha20Ietf => crypto_stream_chacha20_ietf_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                                                           data.as_ptr(),
+                                                                           data.len() as c_ulonglong,
+                                                                           iv.as_ptr(),
+                                                                           ic as uint32_t,
+                                                                           key.as_ptr()),
+            CipherType::Salsa20 => crypto_stream_salsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                                                data.as_ptr(),
+                                                                data.len() as c_ulonglong,
+                                                                iv.as_ptr(),
+                                                                ic as c_ulonglong,
+                                                                key.as_ptr()),
+            CipherType::XSalsa20 => crypto_stream_xsalsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                                                  data.as_ptr(),
+                                                                  data.len() as c_ulonglong,
+                                                                  iv.as_ptr(),
+                                                                  ic as c_ulonglong,
+                                                                  key.as_ptr()),
             _ => unreachable!(),
         }
     };
@@ -144,8 +131,6 @@ impl StreamCipher for SodiumCipher {
         data.len()
     }
 }
-
-
 
 #[cfg(test)]
 mod test {

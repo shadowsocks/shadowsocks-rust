@@ -54,8 +54,7 @@ enum ReadingStep {
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader<R>
-where
-    R: AsyncRead,
+    where R: AsyncRead
 {
     reader: R,
     buffer: BytesMut,
@@ -68,20 +67,17 @@ where
 }
 
 impl<R> DecryptedReader<R>
-where
-    R: AsyncRead,
+    where R: AsyncRead
 {
     pub fn new(r: R, t: CipherType, key: &[u8], nounce: &[u8]) -> DecryptedReader<R> {
-        DecryptedReader {
-            reader: r,
-            buffer: BytesMut::with_capacity(BUFFER_SIZE),
-            data: BytesMut::with_capacity(BUFFER_SIZE),
-            cipher: crypto::new_aead_decryptor(t, key, nounce),
-            pos: 0,
-            sent_final: false,
-            tag_size: t.tag_size(),
-            read_step: ReadingStep::Length,
-        }
+        DecryptedReader { reader: r,
+                          buffer: BytesMut::with_capacity(BUFFER_SIZE),
+                          data: BytesMut::with_capacity(BUFFER_SIZE),
+                          cipher: crypto::new_aead_decryptor(t, key, nounce),
+                          pos: 0,
+                          sent_final: false,
+                          tag_size: t.tag_size(),
+                          read_step: ReadingStep::Length, }
     }
 
     pub fn get_ref(&self) -> &R {
@@ -148,12 +144,12 @@ where
                 if len > MAX_PACKET_SIZE {
                     use std::io::{Error, ErrorKind};
 
-                    error!("AEAD packet size must be <= {}, but received length {}", MAX_PACKET_SIZE, len);
+                    error!("AEAD packet size must be <= {}, but received length {}",
+                           MAX_PACKET_SIZE, len);
 
-                    let err = Error::new(
-                        ErrorKind::InvalidData,
-                        format!("AEAD packet size must be <= {}, but received length {}", MAX_PACKET_SIZE, len),
-                    );
+                    let err = Error::new(ErrorKind::InvalidData,
+                                         format!("AEAD packet size must be <= {}, but received length {}",
+                                                 MAX_PACKET_SIZE, len));
                     return Err(err);
                 }
 
@@ -208,8 +204,7 @@ where
 }
 
 impl<R> BufRead for DecryptedReader<R>
-where
-    R: AsyncRead,
+    where R: AsyncRead
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         while self.pos >= self.data.len() {
@@ -232,8 +227,7 @@ where
 }
 
 impl<R> Read for DecryptedReader<R>
-where
-    R: AsyncRead,
+    where R: AsyncRead
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let nread = {
@@ -246,8 +240,7 @@ where
 }
 
 impl<R> DecryptedRead for DecryptedReader<R>
-where
-    R: AsyncRead,
+    where R: AsyncRead
 {
     fn buffer_size(&self, data: &[u8]) -> usize {
         2 + self.tag_size // len and len_tag
@@ -255,16 +248,11 @@ where
     }
 }
 
-impl<R> AsyncRead for DecryptedReader<R>
-where
-    R: AsyncRead,
-{
-}
+impl<R> AsyncRead for DecryptedReader<R> where R: AsyncRead {}
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter<W>
-where
-    W: AsyncWrite,
+    where W: AsyncWrite
 {
     writer: W,
     cipher: BoxAeadEncryptor,
@@ -272,22 +260,18 @@ where
 }
 
 impl<W> EncryptedWriter<W>
-where
-    W: AsyncWrite,
+    where W: AsyncWrite
 {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter<W> {
-        EncryptedWriter {
-            writer: w,
-            cipher: crypto::new_aead_encryptor(t, key, nonce),
-            tag_size: t.tag_size(),
-        }
+        EncryptedWriter { writer: w,
+                          cipher: crypto::new_aead_encryptor(t, key, nonce),
+                          tag_size: t.tag_size(), }
     }
 }
 
 impl<W> EncryptedWrite for EncryptedWriter<W>
-where
-    W: AsyncWrite,
+    where W: AsyncWrite
 {
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
         self.writer.write(data)

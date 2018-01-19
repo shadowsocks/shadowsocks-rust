@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use tokio_core::reactor::Timeout;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::io::{Copy, copy};
+use tokio_io::io::{copy, Copy};
 
 use futures::{Async, Future, Poll};
 
@@ -15,18 +15,16 @@ use super::BUFFER_SIZE;
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration) -> CopyTimeout<R, W>
-where
-    R: AsyncRead,
-    W: AsyncWrite,
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     CopyTimeout::new(r, w, dur)
 }
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub struct CopyTimeout<R, W>
-where
-    R: AsyncRead,
-    W: AsyncWrite,
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     r: Option<R>,
     w: Option<W>,
@@ -39,21 +37,18 @@ where
 }
 
 impl<R, W> CopyTimeout<R, W>
-where
-    R: AsyncRead,
-    W: AsyncWrite,
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     fn new(r: R, w: W, timeout: Duration) -> CopyTimeout<R, W> {
-        CopyTimeout {
-            r: Some(r),
-            w: Some(w),
-            timeout: timeout,
-            amt: 0,
-            timer: None,
-            buf: [0u8; BUFFER_SIZE],
-            pos: 0,
-            cap: 0,
-        }
+        CopyTimeout { r: Some(r),
+                      w: Some(w),
+                      timeout: timeout,
+                      amt: 0,
+                      timer: None,
+                      buf: [0u8; BUFFER_SIZE],
+                      pos: 0,
+                      cap: 0, }
     }
 
     fn try_poll_timeout(&mut self) -> io::Result<()> {
@@ -111,9 +106,8 @@ where
 }
 
 impl<R, W> Future for CopyTimeout<R, W>
-where
-    R: AsyncRead,
-    W: AsyncWrite,
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     type Item = (u64, R, W);
     type Error = io::Error;
@@ -154,9 +148,8 @@ where
 
 /// Copies all data from `r` to `w` with optional timeout param
 pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>) -> CopyTimeoutOpt<R, W>
-where
-    R: AsyncRead,
-    W: AsyncWrite,
+    where R: AsyncRead,
+          W: AsyncWrite
 {
     match dur {
         Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d)),

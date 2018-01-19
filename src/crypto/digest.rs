@@ -62,8 +62,8 @@ impl Digest for DigestVariant {
     }
 
     fn digest_len(&self) -> usize {
-        use typenum::Unsigned;
         use digest::FixedOutput;
+        use typenum::Unsigned;
 
         match *self {
             DigestVariant::Md5(_) => <Md5 as FixedOutput>::OutputSize::to_usize(),

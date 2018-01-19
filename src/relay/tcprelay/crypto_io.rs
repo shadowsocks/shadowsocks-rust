@@ -8,12 +8,12 @@ use futures::{Async, Future, Poll};
 
 use tokio_core::reactor::Timeout;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::io::{Copy, copy};
+use tokio_io::io::{copy, Copy};
 
 use bytes::{BufMut, BytesMut};
 
 use super::BUFFER_SIZE;
-use super::utils::{CopyTimeout, CopyTimeoutOpt, copy_timeout, copy_timeout_opt};
+use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
 
 use relay::Context;
 
@@ -29,27 +29,24 @@ pub trait DecryptedRead: BufRead + AsyncRead {
 
     /// Copies all data to `w`
     fn copy<W>(self, w: W) -> Copy<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
+        where Self: Sized,
+              W: AsyncWrite
     {
         copy(self, w)
     }
 
     /// Copies all data to `w`, return `TimedOut` if timeout reaches
     fn copy_timeout<W>(self, w: W, timeout: Duration) -> CopyTimeout<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
+        where Self: Sized,
+              W: AsyncWrite
     {
         copy_timeout(self, w, timeout)
     }
 
     /// The same as `copy_timeout`, but has optional `timeout`
     fn copy_timeout_opt<W>(self, w: W, timeout: Option<Duration>) -> CopyTimeoutOpt<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
+        where Self: Sized,
+              W: AsyncWrite
     {
         copy_timeout_opt(self, w, timeout)
     }
@@ -71,32 +68,28 @@ pub trait EncryptedWrite {
 
     /// Encrypt data in `buf` and write all to the writer
     fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<Self, B>
-    where
-        Self: Sized,
+        where Self: Sized
     {
         EncryptedWriteAll::new(self, buf)
     }
 
     /// Copies all data from `r`
     fn copy<R: Read>(self, r: R) -> EncryptedCopy<R, Self>
-    where
-        Self: Sized,
+        where Self: Sized
     {
         EncryptedCopy::new(r, self)
     }
 
     /// Copies all data from `r` with timeout
     fn copy_timeout<R: Read>(self, r: R, timeout: Duration) -> EncryptedCopyTimeout<R, Self>
-    where
-        Self: Sized,
+        where Self: Sized
     {
         EncryptedCopyTimeout::new(r, self, timeout)
     }
 
     /// Copies all data from `r` with optional timeout
     fn copy_timeout_opt<R: Read>(self, r: R, timeout: Option<Duration>) -> EncryptedCopyOpt<R, Self>
-    where
-        Self: Sized,
+        where Self: Sized
     {
         match timeout {
             Some(t) => EncryptedCopyOpt::CopyTimeout(self.copy_timeout(r, t)),
@@ -107,9 +100,8 @@ pub trait EncryptedWrite {
 
 /// Write all data encrypted
 pub enum EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
+    where W: EncryptedWrite,
+          B: AsRef<[u8]>
 {
     Writing {
         writer: W,
@@ -122,26 +114,22 @@ where
 }
 
 impl<W, B> EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
+    where W: EncryptedWrite,
+          B: AsRef<[u8]>
 {
     fn new(w: W, buf: B) -> EncryptedWriteAll<W, B> {
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedWriteAll::Writing {
-            writer: w,
-            buf: buf,
-            pos: 0,
-            enc_buf: BytesMut::with_capacity(buffer_size),
-            encrypted: false,
-        }
+        EncryptedWriteAll::Writing { writer: w,
+                                     buf: buf,
+                                     pos: 0,
+                                     enc_buf: BytesMut::with_capacity(buffer_size),
+                                     encrypted: false, }
     }
 }
 
 impl<W, B> Future for EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
+    where W: EncryptedWrite,
+          B: AsRef<[u8]>
 {
     type Item = (W, B);
     type Error = io::Error;
@@ -149,13 +137,11 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
             EncryptedWriteAll::Empty => panic!("poll after EncryptedWriteAll finished"),
-            EncryptedWriteAll::Writing {
-                ref mut writer,
-                ref buf,
-                ref mut pos,
-                ref mut enc_buf,
-                ref mut encrypted,
-            } => {
+            EncryptedWriteAll::Writing { ref mut writer,
+                                         ref buf,
+                                         ref mut pos,
+                                         ref mut enc_buf,
+                                         ref mut encrypted, } => {
                 if !*encrypted {
                     *encrypted = true;
 
@@ -186,9 +172,8 @@ where
 
 /// Encrypted copy
 pub struct EncryptedCopy<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     reader: Option<R>,
     writer: Option<W>,
@@ -200,28 +185,24 @@ where
 }
 
 impl<R, W> EncryptedCopy<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     fn new(r: R, w: W) -> EncryptedCopy<R, W> {
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedCopy {
-            reader: Some(r),
-            writer: Some(w),
-            read_done: false,
-            amt: 0,
-            pos: 0,
-            cap: 0,
-            buf: BytesMut::with_capacity(buffer_size),
-        }
+        EncryptedCopy { reader: Some(r),
+                        writer: Some(w),
+                        read_done: false,
+                        amt: 0,
+                        pos: 0,
+                        cap: 0,
+                        buf: BytesMut::with_capacity(buffer_size), }
     }
 }
 
 impl<R, W> Future for EncryptedCopy<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     type Item = (u64, R, W);
     type Error = io::Error;
@@ -250,8 +231,7 @@ where
 
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
-                let i = try_nb!(self.writer
-                                    .as_mut()
+                let i = try_nb!(self.writer.as_mut()
                                     .unwrap()
                                     .write_raw(&self.buf[self.pos..self.cap]));
                 self.pos += i;
@@ -271,9 +251,8 @@ where
 
 /// Encrypted copy
 pub struct EncryptedCopyTimeout<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     reader: Option<R>,
     writer: Option<W>,
@@ -288,36 +267,31 @@ where
 }
 
 impl<R, W> EncryptedCopyTimeout<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     fn new(r: R, w: W, dur: Duration) -> EncryptedCopyTimeout<R, W> {
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedCopyTimeout {
-            reader: Some(r),
-            writer: Some(w),
-            read_done: false,
-            amt: 0,
-            pos: 0,
-            cap: 0,
-            timeout: dur,
-            timer: None,
-            read_buf: [0u8; BUFFER_SIZE],
-            write_buf: BytesMut::with_capacity(buffer_size),
-        }
+        EncryptedCopyTimeout { reader: Some(r),
+                               writer: Some(w),
+                               read_done: false,
+                               amt: 0,
+                               pos: 0,
+                               cap: 0,
+                               timeout: dur,
+                               timer: None,
+                               read_buf: [0u8; BUFFER_SIZE],
+                               write_buf: BytesMut::with_capacity(buffer_size), }
     }
 
     fn try_poll_timeout(&mut self) -> io::Result<()> {
         match self.timer.as_mut() {
             None => Ok(()),
-            Some(t) => {
-                match t.poll() {
-                    Err(err) => Err(err),
-                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                    Ok(Async::NotReady) => Ok(()),
-                }
-            }
+            Some(t) => match t.poll() {
+                Err(err) => Err(err),
+                Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+                Ok(Async::NotReady) => Ok(()),
+            },
         }
     }
 
@@ -345,8 +319,7 @@ where
                 let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
                 self.write_buf.reserve(buffer_len);
 
-                self.writer
-                    .as_mut()
+                self.writer.as_mut()
                     .unwrap()
                     .encrypt(data, &mut self.write_buf)?;
                 self.cap = self.write_buf.len();
@@ -369,10 +342,10 @@ where
         // Then, unset the previous timeout
         self.clear_timer();
 
-        match self.writer
-                    .as_mut()
-                    .unwrap()
-                    .write_raw(&self.write_buf[self.pos..self.cap]) {
+        match self.writer.as_mut()
+                  .unwrap()
+                  .write_raw(&self.write_buf[self.pos..self.cap])
+        {
             Ok(n) => {
                 self.pos += n;
                 Ok(n)
@@ -388,15 +361,13 @@ where
 }
 
 impl<R, W> Future for EncryptedCopyTimeout<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     type Item = (u64, R, W);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-
         loop {
             // If our buffer is empty, then we need to read some data to
             // continue.
@@ -430,18 +401,16 @@ where
 
 /// Work for both timeout or no timeout
 pub enum EncryptedCopyOpt<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     Copy(EncryptedCopy<R, W>),
     CopyTimeout(EncryptedCopyTimeout<R, W>),
 }
 
 impl<R, W> Future for EncryptedCopyOpt<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
+    where R: Read,
+          W: EncryptedWrite
 {
     type Item = (u64, R, W);
     type Error = io::Error;

@@ -75,10 +75,8 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
                 }
                 Ok(p) => {
                     let svr_addr = ServerAddr::SocketAddr(local_addr);
-                    plugins.push(Plugin {
-                                     addr: svr_addr.clone(),
-                                     process: p,
-                                 });
+                    plugins.push(Plugin { addr: svr_addr.clone(),
+                                          process: p, });
 
                     // Replace addr with plugin
                     svr_addr
@@ -86,8 +84,14 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
             };
 
             match mode {
-                PluginMode::Client => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, local_addr, svr.addr()),
-                PluginMode::Server => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, svr.addr(), local_addr),
+                PluginMode::Client => info!("Started plugin \"{}\" on {} <-> {}",
+                                            c.plugin,
+                                            local_addr,
+                                            svr.addr()),
+                PluginMode::Server => info!("Started plugin \"{}\" on {} <-> {}",
+                                            c.plugin,
+                                            svr.addr(),
+                                            local_addr),
             }
 
             svr_addr_opt = Some(svr_addr); // Fuck borrow checker

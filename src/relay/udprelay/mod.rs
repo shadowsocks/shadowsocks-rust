@@ -67,10 +67,8 @@ pub struct PacketStream {
 impl PacketStream {
     /// Creates a new `PacketStream`
     pub fn new(udp: Rc<UdpSocket>) -> PacketStream {
-        PacketStream {
-            udp: udp,
-            buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE],
-        }
+        PacketStream { udp: udp,
+                       buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE], }
     }
 }
 
@@ -99,13 +97,9 @@ pub struct SendDgramRc<B: AsRef<[u8]>> {
 
 impl<B: AsRef<[u8]>> SendDgramRc<B> {
     pub fn new(udp: Rc<UdpSocket>, buf: B, addr: SocketAddr) -> SendDgramRc<B> {
-        SendDgramRc {
-            stat: SendDgramStat::Pending {
-                udp: udp,
-                buf: buf,
-                addr: addr,
-            },
-        }
+        SendDgramRc { stat: SendDgramStat::Pending { udp: udp,
+                                                     buf: buf,
+                                                     addr: addr, }, }
     }
 }
 
@@ -114,11 +108,9 @@ impl<B: AsRef<[u8]>> Future for SendDgramRc<B> {
     type Error = io::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let n = match self.stat {
-            SendDgramStat::Pending {
-                ref udp,
-                ref buf,
-                ref addr,
-            } => try_nb!(udp.send_to(buf.as_ref(), addr)),
+            SendDgramStat::Pending { ref udp,
+                                     ref buf,
+                                     ref addr, } => try_nb!(udp.send_to(buf.as_ref(), addr)),
             SendDgramStat::Empty => unreachable!(),
         };
 

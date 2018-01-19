@@ -4,9 +4,9 @@
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
 extern crate clap;
-extern crate shadowsocks;
 extern crate qrcode;
 extern crate serde_json;
+extern crate shadowsocks;
 
 use clap::{App, Arg};
 

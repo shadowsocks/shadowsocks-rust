@@ -14,7 +14,7 @@ use tokio_io::io::flush;
 
 use config::ServerConfig;
 
-use relay::{BoxIoFuture, boxed_future};
+use relay::{boxed_future, BoxIoFuture};
 use relay::Context;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::loadbalancing::server::RoundRobin;
@@ -178,17 +178,17 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
 
     // Runs in Tokio
     Context::with(|ctx| {
-        let handle = &ctx.handle;
-        handle.spawn(fut.then(|res| match res {
-                                  Ok(..) => Ok(()),
-                                  Err(err) => {
-                                      if err.kind() != io::ErrorKind::BrokenPipe {
-                                          error!("Failed to handle client: {}", err);
-                                      }
-                                      Err(())
-                                  }
-                              }));
-    });
+                      let handle = &ctx.handle;
+                      handle.spawn(fut.then(|res| match res {
+                                                Ok(..) => Ok(()),
+                                                Err(err) => {
+                                                    if err.kind() != io::ErrorKind::BrokenPipe {
+                                                        error!("Failed to handle client: {}", err);
+                                                    }
+                                                    Err(())
+                                                }
+                                            }));
+                  });
 
     Ok(())
 }
@@ -196,21 +196,19 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
 /// Starts a TCP local server with Socks5 proxy protocol
 pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
     let (listener, local_addr) = Context::with(|ctx| {
-        let config = &ctx.config;
-        let handle = &ctx.handle;
+                                                   let config = &ctx.config;
+                                                   let handle = &ctx.handle;
 
-        let local_addr = config.local.as_ref().unwrap();
+                                                   let local_addr = config.local.as_ref().unwrap();
 
-        let l = TcpListener::bind(&local_addr, &handle).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                                                   let l = TcpListener::bind(&local_addr, &handle).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
-        info!("ShadowSocks TCP Listening on {}", local_addr);
-        (l, *local_addr)
-    });
+                                                   info!("ShadowSocks TCP Listening on {}", local_addr);
+                                                   (l, *local_addr)
+                                               });
 
-    let udp_conf = UdpConfig {
-        enable_udp: Context::with(|ctx| ctx.config.enable_udp),
-        client_addr: Rc::new(local_addr),
-    };
+    let udp_conf = UdpConfig { enable_udp: Context::with(|ctx| ctx.config.enable_udp),
+                               client_addr: Rc::new(local_addr), };
 
     let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
     let listening = listener.incoming().for_each(move |(socket, addr)| {

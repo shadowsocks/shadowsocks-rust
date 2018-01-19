@@ -35,24 +35,22 @@ impl TableCipher {
             table.sort_by(|x, y| (a % (*x + i)).cmp(&(a % (*y + i))))
         }
 
-        TableCipher {
-            table: match mode {
-                CryptoMode::Encrypt => {
-                    let mut t = [0u8; TABLE_SIZE];
-                    for i in 0..TABLE_SIZE {
-                        t[i] = table[i] as u8;
-                    }
-                    t
-                }
-                CryptoMode::Decrypt => {
-                    let mut t = [0u8; TABLE_SIZE];
-                    for (idx, &item) in table.iter().enumerate() {
-                        t[item as usize] = idx as u8;
-                    }
-                    t
-                }
-            },
-        }
+        TableCipher { table: match mode {
+                          CryptoMode::Encrypt => {
+                              let mut t = [0u8; TABLE_SIZE];
+                              for i in 0..TABLE_SIZE {
+                                  t[i] = table[i] as u8;
+                              }
+                              t
+                          }
+                          CryptoMode::Decrypt => {
+                              let mut t = [0u8; TABLE_SIZE];
+                              for (idx, &item) in table.iter().enumerate() {
+                                  t[item as usize] = idx as u8;
+                              }
+                              t
+                          }
+                      }, }
     }
 
     fn process<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {

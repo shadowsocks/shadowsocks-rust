@@ -10,7 +10,7 @@ use tokio_io::io::flush;
 
 use futures::{self, Async, Future, Poll};
 
-use relay::{BoxIoFuture, boxed_future};
+use relay::{boxed_future, BoxIoFuture};
 use relay::socks5::{self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader,
                     TcpResponseHeader};
 
@@ -22,9 +22,8 @@ pub struct Socks5Client {
 impl Socks5Client {
     /// Connects to `addr` via `proxy`
     pub fn connect<A>(addr: A, proxy: SocketAddr, handle: Handle) -> BoxIoFuture<Socks5Client>
-    where
-        Address: From<A>,
-        A: 'static,
+        where Address: From<A>,
+              A: 'static
     {
         let fut = futures::lazy(move || TcpStream::connect(&proxy, &handle))
             .and_then(move |s| {
@@ -66,9 +65,8 @@ impl Socks5Client {
 
     /// UDP Associate `addr` via `proxy`
     pub fn udp_associate<A>(addr: A, proxy: SocketAddr, handle: Handle) -> BoxIoFuture<(Socks5Client, Address)>
-    where
-        Address: From<A>,
-        A: 'static,
+        where Address: From<A>,
+              A: 'static
     {
         let fut = futures::lazy(move || TcpStream::connect(&proxy, &handle))
             .and_then(move |s| {
