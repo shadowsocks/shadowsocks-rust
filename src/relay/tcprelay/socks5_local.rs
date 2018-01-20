@@ -201,7 +201,8 @@ pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
 
                                                    let local_addr = config.local.as_ref().unwrap();
 
-                                                   let l = TcpListener::bind(&local_addr, &handle).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                                                   let l = TcpListener::bind(&local_addr, &handle)
+                                                        .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
                                                    info!("ShadowSocks TCP Listening on {}", local_addr);
                                                    (l, *local_addr)

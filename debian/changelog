@@ -1,8 +1,14 @@
+shadowsocks-rust (1.6.11) unstable; urgency=medium
+
+  * Updated dependencies
+
+ -- Y. T. Chung <zonyitoo@gmail.com> Sat, 20 Jan 2018 20:45:59 +0800
+
 shadowsocks-rust (1.6.10) unstable; urgency=medium
 
   * Check AEAD packet length before actually reading it.
 
- -- Y. T. Chung <zonyitoo@gmail.com> Sat, 2, Dec 2017 11:56:00 +0800
+ -- Y. T. Chung <zonyitoo@gmail.com> Sat, 2 Dec 2017 11:56:00 +0800
 
 shadowsocks-rust (1.6.9) unstable; urgency=medium
 
