@@ -13,9 +13,9 @@ RUN cd /home/rust/libs && \
     make && sudo make install && \
     cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
 
-#RUN rustup install nightly
-#RUN rustup default nightly
-#RUN rustup target add x86_64-unknown-linux-musl
+RUN rustup install nightly
+RUN rustup default nightly
+RUN rustup target add x86_64-unknown-linux-musl
 
 ENV SODIUM_STATIC=yes
 ENV SODIUM_LIB_DIR=/usr/local/musl/lib

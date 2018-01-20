@@ -1,6 +1,8 @@
 /target
 /build/*.tar.gz
 /build/*.tar.xz
+/build/target
+/build/install
 /dev
 /*.log
 /debian/*.log
