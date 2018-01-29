@@ -119,6 +119,9 @@ pub fn increase_nonce(nonce: &mut [u8]) {
     }
 }
 
+/// Increase nonce by 1
+///
+/// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
 #[cfg(not(feature = "sodium"))]
 pub fn increase_nonce(nonce: &mut [u8]) {
     let mut prev: u16 = 1;

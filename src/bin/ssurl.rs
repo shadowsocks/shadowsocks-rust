@@ -19,10 +19,6 @@ use shadowsocks::config::{Config, ConfigType, ServerConfig};
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";
 
-fn encode_url(svr: &ServerConfig) -> String {
-    svr.to_url()
-}
-
 fn print_qrcode(encoded: &str) {
     let qrcode = QrCode::new(encoded.as_bytes()).unwrap();
 
@@ -54,11 +50,12 @@ fn encode(filename: &str, need_qrcode: bool) {
     let config = Config::load_from_file(filename, ConfigType::Server).unwrap();
 
     for svr in config.server {
-        let encoded = encode_url(&svr);
+        let encoded = svr.to_url();
 
         println!("{}", encoded);
 
         if need_qrcode {
+            let encoded = svr.to_qrcode_url();
             print_qrcode(&encoded);
         }
     }
@@ -82,21 +79,27 @@ fn main() {
     let app = App::new("ssurl")
         .about("Encode and decode ShadowSocks URL")
         .version(VERSION)
-        .arg(Arg::with_name("ENCODE")
-                 .short("e")
-                 .long("encode")
-                 .takes_value(true)
-                 .help("Encode the server configuration in the provided JSON file"))
-        .arg(Arg::with_name("DECODE")
-                 .short("d")
-                 .long("decode")
-                 .takes_value(true)
-                 .help("Decode the server configuration from the provide ShadowSocks URL"))
-        .arg(Arg::with_name("QRCODE")
-                 .short("c")
-                 .long("qrcode")
-                 .takes_value(false)
-                 .help("Generate the QRCode with the provided configuration"));
+        .arg(
+            Arg::with_name("ENCODE")
+                .short("e")
+                .long("encode")
+                .takes_value(true)
+                .help("Encode the server configuration in the provided JSON file"),
+        )
+        .arg(
+            Arg::with_name("DECODE")
+                .short("d")
+                .long("decode")
+                .takes_value(true)
+                .help("Decode the server configuration from the provide ShadowSocks URL"),
+        )
+        .arg(
+            Arg::with_name("QRCODE")
+                .short("c")
+                .long("qrcode")
+                .takes_value(false)
+                .help("Generate the QRCode with the provided configuration"),
+        );
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");
