@@ -52,7 +52,7 @@ SODIUM_BUILD_STATIC=yes cargo build --release
 Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
 
 ```bash
-make install
+make install TARGET=release
 ```
 
 Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
