@@ -67,7 +67,6 @@ if $BUILD_NIGHTLY; then
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && (rustup update || (rustup toolchain remove nightly && rustup toolchain install nightly)) \
             && rustup run nightly cargo install -f --features miscreant \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 else
@@ -82,7 +81,6 @@ else
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && (rustup update || (rustup toolchain remove stable && rustup toolchain install stable)) \
             && cargo install -f \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 fi
