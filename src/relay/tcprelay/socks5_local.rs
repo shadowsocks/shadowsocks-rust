@@ -60,7 +60,7 @@ fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                     use std::io::ErrorKind;
                     use relay::socks5::Reply;
 
-                    error!("Failed to connect remote server, {:?}", err);
+                    error!("Failed to connect remote server, err: {}", err);
 
                     let reply = match err.kind() {
                         ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
