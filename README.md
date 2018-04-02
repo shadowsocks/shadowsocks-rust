@@ -102,7 +102,7 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
             "port": 1080,
             "password": "hello-world",
             "method": "bf-cfb",
-            "timeout": 300,
+            "timeout": 300
         },
         {
             "address": "127.0.0.1",
