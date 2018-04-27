@@ -57,6 +57,8 @@ make install TARGET=release
 
 Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
 
+For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
+
 ### **Build standalone binaries**
 
 Requirements:

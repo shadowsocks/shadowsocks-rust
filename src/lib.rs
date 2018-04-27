@@ -99,6 +99,7 @@ extern crate subprocess;
 extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
+extern crate tokio;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
 extern crate typenum;
