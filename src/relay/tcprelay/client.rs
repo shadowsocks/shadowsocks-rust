@@ -3,14 +3,13 @@
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Handle;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpStream;
+use tokio_io::{IoFuture, AsyncRead, AsyncWrite};
 use tokio_io::io::flush;
 
 use futures::{self, Async, Future, Poll};
 
-use relay::{boxed_future, BoxIoFuture};
+use relay::boxed_future;
 use relay::socks5::{self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader,
                     TcpResponseHeader};
 
@@ -21,11 +20,11 @@ pub struct Socks5Client {
 
 impl Socks5Client {
     /// Connects to `addr` via `proxy`
-    pub fn connect<A>(addr: A, proxy: SocketAddr, handle: Handle) -> BoxIoFuture<Socks5Client>
+    pub fn connect<A>(addr: A, proxy: SocketAddr) -> IoFuture<Socks5Client>
         where Address: From<A>,
-              A: 'static
+              A: Send + 'static
     {
-        let fut = futures::lazy(move || TcpStream::connect(&proxy, &handle))
+        let fut = futures::lazy(move || TcpStream::connect(&proxy))
             .and_then(move |s| {
                 // 1. Handshake
                 let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
@@ -64,11 +63,11 @@ impl Socks5Client {
     }
 
     /// UDP Associate `addr` via `proxy`
-    pub fn udp_associate<A>(addr: A, proxy: SocketAddr, handle: Handle) -> BoxIoFuture<(Socks5Client, Address)>
+    pub fn udp_associate<A>(addr: A, proxy: SocketAddr) -> IoFuture<(Socks5Client, Address)>
         where Address: From<A>,
-              A: 'static
+              A: Send + 'static
     {
-        let fut = futures::lazy(move || TcpStream::connect(&proxy, &handle))
+        let fut = futures::lazy(move || TcpStream::connect(&proxy))
             .and_then(move |s| {
                 // 1. Handshake
                 let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);

@@ -54,7 +54,7 @@
 //! use shadowsocks::{run_local, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
-//! run_local(config).unwrap();
+//! run_local(config);
 //! ```
 //!
 //! That's all! And let me show you how to run a proxy server
@@ -63,7 +63,7 @@
 //! use shadowsocks::{run_server, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
-//! run_server(config).unwrap();
+//! run_server(config);
 //! ```
 //!
 
@@ -91,12 +91,9 @@ extern crate miscreant;
 extern crate openssl;
 extern crate rand;
 extern crate ring;
-#[macro_use]
-extern crate scoped_tls;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate subprocess;
-extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
 extern crate tokio;
@@ -117,4 +114,4 @@ pub mod config;
 pub mod relay;
 pub mod crypto;
 pub mod plugin;
-mod monitor;
+// mod monitor;

@@ -40,9 +40,9 @@
 use std::io;
 use std::mem;
 use std::net::SocketAddr;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use tokio_core::net::UdpSocket;
+use tokio::net::UdpSocket;
 
 use futures::{Async, Future, Poll, Stream};
 
@@ -58,15 +58,17 @@ mod crypto_io;
 /// [here](http://support.microsoft.com/kb/822061/)*
 pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
 
+type SharedUdpSocket = Arc<Mutex<UdpSocket>>;
+
 /// UDP `recv_from` stream
 pub struct PacketStream {
-    udp: Rc<UdpSocket>,
+    udp: SharedUdpSocket,
     buf: [u8; MAXIMUM_UDP_PAYLOAD_SIZE],
 }
 
 impl PacketStream {
     /// Creates a new `PacketStream`
-    pub fn new(udp: Rc<UdpSocket>) -> PacketStream {
+    pub fn new(udp: SharedUdpSocket) -> PacketStream {
         PacketStream { udp: udp,
                        buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE], }
     }
@@ -76,14 +78,14 @@ impl Stream for PacketStream {
     type Item = (Vec<u8>, SocketAddr);
     type Error = io::Error;
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let (n, addr) = try_nb!(self.udp.recv_from(&mut self.buf));
+        let (n, addr) = try_ready!(self.udp.lock().unwrap().poll_recv_from(&mut self.buf));
         Ok(Async::Ready(Some((self.buf[..n].to_vec(), addr))))
     }
 }
 
 enum SendDgramStat<B: AsRef<[u8]>> {
     Pending {
-        udp: Rc<UdpSocket>,
+        udp: SharedUdpSocket,
         buf: B,
         addr: SocketAddr,
     },
@@ -96,7 +98,7 @@ pub struct SendDgramRc<B: AsRef<[u8]>> {
 }
 
 impl<B: AsRef<[u8]>> SendDgramRc<B> {
-    pub fn new(udp: Rc<UdpSocket>, buf: B, addr: SocketAddr) -> SendDgramRc<B> {
+    pub fn new(udp: SharedUdpSocket, buf: B, addr: SocketAddr) -> SendDgramRc<B> {
         SendDgramRc { stat: SendDgramStat::Pending { udp: udp,
                                                      buf: buf,
                                                      addr: addr, }, }
@@ -104,13 +106,13 @@ impl<B: AsRef<[u8]>> SendDgramRc<B> {
 }
 
 impl<B: AsRef<[u8]>> Future for SendDgramRc<B> {
-    type Item = (Rc<UdpSocket>, usize, B);
+    type Item = (SharedUdpSocket, usize, B);
     type Error = io::Error;
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let n = match self.stat {
             SendDgramStat::Pending { ref udp,
                                      ref buf,
-                                     ref addr, } => try_nb!(udp.send_to(buf.as_ref(), addr)),
+                                     ref addr, } => try_ready!(udp.lock().unwrap().poll_send_to(buf.as_ref(), addr)),
             SendDgramStat::Empty => unreachable!(),
         };
 

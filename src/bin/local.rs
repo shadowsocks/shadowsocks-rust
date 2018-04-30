@@ -232,5 +232,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    run_local(config).unwrap();
+    run_local(config);
 }

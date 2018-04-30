@@ -194,5 +194,5 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    run_server(config).unwrap();
+    run_server(config);
 }

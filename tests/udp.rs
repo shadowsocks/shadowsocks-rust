@@ -4,8 +4,8 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate shadowsocks;
-extern crate tokio_core;
 extern crate tokio_io;
+extern crate tokio;
 
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use bytes::{BufMut, BytesMut};
 use futures::Future;
-use tokio_core::reactor::Core;
 use tokio_io::io::read_to_end;
 
 use shadowsocks::{run_local, run_server};
@@ -48,14 +47,14 @@ fn get_client_addr() -> SocketAddr {
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
                       bar.wait();
-                      run_server(get_config()).unwrap();
+                      run_server(get_config());
                   });
 }
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
                       bar.wait();
-                      run_local(get_config()).unwrap();
+                      run_local(get_config());
                   });
 }
 
@@ -76,10 +75,7 @@ fn start_udp_echo_server(bar: Arc<Barrier>) {
 
 fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
-                      let mut lp = Core::new().unwrap();
-                      let handle = lp.handle();
-
-                      let c = Socks5Client::udp_associate(addr, get_client_addr(), handle);
+                      let c = Socks5Client::udp_associate(addr, get_client_addr());
                       let fut = c.and_then(|(c, addr)| {
                                                assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
 
@@ -89,7 +85,7 @@ fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
 
                       bar.wait();
 
-                      lp.run(fut).unwrap();
+                      tokio::run(fut.map_err(|_| ()));
                   });
 }
 

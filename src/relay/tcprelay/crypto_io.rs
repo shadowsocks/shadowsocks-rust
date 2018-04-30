@@ -2,20 +2,18 @@
 
 use std::io::{self, BufRead, Read};
 use std::mem;
-use std::time::Duration;
+use std::time::{Instant, Duration};
 
 use futures::{Async, Future, Poll};
 
-use tokio_core::reactor::Timeout;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::io::{copy, Copy};
+use tokio::timer::Delay;
 
 use bytes::{BufMut, BytesMut};
 
 use super::BUFFER_SIZE;
 use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
-
-use relay::Context;
 
 static DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
@@ -261,7 +259,7 @@ pub struct EncryptedCopyTimeout<R, W>
     pos: usize,
     cap: usize,
     timeout: Duration,
-    timer: Option<Timeout>,
+    timer: Option<Delay>,
     read_buf: [u8; BUFFER_SIZE],
     write_buf: BytesMut,
 }
@@ -288,7 +286,7 @@ impl<R, W> EncryptedCopyTimeout<R, W>
         match self.timer.as_mut() {
             None => Ok(()),
             Some(t) => match t.poll() {
-                Err(err) => Err(err),
+                Err(err) => panic!("Failed to poll on timer, err: {}", err),
                 Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
                 Ok(Async::NotReady) => Ok(()),
             },
@@ -328,7 +326,7 @@ impl<R, W> EncryptedCopyTimeout<R, W>
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    Context::with(|ctx| self.timer = Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }
@@ -352,7 +350,7 @@ impl<R, W> EncryptedCopyTimeout<R, W>
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }

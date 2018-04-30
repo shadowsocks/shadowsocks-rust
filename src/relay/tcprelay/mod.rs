@@ -4,19 +4,17 @@ use std::io::{self, BufRead, Read};
 use std::iter::{IntoIterator, Iterator};
 use std::mem;
 use std::net::SocketAddr;
-use std::rc::Rc;
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Instant, Duration};
 
-use config::{ServerAddr, ServerConfig};
+use config::{ServerAddr, Config, ServerConfig};
 use crypto::CipherCategory;
-use relay::{boxed_future, BoxIoFuture};
-use relay::Context;
+use relay::{boxed_future};
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
-use tokio_core::net::{TcpStream, TcpStreamNew};
-use tokio_core::reactor::{Handle, Timeout};
-use tokio_io::AsyncRead;
+use tokio::net::{TcpStream, ConnectFuture};
+use tokio_io::{IoFuture, AsyncRead};
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::io::{read_exact, write_all};
 
@@ -151,9 +149,9 @@ impl From<AeadEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
 }
 
 /// Boxed future of `DecryptedHalf`
-pub type DecryptedHalfFut = BoxIoFuture<DecryptedHalf>;
+pub type DecryptedHalfFut = IoFuture<DecryptedHalf>;
 /// Boxed future of `EncryptedHalf`
-pub type EncryptedHalfFut = BoxIoFuture<EncryptedHalf>;
+pub type EncryptedHalfFut = IoFuture<EncryptedHalf>;
 
 /// Try to connect every IPs one by one
 enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
@@ -161,17 +159,15 @@ enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
     Connect {
         last_err: Option<io::Error>,
         addr_iter: I,
-        opt_stream_new: Option<(TcpStreamNew, SocketAddr)>,
-        handle: Handle,
+        opt_stream_new: Option<(ConnectFuture, SocketAddr)>,
     },
 }
 
 impl<I: Iterator<Item = SocketAddr>> TcpStreamConnect<I> {
-    fn new(iter: I, handle: &Handle) -> TcpStreamConnect<I> {
+    fn new(iter: I) -> TcpStreamConnect<I> {
         TcpStreamConnect::Connect { last_err: None,
                                     addr_iter: iter,
-                                    opt_stream_new: None,
-                                    handle: handle.clone(), }
+                                    opt_stream_new: None, }
     }
 }
 
@@ -185,8 +181,8 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
             TcpStreamConnect::Empty => unreachable!(),
             TcpStreamConnect::Connect { ref mut last_err,
                                         ref mut addr_iter,
-                                        ref mut opt_stream_new,
-                                        ref handle, } => {
+                                        ref mut opt_stream_new
+                                         } => {
                 loop {
                     // 1. Poll before doing anything else
                     if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
@@ -205,7 +201,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
                     match addr_iter.next() {
                         None => break,
                         Some(addr) => {
-                            *opt_stream_new = Some((TcpStream::connect(&addr, &handle), addr));
+                            *opt_stream_new = Some((TcpStream::connect(&addr), addr));
                         }
                     }
                 }
@@ -225,26 +221,22 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
     }
 }
 
-fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
+fn connect_proxy_server(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<TcpStream> {
     let timeout = *svr_cfg.timeout();
     trace!("Connecting to proxy {:?}, timeout: {:?}",
            svr_cfg.addr(),
            timeout);
     match *svr_cfg.addr() {
         ServerAddr::SocketAddr(ref addr) => {
-            Context::with(|ctx| {
-                              let handle = ctx.handle();
-                              try_timeout(TcpStream::connect(addr, handle), timeout, handle)
-                          })
+            try_timeout(TcpStream::connect(addr), timeout)
         }
         ServerAddr::DomainName(ref domain, port) => {
-            let fut = Context::with(|ctx| {
-                let handle = ctx.handle().clone();
-                try_timeout(resolve(&domain[..], port, false), timeout, &handle).and_then(move |vec_ipaddr| {
-                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter(), &handle);
-                    try_timeout(fut, timeout, &handle)
+            let fut = {
+                try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
+                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
+                    try_timeout(fut, timeout)
                 })
-            });
+            };
             boxed_future(fut)
         }
     }
@@ -252,9 +244,9 @@ fn connect_proxy_server(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<TcpStream> {
 
 /// Handshake logic for ShadowSocks Client
 pub fn proxy_server_handshake(remote_stream: TcpStream,
-                              svr_cfg: Rc<ServerConfig>,
+                              svr_cfg: Arc<ServerConfig>,
                               relay_addr: Address)
-                              -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+                              -> IoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
@@ -264,7 +256,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 
             trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}", relay_addr, buf);
 
-            Context::with(|ctx| try_timeout(enc_w.write_all(buf), timeout, ctx.handle()).map(|(w, _)| w))
+            try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
         });
 
         Ok((r_fut, boxed_future(w_fut)))
@@ -275,8 +267,8 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
 pub fn proxy_handshake(remote_stream: TcpStream,
-                       svr_cfg: Rc<ServerConfig>)
-                       -> BoxIoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+                       svr_cfg: Arc<ServerConfig>)
+                       -> IoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
     let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
         let timeout = svr_cfg.timeout().clone();
 
@@ -301,21 +293,19 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 }
             };
 
-            Context::with(|ctx| {
-                try_timeout(write_all(w, prev_buf), timeout, ctx.handle()).and_then(
-                    move |(w, prev_buf)| match svr_cfg.method().category() {
-                        CipherCategory::Stream => {
-                            let local_iv = prev_buf;
-                            Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
-                        }
-                        CipherCategory::Aead => {
-                            let local_salt = prev_buf;
-                            let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
-                            Ok(From::from(wtr))
-                        }
-                    },
-                )
-            })
+            try_timeout(write_all(w, prev_buf), timeout).and_then(
+                move |(w, prev_buf)| match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        let local_iv = prev_buf;
+                        Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
+                    }
+                    CipherCategory::Aead => {
+                        let local_salt = prev_buf;
+                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
+                        Ok(From::from(wtr))
+                    }
+                },
+            )
         };
 
         let dec = {
@@ -329,23 +319,21 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 CipherCategory::Aead => method.salt_size(),
             };
 
-            Context::with(|ctx| {
-                try_timeout(read_exact(r, vec![0u8; prev_len]), timeout, ctx.handle()).and_then(
-                    move |(r, remote_iv)| match svr_cfg.method().category() {
-                        CipherCategory::Stream => {
-                            trace!("Got initialize vector {:?}", ByteStr::new(&remote_iv));
-                            let decrypt_stream =
-                                StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                            Ok(From::from(decrypt_stream))
-                        }
-                        CipherCategory::Aead => {
-                            trace!("Got salt {:?}", ByteStr::new(&remote_iv));
-                            let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                            Ok(From::from(dr))
-                        }
-                    },
-                )
-            })
+            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout).and_then(
+                move |(r, remote_iv)| match svr_cfg.method().category() {
+                    CipherCategory::Stream => {
+                        trace!("Got initialize vector {:?}", ByteStr::new(&remote_iv));
+                        let decrypt_stream =
+                            StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                        Ok(From::from(decrypt_stream))
+                    }
+                    CipherCategory::Aead => {
+                        trace!("Got salt {:?}", ByteStr::new(&remote_iv));
+                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                        Ok(From::from(dr))
+                    }
+                },
+            )
         };
 
         Ok((boxed_future(dec), boxed_future(enc)))
@@ -355,11 +343,11 @@ pub fn proxy_handshake(remote_stream: TcpStream,
 }
 
 /// Establish tunnel between server and client
-pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> BoxIoFuture<()>
-    where CF: Future<Item = CFI, Error = io::Error> + 'static,
-          SF: Future<Item = SFI, Error = io::Error> + 'static
+pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> IoFuture<()>
+    where CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
+          SF: Future<Item = SFI, Error = io::Error> + Send + 'static
 {
-    let addr = Rc::new(addr);
+    let addr = Arc::new(addr);
 
     let cloned_addr = addr.clone();
     let c2s = c2s.then(move |res| {
@@ -448,26 +436,33 @@ pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
     IgnoreUntilEnd::Pending { r: r, amt: 0 }
 }
 
-fn try_timeout<T, F>(fut: F, dur: Option<Duration>, handle: &Handle) -> BoxIoFuture<T>
-    where F: Future<Item = T, Error = io::Error> + 'static,
+fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> IoFuture<T>
+    where F: Future<Item = T, Error = io::Error> + Send + 'static,
           T: 'static
 {
     match dur {
-        Some(dur) => io_timeout(fut, dur, handle),
+        Some(dur) => io_timeout(fut, dur),
         None => boxed_future(fut),
     }
 }
 
-fn io_timeout<T, F>(fut: F, dur: Duration, handle: &Handle) -> BoxIoFuture<T>
-    where F: Future<Item = T, Error = io::Error> + 'static,
+fn io_timeout<T, F>(fut: F, dur: Duration) -> IoFuture<T>
+    where F: Future<Item = T, Error = io::Error> + Send + 'static,
           T: 'static
 {
-    let fut = fut.select(Timeout::new(dur, handle)
-                         .unwrap() // It must be succeeded!
-                         .and_then(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out"))))
-                 .then(|res| match res {
-                           Ok((t, _)) => Ok(t),
-                           Err((err, _)) => Err(err),
-                       });
+    use tokio::prelude::*;
+
+    let fut = fut.deadline(Instant::now() + dur)
+        .map_err(|err| {
+            match err.into_inner() {
+                Some(e) => {
+                    e
+                }
+                None => {
+                    io::Error::new(io::ErrorKind::TimedOut, "connection timed out")
+                }
+            }
+        });
+
     boxed_future(fut)
 }

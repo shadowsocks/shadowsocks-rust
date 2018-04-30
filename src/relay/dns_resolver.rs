@@ -2,37 +2,40 @@
 
 use std::io::{self, ErrorKind};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 
 use futures::{future, Future};
 
 use futures_cpupool::CpuPool;
 
-use relay::{boxed_future, BoxIoFuture};
-use relay::Context;
+use tokio_io::IoFuture;
+
+use relay::boxed_future;
+use config::Config;
 
 lazy_static! {
     static ref GLOBAL_DNS_CPU_POOL: CpuPool = CpuPool::new_num_cpus();
 }
 
-pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<SocketAddr>> {
+pub fn resolve(config: Arc<Config>, addr: &str, port: u16, check_forbidden: bool) -> IoFuture<Vec<SocketAddr>> {
     // FIXME: Sometimes addr is actually an IpAddr!
     if let Ok(addr) = addr.parse::<IpAddr>() {
         if !check_forbidden {
             return boxed_future(future::finished(vec![SocketAddr::new(addr, port)]));
         }
 
-        let result = Context::with(move |ctx| {
-                                       let forbidden_ip = &ctx.forbidden_ip();
+        let result = {
+            let forbidden_ip = &config.forbidden_ip;
 
-                                       if forbidden_ip.contains(&addr) {
-                                           let err = io::Error::new(ErrorKind::Other,
-                                                                    format!("{} is forbidden, all IPs are filtered",
-                                                                            addr));
-                                           Err(err)
-                                       } else {
-                                           Ok(vec![SocketAddr::new(addr, port)])
-                                       }
-                                   });
+            if forbidden_ip.contains(&addr) {
+                let err = io::Error::new(ErrorKind::Other,
+                                        format!("{} is forbidden, all IPs are filtered",
+                                                addr));
+                Err(err)
+            } else {
+                Ok(vec![SocketAddr::new(addr, port)])
+            }
+        };
 
         return boxed_future(future::done(result));
     }
@@ -51,8 +54,7 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
                                                    if !check_forbidden {
                                                        addr_iter.collect::<Vec<SocketAddr>>()
                                                    } else {
-                                                       Context::with(move |ctx| {
-                                                           let forbidden_ip = ctx.forbidden_ip();
+                                                           let forbidden_ip = &config.forbidden_ip;
                                                            addr_iter.filter(|addr| {
                                                                   let filtered = forbidden_ip.contains(&addr.ip());
                                                                   if filtered {
@@ -61,7 +63,6 @@ pub fn resolve(addr: &str, port: u16, check_forbidden: bool) -> BoxIoFuture<Vec<
                                                                   !filtered
                                                               })
                                                       .collect::<Vec<SocketAddr>>()
-                                                       })
                                                    };
 
                                                if v.is_empty() {

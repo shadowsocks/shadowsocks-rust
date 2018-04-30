@@ -2,20 +2,23 @@
 
 use std::io;
 use std::net::SocketAddr;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use futures::{self, Future};
 use futures::stream::Stream;
 
-use tokio_core::net::{TcpListener, TcpStream};
+// use tokio_core::net::{TcpListener, TcpStream};
 use tokio_io::AsyncRead;
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::io::flush;
+use tokio_io::IoFuture;
 
-use config::ServerConfig;
+use tokio::net::{TcpListener, TcpStream};
+use tokio;
 
-use relay::{boxed_future, BoxIoFuture};
-use relay::Context;
+use config::{Config, ServerConfig};
+
+use relay::boxed_future;
 use relay::loadbalancing::server::LoadBalancer;
 use relay::loadbalancing::server::RoundRobin;
 use relay::socks5::{self, Address, HandshakeRequest, HandshakeResponse};
@@ -27,18 +30,19 @@ use super::{ignore_until_end, try_timeout, tunnel};
 #[derive(Debug, Clone)]
 struct UdpConfig {
     enable_udp: bool,
-    client_addr: Rc<SocketAddr>,
+    client_addr: SocketAddr,
 }
 
-fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
+fn handle_socks5_connect(config: Arc<Config>,
+                         (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                          client_addr: SocketAddr,
                          addr: Address,
-                         svr_cfg: Rc<ServerConfig>)
-                         -> BoxIoFuture<()> {
+                         svr_cfg: Arc<ServerConfig>)
+                         -> IoFuture<()> {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
     let timeout = *svr_cfg.timeout();
-    let fut = super::connect_proxy_server(svr_cfg)
+    let fut = super::connect_proxy_server(config.clone(), svr_cfg)
         .then(move |res| {
             match res {
                 Ok(svr_s) => {
@@ -48,13 +52,9 @@ fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                     let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(client_addr));
                     trace!("Send header: {:?}", header);
 
-                    let fut = Context::with(|ctx| {
-                                                let handle = ctx.handle();
-                                                let fut = try_timeout(header.write_to(w), timeout, &handle);
-                                                try_timeout(fut.and_then(flush), timeout, &handle)
-                                            });
-
-                    boxed_future(fut.map(move |w| (svr_s, w)))
+                    boxed_future(
+                        try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout)
+                        .map(move |w| (svr_s, w)))
                 }
                 Err(err) => {
                     use std::io::ErrorKind;
@@ -71,13 +71,7 @@ fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
                     let header = TcpResponseHeader::new(reply, Address::SocketAddress(client_addr));
                     trace!("Send header: {:?}", header);
 
-                    let fut = Context::with(|ctx| {
-                                                let handle = ctx.handle();
-                                                let fut = try_timeout(header.write_to(w), timeout, &handle);
-                                                try_timeout(fut.and_then(flush), timeout, &handle)
-                                            });
-
-                    boxed_future(fut.and_then(|_| Err(err)))
+                    boxed_future(try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout).and_then(|_| Err(err)))
                 }
             }
         })
@@ -96,7 +90,7 @@ fn handle_socks5_connect((r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
     Box::new(fut)
 }
 
-fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
+fn handle_socks5_client(config: Arc<Config>, s: TcpStream, conf: Arc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
     let client_addr = s.peer_addr()?;
     let cloned_client_addr = client_addr;
     let fut = futures::lazy(|| Ok(s.split()))
@@ -144,7 +138,7 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
             match header.command {
                 socks5::Command::TcpConnect => {
                     debug!("CONNECT {}", addr);
-                    handle_socks5_connect((r, w), cloned_client_addr, addr, conf)
+                    handle_socks5_connect(config, (r, w), cloned_client_addr, addr, conf)
                 }
                 socks5::Command::TcpBind => {
                     warn!("BIND is not supported");
@@ -156,7 +150,7 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
                 socks5::Command::UdpAssociate => {
                     if udp_conf.enable_udp {
                         debug!("UDP ASSOCIATE {}", addr);
-                        let fut = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(*udp_conf.client_addr))
+                        let fut = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(udp_conf.client_addr))
                             .write_to(w)
                             .and_then(flush)
                             .and_then(|_| {
@@ -177,50 +171,84 @@ fn handle_socks5_client(s: TcpStream, conf: Rc<ServerConfig>, udp_conf: UdpConfi
         });
 
     // Runs in Tokio
-    Context::with(|ctx| {
-                      let handle = &ctx.handle;
-                      handle.spawn(fut.then(|res| match res {
-                                                Ok(..) => Ok(()),
-                                                Err(err) => {
-                                                    if err.kind() != io::ErrorKind::BrokenPipe {
-                                                        error!("Failed to handle client: {}", err);
-                                                    }
-                                                    Err(())
-                                                }
-                                            }));
-                  });
+    // Context::with(|ctx| {
+    //                   let handle = &ctx.handle;
+    //                   handle.spawn(fut.then(|res| match res {
+    //                                             Ok(..) => Ok(()),
+    //                                             Err(err) => {
+    //                                                 if err.kind() != io::ErrorKind::BrokenPipe {
+    //                                                     error!("Failed to handle client: {}", err);
+    //                                                 }
+    //                                                 Err(())
+    //                                             }
+    //                                         }));
+    //               });
+
+    tokio::spawn(fut.then(|res| match res {
+        Ok(..) => Ok(()),
+        Err(err) => {
+            if err.kind() != io::ErrorKind::BrokenPipe {
+                error!("Failed to handle client: {}", err);
+            }
+            Err(())
+        }
+    }));
 
     Ok(())
 }
 
 /// Starts a TCP local server with Socks5 proxy protocol
-pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
-    let (listener, local_addr) = Context::with(|ctx| {
-                                                   let config = &ctx.config;
-                                                   let handle = &ctx.handle;
+pub fn run(config: Arc<Config>) -> IoFuture<()> {
+    let local_addr = *config.local.as_ref().expect("Missing local config");
 
-                                                   let local_addr = config.local.as_ref().unwrap();
+    let listener = TcpListener::bind(&local_addr)
+        .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
-                                                   let l = TcpListener::bind(&local_addr, &handle)
-                                                        .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+    info!("ShadowSocks TCP Listening on {}", local_addr);
 
-                                                   info!("ShadowSocks TCP Listening on {}", local_addr);
-                                                   (l, *local_addr)
-                                               });
+    let udp_conf = UdpConfig {
+        enable_udp: config.enable_udp,
+        client_addr: local_addr,
+    };
 
-    let udp_conf = UdpConfig { enable_udp: Context::with(|ctx| ctx.config.enable_udp),
-                               client_addr: Rc::new(local_addr), };
+    let mut servers = RoundRobin::new(&*config);
+    let listening = listener.incoming().for_each(move |socket| {
+        let server_cfg = servers.pick_server();
 
-    let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
-    let listening = listener.incoming().for_each(move |(socket, addr)| {
-                                                     let server_cfg = servers.pick_server();
-                                                     trace!("Got connection, addr: {}", addr);
-                                                     trace!("Picked proxy server: {:?}", server_cfg);
-                                                     handle_socks5_client(socket, server_cfg, udp_conf.clone())
-                                                 });
+        trace!("Got connection, addr: {}", socket.peer_addr()?);
+        trace!("Picked proxy server: {:?}", server_cfg);
 
-    Box::new(listening.map_err(|err| {
-                                   error!("Socks5 server run failed: {}", err);
-                                   err
-                               }))
+        handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
+    });
+
+    Box::new(listening)
+
+    // let (listener, local_addr) = Context::with(|ctx| {
+    //                                                let config = &ctx.config;
+    //                                                let handle = &ctx.handle;
+
+    //                                                let local_addr = config.local.as_ref().unwrap();
+
+    //                                                let l = TcpListener::bind(&local_addr, &handle)
+    //                                                     .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+
+    //                                                info!("ShadowSocks TCP Listening on {}", local_addr);
+    //                                                (l, *local_addr)
+    //                                            });
+
+    // let udp_conf = UdpConfig { enable_udp: Context::with(|ctx| ctx.config.enable_udp),
+    //                            client_addr: Rc::new(local_addr), };
+
+    // let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
+    // let listening = listener.incoming().for_each(move |(socket, addr)| {
+    //                                                  let server_cfg = servers.pick_server();
+    //                                                  trace!("Got connection, addr: {}", addr);
+    //                                                  trace!("Picked proxy server: {:?}", server_cfg);
+    //                                                  handle_socks5_client(socket, server_cfg, udp_conf.clone())
+    //                                              });
+
+    // Box::new(listening.map_err(|err| {
+    //                                error!("Socks5 server run failed: {}", err);
+    //                                err
+    //                            }))
 }

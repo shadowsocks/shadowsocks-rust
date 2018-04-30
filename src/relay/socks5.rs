@@ -15,10 +15,8 @@ use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 
 use futures::{Async, Future, Poll};
 
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::{IoFuture, AsyncRead, AsyncWrite};
 use tokio_io::io::read_exact;
-
-use relay::BoxIoFuture;
 
 pub use self::consts::{SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
                        SOCKS5_AUTH_METHOD_PASSWORD};
@@ -551,7 +549,7 @@ impl TcpRequestHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error> + Send + 'static> {
         let fut = read_exact(r, [0u8; 3]).map_err(From::from)
                                          .and_then(|(r, buf)| {
                                                        let ver = buf[0];
@@ -631,7 +629,7 @@ impl TcpResponseHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error> + Send + 'static> {
         let fut = read_exact(r, [0u8; 3]).map_err(From::from)
                                          .and_then(|(r, buf)| {
                                                        let ver = buf[0];
@@ -700,7 +698,7 @@ impl HandshakeRequest {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + 'static>(r: R) -> BoxIoFuture<(R, HandshakeRequest)> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> IoFuture<(R, HandshakeRequest)> {
         let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
                                                          let ver = buf[0];
                                                          let nmet = buf[1];
@@ -760,7 +758,7 @@ impl HandshakeResponse {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + 'static>(r: R) -> BoxIoFuture<(R, HandshakeResponse)> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> IoFuture<(R, HandshakeResponse)> {
         let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
                                                          let ver = buf[0];
                                                          let met = buf[1];
@@ -820,7 +818,7 @@ impl UdpAssociateHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error>> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error> + Send + 'static> {
         let fut = read_exact(r, [0u8; 3]).map_err(From::from)
                                          .and_then(|(r, buf)| {
                                                        let frag = buf[2];

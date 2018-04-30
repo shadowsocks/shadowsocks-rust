@@ -2,15 +2,16 @@
 
 use std::io::{self, Cursor, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::rc::Rc;
+use std::sync::{Mutex, Arc};
 
 use futures::{self, Future, Stream};
 
-use tokio_core::net::UdpSocket;
+use tokio::net::UdpSocket;
+use tokio_io::IoFuture;
+use tokio;
 
-use config::ServerConfig;
-use relay::{boxed_future, BoxIoFuture};
-use relay::Context;
+use config::{Config, ServerConfig};
+use relay::boxed_future;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
@@ -18,39 +19,39 @@ use super::{PacketStream, SendDgramRc};
 use super::MAXIMUM_UDP_PAYLOAD_SIZE;
 use super::crypto_io::{decrypt_payload, encrypt_payload};
 
-fn resolve_remote_addr(addr: Address) -> BoxIoFuture<SocketAddr> {
+fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> IoFuture<SocketAddr> {
     match addr {
         Address::SocketAddress(s) => {
-            Context::with(|ctx| {
-                              if ctx.forbidden_ip().contains(&s.ip()) {
-                                  let err = io::Error::new(ErrorKind::Other,
-                                                           format!("{} is forbidden, failed to connect {}", s.ip(), s));
-                                  return boxed_future(futures::done(Err(err)));
-                              }
+            if config.forbidden_ip.contains(&s.ip()) {
+                let err = io::Error::new(ErrorKind::Other,
+                                        format!("{} is forbidden, failed to connect {}", s.ip(), s));
+                return boxed_future(futures::done(Err(err)));
+            }
 
-                              boxed_future(futures::finished(s))
-                          })
+            boxed_future(futures::finished(s))
         }
         Address::DomainNameAddress(dname, port) => {
-            let fut = resolve(&dname, port, true).map(move |vec_ipaddr| {
-                                                          assert!(!vec_ipaddr.is_empty());
-                                                          vec_ipaddr[0]
-                                                      });
+            let fut = resolve(config, &dname, port, true)
+                .map(move |vec_ipaddr| {
+                    assert!(!vec_ipaddr.is_empty());
+                    vec_ipaddr[0]
+                });
             boxed_future(fut)
         }
     }
 }
 
-fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
+fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || Context::with(|ctx| UdpSocket::bind(&listen_addr, ctx.handle())))
+    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr))
         .and_then(move |socket| {
-            let socket = Rc::new(socket);
+            let socket = Arc::new(Mutex::new(socket));
             PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
                 let svr_cfg = svr_cfg.clone();
                 let svr_cfg_cloned = svr_cfg.clone();
                 let socket = socket.clone();
+                let config = config.clone();
                 let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
                     .and_then(move |payload| {
                         // Read Address in the front (ShadowSocks protocol)
@@ -67,12 +68,12 @@ fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
                             })
                             .and_then(|(addr, body)| {
                                           let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-                                          Context::with(|ctx| UdpSocket::bind(&local_addr, ctx.handle()))
+                                          UdpSocket::bind(&local_addr)
                                               .map(|remote_udp| (remote_udp, addr, body))
                                       })
                             .and_then(|(remote_udp, addr, body)| {
-                                          resolve_remote_addr(addr.clone())
-                                              .and_then(|addr| remote_udp.send_dgram(body, addr))
+                                          resolve_remote_addr(config, addr.clone())
+                                              .and_then(|addr| remote_udp.send_dgram(body, &addr))
                                               .map(|(remote_udp, _)| (remote_udp, addr))
                                       })
                     })
@@ -94,12 +95,9 @@ fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
                               })
                     .map(|_| ());
 
-                Context::with(|ctx| {
-                                  let handle = ctx.handle();
-                                  handle.spawn(rel.map_err(|err| {
-                                                               error!("Udp relay error: {}", err);
-                                                           }));
-                              });
+                tokio::spawn(rel.map_err(|err| {
+                    error!("Udp relay error: {}", err);
+                }));
 
                 Ok(())
             })
@@ -108,21 +106,18 @@ fn listen(svr_cfg: Rc<ServerConfig>) -> BoxIoFuture<()> {
 }
 
 /// Starts a UDP relay server
-pub fn run() -> BoxIoFuture<()> {
+pub fn run(config: Arc<Config>) -> IoFuture<()> {
     let mut fut = None;
 
-    Context::with(|ctx| {
-                      let config = ctx.config();
-                      for svr in &config.server {
-                          let svr_cfg = Rc::new(svr.clone());
+    for svr in &config.server {
+        let svr_cfg = Arc::new(svr.clone());
 
-                          let svr_fut = listen(svr_cfg);
-                          fut = match fut {
-                              None => Some(svr_fut),
-                              Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
-                          };
-                      }
+        let svr_fut = listen(config.clone(), svr_cfg);
+        fut = match fut {
+            None => Some(svr_fut),
+            Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
+        };
+    }
 
-                      fut.expect("Should have at least one server")
-                  })
+    fut.expect("Should have at least one server")
 }
