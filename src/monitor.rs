@@ -5,13 +5,16 @@ use std::process;
 
 use libc;
 use tokio;
+use tokio_io::IoFuture;
 
+use futures::future::select_all;
 use futures::{self, Future, Stream};
 
 use plugin::Plugin;
+use relay::boxed_future;
 
 #[cfg(unix)]
-pub fn monitor_signal(plugins: Vec<Plugin>) {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
     use tokio_signal::unix::Signal;
 
     // Monitor SIGCHLD, triggered if subprocess (plugin) is exited.
@@ -25,6 +28,7 @@ pub fn monitor_signal(plugins: Vec<Plugin>) {
                                                    })
                                          .map_err(|err| {
                                                       error!("Failed to monitor SIGCHLD, err: {:?}", err);
+                                                      err
                                                   });
 
     // Monitor SIGTERM, triggered if shadowsocks is exited gracefully. (Kill by user).
@@ -38,6 +42,7 @@ pub fn monitor_signal(plugins: Vec<Plugin>) {
                                                    })
                                          .map_err(|err| {
                                                       error!("Failed to monitor SIGTERM, err: {:?}", err);
+                                                      err
                                                   });
 
     // Monitor SIGINT, triggered by CTRL-C
@@ -51,32 +56,35 @@ pub fn monitor_signal(plugins: Vec<Plugin>) {
                                                   })
                                         .map_err(|err| {
                                                      error!("Failed to monitor SIGINT, err: {:?}", err);
+                                                     err
                                                  });
 
     // Join them all, if any of them is triggered, kill all subprocesses and exit.
-    let fut = fut1.select(fut2).map(|(sig, _)| sig)
-                  .map_err(|(e, _)| e)
-                  .select(fut3)
-                  .map(|(sig, _)| sig)
-                  .map_err(|(e, _)| e)
-                  .then(|r| {
-                            // Something happened ... killing all subprocesses
-                            info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-                            drop(plugins);
+    boxed_future(fut1.select(fut2).then(|r| match r {
+                               Ok((o, _)) => Ok(o),
+                               Err((e, _)) => Err(e),
+                           })
+                     .select(fut3)
+                     .then(|r| match r {
+                               Ok((o, _)) => Ok(o),
+                               Err((e, _)) => Err(e),
+                           })
+                     .then(move |r| {
+                               // Something happened ... killing all subprocesses
+                               info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+                               drop(plugins);
 
-                            match r {
-                                Ok(_signo) => {
-                                    process::exit(0);
-                                }
-                                Err(..) => Err(()),
-                            }
-                        });
-
-    tokio::spawn(fut);
+                               match r {
+                                   Ok(..) => {
+                                       process::exit(0);
+                                   }
+                                   Err(err) => Err(err),
+                               }
+                           }))
 }
 
 #[cfg(windows)]
-pub fn monitor_signal(plugins: Vec<Plugin>) {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
     // FIXME: How to handle SIGTERM equavalent in Windows?
 
     use tokio_signal::windows::Event;
@@ -89,6 +97,7 @@ pub fn monitor_signal(plugins: Vec<Plugin>) {
                                         })
                               .map_err(|err| {
                                            error!("Failed to monitor Ctrl-C event: {:?}", err);
+                                           err
                                        });
 
     let fut2 = Event::ctrl_break().and_then(|ev| {
@@ -99,23 +108,23 @@ pub fn monitor_signal(plugins: Vec<Plugin>) {
                                             })
                                   .map_err(|err| {
                                                error!("Failed to monitor Ctrl-Break event: {:?}", err);
+                                               err
                                            });
 
-    let fut = fut1.select(fut2).then(|_| -> Result<(), ()> {
-                                         // Something happened ... killing all subprocesses
-                                         info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-                                         drop(plugins);
-                                         process::exit(libc::EXIT_FAILURE);
-                                     });
-    tokio::spawn(fut);
+    boxed_future(fut1.select(fut2).then(|_| -> Result<(), ()> {
+                                            // Something happened ... killing all subprocesses
+                                            info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+                                            drop(plugins);
+                                            process::exit(libc::EXIT_FAILURE);
+                                        }))
 }
 
 #[cfg(not(any(windows, unix)))]
-pub fn monitor_signal(plugins: Vec<Plugin>) {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
     // FIXME: What can I do ...
     // Blocks forever
     let fut = futures::empty::<(), ()>().and_then(|_| {
                                                       drop(plugins);
                                                   });
-    tokio::spawn(fut);
+    boxed_future(fut)
 }
