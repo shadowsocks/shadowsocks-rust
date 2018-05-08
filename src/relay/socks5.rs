@@ -15,11 +15,12 @@ use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 
 use futures::{Async, Future, Poll};
 
-use tokio_io::{IoFuture, AsyncRead, AsyncWrite};
 use tokio_io::io::read_exact;
+use tokio_io::{AsyncRead, AsyncWrite, IoFuture};
 
-pub use self::consts::{SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
-                       SOCKS5_AUTH_METHOD_PASSWORD};
+pub use self::consts::{
+    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
+};
 
 use super::utils::{write_bytes, WriteBytes};
 
@@ -197,8 +198,7 @@ impl error::Error for Error {
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::new(Reply::GeneralFailure,
-                   <io::Error as error::Error>::description(&err))
+        Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
     }
 }
 
@@ -442,10 +442,7 @@ impl<R> ReadAddress<R>
         let buf = self.buf.as_mut().unwrap();
 
         while self.already_read < buf.len() {
-            match self.reader.as_mut()
-                      .unwrap()
-                      .read(&mut buf[self.already_read..])
-            {
+            match self.reader.as_mut().unwrap().read(&mut buf[self.already_read..]) {
                 Ok(0) => {
                     let err = io::Error::new(io::ErrorKind::Other, "Unexpected EOF");
                     return Err(err);
@@ -491,14 +488,12 @@ fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
 }
 
 fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
-    use bytes::BigEndian;
-
     assert!(dnaddr.len() <= u8::max_value() as usize);
 
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
     buf.put_u8(dnaddr.len() as u8);
     buf.put_slice(dnaddr[..].as_bytes());
-    buf.put_u16::<BigEndian>(port);
+    buf.put_u16_be(port);
 }
 
 fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {
@@ -549,7 +544,9 @@ impl TcpRequestHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, TcpRequestHeader), Error = Error> + Send + 'static> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(
+        r: R)
+        -> Box<Future<Item = (R, TcpRequestHeader), Error = Error> + Send + 'static> {
         let fut = read_exact(r, [0u8; 3]).map_err(From::from)
                                          .and_then(|(r, buf)| {
                                                        let ver = buf[0];
@@ -629,7 +626,9 @@ impl TcpResponseHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, TcpResponseHeader), Error = Error> + Send + 'static> {
+    pub fn read_from<R: AsyncRead + Send + 'static>(
+        r: R)
+        -> Box<Future<Item = (R, TcpResponseHeader), Error = Error> + Send + 'static> {
         let fut = read_exact(r, [0u8; 3]).map_err(From::from)
                                          .and_then(|(r, buf)| {
                                                        let ver = buf[0];
@@ -664,8 +663,7 @@ impl TcpResponseHeader {
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let TcpResponseHeader { ref reply,
-                                ref address, } = *self;
+        let TcpResponseHeader { ref reply, ref address } = *self;
         buf.put_slice(&[consts::SOCKS5_VERSION, reply.as_u8(), 0x00]);
         address.write_to_buf(buf);
     }
@@ -818,15 +816,16 @@ impl UdpAssociateHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error> + Send + 'static> {
-        let fut = read_exact(r, [0u8; 3]).map_err(From::from)
-                                         .and_then(|(r, buf)| {
-                                                       let frag = buf[2];
-                                                       Address::read_from(r).map(move |(r, address)| {
-                                                        let h = UdpAssociateHeader::new(frag, address);
-                                                        (r, h)
-                                                    })
-                                                   });
+    pub fn read_from<R: AsyncRead + Send + 'static>(
+        r: R)
+        -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error> + Send + 'static> {
+        let fut = read_exact(r, [0u8; 3]).map_err(From::from).and_then(|(r, buf)| {
+            let frag = buf[2];
+            Address::read_from(r).map(move |(r, address)| {
+                                          let h = UdpAssociateHeader::new(frag, address);
+                                          (r, h)
+                                      })
+        });
         Box::new(fut)
     }
 
@@ -839,8 +838,7 @@ impl UdpAssociateHeader {
 
     /// Write to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let UdpAssociateHeader { ref frag,
-                                 ref address, } = *self;
+        let UdpAssociateHeader { ref frag, ref address } = *self;
         buf.put_slice(&[0x00, 0x00, *frag]);
         address.write_to_buf(buf);
     }
