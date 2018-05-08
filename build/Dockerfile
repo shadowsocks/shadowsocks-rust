@@ -1,4 +1,5 @@
-FROM ekidd/rust-musl-builder
+ARG TOOLCHAIN=stable
+FROM ekidd/rust-musl-builder:$TOOLCHAIN
 
 #ENV HTTP_PROXY="http://192.168.0.106:8118"
 #ENV HTTPS_PROXY="http://192.168.0.106:8118"
