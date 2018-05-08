@@ -27,9 +27,8 @@ use relay::udprelay::local::run as run_udp;
 /// ```
 pub fn run(mut config: Config) {
     // Hold it here, kill all plugins when Core is finished
-    let plugins = launch_plugin(&mut config, PluginMode::Client)
-        .expect("Failed to launch plugins");
-    // ::monitor::monitor_signal(&handle, plugins);
+    let plugins = launch_plugin(&mut config, PluginMode::Client).expect("Failed to launch plugins");
+    ::monitor::monitor_signal(plugins);
 
     let config = Arc::new(config);
 
@@ -38,19 +37,15 @@ pub fn run(mut config: Config) {
     if enable_udp {
         let tcp_fut = run_tcp(config.clone());
         let udp_fut = run_udp(config);
-        tokio::run(tcp_fut.join(udp_fut).then(|res| {
-            match res {
-                Ok(..) => Ok(()),
-                Err(err) => panic!("Failed to run server, err: {}", err),
-            }
-        }));
+        tokio::run(tcp_fut.join(udp_fut).then(|res| match res {
+                                                  Ok(..) => Ok(()),
+                                                  Err(err) => panic!("Failed to run server, err: {}", err),
+                                              }));
     } else {
         let tcp_fut = run_tcp(config);
-        tokio::run(tcp_fut.then(|res| {
-            match res {
-                Ok(..) => Ok(()),
-                Err(err) => panic!("Failed to run server, err: {}", err),
-            }
-        }))
+        tokio::run(tcp_fut.then(|res| match res {
+                                    Ok(..) => Ok(()),
+                                    Err(err) => panic!("Failed to run server, err: {}", err),
+                                }))
     }
 }

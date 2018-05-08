@@ -2,13 +2,13 @@
 
 use futures::Future;
 
-pub mod tcprelay;
-pub mod udprelay;
+mod dns_resolver;
+mod loadbalancing;
 pub mod local;
 pub mod server;
-mod loadbalancing;
-mod dns_resolver;
 pub mod socks5;
+pub mod tcprelay;
+pub mod udprelay;
 mod utils;
 
 fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>

@@ -7,8 +7,8 @@ use bytes::{BufMut, BytesMut};
 use crypto::{new_stream, CipherType, CryptoMode, StreamCipher, StreamCipherVariant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-use super::{DecryptedRead, EncryptedWrite};
 use super::BUFFER_SIZE;
+use super::{DecryptedRead, EncryptedWrite};
 
 const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 

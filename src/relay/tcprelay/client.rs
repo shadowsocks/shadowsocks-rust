@@ -4,8 +4,8 @@ use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 
 use tokio::net::TcpStream;
-use tokio_io::{IoFuture, AsyncRead, AsyncWrite};
 use tokio_io::io::flush;
+use tokio_io::{AsyncRead, AsyncWrite, IoFuture};
 
 use futures::{self, Async, Future, Poll};
 

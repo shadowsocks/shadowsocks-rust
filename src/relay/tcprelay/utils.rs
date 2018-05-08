@@ -1,11 +1,11 @@
 //! Utility functions
 
 use std::io;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::io::{copy, Copy};
 use tokio::timer::Delay;
+use tokio_io::io::{copy, Copy};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use futures::{Async, Future, Poll};
 
@@ -52,13 +52,11 @@ impl<R, W> CopyTimeout<R, W>
     fn try_poll_timeout(&mut self) -> io::Result<()> {
         match self.timer.as_mut() {
             None => Ok(()),
-            Some(t) => {
-                match t.poll() {
-                    Err(err) => panic!("Failed to poll on timer, err: {}", err),
-                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                    Ok(Async::NotReady) => Ok(()),
-                }
-            }
+            Some(t) => match t.poll() {
+                Err(err) => panic!("Failed to poll on timer, err: {}", err),
+                Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+                Ok(Async::NotReady) => Ok(()),
+            },
         }
     }
 

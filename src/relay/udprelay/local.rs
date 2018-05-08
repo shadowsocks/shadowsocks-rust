@@ -1,14 +1,14 @@
 //! UDP relay local server
 
 use std::io::{self, Cursor, ErrorKind, Read};
-use std::net::{IpAddr, Ipv4Addr};
 use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex};
 
 use futures::{self, Future, Stream};
 
-use tokio::net::UdpSocket;
 use tokio;
+use tokio::net::UdpSocket;
 use tokio_io::IoFuture;
 
 use config::{Config, ServerAddr, ServerConfig};
@@ -17,9 +17,9 @@ use relay::dns_resolver::resolve;
 use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
 use relay::socks5::{Address, UdpAssociateHeader};
 
-use super::{PacketStream, SendDgramRc};
-use super::MAXIMUM_UDP_PAYLOAD_SIZE;
 use super::crypto_io::{decrypt_payload, encrypt_payload};
+use super::MAXIMUM_UDP_PAYLOAD_SIZE;
+use super::{PacketStream, SendDgramRc};
 
 /// Resolves server address to SocketAddr
 fn resolve_server_addr(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<SocketAddr> {
@@ -28,11 +28,10 @@ fn resolve_server_addr(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFut
         ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
         // Resolve domain name to SocketAddr
         ServerAddr::DomainName(ref dname, port) => {
-            let fut = resolve(config, dname, port, false)
-                .map(move |vec_ipaddr| {
-                    assert!(!vec_ipaddr.is_empty());
-                    vec_ipaddr[0]
-                });
+            let fut = resolve(config, dname, port, false).map(move |vec_ipaddr| {
+                                                                  assert!(!vec_ipaddr.is_empty());
+                                                                  vec_ipaddr[0]
+                                                              });
             boxed_future(fut)
         }
     }
@@ -42,8 +41,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
     let socket = Arc::new(Mutex::new(l));
     let mut balancer = RoundRobin::new(&*config);
 
-    let fut = PacketStream::new(socket.clone())
-        .for_each(move |(pkt, src)| {
+    let fut = PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
         let svr_cfg = balancer.pick_server();
         let svr_cfg_cloned = svr_cfg.clone();
         let svr_cfg_cloned_cloned = svr_cfg.clone();
@@ -115,8 +113,8 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
             .map(|_| ());
 
         tokio::spawn(rel.map_err(|err| {
-            error!("Error occurs in UDP relay: {}", err);
-        }));
+                                     error!("Error occurs in UDP relay: {}", err);
+                                 }));
 
         Ok(())
     });

@@ -5,18 +5,18 @@ use std::iter::{IntoIterator, Iterator};
 use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-use config::{ServerAddr, Config, ServerConfig};
+use config::{Config, ServerAddr, ServerConfig};
 use crypto::CipherCategory;
-use relay::{boxed_future};
+use relay::boxed_future;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
-use tokio::net::{TcpStream, ConnectFuture};
-use tokio_io::{IoFuture, AsyncRead};
-use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio::net::{ConnectFuture, TcpStream};
 use tokio_io::io::{read_exact, write_all};
+use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::{AsyncRead, IoFuture};
 
 use futures::{self, Async, Future, Poll};
 
@@ -29,13 +29,13 @@ pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
 use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
-pub mod local;
-mod socks5_local;
-pub mod server;
-mod stream;
+mod aead;
 pub mod client;
 mod crypto_io;
-mod aead;
+pub mod local;
+pub mod server;
+mod socks5_local;
+mod stream;
 mod utils;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
@@ -181,8 +181,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
             TcpStreamConnect::Empty => unreachable!(),
             TcpStreamConnect::Connect { ref mut last_err,
                                         ref mut addr_iter,
-                                        ref mut opt_stream_new
-                                         } => {
+                                        ref mut opt_stream_new, } => {
                 loop {
                     // 1. Poll before doing anything else
                     if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
@@ -210,26 +209,24 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => match last_err {
-                None => {
-                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                    Err(err)
+            TcpStreamConnect::Connect { last_err, .. } => {
+                match last_err {
+                    None => {
+                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                        Err(err)
+                    }
+                    Some(err) => Err(err),
                 }
-                Some(err) => Err(err),
-            },
+            }
         }
     }
 }
 
 fn connect_proxy_server(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<TcpStream> {
     let timeout = *svr_cfg.timeout();
-    trace!("Connecting to proxy {:?}, timeout: {:?}",
-           svr_cfg.addr(),
-           timeout);
+    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
     match *svr_cfg.addr() {
-        ServerAddr::SocketAddr(ref addr) => {
-            try_timeout(TcpStream::connect(addr), timeout)
-        }
+        ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr), timeout),
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
                 try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
@@ -250,14 +247,16 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
     let timeout = *svr_cfg.timeout();
     let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
-            // Send relay address to remote
-            let mut buf = BytesMut::with_capacity(relay_addr.len());
-            relay_addr.write_to_buf(&mut buf);
+                                       // Send relay address to remote
+                                       let mut buf = BytesMut::with_capacity(relay_addr.len());
+                                       relay_addr.write_to_buf(&mut buf);
 
-            trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}", relay_addr, buf);
+                                       trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}",
+                                              relay_addr,
+                                              buf);
 
-            try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
-        });
+                                       try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
+                                   });
 
         Ok((r_fut, boxed_future(w_fut)))
     });
@@ -319,12 +318,11 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 CipherCategory::Aead => method.salt_size(),
             };
 
-            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout).and_then(
-                move |(r, remote_iv)| match svr_cfg.method().category() {
+            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout).and_then(move |(r, remote_iv)| {
+                match svr_cfg.method().category() {
                     CipherCategory::Stream => {
                         trace!("Got initialize vector {:?}", ByteStr::new(&remote_iv));
-                        let decrypt_stream =
-                            StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
+                        let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                         Ok(From::from(decrypt_stream))
                     }
                     CipherCategory::Aead => {
@@ -332,8 +330,8 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                         let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
                         Ok(From::from(dr))
                     }
-                },
-            )
+                }
+            })
         };
 
         Ok((boxed_future(dec), boxed_future(enc)))
@@ -381,12 +379,10 @@ pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> IoFuture<()>
     let fut = c2s.select(s2c).and_then(move |(dir, _)| {
                                match dir {
                                    TunnelDirection::Server2Client => {
-                                       trace!("Relay {} client <- server is closed, abort connection",
-                                              addr)
+                                       trace!("Relay {} client <- server is closed, abort connection", addr)
                                    }
                                    TunnelDirection::Client2Server => {
-                                       trace!("Relay {} server -> client is closed, abort connection",
-                                              addr)
+                                       trace!("Relay {} server -> client is closed, abort connection", addr)
                                    }
                                }
 
@@ -410,8 +406,7 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
             IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
-            IgnoreUntilEnd::Pending { ref mut r,
-                                      ref mut amt, } => {
+            IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
                 let mut buf = [0u8; 4096];
                 loop {
                     let n = try_nb!(r.read(&mut buf));
@@ -452,17 +447,10 @@ fn io_timeout<T, F>(fut: F, dur: Duration) -> IoFuture<T>
 {
     use tokio::prelude::*;
 
-    let fut = fut.deadline(Instant::now() + dur)
-        .map_err(|err| {
-            match err.into_inner() {
-                Some(e) => {
-                    e
-                }
-                None => {
-                    io::Error::new(io::ErrorKind::TimedOut, "connection timed out")
-                }
-            }
-        });
+    let fut = fut.deadline(Instant::now() + dur).map_err(|err| match err.into_inner() {
+                              Some(e) => e,
+                              None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
+                          });
 
     boxed_future(fut)
 }

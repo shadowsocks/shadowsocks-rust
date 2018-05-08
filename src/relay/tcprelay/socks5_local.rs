@@ -4,17 +4,17 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use futures::{self, Future};
 use futures::stream::Stream;
+use futures::{self, Future};
 
 // use tokio_core::net::{TcpListener, TcpStream};
-use tokio_io::AsyncRead;
-use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::io::flush;
+use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::AsyncRead;
 use tokio_io::IoFuture;
 
-use tokio::net::{TcpListener, TcpStream};
 use tokio;
+use tokio::net::{TcpListener, TcpStream};
 
 use config::{Config, ServerConfig};
 
@@ -90,7 +90,11 @@ fn handle_socks5_connect(config: Arc<Config>,
     Box::new(fut)
 }
 
-fn handle_socks5_client(config: Arc<Config>, s: TcpStream, conf: Arc<ServerConfig>, udp_conf: UdpConfig) -> io::Result<()> {
+fn handle_socks5_client(config: Arc<Config>,
+                        s: TcpStream,
+                        conf: Arc<ServerConfig>,
+                        udp_conf: UdpConfig)
+                        -> io::Result<()> {
     let client_addr = s.peer_addr()?;
     let cloned_client_addr = client_addr;
     let fut = futures::lazy(|| Ok(s.split()))
@@ -170,29 +174,15 @@ fn handle_socks5_client(config: Arc<Config>, s: TcpStream, conf: Arc<ServerConfi
             }
         });
 
-    // Runs in Tokio
-    // Context::with(|ctx| {
-    //                   let handle = &ctx.handle;
-    //                   handle.spawn(fut.then(|res| match res {
-    //                                             Ok(..) => Ok(()),
-    //                                             Err(err) => {
-    //                                                 if err.kind() != io::ErrorKind::BrokenPipe {
-    //                                                     error!("Failed to handle client: {}", err);
-    //                                                 }
-    //                                                 Err(())
-    //                                             }
-    //                                         }));
-    //               });
-
     tokio::spawn(fut.then(|res| match res {
-        Ok(..) => Ok(()),
-        Err(err) => {
-            if err.kind() != io::ErrorKind::BrokenPipe {
-                error!("Failed to handle client: {}", err);
-            }
-            Err(())
-        }
-    }));
+                              Ok(..) => Ok(()),
+                              Err(err) => {
+                                  if err.kind() != io::ErrorKind::BrokenPipe {
+                                      error!("Failed to handle client: {}", err);
+                                  }
+                                  Err(())
+                              }
+                          }));
 
     Ok(())
 }
@@ -201,54 +191,23 @@ fn handle_socks5_client(config: Arc<Config>, s: TcpStream, conf: Arc<ServerConfi
 pub fn run(config: Arc<Config>) -> IoFuture<()> {
     let local_addr = *config.local.as_ref().expect("Missing local config");
 
-    let listener = TcpListener::bind(&local_addr)
-        .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+    let listener = TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
     info!("ShadowSocks TCP Listening on {}", local_addr);
 
-    let udp_conf = UdpConfig {
-        enable_udp: config.enable_udp,
-        client_addr: local_addr,
-    };
+    let udp_conf = UdpConfig { enable_udp: config.enable_udp,
+                               client_addr: local_addr, };
 
     let mut servers = RoundRobin::new(&*config);
-    let listening = listener.incoming().for_each(move |socket| {
-        let server_cfg = servers.pick_server();
+    let listening =
+        listener.incoming().for_each(move |socket| {
+                                         let server_cfg = servers.pick_server();
 
-        trace!("Got connection, addr: {}", socket.peer_addr()?);
-        trace!("Picked proxy server: {:?}", server_cfg);
+                                         trace!("Got connection, addr: {}", socket.peer_addr()?);
+                                         trace!("Picked proxy server: {:?}", server_cfg);
 
-        handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
-    });
+                                         handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
+                                     });
 
     Box::new(listening)
-
-    // let (listener, local_addr) = Context::with(|ctx| {
-    //                                                let config = &ctx.config;
-    //                                                let handle = &ctx.handle;
-
-    //                                                let local_addr = config.local.as_ref().unwrap();
-
-    //                                                let l = TcpListener::bind(&local_addr, &handle)
-    //                                                     .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
-
-    //                                                info!("ShadowSocks TCP Listening on {}", local_addr);
-    //                                                (l, *local_addr)
-    //                                            });
-
-    // let udp_conf = UdpConfig { enable_udp: Context::with(|ctx| ctx.config.enable_udp),
-    //                            client_addr: Rc::new(local_addr), };
-
-    // let mut servers = Context::with(|ctx| RoundRobin::new(ctx.config()));
-    // let listening = listener.incoming().for_each(move |(socket, addr)| {
-    //                                                  let server_cfg = servers.pick_server();
-    //                                                  trace!("Got connection, addr: {}", addr);
-    //                                                  trace!("Picked proxy server: {:?}", server_cfg);
-    //                                                  handle_socks5_client(socket, server_cfg, udp_conf.clone())
-    //                                              });
-
-    // Box::new(listening.map_err(|err| {
-    //                                error!("Socks5 server run failed: {}", err);
-    //                                err
-    //                            }))
 }

@@ -111,7 +111,7 @@ pub use self::relay::server::run as run_server;
 pub use self::relay::tcprelay::client::Socks5Client;
 
 pub mod config;
-pub mod relay;
 pub mod crypto;
+mod monitor;
 pub mod plugin;
-// mod monitor;
+pub mod relay;

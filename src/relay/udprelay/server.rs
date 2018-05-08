@@ -2,40 +2,39 @@
 
 use std::io::{self, Cursor, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use futures::{self, Future, Stream};
 
+use tokio;
 use tokio::net::UdpSocket;
 use tokio_io::IoFuture;
-use tokio;
 
 use config::{Config, ServerConfig};
 use relay::boxed_future;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
-use super::{PacketStream, SendDgramRc};
-use super::MAXIMUM_UDP_PAYLOAD_SIZE;
 use super::crypto_io::{decrypt_payload, encrypt_payload};
+use super::MAXIMUM_UDP_PAYLOAD_SIZE;
+use super::{PacketStream, SendDgramRc};
 
 fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> IoFuture<SocketAddr> {
     match addr {
         Address::SocketAddress(s) => {
             if config.forbidden_ip.contains(&s.ip()) {
                 let err = io::Error::new(ErrorKind::Other,
-                                        format!("{} is forbidden, failed to connect {}", s.ip(), s));
+                                         format!("{} is forbidden, failed to connect {}", s.ip(), s));
                 return boxed_future(futures::done(Err(err)));
             }
 
             boxed_future(futures::finished(s))
         }
         Address::DomainNameAddress(dname, port) => {
-            let fut = resolve(config, &dname, port, true)
-                .map(move |vec_ipaddr| {
-                    assert!(!vec_ipaddr.is_empty());
-                    vec_ipaddr[0]
-                });
+            let fut = resolve(config, &dname, port, true).map(move |vec_ipaddr| {
+                                                                  assert!(!vec_ipaddr.is_empty());
+                                                                  vec_ipaddr[0]
+                                                              });
             boxed_future(fut)
         }
     }
@@ -44,15 +43,14 @@ fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> IoFuture<SocketAdd
 fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr))
-        .and_then(move |socket| {
-            let socket = Arc::new(Mutex::new(socket));
-            PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
-                let svr_cfg = svr_cfg.clone();
-                let svr_cfg_cloned = svr_cfg.clone();
-                let socket = socket.clone();
-                let config = config.clone();
-                let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
+    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr)).and_then(move |socket| {
+        let socket = Arc::new(Mutex::new(socket));
+        PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
+            let svr_cfg = svr_cfg.clone();
+            let svr_cfg_cloned = svr_cfg.clone();
+            let socket = socket.clone();
+            let config = config.clone();
+            let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
                     .and_then(move |payload| {
                         // Read Address in the front (ShadowSocks protocol)
                         Address::read_from(Cursor::new(payload))
@@ -95,13 +93,13 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                               })
                     .map(|_| ());
 
-                tokio::spawn(rel.map_err(|err| {
-                    error!("Udp relay error: {}", err);
-                }));
+            tokio::spawn(rel.map_err(|err| {
+                                         error!("Udp relay error: {}", err);
+                                     }));
 
-                Ok(())
-            })
-        });
+            Ok(())
+        })
+    });
     boxed_future(fut)
 }
 

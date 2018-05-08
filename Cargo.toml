@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.6.12"
+version = "1.7.0"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -60,7 +60,7 @@ futures-cpupool = "0.1"
 miscreant = { version = "0.3", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-tokio-signal = "0.1"
+tokio-signal = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 tokio-signal = "0.1"
