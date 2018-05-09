@@ -3,11 +3,13 @@
 use std::io::{self, Cursor, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use futures::{self, Future, Stream};
 
 use tokio;
 use tokio::net::UdpSocket;
+use tokio::util::FutureExt;
 use tokio_io::IoFuture;
 
 use config::{Config, ServerConfig};
@@ -50,6 +52,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
             let svr_cfg_cloned = svr_cfg.clone();
             let socket = socket.clone();
             let config = config.clone();
+            let timeout = *svr_cfg.timeout();
             let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
                     .and_then(move |payload| {
                         // Read Address in the front (ShadowSocks protocol)
@@ -75,9 +78,21 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                                               .map(|(remote_udp, _)| (remote_udp, addr))
                                       })
                     })
-                    .and_then(|(remote_udp, addr)| {
+                    .and_then(move |(remote_udp, addr)| {
                         let buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+                        let to = timeout.unwrap_or(Duration::from_secs(5));
+                        let caddr = addr.clone();
                         remote_udp.recv_dgram(buf)
+                                  .deadline(Instant::now() + to)
+                                  .map_err(move |err| {
+                                      match err.into_inner() {
+                                          Some(e) => e,
+                                          None => {
+                                              error!("Udp associate waiting datagram {} -> {} timed out in {:?}", src, caddr, to);
+                                              io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
+                                          }
+                                      }
+                                  })
                                   .and_then(|(_remote_udp, buf, n, _from)| {
                             let svr_cfg = svr_cfg_cloned;
 
@@ -89,7 +104,20 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                     })
                     .and_then(move |(buf, addr)| {
                                   info!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, buf.len());
+
+                                  let to = timeout.unwrap_or(Duration::from_secs(5));
+                                  let caddr = addr.clone();
                                   SendDgramRc::new(socket, buf, src)
+                                      .deadline(Instant::now() + to)
+                                      .map_err(move |err| {
+                                          match err.into_inner() {
+                                              Some(e) => e,
+                                              None => {
+                                                  error!("Udp associate sending datagram {} <- {} timed out in {:?}", src, caddr, to);
+                                                  io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
+                                              }
+                                          }
+                                      })
                               })
                     .map(|_| ());
 

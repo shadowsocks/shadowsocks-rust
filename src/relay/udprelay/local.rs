@@ -4,11 +4,13 @@ use std::io::{self, Cursor, ErrorKind, Read};
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use futures::{self, Future, Stream};
 
 use tokio;
 use tokio::net::UdpSocket;
+use tokio::util::FutureExt;
 use tokio_io::IoFuture;
 
 use config::{Config, ServerAddr, ServerConfig};
@@ -47,6 +49,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
         let svr_cfg_cloned_cloned = svr_cfg.clone();
         let socket = socket.clone();
         let config = config.clone();
+        let timeout = *svr_cfg.timeout();
 
         let rel = futures::lazy(|| UdpAssociateHeader::read_from(Cursor::new(pkt)))
             .map_err(From::from)
@@ -82,12 +85,36 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
             })
             .and_then(move |(remote_udp, remote_addr, payload, addr)| {
                 info!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, payload.len());
+                let to = timeout.unwrap_or(Duration::from_secs(5));
+                let caddr = addr.clone();
                 remote_udp.send_dgram(payload, &remote_addr)
+                          .deadline(Instant::now() + to)
+                          .map_err(move |err| {
+                              match err.into_inner() {
+                                  Some(e) => e,
+                                  None => {
+                                      error!("Udp associate sending datagram {} -> {} timed out in {:?}", src, caddr, to);
+                                      io::Error::new(io::ErrorKind::TimedOut, "udp send timed out")
+                                  }
+                              }
+                          })
                           .map(|(remote_udp, _)| (remote_udp, addr))
             })
             .and_then(move |(remote_udp, addr)| {
                 let buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+                let to = timeout.unwrap_or(Duration::from_secs(5));
+                let caddr = addr.clone();
                 remote_udp.recv_dgram(buf)
+                          .deadline(Instant::now() + to)
+                          .map_err(move |err| {
+                              match err.into_inner() {
+                                  Some(e) => e,
+                                  None => {
+                                      error!("Udp associate waiting datagram {} <- {} timed out in {:?}", src, caddr, to);
+                                      io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
+                                  }
+                              }
+                          })
                           .and_then(move |(_remote_udp, buf, n, _from)| {
                                         let svr_cfg = svr_cfg_cloned;
                                         decrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf[..n])
