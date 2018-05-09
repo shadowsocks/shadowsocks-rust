@@ -84,7 +84,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
                               .map(|payload| (remote_udp, remote_addr, payload, addr))
             })
             .and_then(move |(remote_udp, remote_addr, payload, addr)| {
-                info!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, payload.len());
+                debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, payload.len());
                 let to = timeout.unwrap_or(Duration::from_secs(5));
                 let caddr = addr.clone();
                 remote_udp.send_dgram(payload, &remote_addr)
@@ -128,7 +128,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
             })
             .and_then(move |(mut cur, addr)| {
                 let payload_len = cur.get_ref().len() - cur.position() as usize;
-                info!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, payload_len);
+                debug!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, payload_len);
 
                 let mut data = Vec::new();
                 UdpAssociateHeader::new(0, Address::SocketAddress(src)).write_to_buf(&mut data);

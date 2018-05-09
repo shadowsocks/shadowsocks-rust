@@ -64,7 +64,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                                 payload.drain(..header_len);
                                 let body = payload;
 
-                                info!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
+                                debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
                                 Ok((addr, body))
                             })
                             .and_then(|(addr, body)| {
@@ -103,7 +103,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                         })
                     })
                     .and_then(move |(buf, addr)| {
-                                  info!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, buf.len());
+                                  debug!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, buf.len());
 
                                   let to = timeout.unwrap_or(Duration::from_secs(5));
                                   let caddr = addr.clone();
@@ -114,7 +114,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
                                               Some(e) => e,
                                               None => {
                                                   error!("Udp associate sending datagram {} <- {} timed out in {:?}", src, caddr, to);
-                                                  io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
+                                                  io::Error::new(io::ErrorKind::TimedOut, "udp send timed out")
                                               }
                                           }
                                       })
