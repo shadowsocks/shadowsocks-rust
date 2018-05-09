@@ -10,8 +10,9 @@ use tokio_io::{AsyncRead, AsyncWrite, IoFuture};
 use futures::{self, Async, Future, Poll};
 
 use relay::boxed_future;
-use relay::socks5::{self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader,
-                    TcpResponseHeader};
+use relay::socks5::{
+    self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
+};
 
 /// Socks5 proxy client
 pub struct Socks5Client {
