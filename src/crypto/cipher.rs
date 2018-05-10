@@ -121,18 +121,24 @@ pub enum CipherType {
     Rc4,
     Rc4Md5,
 
-    #[cfg(feature = "sodium")] ChaCha20,
-    #[cfg(feature = "sodium")] Salsa20,
-    #[cfg(feature = "sodium")] XSalsa20,
-    #[cfg(feature = "sodium")] ChaCha20Ietf,
+    #[cfg(feature = "sodium")]
+    ChaCha20,
+    #[cfg(feature = "sodium")]
+    Salsa20,
+    #[cfg(feature = "sodium")]
+    XSalsa20,
+    #[cfg(feature = "sodium")]
+    ChaCha20Ietf,
 
     Aes128Gcm,
     Aes256Gcm,
 
     ChaCha20Poly1305,
 
-    #[cfg(feature = "miscreant")] Aes128PmacSiv,
-    #[cfg(feature = "miscreant")] Aes256PmacSiv,
+    #[cfg(feature = "miscreant")]
+    Aes128PmacSiv,
+    #[cfg(feature = "miscreant")]
+    Aes256PmacSiv,
 }
 
 /// Category of ciphers
@@ -215,35 +221,24 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Plain => 0,
 
-            CipherType::Aes128Cfb1 => {
-                symm::Cipher::aes_128_cfb1().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes128Cfb8 => {
-                symm::Cipher::aes_128_cfb8().iv_len()
-                                            .expect("iv_len should not be None")
-            }
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len()
+                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len()
+                                                                  .expect("iv_len should not be None"),
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => {
                 symm::Cipher::aes_128_cfb128().iv_len()
                                               .expect("iv_len should not be None")
             }
-            CipherType::Aes256Cfb1 => {
-                symm::Cipher::aes_256_cfb1().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes256Cfb8 => {
-                symm::Cipher::aes_256_cfb8().iv_len()
-                                            .expect("iv_len should not be None")
-            }
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len()
+                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len()
+                                                                  .expect("iv_len should not be None"),
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => {
                 symm::Cipher::aes_256_cfb128().iv_len()
                                               .expect("iv_len should not be None")
             }
 
-            CipherType::Rc4 => {
-                symm::Cipher::rc4().iv_len()
-                                   .expect("iv_len should not be None")
-            }
+            CipherType::Rc4 => symm::Cipher::rc4().iv_len().expect("iv_len should not be None"),
             CipherType::Rc4Md5 => 16,
 
             #[cfg(feature = "sodium")]
@@ -410,29 +405,21 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::{new_stream, CipherType, StreamCipher};
     use crypto::CryptoMode;
+    use crypto::{new_stream, CipherType, StreamCipher};
 
     #[test]
     fn test_get_cipher() {
         let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
         let iv = CipherType::Aes128Cfb.gen_init_vec();
-        let mut encryptor = new_stream(CipherType::Aes128Cfb,
-                                       &key[0..],
-                                       &iv[0..],
-                                       CryptoMode::Encrypt);
-        let mut decryptor = new_stream(CipherType::Aes128Cfb,
-                                       &key[0..],
-                                       &iv[0..],
-                                       CryptoMode::Decrypt);
+        let mut encryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
+        let mut decryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();
-        encryptor.update(message.as_bytes(), &mut encrypted_msg)
-                 .unwrap();
+        encryptor.update(message.as_bytes(), &mut encrypted_msg).unwrap();
         let mut decrypted_msg = Vec::new();
-        decryptor.update(&encrypted_msg[..], &mut decrypted_msg)
-                 .unwrap();
+        decryptor.update(&encrypted_msg[..], &mut decrypted_msg).unwrap();
 
         assert!(message.as_bytes() == &decrypted_msg[..]);
     }

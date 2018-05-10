@@ -38,16 +38,26 @@ impl<'a> fmt::Display for PrettyRRData<'a> {
             RRData::NS(ref c) => write!(f, "NS({})", c.to_string()),
             RRData::A(ref i) => write!(f, "A({})", i),
             RRData::AAAA(ref i) => write!(f, "AAAA({})", i),
-            RRData::SRV{
-                priority, weight, port, target
-            } => write!(f, "SRV({{priority: {}, weight: {}, port: {}, target: {}}})",
-                        priority, weight, port, target.to_string()),
-            RRData::SOA(ref s) => write!(f, "SOA({{primary_ns: {}, mailbox: {}, serial: {}, refresh: {}, retry: {}, expire: {}, minimum_ttl: {}}})",
-            s.primary_ns.to_string(), s.mailbox.to_string(), s.serial, s.refresh, s.retry, s.expire, s.minimum_ttl),
+            RRData::SRV { priority, weight, port, target }
+                => write!(f,
+                          "SRV({{priority: {}, weight: {}, port: {}, target: {}}})",
+                          priority,
+                          weight,
+                          port,
+                          target.to_string()),
+            RRData::SOA(ref s)
+                => write!(f,
+                          "SOA({{primary_ns: {}, mailbox: {}, serial: {}, refresh: {}, retry: {}, expire: {}, minimum_ttl: {}}})",
+                          s.primary_ns.to_string(),
+                          s.mailbox.to_string(),
+                          s.serial,
+                          s.refresh,
+                          s.retry,
+                          s.expire,
+                          s.minimum_ttl),
             RRData::PTR(ref p) => write!(f, "PTR({})", p.to_string()),
-            RRData::MX{
-                preference, exchange
-            } => write!(f, "MX({{preference: {}, exchange: {}}})", preference, exchange.to_string()),
+            RRData::MX { preference, exchange }
+                => write!(f, "MX({{preference: {}, exchange: {}}})", preference, exchange.to_string()),
             RRData::TXT(t) => write!(f, "TXT({})", t),
             RRData::Unknown(u) => write!(f, "Unknown({:?})", u),
         }

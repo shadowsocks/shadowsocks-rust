@@ -19,12 +19,12 @@ use std::io::{self, Write};
 
 use clap::{App, Arg};
 
-use env_logger::Builder;
 use env_logger::fmt::Formatter;
+use env_logger::Builder;
 use log::{LevelFilter, Record};
 
-use shadowsocks::{run_server, Config, ConfigType, ServerAddr, ServerConfig};
 use shadowsocks::plugin::PluginConfig;
+use shadowsocks::{run_server, Config, ConfigType, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -129,18 +129,16 @@ fn main() {
 
     let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => {
-            match Config::load_from_file(cpath, ConfigType::Server) {
-                Ok(cfg) => {
-                    has_provided_config = true;
-                    cfg
-                }
-                Err(err) => {
-                    error!("{:?}", err);
-                    return;
-                }
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Server) {
+            Ok(cfg) => {
+                has_provided_config = true;
+                cfg
             }
-        }
+            Err(err) => {
+                error!("{:?}", err);
+                return;
+            }
+        },
         None => Config::new(),
     };
 

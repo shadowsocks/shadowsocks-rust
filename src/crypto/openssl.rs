@@ -2,8 +2,8 @@
 
 use std::convert::From;
 
-use crypto::{CipherResult, CipherType, StreamCipher};
 use crypto::cipher;
+use crypto::{CipherResult, CipherType, StreamCipher};
 
 use crypto::CryptoMode;
 
@@ -28,8 +28,7 @@ impl OpenSSLCrypto {
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
             CipherType::Rc4 => symm::Cipher::rc4(),
-            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet",
-                        cipher_type),
+            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
         };
 
         // Panic if error occurs
@@ -81,8 +80,8 @@ impl OpenSSLCrypto {
 /// *Note: This behavior works just the same as the official version of shadowsocks.*
 ///
 /// ```rust
-/// use shadowsocks::crypto::{CipherType, CryptoMode, StreamCipher};
 /// use shadowsocks::crypto::openssl::OpenSSLCipher;
+/// use shadowsocks::crypto::{CipherType, CryptoMode, StreamCipher};
 ///
 /// let method = CipherType::Aes128Cfb;
 ///

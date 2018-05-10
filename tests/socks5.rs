@@ -2,8 +2,8 @@ extern crate env_logger;
 extern crate futures;
 extern crate log;
 extern crate shadowsocks;
-extern crate tokio_io;
 extern crate tokio;
+extern crate tokio_io;
 
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::thread;
@@ -12,11 +12,11 @@ use std::time::Duration;
 use futures::Future;
 use tokio_io::io::{flush, read_to_end, write_all};
 
-use shadowsocks::{run_local, run_server};
 use shadowsocks::config::{Config, ServerConfig};
 use shadowsocks::crypto::CipherType;
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::relay::tcprelay::client::Socks5Client;
+use shadowsocks::{run_local, run_server};
 
 pub struct Socks5TestServer {
     local_addr: SocketAddr,

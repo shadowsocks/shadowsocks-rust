@@ -131,18 +131,16 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => {
-            match Config::load_from_file(cpath, ConfigType::Local) {
-                Ok(cfg) => {
-                    has_provided_config = true;
-                    cfg
-                }
-                Err(err) => {
-                    error!("{:?}", err);
-                    return;
-                }
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+            Ok(cfg) => {
+                has_provided_config = true;
+                cfg
             }
-        }
+            Err(err) => {
+                error!("{:?}", err);
+                return;
+            }
+        },
         None => Config::new(),
     };
 

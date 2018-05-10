@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use subprocess::{Exec, Popen};
 use subprocess::Result as PopenResult;
+use subprocess::{Exec, Popen};
 
 use config::ServerAddr;
 
@@ -46,16 +46,12 @@ pub fn start_plugin(plugin: &PluginConfig,
     }
 
     let cmd = match mode {
-        PluginMode::Client => {
-            cmd.arg("--dest").arg(remote.to_string())
-               .arg("client")
-               .arg(local.to_string())
-        }
-        PluginMode::Server => {
-            cmd.arg("--dest").arg(local.to_string())
-               .arg("server")
-               .arg(remote.to_string())
-        }
+        PluginMode::Client => cmd.arg("--dest").arg(remote.to_string())
+                                 .arg("client")
+                                 .arg(local.to_string()),
+        PluginMode::Server => cmd.arg("--dest").arg(local.to_string())
+                                 .arg("server")
+                                 .arg(remote.to_string()),
     };
 
     cmd.popen()

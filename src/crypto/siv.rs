@@ -4,10 +4,10 @@ use std::ptr;
 
 use miscreant::aead::{Aes128PmacSiv, Aes256PmacSiv, Algorithm};
 
-use crypto::{AeadDecryptor, AeadEncryptor};
-use crypto::{CipherResult, CipherType};
 use crypto::aead::{increase_nonce, make_skey};
 use crypto::cipher::Error;
+use crypto::{AeadDecryptor, AeadEncryptor};
+use crypto::{CipherResult, CipherType};
 
 use bytes::{BufMut, BytesMut};
 

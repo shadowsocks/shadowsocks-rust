@@ -209,15 +209,13 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => {
-                match last_err {
-                    None => {
-                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                        Err(err)
-                    }
-                    Some(err) => Err(err),
+            TcpStreamConnect::Connect { last_err, .. } => match last_err {
+                None => {
+                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                    Err(err)
                 }
-            }
+                Some(err) => Err(err),
+            },
         }
     }
 }

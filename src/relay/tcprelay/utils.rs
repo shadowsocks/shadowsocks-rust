@@ -52,11 +52,13 @@ impl<R, W> CopyTimeout<R, W>
     fn try_poll_timeout(&mut self) -> io::Result<()> {
         match self.timer.as_mut() {
             None => Ok(()),
-            Some(t) => match t.poll() {
-                Err(err) => panic!("Failed to poll on timer, err: {}", err),
-                Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                Ok(Async::NotReady) => Ok(()),
-            },
+            Some(t) => {
+                match t.poll() {
+                    Err(err) => panic!("Failed to poll on timer, err: {}", err),
+                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+                    Ok(Async::NotReady) => Ok(()),
+                }
+            }
         }
     }
 

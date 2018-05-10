@@ -3,7 +3,7 @@
 //! You have to provide all needed configuration attributes via command line parameters,
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
-//! 
+//!
 
 extern crate clap;
 extern crate env_logger;
@@ -18,12 +18,12 @@ use std::env;
 use std::io::{self, Write};
 use std::net::SocketAddr;
 
-use env_logger::Builder;
 use env_logger::fmt::Formatter;
+use env_logger::Builder;
 use log::{LevelFilter, Record};
 
-use shadowsocks::{run_local, Config, ConfigType, ServerAddr, ServerConfig};
 use shadowsocks::plugin::PluginConfig;
+use shadowsocks::{run_local, Config, ConfigType, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -148,18 +148,16 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => {
-            match Config::load_from_file(cpath, ConfigType::Local) {
-                Ok(cfg) => {
-                    has_provided_config = true;
-                    cfg
-                }
-                Err(err) => {
-                    error!("{:?}", err);
-                    return;
-                }
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+            Ok(cfg) => {
+                has_provided_config = true;
+                cfg
             }
-        }
+            Err(err) => {
+                error!("{:?}", err);
+                return;
+            }
+        },
         None => Config::new(),
     };
 
@@ -201,8 +199,7 @@ fn main() {
 
     let has_provided_local_config = match matches.value_of("LOCAL_ADDR") {
         Some(local_addr) => {
-            let local_addr: SocketAddr = local_addr.parse()
-                                                   .expect("`local-addr` is not a valid IP address");
+            let local_addr: SocketAddr = local_addr.parse().expect("`local-addr` is not a valid IP address");
 
             config.local = Some(local_addr);
             true

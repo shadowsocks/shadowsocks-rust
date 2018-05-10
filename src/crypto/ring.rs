@@ -5,10 +5,10 @@ use std::ptr;
 
 use ring::aead::{open_in_place, seal_in_place, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey};
 
-use crypto::{AeadDecryptor, AeadEncryptor};
-use crypto::{CipherResult, CipherType};
 use crypto::aead::{increase_nonce, make_skey};
 use crypto::cipher::Error;
+use crypto::{AeadDecryptor, AeadEncryptor};
+use crypto::{CipherResult, CipherType};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -52,13 +52,16 @@ impl RingAeadCipher {
 
     fn new_variant(t: CipherType, key: &[u8], nonce: &[u8], is_seal: bool) -> RingAeadCryptoVariant {
         macro_rules! seal_or_open {
-            ( $item:ident, $key:ident, $crypt:ident ) => {
+            ($item:ident, $key:ident, $crypt:ident) => {
                 RingAeadCryptoVariant::$item($key::new(&$crypt, key).unwrap(), Bytes::from(nonce))
             };
-            ( $crypt:ident ) => {
-                if is_seal { seal_or_open!(Seal, SealingKey, $crypt) }
-                else { seal_or_open!(Open, OpeningKey, $crypt) }
-            }
+            ($crypt:ident) => {
+                if is_seal {
+                    seal_or_open!(Seal, SealingKey, $crypt)
+                } else {
+                    seal_or_open!(Open, OpeningKey, $crypt)
+                }
+            };
         }
 
         match t {

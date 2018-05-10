@@ -138,12 +138,10 @@ impl FromStr for ServerAddr {
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
-                    (Some(dn), Some(port)) => {
-                        match port.parse::<u16>() {
-                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
-                            Err(..) => Err(ServerAddrError),
-                        }
-                    }
+                    (Some(dn), Some(port)) => match port.parse::<u16>() {
+                        Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                        Err(..) => Err(ServerAddrError),
+                    },
                     _ => Err(ServerAddrError),
                 }
             }
@@ -287,14 +285,12 @@ impl ServerConfig {
 
         let user_info = parsed.username();
         let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
-            Ok(account) => {
-                match String::from_utf8(account) {
-                    Ok(ac) => ac,
-                    Err(..) => {
-                        return Err(UrlParseError::InvalidAuthInfo);
-                    }
+            Ok(account) => match String::from_utf8(account) {
+                Ok(ac) => ac,
+                Err(..) => {
+                    return Err(UrlParseError::InvalidAuthInfo);
                 }
-            }
+            },
             Err(err) => {
                 error!("Failed to parse UserInfo with Base64, err: {}", err);
                 return Err(UrlParseError::InvalidUserInfo);
@@ -679,17 +675,15 @@ impl Config {
 
                         match addr_str.parse::<Ipv4Addr>() {
                             Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => {
-                                match addr_str.parse::<Ipv6Addr>() {
-                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                    Err(..) => {
-                                        return Err(Error::new(ErrorKind::Malformed,
-                                                              "`local_address` is not a valid IP \
-                                                               address",
-                                                              None))
-                                    }
+                            Err(..) => match addr_str.parse::<Ipv6Addr>() {
+                                Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
+                                Err(..) => {
+                                    return Err(Error::new(ErrorKind::Malformed,
+                                                          "`local_address` is not a valid IP \
+                                                           address",
+                                                          None))
                                 }
-                            }
+                            },
                         }
                     }
                     None => None,
@@ -739,15 +733,17 @@ impl Config {
                     let err = Error::new(ErrorKind::Malformed, "`dns` should be string", None);
                     return Err(err);
                 }
-                Some(dns) => match dns.parse::<IpAddr>() {
-                    Err(..) => {
-                        let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
-                        return Err(err);
+                Some(dns) => {
+                    match dns.parse::<IpAddr>() {
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
+                            return Err(err);
+                        }
+                        Ok(addr) => {
+                            config.dns = SocketAddr::new(addr, 53);
+                        }
                     }
-                    Ok(addr) => {
-                        config.dns = SocketAddr::new(addr, 53);
-                    }
-                },
+                }
             }
         }
 

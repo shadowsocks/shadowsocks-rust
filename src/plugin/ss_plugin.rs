@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use subprocess::{Exec, NullFile, Popen};
 use subprocess::Result as PopenResult;
+use subprocess::{Exec, NullFile, Popen};
 
 use config::ServerAddr;
 
@@ -12,10 +12,7 @@ pub fn start_plugin(plugin: &PluginConfig,
                     local: &SocketAddr,
                     _mode: PluginMode)
                     -> PopenResult<Popen> {
-    trace!("Start plugin \"{:?}\" remote: {}, local: {}",
-           plugin,
-           remote,
-           local);
+    trace!("Start plugin \"{:?}\" remote: {}, local: {}", plugin, remote, local);
 
     let mut exec = Exec::cmd(&plugin.plugin).env("SS_REMOTE_HOST", remote.host())
                                             .env("SS_REMOTE_PORT", remote.port().to_string())

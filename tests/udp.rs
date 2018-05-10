@@ -4,8 +4,8 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate shadowsocks;
-extern crate tokio_io;
 extern crate tokio;
+extern crate tokio_io;
 
 use std::io::Cursor;
 use std::net::SocketAddr;
@@ -17,11 +17,11 @@ use bytes::{BufMut, BytesMut};
 use futures::Future;
 use tokio_io::io::read_to_end;
 
-use shadowsocks::{run_local, run_server};
 use shadowsocks::config::{Config, ServerConfig};
 use shadowsocks::crypto::CipherType;
 use shadowsocks::relay::socks5::{Address, UdpAssociateHeader};
 use shadowsocks::relay::tcprelay::client::Socks5Client;
+use shadowsocks::{run_local, run_server};
 
 const SERVER_ADDR: &'static str = "127.0.0.1:8093";
 const LOCAL_ADDR: &'static str = "127.0.0.1:8291";
@@ -132,8 +132,7 @@ fn udp_relay() {
     println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
     let cur = Cursor::new(buf[..amt].to_vec());
-    let (cur, header) = UdpAssociateHeader::read_from(cur).wait()
-                                                          .expect("Invalid UDP header");
+    let (cur, header) = UdpAssociateHeader::read_from(cur).wait().expect("Invalid UDP header");
     println!("{:?}", header);
     let header_len = cur.position() as usize;
     let buf = cur.into_inner();

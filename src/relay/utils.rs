@@ -1,8 +1,8 @@
 use std::io;
 
 use futures::{Async, Future, Poll};
-use tokio_io::AsyncWrite;
 use tokio_io::io::{write_all, WriteAll};
+use tokio_io::AsyncWrite;
 
 /// Write all bytes without returning the internal bytes buffer
 pub struct WriteBytes<W, B>
