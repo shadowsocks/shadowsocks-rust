@@ -186,7 +186,7 @@ fn handle_l2r(config: Arc<Config>,
                                                                                   "parse DNS packet failed")
                                                                })?;
 
-                              let (ref socket, ref svr_cfg, svr_addr) = &server[server_idx % server.len()];
+                              let (ref socket, ref svr_cfg, svr_addr) = server[server_idx % server.len()];
                               let (ni, _) = server_idx.overflowing_add(1);
                               server_idx = ni;
 
