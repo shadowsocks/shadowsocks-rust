@@ -10,6 +10,7 @@ use dns_parser::{Packet, RRData};
 use futures::future::join_all;
 use futures::{self, Future, Stream};
 use lru_cache::LruCache;
+use tokio;
 use tokio::net::UdpSocket;
 use tokio_io::IoFuture;
 
@@ -180,7 +181,7 @@ fn handle_l2r(config: Arc<Config>,
         PacketStream::new(l).for_each(move |(payload, src)| {
             let server = server.clone();
             let config = config.clone();
-            futures::lazy(move || {
+            let pkt_fut = futures::lazy(move || {
                               let pkt = Packet::parse(&payload[..]).map_err(|err| {
                                                                    error!("Failed to parse DNS payload, err: {}", err);
                                                                    io::Error::new(io::ErrorKind::Other,
@@ -211,7 +212,18 @@ fn handle_l2r(config: Arc<Config>,
                                                       SendDgramRc::new(socket, send_payload, svr_addr).map(move |_| {
                                                           GLOBAL_QUERY_ADDR.lock().unwrap().insert(id, (src, Instant::now()));
                                                       })
-                                                  })
+                                                  });
+            tokio::spawn(pkt_fut.then(|res| {
+                match res {
+                    Ok(..) => Ok(()),
+                    Err(err) => {
+                        error!("Failed to handle local -> remote packet, err: {}", err);
+                        Err(())
+                    }
+                }
+            }));
+
+            Ok(())
         });
     boxed_future(fut)
 }
@@ -220,7 +232,7 @@ fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>
     let fut = PacketStream::new(r).for_each(move |(payload, src)| {
         let l = l.clone();
         let svr_cfg = svr_cfg.clone();
-        futures::lazy(move || {
+        let pkt_fut = futures::lazy(move || {
             decrypt_payload(svr_cfg.method(), svr_cfg.key(), &payload)
         }).and_then(move |payload| {
             Address::read_from(Cursor::new(payload))
@@ -258,8 +270,19 @@ fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>
                 }
                 None => boxed_future(futures::finished(()))
             }
-            
-        })
+        });
+
+        tokio::spawn(pkt_fut.then(|res| {
+            match res {
+                Ok(..) => Ok(()),
+                Err(err) => {
+                    error!("Failed to handle local <- remote packet, err: {}", err);
+                    Err(())
+                }
+            }
+        }));
+
+        Ok(())
     });
 
     boxed_future(fut)
