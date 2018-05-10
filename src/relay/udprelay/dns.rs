@@ -4,6 +4,7 @@ use std::fmt;
 use std::io::{self, Cursor};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use dns_parser::{Packet, RRData};
 use futures::future::join_all;
@@ -163,7 +164,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
 }
 
 lazy_static! {
-    static ref GLOBAL_QUERY_ADDR: Mutex<LruCache<u16, SocketAddr>> = Mutex::new(LruCache::new(1024));
+    static ref GLOBAL_QUERY_ADDR: Mutex<LruCache<u16, (SocketAddr, Instant)>> = Mutex::new(LruCache::new(1024));
 }
 
 fn handle_l2r(config: Arc<Config>,
@@ -202,13 +203,13 @@ fn handle_l2r(config: Arc<Config>,
                               let id = pkt.header.id;
                               encrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf).map(move |send_payload| {
                                                                                              (socket,
-                                                                                             *svr_addr,
+                                                                                             svr_addr,
                                                                                              send_payload,
                                                                                              id)
                                                                                          })
                           }).and_then(move |(socket, svr_addr, send_payload, id)| {
                                                       SendDgramRc::new(socket, send_payload, svr_addr).map(move |_| {
-                                                          GLOBAL_QUERY_ADDR.lock().unwrap().insert(id, src);
+                                                          GLOBAL_QUERY_ADDR.lock().unwrap().insert(id, (src, Instant::now()));
                                                       })
                                                   })
         });
@@ -236,8 +237,8 @@ fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>
             let payload = payload[pos..].to_vec();
 
             match GLOBAL_QUERY_ADDR.lock().unwrap().remove(&pkt.header.id) {
-                Some(cli_addr) => {
-                    debug!("DNS {} <- {} {}", cli_addr, src, PrettyPacket::new(&pkt));
+                Some((cli_addr, start_time)) => {
+                    debug!("DNS {} <- {} {} elapsed: {:?}", cli_addr, src, PrettyPacket::new(&pkt), Instant::now() - start_time);
                     trace!("DETAIL {} <- {} {:?}", cli_addr, src, pkt);
 
                     Ok(Some((cli_addr, payload)))
