@@ -1,10 +1,11 @@
 //! UDP DNS relay
 
+use std::fmt;
 use std::io::{self, Cursor};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
-use dns_parser::Packet;
+use dns_parser::{Packet, RRData};
 use futures::future::join_all;
 use futures::{self, Future, Stream};
 use lru_cache::LruCache;
@@ -17,6 +18,95 @@ use config::{Config, ServerAddr, ServerConfig};
 use relay::boxed_future;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
+
+struct PrettyRRData<'a> {
+    data: &'a RRData<'a>,
+}
+
+impl<'a> PrettyRRData<'a> {
+    pub fn new(d: &'a RRData<'a>) -> PrettyRRData<'a> {
+        PrettyRRData { data: d }
+    }
+}
+
+impl<'a> fmt::Display for PrettyRRData<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.data {
+            RRData::CNAME(ref c) => write!(f, "CNAME({})", c.to_string()),
+            RRData::NS(ref c) => write!(f, "NS({})", c.to_string()),
+            RRData::A(ref i) => write!(f, "A({})", i),
+            RRData::AAAA(ref i) => write!(f, "AAAA({})", i),
+            RRData::SRV{
+                priority, weight, port, target
+            } => write!(f, "SRV({{priority: {}, weight: {}, port: {}, target: {}}})",
+                        priority, weight, port, target.to_string()),
+            RRData::SOA(ref s) => write!(f, "SOA({{primary_ns: {}, mailbox: {}, serial: {}, refresh: {}, retry: {}, expire: {}, minimum_ttl: {}}})",
+            s.primary_ns.to_string(), s.mailbox.to_string(), s.serial, s.refresh, s.retry, s.expire, s.minimum_ttl),
+            RRData::PTR(ref p) => write!(f, "PTR({})", p.to_string()),
+            RRData::MX{
+                preference, exchange
+            } => write!(f, "MX({{preference: {}, exchange: {}}})", preference, exchange.to_string()),
+            RRData::TXT(t) => write!(f, "TXT({})", t),
+            RRData::Unknown(u) => write!(f, "Unknown({:?})", u),
+        }
+    }
+}
+
+struct PrettyPacket<'a> {
+    pkt: &'a Packet<'a>,
+}
+
+impl<'a> PrettyPacket<'a> {
+    pub fn new(pkt: &'a Packet<'a>) -> PrettyPacket<'a> {
+        PrettyPacket { pkt: pkt }
+    }
+}
+
+impl<'a> fmt::Display for PrettyPacket<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,
+               "Packet (id={} opcode={:?})",
+               self.pkt.header.id, self.pkt.header.opcode)?;
+
+        if !self.pkt.questions.is_empty() {
+            write!(f, " QUESTION[")?;
+            for q in &self.pkt.questions {
+                write!(f, "{}, ", q.qname.to_string())?;
+            }
+            write!(f, "]")?;
+        }
+
+        if !self.pkt.answers.is_empty() {
+            write!(f, " ANSWER[")?;
+            for a in &self.pkt.answers {
+                write!(f, "{}:{}, ", a.name.to_string(), PrettyRRData::new(&a.data))?;
+            }
+            write!(f, "]")?;
+        }
+
+        if !self.pkt.nameservers.is_empty() {
+            write!(f, " NAMESERVERS[")?;
+            for n in &self.pkt.nameservers {
+                write!(f, "{}:{}, ", n.name.to_string(), PrettyRRData::new(&n.data))?;
+            }
+            write!(f, "]")?;
+        }
+
+        if !self.pkt.additional.is_empty() {
+            write!(f, " ADDITIONAL[")?;
+            for n in &self.pkt.additional {
+                write!(f, "{}:{}, ", n.name.to_string(), PrettyRRData::new(&n.data))?;
+            }
+            write!(f, "]")?;
+        }
+
+        if let Some(ref opt) = self.pkt.opt {
+            write!(f, " OPT[{:?}]", opt)?;
+        }
+
+        Ok(())
+    }
+}
 
 /// Starts a UDP DNS server
 pub fn run(config: Arc<Config>) -> IoFuture<()> {
@@ -96,11 +186,12 @@ fn handle_l2r(config: Arc<Config>,
                                                                                   "parse DNS packet failed")
                                                                })?;
 
-                              debug!("DNS QUERY id={} src={} {:?}", pkt.header.id, src, pkt);
-
                               let (ref socket, ref svr_cfg, svr_addr) = &server[server_idx % server.len()];
                               let (ni, _) = server_idx.overflowing_add(1);
                               server_idx = ni;
+
+                              debug!("DNS {} -> {} {}", src, svr_cfg.addr(), PrettyPacket::new(&pkt));
+                              trace!("DETAIL {} -> {} {:?}", src, svr_cfg.addr(), pkt);
 
                               let mut buf = Vec::new();
                               Address::SocketAddress(config.dns).write_to_buf(&mut buf);
@@ -144,20 +235,29 @@ fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>
 
             let payload = payload[pos..].to_vec();
 
-            debug!("DNS RESPONSE id={} server={} {:?}", pkt.header.id, src, pkt);
-
-            Ok((pkt.header.id, payload))
-        }).and_then(move |(id, payload)| {
-            match GLOBAL_QUERY_ADDR.lock().unwrap().remove(&id) {
+            match GLOBAL_QUERY_ADDR.lock().unwrap().remove(&pkt.header.id) {
                 Some(cli_addr) => {
+                    debug!("DNS {} <- {} {}", cli_addr, src, PrettyPacket::new(&pkt));
+                    trace!("DETAIL {} <- {} {:?}", cli_addr, src, pkt);
+
+                    Ok(Some((cli_addr, payload)))
+                }
+                None => {
+                    error!("DNS received packet id={} opcode={:?} but found no local endpoint",
+                           pkt.header.id, pkt.header.opcode);
+                    Ok(None)
+                }
+            }
+        }).and_then(move |opt| {
+            match opt {
+                Some((cli_addr, payload)) => {
                     let f = SendDgramRc::new(l, payload, cli_addr)
                         .map(|_| ());
                     boxed_future(f)
                 }
-                None => {
-                    boxed_future(futures::finished(()))
-                }
+                None => boxed_future(futures::finished(()))
             }
+            
         })
     });
 
