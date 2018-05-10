@@ -2,6 +2,7 @@
 
 use futures::Future;
 
+pub mod dns;
 mod dns_resolver;
 mod loadbalancing;
 pub mod local;

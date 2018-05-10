@@ -182,9 +182,11 @@ $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-serve
 
 1. `ssurl` is for encoding and decoding ShadowSocks URLs (SIP002). Example:
 
-```plain
-ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
-```
+    ```plain
+    ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
+    ```
+
+2. `ssdns` is a DNS server which will do DNS queries via ShadowSocks' servers. Currently it only supports UDP DNS.
 
 ## Notes
 

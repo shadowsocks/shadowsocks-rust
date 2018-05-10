@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.7.0-alpha.2"
+version = "1.7.0-alpha.3"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -22,6 +22,10 @@ path = "src/bin/server.rs"
 [[bin]]
 name = "ssurl"
 path = "src/bin/ssurl.rs"
+
+[[bin]]
+name = "ssdns"
+path = "src/bin/ssdns.rs"
 
 [profile.release]
 lto = true
@@ -58,6 +62,8 @@ byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
 futures-cpupool = "0.1"
 miscreant = { version = "0.3", optional = true }
+lru-cache = "0.1"
+dns-parser = "0.7"
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.2"

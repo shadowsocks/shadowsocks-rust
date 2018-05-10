@@ -96,6 +96,8 @@ extern crate serde_urlencoded;
 extern crate subprocess;
 #[macro_use]
 extern crate tokio_io;
+extern crate dns_parser;
+extern crate lru_cache;
 extern crate tokio;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
@@ -106,6 +108,7 @@ extern crate url;
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub use self::config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig};
+pub use self::relay::dns::run as run_dns;
 pub use self::relay::local::run as run_local;
 pub use self::relay::server::run as run_server;
 pub use self::relay::tcprelay::client::Socks5Client;

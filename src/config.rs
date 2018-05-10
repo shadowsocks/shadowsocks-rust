@@ -40,7 +40,7 @@
 //! ```
 //!
 //! These defined server will be used with a load balancing algorithm.
-//! 
+//!
 
 use std::collections::HashSet;
 use std::convert::From;
@@ -48,8 +48,8 @@ use std::default::Default;
 use std::error;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::OpenOptions;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::net::IpAddr;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::option::Option;
 use std::path::Path;
 use std::str::FromStr;
@@ -138,10 +138,12 @@ impl FromStr for ServerAddr {
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
-                    (Some(dn), Some(port)) => match port.parse::<u16>() {
-                        Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
-                        Err(..) => Err(ServerAddrError),
-                    },
+                    (Some(dn), Some(port)) => {
+                        match port.parse::<u16>() {
+                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                            Err(..) => Err(ServerAddrError),
+                        }
+                    }
                     _ => Err(ServerAddrError),
                 }
             }
@@ -177,23 +179,20 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     /// Creates a new ServerConfig
-    pub fn new(
-        addr: ServerAddr,
-        pwd: String,
-        method: CipherType,
-        timeout: Option<Duration>,
-        plugin: Option<PluginConfig>,
-    ) -> ServerConfig {
+    pub fn new(addr: ServerAddr,
+               pwd: String,
+               method: CipherType,
+               timeout: Option<Duration>,
+               plugin: Option<PluginConfig>)
+               -> ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
         trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
-        ServerConfig {
-            addr: addr,
-            password: pwd,
-            method: method,
-            timeout: timeout,
-            enc_key: enc_key,
-            plugin: plugin,
-        }
+        ServerConfig { addr: addr,
+                       password: pwd,
+                       method: method,
+                       timeout: timeout,
+                       enc_key: enc_key,
+                       plugin: plugin, }
     }
 
     /// Create a basic config
@@ -288,12 +287,14 @@ impl ServerConfig {
 
         let user_info = parsed.username();
         let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
-            Ok(account) => match String::from_utf8(account) {
-                Ok(ac) => ac,
-                Err(..) => {
-                    return Err(UrlParseError::InvalidAuthInfo);
+            Ok(account) => {
+                match String::from_utf8(account) {
+                    Ok(ac) => ac,
+                    Err(..) => {
+                        return Err(UrlParseError::InvalidAuthInfo);
+                    }
                 }
-            },
+            }
             Err(err) => {
                 error!("Failed to parse UserInfo with Base64, err: {}", err);
                 return Err(UrlParseError::InvalidUserInfo);
@@ -341,10 +342,8 @@ impl ServerConfig {
                 match vsp.next() {
                     None => {}
                     Some(p) => {
-                        plugin = Some(PluginConfig {
-                            plugin: p.to_owned(),
-                            plugin_opt: vsp.next().map(ToOwned::to_owned),
-                        })
+                        plugin = Some(PluginConfig { plugin: p.to_owned(),
+                                                     plugin_opt: vsp.next().map(ToOwned::to_owned), })
                     }
                 }
             }
@@ -465,6 +464,7 @@ pub struct Config {
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
     pub forbidden_ip: HashSet<IpAddr>,
+    pub dns: SocketAddr,
 }
 
 impl Default for Config {
@@ -492,47 +492,37 @@ pub struct Error {
 
 impl Error {
     pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
-        Error {
-            kind: kind,
-            desc: desc,
-            detail: detail,
-        }
+        Error { kind: kind,
+                desc: desc,
+                detail: detail, }
     }
 }
 
 macro_rules! impl_from {
-    ($error:ty,$kind:expr,$desc:expr) => (
+    ($error:ty, $kind:expr, $desc:expr) => {
         impl From<$error> for Error {
-            fn from(err:$error) -> Self {
-                Error::new($kind,$desc,Some(format!("{:?}",err)))
+            fn from(err: $error) -> Self {
+                Error::new($kind, $desc, Some(format!("{:?}", err)))
             }
         }
-    )
+    };
 }
 
-impl_from!(
-    ::std::io::Error,
-    ErrorKind::IoError,
-    "error while reading file"
-);
-impl_from!(
-    serde_json::Error,
-    ErrorKind::JsonParsingError,
-    "Json parse error"
-);
+impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
+impl_from!(serde_json::Error, ErrorKind::JsonParsingError, "Json parse error");
 
 macro_rules! except {
-    ($expr:expr,$kind:expr,$desc:expr) => (except!($expr,$kind,$desc,None));
-    ($expr:expr,$kind:expr,$desc:expr,$detail:expr) => (
+    ($expr:expr, $kind:expr, $desc:expr) => {
+        except!($expr, $kind, $desc, None)
+    };
+    ($expr:expr, $kind:expr, $desc:expr, $detail:expr) => {
         match $expr {
             ::std::option::Option::Some(val) => val,
             ::std::option::Option::None => {
-                return ::std::result::Result::Err(
-                    $crate::config::Error::new($kind,$desc,$detail)
-                )
+                return ::std::result::Result::Err($crate::config::Error::new($kind, $desc, $detail))
             }
         }
-    )
+    };
 }
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -546,94 +536,78 @@ impl Debug for Error {
 impl Config {
     /// Creates an empty configuration
     pub fn new() -> Config {
-        Config {
-            server: Vec::new(),
-            local: None,
-            enable_udp: false,
-            forbidden_ip: HashSet::new(),
-        }
+        Config { server: Vec::new(),
+                 local: None,
+                 enable_udp: false,
+                 forbidden_ip: HashSet::new(),
+                 dns: "8.8.8.8:53".parse::<SocketAddr>().unwrap(), }
     }
 
     fn parse_server(server: &Map<String, Value>) -> Result<ServerConfig, Error> {
-        let method = server
-            .get("method")
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
-            .and_then(|method_o| {
-                method_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`method` should be a string", None))
-            })
-            .and_then(|method_str| {
-                method_str.parse::<CipherType>().map_err(|_| {
-                    Error::new(
-                        ErrorKind::Invalid,
-                        "not supported method",
-                        Some(format!("`{}` is not a supported method", method_str)),
-                    )
-                })
-            })?;
+        let method = server.get("method")
+                           .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
+                           .and_then(|method_o| {
+                                         method_o.as_str().ok_or_else(|| {
+                                                                          Error::new(ErrorKind::Malformed,
+                                                                                     "`method` should be a string",
+                                                                                     None)
+                                                                      })
+                                     })
+                           .and_then(|method_str| {
+                                         method_str.parse::<CipherType>().map_err(|_| {
+                                             Error::new(ErrorKind::Invalid,
+                                                        "not supported method",
+                                                        Some(format!("`{}` is not a supported method", method_str)))
+                                         })
+                                     })?;
 
-        let port = server
-            .get("port")
-            .or_else(|| server.get("server_port"))
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::MissingField,
-                    "need to specify a server port",
-                    None,
-                )
-            })
-            .and_then(|port_o| {
-                port_o
-                    .as_u64()
-                    .map(|u| u as u16)
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`port` should be an integer", None))
-            })?;
+        let port = server.get("port")
+                         .or_else(|| server.get("server_port"))
+                         .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server port", None))
+                         .and_then(|port_o| {
+                                       port_o.as_u64().map(|u| u as u16).ok_or_else(|| {
+                                                                                        Error::new(ErrorKind::Malformed,
+                                                                                         "`port` should be an integer",
+                                                                                         None)
+                                                                                    })
+                                   })?;
 
-        let addr = server
-            .get("address")
-            .or_else(|| server.get("server"))
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::MissingField,
-                    "need to specify a server address",
-                    None,
-                )
-            })
-            .and_then(|addr_o| {
-                addr_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`address` should be a string", None))
-            })
-            .and_then(|addr_str| {
-                addr_str
-                    .parse::<Ipv4Addr>()
-                    .map(|v4| ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))))
-                    .or_else(|_| {
-                        addr_str
+        let addr = server.get("address")
+                         .or_else(|| server.get("server"))
+                         .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server address", None))
+                         .and_then(|addr_o| {
+                                       addr_o.as_str().ok_or_else(|| {
+                                                                      Error::new(ErrorKind::Malformed,
+                                                                                 "`address` should be a string",
+                                                                                 None)
+                                                                  })
+                                   })
+                         .and_then(|addr_str| {
+                             addr_str.parse::<Ipv4Addr>()
+                                     .map(|v4| ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))))
+                                     .or_else(|_| {
+                                         addr_str
                             .parse::<Ipv6Addr>()
                             .map(|v6| ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))))
-                    })
-                    .or_else(|_| Ok(ServerAddr::DomainName(addr_str.to_string(), port)))
-            })?;
+                                     })
+                                     .or_else(|_| Ok(ServerAddr::DomainName(addr_str.to_string(), port)))
+                         })?;
 
-        let password = server
-            .get("password")
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
-            .and_then(|pwd_o| {
-                pwd_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`password` should be a string", None))
-                    .map(|s| s.to_string())
-            })?;
+        let password = server.get("password")
+                             .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
+                             .and_then(|pwd_o| {
+                                           pwd_o.as_str()
+                                                .ok_or_else(|| {
+                                                                Error::new(ErrorKind::Malformed,
+                                                                           "`password` should be a string",
+                                                                           None)
+                                                            })
+                                                .map(|s| s.to_string())
+                                       })?;
 
         let timeout = match server.get("timeout") {
             Some(t) => {
-                let val = t.as_u64().ok_or(Error::new(
-                    ErrorKind::Malformed,
-                    "`timeout` should be an integer",
-                    None,
-                ))?;
+                let val = t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
                 Some(Duration::from_secs(val))
             }
             None => None,
@@ -641,27 +615,23 @@ impl Config {
 
         let plugin = match server.get("plugin") {
             Some(p) => {
-                let plugin = p.as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`plugin` should be a string", None))?;
+                let plugin =
+                    p.as_str().ok_or_else(|| Error::new(ErrorKind::Malformed, "`plugin` should be a string", None))?;
 
                 let opt = match server.get("plugin_opts") {
                     None => None,
                     Some(o) => {
                         let o = o.as_str().ok_or_else(|| {
-                            Error::new(
-                                ErrorKind::Malformed,
-                                "`plugin_opts` should be a string",
-                                None,
-                            )
-                        })?;
+                                                           Error::new(ErrorKind::Malformed,
+                                                                      "`plugin_opts` should be a string",
+                                                                      None)
+                                                       })?;
                         Some(o.to_owned())
                     }
                 };
 
-                Some(PluginConfig {
-                    plugin: plugin.to_owned(),
-                    plugin_opt: opt,
-                })
+                Some(PluginConfig { plugin: plugin.to_owned(),
+                                    plugin_opt: opt, })
             }
             None => None,
         };
@@ -673,11 +643,9 @@ impl Config {
         let mut config = Config::new();
 
         if o.contains_key("servers") {
-            let server_list = o.get("servers").unwrap().as_array().ok_or(Error::new(
-                ErrorKind::Malformed,
-                "`servers` should be a list",
-                None,
-            ))?;
+            let server_list = o.get("servers").unwrap()
+                               .as_array()
+                               .ok_or(Error::new(ErrorKind::Malformed, "`servers` should be a list", None))?;
 
             for server in server_list.iter() {
                 if let Some(server) = server.as_object() {
@@ -686,7 +654,7 @@ impl Config {
                 }
             }
         } else if o.contains_key("server") && o.contains_key("server_port") && o.contains_key("password")
-            && o.contains_key("method")
+                  && o.contains_key("method")
         {
             // Traditional configuration file
             let single_server = Config::parse_server(o)?;
@@ -700,31 +668,28 @@ impl Config {
             if has_local_address && has_local_port {
                 config.local = match o.get("local_address") {
                     Some(local_addr) => {
-                        let addr_str = local_addr.as_str().ok_or(Error::new(
-                            ErrorKind::Malformed,
-                            "`local_address` should be a string",
-                            None,
-                        ))?;
+                        let addr_str = local_addr.as_str().ok_or(Error::new(ErrorKind::Malformed,
+                                                                             "`local_address` should be a string",
+                                                                             None))?;
 
-                        let port = o.get("local_port").unwrap().as_u64().ok_or(Error::new(
-                            ErrorKind::Malformed,
-                            "`local_port` should be an integer",
-                            None,
-                        ))? as u16;
+                        let port = o.get("local_port").unwrap()
+                                    .as_u64()
+                                    .ok_or(Error::new(ErrorKind::Malformed, "`local_port` should be an integer", None))?
+                                   as u16;
 
                         match addr_str.parse::<Ipv4Addr>() {
                             Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => match addr_str.parse::<Ipv6Addr>() {
-                                Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                Err(..) => {
-                                    return Err(Error::new(
-                                        ErrorKind::Malformed,
-                                        "`local_address` is not a valid IP \
-                                         address",
-                                        None,
-                                    ))
+                            Err(..) => {
+                                match addr_str.parse::<Ipv6Addr>() {
+                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
+                                    Err(..) => {
+                                        return Err(Error::new(ErrorKind::Malformed,
+                                                              "`local_address` is not a valid IP \
+                                                               address",
+                                                              None))
+                                    }
                                 }
-                            },
+                            }
                         }
                     }
                     None => None,
@@ -735,33 +700,27 @@ impl Config {
         }
 
         if let Some(forbidden_ip_conf) = o.get("forbidden_ip") {
-            let forbidden_ip_arr = forbidden_ip_conf.as_array().ok_or(Error::new(
-                ErrorKind::Malformed,
-                "`forbidden_ip` should be a list",
-                None,
-            ))?;
-            config
-                .forbidden_ip
-                .extend(forbidden_ip_arr.into_iter().filter_map(|x| {
-                    let x = match x.as_str() {
-                        Some(x) => x,
-                        None => {
-                            error!(
-                                "Forbidden IP should be a string, but found {:?}, skipping",
-                                x
-                            );
-                            return None;
-                        }
-                    };
+            let forbidden_ip_arr = forbidden_ip_conf.as_array().ok_or(Error::new(ErrorKind::Malformed,
+                                                                                  "`forbidden_ip` should be a list",
+                                                                                  None))?;
+            config.forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
+                                           let x = match x.as_str() {
+                                               Some(x) => x,
+                                               None => {
+                                                   error!("Forbidden IP should be a string, but found {:?}, skipping",
+                                                          x);
+                                                   return None;
+                                               }
+                                           };
 
-                    match x.parse::<IpAddr>() {
-                        Ok(sock) => Some(sock),
-                        Err(err) => {
-                            error!("Invalid forbidden IP {}, {:?}, skipping", x, err);
-                            None
-                        }
-                    }
-                }));
+                                           match x.parse::<IpAddr>() {
+                                               Ok(sock) => Some(sock),
+                                               Err(err) => {
+                                                   error!("Invalid forbidden IP {}, {:?}, skipping", x, err);
+                                                   None
+                                               }
+                                           }
+                                       }));
         }
 
         if let Some(udp_enable) = o.get("enable_udp") {
@@ -774,40 +733,48 @@ impl Config {
             }
         }
 
+        if let Some(dns) = o.get("dns") {
+            match dns.as_str() {
+                None => {
+                    let err = Error::new(ErrorKind::Malformed, "`dns` should be string", None);
+                    return Err(err);
+                }
+                Some(dns) => match dns.parse::<IpAddr>() {
+                    Err(..) => {
+                        let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
+                        return Err(err);
+                    }
+                    Ok(addr) => {
+                        config.dns = SocketAddr::new(addr, 53);
+                    }
+                },
+            }
+        }
+
         Ok(config)
     }
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let object = serde_json::from_str::<Value>(s)?;
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            },
-        )
+        let json_object = except!(object.as_object(),
+                                  ErrorKind::JsonParsingError,
+                                  "root is not a JsonObject");
+        Config::parse_json_object(json_object, match config_type {
+            ConfigType::Local => true,
+            ConfigType::Server => false,
+        })
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let reader = &mut OpenOptions::new().read(true).open(&Path::new(filename))?;
         let object = serde_json::from_reader::<_, Value>(reader)?;
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            },
-        )
+        let json_object = except!(object.as_object(),
+                                  ErrorKind::JsonParsingError,
+                                  "root is not a JsonObject");
+        Config::parse_json_object(json_object, match config_type {
+            ConfigType::Local => true,
+            ConfigType::Server => false,
+        })
     }
 }
 
@@ -820,14 +787,8 @@ impl Config {
             let server = &self.server[0];
             server.addr.to_json_object_old(&mut obj);
 
-            obj.insert(
-                "password".to_owned(),
-                Value::String(server.password.clone()),
-            );
-            obj.insert(
-                "method".to_owned(),
-                Value::String(server.method.to_string()),
-            );
+            obj.insert("password".to_owned(), Value::String(server.password.clone()));
+            obj.insert("method".to_owned(), Value::String(server.method.to_string()));
             if let Some(t) = server.timeout {
                 obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
             }
@@ -850,10 +811,7 @@ impl Config {
             };
 
             obj.insert("local_address".to_owned(), Value::String(ip_str));
-            obj.insert(
-                "local_port".to_owned(),
-                Value::Number(From::from(l.port() as u64)),
-            );
+            obj.insert("local_port".to_owned(), Value::Number(From::from(l.port() as u64)));
         }
 
         obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));
