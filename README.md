@@ -162,6 +162,24 @@ $ ssserver -c /path/to/shadowsocks.json
 $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
 ```
 
+DNS Local server
+
+```bash
+# Read configuration from file
+$ ssdns -c /path/to/shadowsocks.json
+
+# Pass all parameters via command line
+$ ssdns -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --dns "8.8.8.8:53"
+```
+
+For DNS relay server, you can set remote DNS server in configuration file with `dns` key in root object.
+
+```json
+{
+    "dns": "8.8.8.8:53"
+}
+```
+
 ## Supported Ciphers
 
 ### Stream Ciphers
@@ -185,8 +203,6 @@ $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-serve
     ```plain
     ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
     ```
-
-2. `ssdns` is a DNS server which will do DNS queries via ShadowSocks' servers. Currently it only supports UDP DNS.
 
 ## Notes
 

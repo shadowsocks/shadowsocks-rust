@@ -89,6 +89,10 @@ fn main() {
                  .long("server-url")
                  .takes_value(true)
                  .help("Server address in SIP002 URL"))
+        .arg(Arg::with_name("DNS")
+                .long("dns")
+                .takes_value(true)
+                .help("Remote DNS server, default is 8.8.8.8:53"))
         .get_matches();
 
     let mut log_builder = Builder::new();
@@ -131,16 +135,18 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
+        Some(cpath) => {
+            match Config::load_from_file(cpath, ConfigType::Local) {
+                Ok(cfg) => {
+                    has_provided_config = true;
+                    cfg
+                }
+                Err(err) => {
+                    error!("{:?}", err);
+                    return;
+                }
             }
-            Err(err) => {
-                error!("{:?}", err);
-                return;
-            }
-        },
+        }
         None => Config::new(),
     };
 
@@ -194,6 +200,11 @@ fn main() {
         println!("You have to specify a configuration file or pass arguments by argument list");
         println!("{}", matches.usage());
         return;
+    }
+
+    if let Some(dns) = matches.value_of("DNS") {
+        let dns_addr = dns.parse::<SocketAddr>().expect("Failed to parse `dns`");
+        config.dns = dns_addr;
     }
 
     info!("ShadowSocks DNS {}", shadowsocks::VERSION);
