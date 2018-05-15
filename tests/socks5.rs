@@ -2,7 +2,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate log;
 extern crate shadowsocks;
-extern crate tokio_core;
+extern crate tokio;
 extern crate tokio_io;
 
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -10,14 +10,13 @@ use std::thread;
 use std::time::Duration;
 
 use futures::Future;
-use tokio_core::reactor::Core;
 use tokio_io::io::{flush, read_to_end, write_all};
 
-use shadowsocks::{run_local, run_server};
 use shadowsocks::config::{Config, ServerConfig};
 use shadowsocks::crypto::CipherType;
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::relay::tcprelay::client::Socks5Client;
+use shadowsocks::{run_local, run_server};
 
 pub struct Socks5TestServer {
     local_addr: SocketAddr,
@@ -54,12 +53,12 @@ impl Socks5TestServer {
     pub fn run(&self) {
         let svr_cfg = self.config.clone();
         thread::spawn(move || {
-                          run_server(svr_cfg).unwrap();
+                          run_server(svr_cfg);
                       });
 
         let client_cfg = self.config.clone();
         thread::spawn(move || {
-                          run_local(client_cfg).unwrap();
+                          run_local(client_cfg);
                       });
 
         thread::sleep(Duration::from_secs(1));
@@ -77,12 +76,9 @@ fn socks5_relay_stream() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run();
 
-    let mut lp = Core::new().unwrap();
-    let handle = lp.handle();
-
     let c = Socks5Client::connect(Address::DomainNameAddress("www.example.com".to_owned(), 80),
-                                  *svr.client_addr(),
-                                  handle);
+                                  *svr.client_addr());
+
     let fut = c.and_then(|c| {
                              let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
                              write_all(c, req.to_vec()).and_then(|(c, _)| flush(c))
@@ -93,7 +89,7 @@ fn socks5_relay_stream() {
                                                             })
                          });
 
-    lp.run(fut).unwrap();
+    tokio::run(fut.map_err(|_| ()));
 }
 
 #[test]
@@ -107,12 +103,8 @@ fn socks5_relay_aead() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run();
 
-    let mut lp = Core::new().unwrap();
-    let handle = lp.handle();
-
     let c = Socks5Client::connect(Address::DomainNameAddress("www.example.com".to_owned(), 80),
-                                  *svr.client_addr(),
-                                  handle);
+                                  *svr.client_addr());
     let fut = c.and_then(|c| {
                              let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
                              write_all(c, req.to_vec()).and_then(|(c, _)| flush(c))
@@ -123,5 +115,5 @@ fn socks5_relay_aead() {
                                                             })
                          });
 
-    lp.run(fut).unwrap();
+    tokio::run(fut.map_err(|_| ()));
 }

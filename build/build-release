@@ -40,11 +40,19 @@ fi
 
 echo "* Building ${RELEASE_NAME} package ${VERSION} ..."
 
-IMAGE='shadowsocks-rust:latest'
+if $BUILD_NIGHTLY; then
+    IMAGE='shadowsocks-rust:nightly'
+else
+    IMAGE='shadowsocks-rust:stable'
+fi
 
 if $BUILD_DOCKER_IMG; then
     echo "* Rebuild docker image ${IMAGE} ...";
-    docker build -t "${IMAGE}" "$CUR_DIR";
+    if $BUILD_NIGHTLY; then
+        docker build -t "${IMAGE}" "$CUR_DIR" --build-arg TOOLCHAIN=nightly;
+    else
+        docker build -t "${IMAGE}" "$CUR_DIR" --build-arg TOOLCHAIN=stable;
+    fi
 fi
 
 SRC_PATH="/home/rust/src"
@@ -59,6 +67,7 @@ if $BUILD_NIGHTLY; then
     docker run \
         -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
         -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
+        -e RUSTFLAGS="-Ctarget-feature=+aes" \
         -e HTTP_PROXY="$HTTP_PROXY" \
         -e HTTPS_PROXY="$HTTPS_PROXY" \
         -v "${CUR_DIR}"/..:"$SRC_PATH" \
@@ -67,7 +76,7 @@ if $BUILD_NIGHTLY; then
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && rustup run nightly cargo install -f --features miscreant \
+            && cargo install -f --features miscreant \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 else
     docker run \
@@ -117,6 +126,7 @@ echo "* Packaging XZ in ${PKG_PATH} ..."
 tar -cJf ${PKG_PATH} \
     "sslocal" \
     "ssserver" \
-    "ssurl"
+    "ssurl" \
+    "ssdns"
 
 echo "* Done build package ${PKG_NAME}"

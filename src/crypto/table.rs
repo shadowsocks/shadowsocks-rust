@@ -2,9 +2,9 @@
 
 use std::io::Cursor;
 
-use crypto::{CipherResult, StreamCipher};
-use crypto::CryptoMode;
 use crypto::digest::{self, Digest, DigestType};
+use crypto::CryptoMode;
+use crypto::{CipherResult, StreamCipher};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use bytes::{BufMut, BytesMut};

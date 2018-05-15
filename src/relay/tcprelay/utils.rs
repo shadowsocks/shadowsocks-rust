@@ -1,15 +1,13 @@
 //! Utility functions
 
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use tokio_core::reactor::Timeout;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::timer::Delay;
 use tokio_io::io::{copy, Copy};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use futures::{Async, Future, Poll};
-
-use relay::Context;
 
 use super::BUFFER_SIZE;
 
@@ -30,7 +28,7 @@ pub struct CopyTimeout<R, W>
     w: Option<W>,
     timeout: Duration,
     amt: u64,
-    timer: Option<Timeout>,
+    timer: Option<Delay>,
     buf: [u8; BUFFER_SIZE],
     pos: usize,
     cap: usize,
@@ -56,7 +54,7 @@ impl<R, W> CopyTimeout<R, W>
             None => Ok(()),
             Some(t) => {
                 match t.poll() {
-                    Err(err) => Err(err),
+                    Err(err) => panic!("Failed to poll on timer, err: {}", err),
                     Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
                     Ok(Async::NotReady) => Ok(()),
                 }
@@ -79,7 +77,7 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }
@@ -97,7 +95,7 @@ impl<R, W> CopyTimeout<R, W>
             Ok(n) => Ok(n),
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }

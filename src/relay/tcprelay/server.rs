@@ -1,64 +1,58 @@
 //! Relay for TCP server that running on the server side
 
 use std::io::{self, ErrorKind};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
-use config::ServerConfig;
+use config::{Config, ServerConfig};
 
-use relay::{boxed_future, BoxIoFuture};
-use relay::Context;
+use relay::boxed_future;
 use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 use relay::tcprelay::crypto_io::{DecryptedRead, EncryptedWrite};
 
-use futures::{self, Future};
 use futures::stream::Stream;
+use futures::{self, Future};
 
-use tokio_core::net::{TcpListener, TcpStream};
-use tokio_io::AsyncRead;
+use tokio;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_io::{AsyncRead, IoFuture};
 
 use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalfFut, TcpStreamConnect};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
     s: TcpStream,
-    svr_cfg: Rc<ServerConfig>,
+    svr_cfg: Arc<ServerConfig>,
+    config: Arc<Config>,
 }
 
 impl TcpRelayClientHandshake {
     /// Doing handshake with client
-    pub fn handshake(self) -> BoxIoFuture<TcpRelayClientPending> {
-        let TcpRelayClientHandshake { s, svr_cfg } = self;
+    pub fn handshake(self) -> impl Future<Item = TcpRelayClientPending, Error = io::Error> {
+        let TcpRelayClientHandshake { s, svr_cfg, config } = self;
 
-        let fut = futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
+        futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
             debug!("Handshaking with peer {}", peer_addr);
 
             let timeout = *svr_cfg.timeout();
             proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
-                r_fut
-                    .and_then(move |r| {
-                        let fut = Address::read_from(r).map_err(move |_| {
-                            io::Error::new(
-                                ErrorKind::Other,
-                                format!(
-                                    "failed to decode Address, may be wrong method or key, peer: {}",
-                                    peer_addr
-                                ),
-                            )
-                        });
-                        Context::with(|ctx| try_timeout(fut, timeout, ctx.handle()))
-                    })
-                    .map(move |(r, addr)| TcpRelayClientPending {
-                        r: r,
-                        addr: addr,
-                        w: w_fut,
-                        timeout: timeout,
-                    })
+                r_fut.and_then(move |r| {
+                                   let fut = Address::read_from(r).map_err(move |_| {
+                                       io::Error::new(ErrorKind::Other,
+                                       format!("failed to decode Address, may be wrong method or key, peer: {}",
+                                               peer_addr))
+                                   });
+                                   try_timeout(fut, timeout)
+                               })
+                     .map(move |(r, addr)| TcpRelayClientPending { r: r,
+                                                                   addr: addr,
+                                                                   w: w_fut,
+                                                                   timeout: timeout,
+                                                                   config: config, })
             })
-        });
-        boxed_future(fut)
+        })
     }
 }
 
@@ -68,53 +62,53 @@ pub struct TcpRelayClientPending {
     addr: Address,
     w: EncryptedHalfFut,
     timeout: Option<Duration>,
+    config: Arc<Config>,
 }
 
 impl TcpRelayClientPending {
     /// Connect to the remote server
     #[inline]
-    fn connect_remote(addr: Address, timeout: Option<Duration>) -> BoxIoFuture<TcpStream> {
+    fn connect_remote(config: Arc<Config>,
+                      addr: Address,
+                      timeout: Option<Duration>)
+                      -> impl Future<Item = TcpStream, Error = io::Error> {
         debug!("Connecting to remote {}", addr);
 
         match addr {
-            Address::SocketAddress(saddr) => Context::with(move |ctx| {
-                if ctx.forbidden_ip().contains(&saddr.ip()) {
-                    let err = io::Error::new(
-                        ErrorKind::Other,
-                        format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr),
-                    );
+            Address::SocketAddress(saddr) => {
+                if config.forbidden_ip.contains(&saddr.ip()) {
+                    let err = io::Error::new(ErrorKind::Other,
+                                             format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr));
                     return boxed_future(futures::done(Err(err)));
                 }
 
-                let conn = TcpStream::connect(&saddr, ctx.handle());
-                try_timeout(conn, timeout, ctx.handle())
-            }),
+                let conn = TcpStream::connect(&saddr);
+                let fut = try_timeout(conn, timeout);
+                boxed_future(fut)
+            }
             Address::DomainNameAddress(dname, port) => {
-                let fut = Context::with(move |ctx| {
-                    let handle = ctx.handle().clone();
-                    try_timeout(resolve(dname.as_str(), port, true), timeout, &handle).and_then(move |addrs| {
-                        let conn = TcpStreamConnect::new(addrs.into_iter(), &handle);
-                        try_timeout(conn, timeout, &handle)
+                let fut = {
+                    try_timeout(resolve(config, dname.as_str(), port, true), timeout).and_then(move |addrs| {
+                        let conn = TcpStreamConnect::new(addrs.into_iter());
+                        try_timeout(conn, timeout)
                     })
-                });
+                };
                 boxed_future(fut)
             }
         }
     }
 
     /// Connect to the remote server
-    pub fn connect(self) -> BoxIoFuture<TcpRelayClientConnected> {
+    pub fn connect(self) -> impl Future<Item = TcpRelayClientConnected, Error = io::Error> + Send {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
         let timeout = self.timeout;
-        let fut = TcpRelayClientPending::connect_remote(self.addr, self.timeout);
-        let fut = fut.map(move |stream| TcpRelayClientConnected {
-            server: stream.split(),
-            client: client_pair,
-            addr: addr,
-            timeout: timeout,
-        });
-        Box::new(fut)
+        TcpRelayClientPending::connect_remote(self.config, self.addr, self.timeout).map(move |stream| {
+            TcpRelayClientConnected { server: stream.split(),
+                                      client: client_pair,
+                                      addr: addr,
+                                      timeout: timeout, }
+        })
     }
 }
 
@@ -129,74 +123,68 @@ pub struct TcpRelayClientConnected {
 impl TcpRelayClientConnected {
     /// Establish tunnel
     #[inline]
-    pub fn tunnel(self) -> BoxIoFuture<()> {
+    pub fn tunnel(self) -> impl Future<Item = (), Error = io::Error> + Send {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;
         let timeout = self.timeout;
 
-        tunnel(
-            self.addr,
-            r.copy_timeout_opt(svr_w, self.timeout),
-            w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout)),
-        )
+        tunnel(self.addr,
+               r.copy_timeout_opt(svr_w, self.timeout),
+               w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout)))
     }
 }
 
 /// Runs the server
-pub fn run() -> Box<Future<Item = (), Error = io::Error>> {
-    let mut fut: Option<Box<Future<Item = (), Error = io::Error>>> = None;
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
+    let mut fut: Option<IoFuture<()>> = None;
 
-    Context::with(|ctx| {
-        let config = ctx.config();
+    for svr_cfg in &config.server {
+        let listener = {
+            let addr = svr_cfg.addr();
+            let addr = addr.listen_addr();
 
-        for svr_cfg in &config.server {
-            let listener = {
-                let addr = svr_cfg.addr();
-                let addr = addr.listen_addr();
+            let listener = TcpListener::bind(&addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
-                let listener =
-                    TcpListener::bind(&addr, ctx.handle()).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+            info!("ShadowSocks TCP Listening on {}", addr);
+            listener
+        };
 
-                info!("ShadowSocks TCP Listening on {}", addr);
-                listener
-            };
+        let svr_cfg = Arc::new(svr_cfg.clone());
+        let config = config.clone();
+        let listening = listener.incoming()
+                                .for_each(move |socket| {
+                                              let server_cfg = svr_cfg.clone();
 
-            let svr_cfg = Rc::new(svr_cfg.clone());
-            let listening = listener
-                .incoming()
-                .for_each(move |(socket, addr)| {
-                    let server_cfg = svr_cfg.clone();
+                                              let addr = socket.peer_addr()?;
 
-                    trace!("Got connection, addr: {}", addr);
-                    trace!("Picked proxy server: {:?}", server_cfg);
+                                              trace!("Got connection, addr: {}", addr);
+                                              trace!("Picked proxy server: {:?}", server_cfg);
 
-                    let client = TcpRelayClientHandshake {
-                        s: socket,
-                        svr_cfg: server_cfg,
-                    };
+                                              let client = TcpRelayClientHandshake { s: socket,
+                                                                                     svr_cfg: server_cfg,
+                                                                                     config: config.clone(), };
 
-                    let fut = client
-                        .handshake()
-                        .and_then(|c| c.connect())
-                        .and_then(|c| c.tunnel())
-                        .map_err(move |err| {
-                            error!("Failed to handle client ({}): {}", addr, err);
-                        });
+                                              let fut = client.handshake()
+                                                              .and_then(|c| c.connect())
+                                                              .and_then(|c| c.tunnel())
+                                                              .map_err(move |err| {
+                                                                           error!("Failed to handle client ({}): {}",
+                                                                                  addr, err);
+                                                                       });
 
-                    Context::with(|ctx| ctx.handle().spawn(fut));
-                    Ok(())
-                })
-                .map_err(|err| {
-                    error!("Server run failed: {}", err);
-                    err
-                });
+                                              tokio::spawn(fut);
+                                              Ok(())
+                                          })
+                                .map_err(|err| {
+                                             error!("Server run failed: {}", err);
+                                             err
+                                         });
 
-            fut = Some(match fut.take() {
-                Some(fut) => Box::new(fut.join(listening).map(|_| ())) as Box<Future<Item = (), Error = io::Error>>,
-                None => Box::new(listening) as Box<Future<Item = (), Error = io::Error>>,
-            })
-        }
+        fut = Some(match fut.take() {
+                       Some(fut) => Box::new(fut.join(listening).map(|_| ())) as IoFuture<()>,
+                       None => Box::new(listening) as IoFuture<()>,
+                   })
+    }
 
-        fut.expect("Must have at least one server")
-    })
+    fut.expect("Must have at least one server")
 }

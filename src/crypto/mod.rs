@@ -4,24 +4,25 @@ use std::convert::From;
 
 use openssl::symm;
 
-pub use self::aead::{new_aead_decryptor, new_aead_encryptor, AeadDecryptor, AeadEncryptor, BoxAeadDecryptor,
-                     BoxAeadEncryptor};
+pub use self::aead::{
+    new_aead_decryptor, new_aead_encryptor, AeadDecryptor, AeadEncryptor, BoxAeadDecryptor, BoxAeadEncryptor,
+};
 pub use self::cipher::{CipherCategory, CipherResult, CipherType};
 pub use self::stream::{new_stream, StreamCipher, StreamCipherVariant};
 
+pub mod aead;
 pub mod cipher;
-pub mod openssl;
 pub mod digest;
-pub mod table;
+pub mod dummy;
+pub mod openssl;
 pub mod rc4_md5;
 pub mod ring;
-pub mod dummy;
-pub mod aead;
-pub mod stream;
 #[cfg(feature = "miscreant")]
 pub mod siv;
 #[cfg(feature = "sodium")]
 pub mod sodium;
+pub mod stream;
+pub mod table;
 
 /// Crypto mode, encrypt or decrypt
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]

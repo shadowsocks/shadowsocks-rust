@@ -36,7 +36,7 @@ use std::cmp;
 use std::io::{self, BufRead, Cursor, Read};
 use std::u16;
 
-use bytes::{BigEndian, Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
@@ -138,7 +138,7 @@ impl<R> DecryptedReader<R>
                 let len = {
                     let mut len_buf = [0u8; 2];
                     self.cipher.decrypt(data, &mut len_buf, tag)?;
-                    Cursor::new(len_buf).get_u16::<BigEndian>() as usize
+                    Cursor::new(len_buf).get_u16_be() as usize
                 };
 
                 if len > MAX_PACKET_SIZE {
@@ -288,7 +288,7 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         let data_length = data.len() as u16;
 
         let mut data_len_buf = BytesMut::with_capacity(2);
-        data_len_buf.put_u16::<BigEndian>(data_length);
+        data_len_buf.put_u16_be(data_length);
 
         let mut tag_buf = BytesMut::with_capacity(self.tag_size);
         unsafe {

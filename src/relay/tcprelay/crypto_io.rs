@@ -2,20 +2,18 @@
 
 use std::io::{self, BufRead, Read};
 use std::mem;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::{Async, Future, Poll};
 
-use tokio_core::reactor::Timeout;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::timer::Delay;
 use tokio_io::io::{copy, Copy};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use bytes::{BufMut, BytesMut};
 
-use super::BUFFER_SIZE;
 use super::utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt};
-
-use relay::Context;
+use super::BUFFER_SIZE;
 
 static DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
@@ -231,9 +229,7 @@ impl<R, W> Future for EncryptedCopy<R, W>
 
             // If our buffer has some data, let's write it out!
             while self.pos < self.cap {
-                let i = try_nb!(self.writer.as_mut()
-                                    .unwrap()
-                                    .write_raw(&self.buf[self.pos..self.cap]));
+                let i = try_nb!(self.writer.as_mut().unwrap().write_raw(&self.buf[self.pos..self.cap]));
                 self.pos += i;
                 self.amt += i as u64;
             }
@@ -261,7 +257,7 @@ pub struct EncryptedCopyTimeout<R, W>
     pos: usize,
     cap: usize,
     timeout: Duration,
-    timer: Option<Timeout>,
+    timer: Option<Delay>,
     read_buf: [u8; BUFFER_SIZE],
     write_buf: BytesMut,
 }
@@ -288,7 +284,7 @@ impl<R, W> EncryptedCopyTimeout<R, W>
         match self.timer.as_mut() {
             None => Ok(()),
             Some(t) => match t.poll() {
-                Err(err) => Err(err),
+                Err(err) => panic!("Failed to poll on timer, err: {}", err),
                 Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
                 Ok(Async::NotReady) => Ok(()),
             },
@@ -319,16 +315,14 @@ impl<R, W> EncryptedCopyTimeout<R, W>
                 let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
                 self.write_buf.reserve(buffer_len);
 
-                self.writer.as_mut()
-                    .unwrap()
-                    .encrypt(data, &mut self.write_buf)?;
+                self.writer.as_mut().unwrap().encrypt(data, &mut self.write_buf)?;
                 self.cap = self.write_buf.len();
                 self.pos = 0;
                 Ok(n)
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    Context::with(|ctx| self.timer = Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }
@@ -352,7 +346,7 @@ impl<R, W> EncryptedCopyTimeout<R, W>
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Context::with(|ctx| Some(Timeout::new(self.timeout, ctx.handle()).unwrap()));
+                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
                 }
                 Err(e)
             }

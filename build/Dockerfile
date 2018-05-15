@@ -1,7 +1,5 @@
-FROM ekidd/rust-musl-builder
-
-#ENV HTTP_PROXY="http://192.168.0.106:8118"
-#ENV HTTPS_PROXY="http://192.168.0.106:8118"
+ARG TOOLCHAIN=stable
+FROM ekidd/rust-musl-builder:$TOOLCHAIN
 
 ENV SODIUM_VERS="1.0.16"
 
@@ -12,10 +10,6 @@ RUN cd /home/rust/libs && \
     CC=musl-gcc ./configure --prefix=/usr/local/musl && \
     make && sudo make install && \
     cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
-
-RUN rustup install nightly
-RUN rustup default nightly
-RUN rustup target add x86_64-unknown-linux-musl
 
 ENV SODIUM_STATIC=yes
 ENV SODIUM_LIB_DIR=/usr/local/musl/lib

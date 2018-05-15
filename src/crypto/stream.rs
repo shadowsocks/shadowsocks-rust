@@ -1,6 +1,5 @@
 //! Stream ciphers
 
-use crypto::CryptoMode;
 use crypto::cipher::{CipherCategory, CipherResult, CipherType};
 use crypto::dummy;
 use crypto::openssl;
@@ -8,6 +7,7 @@ use crypto::rc4_md5;
 #[cfg(feature = "sodium")]
 use crypto::sodium;
 use crypto::table;
+use crypto::CryptoMode;
 
 use bytes::BufMut;
 

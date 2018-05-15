@@ -57,6 +57,8 @@ make install TARGET=release
 
 Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
 
+For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
+
 ### **Build standalone binaries**
 
 Requirements:
@@ -160,6 +162,24 @@ $ ssserver -c /path/to/shadowsocks.json
 $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
 ```
 
+DNS Local server
+
+```bash
+# Read configuration from file
+$ ssdns -c /path/to/shadowsocks.json
+
+# Pass all parameters via command line
+$ ssdns -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --dns "8.8.8.8:53"
+```
+
+For DNS relay server, you can set remote DNS server in configuration file with `dns` key in root object.
+
+```json
+{
+    "dns": "8.8.8.8:53"
+}
+```
+
 ## Supported Ciphers
 
 ### Stream Ciphers
@@ -180,9 +200,9 @@ $ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-serve
 
 1. `ssurl` is for encoding and decoding ShadowSocks URLs (SIP002). Example:
 
-```plain
-ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
-```
+    ```plain
+    ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
+    ```
 
 ## Notes
 

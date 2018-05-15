@@ -20,8 +20,8 @@ use subprocess::Result as PopenResult;
 
 use config::{Config, ServerAddr};
 
-mod ss_plugin;
 mod obfs_proxy;
+mod ss_plugin;
 
 /// Config for plugin
 #[derive(Debug, Clone)]
@@ -84,14 +84,8 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
             };
 
             match mode {
-                PluginMode::Client => info!("Started plugin \"{}\" on {} <-> {}",
-                                            c.plugin,
-                                            local_addr,
-                                            svr.addr()),
-                PluginMode::Server => info!("Started plugin \"{}\" on {} <-> {}",
-                                            c.plugin,
-                                            svr.addr(),
-                                            local_addr),
+                PluginMode::Client => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, local_addr, svr.addr()),
+                PluginMode::Server => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, svr.addr(), local_addr),
             }
 
             svr_addr_opt = Some(svr_addr); // Fuck borrow checker

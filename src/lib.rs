@@ -54,7 +54,7 @@
 //! use shadowsocks::{run_local, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
-//! run_local(config).unwrap();
+//! run_local(config);
 //! ```
 //!
 //! That's all! And let me show you how to run a proxy server
@@ -63,7 +63,7 @@
 //! use shadowsocks::{run_server, Config, ConfigType};
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
-//! run_server(config).unwrap();
+//! run_server(config);
 //! ```
 //!
 
@@ -77,7 +77,6 @@ extern crate bytes;
 extern crate digest;
 #[macro_use]
 extern crate futures;
-extern crate futures_cpupool;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
@@ -91,16 +90,17 @@ extern crate miscreant;
 extern crate openssl;
 extern crate rand;
 extern crate ring;
-#[macro_use]
-extern crate scoped_tls;
 extern crate serde_json;
 extern crate serde_urlencoded;
 extern crate subprocess;
-extern crate tokio_core;
 #[macro_use]
 extern crate tokio_io;
+extern crate dns_parser;
+extern crate lru_cache;
+extern crate tokio;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
+extern crate trust_dns_resolver;
 extern crate typenum;
 extern crate url;
 
@@ -108,12 +108,13 @@ extern crate url;
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub use self::config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig};
+pub use self::relay::dns::run as run_dns;
 pub use self::relay::local::run as run_local;
 pub use self::relay::server::run as run_server;
 pub use self::relay::tcprelay::client::Socks5Client;
 
 pub mod config;
-pub mod relay;
 pub mod crypto;
-pub mod plugin;
 mod monitor;
+pub mod plugin;
+pub mod relay;
