@@ -209,22 +209,29 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => match last_err {
-                None => {
-                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                    Err(err)
+            TcpStreamConnect::Connect { last_err, .. } => {
+                match last_err {
+                    None => {
+                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                        Err(err)
+                    }
+                    Some(err) => Err(err),
                 }
-                Some(err) => Err(err),
-            },
+            }
         }
     }
 }
 
-fn connect_proxy_server(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<TcpStream> {
+fn connect_proxy_server(config: Arc<Config>,
+                        svr_cfg: Arc<ServerConfig>)
+                        -> impl Future<Item = TcpStream, Error = io::Error> + Send {
     let timeout = *svr_cfg.timeout();
     trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
     match *svr_cfg.addr() {
-        ServerAddr::SocketAddr(ref addr) => try_timeout(TcpStream::connect(addr), timeout),
+        ServerAddr::SocketAddr(ref addr) => {
+            let fut = try_timeout(TcpStream::connect(addr), timeout);
+            boxed_future(fut)
+        }
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
                 try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
@@ -241,9 +248,9 @@ fn connect_proxy_server(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFu
 pub fn proxy_server_handshake(remote_stream: TcpStream,
                               svr_cfg: Arc<ServerConfig>,
                               relay_addr: Address)
-                              -> IoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
+                              -> impl Future<Item = (DecryptedHalfFut, EncryptedHalfFut), Error = io::Error> + Send {
     let timeout = *svr_cfg.timeout();
-    let fut = proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
+    proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
                                        // Send relay address to remote
                                        let mut buf = BytesMut::with_capacity(relay_addr.len());
@@ -257,16 +264,15 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                                    });
 
         Ok((r_fut, boxed_future(w_fut)))
-    });
-    boxed_future(fut)
+    })
 }
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
 pub fn proxy_handshake(remote_stream: TcpStream,
                        svr_cfg: Arc<ServerConfig>)
-                       -> IoFuture<(DecryptedHalfFut, EncryptedHalfFut)> {
-    let fut = futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
+                       -> impl Future<Item = (DecryptedHalfFut, EncryptedHalfFut), Error = io::Error> + Send {
+    futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
         let timeout = svr_cfg.timeout().clone();
 
         let svr_cfg_cloned = svr_cfg.clone();
@@ -333,13 +339,11 @@ pub fn proxy_handshake(remote_stream: TcpStream,
         };
 
         Ok((boxed_future(dec), boxed_future(enc)))
-    });
-
-    boxed_future(fut)
+    })
 }
 
 /// Establish tunnel between server and client
-pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> IoFuture<()>
+pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
     where CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
           SF: Future<Item = SFI, Error = io::Error> + Send + 'static
 {
@@ -374,21 +378,19 @@ pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> IoFuture<()>
                            }
                        });
 
-    let fut = c2s.select(s2c).and_then(move |(dir, _)| {
-                               match dir {
-                                   TunnelDirection::Server2Client => {
-                                       trace!("Relay {} client <- server is closed, abort connection", addr)
-                                   }
-                                   TunnelDirection::Client2Server => {
-                                       trace!("Relay {} server -> client is closed, abort connection", addr)
-                                   }
-                               }
+    c2s.select(s2c).and_then(move |(dir, _)| {
+                     match dir {
+                         TunnelDirection::Server2Client => {
+                             trace!("Relay {} client <- server is closed, abort connection", addr)
+                         }
+                         TunnelDirection::Client2Server => {
+                             trace!("Relay {} server -> client is closed, abort connection", addr)
+                         }
+                     }
 
-                               Ok(())
-                           })
-                 .map_err(|(err, _)| err);
-
-    boxed_future(fut)
+                     Ok(())
+                 })
+       .map_err(|(err, _)| err)
 }
 
 /// Read until EOF, and ignore
@@ -429,26 +431,24 @@ pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
     IgnoreUntilEnd::Pending { r: r, amt: 0 }
 }
 
-fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> IoFuture<T>
+fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> impl Future<Item = T, Error = io::Error> + Send
     where F: Future<Item = T, Error = io::Error> + Send + 'static,
           T: 'static
 {
     match dur {
-        Some(dur) => io_timeout(fut, dur),
+        Some(dur) => boxed_future(io_timeout(fut, dur)),
         None => boxed_future(fut),
     }
 }
 
-fn io_timeout<T, F>(fut: F, dur: Duration) -> IoFuture<T>
+fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::Error> + Send
     where F: Future<Item = T, Error = io::Error> + Send + 'static,
           T: 'static
 {
     use tokio::prelude::*;
 
-    let fut = fut.deadline(Instant::now() + dur).map_err(|err| match err.into_inner() {
-                              Some(e) => e,
-                              None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
-                          });
-
-    boxed_future(fut)
+    fut.deadline(Instant::now() + dur).map_err(|err| match err.into_inner() {
+                    Some(e) => e,
+                    None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
+                })
 }

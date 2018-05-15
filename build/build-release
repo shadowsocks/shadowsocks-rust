@@ -126,6 +126,7 @@ echo "* Packaging XZ in ${PKG_PATH} ..."
 tar -cJf ${PKG_PATH} \
     "sslocal" \
     "ssserver" \
-    "ssurl"
+    "ssurl" \
+    "ssdns"
 
 echo "* Done build package ${PKG_NAME}"

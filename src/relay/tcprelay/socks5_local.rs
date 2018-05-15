@@ -11,7 +11,6 @@ use futures::{self, Future};
 use tokio_io::io::flush;
 use tokio_io::io::{ReadHalf, WriteHalf};
 use tokio_io::AsyncRead;
-use tokio_io::IoFuture;
 
 use tokio;
 use tokio::net::{TcpListener, TcpStream};
@@ -38,11 +37,11 @@ fn handle_socks5_connect(config: Arc<Config>,
                          client_addr: SocketAddr,
                          addr: Address,
                          svr_cfg: Arc<ServerConfig>)
-                         -> IoFuture<()> {
+                         -> impl Future<Item = (), Error = io::Error> + Send {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
     let timeout = *svr_cfg.timeout();
-    let fut = super::connect_proxy_server(config.clone(), svr_cfg)
+    super::connect_proxy_server(config.clone(), svr_cfg)
         .then(move |res| {
             match res {
                 Ok(svr_s) => {
@@ -85,9 +84,7 @@ fn handle_socks5_connect(config: Arc<Config>,
 
                 tunnel(cloned_addr, whalf, rhalf)
             })
-        });
-
-    Box::new(fut)
+        })
 }
 
 fn handle_socks5_client(config: Arc<Config>,
@@ -142,7 +139,8 @@ fn handle_socks5_client(config: Arc<Config>,
             match header.command {
                 socks5::Command::TcpConnect => {
                     debug!("CONNECT {}", addr);
-                    handle_socks5_connect(config, (r, w), cloned_client_addr, addr, conf)
+                    let fut = handle_socks5_connect(config, (r, w), cloned_client_addr, addr, conf);
+                    boxed_future(fut)
                 }
                 socks5::Command::TcpBind => {
                     warn!("BIND is not supported");
@@ -188,7 +186,7 @@ fn handle_socks5_client(config: Arc<Config>,
 }
 
 /// Starts a TCP local server with Socks5 proxy protocol
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *config.local.as_ref().expect("Missing local config");
 
     let listener = TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
@@ -199,15 +197,12 @@ pub fn run(config: Arc<Config>) -> IoFuture<()> {
                                client_addr: local_addr, };
 
     let mut servers = RoundRobin::new(&*config);
-    let listening =
-        listener.incoming().for_each(move |socket| {
-                                         let server_cfg = servers.pick_server();
+    listener.incoming().for_each(move |socket| {
+                                     let server_cfg = servers.pick_server();
 
-                                         trace!("Got connection, addr: {}", socket.peer_addr()?);
-                                         trace!("Picked proxy server: {:?}", server_cfg);
+                                     trace!("Got connection, addr: {}", socket.peer_addr()?);
+                                     trace!("Picked proxy server: {:?}", server_cfg);
 
-                                         handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
-                                     });
-
-    Box::new(listening)
+                                     handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
+                                 })
 }

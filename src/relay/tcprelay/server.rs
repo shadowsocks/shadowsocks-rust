@@ -30,10 +30,10 @@ pub struct TcpRelayClientHandshake {
 
 impl TcpRelayClientHandshake {
     /// Doing handshake with client
-    pub fn handshake(self) -> IoFuture<TcpRelayClientPending> {
+    pub fn handshake(self) -> impl Future<Item = TcpRelayClientPending, Error = io::Error> {
         let TcpRelayClientHandshake { s, svr_cfg, config } = self;
 
-        let fut = futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
+        futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
             debug!("Handshaking with peer {}", peer_addr);
 
             let timeout = *svr_cfg.timeout();
@@ -52,8 +52,7 @@ impl TcpRelayClientHandshake {
                                                                    timeout: timeout,
                                                                    config: config, })
             })
-        });
-        boxed_future(fut)
+        })
     }
 }
 
@@ -69,7 +68,10 @@ pub struct TcpRelayClientPending {
 impl TcpRelayClientPending {
     /// Connect to the remote server
     #[inline]
-    fn connect_remote(config: Arc<Config>, addr: Address, timeout: Option<Duration>) -> IoFuture<TcpStream> {
+    fn connect_remote(config: Arc<Config>,
+                      addr: Address,
+                      timeout: Option<Duration>)
+                      -> impl Future<Item = TcpStream, Error = io::Error> {
         debug!("Connecting to remote {}", addr);
 
         match addr {
@@ -81,7 +83,8 @@ impl TcpRelayClientPending {
                 }
 
                 let conn = TcpStream::connect(&saddr);
-                try_timeout(conn, timeout)
+                let fut = try_timeout(conn, timeout);
+                boxed_future(fut)
             }
             Address::DomainNameAddress(dname, port) => {
                 let fut = {
@@ -96,16 +99,16 @@ impl TcpRelayClientPending {
     }
 
     /// Connect to the remote server
-    pub fn connect(self) -> IoFuture<TcpRelayClientConnected> {
+    pub fn connect(self) -> impl Future<Item = TcpRelayClientConnected, Error = io::Error> + Send {
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
         let timeout = self.timeout;
-        let fut = TcpRelayClientPending::connect_remote(self.config, self.addr, self.timeout);
-        let fut = fut.map(move |stream| TcpRelayClientConnected { server: stream.split(),
-                                                                  client: client_pair,
-                                                                  addr: addr,
-                                                                  timeout: timeout, });
-        Box::new(fut)
+        TcpRelayClientPending::connect_remote(self.config, self.addr, self.timeout).map(move |stream| {
+            TcpRelayClientConnected { server: stream.split(),
+                                      client: client_pair,
+                                      addr: addr,
+                                      timeout: timeout, }
+        })
     }
 }
 
@@ -120,7 +123,7 @@ pub struct TcpRelayClientConnected {
 impl TcpRelayClientConnected {
     /// Establish tunnel
     #[inline]
-    pub fn tunnel(self) -> IoFuture<()> {
+    pub fn tunnel(self) -> impl Future<Item = (), Error = io::Error> + Send {
         let (svr_r, svr_w) = self.server;
         let (r, w_fut) = self.client;
         let timeout = self.timeout;
@@ -132,7 +135,7 @@ impl TcpRelayClientConnected {
 }
 
 /// Runs the server
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let mut fut: Option<IoFuture<()>> = None;
 
     for svr_cfg in &config.server {

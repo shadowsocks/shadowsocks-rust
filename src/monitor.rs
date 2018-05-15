@@ -14,7 +14,7 @@ use plugin::Plugin;
 use relay::boxed_future;
 
 #[cfg(unix)]
-pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io::Error> + Send {
     use tokio_signal::unix::Signal;
 
     // Monitor SIGCHLD, triggered if subprocess (plugin) is exited.
@@ -60,31 +60,31 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
                                                  });
 
     // Join them all, if any of them is triggered, kill all subprocesses and exit.
-    boxed_future(fut1.select(fut2).then(|r| match r {
-                               Ok((o, _)) => Ok(o),
-                               Err((e, _)) => Err(e),
-                           })
-                     .select(fut3)
-                     .then(|r| match r {
-                               Ok((o, _)) => Ok(o),
-                               Err((e, _)) => Err(e),
-                           })
-                     .then(move |r| {
-                               // Something happened ... killing all subprocesses
-                               info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-                               drop(plugins);
+    fut1.select(fut2).then(|r| match r {
+                  Ok((o, _)) => Ok(o),
+                  Err((e, _)) => Err(e),
+              })
+        .select(fut3)
+        .then(|r| match r {
+                  Ok((o, _)) => Ok(o),
+                  Err((e, _)) => Err(e),
+              })
+        .then(move |r| {
+                  // Something happened ... killing all subprocesses
+                  info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+                  drop(plugins);
 
-                               match r {
-                                   Ok(..) => {
-                                       process::exit(0);
-                                   }
-                                   Err(err) => Err(err),
-                               }
-                           }))
+                  match r {
+                      Ok(..) => {
+                          process::exit(0);
+                      }
+                      Err(err) => Err(err),
+                  }
+              })
 }
 
 #[cfg(windows)]
-pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io::Error> + Send {
     // FIXME: How to handle SIGTERM equavalent in Windows?
 
     use tokio_signal::windows::Event;
@@ -111,20 +111,19 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
                                                err
                                            });
 
-    boxed_future(fut1.select(fut2).then(|_| -> Result<(), ()> {
-                                            // Something happened ... killing all subprocesses
-                                            info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-                                            drop(plugins);
-                                            process::exit(libc::EXIT_FAILURE);
-                                        }))
+    fut1.select(fut2).then(|_| -> Result<(), ()> {
+                               // Something happened ... killing all subprocesses
+                               info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+                               drop(plugins);
+                               process::exit(libc::EXIT_FAILURE);
+                           })
 }
 
 #[cfg(not(any(windows, unix)))]
-pub fn monitor_signal(plugins: Vec<Plugin>) -> IoFuture<()> {
+pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io::Error> + Send {
     // FIXME: What can I do ...
     // Blocks forever
-    let fut = futures::empty::<(), ()>().and_then(|_| {
-                                                      drop(plugins);
-                                                  });
-    boxed_future(fut)
+    futures::empty::<(), ()>().and_then(|_| {
+                                            drop(plugins);
+                                        })
 }

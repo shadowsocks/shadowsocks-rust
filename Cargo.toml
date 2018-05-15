@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.7.0-alpha.3"
+version = "1.7.0-alpha.4"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -50,7 +50,7 @@ lazy_static = "1.0"
 serde_json = "1.0"
 base64 = "0.9"
 bytes = "0.4"
-ring = "0.13.0-alpha"
+ring = "0.12"
 md-5 = "0.7"
 digest = "0.7"
 typenum = "1.10"
@@ -60,10 +60,10 @@ serde_urlencoded = "0.5"
 url = "1"
 byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
-futures-cpupool = "0.1"
 miscreant = { version = "0.3", optional = true }
 lru-cache = "0.1"
 dns-parser = "0.7"
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls"] }
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.2"

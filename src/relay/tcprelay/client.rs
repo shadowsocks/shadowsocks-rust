@@ -5,11 +5,10 @@ use std::net::SocketAddr;
 
 use tokio::net::TcpStream;
 use tokio_io::io::flush;
-use tokio_io::{AsyncRead, AsyncWrite, IoFuture};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use futures::{self, Async, Future, Poll};
 
-use relay::boxed_future;
 use relay::socks5::{
     self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
 };
@@ -21,11 +20,11 @@ pub struct Socks5Client {
 
 impl Socks5Client {
     /// Connects to `addr` via `proxy`
-    pub fn connect<A>(addr: A, proxy: SocketAddr) -> IoFuture<Socks5Client>
+    pub fn connect<A>(addr: A, proxy: SocketAddr) -> impl Future<Item = Socks5Client, Error = io::Error> + Send
         where Address: From<A>,
               A: Send + 'static
     {
-        let fut = futures::lazy(move || TcpStream::connect(&proxy))
+        futures::lazy(move || TcpStream::connect(&proxy))
             .and_then(move |s| {
                 // 1. Handshake
                 let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
@@ -58,17 +57,17 @@ impl Socks5Client {
                     }
                 })
             })
-            .map(|s| Socks5Client { stream: s });
-
-        boxed_future(fut)
+            .map(|s| Socks5Client { stream: s })
     }
 
     /// UDP Associate `addr` via `proxy`
-    pub fn udp_associate<A>(addr: A, proxy: SocketAddr) -> IoFuture<(Socks5Client, Address)>
+    pub fn udp_associate<A>(addr: A,
+                            proxy: SocketAddr)
+                            -> impl Future<Item = (Socks5Client, Address), Error = io::Error> + Send
         where Address: From<A>,
               A: Send + 'static
     {
-        let fut = futures::lazy(move || TcpStream::connect(&proxy))
+        futures::lazy(move || TcpStream::connect(&proxy))
             .and_then(move |s| {
                 // 1. Handshake
                 let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
@@ -101,9 +100,7 @@ impl Socks5Client {
                     }
                 })
             })
-            .map(|(s, a)| (Socks5Client { stream: s }, a));
-
-        boxed_future(fut)
+            .map(|(s, a)| (Socks5Client { stream: s }, a))
     }
 }
 

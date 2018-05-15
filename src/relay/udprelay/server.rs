@@ -21,7 +21,7 @@ use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::MAXIMUM_UDP_PAYLOAD_SIZE;
 use super::{PacketStream, SendDgramRc};
 
-fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> IoFuture<SocketAddr> {
+fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
     match addr {
         Address::SocketAddress(s) => {
             if config.forbidden_ip.contains(&s.ip()) {
@@ -42,10 +42,10 @@ fn resolve_remote_addr(config: Arc<Config>, addr: Address) -> IoFuture<SocketAdd
     }
 }
 
-fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
+fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> impl Future<Item = (), Error = io::Error> + Send {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
-    let fut = futures::lazy(move || UdpSocket::bind(&listen_addr)).and_then(move |socket| {
+    futures::lazy(move || UdpSocket::bind(&listen_addr)).and_then(move |socket| {
         let socket = Arc::new(Mutex::new(socket));
         PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
             let svr_cfg = svr_cfg.clone();
@@ -127,20 +127,19 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
 
             Ok(())
         })
-    });
-    boxed_future(fut)
+    })
 }
 
 /// Starts a UDP relay server
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
-    let mut fut = None;
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
+    let mut fut: Option<IoFuture<()>> = None;
 
     for svr in &config.server {
         let svr_cfg = Arc::new(svr.clone());
 
         let svr_fut = listen(config.clone(), svr_cfg);
         fut = match fut {
-            None => Some(svr_fut),
+            None => Some(boxed_future(svr_fut)),
             Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
         };
     }

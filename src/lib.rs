@@ -77,7 +77,6 @@ extern crate bytes;
 extern crate digest;
 #[macro_use]
 extern crate futures;
-extern crate futures_cpupool;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
@@ -101,6 +100,7 @@ extern crate lru_cache;
 extern crate tokio;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;
+extern crate trust_dns_resolver;
 extern crate typenum;
 extern crate url;
 

@@ -18,7 +18,7 @@ use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::{PacketStream, SendDgramRc, SharedUdpSocket};
 use config::{Config, ServerAddr, ServerConfig};
 use relay::boxed_future;
-use relay::dns_resolver::resolve;
+use relay::dns_resolver::resolve_by_google;
 use relay::socks5::Address;
 
 struct PrettyRRData<'a> {
@@ -133,7 +133,7 @@ pub fn run(config: Arc<Config>) -> IoFuture<()> {
     boxed_future(fut)
 }
 
-fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
+fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
     assert!(!config.server.is_empty());
 
     let mut svr_fut = Vec::with_capacity(config.server.len());
@@ -143,35 +143,32 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
                 svr_fut.push(boxed_future(futures::finished::<_, io::Error>(vec![*addr])));
             }
             ServerAddr::DomainName(ref dom, ref port) => {
-                svr_fut.push(resolve(config.clone(), &*dom, *port, false));
+                svr_fut.push(boxed_future(resolve_by_google(config.clone(), &*dom, *port, false)));
             }
         }
     }
 
     let cloned_config = config.clone();
-    let fut = join_all(svr_fut).and_then(move |svr_addrs| {
-                                             let mut u = Vec::with_capacity(svr_addrs.len());
-                                             for (idx, svr_addr) in svr_addrs.into_iter().enumerate() {
-                                                 let local_addr =
-                                                     SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
-                                                 let s = UdpSocket::bind(&local_addr)?;
-                                                 let svr_cfg = Arc::new(cloned_config.server[idx].clone());
-                                                 u.push((Arc::new(Mutex::new(s)), svr_cfg, svr_addr[0]));
-                                             }
-                                             Ok(u)
-                                         })
-                               .and_then(move |vec_servers| {
-                                             let mut f = Vec::with_capacity(1 + vec_servers.len());
-                                             let l = Arc::new(Mutex::new(l));
-                                             f.push(handle_l2r(config, l.clone(), vec_servers.clone()));
-                                             for (svr, cfg, _) in vec_servers {
-                                                 f.push(handle_r2l(l.clone(), svr, cfg))
-                                             }
-                                             join_all(f)
-                                         })
-                               .map(|_| ());
-
-    boxed_future(fut)
+    join_all(svr_fut).and_then(move |svr_addrs| {
+                                   let mut u = Vec::with_capacity(svr_addrs.len());
+                                   for (idx, svr_addr) in svr_addrs.into_iter().enumerate() {
+                                       let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
+                                       let s = UdpSocket::bind(&local_addr)?;
+                                       let svr_cfg = Arc::new(cloned_config.server[idx].clone());
+                                       u.push((Arc::new(Mutex::new(s)), svr_cfg, svr_addr[0]));
+                                   }
+                                   Ok(u)
+                               })
+                     .and_then(move |vec_servers| {
+                                   let mut f = Vec::with_capacity(1 + vec_servers.len());
+                                   let l = Arc::new(Mutex::new(l));
+                                   f.push(boxed_future(handle_l2r(config, l.clone(), vec_servers.clone())));
+                                   for (svr, cfg, _) in vec_servers {
+                                       f.push(boxed_future(handle_r2l(l.clone(), svr, cfg)))
+                                   }
+                                   join_all(f)
+                               })
+                     .map(|_| ())
 }
 
 lazy_static! {
@@ -181,14 +178,13 @@ lazy_static! {
 fn handle_l2r(config: Arc<Config>,
               l: SharedUdpSocket,
               server: Vec<(SharedUdpSocket, Arc<ServerConfig>, SocketAddr)>)
-              -> IoFuture<()> {
+              -> impl Future<Item = (), Error = io::Error> + Send {
     assert!(!server.is_empty());
 
     let mut server_idx: usize = 0;
     let server = Arc::new(server);
 
-    let fut =
-        PacketStream::new(l).for_each(move |(payload, src)| {
+    PacketStream::new(l).for_each(move |(payload, src)| {
             let server = server.clone();
             let config = config.clone();
             let pkt_fut = futures::lazy(move || {
@@ -234,12 +230,14 @@ fn handle_l2r(config: Arc<Config>,
             }));
 
             Ok(())
-        });
-    boxed_future(fut)
+        })
 }
 
-fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>) -> IoFuture<()> {
-    let fut = PacketStream::new(r).for_each(move |(payload, src)| {
+fn handle_r2l(l: SharedUdpSocket,
+              r: SharedUdpSocket,
+              svr_cfg: Arc<ServerConfig>)
+              -> impl Future<Item = (), Error = io::Error> + Send {
+    PacketStream::new(r).for_each(move |(payload, src)| {
         let l = l.clone();
         let svr_cfg = svr_cfg.clone();
         let pkt_fut = futures::lazy(move || {
@@ -293,7 +291,5 @@ fn handle_r2l(l: SharedUdpSocket, r: SharedUdpSocket, svr_cfg: Arc<ServerConfig>
         }));
 
         Ok(())
-    });
-
-    boxed_future(fut)
+    })
 }

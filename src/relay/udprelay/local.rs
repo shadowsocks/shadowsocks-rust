@@ -11,7 +11,6 @@ use futures::{self, Future, Stream};
 use tokio;
 use tokio::net::UdpSocket;
 use tokio::util::FutureExt;
-use tokio_io::IoFuture;
 
 use config::{Config, ServerAddr, ServerConfig};
 use relay::boxed_future;
@@ -24,7 +23,9 @@ use super::MAXIMUM_UDP_PAYLOAD_SIZE;
 use super::{PacketStream, SendDgramRc};
 
 /// Resolves server address to SocketAddr
-fn resolve_server_addr(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFuture<SocketAddr> {
+fn resolve_server_addr(config: Arc<Config>,
+                       svr_cfg: Arc<ServerConfig>)
+                       -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
     match *svr_cfg.addr() {
         // Return directly if it is a SocketAddr
         ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
@@ -39,11 +40,11 @@ fn resolve_server_addr(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> IoFut
     }
 }
 
-fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
+fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
     let socket = Arc::new(Mutex::new(l));
     let mut balancer = RoundRobin::new(&*config);
 
-    let fut = PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
+    PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
         let svr_cfg = balancer.pick_server();
         let svr_cfg_cloned = svr_cfg.clone();
         let svr_cfg_cloned_cloned = svr_cfg.clone();
@@ -144,19 +145,16 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> IoFuture<()> {
                                  }));
 
         Ok(())
-    });
-    boxed_future(fut)
+    })
 }
 
 /// Starts a UDP local server
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *config.local.as_ref().unwrap();
 
-    let fut = futures::lazy(move || {
-        info!("ShadowSocks UDP Listening on {}", local_addr);
+    futures::lazy(move || {
+                      info!("ShadowSocks UDP Listening on {}", local_addr);
 
-        UdpSocket::bind(&local_addr)
-    }).and_then(move |l| listen(config, l));
-
-    boxed_future(fut)
+                      UdpSocket::bind(&local_addr)
+                  }).and_then(move |l| listen(config, l))
 }

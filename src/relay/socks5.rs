@@ -16,7 +16,7 @@ use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::{Async, Future, Poll};
 
 use tokio_io::io::read_exact;
-use tokio_io::{AsyncRead, AsyncWrite, IoFuture};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::consts::{
     SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
@@ -544,38 +544,37 @@ impl TcpRequestHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(
-        r: R)
-        -> Box<Future<Item = (R, TcpRequestHeader), Error = Error> + Send + 'static> {
-        let fut = read_exact(r, [0u8; 3]).map_err(From::from)
-                                         .and_then(|(r, buf)| {
-                                                       let ver = buf[0];
-                                                       if ver != consts::SOCKS5_VERSION {
-                                                           return Err(Error::new(Reply::ConnectionRefused,
-                                                                                 "Unsupported Socks version"));
-                                                       }
+    pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpRequestHeader), Error = Error> + Send
+        where R: AsyncRead + Send + 'static
+    {
+        read_exact(r, [0u8; 3]).map_err(From::from)
+                               .and_then(|(r, buf)| {
+                                             let ver = buf[0];
+                                             if ver != consts::SOCKS5_VERSION {
+                                                 return Err(Error::new(Reply::ConnectionRefused,
+                                                                       "Unsupported Socks version"));
+                                             }
 
-                                                       let cmd = buf[1];
-                                                       let command = match Command::from_u8(cmd) {
-                                                           Some(c) => c,
-                                                           None => {
-                                                               return Err(Error::new(Reply::CommandNotSupported,
-                                                                                     "Unsupported command"))
-                                                           }
-                                                       };
+                                             let cmd = buf[1];
+                                             let command = match Command::from_u8(cmd) {
+                                                 Some(c) => c,
+                                                 None => {
+                                                     return Err(Error::new(Reply::CommandNotSupported,
+                                                                           "Unsupported command"))
+                                                 }
+                                             };
 
-                                                       Ok((r, command))
-                                                   })
-                                         .and_then(|(r, command)| {
-                                                       Address::read_from(r).map(move |(conn, address)| {
-                                                           let header = TcpRequestHeader { command: command,
-                                                                                           address: address, };
+                                             Ok((r, command))
+                                         })
+                               .and_then(|(r, command)| {
+                                             Address::read_from(r).map(move |(conn, address)| {
+                                                                           let header =
+                                                                               TcpRequestHeader { command: command,
+                                                                                                  address: address, };
 
-                                                           (conn, header)
-                                                       })
-                                                   });
-
-        Box::new(fut)
+                                                                           (conn, header)
+                                                                       })
+                                         })
     }
 
     /// Write data into a writer
@@ -626,32 +625,30 @@ impl TcpResponseHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(
-        r: R)
-        -> Box<Future<Item = (R, TcpResponseHeader), Error = Error> + Send + 'static> {
-        let fut = read_exact(r, [0u8; 3]).map_err(From::from)
-                                         .and_then(|(r, buf)| {
-                                                       let ver = buf[0];
-                                                       let reply_code = buf[1];
+    pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpResponseHeader), Error = Error> + Send
+        where R: AsyncRead + Send + 'static
+    {
+        read_exact(r, [0u8; 3]).map_err(From::from)
+                               .and_then(|(r, buf)| {
+                                             let ver = buf[0];
+                                             let reply_code = buf[1];
 
-                                                       if ver != consts::SOCKS5_VERSION {
-                                                           return Err(Error::new(Reply::ConnectionRefused,
-                                                                                 "Unsupported Socks version"));
-                                                       }
+                                             if ver != consts::SOCKS5_VERSION {
+                                                 return Err(Error::new(Reply::ConnectionRefused,
+                                                                       "Unsupported Socks version"));
+                                             }
 
-                                                       Ok((r, reply_code))
-                                                   })
-                                         .and_then(|(r, reply_code)| {
-                                                       Address::read_from(r).map(move |(r, address)| {
-                                                           let rep = TcpResponseHeader { reply:
+                                             Ok((r, reply_code))
+                                         })
+                               .and_then(|(r, reply_code)| {
+                                             Address::read_from(r).map(move |(r, address)| {
+                                                                           let rep = TcpResponseHeader { reply:
                                                                                              Reply::from_u8(reply_code),
                                                                                          address: address, };
 
-                                                           (r, rep)
-                                                       })
-                                                   });
-
-        Box::new(fut)
+                                                                           (r, rep)
+                                                                       })
+                                         })
     }
 
     /// Write to a writer
@@ -696,23 +693,22 @@ impl HandshakeRequest {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> IoFuture<(R, HandshakeRequest)> {
-        let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
-                                                         let ver = buf[0];
-                                                         let nmet = buf[1];
+    pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeRequest), Error = io::Error>
+        where R: AsyncRead + Send + 'static
+    {
+        read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
+                                               let ver = buf[0];
+                                               let nmet = buf[1];
 
-                                                         if ver != consts::SOCKS5_VERSION {
-                                                             return Err(io::Error::new(io::ErrorKind::Other,
-                                                                                       "Invalid Socks5 version"));
-                                                         }
+                                               if ver != consts::SOCKS5_VERSION {
+                                                   return Err(io::Error::new(io::ErrorKind::Other,
+                                                                             "Invalid Socks5 version"));
+                                               }
 
-                                                         Ok((r, nmet))
-                                                     })
-                                           .and_then(|(r, nmet)| {
-                                               read_exact(r, vec![0u8; nmet as usize])
-                              .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
-                                           });
-        Box::new(fut)
+                                               Ok((r, nmet))
+                                           })
+                                 .and_then(|(r, nmet)| read_exact(r, vec![0u8; nmet as usize]))
+                                 .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
     }
 
     /// Write to a writer
@@ -756,19 +752,19 @@ impl HandshakeResponse {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(r: R) -> IoFuture<(R, HandshakeResponse)> {
-        let fut = read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
-                                                         let ver = buf[0];
-                                                         let met = buf[1];
+    pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeResponse), Error = io::Error>
+        where R: AsyncRead + Send + 'static
+    {
+        read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
+                                               let ver = buf[0];
+                                               let met = buf[1];
 
-                                                         if ver != consts::SOCKS5_VERSION {
-                                                             Err(io::Error::new(io::ErrorKind::Other,
-                                                                                "Invalid Socks5 version"))
-                                                         } else {
-                                                             Ok((r, HandshakeResponse { chosen_method: met }))
-                                                         }
-                                                     });
-        Box::new(fut)
+                                               if ver != consts::SOCKS5_VERSION {
+                                                   Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
+                                               } else {
+                                                   Ok((r, HandshakeResponse { chosen_method: met }))
+                                               }
+                                           })
     }
 
     /// Write to a writer
@@ -816,17 +812,16 @@ impl UdpAssociateHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R: AsyncRead + Send + 'static>(
-        r: R)
-        -> Box<Future<Item = (R, UdpAssociateHeader), Error = Error> + Send + 'static> {
-        let fut = read_exact(r, [0u8; 3]).map_err(From::from).and_then(|(r, buf)| {
+    pub fn read_from<R>(r: R) -> impl Future<Item = (R, UdpAssociateHeader), Error = Error> + Send
+        where R: AsyncRead + Send + 'static
+    {
+        read_exact(r, [0u8; 3]).map_err(From::from).and_then(|(r, buf)| {
             let frag = buf[2];
             Address::read_from(r).map(move |(r, address)| {
                                           let h = UdpAssociateHeader::new(frag, address);
                                           (r, h)
                                       })
-        });
-        Box::new(fut)
+        })
     }
 
     /// Write to a writer

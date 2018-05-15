@@ -9,6 +9,7 @@ use futures::Future;
 
 use config::Config;
 use plugin::{launch_plugin, PluginMode};
+use relay::boxed_future;
 use relay::tcprelay::local::run as run_tcp;
 use relay::udprelay::local::run as run_udp;
 
@@ -35,20 +36,15 @@ pub fn run(mut config: Config) {
 
     let enable_udp = config.enable_udp;
 
+    let tcp_fut = run_tcp(config.clone());
+    let mut vf = vec![boxed_future(mon), boxed_future(tcp_fut)];
     if enable_udp {
-        let tcp_fut = run_tcp(config.clone());
         let udp_fut = run_udp(config);
-        tokio::run(join_all(vec![mon, tcp_fut, udp_fut]).then(|res| match res {
-                                                                  Ok(..) => Ok(()),
-                                                                  Err(err) => {
-                                                                      panic!("Failed to run server, err: {}", err)
-                                                                  }
-                                                              }));
-    } else {
-        let tcp_fut = run_tcp(config);
-        tokio::run(join_all(vec![mon, tcp_fut]).then(|res| match res {
-                                                         Ok(..) => Ok(()),
-                                                         Err(err) => panic!("Failed to run server, err: {}", err),
-                                                     }))
+        vf.push(boxed_future(udp_fut));
     }
+
+    tokio::run(join_all(vf).then(|res| match res {
+                                     Ok(..) => Ok(()),
+                                     Err(err) => panic!("Failed to run server, err: {}", err),
+                                 }));
 }
