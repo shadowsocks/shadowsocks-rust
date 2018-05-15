@@ -108,16 +108,16 @@ fn main() {
         }
         1 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Debug);
+            log_builder.filter(Some("ssdns"), LevelFilter::Debug);
         }
         2 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Debug)
+            log_builder.filter(Some("ssdns"), LevelFilter::Debug)
                        .filter(Some("shadowsocks"), LevelFilter::Debug);
         }
         3 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Trace)
+            log_builder.filter(Some("ssdns"), LevelFilter::Trace)
                        .filter(Some("shadowsocks"), LevelFilter::Trace);
         }
         _ => {
@@ -135,16 +135,18 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
+        Some(cpath) => {
+            match Config::load_from_file(cpath, ConfigType::Local) {
+                Ok(cfg) => {
+                    has_provided_config = true;
+                    cfg
+                }
+                Err(err) => {
+                    error!("{:?}", err);
+                    return;
+                }
             }
-            Err(err) => {
-                error!("{:?}", err);
-                return;
-            }
-        },
+        }
         None => Config::new(),
     };
 
