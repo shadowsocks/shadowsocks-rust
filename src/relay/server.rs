@@ -28,19 +28,30 @@ use relay::udprelay::server::run as run_udp;
 /// ```
 ///
 pub fn run(mut config: Config) {
-    // Hold it here, kill all plugins when Core is finished
+    let mut vf = Vec::new();
+
+    if config.enable_udp {
+        // Clone config here, because the config for TCP relay will be modified
+        // after plugins started
+        let udp_config = Arc::new(config.clone());
+
+        // Run UDP relay before starting plugins
+        // Because plugins doesn't support UDP relay
+        let udp_fut = run_udp(udp_config);
+        vf.push(boxed_future(udp_fut));
+    }
+
+    // Hold it here, kill all plugins when `tokio::run` is finished
     let plugins = launch_plugin(&mut config, PluginMode::Server).expect("Failed to launch plugins");
     let mon = ::monitor::monitor_signal(plugins);
 
+    // Recreate shared config here
     let config = Arc::new(config);
-    let enable_udp = config.enable_udp;
 
     let tcp_fut = run_tcp(config.clone());
-    let mut vf = vec![boxed_future(mon), boxed_future(tcp_fut)];
-    if enable_udp {
-        let udp_fut = run_udp(config);
-        vf.push(boxed_future(udp_fut));
-    }
+
+    vf.push(boxed_future(mon));
+    vf.push(boxed_future(tcp_fut));
 
     tokio::run(join_all(vf).then(|res| match res {
                                      Ok(..) => Ok(()),

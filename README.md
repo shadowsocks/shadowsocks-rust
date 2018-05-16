@@ -176,7 +176,7 @@ For DNS relay server, you can set remote DNS server in configuration file with `
 
 ```json
 {
-    "dns": "8.8.8.8:53"
+    "dns": "8.8.8.8"
 }
 ```
 
