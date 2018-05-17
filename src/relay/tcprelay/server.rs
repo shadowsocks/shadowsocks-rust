@@ -134,6 +134,33 @@ impl TcpRelayClientConnected {
     }
 }
 
+fn handle_client(server_cfg: Arc<ServerConfig>,
+                 config: Arc<Config>,
+                 socket: TcpStream)
+                 -> impl Future<Item = (), Error = ()> + Send {
+    futures::lazy(move || match socket.peer_addr() {
+                      Ok(addr) => Ok((socket, addr)),
+                      Err(err) => {
+                          error!("Failed to get peer_addr after accept: {}", err);
+                          Err(())
+                      }
+                  }).and_then(move |(socket, addr)| {
+                                      trace!("Got connection, addr: {}", addr);
+                                      trace!("Picked proxy server: {:?}", server_cfg);
+
+                                      let client = TcpRelayClientHandshake { s: socket,
+                                                                             svr_cfg: server_cfg,
+                                                                             config: config, };
+
+                                      client.handshake()
+                                            .and_then(|c| c.connect())
+                                            .and_then(|c| c.tunnel())
+                                            .map_err(move |err| {
+                                                         error!("Failed to handle client ({}): {}", addr, err);
+                                                     })
+                                  })
+}
+
 /// Runs the server
 pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let mut fut: Option<IoFuture<()>> = None;
@@ -154,25 +181,8 @@ pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + S
         let listening = listener.incoming()
                                 .for_each(move |socket| {
                                               let server_cfg = svr_cfg.clone();
-
-                                              let addr = socket.peer_addr()?;
-
-                                              trace!("Got connection, addr: {}", addr);
-                                              trace!("Picked proxy server: {:?}", server_cfg);
-
-                                              let client = TcpRelayClientHandshake { s: socket,
-                                                                                     svr_cfg: server_cfg,
-                                                                                     config: config.clone(), };
-
-                                              let fut = client.handshake()
-                                                              .and_then(|c| c.connect())
-                                                              .and_then(|c| c.tunnel())
-                                                              .map_err(move |err| {
-                                                                           error!("Failed to handle client ({}): {}",
-                                                                                  addr, err);
-                                                                       });
-
-                                              tokio::spawn(fut);
+                                              let config = config.clone();
+                                              tokio::spawn(handle_client(server_cfg, config, socket));
                                               Ok(())
                                           })
                                 .map_err(|err| {
