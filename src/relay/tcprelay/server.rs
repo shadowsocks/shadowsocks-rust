@@ -11,13 +11,14 @@ use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 use relay::tcprelay::crypto_io::{DecryptedRead, EncryptedWrite};
 
+use futures::future::join_all;
 use futures::stream::Stream;
 use futures::{self, Future};
 
 use tokio;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_io::io::{ReadHalf, WriteHalf};
-use tokio_io::{AsyncRead, IoFuture};
+use tokio_io::AsyncRead;
 
 use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalfFut, TcpStreamConnect};
 
@@ -163,7 +164,7 @@ fn handle_client(server_cfg: Arc<ServerConfig>,
 
 /// Runs the server
 pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let mut fut: Option<IoFuture<()>> = None;
+    let mut vec_fut = Vec::with_capacity(config.server.len());
 
     for svr_cfg in &config.server {
         let listener = {
@@ -190,11 +191,8 @@ pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + S
                                              err
                                          });
 
-        fut = Some(match fut.take() {
-                       Some(fut) => Box::new(fut.join(listening).map(|_| ())) as IoFuture<()>,
-                       None => Box::new(listening) as IoFuture<()>,
-                   })
+        vec_fut.push(boxed_future(listening));
     }
 
-    fut.expect("Must have at least one server")
+    join_all(vec_fut).map(|_| ())
 }
