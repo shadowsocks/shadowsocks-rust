@@ -8,11 +8,11 @@ use std::time::Instant;
 
 use dns_parser::{Packet, RRData};
 use futures::future::join_all;
+use futures::stream::futures_unordered;
 use futures::{self, Future, Stream};
 use lru_cache::LruCache;
 use tokio;
 use tokio::net::UdpSocket;
-use tokio_io::IoFuture;
 
 use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::{PacketStream, SendDgramRc, SharedUdpSocket};
@@ -121,16 +121,14 @@ impl<'a> fmt::Display for PrettyPacket<'a> {
 }
 
 /// Starts a UDP DNS server
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *config.local.as_ref().unwrap();
 
-    let fut = futures::lazy(move || {
-        info!("ShadowSocks UDP DNS Listening on {}", local_addr);
+    futures::lazy(move || {
+                      info!("ShadowSocks UDP DNS Listening on {}", local_addr);
 
-        UdpSocket::bind(&local_addr)
-    }).and_then(move |l| listen(config, l));
-
-    boxed_future(fut)
+                      UdpSocket::bind(&local_addr)
+                  }).and_then(move |l| listen(config, l))
 }
 
 fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
@@ -166,9 +164,18 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
                                    for (svr, cfg, _) in vec_servers {
                                        f.push(boxed_future(handle_r2l(l.clone(), svr, cfg)))
                                    }
-                                   join_all(f)
+                                   futures_unordered(f).into_future().then(|res| match res {
+                                       Ok(..) => {
+                                           error!("One of DNS servers exited unexpectly without error");
+                                           let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
+                                           Err(err)
+                                       }
+                                       Err((err, ..)) => {
+                                           error!("One of DNS servers exited unexpectly with error {}", err);
+                                           Err(err)
+                                       }
+                                   })
                                })
-                     .map(|_| ())
 }
 
 lazy_static! {

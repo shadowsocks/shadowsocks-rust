@@ -8,6 +8,7 @@ environment:
           MSYS2: 1
           OPENSSL_DIR: C:\OpenSSL
           SODIUM_BUILD_STATIC: yes
+          RUST_BACKTRACE: 1
         # - TARGET: i686-pc-windows-gnu
         #   BITS: 32
         #   OPENSSL_VERSION: 1_1_0g
@@ -30,7 +31,7 @@ install:
 build: false
 
 test_script:
-    - cargo test -v --no-fail-fast
+    - cargo test --no-fail-fast
 
 cache:
     - target
