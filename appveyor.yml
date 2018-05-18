@@ -4,7 +4,7 @@ environment:
     matrix:
         - TARGET: x86_64-pc-windows-msvc
           BITS: 64
-          OPENSSL_VERSION: 1_1_0g
+          OPENSSL_VERSION: 1_1_0h
           MSYS2: 1
           OPENSSL_DIR: C:\OpenSSL
           SODIUM_BUILD_STATIC: yes
