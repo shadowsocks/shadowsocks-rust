@@ -5,12 +5,12 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use futures::stream::futures_unordered;
 use futures::{self, Future, Stream};
 
 use tokio;
 use tokio::net::UdpSocket;
 use tokio::util::FutureExt;
-use tokio_io::IoFuture;
 
 use config::{Config, ServerConfig};
 use relay::boxed_future;
@@ -132,17 +132,26 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> impl Future<Item =
 
 /// Starts a UDP relay server
 pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let mut fut: Option<IoFuture<()>> = None;
+    let mut vec_fut = Vec::new();
 
     for svr in &config.server {
         let svr_cfg = Arc::new(svr.clone());
 
         let svr_fut = listen(config.clone(), svr_cfg);
-        fut = match fut {
-            None => Some(boxed_future(svr_fut)),
-            Some(fut) => Some(boxed_future(fut.join(svr_fut).map(|_| ()))),
-        };
+        vec_fut.push(boxed_future(svr_fut));
     }
 
-    fut.expect("Should have at least one server")
+    futures_unordered(vec_fut).into_future().then(|res| match res {
+                                                      Ok(..) => {
+                                                          error!("One of UDP servers exited unexpectly without error");
+                                                          let err = io::Error::new(io::ErrorKind::Other,
+                                                                                   "server exited unexpectly");
+                                                          Err(err)
+                                                      }
+                                                      Err((err, ..)) => {
+                                                          error!("One of UDP servers exited unexpectly with error {}",
+                                                                 err);
+                                                          Err(err)
+                                                      }
+                                                  })
 }

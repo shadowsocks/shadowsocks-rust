@@ -11,7 +11,7 @@ use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 use relay::tcprelay::crypto_io::{DecryptedRead, EncryptedWrite};
 
-use futures::future::join_all;
+use futures::stream::futures_unordered;
 use futures::stream::Stream;
 use futures::{self, Future};
 
@@ -194,5 +194,17 @@ pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + S
         vec_fut.push(boxed_future(listening));
     }
 
-    join_all(vec_fut).map(|_| ())
+    futures_unordered(vec_fut).into_future().then(|res| match res {
+                                                      Ok(..) => {
+                                                          error!("One of TCP servers exited unexpectly without error");
+                                                          let err = io::Error::new(io::ErrorKind::Other,
+                                                                                   "server exited unexpectly");
+                                                          Err(err)
+                                                      }
+                                                      Err((err, ..)) => {
+                                                          error!("One of TCP servers exited unexpectly with error {}",
+                                                                 err);
+                                                          Err(err)
+                                                      }
+                                                  })
 }

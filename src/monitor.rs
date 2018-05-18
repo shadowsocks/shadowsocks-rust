@@ -7,7 +7,7 @@ use libc;
 use tokio;
 use tokio_io::IoFuture;
 
-use futures::future::select_all;
+use futures::stream::futures_unordered;
 use futures::{self, Future, Stream};
 
 use plugin::Plugin;
@@ -60,15 +60,8 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io
                                                  });
 
     // Join them all, if any of them is triggered, kill all subprocesses and exit.
-    fut1.select(fut2).then(|r| match r {
-                  Ok((o, _)) => Ok(o),
-                  Err((e, _)) => Err(e),
-              })
-        .select(fut3)
-        .then(|r| match r {
-                  Ok((o, _)) => Ok(o),
-                  Err((e, _)) => Err(e),
-              })
+    futures_unordered(vec![boxed_future(fut1), boxed_future(fut2), boxed_future(fut3)])
+        .into_future()
         .then(move |r| {
                   // Something happened ... killing all subprocesses
                   info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
@@ -78,7 +71,7 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io
                       Ok(..) => {
                           process::exit(0);
                       }
-                      Err(err) => Err(err),
+                      Err((err, ..)) => Err(err),
                   }
               })
 }
@@ -111,12 +104,20 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io
                                                err
                                            });
 
-    fut1.select(fut2).then(|_| -> Result<(), ()> {
-                               // Something happened ... killing all subprocesses
-                               info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-                               drop(plugins);
-                               process::exit(libc::EXIT_FAILURE);
-                           })
+    // Join them all, if any of them is triggered, kill all subprocesses and exit.
+    futures_unordered(vec![boxed_future(fut1), boxed_future(fut2)])
+        .into_future()
+        .then(|r| {
+            // Something happened ... killing all subprocesses
+            info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+            drop(plugins);
+            match r {
+                Ok(..) => {
+                    process::exit(libc::EXIT_FAILURE);
+                }
+                Err((err, ..)) => Err(err)
+            }
+        })
 }
 
 #[cfg(not(any(windows, unix)))]

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use tokio;
 
-use futures::future::join_all;
-use futures::Future;
+use futures::stream::futures_unordered;
+use futures::{Future, Stream};
 
 use config::Config;
 use plugin::{launch_plugin, PluginMode};
@@ -53,8 +53,12 @@ pub fn run(mut config: Config) {
     vf.push(boxed_future(mon));
     vf.push(boxed_future(tcp_fut));
 
-    tokio::run(join_all(vf).then(|res| match res {
-                                     Ok(..) => Ok(()),
-                                     Err(err) => panic!("Failed to run server, err: {}", err),
-                                 }));
+    tokio::run(futures_unordered(vf).into_future().then(|res| -> Result<(), ()> {
+                                                            match res {
+                                                                Ok(..) => unreachable!("Server exited without error"),
+                                                                Err((err, ..)) => {
+                                                                    panic!("Server exited with error {}", err)
+                                                                }
+                                                            }
+                                                        }));
 }
