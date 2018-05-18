@@ -1,8 +1,7 @@
 //! Server side
 
+use std::io;
 use std::sync::Arc;
-
-use tokio;
 
 use futures::stream::futures_unordered;
 use futures::{Future, Stream};
@@ -27,7 +26,7 @@ use relay::udprelay::server::run as run_udp;
 /// run(config);
 /// ```
 ///
-pub fn run(mut config: Config) {
+pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
     let mut vf = Vec::new();
 
     if config.enable_udp {
@@ -53,12 +52,10 @@ pub fn run(mut config: Config) {
     vf.push(boxed_future(mon));
     vf.push(boxed_future(tcp_fut));
 
-    tokio::run(futures_unordered(vf).into_future().then(|res| -> Result<(), ()> {
-                                                            match res {
-                                                                Ok(..) => unreachable!("Server exited without error"),
-                                                                Err((err, ..)) => {
-                                                                    panic!("Server exited with error {}", err)
-                                                                }
-                                                            }
-                                                        }));
+    futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
+                                                 match res {
+                                                     Ok(..) => Ok(()),
+                                                     Err((err, ..)) => Err(err),
+                                                 }
+                                             })
 }

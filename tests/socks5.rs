@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use futures::Future;
+use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::{flush, read_to_end, write_all};
 
 use shadowsocks::config::{Config, ServerConfig};
@@ -53,12 +54,16 @@ impl Socks5TestServer {
     pub fn run(&self) {
         let svr_cfg = self.config.clone();
         thread::spawn(move || {
-                          run_server(svr_cfg);
+                          let mut runtime = Runtime::new().expect("Failed to create Runtime");
+                          let fut = run_server(svr_cfg);
+                          runtime.block_on(fut).expect("Failed to run Server");
                       });
 
         let client_cfg = self.config.clone();
         thread::spawn(move || {
-                          run_local(client_cfg);
+                          let mut runtime = Runtime::new().expect("Failed to create Runtime");
+                          let fut = run_local(client_cfg);
+                          runtime.block_on(fut).expect("Failed to run Local");
                       });
 
         thread::sleep(Duration::from_secs(1));
@@ -89,7 +94,8 @@ fn socks5_relay_stream() {
                                                             })
                          });
 
-    tokio::run(fut.map_err(|_| ()));
+    let mut runtime = Runtime::new().expect("Failed to create Runtime");
+    runtime.block_on(fut).unwrap();
 }
 
 #[test]
@@ -115,5 +121,6 @@ fn socks5_relay_aead() {
                                                             })
                          });
 
-    tokio::run(fut.map_err(|_| ()));
+    let mut runtime = Runtime::new().expect("Failed to create Runtime");
+    runtime.block_on(fut).unwrap();
 }

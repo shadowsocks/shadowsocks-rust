@@ -9,8 +9,10 @@ extern crate clap;
 extern crate env_logger;
 #[macro_use]
 extern crate log;
+extern crate futures;
 extern crate shadowsocks;
 extern crate time;
+extern crate tokio;
 
 use clap::{App, Arg};
 
@@ -20,6 +22,7 @@ use std::net::SocketAddr;
 
 use env_logger::fmt::Formatter;
 use env_logger::Builder;
+use futures::Future;
 use log::{LevelFilter, Record};
 
 use shadowsocks::plugin::PluginConfig;
@@ -148,16 +151,18 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
+        Some(cpath) => {
+            match Config::load_from_file(cpath, ConfigType::Local) {
+                Ok(cfg) => {
+                    has_provided_config = true;
+                    cfg
+                }
+                Err(err) => {
+                    error!("{:?}", err);
+                    return;
+                }
             }
-            Err(err) => {
-                error!("{:?}", err);
-                return;
-            }
-        },
+        }
         None => Config::new(),
     };
 
@@ -229,5 +234,10 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    run_local(config);
+    tokio::run(run_local(config).then(|res| -> Result<(), ()> {
+                                          match res {
+                                              Ok(..) => panic!("Server exited without error"),
+                                              Err(err) => panic!("Server exited with error {}", err),
+                                          }
+                                      }));
 }

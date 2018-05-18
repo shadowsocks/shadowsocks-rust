@@ -6,6 +6,7 @@ extern crate tokio;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+extern crate futures;
 extern crate time;
 
 use clap::{App, Arg};
@@ -16,6 +17,7 @@ use std::net::SocketAddr;
 
 use env_logger::fmt::Formatter;
 use env_logger::Builder;
+use futures::Future;
 use log::{LevelFilter, Record};
 
 use shadowsocks::{run_dns, Config, ConfigType, ServerAddr, ServerConfig};
@@ -211,5 +213,10 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    run_dns(config);
+    tokio::run(run_dns(config).then(|res| -> Result<(), ()> {
+                                        match res {
+                                            Ok(..) => panic!("Server exited without error"),
+                                            Err(err) => panic!("Server exited with error {}", err),
+                                        }
+                                    }));
 }

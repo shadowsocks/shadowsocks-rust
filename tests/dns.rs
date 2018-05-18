@@ -2,6 +2,7 @@ extern crate dns_parser;
 extern crate env_logger;
 extern crate rand;
 extern crate shadowsocks;
+extern crate tokio;
 
 use std::collections::HashSet;
 use std::net::{SocketAddr, UdpSocket};
@@ -11,6 +12,7 @@ use std::time::Duration;
 use dns_parser::{Builder, Packet, QueryClass, QueryType};
 use shadowsocks::config::{Config, ConfigType};
 use shadowsocks::{run_dns, run_server};
+use tokio::runtime::current_thread::Runtime;
 
 const CONFIG: &'static str = r#"{
         "server": "127.0.0.1",
@@ -31,11 +33,13 @@ fn dns_relay() {
     let dns_cfg = Config::load_from_str(CONFIG, ConfigType::Local).unwrap();
 
     thread::spawn(move || {
-                      run_server(server_cfg);
+                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+                      runtime.block_on(run_server(server_cfg)).unwrap();
                   });
 
     thread::spawn(move || {
-                      run_dns(dns_cfg);
+                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+                      runtime.block_on(run_dns(dns_cfg)).unwrap();
                   });
 
     thread::sleep(Duration::from_secs(1));

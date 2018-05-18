@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use bytes::{BufMut, BytesMut};
 use futures::Future;
+use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::read_to_end;
 
 use shadowsocks::config::{Config, ServerConfig};
@@ -46,15 +47,21 @@ fn get_client_addr() -> SocketAddr {
 
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
+                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+
+                      let fut = run_server(get_config());
                       bar.wait();
-                      run_server(get_config());
+                      runtime.block_on(fut).expect("Failed to run Server");
                   });
 }
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
+                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+
+                      let fut = run_local(get_config());
                       bar.wait();
-                      run_local(get_config());
+                      runtime.block_on(fut).expect("Failed to run Local");
                   });
 }
 
@@ -75,6 +82,8 @@ fn start_udp_echo_server(bar: Arc<Barrier>) {
 
 fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
+                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+
                       let c = Socks5Client::udp_associate(addr, get_client_addr());
                       let fut = c.and_then(|(c, addr)| {
                                                assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
@@ -85,7 +94,7 @@ fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
 
                       bar.wait();
 
-                      tokio::run(fut.map_err(|_| ()));
+                      runtime.block_on(fut).expect("Failed to run UDP socks5 client");
                   });
 }
 

@@ -11,8 +11,10 @@ extern crate clap;
 extern crate env_logger;
 #[macro_use]
 extern crate log;
+extern crate futures;
 extern crate shadowsocks;
 extern crate time;
+extern crate tokio;
 
 use std::env;
 use std::io::{self, Write};
@@ -21,6 +23,7 @@ use clap::{App, Arg};
 
 use env_logger::fmt::Formatter;
 use env_logger::Builder;
+use futures::Future;
 use log::{LevelFilter, Record};
 
 use shadowsocks::plugin::PluginConfig;
@@ -192,5 +195,10 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    run_server(config);
+    tokio::run(run_server(config).then(|res| -> Result<(), ()> {
+                                           match res {
+                                               Ok(..) => panic!("Server exited without error"),
+                                               Err(err) => panic!("Server exited with error {}", err),
+                                           }
+                                       }));
 }
