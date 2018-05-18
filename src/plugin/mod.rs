@@ -44,6 +44,10 @@ pub struct Plugin {
     process: Popen,
 }
 
+/// Plugin can always be sent between threads
+/// It contains only a handle to subprocess.
+unsafe impl Send for Plugin {}
+
 impl Plugin {
     /// Get address of the plugin
     pub fn addr(&self) -> &ServerAddr {
