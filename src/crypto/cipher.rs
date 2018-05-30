@@ -1,6 +1,5 @@
 //! Ciphers
 
-use std::cell::RefCell;
 use std::convert::From;
 use std::fmt::{self, Debug, Display};
 use std::io;
@@ -10,7 +9,7 @@ use std::str::{self, FromStr};
 use bytes::{BufMut, Bytes, BytesMut};
 use crypto::digest::{self, Digest, DigestType};
 use openssl::symm;
-use rand::{OsRng, Rng};
+use rand::{self, RngCore};
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 
 /// Cipher result
@@ -221,18 +220,26 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Plain => 0,
 
-            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len()
-                                                                  .expect("iv_len should not be None"),
-            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len()
-                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes128Cfb1 => {
+                symm::Cipher::aes_128_cfb1().iv_len()
+                                            .expect("iv_len should not be None")
+            }
+            CipherType::Aes128Cfb8 => {
+                symm::Cipher::aes_128_cfb8().iv_len()
+                                            .expect("iv_len should not be None")
+            }
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => {
                 symm::Cipher::aes_128_cfb128().iv_len()
                                               .expect("iv_len should not be None")
             }
-            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len()
-                                                                  .expect("iv_len should not be None"),
-            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len()
-                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb1 => {
+                symm::Cipher::aes_256_cfb1().iv_len()
+                                            .expect("iv_len should not be None")
+            }
+            CipherType::Aes256Cfb8 => {
+                symm::Cipher::aes_256_cfb8().iv_len()
+                                            .expect("iv_len should not be None")
+            }
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => {
                 symm::Cipher::aes_256_cfb128().iv_len()
                                               .expect("iv_len should not be None")
@@ -260,19 +267,14 @@ impl CipherType {
     }
 
     fn gen_random_bytes(len: usize) -> Bytes {
-        thread_local!(static RNG: RefCell<OsRng> = RefCell::new(OsRng::new().unwrap()));
+        let mut iv = BytesMut::with_capacity(len);
+        unsafe {
+            iv.set_len(len);
+        }
 
-        RNG.with(|rng| {
-                     let mut brng = rng.borrow_mut();
-
-                     let mut iv = BytesMut::with_capacity(len);
-                     unsafe {
-                         iv.set_len(len);
-                     }
-
-                     brng.fill_bytes(&mut iv);
-                     iv.freeze()
-                 })
+        let mut rng = rand::thread_rng();
+        rng.fill_bytes(&mut iv);
+        iv.freeze()
     }
 
     /// Generate a random initialize vector for this cipher

@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use futures::Future;
 use tokio::runtime::current_thread::Runtime;
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::ResolverFuture;
+use trust_dns_resolver::AsyncResolver;
 
 use config::Config;
 
@@ -16,16 +15,16 @@ use config::Config;
 // bluejekyll/trust-dns/resolver/examples/global_resolver.rs
 lazy_static! {
     // First we need to setup the global Resolver
-    static ref GLOBAL_DNS_RESOLVER: ResolverFuture = init_resolver(false);
-    static ref GLOBAL_GOOGLE_DNS_RESOLVER: ResolverFuture = init_resolver(true);
+    static ref GLOBAL_DNS_RESOLVER: AsyncResolver = init_resolver(false);
+    static ref GLOBAL_GOOGLE_DNS_RESOLVER: AsyncResolver = init_resolver(true);
 }
 
-fn init_resolver(force_google: bool) -> ResolverFuture {
+fn init_resolver(force_google: bool) -> AsyncResolver {
     use std::sync::{Arc, Condvar, Mutex};
     use std::thread;
 
     // We'll be using this condvar to get the Resolver from the thread...
-    let pair = Arc::new((Mutex::new(None::<ResolverFuture>), Condvar::new()));
+    let pair = Arc::new((Mutex::new(None::<AsyncResolver>), Condvar::new()));
     let pair2 = pair.clone();
 
     // Spawn the runtime to a new thread...
@@ -36,31 +35,32 @@ fn init_resolver(force_google: bool) -> ResolverFuture {
                       let mut runtime = Runtime::new().expect("failed to launch Runtime");
 
                       // our platform independent future, result, see next blocks
-                      let future;
-
-                      // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
-                      #[cfg(any(unix, windows))]
-                      {
-                          if force_google {
-                              future = ResolverFuture::new(ResolverConfig::google(), ResolverOpts::default());
-                          } else {
-                              // use the system resolver configuration
-                              future = ResolverFuture::from_system_conf().expect("Failed to create ResolverFuture");
+                      let (resolver, bg) = {
+                          // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
+                          #[cfg(any(unix, windows))]
+                          {
+                              if force_google {
+                                  use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+                                  // Get a new resolver with the google nameservers as the upstream recursive resolvers
+                                  AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                              } else {
+                                  use trust_dns_resolver::system_conf::read_system_conf;
+                                  // use the system resolver configuration
+                                  let (config, opts) = read_system_conf().expect("Failed to read global dns sysconf");
+                                  AsyncResolver::new(config, opts)
+                              }
                           }
-                      }
 
-                      // For other operating systems, we can use one of the preconfigured definitions
-                      #[cfg(not(any(unix, windows)))]
-                      {
-                          // Directly reference the config types
-                          use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+                          // For other operating systems, we can use one of the preconfigured definitions
+                          #[cfg(not(any(unix, windows)))]
+                          {
+                              // Directly reference the config types
+                              use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
-                          // Get a new resolver with the google nameservers as the upstream recursive resolvers
-                          future = ResolverFuture::new(ResolverConfig::google(), ResolverOpts::default());
-                      }
-
-                      // this will block the thread until the Resolver is constructed with the above configuration
-                      let resolver = runtime.block_on(future).expect("Failed to create DNS resolver");
+                              // Get a new resolver with the google nameservers as the upstream recursive resolvers
+                              AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                          }
+                      };
 
                       let &(ref lock, ref cvar) = &*pair2;
                       let mut started = lock.lock().unwrap();
@@ -68,7 +68,7 @@ fn init_resolver(force_google: bool) -> ResolverFuture {
                       cvar.notify_one();
                       drop(started);
 
-                      runtime.run().expect("Resolver Thread shutdown!");
+                      runtime.block_on(bg).expect("Failed to create DNS resolver");
                   });
 
     // Wait for the thread to start up.

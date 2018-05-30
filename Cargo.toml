@@ -37,7 +37,7 @@ sodium = ["libsodium-ffi"]
 [dependencies]
 log = "0.4"
 byteorder = "1.2"
-rand = "0.4"
+rand = "0.5"
 time = "0.1"
 clap = "2"
 env_logger = "0.5"
