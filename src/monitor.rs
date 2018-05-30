@@ -82,42 +82,47 @@ pub fn monitor_signal(plugins: Vec<Plugin>) -> impl Future<Item = (), Error = io
 
     use tokio_signal::windows::Event;
 
-    let fut1 = Event::ctrl_c().and_then(|ev| {
-                                            ev.take(1).for_each(|_| -> Result<(), io::Error> {
-                                                                    error!("Received Ctrl-C event");
-                                                                    Ok(())
-                                                                })
-                                        })
-                              .map_err(|err| {
-                                           error!("Failed to monitor Ctrl-C event: {:?}", err);
-                                           err
-                                       });
-
-    let fut2 = Event::ctrl_break().and_then(|ev| {
+    // Must be wrapped with a future, because when `Event` is being created, it will spawn
+    // a task into the current executor. So if there is no current running executor, thread
+    // will panic.
+    futures::lazy(|| {
+        let fut1 = Event::ctrl_c().and_then(|ev| {
                                                 ev.take(1).for_each(|_| -> Result<(), io::Error> {
-                                                                        error!("Received Ctrl-Break event");
+                                                                        error!("Received Ctrl-C event");
                                                                         Ok(())
                                                                     })
                                             })
                                   .map_err(|err| {
-                                               error!("Failed to monitor Ctrl-Break event: {:?}", err);
+                                               error!("Failed to monitor Ctrl-C event: {:?}", err);
                                                err
                                            });
 
-    // Join them all, if any of them is triggered, kill all subprocesses and exit.
-    futures_unordered(vec![boxed_future(fut1), boxed_future(fut2)])
-        .into_future()
-        .then(|r| {
-            // Something happened ... killing all subprocesses
-            info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
-            drop(plugins);
-            match r {
-                Ok(..) => {
-                    process::exit(libc::EXIT_FAILURE);
+        let fut2 = Event::ctrl_break().and_then(|ev| {
+                                                    ev.take(1).for_each(|_| -> Result<(), io::Error> {
+                                                                            error!("Received Ctrl-Break event");
+                                                                            Ok(())
+                                                                        })
+                                                })
+                                      .map_err(|err| {
+                                                   error!("Failed to monitor Ctrl-Break event: {:?}", err);
+                                                   err
+                                               });
+
+        // Join them all, if any of them is triggered, kill all subprocesses and exit.
+        futures_unordered(vec![boxed_future(fut1), boxed_future(fut2)])
+            .into_future()
+            .then(|r| {
+                // Something happened ... killing all subprocesses
+                info!("Killing {} plugin(s) and then ... Bye Bye :)", plugins.len());
+                drop(plugins);
+                match r {
+                    Ok(..) => {
+                        process::exit(libc::EXIT_FAILURE);
+                    }
+                    Err((err, ..)) => Err(err)
                 }
-                Err((err, ..)) => Err(err)
-            }
-        })
+            })
+    })
 }
 
 #[cfg(not(any(windows, unix)))]
