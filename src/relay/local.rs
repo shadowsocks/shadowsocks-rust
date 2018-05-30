@@ -15,9 +15,14 @@ use relay::udprelay::local::run as run_udp;
 /// Relay server running under local environment.
 ///
 /// ```no_run
+/// extern crate tokio;
+/// extern crate shadowsocks;
+///
 /// use shadowsocks::config::{Config, ServerConfig};
 /// use shadowsocks::crypto::CipherType;
 /// use shadowsocks::relay::local::run;
+///
+/// use tokio::prelude::*;
 ///
 /// let mut config = Config::new();
 /// config.local = Some("127.0.0.1:1080".parse().unwrap());
@@ -25,7 +30,7 @@ use relay::udprelay::local::run as run_udp;
 ///                                          "server-password".to_string(),
 ///                                          CipherType::Aes256Cfb)];
 /// let fut = run(config);
-/// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err));
+/// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
 pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
     let mut vf = Vec::new();
