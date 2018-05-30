@@ -4,20 +4,17 @@ environment:
     matrix:
         - TARGET: x86_64-pc-windows-msvc
           BITS: 64
-          OPENSSL_VERSION: 1_1_0h
           MSYS2: 1
-          OPENSSL_DIR: C:\OpenSSL
+          OPENSSL_DIR: C:\OpenSSL-Win64
           SODIUM_BUILD_STATIC: yes
           RUST_BACKTRACE: 1
-        # - TARGET: i686-pc-windows-gnu
-        #   BITS: 32
-        #   OPENSSL_VERSION: 1_1_0g
-        #   MSYS2: 1
+        - TARGET: i686-pc-windows-gnu
+          BITS: 32
+          OPENSSL_DIR: C:\OpenSSL-Win32
+          MSYS2: 1
+          SODIUM_BUILD_STATIC: yes
+          RUST_BACKTRACE: 1
 install:
-  - ps: Start-FileDownload "http://slproweb.com/download/Win${env:BITS}OpenSSL-${env:OPENSSL_VERSION}.exe"
-  - Win%BITS%OpenSSL-%OPENSSL_VERSION%.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
-  - ps: Start-FileDownload "https://curl.haxx.se/ca/cacert.pem" -FileName "C:\OpenSSL\cacert.pem"
-
   # Install Rust
   - appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
   - rustup-init.exe -y --default-host %TARGET%
@@ -31,7 +28,6 @@ install:
 build: false
 
 test_script:
-    - set RUST_LOG=shadowsocks
     - cargo test --no-fail-fast
 
 cache:

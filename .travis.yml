@@ -12,13 +12,14 @@ addons:
     apt:
         packages:
             - libssl-dev
+            - libsodium-dev
 
 install:
-    - wget https://github.com/jedisct1/libsodium/releases/download/1.0.12/libsodium-1.0.12.tar.gz
-    - tar xvfz libsodium-1.0.12.tar.gz
-    - cd libsodium-1.0.12 && ./configure --prefix=$HOME/installed_libsodium && make && make install &&
-      cd ..
-    - export PKG_CONFIG_PATH=$HOME/installed_libsodium/lib/pkgconfig:$PKG_CONFIG_PATH
-    - export LD_LIBRARY_PATH=$HOME/installed_libsodium/lib:$LD_LIBRARY_PATH
+    #- wget https://github.com/jedisct1/libsodium/releases/download/1.0.16/libsodium-1.0.16.tar.gz
+    #- tar xvfz libsodium-1.0.16.tar.gz
+    #- cd libsodium-1.0.16 && ./configure --prefix=$HOME/installed_libsodium && make && make install &&
+    #  cd ..
+    #- export PKG_CONFIG_PATH=$HOME/installed_libsodium/lib/pkgconfig:$PKG_CONFIG_PATH
+    #- export LD_LIBRARY_PATH=$HOME/installed_libsodium/lib:$LD_LIBRARY_PATH
 script:
-    - cargo test -v --no-fail-fast
+    - cargo test --no-fail-fast
