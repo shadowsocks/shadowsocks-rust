@@ -3,6 +3,8 @@ extern crate env_logger;
 extern crate rand;
 extern crate shadowsocks;
 extern crate tokio;
+#[macro_use]
+extern crate log;
 
 use std::collections::HashSet;
 use std::net::{SocketAddr, UdpSocket};
@@ -27,7 +29,7 @@ const CONFIG: &'static str = r#"{
 
 #[test]
 fn dns_relay() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let server_cfg = Config::load_from_str(CONFIG, ConfigType::Server).unwrap();
     let dns_cfg = Config::load_from_str(CONFIG, ConfigType::Local).unwrap();
@@ -47,6 +49,8 @@ fn dns_relay() {
     let dns_addr = "127.0.0.1:5030".parse::<SocketAddr>().unwrap();
     let local_addr = "0.0.0.0:0".parse::<SocketAddr>().unwrap();
     let local = UdpSocket::bind(&local_addr).unwrap();
+    local.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    local.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
 
     const LOOP_ROUND: usize = 10;
 
@@ -66,14 +70,14 @@ fn dns_relay() {
 
         local.send_to(&payload, &dns_addr).unwrap();
 
-        // println!("SENT {:?}", payload);
+        trace!("DNS SENT {:?}", payload);
 
         let mut buf = [0u8; 65535];
         let (len, _) = local.recv_from(&mut buf).unwrap();
 
         let packet = Packet::parse(&buf[..len]).unwrap();
 
-        // println!("GOT {:?}", packet);
+        trace!("DNS GOT {:?}", packet);
         assert_eq!(packet.header.id, id);
     }
 }

@@ -102,6 +102,8 @@ fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
 fn udp_relay() {
     use std::net::UdpSocket;
 
+    let _ = env_logger::try_init();
+
     let remote_addr = Address::SocketAddress(UDP_ECHO_SERVER_ADDR.parse().unwrap());
 
     let bar = Arc::new(Barrier::new(4));
@@ -123,6 +125,8 @@ fn udp_relay() {
     bar.wait();
 
     let l = UdpSocket::bind(UDP_LOCAL_ADDR).unwrap();
+    l.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    l.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
 
     let header = UdpAssociateHeader::new(0, remote_addr);
     let mut buf = BytesMut::with_capacity(header.len());

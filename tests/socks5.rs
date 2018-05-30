@@ -72,6 +72,8 @@ impl Socks5TestServer {
 
 #[test]
 fn socks5_relay_stream() {
+    let _ = env_logger::try_init();
+
     const SERVER_ADDR: &'static str = "127.0.0.1:8100";
     const LOCAL_ADDR: &'static str = "127.0.0.1:8200";
 
@@ -100,6 +102,8 @@ fn socks5_relay_stream() {
 
 #[test]
 fn socks5_relay_aead() {
+    let _ = env_logger::try_init();
+
     const SERVER_ADDR: &'static str = "127.0.0.1:8110";
     const LOCAL_ADDR: &'static str = "127.0.0.1:8210";
 

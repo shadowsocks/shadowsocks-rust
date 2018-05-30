@@ -31,6 +31,7 @@ install:
 build: false
 
 test_script:
+    - set RUST_LOG=shadowsocks
     - cargo test --no-fail-fast
 
 cache:
