@@ -23,6 +23,7 @@ pub enum MiscreantCryptoVariant {
 ///
 /// According to SIP004, the `nonce` has to incr 1 after each encrypt/decrypt.
 pub struct MiscreantCipher {
+    cipher_type: CipherType,
     cipher: MiscreantCryptoVariant,
     nonce: BytesMut,
 }
@@ -41,7 +42,8 @@ impl MiscreantCipher {
 
         let skey = make_skey(t, key, salt);
         let cipher = Self::new_variant(t, &skey);
-        MiscreantCipher { cipher: cipher,
+        MiscreantCipher { cipher_type: t,
+                          cipher: cipher,
                           nonce: nonce, }
     }
 
@@ -63,8 +65,8 @@ impl MiscreantCipher {
 }
 
 impl AeadEncryptor for MiscreantCipher {
-    fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]) {
-        let tag_len = tag.len();
+    fn encrypt(&mut self, input: &[u8], output: &mut [u8]) {
+        let tag_len = self.cipher_type.tag_size();
         let buf_len = input.len() + tag_len;
 
         let mut buf = BytesMut::with_capacity(buf_len);
@@ -76,13 +78,13 @@ impl AeadEncryptor for MiscreantCipher {
         match self.cipher {
             MiscreantCryptoVariant::Aes128(ref mut cipher) => {
                 cipher.seal_in_place(&self.nonce, b"", &mut buf);
-                tag.copy_from_slice(&buf[..tag_len]);
-                output.copy_from_slice(&buf[tag_len..]);
+                (&mut output[..input.len()]).copy_from_slice(&buf[tag_len..]);
+                (&mut output[input.len()..]).copy_from_slice(&buf[..tag_len]);
             }
             MiscreantCryptoVariant::Aes256(ref mut cipher) => {
                 cipher.seal_in_place(&self.nonce, b"", &mut buf);
-                tag.copy_from_slice(&buf[..tag_len]);
-                output.copy_from_slice(&buf[tag_len..]);
+                (&mut output[..input.len()]).copy_from_slice(&buf[tag_len..]);
+                (&mut output[input.len()..]).copy_from_slice(&buf[..tag_len]);
             }
         }
 
@@ -91,10 +93,11 @@ impl AeadEncryptor for MiscreantCipher {
 }
 
 impl AeadDecryptor for MiscreantCipher {
-    fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()> {
-        let mut buf = BytesMut::with_capacity(input.len() + tag.len());
-        buf.put_slice(tag);
-        buf.put_slice(input);
+    fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()> {
+        let tag_size = self.cipher_type.tag_size();
+        let mut buf = BytesMut::with_capacity(input.len() + tag_size);
+        buf.put_slice(&input[input.len() - tag_size..]);
+        buf.put_slice(&input[..input.len() - tag_size]);
 
         let result = match self.cipher {
             MiscreantCryptoVariant::Aes128(ref mut cipher) => cipher.open_in_place(&self.nonce, b"", &mut buf),
@@ -108,8 +111,8 @@ impl AeadDecryptor for MiscreantCipher {
               .map_err(|_| {
                            error!("AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: decrypt failure",
                                   ByteStr::new(&self.nonce),
-                                  ByteStr::new(input),
-                                  ByteStr::new(tag));
+                                  ByteStr::new(&input[..input.len() - tag_size]),
+                                  ByteStr::new(&input[input.len() - tag_size..]));
                            Error::AeadDecryptFailed
                        })
     }
@@ -127,15 +130,15 @@ mod test {
         let iv = ct.gen_init_vec();
 
         let mut enc = MiscreantCipher::new(ct, &key[..], &iv[..]);
-        let mut encrypted_msg = vec![0; message.len()];
-        let mut tag = [0; 16];
-        enc.encrypt(message, &mut encrypted_msg, &mut tag);
+
+        let mut encrypted_msg = vec![0u8; message.len() + ct.tag_size()];
+        enc.encrypt(message, &mut encrypted_msg);
 
         assert_ne!(message, &encrypted_msg[..]);
 
         let mut dec = MiscreantCipher::new(ct, &key[..], &iv[..]);
-        let mut decrypted_msg = vec![0; encrypted_msg.len()];
-        dec.decrypt(&encrypted_msg[..], &mut decrypted_msg, &tag).unwrap();
+        let mut decrypted_msg = vec![0u8; message.len()];
+        dec.decrypt(&encrypted_msg[..], &mut decrypted_msg).unwrap();
 
         assert_eq!(&decrypted_msg[..], message);
     }
