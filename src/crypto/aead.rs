@@ -14,14 +14,14 @@ use bytes::{Bytes, BytesMut};
 
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {
-    /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()`.
-    fn encrypt(&mut self, input: &[u8], output: &mut [u8], tag: &mut [u8]);
+    /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()+tag.len()`.
+    fn encrypt(&mut self, input: &[u8], output: &mut [u8]);
 }
 
 /// Decryptor API for AEAD ciphers
 pub trait AeadDecryptor {
-    /// Decrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()`.
-    fn decrypt(&mut self, input: &[u8], output: &mut [u8], tag: &[u8]) -> CipherResult<()>;
+    /// Decrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()+tag.len()`.
+    fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()>;
 }
 
 /// Variant `AeadDecryptor`

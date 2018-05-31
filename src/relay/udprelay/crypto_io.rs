@@ -52,13 +52,9 @@ fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result
     let mut send_payload = Vec::with_capacity(salt.len() + payload.len() + tag_size);
     send_payload.extend_from_slice(&salt);
     let start_pos = send_payload.len();
-    send_payload.resize(start_pos + payload.len(), 0);
+    send_payload.resize(start_pos + payload.len() + tag_size, 0);
 
-    let mut tag_buf = vec![0u8; tag_size];
-
-    cipher.encrypt(payload, &mut send_payload[start_pos..], &mut tag_buf);
-
-    send_payload.append(&mut tag_buf);
+    cipher.encrypt(payload, &mut send_payload[start_pos..]);
 
     Ok(send_payload)
 }
@@ -100,14 +96,13 @@ fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result
     }
 
     let salt = &payload[..salt_size];
-    let data = &payload[salt_size..payload.len() - tag_size];
-    let tag = &payload[payload.len() - tag_size..];
+    let data = &payload[salt_size..];
     let data_length = payload.len() - tag_size - salt_size;
 
     let mut cipher = crypto::new_aead_decryptor(t, key, salt);
 
     let mut recv_payload = vec![0u8; data_length];
-    cipher.decrypt(data, &mut recv_payload, tag)?;
+    cipher.decrypt(data, &mut recv_payload)?;
 
     Ok(recv_payload)
 }

@@ -132,12 +132,9 @@ impl<R> DecryptedReader<R>
         if !self.sent_final {
             // Ok, read length finished
             {
-                let data = &self.buffer[..2];
-                let tag = &self.buffer[2..];
-
                 let len = {
                     let mut len_buf = [0u8; 2];
-                    self.cipher.decrypt(data, &mut len_buf, tag)?;
+                    self.cipher.decrypt(&self.buffer[..], &mut len_buf)?;
                     Cursor::new(len_buf).get_u16_be() as usize
                 };
 
@@ -168,14 +165,12 @@ impl<R> DecryptedReader<R>
         if !self.sent_final {
             {
                 // Ok, got data
-                let data = &self.buffer[..dlen];
-                let tag = &self.buffer[dlen..];
                 self.data.clear();
                 self.data.reserve(dlen);
                 unsafe {
                     self.data.set_len(dlen); // Decrypted data has exactly the same length
                 }
-                self.cipher.decrypt(data, &mut *self.data, tag)?;
+                self.cipher.decrypt(&self.buffer[..], &mut *self.data)?;
             }
 
             self.read_step = ReadingStep::Done;
@@ -290,25 +285,21 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
         let mut data_len_buf = BytesMut::with_capacity(2);
         data_len_buf.put_u16_be(data_length);
 
-        let mut tag_buf = BytesMut::with_capacity(self.tag_size);
+        let mut encrypted_data_len = BytesMut::with_capacity(2 + self.tag_size);
         unsafe {
-            tag_buf.set_len(self.tag_size);
+            encrypted_data_len.set_len(2 + self.tag_size);
         }
+        self.cipher.encrypt(&data_len_buf, &mut encrypted_data_len);
 
-        let mut encrypted_data_len = [0u8; 2];
-        self.cipher.encrypt(&data_len_buf, &mut encrypted_data_len, &mut *tag_buf);
+        buf.put(&encrypted_data_len);
 
-        buf.put(&encrypted_data_len[..]);
-        buf.put_slice(&tag_buf);
-
-        let mut data_buf = BytesMut::with_capacity(data.len());
+        let mut data_buf = BytesMut::with_capacity(data.len() + self.tag_size);
         unsafe {
-            data_buf.set_len(data.len());
+            data_buf.set_len(data.len() + self.tag_size);
         }
-        self.cipher.encrypt(data, &mut *data_buf, &mut *tag_buf);
+        self.cipher.encrypt(data, &mut *data_buf);
 
         buf.put(data_buf);
-        buf.put(tag_buf);
 
         Ok(())
     }
