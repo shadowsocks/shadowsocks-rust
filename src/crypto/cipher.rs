@@ -99,8 +99,8 @@ const CIPHER_PLAIN: &str = "plain";
 
 const CIPHER_AES_128_GCM: &str = "aes-128-gcm";
 const CIPHER_AES_256_GCM: &str = "aes-256-gcm";
-const CIPHER_CHACHA20_POLY1305: &str = "chacha20-ietf-poly1305";
-const CIPHER_XCHACHA20_POLY1305: &str = "xchacha20-ietf-poly1305";
+const CIPHER_CHACHA20_IETF_POLY1305: &str = "chacha20-ietf-poly1305";
+const CIPHER_XCHACHA20_IETF_POLY1305: &str = "xchacha20-ietf-poly1305";
 
 /// ShadowSocks cipher type
 #[derive(Clone, Debug, Copy)]
@@ -133,9 +133,9 @@ pub enum CipherType {
     Aes128Gcm,
     Aes256Gcm,
 
-    ChaCha20Poly1305,
+    ChaCha20IetfPoly1305,
     #[cfg(feature = "sodium")]
-    XChaCha20Poly1305,
+    XChaCha20IetfPoly1305,
 
     #[cfg(feature = "miscreant")]
     Aes128PmacSiv,
@@ -173,10 +173,10 @@ impl CipherType {
             CipherType::Aes128Gcm => AES_128_GCM.key_len(),
             CipherType::Aes256Gcm => AES_256_GCM.key_len(),
 
-            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.key_len(),
+            CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.key_len(),
 
             #[cfg(feature = "sodium")]
-            CipherType::XChaCha20Poly1305 => 32,
+            CipherType::XChaCha20IetfPoly1305 => 32,
 
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv => 32,
@@ -226,18 +226,26 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Plain => 0,
 
-            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len()
-                                                                  .expect("iv_len should not be None"),
-            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().iv_len()
-                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes128Cfb1 => {
+                symm::Cipher::aes_128_cfb1().iv_len()
+                                            .expect("iv_len should not be None")
+            }
+            CipherType::Aes128Cfb8 => {
+                symm::Cipher::aes_128_cfb8().iv_len()
+                                            .expect("iv_len should not be None")
+            }
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => {
                 symm::Cipher::aes_128_cfb128().iv_len()
                                               .expect("iv_len should not be None")
             }
-            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().iv_len()
-                                                                  .expect("iv_len should not be None"),
-            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().iv_len()
-                                                                  .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb1 => {
+                symm::Cipher::aes_256_cfb1().iv_len()
+                                            .expect("iv_len should not be None")
+            }
+            CipherType::Aes256Cfb8 => {
+                symm::Cipher::aes_256_cfb8().iv_len()
+                                            .expect("iv_len should not be None")
+            }
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => {
                 symm::Cipher::aes_256_cfb128().iv_len()
                                               .expect("iv_len should not be None")
@@ -255,9 +263,9 @@ impl CipherType {
 
             CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
             CipherType::Aes256Gcm => AES_256_GCM.nonce_len(),
-            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.nonce_len(),
+            CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.nonce_len(),
             #[cfg(feature = "sodium")]
-            CipherType::XChaCha20Poly1305 => 24,
+            CipherType::XChaCha20IetfPoly1305 => 24,
 
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv => 8,
@@ -286,10 +294,10 @@ impl CipherType {
     /// Get category of cipher
     pub fn category(&self) -> CipherCategory {
         match *self {
-            CipherType::Aes128Gcm | CipherType::Aes256Gcm | CipherType::ChaCha20Poly1305 => CipherCategory::Aead,
+            CipherType::Aes128Gcm | CipherType::Aes256Gcm | CipherType::ChaCha20IetfPoly1305 => CipherCategory::Aead,
 
             #[cfg(feature = "sodium")]
-            CipherType::XChaCha20Poly1305 => CipherCategory::Aead,
+            CipherType::XChaCha20IetfPoly1305 => CipherCategory::Aead,
 
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => CipherCategory::Aead,
@@ -305,9 +313,9 @@ impl CipherType {
         match *self {
             CipherType::Aes128Gcm => AES_128_GCM.tag_len(),
             CipherType::Aes256Gcm => AES_256_GCM.tag_len(),
-            CipherType::ChaCha20Poly1305 => CHACHA20_POLY1305.tag_len(),
+            CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.tag_len(),
             #[cfg(feature = "sodium")]
-            CipherType::XChaCha20Poly1305 => 16,
+            CipherType::XChaCha20IetfPoly1305 => 16,
 
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => 16,
@@ -359,9 +367,9 @@ impl FromStr for CipherType {
             CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
             CIPHER_AES_256_GCM => Ok(CipherType::Aes256Gcm),
 
-            CIPHER_CHACHA20_POLY1305 => Ok(CipherType::ChaCha20Poly1305),
+            CIPHER_CHACHA20_IETF_POLY1305 => Ok(CipherType::ChaCha20IetfPoly1305),
             #[cfg(feature = "sodium")]
-            CIPHER_XCHACHA20_POLY1305 => Ok(CipherType::XChaCha20Poly1305),
+            CIPHER_XCHACHA20_IETF_POLY1305 => Ok(CipherType::XChaCha20IetfPoly1305),
 
             #[cfg(feature = "miscreant")]
             CIPHER_AES_128_PMAC_SIV => Ok(CipherType::Aes128PmacSiv),
@@ -402,9 +410,9 @@ impl Display for CipherType {
 
             CipherType::Aes128Gcm => write!(f, "{}", CIPHER_AES_128_GCM),
             CipherType::Aes256Gcm => write!(f, "{}", CIPHER_AES_256_GCM),
-            CipherType::ChaCha20Poly1305 => write!(f, "{}", CIPHER_CHACHA20_POLY1305),
+            CipherType::ChaCha20IetfPoly1305 => write!(f, "{}", CIPHER_CHACHA20_IETF_POLY1305),
             #[cfg(feature = "sodium")]
-            CipherType::XChaCha20Poly1305 => write!(f, "{}", CIPHER_XCHACHA20_POLY1305),
+            CipherType::XChaCha20IetfPoly1305 => write!(f, "{}", CIPHER_XCHACHA20_IETF_POLY1305),
 
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv => write!(f, "{}", CIPHER_AES_128_PMAC_SIV),

@@ -67,7 +67,7 @@ impl RingAeadCipher {
         match t {
             CipherType::Aes128Gcm => seal_or_open!(AES_128_GCM),
             CipherType::Aes256Gcm => seal_or_open!(AES_256_GCM),
-            CipherType::ChaCha20Poly1305 => seal_or_open!(CHACHA20_POLY1305),
+            CipherType::ChaCha20IetfPoly1305 => seal_or_open!(CHACHA20_POLY1305),
             _ => panic!("unsupported cipher in ring {:?}", t),
         }
     }
@@ -181,6 +181,6 @@ mod test {
 
     #[test]
     fn test_ring_chacha20poly1305() {
-        test_ring_aead(CipherType::ChaCha20Poly1305);
+        test_ring_aead(CipherType::ChaCha20IetfPoly1305);
     }
 }
