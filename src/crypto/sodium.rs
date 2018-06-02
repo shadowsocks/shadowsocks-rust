@@ -84,30 +84,38 @@ fn crypto_stream_xor_ic<B: BufMut>(t: CipherType,
 
     let ret = unsafe {
         match t {
-            CipherType::ChaCha20 => crypto_stream_chacha20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                                                  data.as_ptr(),
-                                                                  data.len() as c_ulonglong,
-                                                                  iv.as_ptr(),
-                                                                  ic as c_ulonglong,
-                                                                  key.as_ptr()),
-            CipherType::ChaCha20Ietf => crypto_stream_chacha20_ietf_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                                                           data.as_ptr(),
-                                                                           data.len() as c_ulonglong,
-                                                                           iv.as_ptr(),
-                                                                           ic as uint32_t,
-                                                                           key.as_ptr()),
-            CipherType::Salsa20 => crypto_stream_salsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                                                data.as_ptr(),
-                                                                data.len() as c_ulonglong,
-                                                                iv.as_ptr(),
-                                                                ic as c_ulonglong,
-                                                                key.as_ptr()),
-            CipherType::XSalsa20 => crypto_stream_xsalsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
-                                                                  data.as_ptr(),
-                                                                  data.len() as c_ulonglong,
-                                                                  iv.as_ptr(),
-                                                                  ic as c_ulonglong,
-                                                                  key.as_ptr()),
+            CipherType::ChaCha20 => {
+                crypto_stream_chacha20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                              data.as_ptr(),
+                                              data.len() as c_ulonglong,
+                                              iv.as_ptr(),
+                                              ic as c_ulonglong,
+                                              key.as_ptr())
+            }
+            CipherType::ChaCha20Ietf => {
+                crypto_stream_chacha20_ietf_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                                   data.as_ptr(),
+                                                   data.len() as c_ulonglong,
+                                                   iv.as_ptr(),
+                                                   ic as uint32_t,
+                                                   key.as_ptr())
+            }
+            CipherType::Salsa20 => {
+                crypto_stream_salsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                             data.as_ptr(),
+                                             data.len() as c_ulonglong,
+                                             iv.as_ptr(),
+                                             ic as c_ulonglong,
+                                             key.as_ptr())
+            }
+            CipherType::XSalsa20 => {
+                crypto_stream_xsalsa20_xor_ic(out.bytes_mut().as_mut_ptr(),
+                                              data.as_ptr(),
+                                              data.len() as c_ulonglong,
+                                              iv.as_ptr(),
+                                              ic as c_ulonglong,
+                                              key.as_ptr())
+            }
             _ => unreachable!(),
         }
     };
@@ -177,10 +185,10 @@ impl AeadEncryptor for SodiumAeadCipher {
         let buf_len = input.len() + tag_len;
         assert!(output.len() >= buf_len);
 
+        let mut len: c_ulonglong = output.len() as c_ulonglong;
+
         let ret = match self.cipher_type {
             CipherType::XChaCha20IetfPoly1305 => unsafe {
-                let mut len: c_ulonglong = output.len() as c_ulonglong;
-
                 crypto_aead_xchacha20poly1305_ietf_encrypt(output.as_mut_ptr(),
                                                            &mut len,
                                                            input.as_ptr(),
@@ -197,6 +205,7 @@ impl AeadEncryptor for SodiumAeadCipher {
         self.reset();
 
         assert_eq!(ret, 0);
+        assert_eq!(len, output.len() as c_ulonglong);
     }
 }
 
@@ -205,10 +214,10 @@ impl AeadDecryptor for SodiumAeadCipher {
         let tag_len = self.cipher_type.tag_size();
         assert!(output.len() >= input.len() - tag_len);
 
+        let mut len: c_ulonglong = output.len() as c_ulonglong;
+
         let ret = match self.cipher_type {
             CipherType::XChaCha20IetfPoly1305 => unsafe {
-                let mut len: c_ulonglong = output.len() as c_ulonglong;
-
                 crypto_aead_xchacha20poly1305_ietf_decrypt(output.as_mut_ptr(),
                                                            &mut len,
                                                            ptr::null_mut(),
@@ -224,7 +233,7 @@ impl AeadDecryptor for SodiumAeadCipher {
 
         self.reset();
 
-        if ret != 0 {
+        if ret != 0 || len != output.len() as c_ulonglong {
             return Err(Error::SodiumError);
         }
 

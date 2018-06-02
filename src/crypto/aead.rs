@@ -16,21 +16,31 @@ use bytes::{Bytes, BytesMut};
 
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {
-    /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()+tag.len()`.
+    /// Encrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len() + tag.len()`.
+    /// ```plain
+    /// +----------------------------------------+-----------------------+
+    /// | ENCRYPTED TEXT (length = input.len())  | TAG                   |
+    /// +----------------------------------------+-----------------------+
+    /// ```
     fn encrypt(&mut self, input: &[u8], output: &mut [u8]);
 }
 
 /// Decryptor API for AEAD ciphers
 pub trait AeadDecryptor {
-    /// Decrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len()+tag.len()`.
+    /// Decrypt `input` to `output` with `tag`. `output.len()` should equals to `input.len() - tag.len()`.
+    /// ```plain
+    /// +----------------------------------------+-----------------------+
+    /// | ENCRYPTED TEXT (length = output.len()) | TAG                   |
+    /// +----------------------------------------+-----------------------+
+    /// ```
     fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()>;
 }
 
 /// Variant `AeadDecryptor`
-pub type BoxAeadDecryptor = Box<AeadDecryptor + Send>;
+pub type BoxAeadDecryptor = Box<AeadDecryptor + Send + 'static>;
 
 /// Variant `AeadEncryptor`
-pub type BoxAeadEncryptor = Box<AeadEncryptor + Send>;
+pub type BoxAeadEncryptor = Box<AeadEncryptor + Send + 'static>;
 
 /// Generate a specific AEAD cipher encryptor
 pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadEncryptor {

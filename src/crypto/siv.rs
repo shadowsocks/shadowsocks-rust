@@ -69,22 +69,24 @@ impl AeadEncryptor for MiscreantCipher {
         let tag_len = self.cipher_type.tag_size();
         let buf_len = input.len() + tag_len;
 
+        // Miscreant requires tag to be in front of text
         let mut buf = BytesMut::with_capacity(buf_len);
         unsafe {
             buf.set_len(buf_len);
         }
         buf[tag_len..].copy_from_slice(input);
 
+        // NOTE: Must swap tag and encrypted text to output
         match self.cipher {
             MiscreantCryptoVariant::Aes128(ref mut cipher) => {
                 cipher.seal_in_place(&self.nonce, b"", &mut buf);
-                (&mut output[..input.len()]).copy_from_slice(&buf[tag_len..]);
-                (&mut output[input.len()..]).copy_from_slice(&buf[..tag_len]);
+                output[..input.len()].copy_from_slice(&buf[tag_len..]);
+                output[input.len()..].copy_from_slice(&buf[..tag_len]);
             }
             MiscreantCryptoVariant::Aes256(ref mut cipher) => {
                 cipher.seal_in_place(&self.nonce, b"", &mut buf);
-                (&mut output[..input.len()]).copy_from_slice(&buf[tag_len..]);
-                (&mut output[input.len()..]).copy_from_slice(&buf[..tag_len]);
+                output[..input.len()].copy_from_slice(&buf[tag_len..]);
+                output[input.len()..].copy_from_slice(&buf[..tag_len]);
             }
         }
 
@@ -95,6 +97,9 @@ impl AeadEncryptor for MiscreantCipher {
 impl AeadDecryptor for MiscreantCipher {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()> {
         let tag_size = self.cipher_type.tag_size();
+
+        // Swap encrypted text and tag
+        // Miscreant requires tag in front of encrypted text
         let mut buf = BytesMut::with_capacity(input.len() + tag_size);
         buf.put_slice(&input[input.len() - tag_size..]);
         buf.put_slice(&input[..input.len() - tag_size]);
