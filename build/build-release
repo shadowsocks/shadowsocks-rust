@@ -76,7 +76,7 @@ if $BUILD_NIGHTLY; then
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && cargo install -f --features miscreant \
+            && cargo install -f --features miscreant --path . \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 else
     docker run \
@@ -90,7 +90,7 @@ else
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && cargo install -f \
+            && cargo install -f --path . \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 fi
 

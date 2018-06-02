@@ -33,10 +33,11 @@
 //! ```
 
 use std::cmp;
-use std::io::{self, BufRead, Cursor, Read};
+use std::io::{self, BufRead, Read};
 use std::u16;
 
-use bytes::{Buf, BufMut, BytesMut};
+use byteorder::{BigEndian, ByteOrder};
+use bytes::{BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
@@ -135,7 +136,7 @@ impl<R> DecryptedReader<R>
                 let len = {
                     let mut len_buf = [0u8; 2];
                     self.cipher.decrypt(&self.buffer[..], &mut len_buf)?;
-                    Cursor::new(len_buf).get_u16_be() as usize
+                    BigEndian::read_u16(&len_buf) as usize
                 };
 
                 if len > MAX_PACKET_SIZE {
@@ -278,28 +279,22 @@ impl<W> EncryptedWrite for EncryptedWriter<W>
 
     fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         // Data.Len is a 16-bit big-endian integer indicating the length of Data. It should be smaller than 0x3FFF.
-        assert!(data.len() <= MAX_PACKET_SIZE);
+        assert!(data.len() <= MAX_PACKET_SIZE,
+                "Buffer size too large, AEAD encryption protocol requires buffer to be smaller than 0x3FFF");
 
+        let output_length = self.buffer_size(data);
         let data_length = data.len() as u16;
 
-        let mut data_len_buf = BytesMut::with_capacity(2);
-        data_len_buf.put_u16_be(data_length);
+        let mut data_len_buf = [0u8; 2];
+        BigEndian::write_u16(&mut data_len_buf, data_length);
 
-        let mut encrypted_data_len = BytesMut::with_capacity(2 + self.tag_size);
+        let output_length_size = 2 + self.tag_size;
+        self.cipher.encrypt(&data_len_buf, unsafe { &mut buf.bytes_mut()[..output_length_size] });
+        self.cipher.encrypt(data, unsafe { &mut buf.bytes_mut()[output_length_size..output_length] });
+
         unsafe {
-            encrypted_data_len.set_len(2 + self.tag_size);
+            buf.advance_mut(output_length);
         }
-        self.cipher.encrypt(&data_len_buf, &mut encrypted_data_len);
-
-        buf.put(&encrypted_data_len);
-
-        let mut data_buf = BytesMut::with_capacity(data.len() + self.tag_size);
-        unsafe {
-            data_buf.set_len(data.len() + self.tag_size);
-        }
-        self.cipher.encrypt(data, &mut *data_buf);
-
-        buf.put(data_buf);
 
         Ok(())
     }
