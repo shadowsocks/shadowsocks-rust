@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.7.0-alpha.9"
+version = "1.7.0-alpha.10"
 dependencies = [
  "base64 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "byte_string 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",

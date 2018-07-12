@@ -132,15 +132,14 @@ impl<'a> fmt::Display for PrettyPacket<'a> {
 // }
 
 /// Starts a UDP DNS server
-pub fn run(config: Arc<Config>) -> Box<Future<Item = (), Error = io::Error> + Send> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *config.local.as_ref().unwrap();
 
-    let fut = futures::lazy(move || {
+    futures::lazy(move || {
                       info!("ShadowSocks UDP DNS Listening on {}", local_addr);
 
                       UdpSocket::bind(&local_addr)
-                  }).and_then(move |l| listen(config, l));
-    boxed_future(fut)
+                  }).and_then(move |l| listen(config, l))
 }
 
 fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
