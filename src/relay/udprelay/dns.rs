@@ -13,6 +13,7 @@ use futures::{self, Future, Stream};
 use lru_cache::LruCache;
 use tokio;
 use tokio::net::UdpSocket;
+use tokio_io::IoFuture;
 
 use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::{PacketStream, SendDgramRc, SharedUdpSocket};
@@ -132,14 +133,15 @@ impl<'a> fmt::Display for PrettyPacket<'a> {
 // }
 
 /// Starts a UDP DNS server
-pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
+pub fn run(config: Arc<Config>) -> IoFuture<()> {
     let local_addr = *config.local.as_ref().unwrap();
 
-    futures::lazy(move || {
+    let fut = futures::lazy(move || {
                       info!("ShadowSocks UDP DNS Listening on {}", local_addr);
 
                       UdpSocket::bind(&local_addr)
-                  }).and_then(move |l| listen(config, l))
+                  }).and_then(move |l| listen(config, l));
+    boxed_future(fut)
 }
 
 fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
