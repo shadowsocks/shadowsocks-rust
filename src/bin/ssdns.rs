@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::env;
 use std::io::{self, Write};
 use std::net::SocketAddr;
+use std::process;
 
 use env_logger::fmt::Formatter;
 use env_logger::Builder;
@@ -205,7 +206,8 @@ fn main() {
     }
 
     if let Some(dns) = matches.value_of("DNS") {
-        let dns_addr = dns.parse::<SocketAddr>().expect("`dns` is not a valid SocketAddr, must be IP:Port");
+        let dns_addr =
+            dns.parse::<SocketAddr>().expect("`dns` is not a valid SocketAddr, must be IP:Port");
         config.dns = dns_addr;
     }
 
@@ -215,8 +217,14 @@ fn main() {
 
     tokio::run(run_dns(config).then(|res| -> Result<(), ()> {
                                         match res {
-                                            Ok(..) => panic!("Server exited without error"),
-                                            Err(err) => panic!("Server exited with error {}", err),
+                                            Ok(..) => error!("Server exited without error"),
+                                            Err(err) => error!("Server exited with error: {}", err),
                                         }
+
+                                        // Kill the whole process
+                                        // Otherwise the users on this crashed server won't be able to connect
+                                        // until manually restart the server.
+                                        // Just crash and restart.
+                                        process::exit(1);
                                     }));
 }

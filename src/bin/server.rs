@@ -18,6 +18,7 @@ extern crate tokio;
 
 use std::env;
 use std::io::{self, Write};
+use std::process;
 
 use clap::{App, Arg};
 
@@ -132,16 +133,18 @@ fn main() {
 
     let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Server) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
+        Some(cpath) => {
+            match Config::load_from_file(cpath, ConfigType::Server) {
+                Ok(cfg) => {
+                    has_provided_config = true;
+                    cfg
+                }
+                Err(err) => {
+                    error!("{:?}", err);
+                    return;
+                }
             }
-            Err(err) => {
-                error!("{:?}", err);
-                return;
-            }
-        },
+        }
         None => Config::new(),
     };
 
@@ -197,8 +200,14 @@ fn main() {
 
     tokio::run(run_server(config).then(|res| -> Result<(), ()> {
                                            match res {
-                                               Ok(..) => panic!("Server exited without error"),
-                                               Err(err) => panic!("Server exited with error {}", err),
+                                               Ok(..) => error!("Server exited without error"),
+                                               Err(err) => error!("Server exited with error: {}", err),
                                            }
+
+                                           // Kill the whole process
+                                           // Otherwise the users on this crashed server won't be able to connect
+                                           // until manually restart the server.
+                                           // Just crash and restart.
+                                           process::exit(1);
                                        }));
 }
