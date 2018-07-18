@@ -138,10 +138,12 @@ impl FromStr for ServerAddr {
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
-                    (Some(dn), Some(port)) => match port.parse::<u16>() {
-                        Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
-                        Err(..) => Err(ServerAddrError),
-                    },
+                    (Some(dn), Some(port)) => {
+                        match port.parse::<u16>() {
+                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                            Err(..) => Err(ServerAddrError),
+                        }
+                    }
                     _ => Err(ServerAddrError),
                 }
             }
@@ -285,12 +287,14 @@ impl ServerConfig {
 
         let user_info = parsed.username();
         let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
-            Ok(account) => match String::from_utf8(account) {
-                Ok(ac) => ac,
-                Err(..) => {
-                    return Err(UrlParseError::InvalidAuthInfo);
+            Ok(account) => {
+                match String::from_utf8(account) {
+                    Ok(ac) => ac,
+                    Err(..) => {
+                        return Err(UrlParseError::InvalidAuthInfo);
+                    }
                 }
-            },
+            }
             Err(err) => {
                 error!("Failed to parse UserInfo with Base64, err: {}", err);
                 return Err(UrlParseError::InvalidUserInfo);
@@ -539,7 +543,7 @@ impl Config {
                  dns: "8.8.8.8:53".parse::<SocketAddr>().unwrap(), }
     }
 
-    fn parse_server(server: &Map<String, Value>) -> Result<ServerConfig, Error> {
+    fn parse_server(server: &Map<String, Value>, default_timeout: Option<Duration>) -> Result<ServerConfig, Error> {
         let method = server.get("method")
                            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
                            .and_then(|method_o| {
@@ -603,10 +607,11 @@ impl Config {
 
         let timeout = match server.get("timeout") {
             Some(t) => {
-                let val = t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
+                let val =
+                    t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
                 Some(Duration::from_secs(val))
             }
-            None => None,
+            None => default_timeout,
         };
 
         let plugin = match server.get("plugin") {
@@ -639,21 +644,33 @@ impl Config {
         let mut config = Config::new();
 
         if o.contains_key("servers") {
-            let server_list = o.get("servers").unwrap()
+            let server_list = o.get("servers")
+                               .unwrap()
                                .as_array()
                                .ok_or(Error::new(ErrorKind::Malformed, "`servers` should be a list", None))?;
 
+            let opt_timeout = match o.get("timeout") {
+                None => None,
+                Some(t) => {
+                    let val =
+                        t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
+                    Some(Duration::from_secs(val))
+                }
+            };
+
             for server in server_list.iter() {
                 if let Some(server) = server.as_object() {
-                    let cfg = Config::parse_server(server)?;
+                    let cfg = Config::parse_server(server, opt_timeout)?;
                     config.server.push(cfg);
                 }
             }
-        } else if o.contains_key("server") && o.contains_key("server_port") && o.contains_key("password")
+        } else if o.contains_key("server")
+                  && o.contains_key("server_port")
+                  && o.contains_key("password")
                   && o.contains_key("method")
         {
             // Traditional configuration file
-            let single_server = Config::parse_server(o)?;
+            let single_server = Config::parse_server(o, None)?;
             config.server = vec![single_server];
         }
 
@@ -668,22 +685,25 @@ impl Config {
                                                                              "`local_address` should be a string",
                                                                              None))?;
 
-                        let port = o.get("local_port").unwrap()
+                        let port = o.get("local_port")
+                                    .unwrap()
                                     .as_u64()
                                     .ok_or(Error::new(ErrorKind::Malformed, "`local_port` should be an integer", None))?
                                    as u16;
 
                         match addr_str.parse::<Ipv4Addr>() {
                             Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => match addr_str.parse::<Ipv6Addr>() {
-                                Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                Err(..) => {
-                                    return Err(Error::new(ErrorKind::Malformed,
-                                                          "`local_address` is not a valid IP \
-                                                           address",
-                                                          None))
+                            Err(..) => {
+                                match addr_str.parse::<Ipv6Addr>() {
+                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
+                                    Err(..) => {
+                                        return Err(Error::new(ErrorKind::Malformed,
+                                                              "`local_address` is not a valid IP \
+                                                               address",
+                                                              None))
+                                    }
                                 }
-                            },
+                            }
                         }
                     }
                     None => None,
@@ -733,17 +753,15 @@ impl Config {
                     let err = Error::new(ErrorKind::Malformed, "`dns` should be string", None);
                     return Err(err);
                 }
-                Some(dns) => {
-                    match dns.parse::<IpAddr>() {
-                        Err(..) => {
-                            let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
-                            return Err(err);
-                        }
-                        Ok(addr) => {
-                            config.dns = SocketAddr::new(addr, 53);
-                        }
+                Some(dns) => match dns.parse::<IpAddr>() {
+                    Err(..) => {
+                        let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
+                        return Err(err);
                     }
-                }
+                    Ok(addr) => {
+                        config.dns = SocketAddr::new(addr, 53);
+                    }
+                },
             }
         }
 
