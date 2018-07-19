@@ -19,12 +19,12 @@ use clap::{App, Arg};
 use std::env;
 use std::io::{self, Write};
 use std::net::SocketAddr;
-use std::process;
 
 use env_logger::fmt::Formatter;
 use env_logger::Builder;
 use futures::Future;
 use log::{LevelFilter, Record};
+use tokio::runtime::Runtime;
 
 use shadowsocks::plugin::PluginConfig;
 use shadowsocks::{run_local, Config, ConfigType, ServerAddr, ServerConfig};
@@ -235,16 +235,11 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    tokio::run(run_local(config).then(|res| -> Result<(), ()> {
-                                          match res {
-                                              Ok(..) => error!("Server exited without error"),
-                                              Err(err) => error!("Server exited with error: {}", err),
-                                          }
+    let mut runtime = Runtime::new().expect("Creating runtime");
 
-                                          // Kill the whole process
-                                          // Otherwise the users on this crashed server won't be able to connect
-                                          // until manually restart the server.
-                                          // Just crash and restart.
-                                          process::exit(1);
-                                      }));
+    let result = runtime.block_on(run_local(config));
+
+    runtime.shutdown_now().wait().unwrap();
+
+    panic!("Server exited unexpectly with result: {:?}", result);
 }
