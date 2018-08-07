@@ -114,9 +114,8 @@ fn inner_resolve(config: Arc<Config>,
                                       debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
                                       continue;
                                   }
-
-                                  vaddr.push(SocketAddr::new(ip, port));
                               }
+                              vaddr.push(SocketAddr::new(ip, port));
                           }
 
                           if vaddr.is_empty() {
