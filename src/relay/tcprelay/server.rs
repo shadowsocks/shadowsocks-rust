@@ -139,6 +139,14 @@ fn handle_client(server_cfg: Arc<ServerConfig>,
                  config: Arc<Config>,
                  socket: TcpStream)
                  -> impl Future<Item = (), Error = ()> + Send {
+    if let Err(err) = socket.set_keepalive(*server_cfg.timeout()) {
+        error!("Failed to set keep alive: {:?}", err);
+    }
+
+    if let Err(err) = socket.set_nodelay(true) {
+        error!("Failed to set no delay: {:?}", err);
+    }
+
     futures::lazy(move || match socket.peer_addr() {
                       Ok(addr) => Ok((socket, addr)),
                       Err(err) => {

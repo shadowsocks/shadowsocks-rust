@@ -92,6 +92,14 @@ fn handle_socks5_client(config: Arc<Config>,
                         conf: Arc<ServerConfig>,
                         udp_conf: UdpConfig)
                         -> io::Result<()> {
+    if let Err(err) = s.set_keepalive(*conf.timeout()) {
+        error!("Failed to set keep alive: {:?}", err);
+    }
+
+    if let Err(err) = s.set_nodelay(true) {
+        error!("Failed to set no delay: {:?}", err);
+    }
+
     let client_addr = s.peer_addr()?;
     let cloned_client_addr = client_addr;
     let fut = futures::lazy(|| Ok(s.split()))
