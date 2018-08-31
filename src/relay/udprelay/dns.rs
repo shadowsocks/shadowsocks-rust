@@ -13,7 +13,6 @@ use futures::{self, Future, Stream};
 use lru_cache::LruCache;
 use tokio;
 use tokio::net::UdpSocket;
-use tokio_io::IoFuture;
 
 use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::{PacketStream, SendDgramRc, SharedUdpSocket};
@@ -121,27 +120,15 @@ impl<'a> fmt::Display for PrettyPacket<'a> {
     }
 }
 
-// /// Starts a UDP DNS server
-// pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-//     let local_addr = *config.local.as_ref().unwrap();
-
-//     futures::lazy(move || {
-//                       info!("ShadowSocks UDP DNS Listening on {}", local_addr);
-
-//                       UdpSocket::bind(&local_addr)
-//                   }).and_then(move |l| listen(config, l))
-// }
-
 /// Starts a UDP DNS server
-pub fn run(config: Arc<Config>) -> IoFuture<()> {
+pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *config.local.as_ref().unwrap();
 
-    let fut = futures::lazy(move || {
+    futures::lazy(move || {
                       info!("ShadowSocks UDP DNS Listening on {}", local_addr);
 
                       UdpSocket::bind(&local_addr)
-                  }).and_then(move |l| listen(config, l));
-    boxed_future(fut)
+                  }).and_then(move |l| listen(config, l))
 }
 
 fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
@@ -205,52 +192,53 @@ fn handle_l2r(config: Arc<Config>,
     let server = Arc::new(server);
 
     PacketStream::new(l).for_each(move |(payload, src)| {
-            let server = server.clone();
-            let config = config.clone();
-            let pkt_fut = futures::lazy(move || {
-                              let pkt = Packet::parse(&payload[..]).map_err(|err| {
-                                                                   error!("Failed to parse DNS payload, err: {}", err);
-                                                                   io::Error::new(io::ErrorKind::Other,
-                                                                                  "parse DNS packet failed")
-                                                               })?;
+                  let server = server.clone();
+                  let config = config.clone();
+                  let pkt_fut =
+                      futures::lazy(move || {
+                                        let pkt = Packet::parse(&payload[..]).map_err(|err| {
+                                                               error!("Failed to parse DNS payload, err: {}", err);
+                                                               io::Error::new(io::ErrorKind::Other,
+                                                                              "parse DNS packet failed")
+                                                           })?;
 
-                              let (ref socket, ref svr_cfg, svr_addr) = server[server_idx % server.len()];
-                              let (ni, _) = server_idx.overflowing_add(1);
-                              server_idx = ni;
+                                        let (ref socket, ref svr_cfg, svr_addr) = server[server_idx % server.len()];
+                                        let (ni, _) = server_idx.overflowing_add(1);
+                                        server_idx = ni;
 
-                              debug!("DNS {} -> {} {}", src, svr_cfg.addr(), PrettyPacket::new(&pkt));
-                              trace!("DETAIL {} -> {} {:?}", src, svr_cfg.addr(), pkt);
+                                        debug!("DNS {} -> {} {}", src, svr_cfg.addr(), PrettyPacket::new(&pkt));
+                                        trace!("DETAIL {} -> {} {:?}", src, svr_cfg.addr(), pkt);
 
-                              let mut buf = Vec::new();
-                              Address::SocketAddress(config.dns).write_to_buf(&mut buf);
+                                        let mut buf = Vec::new();
+                                        Address::SocketAddress(config.dns).write_to_buf(&mut buf);
 
-                              buf.extend_from_slice(&payload);
+                                        buf.extend_from_slice(&payload);
 
-                              let socket = socket.clone();
-                              let id = pkt.header.id;
-                              encrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf).map(move |send_payload| {
-                                                                                             (socket,
-                                                                                             svr_addr,
-                                                                                             send_payload,
-                                                                                             id)
-                                                                                         })
-                          }).and_then(move |(socket, svr_addr, send_payload, id)| {
-                                                      SendDgramRc::new(socket, send_payload, svr_addr).map(move |_| {
-                                                          GLOBAL_QUERY_ADDR.lock().unwrap().insert(id, (src, Instant::now()));
-                                                      })
-                                                  });
-            tokio::spawn(pkt_fut.then(|res| {
-                match res {
-                    Ok(..) => Ok(()),
-                    Err(err) => {
-                        error!("Failed to handle local -> remote packet, err: {}", err);
-                        Err(())
-                    }
-                }
-            }));
+                                        let socket = socket.clone();
+                                        let id = pkt.header.id;
+                                        encrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf).map(move |send_payload| {
+                                                                                                       (socket,
+                                                                                                       svr_addr,
+                                                                                                       send_payload,
+                                                                                                       id)
+                                                                                                   })
+                                    }).and_then(move |(socket, svr_addr, send_payload, id)| {
+                                                    SendDgramRc::new(socket, send_payload, svr_addr).map(move |_| {
+                                                             GLOBAL_QUERY_ADDR.lock()
+                                                                              .unwrap()
+                                                                              .insert(id, (src, Instant::now()));
+                                                         })
+                                                });
+                  tokio::spawn(pkt_fut.then(|res| match res {
+                                                Ok(..) => Ok(()),
+                                                Err(err) => {
+                                                    error!("Failed to handle local -> remote packet, err: {}", err);
+                                                    Err(())
+                                                }
+                                            }));
 
-            Ok(())
-        })
+                  Ok(())
+              })
 }
 
 fn handle_r2l(l: SharedUdpSocket,
