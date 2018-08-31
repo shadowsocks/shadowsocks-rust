@@ -5,7 +5,7 @@ use std::iter::{IntoIterator, Iterator};
 use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use config::{Config, ServerAddr, ServerConfig};
 use crypto::CipherCategory;
@@ -209,15 +209,13 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => {
-                match last_err {
-                    None => {
-                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                        Err(err)
-                    }
-                    Some(err) => Err(err),
+            TcpStreamConnect::Connect { last_err, .. } => match last_err {
+                None => {
+                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                    Err(err)
                 }
-            }
+                Some(err) => Err(err),
+            },
         }
     }
 }
@@ -235,9 +233,9 @@ fn connect_proxy_server(config: Arc<Config>,
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
                 try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
-                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
-                    try_timeout(fut, timeout)
-                })
+                              let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
+                              try_timeout(fut, timeout)
+                          })
             };
             boxed_future(fut)
         }
@@ -251,7 +249,7 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                               -> impl Future<Item = (DecryptedHalfFut, EncryptedHalfFut), Error = io::Error> + Send {
     let timeout = *svr_cfg.timeout();
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
-        let w_fut = w_fut.and_then(move |enc_w| {
+                                               let w_fut = w_fut.and_then(move |enc_w| {
                                        // Send relay address to remote
                                        let mut buf = BytesMut::with_capacity(relay_addr.len());
                                        relay_addr.write_to_buf(&mut buf);
@@ -263,8 +261,8 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
                                        try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
                                    });
 
-        Ok((r_fut, boxed_future(w_fut)))
-    })
+                                               Ok((r_fut, boxed_future(w_fut)))
+                                           })
 }
 
 /// ShadowSocks Client-Server handshake protocol
@@ -378,7 +376,8 @@ pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<
                            }
                        });
 
-    c2s.select(s2c).and_then(move |(dir, _)| {
+    c2s.select(s2c)
+       .and_then(move |(dir, _)| {
                      match dir {
                          TunnelDirection::Server2Client => {
                              trace!("Relay {} client <- server is closed, abort connection", addr)
@@ -447,8 +446,8 @@ fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::
 {
     use tokio::prelude::*;
 
-    fut.deadline(Instant::now() + dur).map_err(|err| match err.into_inner() {
-                    Some(e) => e,
-                    None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
-                })
+    fut.timeout(dur).map_err(|err| match err.into_inner() {
+                                 Some(e) => e,
+                                 None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
+                             })
 }

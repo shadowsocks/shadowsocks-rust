@@ -3,7 +3,7 @@
 use std::io::{self, Cursor, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use futures::stream::futures_unordered;
 use futures::{self, Future, Stream};
@@ -83,7 +83,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> impl Future<Item =
                         let to = timeout.unwrap_or(Duration::from_secs(5));
                         let caddr = addr.clone();
                         remote_udp.recv_dgram(buf)
-                                  .deadline(Instant::now() + to)
+                                  .timeout(to)
                                   .map_err(move |err| {
                                       match err.into_inner() {
                                           Some(e) => e,
@@ -108,7 +108,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> impl Future<Item =
                                   let to = timeout.unwrap_or(Duration::from_secs(5));
                                   let caddr = addr.clone();
                                   SendDgramRc::new(socket, buf, src)
-                                      .deadline(Instant::now() + to)
+                                      .timeout(to)
                                       .map_err(move |err| {
                                           match err.into_inner() {
                                               Some(e) => e,
