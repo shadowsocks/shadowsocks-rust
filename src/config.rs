@@ -175,6 +175,8 @@ pub struct ServerConfig {
     enc_key: Bytes,
     /// Plugin config
     plugin: Option<PluginConfig>,
+    /// UDP timeout
+    udp_timeout: Option<Duration>,
 }
 
 impl ServerConfig {
@@ -192,7 +194,8 @@ impl ServerConfig {
                        method: method,
                        timeout: timeout,
                        enc_key: enc_key,
-                       plugin: plugin, }
+                       plugin: plugin,
+                       udp_timeout: None, }
     }
 
     /// Create a basic config
@@ -245,6 +248,11 @@ impl ServerConfig {
     /// Get plugin
     pub fn plugin(&self) -> Option<&PluginConfig> {
         self.plugin.as_ref()
+    }
+
+    /// Get UDP timeout
+    pub fn udp_timeout(&self) -> &Option<Duration> {
+        &self.udp_timeout
     }
 
     /// Get URL for QRCode
@@ -439,6 +447,10 @@ impl ServerConfig {
             }
         }
 
+        if let Some(ref p) = self.udp_timeout {
+            obj.insert("udp_timeout".to_owned(), Value::Number(From::from(p.as_secs())));
+        }
+
         Value::Object(obj)
     }
 }
@@ -607,17 +619,27 @@ impl Config {
 
         let timeout = match server.get("timeout") {
             Some(t) => {
-                let val =
-                    t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
+                let val = t.as_u64()
+                           .ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
                 Some(Duration::from_secs(val))
             }
             None => default_timeout,
         };
 
+        let udp_timeout = match server.get("udp_timeout") {
+            Some(t) => {
+                let val = t.as_u64()
+                           .ok_or(Error::new(ErrorKind::Malformed, "`udp_timeout` should be an integer", None))?;
+                Some(Duration::from_secs(val))
+            }
+            None => None,
+        };
+
         let plugin = match server.get("plugin") {
             Some(p) => {
                 let plugin =
-                    p.as_str().ok_or_else(|| Error::new(ErrorKind::Malformed, "`plugin` should be a string", None))?;
+                    p.as_str()
+                     .ok_or_else(|| Error::new(ErrorKind::Malformed, "`plugin` should be a string", None))?;
 
                 let opt = match server.get("plugin_opts") {
                     None => None,
@@ -637,7 +659,9 @@ impl Config {
             None => None,
         };
 
-        Ok(ServerConfig::new(addr, password, method, timeout, plugin))
+        let mut c = ServerConfig::new(addr, password, method, timeout, plugin);
+        c.udp_timeout = udp_timeout;
+        Ok(c)
     }
 
     fn parse_json_object(o: &Map<String, Value>, require_local_info: bool) -> Result<Config, Error> {
@@ -652,8 +676,8 @@ impl Config {
             let opt_timeout = match o.get("timeout") {
                 None => None,
                 Some(t) => {
-                    let val =
-                        t.as_u64().ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
+                    let val = t.as_u64()
+                               .ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
                     Some(Duration::from_secs(val))
                 }
             };
@@ -714,9 +738,9 @@ impl Config {
         }
 
         if let Some(forbidden_ip_conf) = o.get("forbidden_ip") {
-            let forbidden_ip_arr = forbidden_ip_conf.as_array().ok_or(Error::new(ErrorKind::Malformed,
-                                                                                  "`forbidden_ip` should be a list",
-                                                                                  None))?;
+            let forbidden_ip_arr =
+                forbidden_ip_conf.as_array()
+                                 .ok_or(Error::new(ErrorKind::Malformed, "`forbidden_ip` should be a list", None))?;
             config.forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
                                            let x = match x.as_str() {
                                                Some(x) => x,
@@ -829,6 +853,7 @@ impl Config {
         }
 
         obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));
+        obj.insert("dns".to_owned(), Value::String(self.dns.to_string()));
 
         Value::Object(obj)
     }

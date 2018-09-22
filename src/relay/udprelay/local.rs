@@ -50,7 +50,9 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
         let svr_cfg_cloned_cloned = svr_cfg.clone();
         let socket = socket.clone();
         let config = config.clone();
-        let timeout = *svr_cfg.timeout();
+        let timeout = *svr_cfg.udp_timeout();
+
+        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
         let rel = futures::lazy(|| UdpAssociateHeader::read_from(Cursor::new(pkt)))
             .map_err(From::from)
@@ -86,7 +88,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
             })
             .and_then(move |(remote_udp, remote_addr, payload, addr)| {
                 debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, payload.len());
-                let to = timeout.unwrap_or(Duration::from_secs(5));
+                let to = timeout.unwrap_or(DEFAULT_TIMEOUT);
                 let caddr = addr.clone();
                 remote_udp.send_dgram(payload, &remote_addr)
                           .timeout(to)
@@ -103,7 +105,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
             })
             .and_then(move |(remote_udp, addr)| {
                 let buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-                let to = timeout.unwrap_or(Duration::from_secs(5));
+                let to = timeout.unwrap_or(DEFAULT_TIMEOUT);
                 let caddr = addr.clone();
                 remote_udp.recv_dgram(buf)
                           .timeout(to)
