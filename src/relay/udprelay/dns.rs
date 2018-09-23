@@ -18,7 +18,7 @@ use super::crypto_io::{decrypt_payload, encrypt_payload};
 use super::{PacketStream, SendDgramRc, SharedUdpSocket};
 use config::{Config, ServerAddr, ServerConfig};
 use relay::boxed_future;
-use relay::dns_resolver::resolve_by_google;
+use relay::dns_resolver::resolve;
 use relay::socks5::Address;
 
 struct PrettyRRData<'a> {
@@ -141,7 +141,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
                 svr_fut.push(boxed_future(futures::finished::<_, io::Error>(vec![*addr])));
             }
             ServerAddr::DomainName(ref dom, ref port) => {
-                svr_fut.push(boxed_future(resolve_by_google(config.clone(), &*dom, *port, false)));
+                svr_fut.push(boxed_future(resolve(config.clone(), &*dom, *port, false)));
             }
         }
     }
@@ -192,9 +192,9 @@ fn handle_l2r(config: Arc<Config>,
     let server = Arc::new(server);
 
     PacketStream::new(l).for_each(move |(payload, src)| {
-                  let server = server.clone();
-                  let config = config.clone();
-                  let pkt_fut =
+                            let server = server.clone();
+                            let config = config.clone();
+                            let pkt_fut =
                       futures::lazy(move || {
                                         let pkt = Packet::parse(&payload[..]).map_err(|err| {
                                                                error!("Failed to parse DNS payload, err: {}", err);
@@ -210,7 +210,7 @@ fn handle_l2r(config: Arc<Config>,
                                         trace!("DETAIL {} -> {} {:?}", src, svr_cfg.addr(), pkt);
 
                                         let mut buf = Vec::new();
-                                        Address::SocketAddress(config.dns).write_to_buf(&mut buf);
+                                        Address::SocketAddress(config.get_remote_dns()).write_to_buf(&mut buf);
 
                                         buf.extend_from_slice(&payload);
 
@@ -229,16 +229,16 @@ fn handle_l2r(config: Arc<Config>,
                                                                               .insert(id, (src, Instant::now()));
                                                          })
                                                 });
-                  tokio::spawn(pkt_fut.then(|res| match res {
-                                                Ok(..) => Ok(()),
-                                                Err(err) => {
-                                                    error!("Failed to handle local -> remote packet, err: {}", err);
-                                                    Err(())
-                                                }
-                                            }));
+                            tokio::spawn(pkt_fut.then(|res| match res {
+                                                   Ok(..) => Ok(()),
+                                                   Err(err) => {
+                                                       error!("Failed to handle local -> remote packet, err: {}", err);
+                                                       Err(())
+                                                   }
+                                               }));
 
-                  Ok(())
-              })
+                            Ok(())
+                        })
 }
 
 fn handle_r2l(l: SharedUdpSocket,

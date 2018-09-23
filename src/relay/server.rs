@@ -6,6 +6,7 @@ use std::sync::Arc;
 use futures::stream::futures_unordered;
 use futures::{Future, Stream};
 
+use super::dns_resolver::set_dns_config;
 use config::Config;
 use plugin::{launch_plugin, PluginMode};
 use relay::boxed_future;
@@ -32,8 +33,11 @@ use relay::udprelay::server::run as run_udp;
 /// let fut = run(config);
 /// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
-///
 pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
+    if let Some(c) = config.get_dns_config() {
+        set_dns_config(c);
+    }
+
     let mut vf = Vec::new();
 
     if config.enable_udp {

@@ -40,7 +40,6 @@
 //! ```
 //!
 //! These defined server will be used with a load balancing algorithm.
-//!
 
 use std::collections::HashSet;
 use std::convert::From;
@@ -60,6 +59,7 @@ use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use serde_json::{self, Map, Value};
 use serde_urlencoded;
+use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
 use crypto::cipher::CipherType;
@@ -138,12 +138,10 @@ impl FromStr for ServerAddr {
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
-                    (Some(dn), Some(port)) => {
-                        match port.parse::<u16>() {
-                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
-                            Err(..) => Err(ServerAddrError),
-                        }
-                    }
+                    (Some(dn), Some(port)) => match port.parse::<u16>() {
+                        Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                        Err(..) => Err(ServerAddrError),
+                    },
                     _ => Err(ServerAddrError),
                 }
             }
@@ -295,14 +293,12 @@ impl ServerConfig {
 
         let user_info = parsed.username();
         let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
-            Ok(account) => {
-                match String::from_utf8(account) {
-                    Ok(ac) => ac,
-                    Err(..) => {
-                        return Err(UrlParseError::InvalidAuthInfo);
-                    }
+            Ok(account) => match String::from_utf8(account) {
+                Ok(ac) => ac,
+                Err(..) => {
+                    return Err(UrlParseError::InvalidAuthInfo);
                 }
-            }
+            },
             Err(err) => {
                 error!("Failed to parse UserInfo with Base64, err: {}", err);
                 return Err(UrlParseError::InvalidUserInfo);
@@ -476,7 +472,8 @@ pub struct Config {
     pub local: Option<ClientConfig>,
     pub enable_udp: bool,
     pub forbidden_ip: HashSet<IpAddr>,
-    pub dns: SocketAddr,
+    pub dns: Option<String>,
+    pub remote_dns: Option<SocketAddr>,
 }
 
 impl Default for Config {
@@ -552,7 +549,8 @@ impl Config {
                  local: None,
                  enable_udp: false,
                  forbidden_ip: HashSet::new(),
-                 dns: "8.8.8.8:53".parse::<SocketAddr>().unwrap(), }
+                 dns: None,
+                 remote_dns: None, }
     }
 
     fn parse_server(server: &Map<String, Value>, default_timeout: Option<Duration>) -> Result<ServerConfig, Error> {
@@ -717,17 +715,15 @@ impl Config {
 
                         match addr_str.parse::<Ipv4Addr>() {
                             Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => {
-                                match addr_str.parse::<Ipv6Addr>() {
-                                    Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                    Err(..) => {
-                                        return Err(Error::new(ErrorKind::Malformed,
-                                                              "`local_address` is not a valid IP \
-                                                               address",
-                                                              None))
-                                    }
+                            Err(..) => match addr_str.parse::<Ipv6Addr>() {
+                                Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
+                                Err(..) => {
+                                    return Err(Error::new(ErrorKind::Malformed,
+                                                          "`local_address` is not a valid IP \
+                                                           address",
+                                                          None))
                                 }
-                            }
+                            },
                         }
                     }
                     None => None,
@@ -771,21 +767,35 @@ impl Config {
             }
         }
 
+        if let Some(dns) = o.get("remote_dns") {
+            match dns.as_str() {
+                None => {
+                    let err = Error::new(ErrorKind::Malformed, "`remote_dns` should be string", None);
+                    return Err(err);
+                }
+                Some(dns) => {
+                    match dns.parse::<IpAddr>() {
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Malformed, "`remote_dns` should be IpAddr", None);
+                            return Err(err);
+                        }
+                        Ok(addr) => {
+                            config.remote_dns = Some(SocketAddr::new(addr, 53));
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(dns) = o.get("dns") {
             match dns.as_str() {
                 None => {
                     let err = Error::new(ErrorKind::Malformed, "`dns` should be string", None);
                     return Err(err);
                 }
-                Some(dns) => match dns.parse::<IpAddr>() {
-                    Err(..) => {
-                        let err = Error::new(ErrorKind::Malformed, "`dns` should be IpAddr", None);
-                        return Err(err);
-                    }
-                    Ok(addr) => {
-                        config.dns = SocketAddr::new(addr, 53);
-                    }
-                },
+                Some(dns) => {
+                    config.dns = Some(dns.to_owned());
+                }
             }
         }
 
@@ -813,6 +823,46 @@ impl Config {
             ConfigType::Local => true,
             ConfigType::Server => false,
         })
+    }
+
+    pub fn get_dns_config(&self) -> Option<ResolverConfig> {
+        match self.dns {
+            None => None,
+            Some(ref ds) => {
+                match &ds[..] {
+                    "google" => Some(ResolverConfig::google()),
+
+                    "cloudflare" => Some(ResolverConfig::cloudflare()),
+                    "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
+                    "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
+
+                    "quad9" => Some(ResolverConfig::quad9()),
+                    "quad9_tls" => Some(ResolverConfig::quad9_tls()),
+
+                    _ => {
+                        // Set ips directly
+                        match ds.parse::<IpAddr>() {
+                            Ok(ip) => Some(ResolverConfig::from_parts(None,
+                                                                      vec![],
+                                                                      NameServerConfigGroup::from_ips_clear(&[ip],
+                                                                                                            53))),
+                            Err(..) => {
+                                error!("Failed to parse DNS \"{}\" in config to IpAddr, fallback to system config",
+                                       ds);
+                                None
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn get_remote_dns(&self) -> SocketAddr {
+        match self.remote_dns {
+            None => SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53)),
+            Some(ip) => ip,
+        }
     }
 }
 
@@ -853,7 +903,14 @@ impl Config {
         }
 
         obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));
-        obj.insert("dns".to_owned(), Value::String(self.dns.to_string()));
+
+        if let Some(ref dns) = self.dns {
+            obj.insert("dns".to_owned(), Value::String(dns.to_owned()));
+        }
+
+        if let Some(ref dns) = self.remote_dns {
+            obj.insert("remote_dns".to_owned(), Value::String(dns.to_string()));
+        }
 
         Value::Object(obj)
     }

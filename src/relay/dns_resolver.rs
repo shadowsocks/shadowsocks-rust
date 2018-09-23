@@ -3,10 +3,11 @@
 use std::io::{self, ErrorKind};
 use std::mem;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use futures::Future;
 use tokio::runtime::current_thread::Runtime;
+use trust_dns_resolver::config::ResolverConfig;
 use trust_dns_resolver::AsyncResolver;
 
 use config::Config;
@@ -14,12 +15,23 @@ use config::Config;
 // Taken from
 // bluejekyll/trust-dns/resolver/examples/global_resolver.rs
 lazy_static! {
+    static ref GLOBAL_DNS_ADDRESS: Mutex<Option<ResolverConfig>> = Mutex::new(None);
+
     // First we need to setup the global Resolver
-    static ref GLOBAL_DNS_RESOLVER: AsyncResolver = init_resolver(false);
-    static ref GLOBAL_GOOGLE_DNS_RESOLVER: AsyncResolver = init_resolver(true);
+    static ref GLOBAL_DNS_RESOLVER: AsyncResolver = init_resolver();
 }
 
-fn init_resolver(force_google: bool) -> AsyncResolver {
+/// Set address for global DNS resolver
+/// Must be called before servers are actually run
+pub fn set_dns_config(addr: ResolverConfig) {
+    *(&*GLOBAL_DNS_ADDRESS).lock().unwrap() = Some(addr);
+}
+
+fn get_dns_address() -> Option<ResolverConfig> {
+    (&*GLOBAL_DNS_ADDRESS).lock().unwrap().clone()
+}
+
+fn init_resolver() -> AsyncResolver {
     use std::sync::{Arc, Condvar, Mutex};
     use std::thread;
 
@@ -39,10 +51,9 @@ fn init_resolver(force_google: bool) -> AsyncResolver {
                           // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
                           #[cfg(any(unix, windows))]
                           {
-                              if force_google {
-                                  use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-                                  // Get a new resolver with the google nameservers as the upstream recursive resolvers
-                                  AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                              if let Some(conf) = get_dns_address() {
+                                  use trust_dns_resolver::config::ResolverOpts;
+                                  AsyncResolver::new(conf, ResolverOpts::default())
                               } else {
                                   use trust_dns_resolver::system_conf::read_system_conf;
                                   // use the system resolver configuration
@@ -57,8 +68,12 @@ fn init_resolver(force_google: bool) -> AsyncResolver {
                               // Directly reference the config types
                               use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
-                              // Get a new resolver with the google nameservers as the upstream recursive resolvers
-                              AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                              if let Some(conf) = get_dns_address() {
+                                  AsyncResolver::new(conf, ResolverOpts::default())
+                              } else {
+                                  // Get a new resolver with the google nameservers as the upstream recursive resolvers
+                                  AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                              }
                           }
                       };
 
@@ -88,17 +103,12 @@ fn init_resolver(force_google: bool) -> AsyncResolver {
 fn inner_resolve(config: Arc<Config>,
                  addr: &str,
                  port: u16,
-                 check_forbidden: bool,
-                 force_google: bool)
+                 check_forbidden: bool)
                  -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
     let owned_addr = addr.to_owned();
     let owned_addr2 = owned_addr.clone();
 
-    let resolver = if force_google {
-        &*GLOBAL_GOOGLE_DNS_RESOLVER
-    } else {
-        &*GLOBAL_DNS_RESOLVER
-    };
+    let resolver = &*GLOBAL_DNS_RESOLVER;
 
     resolver.lookup_ip(addr)
             .map_err(move |err| {
@@ -130,18 +140,11 @@ fn inner_resolve(config: Arc<Config>,
                       })
 }
 
+/// Resolve address to IP
 pub fn resolve(config: Arc<Config>,
                addr: &str,
                port: u16,
                check_forbidden: bool)
                -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
-    inner_resolve(config, addr, port, check_forbidden, false)
-}
-
-pub fn resolve_by_google(config: Arc<Config>,
-                         addr: &str,
-                         port: u16,
-                         check_forbidden: bool)
-                         -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
-    inner_resolve(config, addr, port, check_forbidden, true)
+    inner_resolve(config, addr, port, check_forbidden)
 }

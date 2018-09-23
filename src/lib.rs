@@ -70,6 +70,8 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 
+#![recursion_limit="128"]
+
 extern crate base64;
 extern crate byte_string;
 extern crate byteorder;
