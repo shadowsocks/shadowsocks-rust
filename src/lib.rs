@@ -65,12 +65,10 @@
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
 //! run_server(config);
 //! ```
-//!
 
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
-
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
 extern crate base64;
 extern crate byte_string;
@@ -99,6 +97,7 @@ extern crate subprocess;
 extern crate tokio_io;
 extern crate dns_parser;
 extern crate lru_cache;
+extern crate spin;
 extern crate tokio;
 #[cfg(any(unix, windows))]
 extern crate tokio_signal;

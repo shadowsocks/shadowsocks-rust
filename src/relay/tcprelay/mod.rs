@@ -209,13 +209,15 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => match last_err {
-                None => {
-                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                    Err(err)
+            TcpStreamConnect::Connect { last_err, .. } => {
+                match last_err {
+                    None => {
+                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                        Err(err)
+                    }
+                    Some(err) => Err(err),
                 }
-                Some(err) => Err(err),
-            },
+            }
         }
     }
 }
@@ -250,16 +252,16 @@ pub fn proxy_server_handshake(remote_stream: TcpStream,
     let timeout = *svr_cfg.timeout();
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
                                                let w_fut = w_fut.and_then(move |enc_w| {
-                                       // Send relay address to remote
-                                       let mut buf = BytesMut::with_capacity(relay_addr.len());
-                                       relay_addr.write_to_buf(&mut buf);
+                                                   // Send relay address to remote
+                                                   let mut buf = BytesMut::with_capacity(relay_addr.len());
+                                                   relay_addr.write_to_buf(&mut buf);
 
-                                       trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}",
-                                              relay_addr,
-                                              buf);
+                                                   trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}",
+                                                          relay_addr,
+                                                          buf);
 
-                                       try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
-                                   });
+                                                   try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
+                                               });
 
                                                Ok((r_fut, boxed_future(w_fut)))
                                            })

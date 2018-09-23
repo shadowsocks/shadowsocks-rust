@@ -64,6 +64,7 @@ miscreant = { version = "0.4.0-beta", optional = true }
 lru-cache = "0.1"
 dns-parser = "0.7"
 trust-dns-resolver = { version = "0.10.0-alpha", features = ["dns-over-rustls", "dns-over-https"] }
+spin = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.2"
