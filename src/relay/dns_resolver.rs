@@ -1,13 +1,12 @@
 //! Asynchronous DNS resolver
 
 use std::io::{self, ErrorKind};
-use std::mem;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use futures::Future;
 use spin::Mutex;
-use tokio::runtime::current_thread::Runtime;
+use tokio;
 use trust_dns_resolver::config::ResolverConfig;
 use trust_dns_resolver::AsyncResolver;
 
@@ -33,72 +32,40 @@ fn get_dns_address() -> Option<ResolverConfig> {
 }
 
 fn init_resolver() -> AsyncResolver {
-    use std::sync::{Arc, Condvar, Mutex};
-    use std::thread;
+    let (resolver, bg) = {
+        // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
+        #[cfg(any(unix, windows))]
+        {
+            if let Some(conf) = get_dns_address() {
+                use trust_dns_resolver::config::ResolverOpts;
+                AsyncResolver::new(conf, ResolverOpts::default())
+            } else {
+                use trust_dns_resolver::system_conf::read_system_conf;
+                // use the system resolver configuration
+                let (config, opts) = read_system_conf().expect("Failed to read global dns sysconf");
+                AsyncResolver::new(config, opts)
+            }
+        }
 
-    // We'll be using this condvar to get the Resolver from the thread...
-    let pair = Arc::new((Mutex::new(None::<AsyncResolver>), Condvar::new()));
-    let pair2 = pair.clone();
+        // For other operating systems, we can use one of the preconfigured definitions
+        #[cfg(not(any(unix, windows)))]
+        {
+            // Directly reference the config types
+            use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
-    // Spawn the runtime to a new thread...
-    //
-    // This thread will manage the actual resolution runtime
-    thread::spawn(move || {
-                      // A runtime for this new thread
-                      let mut runtime = Runtime::new().expect("failed to launch Runtime");
+            if let Some(conf) = get_dns_address() {
+                AsyncResolver::new(conf, ResolverOpts::default())
+            } else {
+                // Get a new resolver with the google nameservers as the upstream recursive resolvers
+                AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+            }
+        }
+    };
 
-                      // our platform independent future, result, see next blocks
-                      let (resolver, bg) = {
-                          // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
-                          #[cfg(any(unix, windows))]
-                          {
-                              if let Some(conf) = get_dns_address() {
-                                  use trust_dns_resolver::config::ResolverOpts;
-                                  AsyncResolver::new(conf, ResolverOpts::default())
-                              } else {
-                                  use trust_dns_resolver::system_conf::read_system_conf;
-                                  // use the system resolver configuration
-                                  let (config, opts) = read_system_conf().expect("Failed to read global dns sysconf");
-                                  AsyncResolver::new(config, opts)
-                              }
-                          }
+    // NOTE: resolving will always be called inside a future.
+    tokio::spawn(bg);
 
-                          // For other operating systems, we can use one of the preconfigured definitions
-                          #[cfg(not(any(unix, windows)))]
-                          {
-                              // Directly reference the config types
-                              use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-
-                              if let Some(conf) = get_dns_address() {
-                                  AsyncResolver::new(conf, ResolverOpts::default())
-                              } else {
-                                  // Get a new resolver with the google nameservers as the upstream recursive resolvers
-                                  AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
-                              }
-                          }
-                      };
-
-                      let &(ref lock, ref cvar) = &*pair2;
-                      let mut started = lock.lock().unwrap();
-                      *started = Some(resolver);
-                      cvar.notify_one();
-                      drop(started);
-
-                      runtime.block_on(bg).expect("Failed to create DNS resolver");
-                  });
-
-    // Wait for the thread to start up.
-    let &(ref lock, ref cvar) = &*pair;
-    let mut resolver = lock.lock().unwrap();
-    while resolver.is_none() {
-        resolver = cvar.wait(resolver).unwrap();
-    }
-
-    // take the started resolver
-    let resolver = mem::replace(&mut *resolver, None);
-
-    // set the global resolver
-    resolver.expect("resolver should not be none")
+    resolver
 }
 
 fn inner_resolve(config: Arc<Config>,
