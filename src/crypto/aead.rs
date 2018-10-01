@@ -8,11 +8,8 @@ use crypto::siv::MiscreantCipher;
 #[cfg(feature = "sodium")]
 use crypto::sodium::SodiumAeadCipher;
 
-use ring::digest::SHA1;
-use ring::hkdf;
-use ring::hmac::SigningKey;
-
 use bytes::{Bytes, BytesMut};
+use ring::{digest::SHA1, hkdf, hmac::SigningKey};
 
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {

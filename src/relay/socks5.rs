@@ -2,24 +2,28 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-use std::convert::From;
-use std::error;
-use std::fmt::{self, Debug, Formatter};
-use std::io::{self, Cursor, Read, Write};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
-use std::u8;
-use std::vec;
+use std::{
+    convert::From,
+    error,
+    fmt::{self, Debug, Formatter},
+    io::{self, Cursor, Read, Write},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    u8,
+    vec,
+};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 
 use futures::{Async, Future, Poll};
 
-use tokio_io::io::read_exact;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::{io::read_exact, AsyncRead, AsyncWrite};
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI,
+    SOCKS5_AUTH_METHOD_NONE,
+    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
+    SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 use super::utils::{write_bytes, WriteBytes};
@@ -167,8 +171,10 @@ pub struct Error {
 
 impl Error {
     pub fn new(reply: Reply, message: &str) -> Error {
-        Error { reply: reply,
-                message: message.to_string(), }
+        Error {
+            reply: reply,
+            message: message.to_string(),
+        }
     }
 }
 
@@ -265,6 +271,7 @@ impl fmt::Display for Address {
 
 impl ToSocketAddrs for Address {
     type Iter = vec::IntoIter<SocketAddr>;
+
     fn to_socket_addrs(&self) -> io::Result<vec::IntoIter<SocketAddr>> {
         match self.clone() {
             Address::SocketAddress(addr) => Ok(vec![addr].into_iter()),
@@ -286,7 +293,8 @@ impl From<(String, u16)> for Address {
 }
 
 pub struct ReadAddress<R>
-    where R: AsyncRead
+where
+    R: AsyncRead,
 {
     reader: Option<R>,
     state: ReadAddressState,
@@ -303,10 +311,11 @@ enum ReadAddressState {
 }
 
 impl<R> Future for ReadAddress<R>
-    where R: AsyncRead
+where
+    R: AsyncRead,
 {
-    type Item = (R, Address);
     type Error = Error;
+    type Item = (R, Address);
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         debug_assert!(self.reader.is_some());
@@ -340,13 +349,16 @@ impl<R> Future for ReadAddress<R>
 }
 
 impl<R> ReadAddress<R>
-    where R: AsyncRead
+where
+    R: AsyncRead,
 {
     fn new(r: R) -> ReadAddress<R> {
-        ReadAddress { reader: Some(r),
-                      state: ReadAddressState::ReadingType,
-                      buf: None,
-                      already_read: 0, }
+        ReadAddress {
+            reader: Some(r),
+            state: ReadAddressState::ReadingType,
+            buf: None,
+            already_read: 0,
+        }
     }
 
     fn read_addr_type(&mut self) -> Poll<(), Error> {
@@ -375,10 +387,12 @@ impl<R> ReadAddress<R>
     fn read_ipv4(&mut self) -> Poll<Address, Error> {
         try_ready!(self.read_data());
         let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v4addr = Ipv4Addr::new(stream.read_u8()?,
-                                   stream.read_u8()?,
-                                   stream.read_u8()?,
-                                   stream.read_u8()?);
+        let v4addr = Ipv4Addr::new(
+            stream.read_u8()?,
+            stream.read_u8()?,
+            stream.read_u8()?,
+            stream.read_u8()?,
+        );
         let port = stream.read_u16::<BigEndian>()?;
         let addr = Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)));
         Ok(Async::Ready(addr))
@@ -387,14 +401,16 @@ impl<R> ReadAddress<R>
     fn read_ipv6(&mut self) -> Poll<Address, Error> {
         try_ready!(self.read_data());
         let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v6addr = Ipv6Addr::new(stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?,
-                                   stream.read_u16::<BigEndian>()?);
+        let v6addr = Ipv6Addr::new(
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+            stream.read_u16::<BigEndian>()?,
+        );
         let port = stream.read_u16::<BigEndian>()?;
 
         let addr = Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)));
@@ -539,42 +555,43 @@ pub struct TcpRequestHeader {
 impl TcpRequestHeader {
     /// Creates a request header
     pub fn new(cmd: Command, addr: Address) -> TcpRequestHeader {
-        TcpRequestHeader { command: cmd,
-                           address: addr, }
+        TcpRequestHeader {
+            command: cmd,
+            address: addr,
+        }
     }
 
     /// Read from a reader
     pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpRequestHeader), Error = Error> + Send
-        where R: AsyncRead + Send + 'static
+    where
+        R: AsyncRead + Send + 'static,
     {
-        read_exact(r, [0u8; 3]).map_err(From::from)
-                               .and_then(|(r, buf)| {
-                                             let ver = buf[0];
-                                             if ver != consts::SOCKS5_VERSION {
-                                                 return Err(Error::new(Reply::ConnectionRefused,
-                                                                       "Unsupported Socks version"));
-                                             }
+        read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                if ver != consts::SOCKS5_VERSION {
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+                }
 
-                                             let cmd = buf[1];
-                                             let command = match Command::from_u8(cmd) {
-                                                 Some(c) => c,
-                                                 None => {
-                                                     return Err(Error::new(Reply::CommandNotSupported,
-                                                                           "Unsupported command"))
-                                                 }
-                                             };
+                let cmd = buf[1];
+                let command = match Command::from_u8(cmd) {
+                    Some(c) => c,
+                    None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
+                };
 
-                                             Ok((r, command))
-                                         })
-                               .and_then(|(r, command)| {
-                                             Address::read_from(r).map(move |(conn, address)| {
-                                                                           let header =
-                                                                               TcpRequestHeader { command: command,
-                                                                                                  address: address, };
+                Ok((r, command))
+            })
+            .and_then(|(r, command)| {
+                Address::read_from(r).map(move |(conn, address)| {
+                    let header = TcpRequestHeader {
+                        command: command,
+                        address: address,
+                    };
 
-                                                                           (conn, header)
-                                                                       })
-                                         })
+                    (conn, header)
+                })
+            })
     }
 
     /// Write data into a writer
@@ -586,8 +603,10 @@ impl TcpRequestHeader {
 
     /// Writes to buffer
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
-        let TcpRequestHeader { ref address,
-                               ref command, } = *self;
+        let TcpRequestHeader {
+            ref address,
+            ref command,
+        } = *self;
 
         buf.put_slice(&[consts::SOCKS5_VERSION, command.as_u8(), 0x00]);
         address.write_to_buf(buf);
@@ -620,35 +639,39 @@ pub struct TcpResponseHeader {
 impl TcpResponseHeader {
     /// Creates a response header
     pub fn new(reply: Reply, address: Address) -> TcpResponseHeader {
-        TcpResponseHeader { reply: reply,
-                            address: address, }
+        TcpResponseHeader {
+            reply: reply,
+            address: address,
+        }
     }
 
     /// Read from a reader
     pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpResponseHeader), Error = Error> + Send
-        where R: AsyncRead + Send + 'static
+    where
+        R: AsyncRead + Send + 'static,
     {
-        read_exact(r, [0u8; 3]).map_err(From::from)
-                               .and_then(|(r, buf)| {
-                                             let ver = buf[0];
-                                             let reply_code = buf[1];
+        read_exact(r, [0u8; 3])
+            .map_err(From::from)
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                let reply_code = buf[1];
 
-                                             if ver != consts::SOCKS5_VERSION {
-                                                 return Err(Error::new(Reply::ConnectionRefused,
-                                                                       "Unsupported Socks version"));
-                                             }
+                if ver != consts::SOCKS5_VERSION {
+                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+                }
 
-                                             Ok((r, reply_code))
-                                         })
-                               .and_then(|(r, reply_code)| {
-                                             Address::read_from(r).map(move |(r, address)| {
-                                                                           let rep = TcpResponseHeader { reply:
-                                                                                             Reply::from_u8(reply_code),
-                                                                                         address: address, };
+                Ok((r, reply_code))
+            })
+            .and_then(|(r, reply_code)| {
+                Address::read_from(r).map(move |(r, address)| {
+                    let rep = TcpResponseHeader {
+                        reply: Reply::from_u8(reply_code),
+                        address: address,
+                    };
 
-                                                                           (r, rep)
-                                                                       })
-                                         })
+                    (r, rep)
+                })
+            })
     }
 
     /// Write to a writer
@@ -694,21 +717,22 @@ impl HandshakeRequest {
 
     /// Read from a reader
     pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeRequest), Error = io::Error>
-        where R: AsyncRead + Send + 'static
+    where
+        R: AsyncRead + Send + 'static,
     {
-        read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
-                                               let ver = buf[0];
-                                               let nmet = buf[1];
+        read_exact(r, [0u8, 0u8])
+            .and_then(|(r, buf)| {
+                let ver = buf[0];
+                let nmet = buf[1];
 
-                                               if ver != consts::SOCKS5_VERSION {
-                                                   return Err(io::Error::new(io::ErrorKind::Other,
-                                                                             "Invalid Socks5 version"));
-                                               }
+                if ver != consts::SOCKS5_VERSION {
+                    return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
+                }
 
-                                               Ok((r, nmet))
-                                           })
-                                 .and_then(|(r, nmet)| read_exact(r, vec![0u8; nmet as usize]))
-                                 .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
+                Ok((r, nmet))
+            })
+            .and_then(|(r, nmet)| read_exact(r, vec![0u8; nmet as usize]))
+            .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
     }
 
     /// Write to a writer
@@ -753,18 +777,19 @@ impl HandshakeResponse {
 
     /// Read from a reader
     pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeResponse), Error = io::Error>
-        where R: AsyncRead + Send + 'static
+    where
+        R: AsyncRead + Send + 'static,
     {
         read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
-                                               let ver = buf[0];
-                                               let met = buf[1];
+            let ver = buf[0];
+            let met = buf[1];
 
-                                               if ver != consts::SOCKS5_VERSION {
-                                                   Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
-                                               } else {
-                                                   Ok((r, HandshakeResponse { chosen_method: met }))
-                                               }
-                                           })
+            if ver != consts::SOCKS5_VERSION {
+                Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
+            } else {
+                Ok((r, HandshakeResponse { chosen_method: met }))
+            }
+        })
     }
 
     /// Write to a writer
@@ -807,20 +832,23 @@ pub struct UdpAssociateHeader {
 impl UdpAssociateHeader {
     /// Creates a header
     pub fn new(frag: u8, address: Address) -> UdpAssociateHeader {
-        UdpAssociateHeader { frag: frag,
-                             address: address, }
+        UdpAssociateHeader {
+            frag: frag,
+            address: address,
+        }
     }
 
     /// Read from a reader
     pub fn read_from<R>(r: R) -> impl Future<Item = (R, UdpAssociateHeader), Error = Error> + Send
-        where R: AsyncRead + Send + 'static
+    where
+        R: AsyncRead + Send + 'static,
     {
         read_exact(r, [0u8; 3]).map_err(From::from).and_then(|(r, buf)| {
             let frag = buf[2];
             Address::read_from(r).map(move |(r, address)| {
-                                          let h = UdpAssociateHeader::new(frag, address);
-                                          (r, h)
-                                      })
+                let h = UdpAssociateHeader::new(frag, address);
+                (r, h)
+            })
         })
     }
 

@@ -1,14 +1,17 @@
 //! Cipher defined with Ring
 
-use std::mem;
-use std::ptr;
+use std::{mem, ptr};
 
-use ring::aead::{open_in_place, seal_in_place, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305, OpeningKey, SealingKey};
+use ring::aead::{open_in_place, seal_in_place, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 
-use crypto::aead::{increase_nonce, make_skey};
-use crypto::cipher::Error;
-use crypto::{AeadDecryptor, AeadEncryptor};
-use crypto::{CipherResult, CipherType};
+use crypto::{
+    aead::{increase_nonce, make_skey},
+    cipher::Error,
+    AeadDecryptor,
+    AeadEncryptor,
+    CipherResult,
+    CipherType,
+};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -44,10 +47,12 @@ impl RingAeadCipher {
 
         let skey = make_skey(t, key, salt);
         let cipher = RingAeadCipher::new_variant(t, &skey, &nonce, is_seal);
-        RingAeadCipher { cipher: cipher,
-                         cipher_type: t,
-                         key: skey,
-                         nonce: nonce, }
+        RingAeadCipher {
+            cipher: cipher,
+            cipher_type: t,
+            key: skey,
+            nonce: nonce,
+        }
     }
 
     fn new_variant(t: CipherType, key: &[u8], nonce: &[u8], is_seal: bool) -> RingAeadCryptoVariant {
@@ -126,11 +131,13 @@ impl AeadDecryptor for RingAeadCipher {
                     Ok(())
                 }
                 Err(err) => {
-                    error!("AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: {:?}",
-                           ByteStr::new(nonce),
-                           ByteStr::new(&input[..tag_len]),
-                           ByteStr::new(&input[tag_len..]),
-                           err);
+                    error!(
+                        "AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: {:?}",
+                        ByteStr::new(nonce),
+                        ByteStr::new(&input[..tag_len]),
+                        ByteStr::new(&input[tag_len..]),
+                        err
+                    );
                     Err(Error::AeadDecryptFailed)
                 }
             }

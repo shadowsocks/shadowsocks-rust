@@ -1,11 +1,16 @@
 //! Utility functions
 
-use std::io;
-use std::time::{Duration, Instant};
+use std::{
+    io,
+    time::{Duration, Instant},
+};
 
 use tokio::timer::Delay;
-use tokio_io::io::{copy, Copy};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::{
+    io::{copy, Copy},
+    AsyncRead,
+    AsyncWrite,
+};
 
 use futures::{Async, Future, Poll};
 
@@ -13,16 +18,18 @@ use super::BUFFER_SIZE;
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub fn copy_timeout<R, W>(r: R, w: W, dur: Duration) -> CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     CopyTimeout::new(r, w, dur)
 }
 
 /// Copies all data from `r` to `w`, abort if timeout reaches
 pub struct CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     r: Option<R>,
     w: Option<W>,
@@ -35,30 +42,31 @@ pub struct CopyTimeout<R, W>
 }
 
 impl<R, W> CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     fn new(r: R, w: W, timeout: Duration) -> CopyTimeout<R, W> {
-        CopyTimeout { r: Some(r),
-                      w: Some(w),
-                      timeout: timeout,
-                      amt: 0,
-                      timer: None,
-                      buf: [0u8; BUFFER_SIZE],
-                      pos: 0,
-                      cap: 0, }
+        CopyTimeout {
+            r: Some(r),
+            w: Some(w),
+            timeout: timeout,
+            amt: 0,
+            timer: None,
+            buf: [0u8; BUFFER_SIZE],
+            pos: 0,
+            cap: 0,
+        }
     }
 
     fn try_poll_timeout(&mut self) -> io::Result<()> {
         match self.timer.as_mut() {
             None => Ok(()),
-            Some(t) => {
-                match t.poll() {
-                    Err(err) => panic!("Failed to poll on timer, err: {}", err),
-                    Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                    Ok(Async::NotReady) => Ok(()),
-                }
-            }
+            Some(t) => match t.poll() {
+                Err(err) => panic!("Failed to poll on timer, err: {}", err),
+                Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+                Ok(Async::NotReady) => Ok(()),
+            },
         }
     }
 
@@ -104,11 +112,12 @@ impl<R, W> CopyTimeout<R, W>
 }
 
 impl<R, W> Future for CopyTimeout<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
-    type Item = (u64, R, W);
     type Error = io::Error;
+    type Item = (u64, R, W);
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -146,8 +155,9 @@ impl<R, W> Future for CopyTimeout<R, W>
 
 /// Copies all data from `r` to `w` with optional timeout param
 pub fn copy_timeout_opt<R, W>(r: R, w: W, dur: Option<Duration>) -> CopyTimeoutOpt<R, W>
-    where R: AsyncRead,
-          W: AsyncWrite
+where
+    R: AsyncRead,
+    W: AsyncWrite,
 {
     match dur {
         Some(d) => CopyTimeoutOpt::CopyTimeout(copy_timeout(r, w, d)),
@@ -162,8 +172,8 @@ pub enum CopyTimeoutOpt<R: AsyncRead, W: AsyncWrite> {
 }
 
 impl<R: AsyncRead, W: AsyncWrite> Future for CopyTimeoutOpt<R, W> {
-    type Item = (u64, R, W);
     type Error = io::Error;
+    type Item = (u64, R, W);
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {

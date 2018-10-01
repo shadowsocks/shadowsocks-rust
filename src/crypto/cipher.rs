@@ -1,10 +1,12 @@
 //! Ciphers
 
-use std::convert::From;
-use std::fmt::{self, Debug, Display};
-use std::io;
-use std::mem;
-use std::str::{self, FromStr};
+use std::{
+    convert::From,
+    fmt::{self, Debug, Display},
+    io,
+    mem,
+    str::{self, FromStr},
+};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use crypto::digest::{self, Digest, DigestType};
@@ -226,30 +228,24 @@ impl CipherType {
         match *self {
             CipherType::Table | CipherType::Plain => 0,
 
-            CipherType::Aes128Cfb1 => {
-                symm::Cipher::aes_128_cfb1().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes128Cfb8 => {
-                symm::Cipher::aes_128_cfb8().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => {
-                symm::Cipher::aes_128_cfb128().iv_len()
-                                              .expect("iv_len should not be None")
-            }
-            CipherType::Aes256Cfb1 => {
-                symm::Cipher::aes_256_cfb1().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes256Cfb8 => {
-                symm::Cipher::aes_256_cfb8().iv_len()
-                                            .expect("iv_len should not be None")
-            }
-            CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => {
-                symm::Cipher::aes_256_cfb128().iv_len()
-                                              .expect("iv_len should not be None")
-            }
+            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128()
+                .iv_len()
+                .expect("iv_len should not be None"),
 
             CipherType::Rc4 => symm::Cipher::rc4().iv_len().expect("iv_len should not be None"),
             CipherType::Rc4Md5 => 16,
@@ -338,6 +334,7 @@ impl CipherType {
 
 impl FromStr for CipherType {
     type Err = Error;
+
     fn from_str(s: &str) -> Result<CipherType, Error> {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
@@ -424,8 +421,7 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::CryptoMode;
-    use crypto::{new_stream, CipherType, StreamCipher};
+    use crypto::{new_stream, CipherType, CryptoMode, StreamCipher};
 
     #[test]
     fn test_get_cipher() {

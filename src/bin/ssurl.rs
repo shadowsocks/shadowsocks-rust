@@ -9,12 +9,12 @@ extern crate serde_json;
 extern crate shadowsocks;
 
 use clap::{App, Arg};
+use qrcode::{types::Color, QrCode};
 
-use qrcode::types::Color;
-use qrcode::QrCode;
-
-use shadowsocks::config::{Config, ConfigType, ServerConfig};
-use shadowsocks::VERSION;
+use shadowsocks::{
+    config::{Config, ConfigType, ServerConfig},
+    VERSION,
+};
 
 const BLACK: &'static str = "\x1b[40m  \x1b[0m";
 const WHITE: &'static str = "\x1b[47m  \x1b[0m";

@@ -108,11 +108,10 @@ extern crate url;
 /// ShadowSocks version
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-pub use self::config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig};
-pub use self::relay::dns::run as run_dns;
-pub use self::relay::local::run as run_local;
-pub use self::relay::server::run as run_server;
-pub use self::relay::tcprelay::client::Socks5Client;
+pub use self::{
+    config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig},
+    relay::{dns::run as run_dns, local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
+};
 
 pub mod config;
 pub mod crypto;

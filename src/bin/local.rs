@@ -3,7 +3,6 @@
 //! You have to provide all needed configuration attributes via command line parameters,
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
-//!
 
 extern crate clap;
 extern crate env_logger;
@@ -14,47 +13,52 @@ extern crate shadowsocks;
 extern crate time;
 extern crate tokio;
 
+use std::{
+    env,
+    io::{self, Write},
+    net::SocketAddr,
+};
+
 use clap::{App, Arg};
-
-use std::env;
-use std::io::{self, Write};
-use std::net::SocketAddr;
-
-use env_logger::fmt::Formatter;
-use env_logger::Builder;
+use env_logger::{fmt::Formatter, Builder};
 use futures::Future;
 use log::{LevelFilter, Record};
 use tokio::runtime::Runtime;
 
-use shadowsocks::plugin::PluginConfig;
-use shadowsocks::{run_local, Config, ConfigType, ServerAddr, ServerConfig};
+use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
         writeln!(fmt, "[{}] {}", record.level(), record.args())
     } else {
-        writeln!(fmt,
-                 "[{}][{}] {}",
-                 time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-                 record.level(),
-                 record.args())
+        writeln!(
+            fmt,
+            "[{}][{}] {}",
+            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+            record.level(),
+            record.args()
+        )
     }
 }
 
 fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
-        writeln!(fmt,
-                 "[{}] [{}] {}",
-                 record.level(),
-                 record.module_path().unwrap_or("*"),
-                 record.args())
+        writeln!(
+            fmt,
+            "[{}] [{}] {}",
+            record.level(),
+            record.module_path().unwrap_or("*"),
+            record.args()
+        )
     } else {
-        writeln!(fmt,
-                 "[{}][{}] [{}] {}",
-                 time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-                 record.level(),
-                 record.module_path().unwrap_or("*"),
-                 record.args())
+        writeln!(
+            fmt,
+            "[{}][{}] [{}] {}",
+            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+            record.level(),
+            record.module_path().unwrap_or("*"),
+            record.args()
+        )
     }
 }
 
@@ -62,54 +66,76 @@ fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
-        .arg(Arg::with_name("VERBOSE")
-                 .short("v")
-                 .multiple(true)
-                 .help("Set the level of debug"))
-        .arg(Arg::with_name("ENABLE_UDP")
-                 .short("u")
-                 .long("enable-udp")
-                 .help("Enable UDP relay"))
-        .arg(Arg::with_name("CONFIG")
-                 .short("c")
-                 .long("config")
-                 .takes_value(true)
-                 .help("Specify config file"))
-        .arg(Arg::with_name("SERVER_ADDR")
-                 .short("s")
-                 .long("server-addr")
-                 .takes_value(true)
-                 .help("Server address"))
-        .arg(Arg::with_name("LOCAL_ADDR")
-                 .short("b")
-                 .long("local-addr")
-                 .takes_value(true)
-                 .help("Local address, listen only to this address if specified"))
-        .arg(Arg::with_name("PASSWORD")
-                 .short("k")
-                 .long("password")
-                 .takes_value(true)
-                 .help("Password"))
-        .arg(Arg::with_name("ENCRYPT_METHOD")
-                 .short("m")
-                 .long("encrypt-method")
-                 .takes_value(true)
-                 .help("Encryption method"))
-        .arg(Arg::with_name("PLUGIN")
-                 .long("plugin")
-                 .takes_value(true)
-                 .help("Enable SIP003 plugin"))
-        .arg(Arg::with_name("PLUGIN_OPT")
-                 .long("plugin-opts")
-                 .takes_value(true)
-                 .help("Set SIP003 plugin options"))
-        .arg(Arg::with_name("LOG_WITHOUT_TIME")
-                 .long("log-without-time")
-                 .help("Disable time in log"))
-        .arg(Arg::with_name("URL")
-                 .long("server-url")
-                 .takes_value(true)
-                 .help("Server address in SIP002 URL"))
+        .arg(
+            Arg::with_name("VERBOSE")
+                .short("v")
+                .multiple(true)
+                .help("Set the level of debug"),
+        )
+        .arg(
+            Arg::with_name("ENABLE_UDP")
+                .short("u")
+                .long("enable-udp")
+                .help("Enable UDP relay"),
+        )
+        .arg(
+            Arg::with_name("CONFIG")
+                .short("c")
+                .long("config")
+                .takes_value(true)
+                .help("Specify config file"),
+        )
+        .arg(
+            Arg::with_name("SERVER_ADDR")
+                .short("s")
+                .long("server-addr")
+                .takes_value(true)
+                .help("Server address"),
+        )
+        .arg(
+            Arg::with_name("LOCAL_ADDR")
+                .short("b")
+                .long("local-addr")
+                .takes_value(true)
+                .help("Local address, listen only to this address if specified"),
+        )
+        .arg(
+            Arg::with_name("PASSWORD")
+                .short("k")
+                .long("password")
+                .takes_value(true)
+                .help("Password"),
+        )
+        .arg(
+            Arg::with_name("ENCRYPT_METHOD")
+                .short("m")
+                .long("encrypt-method")
+                .takes_value(true)
+                .help("Encryption method"),
+        )
+        .arg(
+            Arg::with_name("PLUGIN")
+                .long("plugin")
+                .takes_value(true)
+                .help("Enable SIP003 plugin"),
+        )
+        .arg(
+            Arg::with_name("PLUGIN_OPT")
+                .long("plugin-opts")
+                .takes_value(true)
+                .help("Set SIP003 plugin options"),
+        )
+        .arg(
+            Arg::with_name("LOG_WITHOUT_TIME")
+                .long("log-without-time")
+                .help("Disable time in log"),
+        )
+        .arg(
+            Arg::with_name("URL")
+                .long("server-url")
+                .takes_value(true)
+                .help("Server address in SIP002 URL"),
+        )
         .get_matches();
 
     let mut log_builder = Builder::new();
@@ -129,13 +155,15 @@ fn main() {
         }
         2 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Debug)
-                       .filter(Some("shadowsocks"), LevelFilter::Debug);
+            log_builder
+                .filter(Some("sslocal"), LevelFilter::Debug)
+                .filter(Some("shadowsocks"), LevelFilter::Debug);
         }
         3 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Trace)
-                       .filter(Some("shadowsocks"), LevelFilter::Trace);
+            log_builder
+                .filter(Some("sslocal"), LevelFilter::Trace)
+                .filter(Some("shadowsocks"), LevelFilter::Trace);
         }
         _ => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
@@ -152,48 +180,51 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => {
-            match Config::load_from_file(cpath, ConfigType::Local) {
-                Ok(cfg) => {
-                    has_provided_config = true;
-                    cfg
-                }
-                Err(err) => {
-                    error!("{:?}", err);
-                    return;
-                }
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+            Ok(cfg) => {
+                has_provided_config = true;
+                cfg
             }
-        }
+            Err(err) => {
+                error!("{:?}", err);
+                return;
+            }
+        },
         None => Config::new(),
     };
 
-    let mut has_provided_server_config =
-        match (matches.value_of("SERVER_ADDR"), matches.value_of("PASSWORD"), matches.value_of("ENCRYPT_METHOD")) {
-            (Some(svr_addr), Some(password), Some(method)) => {
-                let method = match method.parse() {
-                    Ok(m) => m,
-                    Err(err) => {
-                        panic!("Does not support {:?} method: {:?}", method, err);
-                    }
-                };
+    let mut has_provided_server_config = match (
+        matches.value_of("SERVER_ADDR"),
+        matches.value_of("PASSWORD"),
+        matches.value_of("ENCRYPT_METHOD"),
+    ) {
+        (Some(svr_addr), Some(password), Some(method)) => {
+            let method = match method.parse() {
+                Ok(m) => m,
+                Err(err) => {
+                    panic!("Does not support {:?} method: {:?}", method, err);
+                }
+            };
 
-                let sc = ServerConfig::new(svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
-                                           password.to_owned(),
-                                           method,
-                                           None,
-                                           None);
+            let sc = ServerConfig::new(
+                svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
+                password.to_owned(),
+                method,
+                None,
+                None,
+            );
 
-                config.server.push(sc);
-                true
-            }
-            (None, None, None) => {
-                // Does not provide server config
-                false
-            }
-            _ => {
-                panic!("`server-addr`, `method` and `password` should be provided together");
-            }
-        };
+            config.server.push(sc);
+            true
+        }
+        (None, None, None) => {
+            // Does not provide server config
+            false
+        }
+        _ => {
+            panic!("`server-addr`, `method` and `password` should be provided together");
+        }
+    };
 
     if let Some(url) = matches.value_of("URL") {
         let svr_addr = url.parse::<ServerConfig>().expect("Failed to parse `url`");
@@ -222,8 +253,10 @@ fn main() {
     config.enable_udp |= matches.is_present("ENABLE_UDP");
 
     if let Some(p) = matches.value_of("PLUGIN") {
-        let plugin = PluginConfig { plugin: p.to_owned(),
-                                    plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned), };
+        let plugin = PluginConfig {
+            plugin: p.to_owned(),
+            plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+        };
 
         // Overrides config in file
         for svr in config.server.iter_mut() {

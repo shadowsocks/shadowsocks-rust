@@ -22,8 +22,7 @@
 
 use std::io;
 
-use crypto::StreamCipher;
-use crypto::{self, CipherCategory, CipherType, CryptoMode};
+use crypto::{self, CipherCategory, CipherType, CryptoMode, StreamCipher};
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
 pub fn encrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {

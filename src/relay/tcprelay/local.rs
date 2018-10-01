@@ -1,7 +1,6 @@
 //! Relay for TCP server that running on local environment
 
-use std::io;
-use std::sync::Arc;
+use std::{io, sync::Arc};
 
 use futures::Future;
 

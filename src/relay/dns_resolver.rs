@@ -1,14 +1,15 @@
 //! Asynchronous DNS resolver
 
-use std::io::{self, ErrorKind};
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{
+    io::{self, ErrorKind},
+    net::SocketAddr,
+    sync::Arc,
+};
 
 use futures::Future;
 use spin::Mutex;
 use tokio;
-use trust_dns_resolver::config::ResolverConfig;
-use trust_dns_resolver::AsyncResolver;
+use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
 use config::Config;
 
@@ -68,50 +69,53 @@ fn init_resolver() -> AsyncResolver {
     resolver
 }
 
-fn inner_resolve(config: Arc<Config>,
-                 addr: &str,
-                 port: u16,
-                 check_forbidden: bool)
-                 -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
+fn inner_resolve(
+    config: Arc<Config>,
+    addr: &str,
+    port: u16,
+    check_forbidden: bool,
+) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
     let owned_addr = addr.to_owned();
     let owned_addr2 = owned_addr.clone();
 
-    GLOBAL_DNS_RESOLVER.lookup_ip(addr)
-                       .map_err(move |err| {
-                                    error!("Failed to resolve {}, err: {}", owned_addr2, err);
-                                    io::Error::new(io::ErrorKind::Other, "dns resolve error")
-                                })
-                       .and_then(move |lookup_result| {
-                                     let mut vaddr = Vec::new();
-                                     for ip in lookup_result.iter() {
-                                         if check_forbidden {
-                                             let forbidden_ip = &config.forbidden_ip;
-                                             if forbidden_ip.contains(&ip) {
-                                                 debug!("Resolved {} => {}, which is skipped by forbidden_ip",
-                                                        owned_addr, ip);
-                                                 continue;
-                                             }
-                                         }
-                                         vaddr.push(SocketAddr::new(ip, port));
-                                     }
+    GLOBAL_DNS_RESOLVER
+        .lookup_ip(addr)
+        .map_err(move |err| {
+            error!("Failed to resolve {}, err: {}", owned_addr2, err);
+            io::Error::new(io::ErrorKind::Other, "dns resolve error")
+        })
+        .and_then(move |lookup_result| {
+            let mut vaddr = Vec::new();
+            for ip in lookup_result.iter() {
+                if check_forbidden {
+                    let forbidden_ip = &config.forbidden_ip;
+                    if forbidden_ip.contains(&ip) {
+                        debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
+                        continue;
+                    }
+                }
+                vaddr.push(SocketAddr::new(ip, port));
+            }
 
-                                     if vaddr.is_empty() {
-                                         let err = io::Error::new(ErrorKind::Other,
-                                                       format!("resolved {} to empty address, all IPs are filtered",
-                                                               owned_addr));
-                                         Err(err)
-                                     } else {
-                                         debug!("Resolved {} => {:?}", owned_addr, vaddr);
-                                         Ok(vaddr)
-                                     }
-                                 })
+            if vaddr.is_empty() {
+                let err = io::Error::new(
+                    ErrorKind::Other,
+                    format!("resolved {} to empty address, all IPs are filtered", owned_addr),
+                );
+                Err(err)
+            } else {
+                debug!("Resolved {} => {:?}", owned_addr, vaddr);
+                Ok(vaddr)
+            }
+        })
 }
 
 /// Resolve address to IP
-pub fn resolve(config: Arc<Config>,
-               addr: &str,
-               port: u16,
-               check_forbidden: bool)
-               -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
+pub fn resolve(
+    config: Arc<Config>,
+    addr: &str,
+    port: u16,
+    check_forbidden: bool,
+) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
     inner_resolve(config, addr, port, check_forbidden)
 }

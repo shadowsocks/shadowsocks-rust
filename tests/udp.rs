@@ -7,22 +7,29 @@ extern crate shadowsocks;
 extern crate tokio;
 extern crate tokio_io;
 
-use std::io::Cursor;
-use std::net::SocketAddr;
-use std::sync::{Arc, Barrier};
-use std::thread;
-use std::time::Duration;
+use std::{
+    io::Cursor,
+    net::SocketAddr,
+    sync::{Arc, Barrier},
+    thread,
+    time::Duration,
+};
 
 use bytes::{BufMut, BytesMut};
 use futures::Future;
 use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::read_to_end;
 
-use shadowsocks::config::{Config, ServerConfig};
-use shadowsocks::crypto::CipherType;
-use shadowsocks::relay::socks5::{Address, UdpAssociateHeader};
-use shadowsocks::relay::tcprelay::client::Socks5Client;
-use shadowsocks::{run_local, run_server};
+use shadowsocks::{
+    config::{Config, ServerConfig},
+    crypto::CipherType,
+    relay::{
+        socks5::{Address, UdpAssociateHeader},
+        tcprelay::client::Socks5Client,
+    },
+    run_local,
+    run_server,
+};
 
 const SERVER_ADDR: &'static str = "127.0.0.1:8093";
 const LOCAL_ADDR: &'static str = "127.0.0.1:8291";
@@ -36,7 +43,11 @@ const METHOD: CipherType = CipherType::Aes128Cfb;
 fn get_config() -> Config {
     let mut cfg = Config::new();
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![ServerConfig::basic(SERVER_ADDR.parse().unwrap(), PASSWORD.to_owned(), METHOD)];
+    cfg.server = vec![ServerConfig::basic(
+        SERVER_ADDR.parse().unwrap(),
+        PASSWORD.to_owned(),
+        METHOD,
+    )];
     cfg.enable_udp = true;
     cfg
 }
@@ -47,55 +58,55 @@ fn get_client_addr() -> SocketAddr {
 
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
-                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-                      let fut = run_server(get_config());
-                      bar.wait();
-                      runtime.block_on(fut).expect("Failed to run Server");
-                  });
+        let fut = run_server(get_config());
+        bar.wait();
+        runtime.block_on(fut).expect("Failed to run Server");
+    });
 }
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
-                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-                      let fut = run_local(get_config());
-                      bar.wait();
-                      runtime.block_on(fut).expect("Failed to run Local");
-                  });
+        let fut = run_local(get_config());
+        bar.wait();
+        runtime.block_on(fut).expect("Failed to run Local");
+    });
 }
 
 fn start_udp_echo_server(bar: Arc<Barrier>) {
     use std::net::UdpSocket;
 
     thread::spawn(move || {
-                      let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
+        let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
 
-                      bar.wait();
+        bar.wait();
 
-                      let mut buf = [0u8; 65536];
-                      let (amt, src) = l.recv_from(&mut buf).unwrap();
+        let mut buf = [0u8; 65536];
+        let (amt, src) = l.recv_from(&mut buf).unwrap();
 
-                      l.send_to(&buf[..amt], &src).unwrap();
-                  });
+        l.send_to(&buf[..amt], &src).unwrap();
+    });
 }
 
 fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
-                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-                      let c = Socks5Client::udp_associate(addr, get_client_addr());
-                      let fut = c.and_then(|(c, addr)| {
-                                               assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
+        let c = Socks5Client::udp_associate(addr, get_client_addr());
+        let fut = c.and_then(|(c, addr)| {
+            assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
 
-                                               // Holds it forever
-                                               read_to_end(c, Vec::new()).map(|_| ())
-                                           });
+            // Holds it forever
+            read_to_end(c, Vec::new()).map(|_| ())
+        });
 
-                      bar.wait();
+        bar.wait();
 
-                      runtime.block_on(fut).expect("Failed to run UDP socks5 client");
-                  });
+        runtime.block_on(fut).expect("Failed to run UDP socks5 client");
+    });
 }
 
 #[test]

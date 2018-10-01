@@ -1,22 +1,26 @@
 //! Relay for TCP implementation
 
-use std::io::{self, BufRead, Read};
-use std::iter::{IntoIterator, Iterator};
-use std::mem;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    io::{self, BufRead, Read},
+    iter::{IntoIterator, Iterator},
+    mem,
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use config::{Config, ServerAddr, ServerConfig};
 use crypto::CipherCategory;
-use relay::boxed_future;
-use relay::dns_resolver::resolve;
-use relay::socks5::Address;
+use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
 
-use tokio::net::{ConnectFuture, TcpStream};
-use tokio_io::io::{read_exact, write_all};
-use tokio_io::io::{ReadHalf, WriteHalf};
-use tokio_io::{AsyncRead, IoFuture};
+use tokio::{
+    net::{tcp::ConnectFuture, TcpStream},
+    timer::Timeout,
+};
+use tokio_io::{
+    io::{read_exact, write_all, ReadHalf, WriteHalf},
+    AsyncRead,
+};
 
 use futures::{self, Async, Future, Poll};
 
@@ -26,8 +30,10 @@ use byte_string::ByteStr;
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 
-use self::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
-use self::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
+use self::{
+    aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
+    stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
+};
 
 mod aead;
 pub mod client;
@@ -148,11 +154,6 @@ impl From<AeadEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
     }
 }
 
-/// Boxed future of `DecryptedHalf`
-pub type DecryptedHalfFut = IoFuture<DecryptedHalf>;
-/// Boxed future of `EncryptedHalf`
-pub type EncryptedHalfFut = IoFuture<EncryptedHalf>;
-
 /// Try to connect every IPs one by one
 enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
     Empty,
@@ -165,23 +166,28 @@ enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
 
 impl<I: Iterator<Item = SocketAddr>> TcpStreamConnect<I> {
     fn new(iter: I) -> TcpStreamConnect<I> {
-        TcpStreamConnect::Connect { last_err: None,
-                                    addr_iter: iter,
-                                    opt_stream_new: None, }
+        TcpStreamConnect::Connect {
+            last_err: None,
+            addr_iter: iter,
+            opt_stream_new: None,
+        }
     }
 }
 
 impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
-    type Item = TcpStream;
     type Error = io::Error;
+    type Item = TcpStream;
+
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         use std::io::ErrorKind;
 
         match *self {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { ref mut last_err,
-                                        ref mut addr_iter,
-                                        ref mut opt_stream_new, } => {
+            TcpStreamConnect::Connect {
+                ref mut last_err,
+                ref mut addr_iter,
+                ref mut opt_stream_new,
+            } => {
                 loop {
                     // 1. Poll before doing anything else
                     if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
@@ -209,22 +215,21 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 
         match mem::replace(self, TcpStreamConnect::Empty) {
             TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => {
-                match last_err {
-                    None => {
-                        let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                        Err(err)
-                    }
-                    Some(err) => Err(err),
+            TcpStreamConnect::Connect { last_err, .. } => match last_err {
+                None => {
+                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
+                    Err(err)
                 }
-            }
+                Some(err) => Err(err),
+            },
         }
     }
 }
 
-fn connect_proxy_server(config: Arc<Config>,
-                        svr_cfg: Arc<ServerConfig>)
-                        -> impl Future<Item = TcpStream, Error = io::Error> + Send {
+fn connect_proxy_server(
+    config: Arc<Config>,
+    svr_cfg: Arc<ServerConfig>,
+) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
     let timeout = *svr_cfg.timeout();
     trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
     match *svr_cfg.addr() {
@@ -235,9 +240,9 @@ fn connect_proxy_server(config: Arc<Config>,
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
                 try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
-                              let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
-                              try_timeout(fut, timeout)
-                          })
+                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
+                    try_timeout(fut, timeout)
+                })
             };
             boxed_future(fut)
         }
@@ -245,33 +250,49 @@ fn connect_proxy_server(config: Arc<Config>,
 }
 
 /// Handshake logic for ShadowSocks Client
-pub fn proxy_server_handshake(remote_stream: TcpStream,
-                              svr_cfg: Arc<ServerConfig>,
-                              relay_addr: Address)
-                              -> impl Future<Item = (DecryptedHalfFut, EncryptedHalfFut), Error = io::Error> + Send {
+pub fn proxy_server_handshake(
+    remote_stream: TcpStream,
+    svr_cfg: Arc<ServerConfig>,
+    relay_addr: Address,
+) -> impl Future<
+    Item = (
+        impl Future<Item = DecryptedHalf, Error = io::Error> + Send,
+        impl Future<Item = EncryptedHalf, Error = io::Error> + Send,
+    ),
+    Error = io::Error,
+> + Send {
     let timeout = *svr_cfg.timeout();
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
-                                               let w_fut = w_fut.and_then(move |enc_w| {
-                                                   // Send relay address to remote
-                                                   let mut buf = BytesMut::with_capacity(relay_addr.len());
-                                                   relay_addr.write_to_buf(&mut buf);
+        let w_fut = w_fut.and_then(move |enc_w| {
+            // Send relay address to remote
+            let mut buf = BytesMut::with_capacity(relay_addr.len());
+            relay_addr.write_to_buf(&mut buf);
 
-                                                   trace!("Got encrypt stream and going to send addr: {:?}, buf: {:?}",
-                                                          relay_addr,
-                                                          buf);
+            trace!(
+                "Got encrypt stream and going to send addr: {:?}, buf: {:?}",
+                relay_addr,
+                buf
+            );
 
-                                                   try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
-                                               });
+            try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
+        });
 
-                                               Ok((r_fut, boxed_future(w_fut)))
-                                           })
+        Ok((r_fut, w_fut))
+    })
 }
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake(remote_stream: TcpStream,
-                       svr_cfg: Arc<ServerConfig>)
-                       -> impl Future<Item = (DecryptedHalfFut, EncryptedHalfFut), Error = io::Error> + Send {
+pub fn proxy_handshake(
+    remote_stream: TcpStream,
+    svr_cfg: Arc<ServerConfig>,
+) -> impl Future<
+    Item = (
+        impl Future<Item = DecryptedHalf, Error = io::Error> + Send,
+        impl Future<Item = EncryptedHalf, Error = io::Error> + Send,
+    ),
+    Error = io::Error,
+> + Send {
     futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
         let timeout = svr_cfg.timeout().clone();
 
@@ -296,19 +317,20 @@ pub fn proxy_handshake(remote_stream: TcpStream,
                 }
             };
 
-            try_timeout(write_all(w, prev_buf), timeout).and_then(
-                move |(w, prev_buf)| match svr_cfg.method().category() {
+            try_timeout(write_all(w, prev_buf), timeout).and_then(move |(w, prev_buf)| {
+                match svr_cfg.method().category() {
                     CipherCategory::Stream => {
                         let local_iv = prev_buf;
-                        Ok(From::from(StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv)))
+                        let wtr = StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv);
+                        Ok(From::from(wtr))
                     }
                     CipherCategory::Aead => {
                         let local_salt = prev_buf;
                         let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
                         Ok(From::from(wtr))
                     }
-                },
-            )
+                }
+            })
         };
 
         let dec = {
@@ -338,60 +360,56 @@ pub fn proxy_handshake(remote_stream: TcpStream,
             })
         };
 
-        Ok((boxed_future(dec), boxed_future(enc)))
+        Ok((dec, enc))
     })
 }
 
 /// Establish tunnel between server and client
 pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
-    where CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
-          SF: Future<Item = SFI, Error = io::Error> + Send + 'static
+where
+    CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
+    SF: Future<Item = SFI, Error = io::Error> + Send + 'static,
 {
     let addr = Arc::new(addr);
 
     let cloned_addr = addr.clone();
     let c2s = c2s.then(move |res| {
-                           match res {
-                               Ok(..) => {
-                                   // Continue reading response from remote server
-                                   trace!("Relay {} client -> server is finished", cloned_addr);
+        match res {
+            Ok(..) => {
+                // Continue reading response from remote server
+                trace!("Relay {} client -> server is finished", cloned_addr);
 
-                                   Ok(TunnelDirection::Client2Server)
-                               }
-                               Err(err) => {
-                                   error!("Relay {} client -> server aborted: {}", cloned_addr, err);
-                                   Err(err)
-                               }
-                           }
-                       });
+                Ok(TunnelDirection::Client2Server)
+            }
+            Err(err) => {
+                error!("Relay {} client -> server aborted: {}", cloned_addr, err);
+                Err(err)
+            }
+        }
+    });
 
     let cloned_addr = addr.clone();
     let s2c = s2c.then(move |res| match res {
-                           Ok(..) => {
-                               trace!("Relay {} client <- server is finished", cloned_addr);
+        Ok(..) => {
+            trace!("Relay {} client <- server is finished", cloned_addr);
 
-                               Ok(TunnelDirection::Server2Client)
-                           }
-                           Err(err) => {
-                               error!("Relay {} client <- server aborted: {}", cloned_addr, err);
-                               Err(err)
-                           }
-                       });
+            Ok(TunnelDirection::Server2Client)
+        }
+        Err(err) => {
+            error!("Relay {} client <- server aborted: {}", cloned_addr, err);
+            Err(err)
+        }
+    });
 
     c2s.select(s2c)
-       .and_then(move |(dir, _)| {
-                     match dir {
-                         TunnelDirection::Server2Client => {
-                             trace!("Relay {} client <- server is closed, abort connection", addr)
-                         }
-                         TunnelDirection::Client2Server => {
-                             trace!("Relay {} server -> client is closed, abort connection", addr)
-                         }
-                     }
+        .and_then(move |(dir, _)| {
+            match dir {
+                TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
+                TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
+            }
 
-                     Ok(())
-                 })
-       .map_err(|(err, _)| err)
+            Ok(())
+        }).map_err(|(err, _)| err)
 }
 
 /// Read until EOF, and ignore
@@ -401,8 +419,8 @@ pub enum IgnoreUntilEnd<R: Read> {
 }
 
 impl<R: Read> Future for IgnoreUntilEnd<R> {
-    type Item = u64;
     type Error = io::Error;
+    type Item = u64;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
@@ -432,24 +450,57 @@ pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
     IgnoreUntilEnd::Pending { r: r, amt: 0 }
 }
 
-fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> impl Future<Item = T, Error = io::Error> + Send
-    where F: Future<Item = T, Error = io::Error> + Send + 'static,
-          T: 'static
+pub enum TimeoutFuture<T, F>
+where
+    T: 'static,
+    F: Future<Item = T, Error = io::Error> + Send + 'static,
 {
+    Direct(F),
+    Wait(Timeout<F>),
+}
+
+impl<T, F> Future for TimeoutFuture<T, F>
+where
+    T: 'static,
+    F: Future<Item = T, Error = io::Error> + Send + 'static,
+{
+    type Error = io::Error;
+    type Item = T;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match *self {
+            TimeoutFuture::Direct(ref mut f) => f.poll(),
+            TimeoutFuture::Wait(ref mut f) => match f.poll() {
+                Ok(Async::NotReady) => Ok(Async::NotReady),
+                Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
+                Err(err) => match err.into_inner() {
+                    Some(e) => Err(e),
+                    None => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
+                },
+            },
+        }
+    }
+}
+
+fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> impl Future<Item = T, Error = io::Error> + Send
+where
+    F: Future<Item = T, Error = io::Error> + Send + 'static,
+    T: 'static,
+{
+    use tokio::prelude::*;
+
     match dur {
-        Some(dur) => boxed_future(io_timeout(fut, dur)),
-        None => boxed_future(fut),
+        Some(dur) => TimeoutFuture::Wait(fut.timeout(dur)),
+        None => TimeoutFuture::Direct(fut),
     }
 }
 
 fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::Error> + Send
-    where F: Future<Item = T, Error = io::Error> + Send + 'static,
-          T: 'static
+where
+    F: Future<Item = T, Error = io::Error> + Send + 'static,
+    T: 'static,
 {
     use tokio::prelude::*;
 
-    fut.timeout(dur).map_err(|err| match err.into_inner() {
-                                 Some(e) => e,
-                                 None => io::Error::new(io::ErrorKind::TimedOut, "connection timed out"),
-                             })
+    TimeoutFuture::Wait(fut.timeout(dur))
 }

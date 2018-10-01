@@ -1,13 +1,15 @@
 //! Stream ciphers
 
-use crypto::cipher::{CipherCategory, CipherResult, CipherType};
-use crypto::dummy;
-use crypto::openssl;
-use crypto::rc4_md5;
 #[cfg(feature = "sodium")]
 use crypto::sodium;
-use crypto::table;
-use crypto::CryptoMode;
+use crypto::{
+    cipher::{CipherCategory, CipherResult, CipherType},
+    dummy,
+    openssl,
+    rc4_md5,
+    table,
+    CryptoMode,
+};
 
 use bytes::BufMut;
 
@@ -91,8 +93,10 @@ define_stream_ciphers! {
 
 /// Generate a specific Cipher with key and initialize vector
 pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
-    assert!(t.category() == CipherCategory::Stream,
-            "only allow initializing with stream cipher");
+    assert!(
+        t.category() == CipherCategory::Stream,
+        "only allow initializing with stream cipher"
+    );
 
     match t {
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),

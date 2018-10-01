@@ -1,40 +1,45 @@
 //! UDP relay local server
 
-use std::io::{self, Cursor, ErrorKind, Read};
-use std::net::SocketAddr;
-use std::net::{IpAddr, Ipv4Addr};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::{
+    io::{self, Cursor, ErrorKind, Read},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use futures::{self, Future, Stream};
 
-use tokio;
-use tokio::net::UdpSocket;
-use tokio::util::FutureExt;
+use tokio::{self, net::UdpSocket, util::FutureExt};
 
 use config::{Config, ServerAddr, ServerConfig};
-use relay::boxed_future;
-use relay::dns_resolver::resolve;
-use relay::loadbalancing::server::{LoadBalancer, RoundRobin};
-use relay::socks5::{Address, UdpAssociateHeader};
+use relay::{
+    boxed_future,
+    dns_resolver::resolve,
+    loadbalancing::server::{LoadBalancer, RoundRobin},
+    socks5::{Address, UdpAssociateHeader},
+};
 
-use super::crypto_io::{decrypt_payload, encrypt_payload};
-use super::MAXIMUM_UDP_PAYLOAD_SIZE;
-use super::{PacketStream, SendDgramRc};
+use super::{
+    crypto_io::{decrypt_payload, encrypt_payload},
+    PacketStream,
+    SendDgramRc,
+    MAXIMUM_UDP_PAYLOAD_SIZE,
+};
 
 /// Resolves server address to SocketAddr
-fn resolve_server_addr(config: Arc<Config>,
-                       svr_cfg: Arc<ServerConfig>)
-                       -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
+fn resolve_server_addr(
+    config: Arc<Config>,
+    svr_cfg: Arc<ServerConfig>,
+) -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
     match *svr_cfg.addr() {
         // Return directly if it is a SocketAddr
         ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
         // Resolve domain name to SocketAddr
         ServerAddr::DomainName(ref dname, port) => {
             let fut = resolve(config, dname, port, false).map(move |vec_ipaddr| {
-                                                                  assert!(!vec_ipaddr.is_empty());
-                                                                  vec_ipaddr[0]
-                                                              });
+                assert!(!vec_ipaddr.is_empty());
+                vec_ipaddr[0]
+            });
             boxed_future(fut)
         }
     }
@@ -74,8 +79,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
                 resolve_server_addr(config, svr_cfg)
                     .and_then(|remote_addr| {
                         let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
-                        UdpSocket::bind(&local_addr)
-                            .map(|remote_udp| (remote_udp, remote_addr))
+                        UdpSocket::bind(&local_addr).map(|remote_udp| (remote_udp, remote_addr))
                     })
                     .map(|(remote_udp, remote_addr)| (remote_udp, remote_addr, payload, addr))
             })
@@ -84,45 +88,54 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
                 addr.write_to_buf(&mut buf);
                 buf.extend_from_slice(&payload);
                 encrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf)
-                              .map(|payload| (remote_udp, remote_addr, payload, addr))
+                    .map(|payload| (remote_udp, remote_addr, payload, addr))
             })
             .and_then(move |(remote_udp, remote_addr, payload, addr)| {
-                debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, payload.len());
+                debug!(
+                    "UDP ASSOCIATE {} -> {}, payload length {} bytes",
+                    src,
+                    addr,
+                    payload.len()
+                );
                 let to = timeout.unwrap_or(DEFAULT_TIMEOUT);
                 let caddr = addr.clone();
-                remote_udp.send_dgram(payload, &remote_addr)
-                          .timeout(to)
-                          .map_err(move |err| {
-                              match err.into_inner() {
-                                  Some(e) => e,
-                                  None => {
-                                      error!("Udp associate sending datagram {} -> {} timed out in {:?}", src, caddr, to);
-                                      io::Error::new(io::ErrorKind::TimedOut, "udp send timed out")
-                                  }
-                              }
-                          })
-                          .map(|(remote_udp, _)| (remote_udp, addr))
+                remote_udp
+                    .send_dgram(payload, &remote_addr)
+                    .timeout(to)
+                    .map_err(move |err| match err.into_inner() {
+                        Some(e) => e,
+                        None => {
+                            error!(
+                                "Udp associate sending datagram {} -> {} timed out in {:?}",
+                                src, caddr, to
+                            );
+                            io::Error::new(io::ErrorKind::TimedOut, "udp send timed out")
+                        }
+                    })
+                    .map(|(remote_udp, _)| (remote_udp, addr))
             })
             .and_then(move |(remote_udp, addr)| {
                 let buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
                 let to = timeout.unwrap_or(DEFAULT_TIMEOUT);
                 let caddr = addr.clone();
-                remote_udp.recv_dgram(buf)
-                          .timeout(to)
-                          .map_err(move |err| {
-                              match err.into_inner() {
-                                  Some(e) => e,
-                                  None => {
-                                      error!("Udp associate waiting datagram {} <- {} timed out in {:?}", src, caddr, to);
-                                      io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
-                                  }
-                              }
-                          })
-                          .and_then(move |(_remote_udp, buf, n, _from)| {
-                                        let svr_cfg = svr_cfg_cloned;
-                                        decrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf[..n])
-                                    })
-                          .map(|payload| (payload, addr))
+                remote_udp
+                    .recv_dgram(buf)
+                    .timeout(to)
+                    .map_err(move |err| match err.into_inner() {
+                        Some(e) => e,
+                        None => {
+                            error!(
+                                "Udp associate waiting datagram {} <- {} timed out in {:?}",
+                                src, caddr, to
+                            );
+                            io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
+                        }
+                    })
+                    .and_then(move |(_remote_udp, buf, n, _from)| {
+                        let svr_cfg = svr_cfg_cloned;
+                        decrypt_payload(svr_cfg.method(), svr_cfg.key(), &buf[..n])
+                    })
+                    .map(|payload| (payload, addr))
             })
             .and_then(move |(payload, addr)| {
                 Address::read_from(Cursor::new(payload))
@@ -131,7 +144,10 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
             })
             .and_then(move |(mut cur, addr)| {
                 let payload_len = cur.get_ref().len() - cur.position() as usize;
-                debug!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, payload_len);
+                debug!(
+                    "UDP ASSOCIATE {} <- {}, payload length {} bytes",
+                    src, addr, payload_len
+                );
 
                 let mut data = Vec::new();
                 UdpAssociateHeader::new(0, Address::SocketAddress(src)).write_to_buf(&mut data);
@@ -143,8 +159,8 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
             .map(|_| ());
 
         tokio::spawn(rel.map_err(|err| {
-                                     error!("Error occurs in UDP relay: {}", err);
-                                 }));
+            error!("Error occurs in UDP relay: {}", err);
+        }));
 
         Ok(())
     })
@@ -155,8 +171,9 @@ pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + S
     let local_addr = *config.local.as_ref().unwrap();
 
     futures::lazy(move || {
-                      info!("ShadowSocks UDP Listening on {}", local_addr);
+        info!("ShadowSocks UDP Listening on {}", local_addr);
 
-                      UdpSocket::bind(&local_addr)
-                  }).and_then(move |l| listen(config, l))
+        UdpSocket::bind(&local_addr)
+    })
+    .and_then(move |l| listen(config, l))
 }

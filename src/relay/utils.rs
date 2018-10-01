@@ -1,32 +1,39 @@
 use std::io;
 
 use futures::{Async, Future, Poll};
-use tokio_io::io::{write_all, WriteAll};
-use tokio_io::AsyncWrite;
+use tokio_io::{
+    io::{write_all, WriteAll},
+    AsyncWrite,
+};
 
 /// Write all bytes without returning the internal bytes buffer
 pub struct WriteBytes<W, B>
-    where W: AsyncWrite,
-          B: AsRef<[u8]>
+where
+    W: AsyncWrite,
+    B: AsRef<[u8]>,
 {
     inner: WriteAll<W, B>,
 }
 
 impl<W, B> WriteBytes<W, B>
-    where W: AsyncWrite,
-          B: AsRef<[u8]>
+where
+    W: AsyncWrite,
+    B: AsRef<[u8]>,
 {
     fn new(writer: W, bytes: B) -> WriteBytes<W, B> {
-        WriteBytes { inner: write_all(writer, bytes), }
+        WriteBytes {
+            inner: write_all(writer, bytes),
+        }
     }
 }
 
 impl<W, B> Future for WriteBytes<W, B>
-    where W: AsyncWrite,
-          B: AsRef<[u8]>
+where
+    W: AsyncWrite,
+    B: AsRef<[u8]>,
 {
-    type Item = W;
     type Error = io::Error;
+    type Item = W;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let (w, _) = try_ready!(self.inner.poll());

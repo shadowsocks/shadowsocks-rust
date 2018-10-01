@@ -13,7 +13,8 @@ pub mod udprelay;
 mod utils;
 
 pub fn boxed_future<T, E, F>(f: F) -> Box<Future<Item = T, Error = E> + Send + 'static>
-    where F: Future<Item = T, Error = E> + Send + 'static
+where
+    F: Future<Item = T, Error = E> + Send + 'static,
 {
     Box::new(f)
 }

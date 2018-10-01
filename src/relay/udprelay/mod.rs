@@ -37,10 +37,12 @@
 //! | Fixed |   Variable   |
 //! +-------+--------------+
 
-use std::io;
-use std::mem;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::{
+    io,
+    mem,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use tokio::net::UdpSocket;
 
@@ -70,14 +72,17 @@ pub struct PacketStream {
 impl PacketStream {
     /// Creates a new `PacketStream`
     pub fn new(udp: SharedUdpSocket) -> PacketStream {
-        PacketStream { udp: udp,
-                       buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE], }
+        PacketStream {
+            udp: udp,
+            buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE],
+        }
     }
 }
 
 impl Stream for PacketStream {
-    type Item = (Vec<u8>, SocketAddr);
     type Error = io::Error;
+    type Item = (Vec<u8>, SocketAddr);
+
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let (n, addr) = try_ready!(self.udp.lock().unwrap().poll_recv_from(&mut self.buf));
         Ok(Async::Ready(Some((self.buf[..n].to_vec(), addr))))
@@ -100,20 +105,27 @@ pub struct SendDgramRc<B: AsRef<[u8]>> {
 
 impl<B: AsRef<[u8]>> SendDgramRc<B> {
     pub fn new(udp: SharedUdpSocket, buf: B, addr: SocketAddr) -> SendDgramRc<B> {
-        SendDgramRc { stat: SendDgramStat::Pending { udp: udp,
-                                                     buf: buf,
-                                                     addr: addr, }, }
+        SendDgramRc {
+            stat: SendDgramStat::Pending {
+                udp: udp,
+                buf: buf,
+                addr: addr,
+            },
+        }
     }
 }
 
 impl<B: AsRef<[u8]>> Future for SendDgramRc<B> {
-    type Item = (SharedUdpSocket, usize, B);
     type Error = io::Error;
+    type Item = (SharedUdpSocket, usize, B);
+
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let n = match self.stat {
-            SendDgramStat::Pending { ref udp,
-                                     ref buf,
-                                     ref addr, } => try_ready!(udp.lock().unwrap().poll_send_to(buf.as_ref(), addr)),
+            SendDgramStat::Pending {
+                ref udp,
+                ref buf,
+                ref addr,
+            } => try_ready!(udp.lock().unwrap().poll_send_to(buf.as_ref(), addr)),
             SendDgramStat::Empty => unreachable!(),
         };
 

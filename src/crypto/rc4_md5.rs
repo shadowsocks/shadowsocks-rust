@@ -1,9 +1,13 @@
 //! Rc4Md5 cipher definition
 
-use crypto::digest::{self, Digest, DigestType};
-use crypto::openssl::OpenSSLCrypto;
-use crypto::CryptoMode;
-use crypto::{CipherResult, CipherType, StreamCipher};
+use crypto::{
+    digest::{self, Digest, DigestType},
+    openssl::OpenSSLCrypto,
+    CipherResult,
+    CipherType,
+    CryptoMode,
+    StreamCipher,
+};
 
 use bytes::{BufMut, BytesMut};
 
@@ -20,7 +24,9 @@ impl Rc4Md5Cipher {
         let mut key = BytesMut::with_capacity(md5_digest.digest_len());
         md5_digest.digest(&mut key);
 
-        Rc4Md5Cipher { crypto: OpenSSLCrypto::new(CipherType::Rc4, &key, b"", mode), }
+        Rc4Md5Cipher {
+            crypto: OpenSSLCrypto::new(CipherType::Rc4, &key, b"", mode),
+        }
     }
 }
 
@@ -43,8 +49,7 @@ unsafe impl Send for Rc4Md5Cipher {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::CryptoMode;
-    use crypto::{CipherType, StreamCipher};
+    use crypto::{CipherType, CryptoMode, StreamCipher};
 
     #[test]
     fn test_rc4_md5_cipher() {
@@ -56,13 +61,15 @@ mod test {
 
         let mut enc = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Encrypt);
         let mut encrypted_msg = Vec::new();
-        enc.update(msg, &mut encrypted_msg).and_then(|_| enc.finalize(&mut encrypted_msg))
-           .unwrap();
+        enc.update(msg, &mut encrypted_msg)
+            .and_then(|_| enc.finalize(&mut encrypted_msg))
+            .unwrap();
 
         let mut dec = Rc4Md5Cipher::new(key, &iv[..], CryptoMode::Decrypt);
         let mut decrypted_msg = Vec::new();
-        dec.update(&encrypted_msg[..], &mut decrypted_msg).and_then(|_| dec.finalize(&mut decrypted_msg))
-           .unwrap();
+        dec.update(&encrypted_msg[..], &mut decrypted_msg)
+            .and_then(|_| dec.finalize(&mut decrypted_msg))
+            .unwrap();
 
         assert_eq!(msg, &decrypted_msg[..]);
     }

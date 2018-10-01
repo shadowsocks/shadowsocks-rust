@@ -2,8 +2,7 @@
 
 use std::convert::From;
 
-use crypto::cipher;
-use crypto::{CipherResult, CipherType, StreamCipher};
+use crypto::{cipher, CipherResult, CipherType, StreamCipher};
 
 use crypto::CryptoMode;
 
@@ -34,8 +33,10 @@ impl OpenSSLCrypto {
         // Panic if error occurs
         let cipher = symm::Crypter::new(t, From::from(mode), key, Some(iv)).unwrap();
 
-        OpenSSLCrypto { cipher: t,
-                        inner: cipher, }
+        OpenSSLCrypto {
+            cipher: t,
+            inner: cipher,
+        }
     }
 
     /// Update data
@@ -80,8 +81,7 @@ impl OpenSSLCrypto {
 /// *Note: This behavior works just the same as the official version of shadowsocks.*
 ///
 /// ```rust
-/// use shadowsocks::crypto::openssl::OpenSSLCipher;
-/// use shadowsocks::crypto::{CipherType, CryptoMode, StreamCipher};
+/// use shadowsocks::crypto::{openssl::OpenSSLCipher, CipherType, CryptoMode, StreamCipher};
 ///
 /// let method = CipherType::Aes128Cfb;
 ///
@@ -107,7 +107,9 @@ pub struct OpenSSLCipher {
 impl OpenSSLCipher {
     /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCipher {
-        OpenSSLCipher { worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode), }
+        OpenSSLCipher {
+            worker: OpenSSLCrypto::new(cipher_type, &key[..], &iv[..], mode),
+        }
     }
 }
 

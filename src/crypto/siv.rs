@@ -4,10 +4,14 @@ use std::ptr;
 
 use miscreant::aead::{Aes128PmacSiv, Aes256PmacSiv, Algorithm};
 
-use crypto::aead::{increase_nonce, make_skey};
-use crypto::cipher::Error;
-use crypto::{AeadDecryptor, AeadEncryptor};
-use crypto::{CipherResult, CipherType};
+use crypto::{
+    aead::{increase_nonce, make_skey},
+    cipher::Error,
+    AeadDecryptor,
+    AeadEncryptor,
+    CipherResult,
+    CipherType,
+};
 
 use bytes::{BufMut, BytesMut};
 
@@ -42,9 +46,11 @@ impl MiscreantCipher {
 
         let skey = make_skey(t, key, salt);
         let cipher = Self::new_variant(t, &skey);
-        MiscreantCipher { cipher_type: t,
-                          cipher: cipher,
-                          nonce: nonce, }
+        MiscreantCipher {
+            cipher_type: t,
+            cipher: cipher,
+            nonce: nonce,
+        }
     }
 
     fn new_variant(t: CipherType, key: &[u8]) -> MiscreantCryptoVariant {
@@ -109,17 +115,20 @@ impl AeadDecryptor for MiscreantCipher {
             MiscreantCryptoVariant::Aes256(ref mut cipher) => cipher.open_in_place(&self.nonce, b"", &mut buf),
         };
 
-        result.map(|buf| {
-                       output.copy_from_slice(buf);
-                       increase_nonce(&mut self.nonce);
-                   })
-              .map_err(|_| {
-                           error!("AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: decrypt failure",
-                                  ByteStr::new(&self.nonce),
-                                  ByteStr::new(&input[..input.len() - tag_size]),
-                                  ByteStr::new(&input[input.len() - tag_size..]));
-                           Error::AeadDecryptFailed
-                       })
+        result
+            .map(|buf| {
+                output.copy_from_slice(buf);
+                increase_nonce(&mut self.nonce);
+            })
+            .map_err(|_| {
+                error!(
+                    "AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: decrypt failure",
+                    ByteStr::new(&self.nonce),
+                    ByteStr::new(&input[..input.len() - tag_size]),
+                    ByteStr::new(&input[input.len() - tag_size..])
+                );
+                Error::AeadDecryptFailed
+            })
     }
 }
 

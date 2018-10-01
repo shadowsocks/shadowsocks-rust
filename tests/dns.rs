@@ -6,14 +6,19 @@ extern crate tokio;
 #[macro_use]
 extern crate log;
 
-use std::collections::HashSet;
-use std::net::{SocketAddr, UdpSocket};
-use std::thread;
-use std::time::Duration;
+use std::{
+    collections::HashSet,
+    net::{SocketAddr, UdpSocket},
+    thread,
+    time::Duration,
+};
 
 use dns_parser::{Builder, Packet, QueryClass, QueryType};
-use shadowsocks::config::{Config, ConfigType};
-use shadowsocks::{run_dns, run_server};
+use shadowsocks::{
+    config::{Config, ConfigType},
+    run_dns,
+    run_server,
+};
 use tokio::runtime::current_thread::Runtime;
 
 const CONFIG: &'static str = r#"{
@@ -35,14 +40,14 @@ fn dns_relay() {
     let dns_cfg = Config::load_from_str(CONFIG, ConfigType::Local).unwrap();
 
     thread::spawn(move || {
-                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
-                      runtime.block_on(run_server(server_cfg)).unwrap();
-                  });
+        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        runtime.block_on(run_server(server_cfg)).unwrap();
+    });
 
     thread::spawn(move || {
-                      let mut runtime = Runtime::new().expect("Failed to create Runtime");
-                      runtime.block_on(run_dns(dns_cfg)).unwrap();
-                  });
+        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        runtime.block_on(run_dns(dns_cfg)).unwrap();
+    });
 
     thread::sleep(Duration::from_secs(1));
 
