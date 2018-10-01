@@ -42,18 +42,14 @@ fn handle_socks5_connect(
     let timeout = *svr_cfg.timeout();
     super::connect_proxy_server(config.clone(), svr_cfg)
         .then(move |res| {
-            match res {
+            let (header, r) = match res {
                 Ok(svr_s) => {
                     trace!("Proxy server connected");
 
                     // Tell the client that we are ready
                     let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(client_addr));
-                    trace!("Send header: {:?}", header);
 
-                    boxed_future(
-                        try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout)
-                            .map(move |w| (svr_s, w)),
-                    )
+                    (header, Ok(svr_s))
                 }
                 Err(err) => {
                     use relay::socks5::Reply;
@@ -68,14 +64,16 @@ fn handle_socks5_connect(
                     };
 
                     let header = TcpResponseHeader::new(reply, Address::SocketAddress(client_addr));
-                    trace!("Send header: {:?}", header);
 
-                    boxed_future(
-                        try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout)
-                            .and_then(|_| Err(err)),
-                    )
+                    (header, Err(err))
                 }
-            }
+            };
+
+            trace!("Send header: {:?}", header);
+            try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout).and_then(|w| match r {
+                Ok(svr_s) => Ok((svr_s, w)),
+                Err(err) => Err(err),
+            })
         })
         .and_then(move |(svr_s, w)| {
             let svr_cfg = cloned_svr_cfg;
@@ -112,23 +110,27 @@ fn handle_socks5_client(
             HandshakeRequest::read_from(r).and_then(move |(r, req)| {
                 trace!("Socks5 {:?}", req);
 
-                if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
+                let (resp, res) = if !req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
                     let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-                    let fut = resp.write_to(w).then(|_| {
-                        warn!("Currently shadowsocks-rust does not support authentication");
+                    warn!("Currently shadowsocks-rust does not support authentication");
+                    (
+                        resp,
                         Err(io::Error::new(
                             io::ErrorKind::Other,
                             "Currently shadowsocks-rust does not support authentication",
-                        ))
-                    });
-                    boxed_future(fut)
+                        )),
+                    )
                 } else {
                     // Reply to client
                     let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
                     trace!("Reply handshake {:?}", resp);
-                    let fut = resp.write_to(w).and_then(flush).and_then(|w| Ok((r, w)));
-                    boxed_future(fut)
-                }
+                    (resp, Ok(()))
+                };
+
+                resp.write_to(w).and_then(flush).and_then(move |w| match res {
+                    Ok(..) => Ok((r, w)),
+                    Err(err) => Err(err),
+                })
             })
         })
         .and_then(move |(r, w)| {
