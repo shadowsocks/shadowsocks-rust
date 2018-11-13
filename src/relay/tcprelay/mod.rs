@@ -409,7 +409,8 @@ where
             }
 
             Ok(())
-        }).map_err(|(err, _)| err)
+        })
+        .map_err(|(err, _)| err)
 }
 
 /// Read until EOF, and ignore
@@ -495,12 +496,12 @@ where
     }
 }
 
-fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::Error> + Send
-where
-    F: Future<Item = T, Error = io::Error> + Send + 'static,
-    T: 'static,
-{
-    use tokio::prelude::*;
+// fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::Error> + Send
+// where
+//     F: Future<Item = T, Error = io::Error> + Send + 'static,
+//     T: 'static,
+// {
+//     use tokio::prelude::*;
 
-    TimeoutFuture::Wait(fut.timeout(dur))
-}
+//     TimeoutFuture::Wait(fut.timeout(dur))
+// }
