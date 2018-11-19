@@ -63,9 +63,9 @@ libsodium-ffi = { version = "0.1", optional = true }
 miscreant = { version = "0.4.0-beta", optional = true }
 lru-cache = "0.1"
 dns-parser = "0.7"
-#trust-dns-resolver = { version = "0.10.0-alpha", features = ["dns-over-rustls", "dns-over-https"] }
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-spin = "0.4"
+trust-dns-resolver = { version = "0.10", features = ["dns-over-rustls", "dns-over-https"] }
+#trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+spin = { version = "0.4", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.2"
