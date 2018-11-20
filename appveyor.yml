@@ -8,12 +8,12 @@ environment:
           OPENSSL_DIR: C:\OpenSSL-Win64
           SODIUM_BUILD_STATIC: yes
           RUST_BACKTRACE: 1
-        - TARGET: i686-pc-windows-gnu
-          BITS: 32
-          OPENSSL_DIR: C:\OpenSSL-Win32
-          MSYS2: 1
-          SODIUM_BUILD_STATIC: yes
-          RUST_BACKTRACE: 1
+      # - TARGET: i686-pc-windows-gnu
+      #   BITS: 32
+      #   OPENSSL_DIR: C:\OpenSSL-Win32
+      #   MSYS2: 1
+      #   SODIUM_BUILD_STATIC: yes
+      #   RUST_BACKTRACE: 1
 install:
   # Install Rust
   - appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
