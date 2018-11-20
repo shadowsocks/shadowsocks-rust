@@ -46,12 +46,34 @@ else
     IMAGE='shadowsocks-rust:stable'
 fi
 
+if [[ "$http_proxy" != "" ]]; then
+    ENV_HTTP_PROXY=$http_proxy
+elif [[ "$HTTP_PROXY" != "" ]]; then
+    ENV_HTTP_PROXY=$HTTP_PROXY
+fi
+
+if [[ "$https_proxy" != "" ]]; then
+    ENV_HTTPS_PROXY=$https_proxy
+elif [[ "$HTTPS_PROXY" != "" ]]; then
+    ENV_HTTPS_PROXY=$HTTPS_PROXY
+fi
+
 if $BUILD_DOCKER_IMG; then
     echo "* Rebuild docker image ${IMAGE} ...";
     if $BUILD_NIGHTLY; then
-        docker build -t "${IMAGE}" "$CUR_DIR" --build-arg TOOLCHAIN=nightly;
+        docker build \
+            -t "${IMAGE}" \
+            "$CUR_DIR" \
+            --build-arg TOOLCHAIN=nightly \
+            --build-arg HTTP_PROXY="$ENV_HTTP_PROXY" \
+            --build-arg HTTPS_PROXY="$ENV_HTTPS_PROXY";
     else
-        docker build -t "${IMAGE}" "$CUR_DIR" --build-arg TOOLCHAIN=stable;
+        docker build \
+            -t "${IMAGE}" \
+            "$CUR_DIR" \
+            --build-arg TOOLCHAIN=stable \
+            --build-arg HTTP_PROXY="$ENV_HTTP_PROXY" \
+            --build-arg HTTPS_PROXY="$ENV_HTTPS_PROXY";
     fi
 fi
 
@@ -68,8 +90,8 @@ if $BUILD_NIGHTLY; then
         -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
         -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
         -e RUSTFLAGS="-Ctarget-feature=+aes" \
-        -e HTTP_PROXY="$HTTP_PROXY" \
-        -e HTTPS_PROXY="$HTTPS_PROXY" \
+        -e HTTP_PROXY="$ENV_HTTP_PROXY" \
+        -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
         -v "${CUR_DIR}"/..:"$SRC_PATH" \
         -v "${CUR_DIR}/target/musl-builder/cargo-cache":/home/rust/.cargo/registry \
         "${IMAGE}" \
@@ -82,8 +104,8 @@ else
     docker run \
         -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
         -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
-        -e HTTP_PROXY="$HTTP_PROXY" \
-        -e HTTPS_PROXY="$HTTPS_PROXY" \
+        -e HTTP_PROXY="$ENV_HTTP_PROXY" \
+        -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
         -v "${CUR_DIR}"/..:"$SRC_PATH" \
         -v "${CUR_DIR}/target/musl-builder/cargo-cache":/home/rust/.cargo/registry \
         "${IMAGE}" \
