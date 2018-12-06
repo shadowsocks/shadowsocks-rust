@@ -25,7 +25,7 @@ lazy_static! {
 /// Set address for global DNS resolver
 /// Must be called before servers are actually run
 pub fn set_dns_config(addr: ResolverConfig) {
-    *(&mut *GLOBAL_DNS_ADDRESS.lock()) = Some(addr);
+    *GLOBAL_DNS_ADDRESS.lock() = Some(addr);
 }
 
 fn get_dns_address() -> Option<ResolverConfig> {
