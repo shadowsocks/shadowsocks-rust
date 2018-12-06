@@ -54,7 +54,7 @@ fn listen(config: Arc<Config>, svr_cfg: Arc<ServerConfig>) -> impl Future<Item =
             let svr_cfg_cloned = svr_cfg.clone();
             let socket = socket.clone();
             let config = config.clone();
-            let timeout = *svr_cfg.timeout();
+            let timeout = svr_cfg.timeout();
             let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
                 .and_then(move |payload| {
                     // Read Address in the front (ShadowSocks protocol)

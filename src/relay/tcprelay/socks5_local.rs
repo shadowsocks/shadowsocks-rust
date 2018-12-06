@@ -39,7 +39,7 @@ fn handle_socks5_connect(
 ) -> impl Future<Item = (), Error = io::Error> + Send {
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
-    let timeout = *svr_cfg.timeout();
+    let timeout = svr_cfg.timeout();
     super::connect_proxy_server(config.clone(), svr_cfg)
         .then(move |res| {
             let (header, r) = match res {
@@ -77,7 +77,7 @@ fn handle_socks5_connect(
         })
         .and_then(move |(svr_s, w)| {
             let svr_cfg = cloned_svr_cfg;
-            let timeout = *svr_cfg.timeout();
+            let timeout = svr_cfg.timeout();
             super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
                 let cloned_timeout = timeout;
                 let rhalf = svr_r.and_then(move |svr_r| svr_r.copy_timeout_opt(w, timeout));
@@ -94,7 +94,7 @@ fn handle_socks5_client(
     conf: Arc<ServerConfig>,
     udp_conf: UdpConfig,
 ) -> io::Result<()> {
-    if let Err(err) = s.set_keepalive(*conf.timeout()) {
+    if let Err(err) = s.set_keepalive(conf.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
 

@@ -156,8 +156,8 @@ pub enum CipherCategory {
 
 impl CipherType {
     /// Symmetric crypto key size
-    pub fn key_size(&self) -> usize {
-        match *self {
+    pub fn key_size(self) -> usize {
+        match self {
             CipherType::Table | CipherType::Plain => 0,
 
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
@@ -187,7 +187,7 @@ impl CipherType {
         }
     }
 
-    fn classic_bytes_to_key(&self, key: &[u8]) -> Bytes {
+    fn classic_bytes_to_key(self, key: &[u8]) -> Bytes {
         let iv_len = self.iv_size();
         let key_len = self.key_size();
 
@@ -219,13 +219,13 @@ impl CipherType {
     }
 
     /// Extends key to match the required key length
-    pub fn bytes_to_key(&self, key: &[u8]) -> Bytes {
+    pub fn bytes_to_key(self, key: &[u8]) -> Bytes {
         self.classic_bytes_to_key(key)
     }
 
     /// Symmetric crypto initialize vector size
-    pub fn iv_size(&self) -> usize {
-        match *self {
+    pub fn iv_size(self) -> usize {
+        match self {
             CipherType::Table | CipherType::Plain => 0,
 
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1()
@@ -282,14 +282,14 @@ impl CipherType {
     }
 
     /// Generate a random initialize vector for this cipher
-    pub fn gen_init_vec(&self) -> Bytes {
+    pub fn gen_init_vec(self) -> Bytes {
         let iv_len = self.iv_size();
         CipherType::gen_random_bytes(iv_len)
     }
 
     /// Get category of cipher
-    pub fn category(&self) -> CipherCategory {
-        match *self {
+    pub fn category(self) -> CipherCategory {
+        match self {
             CipherType::Aes128Gcm | CipherType::Aes256Gcm | CipherType::ChaCha20IetfPoly1305 => CipherCategory::Aead,
 
             #[cfg(feature = "sodium")]
@@ -303,10 +303,10 @@ impl CipherType {
     }
 
     /// Get tag size for AEAD Ciphers
-    pub fn tag_size(&self) -> usize {
+    pub fn tag_size(self) -> usize {
         assert!(self.category() == CipherCategory::Aead);
 
-        match *self {
+        match self {
             CipherType::Aes128Gcm => AES_128_GCM.tag_len(),
             CipherType::Aes256Gcm => AES_256_GCM.tag_len(),
             CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.tag_len(),
@@ -321,13 +321,13 @@ impl CipherType {
     }
 
     /// Get nonce size for AEAD ciphers
-    pub fn salt_size(&self) -> usize {
+    pub fn salt_size(self) -> usize {
         assert!(self.category() == CipherCategory::Aead);
         self.key_size()
     }
 
     /// Get salt for AEAD ciphers
-    pub fn gen_salt(&self) -> Bytes {
+    pub fn gen_salt(self) -> Bytes {
         CipherType::gen_random_bytes(self.salt_size())
     }
 }
