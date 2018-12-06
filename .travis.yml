@@ -1,9 +1,10 @@
 language: rust
 matrix:
-    - rust: stable
-    - rust: beta
-    - rust: nightly
-      env: BUILD_WITH_FEATURE="--features miscreant"
+    include:
+        - rust: stable
+        - rust: beta
+        - rust: nightly
+          env: BUILD_WITH_FEATURE="--features miscreant"
 
 cache: cargo
 
