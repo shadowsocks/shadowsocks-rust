@@ -33,6 +33,7 @@ lto = true
 [features]
 default = ["sodium"]
 sodium = ["libsodium-ffi"]
+rc4 = []
 
 [dependencies]
 log = "0.4"

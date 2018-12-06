@@ -26,6 +26,7 @@ impl OpenSSLCrypto {
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
+            #[cfg(feature = "rc4")]
             CipherType::Rc4 => symm::Cipher::rc4(),
             _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
         };

@@ -2,11 +2,12 @@
 
 #[cfg(feature = "sodium")]
 use crypto::sodium;
+#[cfg(feature = "rc4")]
+use crypto::rc4_md5;
 use crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
     dummy,
     openssl,
-    rc4_md5,
     table,
     CryptoMode,
 };
@@ -85,6 +86,7 @@ macro_rules! define_stream_ciphers {
 define_stream_ciphers! {
     pub TableCipher => table::TableCipher,
     pub DummyCipher => dummy::DummyCipher,
+    #[cfg(feature = "rc4")]
     pub Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
     pub OpenSSLCipher => openssl::OpenSSLCipher,
     #[cfg(feature = "sodium")]
@@ -107,6 +109,7 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Str
             StreamCipherVariant::new(sodium::SodiumStreamCipher::new(t, key, iv))
         }
 
+        #[cfg(feature = "rc4")]
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
         _ => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),

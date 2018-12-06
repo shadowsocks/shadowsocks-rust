@@ -15,6 +15,7 @@ pub mod cipher;
 pub mod digest;
 pub mod dummy;
 pub mod openssl;
+#[cfg(feature = "rc4")]
 pub mod rc4_md5;
 pub mod ring;
 #[cfg(feature = "miscreant")]
