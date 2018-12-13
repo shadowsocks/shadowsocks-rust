@@ -244,8 +244,8 @@ impl ServerConfig {
     }
 
     /// Get timeout
-    pub fn timeout(&self) -> &Option<Duration> {
-        &self.timeout
+    pub fn timeout(&self) -> Option<Duration> {
+        self.timeout
     }
 
     /// Get plugin

@@ -64,7 +64,7 @@ impl TcpRelayClientHandshake {
         futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
             debug!("Handshaking with peer {}", peer_addr);
 
-            let timeout = *svr_cfg.timeout();
+            let timeout = svr_cfg.timeout();
             proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
                 r_fut
                     .and_then(move |r| {
@@ -189,7 +189,7 @@ fn handle_client(
     config: Arc<Config>,
     socket: TcpStream,
 ) -> impl Future<Item = (), Error = ()> + Send {
-    if let Err(err) = socket.set_keepalive(*server_cfg.timeout()) {
+    if let Err(err) = socket.set_keepalive(server_cfg.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
 

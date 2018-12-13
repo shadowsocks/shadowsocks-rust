@@ -230,7 +230,7 @@ fn connect_proxy_server(
     config: Arc<Config>,
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
-    let timeout = *svr_cfg.timeout();
+    let timeout = svr_cfg.timeout();
     trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
     match *svr_cfg.addr() {
         ServerAddr::SocketAddr(ref addr) => {
@@ -261,7 +261,7 @@ pub fn proxy_server_handshake(
     ),
     Error = io::Error,
 > + Send {
-    let timeout = *svr_cfg.timeout();
+    let timeout = svr_cfg.timeout();
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
             // Send relay address to remote
@@ -294,7 +294,7 @@ pub fn proxy_handshake(
     Error = io::Error,
 > + Send {
     futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
-        let timeout = svr_cfg.timeout().clone();
+        let timeout = svr_cfg.timeout();
 
         let svr_cfg_cloned = svr_cfg.clone();
 

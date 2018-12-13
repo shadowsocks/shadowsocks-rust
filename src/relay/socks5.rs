@@ -70,8 +70,8 @@ pub enum Command {
 impl Command {
     #[inline]
     #[cfg_attr(rustfmt, rustfmt_skip)]
-    fn as_u8(&self) -> u8 {
-        match *self {
+    fn as_u8(self) -> u8 {
+        match self {
             Command::TcpConnect   => consts::SOCKS5_CMD_TCP_CONNECT,
             Command::TcpBind      => consts::SOCKS5_CMD_TCP_BIND,
             Command::UdpAssociate => consts::SOCKS5_CMD_UDP_ASSOCIATE,
@@ -109,8 +109,8 @@ pub enum Reply {
 impl Reply {
     #[inline]
     #[cfg_attr(rustfmt, rustfmt_skip)]
-    fn as_u8(&self) -> u8 {
-        match *self {
+    fn as_u8(self) -> u8 {
+        match self {
             Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
             Reply::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
             Reply::ConnectionNotAllowed    => consts::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
