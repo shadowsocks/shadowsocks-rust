@@ -104,6 +104,7 @@ const CIPHER_PLAIN: &str = "plain";
 const CIPHER_AES_128_GCM: &str = "aes-128-gcm";
 const CIPHER_AES_256_GCM: &str = "aes-256-gcm";
 const CIPHER_CHACHA20_IETF_POLY1305: &str = "chacha20-ietf-poly1305";
+#[cfg(feature = "sodium")]
 const CIPHER_XCHACHA20_IETF_POLY1305: &str = "xchacha20-ietf-poly1305";
 
 /// ShadowSocks cipher type
