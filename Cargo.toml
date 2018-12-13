@@ -31,8 +31,9 @@ path = "src/bin/ssdns.rs"
 lto = true
 
 [features]
-default = ["sodium"]
+default = ["sodium", "rc4"]
 sodium = ["libsodium-ffi"]
+rc4 = []
 
 [dependencies]
 log = "0.4"

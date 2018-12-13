@@ -78,7 +78,9 @@ const CIPHER_AES_256_CFB_1: &str = "aes-256-cfb1";
 const CIPHER_AES_256_CFB_8: &str = "aes-256-cfb8";
 const CIPHER_AES_256_CFB_128: &str = "aes-256-cfb128";
 
+#[cfg(feature = "rc4")]
 const CIPHER_RC4: &str = "rc4";
+#[cfg(feature = "rc4")]
 const CIPHER_RC4_MD5: &str = "rc4-md5";
 
 const CIPHER_TABLE: &str = "table";
@@ -120,7 +122,9 @@ pub enum CipherType {
     Aes256Cfb8,
     Aes256Cfb128,
 
+    #[cfg(feature = "rc4")]
     Rc4,
+    #[cfg(feature = "rc4")]
     Rc4Md5,
 
     #[cfg(feature = "sodium")]
@@ -167,6 +171,7 @@ impl CipherType {
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
 
+            #[cfg(feature = "rc4")]
             CipherType::Rc4 | CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
 
             #[cfg(feature = "sodium")]
@@ -247,7 +252,9 @@ impl CipherType {
                 .iv_len()
                 .expect("iv_len should not be None"),
 
+            #[cfg(feature = "rc4")]
             CipherType::Rc4 => symm::Cipher::rc4().iv_len().expect("iv_len should not be None"),
+            #[cfg(feature = "rc4")]
             CipherType::Rc4Md5 => 16,
 
             #[cfg(feature = "sodium")]
@@ -349,7 +356,9 @@ impl FromStr for CipherType {
             CIPHER_AES_256_CFB_8 => Ok(CipherType::Aes256Cfb8),
             CIPHER_AES_256_CFB_128 => Ok(CipherType::Aes256Cfb128),
 
+            #[cfg(feature = "rc4")]
             CIPHER_RC4 => Ok(CipherType::Rc4),
+            #[cfg(feature = "rc4")]
             CIPHER_RC4_MD5 => Ok(CipherType::Rc4Md5),
 
             #[cfg(feature = "sodium")]
@@ -393,7 +402,9 @@ impl Display for CipherType {
             CipherType::Aes256Cfb8 => write!(f, "{}", CIPHER_AES_256_CFB_8),
             CipherType::Aes256Cfb128 => write!(f, "{}", CIPHER_AES_256_CFB_128),
 
+            #[cfg(feature = "rc4")]
             CipherType::Rc4 => write!(f, "{}", CIPHER_RC4),
+            #[cfg(feature = "rc4")]
             CipherType::Rc4Md5 => write!(f, "{}", CIPHER_RC4_MD5),
 
             #[cfg(feature = "sodium")]
@@ -439,6 +450,7 @@ mod test_cipher {
         assert!(message.as_bytes() == &decrypted_msg[..]);
     }
 
+    #[cfg(feature = "rc4")]
     #[test]
     fn test_rc4_md5_key_iv() {
         let ty = CipherType::Rc4Md5;
