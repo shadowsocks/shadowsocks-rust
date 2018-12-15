@@ -54,17 +54,64 @@ use std::{
     str::FromStr,
     string::ToString,
     time::Duration,
+    io::Read,
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
-use serde_json::{self, Map, Value};
+use json5;
 use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
 use crypto::cipher::CipherType;
 use plugin::PluginConfig;
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct SSConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin_opts: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enable_udp: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    udp_timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    servers: Option<Vec<SSServerExtConfig>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    forbidden_ip: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dns: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remote_dns: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SSServerExtConfig {
+    address: String,
+    port: u16,
+    password: String,
+    method: String,
+    plugin: Option<String>,
+    plugin_opts: Option<String>,
+    timeout: Option<u64>,
+    udp_timeout: Option<u64>,
+}
 
 /// Server address
 #[derive(Clone, Debug)]
@@ -83,31 +130,6 @@ impl ServerAddr {
             ServerAddr::SocketAddr(ref s) => s,
             _ => panic!("Cannot use domain name as server listen address"),
         }
-    }
-
-    fn to_json_object_inner(&self, obj: &mut Map<String, Value>, addr_key: &str, port_key: &str) {
-        match *self {
-            ServerAddr::SocketAddr(SocketAddr::V4(ref v4)) => {
-                obj.insert(addr_key.to_owned(), Value::String(v4.ip().to_string()));
-                obj.insert(port_key.to_owned(), Value::Number(From::from(v4.port())));
-            }
-            ServerAddr::SocketAddr(SocketAddr::V6(ref v6)) => {
-                obj.insert(addr_key.to_owned(), Value::String(v6.ip().to_string()));
-                obj.insert(port_key.to_owned(), Value::Number(From::from(v6.port())));
-            }
-            ServerAddr::DomainName(ref domain, port) => {
-                obj.insert(addr_key.to_owned(), Value::String(domain.to_owned()));
-                obj.insert(port_key.to_owned(), Value::Number(From::from(port)));
-            }
-        }
-    }
-
-    fn to_json_object(&self, obj: &mut Map<String, Value>) {
-        self.to_json_object_inner(obj, "address", "port")
-    }
-
-    fn to_json_object_old(&self, obj: &mut Map<String, Value>) {
-        self.to_json_object_inner(obj, "server", "server_port")
     }
 
     /// Get string representation of domain
@@ -432,33 +454,6 @@ impl error::Error for UrlParseError {
     }
 }
 
-impl ServerConfig {
-    pub fn to_json(&self) -> Value {
-        let mut obj = Map::new();
-
-        self.addr.to_json_object(&mut obj);
-
-        obj.insert("password".to_owned(), Value::String(self.password.clone()));
-        obj.insert("method".to_owned(), Value::String(self.method.to_string()));
-        if let Some(t) = self.timeout {
-            obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
-        }
-
-        if let Some(ref p) = self.plugin {
-            obj.insert("plugin".to_owned(), Value::String(p.plugin.clone()));
-            if let Some(ref opt) = p.plugin_opt {
-                obj.insert("plugin_opts".to_owned(), Value::String(opt.clone()));
-            }
-        }
-
-        if let Some(ref p) = self.udp_timeout {
-            obj.insert("udp_timeout".to_owned(), Value::Number(From::from(p.as_secs())));
-        }
-
-        Value::Object(obj)
-    }
-}
-
 /// Listening address
 pub type ClientConfig = SocketAddr;
 
@@ -528,21 +523,8 @@ macro_rules! impl_from {
 }
 
 impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
-impl_from!(serde_json::Error, ErrorKind::JsonParsingError, "Json parse error");
+impl_from!(json5::Error, ErrorKind::JsonParsingError, "json parse error");
 
-macro_rules! except {
-    ($expr:expr, $kind:expr, $desc:expr) => {
-        except!($expr, $kind, $desc, None)
-    };
-    ($expr:expr, $kind:expr, $desc:expr, $detail:expr) => {
-        match $expr {
-            ::std::option::Option::Some(val) => val,
-            ::std::option::Option::None => {
-                return ::std::result::Result::Err($crate::config::Error::new($kind, $desc, $detail))
-            }
-        }
-    };
-}
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self.detail {
@@ -565,294 +547,179 @@ impl Config {
         }
     }
 
-    fn parse_server(server: &Map<String, Value>, default_timeout: Option<Duration>) -> Result<ServerConfig, Error> {
-        let method = server
-            .get("method")
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a method", None))
-            .and_then(|method_o| {
-                method_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`method` should be a string", None))
-            })
-            .and_then(|method_str| {
-                method_str.parse::<CipherType>().map_err(|_| {
-                    Error::new(
-                        ErrorKind::Invalid,
-                        "not supported method",
-                        Some(format!("`{}` is not a supported method", method_str)),
-                    )
-                })
-            })?;
-
-        let port = server
-            .get("port")
-            .or_else(|| server.get("server_port"))
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server port", None))
-            .and_then(|port_o| {
-                port_o
-                    .as_u64()
-                    .map(|u| u as u16)
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`port` should be an integer", None))
-            })?;
-
-        let addr = server
-            .get("address")
-            .or_else(|| server.get("server"))
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a server address", None))
-            .and_then(|addr_o| {
-                addr_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`address` should be a string", None))
-            })
-            .and_then(|addr_str| {
-                addr_str
-                    .parse::<Ipv4Addr>()
-                    .map(|v4| ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))))
-                    .or_else(|_| {
-                        addr_str
-                            .parse::<Ipv6Addr>()
-                            .map(|v6| ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))))
-                    })
-                    .or_else(|_| Ok(ServerAddr::DomainName(addr_str.to_string(), port)))
-            })?;
-
-        let password = server
-            .get("password")
-            .ok_or_else(|| Error::new(ErrorKind::MissingField, "need to specify a password", None))
-            .and_then(|pwd_o| {
-                pwd_o
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`password` should be a string", None))
-                    .map(|s| s.to_string())
-            })?;
-
-        let timeout = match server.get("timeout") {
-            Some(t) => {
-                let val = t
-                    .as_u64()
-                    .ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
-                Some(Duration::from_secs(val))
-            }
-            None => default_timeout,
+    fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
+        let check_local = match config_type {
+            ConfigType::Local => true,
+            ConfigType::Server => false,
         };
 
-        let udp_timeout = match server.get("udp_timeout") {
-            Some(t) => {
-                let val = t.as_u64().ok_or(Error::new(
-                    ErrorKind::Malformed,
-                    "`udp_timeout` should be an integer",
-                    None,
-                ))?;
-                Some(Duration::from_secs(val))
-            }
-            None => None,
-        };
+        if check_local && (config.local_address.is_none() || config.local_port.is_none()) {
+            let err = Error::new(ErrorKind::Malformed, "`local_address` and `local_port` are required in client", None);
+            return Err(err);
+        }
 
-        let plugin = match server.get("plugin") {
-            Some(p) => {
-                let plugin = p
-                    .as_str()
-                    .ok_or_else(|| Error::new(ErrorKind::Malformed, "`plugin` should be a string", None))?;
+        let mut nconfig = Config::new();
 
-                let opt = match server.get("plugin_opts") {
-                    None => None,
-                    Some(o) => {
-                        let o = o.as_str().ok_or_else(|| {
-                            Error::new(ErrorKind::Malformed, "`plugin_opts` should be a string", None)
-                        })?;
-                        Some(o.to_owned())
+        // Standard config
+        // Client
+        if let Some(la) = config.local_address {
+            let port = config.local_port.unwrap();
+
+            let local = match la.parse::<Ipv4Addr>() {
+                Ok(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
+                Err(..) => {
+                    match la.parse::<Ipv6Addr>() {
+                        Ok(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Malformed, "`local_address` must be an ipv4 or ipv6 address", None);
+                            return Err(err);
+                        }
                     }
-                };
-
-                Some(PluginConfig {
-                    plugin: plugin.to_owned(),
-                    plugin_opt: opt,
-                })
-            }
-            None => None,
-        };
-
-        let mut c = ServerConfig::new(addr, password, method, timeout, plugin);
-        c.udp_timeout = udp_timeout;
-        Ok(c)
-    }
-
-    fn parse_json_object(o: &Map<String, Value>, require_local_info: bool) -> Result<Config, Error> {
-        let mut config = Config::new();
-
-        if o.contains_key("servers") {
-            let server_list = o.get("servers").unwrap().as_array().ok_or(Error::new(
-                ErrorKind::Malformed,
-                "`servers` should be a list",
-                None,
-            ))?;
-
-            let opt_timeout = match o.get("timeout") {
-                None => None,
-                Some(t) => {
-                    let val =
-                        t.as_u64()
-                            .ok_or(Error::new(ErrorKind::Malformed, "`timeout` should be an integer", None))?;
-                    Some(Duration::from_secs(val))
                 }
             };
 
-            for server in server_list.iter() {
-                if let Some(server) = server.as_object() {
-                    let cfg = Config::parse_server(server, opt_timeout)?;
-                    config.server.push(cfg);
-                }
-            }
-        } else if o.contains_key("server")
-            && o.contains_key("server_port")
-            && o.contains_key("password")
-            && o.contains_key("method")
-        {
-            // Traditional configuration file
-            let single_server = Config::parse_server(o, None)?;
-            config.server = vec![single_server];
+            nconfig.local = Some(local);
         }
 
-        if require_local_info {
-            let has_local_address = o.contains_key("local_address");
-            let has_local_port = o.contains_key("local_port");
-
-            if has_local_address && has_local_port {
-                config.local = match o.get("local_address") {
-                    Some(local_addr) => {
-                        let addr_str = local_addr.as_str().ok_or(Error::new(
-                            ErrorKind::Malformed,
-                            "`local_address` should be a string",
-                            None,
-                        ))?;
-
-                        let port = o.get("local_port").unwrap().as_u64().ok_or(Error::new(
-                            ErrorKind::Malformed,
-                            "`local_port` should be an integer",
-                            None,
-                        ))? as u16;
-
-                        match addr_str.parse::<Ipv4Addr>() {
-                            Ok(ip) => Some(SocketAddr::V4(SocketAddrV4::new(ip, port))),
-                            Err(..) => match addr_str.parse::<Ipv6Addr>() {
-                                Ok(ip) => Some(SocketAddr::V6(SocketAddrV6::new(ip, port, 0, 0))),
-                                Err(..) => {
-                                    return Err(Error::new(
-                                        ErrorKind::Malformed,
-                                        "`local_address` is not a valid IP \
-                                         address",
-                                        None,
-                                    ))
-                                }
-                            },
+        // Standard config
+        // Server
+        match (config.server, config.server_port, config.password, config.method) {
+            (Some(address), Some(port), Some(pwd), Some(m)) => {
+                
+                let addr = match address.parse::<Ipv4Addr>() {
+                    Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))),
+                    Err(..) => {
+                        match address.parse::<Ipv6Addr>() {
+                            Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),
+                            Err(..) => ServerAddr::DomainName(address, port),
                         }
                     }
-                    None => None,
-                };
-            } else if has_local_address ^ has_local_port {
-                panic!("You have to provide `local_address` and `local_port` together");
-            }
-        }
-
-        if let Some(forbidden_ip_conf) = o.get("forbidden_ip") {
-            let forbidden_ip_arr = forbidden_ip_conf.as_array().ok_or(Error::new(
-                ErrorKind::Malformed,
-                "`forbidden_ip` should be a list",
-                None,
-            ))?;
-            config.forbidden_ip.extend(forbidden_ip_arr.into_iter().filter_map(|x| {
-                let x = match x.as_str() {
-                    Some(x) => x,
-                    None => {
-                        error!("Forbidden IP should be a string, but found {:?}, skipping", x);
-                        return None;
-                    }
                 };
 
-                match x.parse::<IpAddr>() {
-                    Ok(sock) => Some(sock),
-                    Err(err) => {
-                        error!("Invalid forbidden IP {}, {:?}, skipping", x, err);
-                        None
-                    }
-                }
-            }));
-        }
-
-        if let Some(udp_enable) = o.get("enable_udp") {
-            match udp_enable.as_bool() {
-                None => {
-                    let err = Error::new(ErrorKind::Malformed, "`enable_udp` should be boolean", None);
-                    return Err(err);
-                }
-                Some(enable_udp) => config.enable_udp = enable_udp,
-            }
-        }
-
-        if let Some(dns) = o.get("remote_dns") {
-            match dns.as_str() {
-                None => {
-                    let err = Error::new(ErrorKind::Malformed, "`remote_dns` should be string", None);
-                    return Err(err);
-                }
-                Some(dns) => match dns.parse::<IpAddr>() {
+                let method = match m.parse::<CipherType>() {
+                    Ok(m) => m,
                     Err(..) => {
-                        let err = Error::new(ErrorKind::Malformed, "`remote_dns` should be IpAddr", None);
+                        let err = Error::new(ErrorKind::Invalid, "unsupported method", Some(format!("`{}` is not a supported method", m)));
                         return Err(err);
                     }
-                    Ok(addr) => {
-                        config.remote_dns = Some(SocketAddr::new(addr, 53));
+                };
+
+                let plugin = match config.plugin {
+                    None => None,
+                    Some(p) => Some(PluginConfig {
+                        plugin: p,
+                        plugin_opt: config.plugin_opts,
+                    })
+                };
+
+                let timeout = match config.timeout {
+                    None => None,
+                    Some(t) => Some(Duration::from_secs(t)),
+                };
+
+                let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
+
+                let udp_timeout = match config.udp_timeout {
+                    None => None,
+                    Some(t) => Some(Duration::from_secs(t)),
+                };
+
+                nsvr.udp_timeout = udp_timeout;
+
+                nconfig.server.push(nsvr);
+            }
+            (None, None, None, None) => (),
+            _ => {
+                let err = Error::new(ErrorKind::Malformed, "`server`, `server_port`, `method`, `password` must be provided together", None);
+                return Err(err);
+            }
+        }
+
+        // Ext servers
+        if let Some(servers) = config.servers {
+            for svr in servers {
+                let addr = match svr.address.parse::<Ipv4Addr>() {
+                    Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, svr.port))),
+                    Err(..) => {
+                        match svr.address.parse::<Ipv6Addr>() {
+                            Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, svr.port, 0, 0))),
+                            Err(..) => ServerAddr::DomainName(svr.address, svr.port),
+                        }
                     }
-                },
+                };
+
+                let method = match svr.method.parse::<CipherType>() {
+                    Ok(m) => m,
+                    Err(..) => {
+                        let err = Error::new(ErrorKind::Invalid, "unsupported method", Some(format!("`{}` is not a supported method", svr.method)));
+                        return Err(err);
+                    }
+                };
+
+                let plugin = match svr.plugin {
+                    None => None,
+                    Some(p) => Some(PluginConfig {
+                        plugin: p,
+                        plugin_opt: svr.plugin_opts,
+                    })
+                };
+
+                let timeout = match svr.timeout {
+                    None => None,
+                    Some(t) => Some(Duration::from_secs(t)),
+                };
+
+                let mut nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
+
+                let udp_timeout = match config.udp_timeout {
+                    None => None,
+                    Some(t) => Some(Duration::from_secs(t)),
+                };
+
+                nsvr.udp_timeout = udp_timeout;
+
+                nconfig.server.push(nsvr);
             }
         }
 
-        if let Some(dns) = o.get("dns") {
-            match dns.as_str() {
-                None => {
-                    let err = Error::new(ErrorKind::Malformed, "`dns` should be string", None);
-                    return Err(err);
-                }
-                Some(dns) => {
-                    config.dns = Some(dns.to_owned());
+        // Forbidden IPs
+        if let Some(forbidden_ip) = config.forbidden_ip {
+            for fi in forbidden_ip {
+                match fi.parse::<IpAddr>() {
+                    Ok(i) => { nconfig.forbidden_ip.insert(i); },
+                    Err(err) => {
+                        error!("Invalid forbidden_ip \"{}\", err: {}", fi, err);
+                    }
                 }
             }
         }
 
-        Ok(config)
+        // DNS
+        nconfig.dns = config.dns;
+
+        if let Some(rdns) = config.remote_dns {
+            match rdns.parse::<SocketAddr>() {
+                Ok(r) => nconfig.remote_dns = Some(r),
+                Err(..) => {
+                    let e = Error::new(ErrorKind::Malformed, "malformed `remote_dns`, which must be a valid SocketAddr", None);
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(nconfig)
     }
 
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let object = serde_json::from_str::<Value>(s)?;
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            },
-        )
+        let c = json5::from_str::<SSConfig>(s)?;
+        Config::load_from_ssconfig(c, config_type)
     }
 
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let reader = &mut OpenOptions::new().read(true).open(&Path::new(filename))?;
-        let object = serde_json::from_reader::<_, Value>(reader)?;
-        let json_object = except!(
-            object.as_object(),
-            ErrorKind::JsonParsingError,
-            "root is not a JsonObject"
-        );
-        Config::parse_json_object(
-            json_object,
-            match config_type {
-                ConfigType::Local => true,
-                ConfigType::Server => false,
-            },
-        )
+        let mut reader = OpenOptions::new().read(true).open(&Path::new(filename))?;
+        let mut content = String::new();
+        reader.read_to_string(&mut content)?;
+        Config::load_from_str(&content[..], config_type)
     }
 
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
@@ -899,58 +766,91 @@ impl Config {
     }
 }
 
-impl Config {
-    pub fn to_json(&self) -> Value {
-        let mut obj = Map::new();
-        if self.server.len() == 1 {
-            // Official format
-
-            let server = &self.server[0];
-            server.addr.to_json_object_old(&mut obj);
-
-            obj.insert("password".to_owned(), Value::String(server.password.clone()));
-            obj.insert("method".to_owned(), Value::String(server.method.to_string()));
-            if let Some(t) = server.timeout {
-                obj.insert("timeout".to_owned(), Value::Number(From::from(t.as_secs())));
-            }
-
-            if let Some(ref p) = server.plugin {
-                obj.insert("plugin".to_owned(), Value::String(p.plugin.clone()));
-                if let Some(ref opt) = p.plugin_opt {
-                    obj.insert("plugin_opts".to_owned(), Value::String(opt.clone()));
-                }
-            }
-        } else {
-            let arr: Vec<Value> = self.server.iter().map(|s| s.to_json()).collect();
-            obj.insert("servers".to_owned(), Value::Array(arr));
-        }
-
-        if let Some(ref l) = self.local {
-            let ip_str = match *l {
-                SocketAddr::V4(ref v4) => v4.ip().to_string(),
-                SocketAddr::V6(ref v6) => v6.ip().to_string(),
-            };
-
-            obj.insert("local_address".to_owned(), Value::String(ip_str));
-            obj.insert("local_port".to_owned(), Value::Number(From::from(l.port() as u64)));
-        }
-
-        obj.insert("enable_udp".to_owned(), Value::Bool(self.enable_udp));
-
-        if let Some(ref dns) = self.dns {
-            obj.insert("dns".to_owned(), Value::String(dns.to_owned()));
-        }
-
-        if let Some(ref dns) = self.remote_dns {
-            obj.insert("remote_dns".to_owned(), Value::String(dns.to_string()));
-        }
-
-        Value::Object(obj)
-    }
-}
-
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_json())
+        // Convert to json
+
+        let mut jconf = SSConfig::default();
+
+        if let Some(ref client) = self.local {
+            jconf.local_address = Some(client.ip().to_string());
+            jconf.local_port = Some(client.port());
+        }
+
+        // Servers
+        // For 1 servers, uses standard configure format
+        if self.server.len() == 1 {
+            
+            let svr = &self.server[0];
+
+            jconf.server = Some(
+                match *svr.addr() {
+                    ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                    ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                }
+            );
+            jconf.server_port = Some(
+                match *svr.addr() {
+                    ServerAddr::SocketAddr(ref sa) => sa.port(),
+                    ServerAddr::DomainName(.., port) => port,
+                }
+            );
+            jconf.method = Some(svr.method().to_string());
+            jconf.password = Some(svr.password().to_string());
+            jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
+            jconf.plugin_opts = match svr.plugin() {
+                None => None,
+                Some(p) => p.plugin_opt.clone(),
+            };
+            jconf.timeout = svr.timeout().map(|t| t.as_secs());
+            jconf.udp_timeout = svr.udp_timeout().map(|t| t.as_secs());
+
+        } else if self.server.len() > 1 {
+            let mut vsvr = Vec::new();
+
+            for svr in &self.server {
+                vsvr.push(SSServerExtConfig {
+                    address: match *svr.addr() {
+                        ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                        ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                    },
+                    port: match *svr.addr() {
+                        ServerAddr::SocketAddr(ref sa) => sa.port(),
+                        ServerAddr::DomainName(.., port) => port,
+                    },
+                    password: svr.password().to_string(),
+                    method: svr.method().to_string(),
+                    plugin: svr.plugin().map(|p| p.plugin.to_string()),
+                    plugin_opts: match svr.plugin() {
+                        None => None,
+                        Some(p) => p.plugin_opt.clone(),
+                    },
+                    timeout: svr.timeout().map(|t| t.as_secs()),
+                    udp_timeout: svr.udp_timeout().map(|t| t.as_secs()),
+                });
+            }
+        }
+
+        if self.enable_udp {
+            jconf.enable_udp = Some(true);
+        }
+
+        if !self.forbidden_ip.is_empty() {
+            let mut vfi = Vec::new();
+            for fi in &self.forbidden_ip {
+                vfi.push(fi.to_string());
+            }
+            jconf.forbidden_ip = Some(vfi);
+        }
+
+        if let Some(ref dns) = self.dns {
+            jconf.dns = Some(dns.to_string());
+        }
+
+        if let Some(ref remote_dns) = self.remote_dns {
+            jconf.remote_dns = Some(remote_dns.to_string());
+        }
+
+        write!(f, "{}", json5::to_string(&jconf).unwrap())
     }
 }

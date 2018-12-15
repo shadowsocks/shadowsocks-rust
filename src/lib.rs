@@ -90,8 +90,11 @@ extern crate miscreant;
 extern crate openssl;
 extern crate rand;
 extern crate ring;
-extern crate serde_json;
+extern crate json5;
 extern crate serde_urlencoded;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
 extern crate subprocess;
 #[macro_use]
 extern crate tokio_io;
