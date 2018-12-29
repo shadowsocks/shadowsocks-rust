@@ -107,9 +107,13 @@ struct SSServerExtConfig {
     port: u16,
     password: String,
     method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
 }
 
