@@ -1,9 +1,9 @@
 //! Stream ciphers
 
-#[cfg(feature = "sodium")]
-use crypto::sodium;
 #[cfg(feature = "rc4")]
 use crypto::rc4_md5;
+#[cfg(feature = "sodium")]
+use crypto::sodium;
 use crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
     dummy,

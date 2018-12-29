@@ -84,13 +84,13 @@ extern crate libc;
 extern crate libsodium_ffi;
 #[macro_use]
 extern crate log;
+extern crate json5;
 extern crate md5;
 #[cfg(feature = "miscreant")]
 extern crate miscreant;
 extern crate openssl;
 extern crate rand;
 extern crate ring;
-extern crate json5;
 extern crate serde_urlencoded;
 #[macro_use]
 extern crate serde_derive;

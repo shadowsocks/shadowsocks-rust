@@ -577,7 +577,9 @@ impl TcpRequestHeader {
                 let cmd = buf[1];
                 let command = match Command::from_u8(cmd) {
                     Some(c) => c,
-                    None => return Err(Error::new(Reply::CommandNotSupported, "Unsupported command")),
+                    None => {
+                        return Err(Error::new(Reply::CommandNotSupported, "Unsupported command"));
+                    }
                 };
 
                 Ok((r, command))

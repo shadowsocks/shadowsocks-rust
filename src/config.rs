@@ -48,13 +48,13 @@ use std::{
     error,
     fmt::{self, Debug, Display, Formatter},
     fs::OpenOptions,
+    io::Read,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     option::Option,
     path::Path,
     str::FromStr,
     string::ToString,
     time::Duration,
-    io::Read,
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
@@ -554,7 +554,11 @@ impl Config {
         };
 
         if check_local && (config.local_address.is_none() || config.local_port.is_none()) {
-            let err = Error::new(ErrorKind::Malformed, "`local_address` and `local_port` are required in client", None);
+            let err = Error::new(
+                ErrorKind::Malformed,
+                "`local_address` and `local_port` are required in client",
+                None,
+            );
             return Err(err);
         }
 
@@ -567,15 +571,17 @@ impl Config {
 
             let local = match la.parse::<Ipv4Addr>() {
                 Ok(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                Err(..) => {
-                    match la.parse::<Ipv6Addr>() {
-                        Ok(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                        Err(..) => {
-                            let err = Error::new(ErrorKind::Malformed, "`local_address` must be an ipv4 or ipv6 address", None);
-                            return Err(err);
-                        }
+                Err(..) => match la.parse::<Ipv6Addr>() {
+                    Ok(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
+                    Err(..) => {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "`local_address` must be an ipv4 or ipv6 address",
+                            None,
+                        );
+                        return Err(err);
                     }
-                }
+                },
             };
 
             nconfig.local = Some(local);
@@ -585,21 +591,22 @@ impl Config {
         // Server
         match (config.server, config.server_port, config.password, config.method) {
             (Some(address), Some(port), Some(pwd), Some(m)) => {
-                
                 let addr = match address.parse::<Ipv4Addr>() {
                     Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))),
-                    Err(..) => {
-                        match address.parse::<Ipv6Addr>() {
-                            Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),
-                            Err(..) => ServerAddr::DomainName(address, port),
-                        }
-                    }
+                    Err(..) => match address.parse::<Ipv6Addr>() {
+                        Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),
+                        Err(..) => ServerAddr::DomainName(address, port),
+                    },
                 };
 
                 let method = match m.parse::<CipherType>() {
                     Ok(m) => m,
                     Err(..) => {
-                        let err = Error::new(ErrorKind::Invalid, "unsupported method", Some(format!("`{}` is not a supported method", m)));
+                        let err = Error::new(
+                            ErrorKind::Invalid,
+                            "unsupported method",
+                            Some(format!("`{}` is not a supported method", m)),
+                        );
                         return Err(err);
                     }
                 };
@@ -609,7 +616,7 @@ impl Config {
                     Some(p) => Some(PluginConfig {
                         plugin: p,
                         plugin_opt: config.plugin_opts,
-                    })
+                    }),
                 };
 
                 let timeout = match config.timeout {
@@ -630,7 +637,11 @@ impl Config {
             }
             (None, None, None, None) => (),
             _ => {
-                let err = Error::new(ErrorKind::Malformed, "`server`, `server_port`, `method`, `password` must be provided together", None);
+                let err = Error::new(
+                    ErrorKind::Malformed,
+                    "`server`, `server_port`, `method`, `password` must be provided together",
+                    None,
+                );
                 return Err(err);
             }
         }
@@ -640,18 +651,20 @@ impl Config {
             for svr in servers {
                 let addr = match svr.address.parse::<Ipv4Addr>() {
                     Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, svr.port))),
-                    Err(..) => {
-                        match svr.address.parse::<Ipv6Addr>() {
-                            Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, svr.port, 0, 0))),
-                            Err(..) => ServerAddr::DomainName(svr.address, svr.port),
-                        }
-                    }
+                    Err(..) => match svr.address.parse::<Ipv6Addr>() {
+                        Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, svr.port, 0, 0))),
+                        Err(..) => ServerAddr::DomainName(svr.address, svr.port),
+                    },
                 };
 
                 let method = match svr.method.parse::<CipherType>() {
                     Ok(m) => m,
                     Err(..) => {
-                        let err = Error::new(ErrorKind::Invalid, "unsupported method", Some(format!("`{}` is not a supported method", svr.method)));
+                        let err = Error::new(
+                            ErrorKind::Invalid,
+                            "unsupported method",
+                            Some(format!("`{}` is not a supported method", svr.method)),
+                        );
                         return Err(err);
                     }
                 };
@@ -661,7 +674,7 @@ impl Config {
                     Some(p) => Some(PluginConfig {
                         plugin: p,
                         plugin_opt: svr.plugin_opts,
-                    })
+                    }),
                 };
 
                 let timeout = match svr.timeout {
@@ -686,7 +699,9 @@ impl Config {
         if let Some(forbidden_ip) = config.forbidden_ip {
             for fi in forbidden_ip {
                 match fi.parse::<IpAddr>() {
-                    Ok(i) => { nconfig.forbidden_ip.insert(i); },
+                    Ok(i) => {
+                        nconfig.forbidden_ip.insert(i);
+                    }
                     Err(err) => {
                         error!("Invalid forbidden_ip \"{}\", err: {}", fi, err);
                     }
@@ -701,7 +716,11 @@ impl Config {
             match rdns.parse::<SocketAddr>() {
                 Ok(r) => nconfig.remote_dns = Some(r),
                 Err(..) => {
-                    let e = Error::new(ErrorKind::Malformed, "malformed `remote_dns`, which must be a valid SocketAddr", None);
+                    let e = Error::new(
+                        ErrorKind::Malformed,
+                        "malformed `remote_dns`, which must be a valid SocketAddr",
+                        None,
+                    );
                     return Err(e);
                 }
             }
@@ -780,21 +799,16 @@ impl fmt::Display for Config {
         // Servers
         // For 1 servers, uses standard configure format
         if self.server.len() == 1 {
-            
             let svr = &self.server[0];
 
-            jconf.server = Some(
-                match *svr.addr() {
-                    ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                    ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                }
-            );
-            jconf.server_port = Some(
-                match *svr.addr() {
-                    ServerAddr::SocketAddr(ref sa) => sa.port(),
-                    ServerAddr::DomainName(.., port) => port,
-                }
-            );
+            jconf.server = Some(match *svr.addr() {
+                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+            });
+            jconf.server_port = Some(match *svr.addr() {
+                ServerAddr::SocketAddr(ref sa) => sa.port(),
+                ServerAddr::DomainName(.., port) => port,
+            });
             jconf.method = Some(svr.method().to_string());
             jconf.password = Some(svr.password().to_string());
             jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
@@ -804,7 +818,6 @@ impl fmt::Display for Config {
             };
             jconf.timeout = svr.timeout().map(|t| t.as_secs());
             jconf.udp_timeout = svr.udp_timeout().map(|t| t.as_secs());
-
         } else if self.server.len() > 1 {
             let mut vsvr = Vec::new();
 
