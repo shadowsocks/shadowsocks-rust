@@ -5,7 +5,6 @@
 
 extern crate clap;
 extern crate qrcode;
-extern crate serde_json;
 extern crate shadowsocks;
 
 use clap::{App, Arg};
@@ -67,8 +66,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     let mut config = Config::new();
     config.server.push(svrconfig);
 
-    let config_json = config.to_json();
-    println!("{}", serde_json::to_string_pretty(&config_json).unwrap());
+    println!("{}", config);
 
     if need_qrcode {
         print_qrcode(encoded);
