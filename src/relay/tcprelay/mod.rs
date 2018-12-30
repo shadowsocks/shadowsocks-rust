@@ -9,7 +9,8 @@ use std::{
     time::Duration,
 };
 
-use config::{Config, ServerAddr, ServerConfig};
+use config::{ServerAddr, ServerConfig};
+use context::SharedContext;
 use crypto::CipherCategory;
 use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
 
@@ -227,7 +228,7 @@ impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
 }
 
 fn connect_proxy_server(
-    config: Arc<Config>,
+    context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
     let timeout = svr_cfg.timeout();
@@ -239,7 +240,7 @@ fn connect_proxy_server(
         }
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
-                try_timeout(resolve(config.clone(), &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
+                try_timeout(resolve(context, &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
                     let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
                     try_timeout(fut, timeout)
                 })

@@ -3,7 +3,7 @@
 use futures::Future;
 
 pub mod dns;
-mod dns_resolver;
+pub(crate) mod dns_resolver;
 mod loadbalancing;
 pub mod local;
 pub mod server;

@@ -77,8 +77,6 @@ extern crate bytes;
 extern crate digest;
 #[macro_use]
 extern crate futures;
-#[macro_use]
-extern crate lazy_static;
 extern crate libc;
 #[cfg(feature = "sodium")]
 extern crate libsodium_ffi;
@@ -117,6 +115,7 @@ pub use self::{
 };
 
 pub mod config;
+mod context;
 pub mod crypto;
 mod monitor;
 pub mod plugin;

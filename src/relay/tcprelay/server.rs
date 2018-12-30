@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use config::{Config, ServerConfig};
+use config::ServerConfig;
 
 use relay::{
     boxed_future,
@@ -15,6 +15,8 @@ use relay::{
     socks5::Address,
     tcprelay::crypto_io::{DecryptedRead, EncryptedWrite},
 };
+
+use context::SharedContext;
 
 use futures::{
     self,
@@ -37,7 +39,7 @@ use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalf, 
 pub struct TcpRelayClientHandshake {
     s: TcpStream,
     svr_cfg: Arc<ServerConfig>,
-    config: Arc<Config>,
+    context: SharedContext,
 }
 
 impl TcpRelayClientHandshake {
@@ -59,7 +61,7 @@ impl TcpRelayClientHandshake {
         Item = TcpRelayClientPending<impl Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static>,
         Error = io::Error,
     > + Send {
-        let TcpRelayClientHandshake { s, svr_cfg, config } = self;
+        let TcpRelayClientHandshake { s, svr_cfg, context } = self;
 
         futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
             debug!("Handshaking with peer {}", peer_addr);
@@ -77,7 +79,7 @@ impl TcpRelayClientHandshake {
                         addr: addr,
                         w: w_fut,
                         timeout: timeout,
-                        config: config,
+                        context: context,
                     })
             })
         })
@@ -93,13 +95,13 @@ where
     addr: Address,
     w: E,
     timeout: Option<Duration>,
-    config: Arc<Config>,
+    context: SharedContext,
 }
 
 /// Connect to the remote server
 #[inline]
 fn connect_remote(
-    config: Arc<Config>,
+    context: SharedContext,
     addr: Address,
     timeout: Option<Duration>,
 ) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
@@ -107,7 +109,7 @@ fn connect_remote(
 
     match addr {
         Address::SocketAddress(saddr) => {
-            if config.forbidden_ip.contains(&saddr.ip()) {
+            if context.config().forbidden_ip.contains(&saddr.ip()) {
                 let err = io::Error::new(
                     ErrorKind::Other,
                     format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr),
@@ -121,7 +123,7 @@ fn connect_remote(
         }
         Address::DomainNameAddress(dname, port) => {
             let fut = {
-                try_timeout(resolve(config, dname.as_str(), port, true), timeout).and_then(move |addrs| {
+                try_timeout(resolve(context, dname.as_str(), port, true), timeout).and_then(move |addrs| {
                     let conn = TcpStreamConnect::new(addrs.into_iter());
                     try_timeout(conn, timeout)
                 })
@@ -145,7 +147,7 @@ where
         let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
         let timeout = self.timeout;
-        connect_remote(self.config, self.addr, self.timeout).map(move |stream| TcpRelayClientConnected {
+        connect_remote(self.context, self.addr, self.timeout).map(move |stream| TcpRelayClientConnected {
             server: stream.split(),
             client: client_pair,
             addr: addr,
@@ -186,7 +188,7 @@ where
 
 fn handle_client(
     server_cfg: Arc<ServerConfig>,
-    config: Arc<Config>,
+    context: SharedContext,
     socket: TcpStream,
 ) -> impl Future<Item = (), Error = ()> + Send {
     if let Err(err) = socket.set_keepalive(server_cfg.timeout()) {
@@ -211,7 +213,7 @@ fn handle_client(
         let client = TcpRelayClientHandshake {
             s: socket,
             svr_cfg: server_cfg,
-            config: config,
+            context: context,
         };
 
         client
@@ -225,10 +227,10 @@ fn handle_client(
 }
 
 /// Runs the server
-pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let mut vec_fut = Vec::with_capacity(config.server.len());
+pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
+    let mut vec_fut = Vec::with_capacity(context.config().server.len());
 
-    for svr_cfg in &config.server {
+    for svr_cfg in &context.config().server {
         let listener = {
             let addr = svr_cfg.addr();
             let addr = addr.listen_addr();
@@ -240,13 +242,13 @@ pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + S
         };
 
         let svr_cfg = Arc::new(svr_cfg.clone());
-        let config = config.clone();
+        let context = context.clone();
         let listening = listener
             .incoming()
             .for_each(move |socket| {
                 let server_cfg = svr_cfg.clone();
-                let config = config.clone();
-                tokio::spawn(handle_client(server_cfg, config, socket));
+                let context = context.clone();
+                tokio::spawn(handle_client(server_cfg, context, socket));
                 Ok(())
             })
             .map_err(|err| {

@@ -3,41 +3,20 @@
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
-    sync::Arc,
 };
 
 use futures::Future;
-use spin::Mutex;
 use tokio;
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
-use config::Config;
+use context::SharedContext;
 
-// Taken from
-// bluejekyll/trust-dns/resolver/examples/global_resolver.rs
-lazy_static! {
-    static ref GLOBAL_DNS_ADDRESS: Mutex<Option<ResolverConfig>> = Mutex::new(None);
-
-    // First we need to setup the global Resolver
-    static ref GLOBAL_DNS_RESOLVER: AsyncResolver = init_resolver();
-}
-
-/// Set address for global DNS resolver
-/// Must be called before servers are actually run
-pub fn set_dns_config(addr: ResolverConfig) {
-    *GLOBAL_DNS_ADDRESS.lock() = Some(addr);
-}
-
-fn get_dns_address() -> Option<ResolverConfig> {
-    GLOBAL_DNS_ADDRESS.lock().clone()
-}
-
-fn init_resolver() -> AsyncResolver {
+pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
     let (resolver, bg) = {
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
         #[cfg(any(unix, windows))]
         {
-            if let Some(conf) = get_dns_address() {
+            if let Some(conf) = dns {
                 use trust_dns_resolver::config::ResolverOpts;
                 AsyncResolver::new(conf, ResolverOpts::default())
             } else {
@@ -54,7 +33,7 @@ fn init_resolver() -> AsyncResolver {
             // Directly reference the config types
             use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
-            if let Some(conf) = get_dns_address() {
+            if let Some(conf) = dns {
                 AsyncResolver::new(conf, ResolverOpts::default())
             } else {
                 // Get a new resolver with the google nameservers as the upstream recursive resolvers
@@ -70,15 +49,17 @@ fn init_resolver() -> AsyncResolver {
 }
 
 fn inner_resolve(
-    config: Arc<Config>,
+    context: SharedContext,
     addr: &str,
     port: u16,
     check_forbidden: bool,
 ) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
     let owned_addr = addr.to_owned();
     let owned_addr2 = owned_addr.clone();
+    let cloned_context = context.clone();
 
-    GLOBAL_DNS_RESOLVER
+    context
+        .dns_resolver()
         .lookup_ip(addr)
         .map_err(move |err| {
             error!("Failed to resolve {}, err: {}", owned_addr2, err);
@@ -88,7 +69,7 @@ fn inner_resolve(
             let mut vaddr = Vec::new();
             for ip in lookup_result.iter() {
                 if check_forbidden {
-                    let forbidden_ip = &config.forbidden_ip;
+                    let forbidden_ip = &cloned_context.config().forbidden_ip;
                     if forbidden_ip.contains(&ip) {
                         debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
                         continue;
@@ -112,10 +93,10 @@ fn inner_resolve(
 
 /// Resolve address to IP
 pub fn resolve(
-    config: Arc<Config>,
+    context: SharedContext,
     addr: &str,
     port: u16,
     check_forbidden: bool,
 ) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
-    inner_resolve(config, addr, port, check_forbidden)
+    inner_resolve(context, addr, port, check_forbidden)
 }

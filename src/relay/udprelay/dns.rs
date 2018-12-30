@@ -10,7 +10,6 @@ use std::{
 
 use dns_parser::{Packet, RRData};
 use futures::{self, future::join_all, stream::futures_unordered, Future, Stream};
-use lru_cache::LruCache;
 use tokio::{self, net::UdpSocket};
 
 use super::{
@@ -19,7 +18,8 @@ use super::{
     SendDgramRc,
     SharedUdpSocket,
 };
-use config::{Config, ServerAddr, ServerConfig};
+use config::{ServerAddr, ServerConfig};
+use context::SharedContext;
 use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
 
 struct PrettyRRData<'a> {
@@ -135,40 +135,40 @@ impl<'a> fmt::Display for PrettyPacket<'a> {
 }
 
 /// Starts a UDP DNS server
-pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let local_addr = *config.local.as_ref().unwrap();
+pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
+    let local_addr = *context.config().local.as_ref().unwrap();
 
     futures::lazy(move || {
         info!("ShadowSocks UDP DNS Listening on {}", local_addr);
 
         UdpSocket::bind(&local_addr)
     })
-    .and_then(move |l| listen(config, l))
+    .and_then(move |l| listen(context, l))
 }
 
-fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
-    assert!(!config.server.is_empty());
+fn listen(context: SharedContext, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
+    assert!(!context.config().server.is_empty());
 
-    let mut svr_fut = Vec::with_capacity(config.server.len());
-    for svr in &config.server {
+    let mut svr_fut = Vec::with_capacity(context.config().server.len());
+    for svr in &context.config().server {
         match *svr.addr() {
             ServerAddr::SocketAddr(ref addr) => {
                 svr_fut.push(boxed_future(futures::finished::<_, io::Error>(vec![*addr])));
             }
             ServerAddr::DomainName(ref dom, ref port) => {
-                svr_fut.push(boxed_future(resolve(config.clone(), &*dom, *port, false)));
+                svr_fut.push(boxed_future(resolve(context.clone(), &*dom, *port, false)));
             }
         }
     }
 
-    let cloned_config = config.clone();
+    let cloned_context = context.clone();
     join_all(svr_fut)
         .and_then(move |svr_addrs| {
             let mut u = Vec::with_capacity(svr_addrs.len());
             for (idx, svr_addr) in svr_addrs.into_iter().enumerate() {
                 let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
                 let s = UdpSocket::bind(&local_addr)?;
-                let svr_cfg = Arc::new(cloned_config.server[idx].clone());
+                let svr_cfg = Arc::new(cloned_context.config().server[idx].clone());
                 u.push((Arc::new(Mutex::new(s)), svr_cfg, svr_addr[0]));
             }
             Ok(u)
@@ -176,9 +176,13 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
         .and_then(move |vec_servers| {
             let mut f = Vec::with_capacity(1 + vec_servers.len());
             let l = Arc::new(Mutex::new(l));
-            f.push(boxed_future(handle_l2r(config, l.clone(), vec_servers.clone())));
+            f.push(boxed_future(handle_l2r(
+                context.clone(),
+                l.clone(),
+                vec_servers.clone(),
+            )));
             for (svr, cfg, _) in vec_servers {
-                f.push(boxed_future(handle_r2l(l.clone(), svr, cfg)))
+                f.push(boxed_future(handle_r2l(context.clone(), l.clone(), svr, cfg)))
             }
             futures_unordered(f).into_future().then(|res| match res {
                 Ok(..) => {
@@ -194,12 +198,8 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
         })
 }
 
-lazy_static! {
-    static ref GLOBAL_QUERY_ADDR: Mutex<LruCache<u16, (SocketAddr, Instant)>> = Mutex::new(LruCache::new(1024));
-}
-
 fn handle_l2r(
-    config: Arc<Config>,
+    context: SharedContext,
     l: SharedUdpSocket,
     server: Vec<(SharedUdpSocket, Arc<ServerConfig>, SocketAddr)>,
 ) -> impl Future<Item = (), Error = io::Error> + Send {
@@ -210,7 +210,8 @@ fn handle_l2r(
 
     PacketStream::new(l).for_each(move |(payload, src)| {
         let server = server.clone();
-        let config = config.clone();
+        let context = context.clone();
+        let context2 = context.clone();
         let pkt_fut = futures::lazy(move || {
             let pkt = Packet::parse(&payload[..]).map_err(|err| {
                 error!("Failed to parse DNS payload, err: {}", err);
@@ -225,7 +226,7 @@ fn handle_l2r(
             trace!("DETAIL {} -> {} {:?}", src, svr_cfg.addr(), pkt);
 
             let mut buf = Vec::new();
-            Address::SocketAddress(config.get_remote_dns()).write_to_buf(&mut buf);
+            Address::SocketAddress(context.config().get_remote_dns()).write_to_buf(&mut buf);
 
             buf.extend_from_slice(&payload);
 
@@ -236,7 +237,7 @@ fn handle_l2r(
         })
         .and_then(move |(socket, svr_addr, send_payload, id)| {
             SendDgramRc::new(socket, send_payload, svr_addr).map(move |_| {
-                GLOBAL_QUERY_ADDR.lock().unwrap().insert(id, (src, Instant::now()));
+                context2.dns_query_cache().insert(id, (src, Instant::now()));
             })
         });
         tokio::spawn(pkt_fut.then(|res| match res {
@@ -252,6 +253,7 @@ fn handle_l2r(
 }
 
 fn handle_r2l(
+    context: SharedContext,
     l: SharedUdpSocket,
     r: SharedUdpSocket,
     svr_cfg: Arc<ServerConfig>,
@@ -259,6 +261,7 @@ fn handle_r2l(
     PacketStream::new(r).for_each(move |(payload, src)| {
         let l = l.clone();
         let svr_cfg = svr_cfg.clone();
+        let context = context.clone();
         let pkt_fut = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &payload))
             .and_then(move |payload| Address::read_from(Cursor::new(payload)).map_err(From::from))
             .and_then(move |(cur, ..)| {
@@ -272,7 +275,8 @@ fn handle_r2l(
 
                 let payload = payload[pos..].to_vec();
 
-                match GLOBAL_QUERY_ADDR.lock().unwrap().remove(&pkt.header.id) {
+                let mut cache = context.dns_query_cache();
+                match cache.remove(&pkt.header.id) {
                     Some((cli_addr, start_time)) => {
                         debug!(
                             "DNS {} <- {} {} elapsed: {:?}",

@@ -730,6 +730,11 @@ impl Config {
             }
         }
 
+        // UDP switch
+        if let Some(enable) = config.enable_udp {
+            nconfig.enable_udp = enable;
+        }
+
         Ok(nconfig)
     }
 

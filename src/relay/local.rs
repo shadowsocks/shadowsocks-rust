@@ -1,11 +1,11 @@
 //! Local side
 
-use std::{io, sync::Arc};
+use std::io;
 
 use futures::{stream::futures_unordered, Future, Stream};
 
-use super::dns_resolver::set_dns_config;
 use config::Config;
+use context::{Context, SharedContext};
 use plugin::{launch_plugin, PluginMode};
 use relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run as run_udp};
 
@@ -33,39 +33,36 @@ use relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run 
 /// let fut = run(config);
 /// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
-pub fn run(mut config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
-    if let Some(c) = config.get_dns_config() {
-        set_dns_config(c);
-    }
+pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
+    futures::lazy(move || {
+        let mut vf = Vec::new();
 
-    let mut vf = Vec::new();
+        let mut context = Context::new(config);
 
-    if config.enable_udp {
-        // Clone config here, because the config for TCP relay will be modified
-        // after plugins started
-        let udp_config = Arc::new(config.clone());
+        if context.config().enable_udp {
+            // Clone config here, because the config for TCP relay will be modified
+            // after plugins started
+            let udp_context = SharedContext::new(context.clone());
 
-        // Run UDP relay before starting plugins
-        // Because plugins doesn't support UDP relay
-        let udp_fut = run_udp(udp_config);
-        vf.push(boxed_future(udp_fut));
-    }
-
-    // Hold it here, kill all plugins when `tokio::run` is finished
-    let plugins = launch_plugin(&mut config, PluginMode::Client).expect("Failed to launch plugins");
-    let mon = ::monitor::monitor_signal(plugins);
-
-    // Recreate shared config here
-    let config = Arc::new(config);
-
-    let tcp_fut = run_tcp(config.clone());
-
-    vf.push(boxed_future(mon));
-    vf.push(boxed_future(tcp_fut));
-    futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-        match res {
-            Ok(..) => Ok(()),
-            Err((err, ..)) => Err(err),
+            // Run UDP relay before starting plugins
+            // Because plugins doesn't support UDP relay
+            let udp_fut = run_udp(udp_context);
+            vf.push(boxed_future(udp_fut));
         }
+
+        // Hold it here, kill all plugins when `tokio::run` is finished
+        let plugins = launch_plugin(context.config_mut(), PluginMode::Client).expect("Failed to launch plugins");
+        let mon = ::monitor::monitor_signal(plugins);
+
+        let tcp_fut = run_tcp(SharedContext::new(context));
+
+        vf.push(boxed_future(mon));
+        vf.push(boxed_future(tcp_fut));
+        futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
+            match res {
+                Ok(..) => Ok(()),
+                Err((err, ..)) => Err(err),
+            }
+        })
     })
 }

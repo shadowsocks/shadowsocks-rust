@@ -13,7 +13,8 @@ use tokio_io::{
     AsyncRead,
 };
 
-use config::{Config, ServerConfig};
+use config::ServerConfig;
+use context::SharedContext;
 
 use relay::{
     boxed_future,
@@ -31,7 +32,7 @@ struct UdpConfig {
 }
 
 fn handle_socks5_connect(
-    config: Arc<Config>,
+    context: SharedContext,
     (r, w): (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
     client_addr: SocketAddr,
     addr: Address,
@@ -40,7 +41,7 @@ fn handle_socks5_connect(
     let cloned_addr = addr.clone();
     let cloned_svr_cfg = svr_cfg.clone();
     let timeout = svr_cfg.timeout();
-    super::connect_proxy_server(config.clone(), svr_cfg)
+    super::connect_proxy_server(context.clone(), svr_cfg)
         .then(move |res| {
             let (header, r) = match res {
                 Ok(svr_s) => {
@@ -89,7 +90,7 @@ fn handle_socks5_connect(
 }
 
 fn handle_socks5_client(
-    config: Arc<Config>,
+    context: SharedContext,
     s: TcpStream,
     conf: Arc<ServerConfig>,
     udp_conf: UdpConfig,
@@ -153,7 +154,7 @@ fn handle_socks5_client(
             match header.command {
                 socks5::Command::TcpConnect => {
                     debug!("CONNECT {}", addr);
-                    let fut = handle_socks5_connect(config, (r, w), cloned_client_addr, addr, conf);
+                    let fut = handle_socks5_connect(context, (r, w), cloned_client_addr, addr, conf);
                     boxed_future(fut)
                 }
                 socks5::Command::TcpBind => {
@@ -200,25 +201,25 @@ fn handle_socks5_client(
 }
 
 /// Starts a TCP local server with Socks5 proxy protocol
-pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let local_addr = *config.local.as_ref().expect("Missing local config");
+pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
+    let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
     let listener = TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
     info!("ShadowSocks TCP Listening on {}", local_addr);
 
     let udp_conf = UdpConfig {
-        enable_udp: config.enable_udp,
+        enable_udp: context.config().enable_udp,
         client_addr: local_addr,
     };
 
-    let mut servers = RoundRobin::new(&*config);
+    let mut servers = RoundRobin::new(context.config());
     listener.incoming().for_each(move |socket| {
         let server_cfg = servers.pick_server();
 
         trace!("Got connection, addr: {}", socket.peer_addr()?);
         trace!("Picked proxy server: {:?}", server_cfg);
 
-        handle_socks5_client(config.clone(), socket, server_cfg, udp_conf.clone())
+        handle_socks5_client(context.clone(), socket, server_cfg, udp_conf.clone())
     })
 }

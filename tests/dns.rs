@@ -39,6 +39,9 @@ fn dns_relay() {
     let server_cfg = Config::load_from_str(CONFIG, ConfigType::Server).unwrap();
     let dns_cfg = Config::load_from_str(CONFIG, ConfigType::Local).unwrap();
 
+    trace!("Server: {:?}", server_cfg);
+    trace!("Client: {:?}", dns_cfg);
+
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
         runtime.block_on(run_server(server_cfg)).unwrap();

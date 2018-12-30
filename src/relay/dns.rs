@@ -1,19 +1,14 @@
 //! DNS relay
 
-use std::{io, sync::Arc};
+use std::io;
 
-use futures::Future;
+use futures::{self, Future};
 
-use super::dns_resolver::set_dns_config;
 use config::Config;
+use context::{Context, SharedContext};
 use relay::udprelay::dns::run as run_udp;
 
 /// DNS Relay server running under local environment.
 pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
-    if let Some(c) = config.get_dns_config() {
-        set_dns_config(c);
-    }
-
-    let config = Arc::new(config);
-    run_udp(config)
+    futures::lazy(move || run_udp(SharedContext::new(Context::new_dns(config))))
 }

@@ -1220,7 +1220,6 @@ dependencies = [
  "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "json5 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.45 (registry+https://github.com/rust-lang/crates.io-index)",
  "libsodium-ffi 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",

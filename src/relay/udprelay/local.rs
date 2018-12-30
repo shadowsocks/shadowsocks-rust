@@ -11,7 +11,8 @@ use futures::{self, Future, Stream};
 
 use tokio::{self, net::UdpSocket, util::FutureExt};
 
-use config::{Config, ServerAddr, ServerConfig};
+use config::{ServerAddr, ServerConfig};
+use context::SharedContext;
 use relay::{
     boxed_future,
     dns_resolver::resolve,
@@ -28,7 +29,7 @@ use super::{
 
 /// Resolves server address to SocketAddr
 fn resolve_server_addr(
-    config: Arc<Config>,
+    context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
     match *svr_cfg.addr() {
@@ -36,7 +37,7 @@ fn resolve_server_addr(
         ServerAddr::SocketAddr(ref addr) => boxed_future(futures::finished(*addr)),
         // Resolve domain name to SocketAddr
         ServerAddr::DomainName(ref dname, port) => {
-            let fut = resolve(config, dname, port, false).map(move |vec_ipaddr| {
+            let fut = resolve(context, dname, port, false).map(move |vec_ipaddr| {
                 assert!(!vec_ipaddr.is_empty());
                 vec_ipaddr[0]
             });
@@ -45,16 +46,16 @@ fn resolve_server_addr(
     }
 }
 
-fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
+fn listen(context: SharedContext, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
     let socket = Arc::new(Mutex::new(l));
-    let mut balancer = RoundRobin::new(&*config);
+    let mut balancer = RoundRobin::new(context.config());
 
     PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
         let svr_cfg = balancer.pick_server();
         let svr_cfg_cloned = svr_cfg.clone();
         let svr_cfg_cloned_cloned = svr_cfg.clone();
         let socket = socket.clone();
-        let config = config.clone();
+        let context = context.clone();
         let timeout = *svr_cfg.udp_timeout();
 
         const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -76,7 +77,7 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
                 let mut payload = Vec::new();
                 cur.read_to_end(&mut payload).unwrap();
 
-                resolve_server_addr(config, svr_cfg)
+                resolve_server_addr(context, svr_cfg)
                     .and_then(|remote_addr| {
                         let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
                         UdpSocket::bind(&local_addr).map(|remote_udp| (remote_udp, remote_addr))
@@ -167,13 +168,13 @@ fn listen(config: Arc<Config>, l: UdpSocket) -> impl Future<Item = (), Error = i
 }
 
 /// Starts a UDP local server
-pub fn run(config: Arc<Config>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let local_addr = *config.local.as_ref().unwrap();
+pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
+    let local_addr = *context.config().local.as_ref().unwrap();
 
     futures::lazy(move || {
         info!("ShadowSocks UDP Listening on {}", local_addr);
 
         UdpSocket::bind(&local_addr)
     })
-    .and_then(move |l| listen(config, l))
+    .and_then(move |l| listen(context, l))
 }
