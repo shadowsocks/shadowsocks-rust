@@ -148,13 +148,22 @@ fn handle_socks5_client(
             let addr = header.address;
             match header.command {
                 socks5::Command::TcpConnect => {
-                    debug!("CONNECT {}", addr);
-                    let fut =
-                        handle_socks5_connect(context, (r, w), cloned_client_addr, addr.clone(), conf).map_err(move |err| {
-                            error!("CONNECT {} failed with error: {}", addr, err);
-                            err
-                        });
-                    boxed_future(fut)
+                    let enable_tcp = context.config().mode.enable_tcp();
+                    if enable_tcp {
+                        debug!("CONNECT {}", addr);
+                        let fut = handle_socks5_connect(context, (r, w), cloned_client_addr, addr.clone(), conf)
+                            .map_err(move |err| {
+                                error!("CONNECT {} failed with error: {}", addr, err);
+                                err
+                            });
+                        boxed_future(fut)
+                    } else {
+                        warn!("CONNECT is not enabled");
+                        let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
+                            .write_to(w)
+                            .map(|_| ());
+                        boxed_future(fut)
+                    }
                 }
                 socks5::Command::TcpBind => {
                     warn!("BIND is not supported");
@@ -176,7 +185,7 @@ fn handle_socks5_client(
 
                         boxed_future(fut)
                     } else {
-                        warn!("UDP Associate is not enabled");
+                        warn!("UDP ASSOCIATE is not enabled");
                         let fut = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr)
                             .write_to(w)
                             .map(|_| ());
@@ -208,7 +217,7 @@ pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> 
     info!("ShadowSocks TCP Listening on {}", local_addr);
 
     let udp_conf = UdpConfig {
-        enable_udp: context.config().enable_udp,
+        enable_udp: context.config().mode.enable_udp(),
         client_addr: local_addr,
     };
 

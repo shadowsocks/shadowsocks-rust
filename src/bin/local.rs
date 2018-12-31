@@ -25,7 +25,7 @@ use futures::Future;
 use log::{LevelFilter, Record};
 use tokio::runtime::Runtime;
 
-use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, ServerAddr, ServerConfig};
+use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -135,6 +135,12 @@ fn main() {
                 .long("server-url")
                 .takes_value(true)
                 .help("Server address in SIP002 URL"),
+        )
+        .arg(
+            Arg::with_name("NO_DELAY")
+                .long("no-delay")
+                .takes_value(false)
+                .help("Set no-delay option for socket"),
         )
         .get_matches();
 
@@ -250,7 +256,17 @@ fn main() {
         return;
     }
 
-    config.enable_udp |= matches.is_present("ENABLE_UDP");
+    if matches.is_present("ENABLE_UDP") {
+        if config.mode.enable_tcp() {
+            config.mode = Mode::TcpAndUdp;
+        } else {
+            config.mode = Mode::UdpOnly;
+        }
+    }
+
+    if matches.is_present("NO_DELAY") {
+        config.no_delay = true;
+    }
 
     if let Some(p) = matches.value_of("PLUGIN") {
         let plugin = PluginConfig {

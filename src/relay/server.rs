@@ -39,7 +39,7 @@ pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
 
         let mut vf = Vec::new();
 
-        if context.config().enable_udp {
+        if context.config().mode.enable_udp() {
             // Clone config here, because the config for TCP relay will be modified
             // after plugins started
             let udp_context = SharedContext::new(context.clone());
@@ -50,14 +50,16 @@ pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
             vf.push(boxed_future(udp_fut));
         }
 
-        // Hold it here, kill all plugins when `tokio::run` is finished
-        let plugins = launch_plugin(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins");
-        let mon = ::monitor::monitor_signal(plugins);
+        if context.config().mode.enable_tcp() {
+            // Hold it here, kill all plugins when `tokio::run` is finished
+            let plugins = launch_plugin(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins");
+            let mon = ::monitor::monitor_signal(plugins);
 
-        let tcp_fut = run_tcp(SharedContext::new(context));
+            let tcp_fut = run_tcp(SharedContext::new(context));
 
-        vf.push(boxed_future(mon));
-        vf.push(boxed_future(tcp_fut));
+            vf.push(boxed_future(mon));
+            vf.push(boxed_future(tcp_fut));
+        }
 
         futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
             match res {

@@ -21,7 +21,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::read_to_end;
 
 use shadowsocks::{
-    config::{Config, ServerConfig},
+    config::{Config, Mode, ServerConfig},
     crypto::CipherType,
     relay::{
         socks5::{Address, UdpAssociateHeader},
@@ -48,7 +48,7 @@ fn get_config() -> Config {
         PASSWORD.to_owned(),
         METHOD,
     )];
-    cfg.enable_udp = true;
+    cfg.mode = Mode::UdpOnly;
     cfg
 }
 

@@ -16,7 +16,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::{flush, read_to_end, write_all};
 
 use shadowsocks::{
-    config::{Config, ServerConfig},
+    config::{Config, Mode, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
     run_local,
@@ -49,7 +49,7 @@ impl Socks5TestServer {
                 let mut cfg = Config::new();
                 cfg.local = Some(local_addr);
                 cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
-                cfg.enable_udp = enable_udp;
+                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg
             },
         }

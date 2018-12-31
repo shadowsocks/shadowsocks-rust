@@ -29,7 +29,7 @@ const CONFIG: &'static str = r#"{
         "password": "abc",
         "timeout": 20,
         "method": "aes-256-gcm",
-        "enable_udp": true
+        "mode": "tcp_and_udp"
     }"#;
 
 #[test]

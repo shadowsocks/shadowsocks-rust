@@ -39,7 +39,7 @@ pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
 
         let mut context = Context::new(config);
 
-        if context.config().enable_udp {
+        if context.config().mode.enable_udp() {
             // Clone config here, because the config for TCP relay will be modified
             // after plugins started
             let udp_context = SharedContext::new(context.clone());

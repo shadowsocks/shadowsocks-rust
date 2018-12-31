@@ -27,7 +27,7 @@ use futures::Future;
 use log::{LevelFilter, Record};
 use tokio::runtime::Runtime;
 
-use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, ServerAddr, ServerConfig};
+use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -125,6 +125,12 @@ fn main() {
                 .long("log-without-time")
                 .help("Disable time in log"),
         )
+        .arg(
+            Arg::with_name("NO_DELAY")
+                .long("no-delay")
+                .takes_value(false)
+                .help("Set no-delay option for socket"),
+        )
         .get_matches();
 
     let mut log_builder = Builder::new();
@@ -220,7 +226,17 @@ fn main() {
         return;
     }
 
-    config.enable_udp |= matches.is_present("ENABLE_UDP");
+    if matches.is_present("ENABLE_UDP") {
+        if config.mode.enable_tcp() {
+            config.mode = Mode::TcpAndUdp;
+        } else {
+            config.mode = Mode::UdpOnly;
+        }
+    }
+
+    if matches.is_present("NO_DELAY") {
+        config.no_delay = true;
+    }
 
     if let Some(p) = matches.value_of("PLUGIN") {
         let plugin = PluginConfig {

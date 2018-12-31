@@ -110,7 +110,7 @@ extern crate url;
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
-    config::{ClientConfig, Config, ConfigType, ServerAddr, ServerConfig},
+    config::{ClientConfig, Config, ConfigType, Mode, ServerAddr, ServerConfig},
     relay::{dns::run as run_dns, local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
 };
 

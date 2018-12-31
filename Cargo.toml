@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.7.0-alpha.19"
+version = "1.7.0-alpha.20"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"

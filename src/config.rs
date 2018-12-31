@@ -86,8 +86,6 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    enable_udp: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
@@ -99,6 +97,10 @@ struct SSConfig {
     dns: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     remote_dns: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    no_delay: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -472,15 +474,63 @@ pub enum ConfigType {
     Server,
 }
 
+/// Server mode
+#[derive(Clone, Copy, Debug)]
+pub enum Mode {
+    TcpOnly,
+    TcpAndUdp,
+    UdpOnly,
+}
+
+impl Mode {
+    pub fn enable_udp(&self) -> bool {
+        match *self {
+            Mode::UdpOnly | Mode::TcpAndUdp => true,
+            _ => false,
+        }
+    }
+
+    pub fn enable_tcp(&self) -> bool {
+        match *self {
+            Mode::TcpOnly | Mode::TcpAndUdp => true,
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Mode::TcpOnly => f.write_str("tcp_only"),
+            Mode::TcpAndUdp => f.write_str("tcp_and_udp"),
+            Mode::UdpOnly => f.write_str("udp_only"),
+        }
+    }
+}
+
+impl FromStr for Mode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "tcp_only" => Ok(Mode::TcpOnly),
+            "tcp_and_udp" => Ok(Mode::TcpAndUdp),
+            "udp_only" => Ok(Mode::UdpOnly),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
-    pub enable_udp: bool,
     pub forbidden_ip: HashSet<IpAddr>,
     pub dns: Option<String>,
     pub remote_dns: Option<SocketAddr>,
+    pub mode: Mode,
+    pub no_delay: bool,
 }
 
 impl Default for Config {
@@ -544,10 +594,11 @@ impl Config {
         Config {
             server: Vec::new(),
             local: None,
-            enable_udp: false,
             forbidden_ip: HashSet::new(),
             dns: None,
             remote_dns: None,
+            mode: Mode::TcpOnly,
+            no_delay: false,
         }
     }
 
@@ -730,9 +781,24 @@ impl Config {
             }
         }
 
-        // UDP switch
-        if let Some(enable) = config.enable_udp {
-            nconfig.enable_udp = enable;
+        // Mode
+        if let Some(m) = config.mode {
+            match m.parse::<Mode>() {
+                Ok(xm) => nconfig.mode = xm,
+                Err(..) => {
+                    let e = Error::new(
+                        ErrorKind::Malformed,
+                        "malformed `mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
+                        None,
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        // TCP nodelay
+        if let Some(b) = config.no_delay {
+            nconfig.no_delay = b;
         }
 
         Ok(nconfig)
@@ -853,8 +919,10 @@ impl fmt::Display for Config {
             }
         }
 
-        if self.enable_udp {
-            jconf.enable_udp = Some(true);
+        jconf.mode = Some(self.mode.to_string());
+
+        if self.no_delay {
+            jconf.no_delay = Some(self.no_delay);
         }
 
         if !self.forbidden_ip.is_empty() {
