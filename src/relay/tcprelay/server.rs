@@ -144,13 +144,11 @@ where
         Item = TcpRelayClientConnected<impl Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static>,
         Error = io::Error,
     > + Send {
-        let addr = self.addr.clone();
         let client_pair = (self.r, self.w);
         let timeout = self.timeout;
         connect_remote(self.context, self.addr, self.timeout).map(move |stream| TcpRelayClientConnected {
             server: stream.split(),
             client: client_pair,
-            addr: addr,
             timeout: timeout,
         })
     }
@@ -163,7 +161,6 @@ where
 {
     server: (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
     client: (DecryptedHalf, E),
-    addr: Address,
     timeout: Option<Duration>,
 }
 
@@ -179,7 +176,6 @@ where
         let timeout = self.timeout;
 
         tunnel(
-            self.addr,
             r.copy_timeout_opt(svr_w, self.timeout),
             w_fut.and_then(move |w| w.copy_timeout_opt(svr_r, timeout)),
         )

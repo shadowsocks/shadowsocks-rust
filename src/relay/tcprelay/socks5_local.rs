@@ -38,10 +38,8 @@ fn handle_socks5_connect(
     addr: Address,
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<Item = (), Error = io::Error> + Send {
-    let cloned_addr = addr.clone();
-    let cloned_svr_cfg = svr_cfg.clone();
     let timeout = svr_cfg.timeout();
-    super::connect_proxy_server(context.clone(), svr_cfg)
+    super::connect_proxy_server(context, svr_cfg.clone())
         .then(move |res| {
             let (header, r) = match res {
                 Ok(svr_s) => {
@@ -70,21 +68,18 @@ fn handle_socks5_connect(
                 }
             };
 
-            trace!("Send header: {:?}", header);
-            try_timeout(try_timeout(header.write_to(w), timeout).and_then(flush), timeout).and_then(|w| match r {
+            trace!("Sent header: {:?}", header);
+            try_timeout(header.write_to(w).and_then(flush), timeout).and_then(|w| match r {
                 Ok(svr_s) => Ok((svr_s, w)),
                 Err(err) => Err(err),
             })
         })
         .and_then(move |(svr_s, w)| {
-            let svr_cfg = cloned_svr_cfg;
             let timeout = svr_cfg.timeout();
             super::proxy_server_handshake(svr_s, svr_cfg, addr).and_then(move |(svr_r, svr_w)| {
-                let cloned_timeout = timeout;
                 let rhalf = svr_r.and_then(move |svr_r| svr_r.copy_timeout_opt(w, timeout));
-                let whalf = svr_w.and_then(move |svr_w| svr_w.copy_timeout_opt(r, cloned_timeout));
-
-                tunnel(cloned_addr, whalf, rhalf)
+                let whalf = svr_w.and_then(move |svr_w| svr_w.copy_timeout_opt(r, timeout));
+                tunnel(whalf, rhalf)
             })
         })
 }
@@ -154,7 +149,11 @@ fn handle_socks5_client(
             match header.command {
                 socks5::Command::TcpConnect => {
                     debug!("CONNECT {}", addr);
-                    let fut = handle_socks5_connect(context, (r, w), cloned_client_addr, addr, conf);
+                    let fut =
+                        handle_socks5_connect(context, (r, w), cloned_client_addr, addr.clone(), conf).map_err(move |err| {
+                            error!("CONNECT {} failed with error: {}", addr, err);
+                            err
+                        });
                     boxed_future(fut)
                 }
                 socks5::Command::TcpBind => {

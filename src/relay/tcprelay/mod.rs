@@ -47,14 +47,14 @@ mod utils;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
-/// Directions in the tunnel
-#[derive(Debug, Copy, Clone)]
-pub enum TunnelDirection {
-    /// Client -> Server
-    Client2Server,
-    /// Client <- Server
-    Server2Client,
-}
+// /// Directions in the tunnel
+// #[derive(Debug, Copy, Clone)]
+// pub enum TunnelDirection {
+//     /// Client -> Server
+//     Client2Server,
+//     /// Client <- Server
+//     Server2Client,
+// }
 
 type TcpReadHalf = ReadHalf<TcpStream>;
 type TcpWriteHalf = WriteHalf<TcpStream>;
@@ -366,52 +366,58 @@ pub fn proxy_handshake(
 }
 
 /// Establish tunnel between server and client
-pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
+// pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
+pub fn tunnel<CF, CFI, SF, SFI>(c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
 where
     CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
     SF: Future<Item = SFI, Error = io::Error> + Send + 'static,
 {
-    let addr = Arc::new(addr);
+    c2s.map(|_| ()).select(s2c.map(|_| ())).then(|r| match r {
+        Ok(..) => Ok(()),
+        Err((err, _)) => Err(err),
+    })
 
-    let cloned_addr = addr.clone();
-    let c2s = c2s.then(move |res| {
-        match res {
-            Ok(..) => {
-                // Continue reading response from remote server
-                trace!("Relay {} client -> server is finished", cloned_addr);
+    // let addr = Arc::new(addr);
 
-                Ok(TunnelDirection::Client2Server)
-            }
-            Err(err) => {
-                error!("Relay {} client -> server aborted: {}", cloned_addr, err);
-                Err(err)
-            }
-        }
-    });
+    // let cloned_addr = addr.clone();
+    // let c2s = c2s.then(move |res| {
+    //     match res {
+    //         Ok(..) => {
+    //             // Continue reading response from remote server
+    //             trace!("Relay {} client -> server is finished", cloned_addr);
 
-    let cloned_addr = addr.clone();
-    let s2c = s2c.then(move |res| match res {
-        Ok(..) => {
-            trace!("Relay {} client <- server is finished", cloned_addr);
+    //             Ok(TunnelDirection::Client2Server)
+    //         }
+    //         Err(err) => {
+    //             error!("Relay {} client -> server aborted: {}", cloned_addr, err);
+    //             Err(err)
+    //         }
+    //     }
+    // });
 
-            Ok(TunnelDirection::Server2Client)
-        }
-        Err(err) => {
-            error!("Relay {} client <- server aborted: {}", cloned_addr, err);
-            Err(err)
-        }
-    });
+    // let cloned_addr = addr.clone();
+    // let s2c = s2c.then(move |res| match res {
+    //     Ok(..) => {
+    //         trace!("Relay {} client <- server is finished", cloned_addr);
 
-    c2s.select(s2c)
-        .and_then(move |(dir, _)| {
-            match dir {
-                TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
-                TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
-            }
+    //         Ok(TunnelDirection::Server2Client)
+    //     }
+    //     Err(err) => {
+    //         error!("Relay {} client <- server aborted: {}", cloned_addr, err);
+    //         Err(err)
+    //     }
+    // });
 
-            Ok(())
-        })
-        .map_err(|(err, _)| err)
+    // c2s.select(s2c)
+    //     .and_then(move |(dir, _)| {
+    //         match dir {
+    //             TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
+    //             TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
+    //         }
+
+    //         Ok(())
+    //     })
+    //     .map_err(|(err, _)| err)
 }
 
 /// Read until EOF, and ignore
