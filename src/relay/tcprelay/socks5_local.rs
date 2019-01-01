@@ -153,8 +153,7 @@ fn handle_socks5_client(
                         debug!("CONNECT {}", addr);
                         let fut = handle_socks5_connect(context, (r, w), cloned_client_addr, addr.clone(), conf)
                             .map_err(move |err| {
-                                error!("CONNECT {} failed with error: {}", addr, err);
-                                err
+                                io::Error::new(err.kind(), format!("CONNECT {} failed with error \"{}\"", addr, err))
                             });
                         boxed_future(fut)
                     } else {
@@ -199,7 +198,7 @@ fn handle_socks5_client(
         Ok(..) => Ok(()),
         Err(err) => {
             if err.kind() != io::ErrorKind::BrokenPipe {
-                error!("Failed to handle client: {}", err);
+                error!("Socks5 client: {}", err);
             }
             Err(())
         }
@@ -212,7 +211,8 @@ fn handle_socks5_client(
 pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
-    let listener = TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+    let listener =
+        TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 
     info!("ShadowSocks TCP Listening on {}", local_addr);
 
