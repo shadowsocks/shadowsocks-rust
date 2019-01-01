@@ -196,7 +196,7 @@ fn main() {
                 return;
             }
         },
-        None => Config::new(),
+        None => Config::new(ConfigType::Local),
     };
 
     let mut has_provided_server_config = match (

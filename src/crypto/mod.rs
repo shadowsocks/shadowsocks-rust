@@ -7,7 +7,7 @@ use openssl::symm;
 pub use self::{
     aead::{new_aead_decryptor, new_aead_encryptor, AeadDecryptor, AeadEncryptor, BoxAeadDecryptor, BoxAeadEncryptor},
     cipher::{CipherCategory, CipherResult, CipherType},
-    stream::{new_stream, StreamCipher, StreamCipherVariant},
+    stream::{new_stream, BoxStreamCipher, StreamCipher},
 };
 
 pub mod aead;

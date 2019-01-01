@@ -131,6 +131,12 @@ fn main() {
                 .takes_value(false)
                 .help("Set no-delay option for socket"),
         )
+        .arg(
+            Arg::with_name("MANAGER_ADDRESS")
+                .long("manager-address")
+                .takes_value(true)
+                .help("ShadowSocks Manager (ssmgr) address"),
+        )
         .get_matches();
 
     let mut log_builder = Builder::new();
@@ -184,7 +190,7 @@ fn main() {
                 return;
             }
         },
-        None => Config::new(),
+        None => Config::new(ConfigType::Server),
     };
 
     let has_provided_server_config = match (
@@ -249,6 +255,13 @@ fn main() {
             svr.set_plugin(plugin.clone());
         }
     };
+
+    if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
+        config.manager_address = Some(
+            m.parse::<ServerAddr>()
+                .expect("Expecting a valid ServerAddr for manager_address"),
+        );
+    }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 

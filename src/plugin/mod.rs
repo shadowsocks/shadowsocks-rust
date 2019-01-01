@@ -95,7 +95,7 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
         }
 
         if let Some(svr_addr) = svr_addr_opt {
-            svr.set_addr(svr_addr);
+            svr.set_plugin_addr(svr_addr);
         }
     }
 

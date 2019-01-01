@@ -7,8 +7,6 @@ use std::{
     time::Duration,
 };
 
-use config::ServerConfig;
-
 use relay::{
     boxed_future,
     dns_resolver::resolve,
@@ -33,13 +31,21 @@ use tokio_io::{
     AsyncRead,
 };
 
-use super::{proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalf, TcpStreamConnect};
+use super::{
+    context::{SharedTcpServerContext, TcpServerContext},
+    monitor::TcpMonStream,
+    proxy_handshake,
+    try_timeout,
+    tunnel,
+    DecryptedHalf,
+    EncryptedHalf,
+    TcpStreamConnect,
+};
 
 /// Context for doing handshake with client
 pub struct TcpRelayClientHandshake {
-    s: TcpStream,
-    svr_cfg: Arc<ServerConfig>,
-    context: SharedContext,
+    s: TcpMonStream,
+    svr_context: SharedTcpServerContext,
 }
 
 impl TcpRelayClientHandshake {
@@ -58,16 +64,18 @@ impl TcpRelayClientHandshake {
     pub fn handshake(
         self,
     ) -> impl Future<
-        Item = TcpRelayClientPending<impl Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static>,
+        Item = TcpRelayClientPending<
+            impl Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
+        >,
         Error = io::Error,
     > + Send {
-        let TcpRelayClientHandshake { s, svr_cfg, context } = self;
+        let TcpRelayClientHandshake { s, svr_context } = self;
 
         futures::lazy(move || s.peer_addr().map(|p| (s, p))).and_then(|(s, peer_addr)| {
             debug!("Handshaking with peer {}", peer_addr);
 
-            let timeout = svr_cfg.timeout();
-            proxy_handshake(s, svr_cfg).and_then(move |(r_fut, w_fut)| {
+            let timeout = svr_context.svr_cfg().timeout();
+            proxy_handshake(s, svr_context.svr_cfg().clone()).and_then(move |(r_fut, w_fut)| {
                 r_fut
                     .and_then(move |r| {
                         let fut =
@@ -79,7 +87,7 @@ impl TcpRelayClientHandshake {
                         addr: addr,
                         w: w_fut,
                         timeout: timeout,
-                        context: context,
+                        svr_context: svr_context,
                     })
             })
         })
@@ -89,13 +97,13 @@ impl TcpRelayClientHandshake {
 /// Context for connecting remote
 pub struct TcpRelayClientPending<E>
 where
-    E: Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static,
+    E: Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
 {
-    r: DecryptedHalf,
+    r: DecryptedHalf<TcpMonStream>,
     addr: Address,
     w: E,
     timeout: Option<Duration>,
-    context: SharedContext,
+    svr_context: SharedTcpServerContext,
 }
 
 /// Connect to the remote server
@@ -135,21 +143,25 @@ fn connect_remote(
 
 impl<E> TcpRelayClientPending<E>
 where
-    E: Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static,
+    E: Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
 {
     /// Connect to the remote server
     pub fn connect(
         self,
     ) -> impl Future<
-        Item = TcpRelayClientConnected<impl Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static>,
+        Item = TcpRelayClientConnected<
+            impl Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
+        >,
         Error = io::Error,
     > + Send {
         let client_pair = (self.r, self.w);
         let timeout = self.timeout;
-        connect_remote(self.context, self.addr, self.timeout).map(move |stream| TcpRelayClientConnected {
-            server: stream.split(),
-            client: client_pair,
-            timeout: timeout,
+        connect_remote(self.svr_context.context().clone(), self.addr, self.timeout).map(move |stream| {
+            TcpRelayClientConnected {
+                server: stream.split(),
+                client: client_pair,
+                timeout: timeout,
+            }
         })
     }
 }
@@ -157,16 +169,16 @@ where
 /// Context for extablishing tunnel
 pub struct TcpRelayClientConnected<E>
 where
-    E: Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static,
+    E: Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
 {
     server: (ReadHalf<TcpStream>, WriteHalf<TcpStream>),
-    client: (DecryptedHalf, E),
+    client: (DecryptedHalf<TcpMonStream>, E),
     timeout: Option<Duration>,
 }
 
 impl<E> TcpRelayClientConnected<E>
 where
-    E: Future<Item = EncryptedHalf, Error = io::Error> + Send + 'static,
+    E: Future<Item = EncryptedHalf<TcpMonStream>, Error = io::Error> + Send + 'static,
 {
     /// Establish tunnel
     #[inline]
@@ -182,12 +194,10 @@ where
     }
 }
 
-fn handle_client(
-    server_cfg: Arc<ServerConfig>,
-    context: SharedContext,
-    socket: TcpStream,
-) -> impl Future<Item = (), Error = ()> + Send {
-    if let Err(err) = socket.set_keepalive(server_cfg.timeout()) {
+fn handle_client(svr_context: SharedTcpServerContext, socket: TcpStream) -> impl Future<Item = (), Error = ()> + Send {
+    let socket = TcpMonStream::new(svr_context.clone(), socket);
+
+    if let Err(err) = socket.set_keepalive(svr_context.svr_cfg().timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
 
@@ -204,12 +214,11 @@ fn handle_client(
     })
     .and_then(move |(socket, addr)| {
         trace!("Got connection, addr: {}", addr);
-        trace!("Picked proxy server: {:?}", server_cfg);
+        trace!("Picked proxy server: {:?}", svr_context.svr_cfg());
 
         let client = TcpRelayClientHandshake {
             s: socket,
-            svr_cfg: server_cfg,
-            context: context,
+            svr_context: svr_context,
         };
 
         client
@@ -228,7 +237,7 @@ pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> 
 
     for svr_cfg in &context.config().server {
         let listener = {
-            let addr = svr_cfg.addr();
+            let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
             let addr = addr.listen_addr();
 
             let listener = TcpListener::bind(&addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
@@ -239,17 +248,32 @@ pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> 
 
         let svr_cfg = Arc::new(svr_cfg.clone());
         let context = context.clone();
+        let svr_context = TcpServerContext::new(context.clone(), svr_cfg.clone());
+
+        struct CloseGuard(SharedTcpServerContext);
+        impl Drop for CloseGuard {
+            fn drop(&mut self) {
+                self.0.close();
+            }
+        }
+
+        let close_guard = CloseGuard(svr_context.clone());
+
         let listening = listener
             .incoming()
             .for_each(move |socket| {
-                let server_cfg = svr_cfg.clone();
-                let context = context.clone();
-                tokio::spawn(handle_client(server_cfg, context, socket));
+                let svr_context = svr_context.clone();
+                tokio::spawn(handle_client(svr_context, socket));
                 Ok(())
             })
             .map_err(|err| {
                 error!("Server run failed: {}", err);
                 err
+            })
+            .then(move |r| {
+                // Close the context to ensure reporting Future is terminated
+                drop(close_guard);
+                r
             });
 
         vec_fut.push(boxed_future(listening));

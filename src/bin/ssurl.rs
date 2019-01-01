@@ -63,7 +63,7 @@ fn encode(filename: &str, need_qrcode: bool) {
 fn decode(encoded: &str, need_qrcode: bool) {
     let svrconfig = ServerConfig::from_url(encoded).unwrap();
 
-    let mut config = Config::new();
+    let mut config = Config::new(ConfigType::Server);
     config.server.push(svrconfig);
 
     println!("{}", config);

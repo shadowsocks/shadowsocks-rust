@@ -1,5 +1,7 @@
 //! Stream ciphers
 
+use std::ops::{Deref, DerefMut};
+
 #[cfg(feature = "rc4")]
 use crypto::rc4_md5;
 #[cfg(feature = "sodium")]
@@ -83,6 +85,25 @@ macro_rules! define_stream_ciphers {
     }
 }
 
+/// Variant cipher which contains all possible stream ciphers
+pub struct BoxStreamCipher {
+    cipher: Box<StreamCipherVariant>,
+}
+
+impl Deref for BoxStreamCipher {
+    type Target = StreamCipherVariant;
+
+    fn deref(&self) -> &StreamCipherVariant {
+        &*self.cipher
+    }
+}
+
+impl DerefMut for BoxStreamCipher {
+    fn deref_mut(&mut self) -> &mut StreamCipherVariant {
+        &mut *self.cipher
+    }
+}
+
 define_stream_ciphers! {
     pub TableCipher => table::TableCipher,
     pub DummyCipher => dummy::DummyCipher,
@@ -94,13 +115,13 @@ define_stream_ciphers! {
 }
 
 /// Generate a specific Cipher with key and initialize vector
-pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> StreamCipherVariant {
+pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> BoxStreamCipher {
     assert!(
         t.category() == CipherCategory::Stream,
         "only allow initializing with stream cipher"
     );
 
-    match t {
+    let cipher = match t {
         CipherType::Table => StreamCipherVariant::new(table::TableCipher::new(key, mode)),
         CipherType::Plain => StreamCipherVariant::new(dummy::DummyCipher),
 
@@ -113,5 +134,8 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Str
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
         _ => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+    };
+    BoxStreamCipher {
+        cipher: Box::new(cipher),
     }
 }

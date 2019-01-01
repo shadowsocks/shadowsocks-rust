@@ -6,7 +6,7 @@ use std::{
 };
 
 use bytes::{BufMut, BytesMut};
-use crypto::{new_stream, CipherType, CryptoMode, StreamCipher, StreamCipherVariant};
+use crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode, StreamCipher};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use super::{DecryptedRead, EncryptedWrite, BUFFER_SIZE};
@@ -20,7 +20,7 @@ where
 {
     reader: R,
     buffer: BytesMut,
-    cipher: StreamCipherVariant,
+    cipher: BoxStreamCipher,
     pos: usize,
     sent_final: bool,
 }
@@ -142,7 +142,7 @@ where
     W: AsyncWrite,
 {
     writer: W,
-    cipher: StreamCipherVariant,
+    cipher: BoxStreamCipher,
 }
 
 impl<W> EncryptedWriter<W>

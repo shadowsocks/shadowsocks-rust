@@ -16,7 +16,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::{flush, read_to_end, write_all};
 
 use shadowsocks::{
-    config::{Config, Mode, ServerConfig},
+    config::{Config, ConfigType, Mode, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
     run_local,
@@ -25,7 +25,8 @@ use shadowsocks::{
 
 pub struct Socks5TestServer {
     local_addr: SocketAddr,
-    config: Config,
+    svr_config: Config,
+    cli_config: Config,
 }
 
 impl Socks5TestServer {
@@ -45,8 +46,14 @@ impl Socks5TestServer {
 
         Socks5TestServer {
             local_addr: local_addr,
-            config: {
-                let mut cfg = Config::new();
+            svr_config: {
+                let mut cfg = Config::new(ConfigType::Server);
+                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
+                cfg
+            },
+            cli_config: {
+                let mut cfg = Config::new(ConfigType::Local);
                 cfg.local = Some(local_addr);
                 cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
@@ -60,14 +67,14 @@ impl Socks5TestServer {
     }
 
     pub fn run(&self) {
-        let svr_cfg = self.config.clone();
+        let svr_cfg = self.svr_config.clone();
         thread::spawn(move || {
             let mut runtime = Runtime::new().expect("Failed to create Runtime");
             let fut = run_server(svr_cfg);
             runtime.block_on(fut).expect("Failed to run Server");
         });
 
-        let client_cfg = self.config.clone();
+        let client_cfg = self.cli_config.clone();
         thread::spawn(move || {
             let mut runtime = Runtime::new().expect("Failed to create Runtime");
             let fut = run_local(client_cfg);

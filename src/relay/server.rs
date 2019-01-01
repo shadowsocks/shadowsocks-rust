@@ -16,14 +16,14 @@ use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::ru
 /// extern crate shadowsocks;
 ///
 /// use shadowsocks::{
-///     config::{Config, ServerConfig},
+///     config::{Config, ConfigType, ServerConfig},
 ///     crypto::CipherType,
 ///     relay::server::run,
 /// };
 ///
 /// use tokio::prelude::*;
 ///
-/// let mut config = Config::new();
+/// let mut config = Config::new(ConfigType::Server);
 /// config.server = vec![ServerConfig::basic(
 ///     "127.0.0.1:8388".parse().unwrap(),
 ///     "server-password".to_string(),

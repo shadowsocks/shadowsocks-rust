@@ -21,7 +21,7 @@ use tokio::runtime::current_thread::Runtime;
 use tokio_io::io::read_to_end;
 
 use shadowsocks::{
-    config::{Config, Mode, ServerConfig},
+    config::{Config, ConfigType, Mode, ServerConfig},
     crypto::CipherType,
     relay::{
         socks5::{Address, UdpAssociateHeader},
@@ -40,8 +40,19 @@ const UDP_LOCAL_ADDR: &'static str = "127.0.0.1:9011";
 const PASSWORD: &'static str = "test-password";
 const METHOD: CipherType = CipherType::Aes128Cfb;
 
-fn get_config() -> Config {
-    let mut cfg = Config::new();
+fn get_svr_config() -> Config {
+    let mut cfg = Config::new(ConfigType::Server);
+    cfg.server = vec![ServerConfig::basic(
+        SERVER_ADDR.parse().unwrap(),
+        PASSWORD.to_owned(),
+        METHOD,
+    )];
+    cfg.mode = Mode::UdpOnly;
+    cfg
+}
+
+fn get_cli_config() -> Config {
+    let mut cfg = Config::new(ConfigType::Local);
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
     cfg.server = vec![ServerConfig::basic(
         SERVER_ADDR.parse().unwrap(),
@@ -60,7 +71,7 @@ fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-        let fut = run_server(get_config());
+        let fut = run_server(get_svr_config());
         bar.wait();
         runtime.block_on(fut).expect("Failed to run Server");
     });
@@ -70,7 +81,7 @@ fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-        let fut = run_local(get_config());
+        let fut = run_local(get_cli_config());
         bar.wait();
         runtime.block_on(fut).expect("Failed to run Local");
     });

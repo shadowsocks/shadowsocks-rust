@@ -205,6 +205,8 @@ pub struct ServerConfig {
     plugin: Option<PluginConfig>,
     /// UDP timeout
     udp_timeout: Option<Duration>,
+    /// Plugin address
+    plugin_addr: Option<ServerAddr>,
 }
 
 impl ServerConfig {
@@ -226,6 +228,7 @@ impl ServerConfig {
             enc_key: enc_key,
             plugin: plugin,
             udp_timeout: None,
+            plugin_addr: None,
         }
     }
 
@@ -284,6 +287,16 @@ impl ServerConfig {
     /// Get UDP timeout
     pub fn udp_timeout(&self) -> &Option<Duration> {
         &self.udp_timeout
+    }
+
+    /// Set plugin address
+    pub fn set_plugin_addr(&mut self, a: ServerAddr) {
+        self.plugin_addr = Some(a);
+    }
+
+    /// Get plugin address
+    pub fn plugin_addr(&self) -> &Option<ServerAddr> {
+        &self.plugin_addr
     }
 
     /// Get URL for QRCode
@@ -464,7 +477,7 @@ impl error::Error for UrlParseError {
 pub type ClientConfig = SocketAddr;
 
 /// Server config type
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ConfigType {
     /// Config for local
     ///
@@ -483,15 +496,15 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn enable_udp(&self) -> bool {
-        match *self {
+    pub fn enable_udp(self) -> bool {
+        match self {
             Mode::UdpOnly | Mode::TcpAndUdp => true,
             _ => false,
         }
     }
 
-    pub fn enable_tcp(&self) -> bool {
-        match *self {
+    pub fn enable_tcp(self) -> bool {
+        match self {
             Mode::TcpOnly | Mode::TcpAndUdp => true,
             _ => false,
         }
@@ -531,16 +544,12 @@ pub struct Config {
     pub remote_dns: Option<SocketAddr>,
     pub mode: Mode,
     pub no_delay: bool,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config::new()
-    }
+    pub manager_address: Option<ServerAddr>,
+    pub config_type: ConfigType,
 }
 
 /// Configuration parsing error kind
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ErrorKind {
     MissingField,
     Malformed,
@@ -590,7 +599,7 @@ impl Debug for Error {
 
 impl Config {
     /// Creates an empty configuration
-    pub fn new() -> Config {
+    pub fn new(config_type: ConfigType) -> Config {
         Config {
             server: Vec::new(),
             local: None,
@@ -599,6 +608,8 @@ impl Config {
             remote_dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
+            manager_address: None,
+            config_type: config_type,
         }
     }
 
@@ -617,7 +628,7 @@ impl Config {
             return Err(err);
         }
 
-        let mut nconfig = Config::new();
+        let mut nconfig = Config::new(config_type);
 
         // Standard config
         // Client

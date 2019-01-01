@@ -1,7 +1,7 @@
 //! Relay for TCP implementation
 
 use std::{
-    io::{self, BufRead, Read},
+    io::{self, BufRead, Read, Write},
     iter::{IntoIterator, Iterator},
     mem,
     net::SocketAddr,
@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use config::{ServerAddr, ServerConfig};
+use config::{ConfigType, ServerAddr, ServerConfig};
 use context::SharedContext;
 use crypto::CipherCategory;
 use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
@@ -21,6 +21,7 @@ use tokio::{
 use tokio_io::{
     io::{read_exact, write_all, ReadHalf, WriteHalf},
     AsyncRead,
+    AsyncWrite,
 };
 
 use futures::{self, Async, Future, Poll};
@@ -38,8 +39,10 @@ use self::{
 
 mod aead;
 pub mod client;
+mod context;
 mod crypto_io;
 pub mod local;
+mod monitor;
 pub mod server;
 mod socks5_local;
 mod stream;
@@ -56,13 +59,16 @@ const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 //     Server2Client,
 // }
 
-type TcpReadHalf = ReadHalf<TcpStream>;
-type TcpWriteHalf = WriteHalf<TcpStream>;
+type TcpReadHalf<S /* : Read + Write + AsyncRead + AsyncWrite + Send */> = ReadHalf<S>;
+type TcpWriteHalf<S /* : Read + Write + AsyncRead + AsyncWrite + Send */> = WriteHalf<S>;
 
 /// `ReadHalf `of `TcpStream` with decryption
-pub enum DecryptedHalf {
-    Stream(StreamDecryptedReader<TcpReadHalf>),
-    Aead(AeadDecryptedReader<TcpReadHalf>),
+pub enum DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    Stream(StreamDecryptedReader<TcpReadHalf<S>>),
+    Aead(AeadDecryptedReader<TcpReadHalf<S>>),
 }
 
 macro_rules! ref_half_do {
@@ -83,21 +89,30 @@ macro_rules! mut_half_do {
     }
 }
 
-impl Read for DecryptedHalf {
+impl<S> Read for DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         mut_half_do!(self, DecryptedHalf, read, buf)
     }
 }
 
-impl DecryptedRead for DecryptedHalf {
+impl<S> DecryptedRead for DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
     fn buffer_size(&self, data: &[u8]) -> usize {
         ref_half_do!(self, DecryptedHalf, buffer_size, data)
     }
 }
 
-impl AsyncRead for DecryptedHalf {}
+impl<S> AsyncRead for DecryptedHalf<S> where S: Read + Write + AsyncRead + AsyncWrite + Send {}
 
-impl BufRead for DecryptedHalf {
+impl<S> BufRead for DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         mut_half_do!(self, DecryptedHalf, fill_buf)
     }
@@ -107,25 +122,37 @@ impl BufRead for DecryptedHalf {
     }
 }
 
-impl From<StreamDecryptedReader<TcpReadHalf>> for DecryptedHalf {
-    fn from(r: StreamDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+impl<S> From<StreamDecryptedReader<TcpReadHalf<S>>> for DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    fn from(r: StreamDecryptedReader<TcpReadHalf<S>>) -> DecryptedHalf<S> {
         DecryptedHalf::Stream(r)
     }
 }
 
-impl From<AeadDecryptedReader<TcpReadHalf>> for DecryptedHalf {
-    fn from(r: AeadDecryptedReader<TcpReadHalf>) -> DecryptedHalf {
+impl<S> From<AeadDecryptedReader<TcpReadHalf<S>>> for DecryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    fn from(r: AeadDecryptedReader<TcpReadHalf<S>>) -> DecryptedHalf<S> {
         DecryptedHalf::Aead(r)
     }
 }
 
 /// `WriteHalf` of `TcpStream` with encryption
-pub enum EncryptedHalf {
-    Stream(StreamEncryptedWriter<TcpWriteHalf>),
-    Aead(AeadEncryptedWriter<TcpWriteHalf>),
+pub enum EncryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    Stream(StreamEncryptedWriter<TcpWriteHalf<S>>),
+    Aead(AeadEncryptedWriter<TcpWriteHalf<S>>),
 }
 
-impl EncryptedWrite for EncryptedHalf {
+impl<S> EncryptedWrite for EncryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
     fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
         mut_half_do!(self, EncryptedHalf, write_raw, data)
     }
@@ -143,14 +170,20 @@ impl EncryptedWrite for EncryptedHalf {
     }
 }
 
-impl From<StreamEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
-    fn from(d: StreamEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+impl<S> From<StreamEncryptedWriter<TcpWriteHalf<S>>> for EncryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    fn from(d: StreamEncryptedWriter<TcpWriteHalf<S>>) -> EncryptedHalf<S> {
         EncryptedHalf::Stream(d)
     }
 }
 
-impl From<AeadEncryptedWriter<TcpWriteHalf>> for EncryptedHalf {
-    fn from(d: AeadEncryptedWriter<TcpWriteHalf>) -> EncryptedHalf {
+impl<S> From<AeadEncryptedWriter<TcpWriteHalf<S>>> for EncryptedHalf<S>
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send,
+{
+    fn from(d: AeadEncryptedWriter<TcpWriteHalf<S>>) -> EncryptedHalf<S> {
         EncryptedHalf::Aead(d)
     }
 }
@@ -232,15 +265,21 @@ fn connect_proxy_server(
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
     let timeout = svr_cfg.timeout();
-    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_cfg.addr(), timeout);
-    match *svr_cfg.addr() {
+
+    let svr_addr = match context.config().config_type {
+        ConfigType::Server => svr_cfg.addr(),
+        ConfigType::Local => svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr()),
+    };
+
+    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_addr, timeout);
+    match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let fut = try_timeout(TcpStream::connect(addr), timeout);
             boxed_future(fut)
         }
         ServerAddr::DomainName(ref domain, port) => {
             let fut = {
-                try_timeout(resolve(context, &domain[..], port, false), timeout).and_then(move |vec_ipaddr| {
+                try_timeout(resolve(context, &domain[..], *port, false), timeout).and_then(move |vec_ipaddr| {
                     let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
                     try_timeout(fut, timeout)
                 })
@@ -251,17 +290,20 @@ fn connect_proxy_server(
 }
 
 /// Handshake logic for ShadowSocks Client
-pub fn proxy_server_handshake(
-    remote_stream: TcpStream,
+pub fn proxy_server_handshake<S>(
+    remote_stream: S,
     svr_cfg: Arc<ServerConfig>,
     relay_addr: Address,
 ) -> impl Future<
     Item = (
-        impl Future<Item = DecryptedHalf, Error = io::Error> + Send,
-        impl Future<Item = EncryptedHalf, Error = io::Error> + Send,
+        impl Future<Item = DecryptedHalf<S>, Error = io::Error> + Send,
+        impl Future<Item = EncryptedHalf<S>, Error = io::Error> + Send,
     ),
     Error = io::Error,
-> + Send {
+> + Send
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send + 'static,
+{
     let timeout = svr_cfg.timeout();
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
@@ -284,16 +326,19 @@ pub fn proxy_server_handshake(
 
 /// ShadowSocks Client-Server handshake protocol
 /// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake(
-    remote_stream: TcpStream,
+pub fn proxy_handshake<S>(
+    remote_stream: S,
     svr_cfg: Arc<ServerConfig>,
 ) -> impl Future<
     Item = (
-        impl Future<Item = DecryptedHalf, Error = io::Error> + Send,
-        impl Future<Item = EncryptedHalf, Error = io::Error> + Send,
+        impl Future<Item = DecryptedHalf<S>, Error = io::Error> + Send,
+        impl Future<Item = EncryptedHalf<S>, Error = io::Error> + Send,
     ),
     Error = io::Error,
-> + Send {
+> + Send
+where
+    S: Read + Write + AsyncRead + AsyncWrite + Send + 'static,
+{
     futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
         let timeout = svr_cfg.timeout();
 
