@@ -72,12 +72,8 @@ fn main() {
                 .multiple(true)
                 .help("Set the level of debug"),
         )
-        .arg(
-            Arg::with_name("ENABLE_UDP")
-                .short("u")
-                .long("enable-udp")
-                .help("Enable UDP relay"),
-        )
+        .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
+        .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
         .arg(
             Arg::with_name("CONFIG")
                 .short("c")
@@ -256,12 +252,16 @@ fn main() {
         return;
     }
 
-    if matches.is_present("ENABLE_UDP") {
+    if matches.is_present("UDP_ONLY") {
         if config.mode.enable_tcp() {
             config.mode = Mode::TcpAndUdp;
         } else {
             config.mode = Mode::UdpOnly;
         }
+    }
+
+    if matches.is_present("TCP_AND_UDP") {
+        config.mode = Mode::TcpAndUdp;
     }
 
     if matches.is_present("NO_DELAY") {
