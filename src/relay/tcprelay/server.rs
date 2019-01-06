@@ -201,8 +201,10 @@ fn handle_client(svr_context: SharedTcpServerContext, socket: TcpStream) -> impl
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    if let Err(err) = socket.set_nodelay(true) {
-        error!("Failed to set no delay: {:?}", err);
+    if svr_context.context().config().no_delay {
+        if let Err(err) = socket.set_nodelay(true) {
+            error!("Failed to set no delay: {:?}", err);
+        }
     }
 
     futures::lazy(move || match socket.peer_addr() {

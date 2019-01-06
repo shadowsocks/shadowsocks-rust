@@ -94,8 +94,10 @@ fn handle_socks5_client(
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    if let Err(err) = s.set_nodelay(true) {
-        error!("Failed to set no delay: {:?}", err);
+    if context.config().no_delay {
+        if let Err(err) = s.set_nodelay(true) {
+            error!("Failed to set no delay: {:?}", err);
+        }
     }
 
     let client_addr = s.peer_addr()?;
