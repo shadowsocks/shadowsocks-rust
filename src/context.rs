@@ -10,6 +10,7 @@ use lru_cache::LruCache;
 use trust_dns_resolver::AsyncResolver;
 
 use config::Config;
+use plugin::Plugin;
 use relay::dns_resolver::create_resolver;
 
 type DnsQueryCache = LruCache<u16, (SocketAddr, Instant)>;
@@ -19,6 +20,7 @@ pub struct Context {
     config: Config,
     dns_resolver: Arc<AsyncResolver>,
     dns_query_cache: Option<Arc<Mutex<DnsQueryCache>>>,
+    plugins: Arc<Vec<Plugin>>,
 }
 
 pub type SharedContext = Arc<Context>;
@@ -30,6 +32,7 @@ impl Context {
             config: config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: None,
+            plugins: Arc::new(Vec::new()),
         }
     }
 
@@ -39,6 +42,7 @@ impl Context {
             config: config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: Some(Arc::new(Mutex::new(LruCache::new(1024)))),
+            plugins: Arc::new(Vec::new()),
         }
     }
 
@@ -54,7 +58,11 @@ impl Context {
         &*self.dns_resolver
     }
 
-    pub fn dns_query_cache<'a>(&'a self) -> MutexGuard<'a, DnsQueryCache> {
+    pub fn dns_query_cache(&self) -> MutexGuard<DnsQueryCache> {
         self.dns_query_cache.as_ref().unwrap().lock().unwrap()
+    }
+
+    pub fn set_plugins(&mut self, plugins: Vec<Plugin>) {
+        self.plugins = Arc::new(plugins);
     }
 }
