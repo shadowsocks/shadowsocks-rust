@@ -4,7 +4,7 @@ use crate::crypto::cipher::{CipherCategory, CipherResult, CipherType};
 
 use crate::crypto::ring::RingAeadCipher;
 #[cfg(feature = "miscreant")]
-use crypto::siv::MiscreantCipher;
+use crate::crypto::siv::MiscreantCipher;
 #[cfg(feature = "sodium")]
 use crate::crypto::sodium::SodiumAeadCipher;
 
