@@ -19,7 +19,7 @@ use std::{
 
 use subprocess::{Popen, Result as PopenResult};
 
-use config::{Config, ServerAddr};
+use crate::config::{Config, ServerAddr};
 
 mod obfs_proxy;
 mod ss_plugin;

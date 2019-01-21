@@ -4,7 +4,7 @@ use std::ptr;
 
 use miscreant::aead::{Aes128PmacSiv, Aes256PmacSiv, Algorithm};
 
-use crypto::{
+use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
     AeadDecryptor,
@@ -135,7 +135,6 @@ impl AeadDecryptor for MiscreantCipher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::{AeadDecryptor, AeadEncryptor, CipherType};
 
     fn test_miscreant(ct: CipherType) {
         let key = ct.bytes_to_key(b"PassWORD");

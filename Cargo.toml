@@ -7,6 +7,7 @@ repository = "https://github.com/zonyitoo/shadowsocks-rust"
 documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
+edition = "2018"
 
 [lib]
 name = "shadowsocks"

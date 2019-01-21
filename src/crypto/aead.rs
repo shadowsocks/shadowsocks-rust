@@ -1,12 +1,12 @@
 //! Aead Ciphers
 
-use crypto::cipher::{CipherCategory, CipherResult, CipherType};
+use crate::crypto::cipher::{CipherCategory, CipherResult, CipherType};
 
-use crypto::ring::RingAeadCipher;
+use crate::crypto::ring::RingAeadCipher;
 #[cfg(feature = "miscreant")]
-use crypto::siv::MiscreantCipher;
+use crate::crypto::siv::MiscreantCipher;
 #[cfg(feature = "sodium")]
-use crypto::sodium::SodiumAeadCipher;
+use crate::crypto::sodium::SodiumAeadCipher;
 
 use bytes::{Bytes, BytesMut};
 use ring::{digest::SHA1, hkdf, hmac::SigningKey};

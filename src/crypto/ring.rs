@@ -4,7 +4,7 @@ use std::{mem, ptr};
 
 use ring::aead::{open_in_place, seal_in_place, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 
-use crypto::{
+use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
     AeadDecryptor,
@@ -154,7 +154,7 @@ impl AeadDecryptor for RingAeadCipher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::CipherType;
+    use crate::crypto::CipherType;
 
     fn test_ring_aead(ct: CipherType) {
         let key = ct.bytes_to_key(b"PassWORD");

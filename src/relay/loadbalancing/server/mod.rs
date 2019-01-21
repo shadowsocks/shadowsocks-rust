@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 pub use self::roundrobin::RoundRobin;
 
-use config::ServerConfig;
+use crate::config::ServerConfig;
 
 pub mod roundrobin;
 

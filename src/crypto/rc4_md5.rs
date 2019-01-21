@@ -1,6 +1,6 @@
 //! Rc4Md5 cipher definition
 
-use crypto::{
+use crate::crypto::{
     digest::{self, Digest, DigestType},
     openssl::OpenSSLCrypto,
     CipherResult,
@@ -49,7 +49,7 @@ unsafe impl Send for Rc4Md5Cipher {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::{CipherType, CryptoMode, StreamCipher};
+    use crate::crypto::{CipherType, CryptoMode, StreamCipher};
 
     #[test]
     fn test_rc4_md5_cipher() {

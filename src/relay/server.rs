@@ -4,10 +4,12 @@ use std::io;
 
 use futures::{stream::futures_unordered, Future, Stream};
 
-use config::Config;
-use context::{Context, SharedContext};
-use plugin::{launch_plugin, PluginMode};
-use relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp};
+use crate::{
+    config::Config,
+    context::{Context, SharedContext},
+    plugin::{launch_plugin, PluginMode},
+    relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
+};
 
 /// Options for Local server
 #[derive(Clone, Debug, Default)]
@@ -24,7 +26,7 @@ pub fn run_opt(config: Config, opt: Options) -> impl Future<Item = (), Error = i
         let mut vf = Vec::new();
 
         if opt.enable_signal_monitor {
-            let mon = ::monitor::monitor_signal();
+            let mon = crate::monitor::monitor_signal();
             vf.push(boxed_future(mon));
         }
 

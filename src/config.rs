@@ -64,8 +64,8 @@ use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
-use crypto::cipher::CipherType;
-use plugin::PluginConfig;
+use crate::crypto::cipher::CipherType;
+use crate::plugin::PluginConfig;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
