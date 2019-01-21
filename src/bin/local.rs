@@ -17,15 +17,18 @@ use std::{
     env,
     io::{self, Write},
     net::SocketAddr,
+    process,
 };
 
 use clap::{App, Arg};
 use env_logger::{fmt::Formatter, Builder};
-use futures::Future;
+use futures::{future::Either, Future};
 use log::{LevelFilter, Record};
 use tokio::runtime::Runtime;
 
 use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+
+mod monitor;
 
 fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
     if without_time {
@@ -286,11 +289,20 @@ fn main() {
 
     let mut runtime = Runtime::new().expect("Creating runtime");
 
-    let result = runtime.block_on(run_local(config));
+    let abort_signal = monitor::create_signal_monitor();
+    let result = runtime.block_on(run_local(config).select2(abort_signal));
 
     runtime.shutdown_now().wait().unwrap();
 
-    if let Err(err) = result {
-        panic!("Server exited unexpectly with error: {:?}", err);
+    match result {
+        // Server future resolved without an error. This should never happen.
+        Ok(Either::A(_)) => panic!("Server exited unexpectly"),
+        // Server future resolved with an error.
+        Err(Either::A((err, _))) => {
+            error!("Server exited unexpectly with error: {}", err);
+            process::exit(1);
+        }
+        // The abort signal future resolved. Means we should just exit.
+        Ok(Either::B(..)) | Err(Either::B(..)) => (),
     }
 }

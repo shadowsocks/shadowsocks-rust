@@ -111,17 +111,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
     config::{ClientConfig, Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    relay::{
-        dns::run as run_dns,
-        local::{run as run_local, run_opt as run_local_opt, Options as LocalOptions},
-        server::{run as run_server, run_opt as run_server_opt, Options as ServerOptions},
-        tcprelay::client::Socks5Client,
-    },
+    relay::{dns::run as run_dns, local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
 };
 
 pub mod config;
 mod context;
 pub mod crypto;
-mod monitor;
 pub mod plugin;
 pub mod relay;
