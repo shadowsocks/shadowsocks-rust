@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use subprocess::{Exec, NullFile, Popen, Result as PopenResult};
 
-use config::ServerAddr;
+use crate::config::ServerAddr;
 
 use super::{PluginConfig, PluginMode};
 

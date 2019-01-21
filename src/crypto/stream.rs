@@ -3,10 +3,10 @@
 use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "rc4")]
-use crypto::rc4_md5;
+use crate::crypto::rc4_md5;
 #[cfg(feature = "sodium")]
-use crypto::sodium;
-use crypto::{
+use crate::crypto::sodium;
+use crate::crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
     dummy,
     openssl,

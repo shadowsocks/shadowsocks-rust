@@ -7,14 +7,14 @@ use std::{
     time::Duration,
 };
 
-use relay::{
+use crate::relay::{
     boxed_future,
     dns_resolver::resolve,
     socks5::Address,
     tcprelay::crypto_io::{DecryptedRead, EncryptedWrite},
 };
 
-use context::SharedContext;
+use crate::context::SharedContext;
 
 use futures::{
     self,

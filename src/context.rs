@@ -9,8 +9,8 @@ use std::{
 use lru_cache::LruCache;
 use trust_dns_resolver::AsyncResolver;
 
-use config::Config;
-use relay::dns_resolver::create_resolver;
+use crate::config::Config;
+use crate::relay::dns_resolver::create_resolver;
 
 type DnsQueryCache = LruCache<u16, (SocketAddr, Instant)>;
 

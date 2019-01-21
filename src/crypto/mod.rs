@@ -1,9 +1,7 @@
 //! Crypto methods for shadowsocks
 
 use std::convert::From;
-
-use openssl::symm;
-
+use crate::openssl::symm;
 pub use self::{
     aead::{new_aead_decryptor, new_aead_encryptor, AeadDecryptor, AeadEncryptor, BoxAeadDecryptor, BoxAeadEncryptor},
     cipher::{CipherCategory, CipherResult, CipherType},

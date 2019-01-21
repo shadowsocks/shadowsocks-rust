@@ -9,7 +9,7 @@ use std::{
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
-use crypto::digest::{self, Digest, DigestType};
+use crate::crypto::digest::{self, Digest, DigestType};
 use openssl::symm;
 use rand::{self, RngCore};
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
@@ -433,7 +433,7 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crypto::{new_stream, CipherType, CryptoMode, StreamCipher};
+    use crate::crypto::{new_stream, CipherType, CryptoMode, StreamCipher};
 
     #[test]
     fn test_get_cipher() {

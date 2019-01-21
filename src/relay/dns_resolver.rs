@@ -9,7 +9,7 @@ use futures::Future;
 use tokio;
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
-use context::SharedContext;
+use crate::context::SharedContext;
 
 pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
     let (resolver, bg) = {
