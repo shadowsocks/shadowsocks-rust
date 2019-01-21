@@ -10,7 +10,7 @@ use tokio_io::{io::flush, AsyncRead, AsyncWrite};
 
 use futures::{self, Async, Future, Poll};
 
-use relay::socks5::{
+use crate::relay::socks5::{
     self,
     Address,
     Command,

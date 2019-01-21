@@ -18,7 +18,7 @@ use libsodium_ffi::{
     sodium_init,
 };
 
-use crypto::{
+use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
     AeadDecryptor,
@@ -266,7 +266,7 @@ impl AeadDecryptor for SodiumAeadCipher {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crypto::{CipherType, StreamCipher};
+    use crate::crypto::{CipherType, StreamCipher};
 
     fn test_sodium(ct: CipherType) {
         let key = ct.bytes_to_key(b"PassWORD");

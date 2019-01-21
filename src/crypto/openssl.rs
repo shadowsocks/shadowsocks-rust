@@ -2,9 +2,9 @@
 
 use std::convert::From;
 
-use crypto::{cipher, CipherResult, CipherType, StreamCipher};
+use crate::crypto::{cipher, CipherResult, CipherType, StreamCipher};
 
-use crypto::CryptoMode;
+use crate::crypto::CryptoMode;
 
 use bytes::{BufMut, BytesMut};
 use openssl::symm;

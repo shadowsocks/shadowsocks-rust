@@ -13,10 +13,10 @@ use tokio_io::{
     AsyncRead,
 };
 
-use config::ServerConfig;
-use context::SharedContext;
+use crate::config::ServerConfig;
+use crate::context::SharedContext;
 
-use relay::{
+use crate::relay::{
     boxed_future,
     loadbalancing::server::{LoadBalancer, RoundRobin},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
@@ -51,7 +51,7 @@ fn handle_socks5_connect(
                     (header, Ok(svr_s))
                 }
                 Err(err) => {
-                    use relay::socks5::Reply;
+                    use crate::relay::socks5::Reply;
                     use std::io::ErrorKind;
 
                     error!("Failed to connect remote server, err: {}", err);

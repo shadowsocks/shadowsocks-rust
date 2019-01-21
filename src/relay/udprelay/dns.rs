@@ -18,9 +18,9 @@ use super::{
     SendDgramRc,
     SharedUdpSocket,
 };
-use config::{ServerAddr, ServerConfig};
-use context::SharedContext;
-use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
+use crate::config::{ServerAddr, ServerConfig};
+use crate::context::SharedContext;
+use crate::relay::{boxed_future, dns_resolver::resolve, socks5::Address};
 
 struct PrettyRRData<'a> {
     data: &'a RRData<'a>,

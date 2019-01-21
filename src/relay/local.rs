@@ -4,10 +4,10 @@ use std::io;
 
 use futures::{stream::futures_unordered, Future, Stream};
 
-use config::Config;
-use context::{Context, SharedContext};
-use plugin::{launch_plugin, PluginMode};
-use relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run as run_udp};
+use crate::config::Config;
+use crate::context::{Context, SharedContext};
+use crate::plugin::{launch_plugin, PluginMode};
+use crate::relay::{boxed_future, tcprelay::local::run as run_tcp, udprelay::local::run as run_udp};
 
 /// Relay server running under local environment.
 ///
@@ -52,7 +52,7 @@ pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
 
         // Hold it here, kill all plugins when `tokio::run` is finished
         let plugins = launch_plugin(context.config_mut(), PluginMode::Client).expect("Failed to launch plugins");
-        let mon = ::monitor::monitor_signal(plugins);
+        let mon = crate::monitor::monitor_signal(plugins);
 
         let tcp_fut = run_tcp(SharedContext::new(context));
 

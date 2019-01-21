@@ -9,10 +9,10 @@ use std::{
     time::Duration,
 };
 
-use config::{ConfigType, ServerAddr, ServerConfig};
-use context::SharedContext;
-use crypto::CipherCategory;
-use relay::{boxed_future, dns_resolver::resolve, socks5::Address};
+use crate::config::{ConfigType, ServerAddr, ServerConfig};
+use crate::context::SharedContext;
+use crate::crypto::CipherCategory;
+use crate::relay::{boxed_future, dns_resolver::resolve, socks5::Address};
 
 use tokio::{
     net::{tcp::ConnectFuture, TcpStream},

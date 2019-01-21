@@ -42,7 +42,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-use crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
+use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
 use super::{DecryptedRead, EncryptedWrite, BUFFER_SIZE};
 
