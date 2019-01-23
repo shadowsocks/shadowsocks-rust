@@ -679,23 +679,17 @@ impl Config {
 
                 let plugin = match config.plugin {
                     None => None,
-                    Some(p) => Some(PluginConfig {
-                        plugin: p,
+                    Some(plugin) => Some(PluginConfig {
+                        plugin,
                         plugin_opt: config.plugin_opts,
                     }),
                 };
 
-                let timeout = match config.timeout {
-                    None => None,
-                    Some(t) => Some(Duration::from_secs(t)),
-                };
+                let timeout = config.timeout.map(Duration::from_secs);
+                let udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
                 let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
 
-                let udp_timeout = match config.udp_timeout {
-                    None => None,
-                    Some(t) => Some(Duration::from_secs(t)),
-                };
 
                 nsvr.udp_timeout = udp_timeout;
 
@@ -743,17 +737,10 @@ impl Config {
                     }),
                 };
 
-                let timeout = match svr.timeout {
-                    None => None,
-                    Some(t) => Some(Duration::from_secs(t)),
-                };
+                let timeout = svr.timeout.map(Duration::from_secs);
+                let udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
                 let mut nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
-
-                let udp_timeout = match config.udp_timeout {
-                    None => None,
-                    Some(t) => Some(Duration::from_secs(t)),
-                };
 
                 nsvr.udp_timeout = udp_timeout;
 
@@ -828,39 +815,36 @@ impl Config {
     }
 
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
-        match self.dns {
-            None => None,
-            Some(ref ds) => {
-                match &ds[..] {
-                    "google" => Some(ResolverConfig::google()),
+        self.dns.as_ref().and_then(|ds| {
+            match &ds[..] {
+                "google" => Some(ResolverConfig::google()),
 
-                    "cloudflare" => Some(ResolverConfig::cloudflare()),
-                    "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
-                    "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
+                "cloudflare" => Some(ResolverConfig::cloudflare()),
+                "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
+                "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
 
-                    "quad9" => Some(ResolverConfig::quad9()),
-                    "quad9_tls" => Some(ResolverConfig::quad9_tls()),
+                "quad9" => Some(ResolverConfig::quad9()),
+                "quad9_tls" => Some(ResolverConfig::quad9_tls()),
 
-                    _ => {
-                        // Set ips directly
-                        match ds.parse::<IpAddr>() {
-                            Ok(ip) => Some(ResolverConfig::from_parts(
-                                None,
-                                vec![],
-                                NameServerConfigGroup::from_ips_clear(&[ip], 53),
-                            )),
-                            Err(..) => {
-                                error!(
-                                    "Failed to parse DNS \"{}\" in config to IpAddr, fallback to system config",
-                                    ds
-                                );
-                                None
-                            }
+                _ => {
+                    // Set ips directly
+                    match ds.parse::<IpAddr>() {
+                        Ok(ip) => Some(ResolverConfig::from_parts(
+                            None,
+                            vec![],
+                            NameServerConfigGroup::from_ips_clear(&[ip], 53),
+                        )),
+                        Err(..) => {
+                            error!(
+                                "Failed to parse DNS \"{}\" in config to IpAddr, fallback to system config",
+                                ds
+                            );
+                            None
                         }
                     }
                 }
             }
-        }
+        })
     }
 
     pub fn get_remote_dns(&self) -> SocketAddr {
@@ -898,10 +882,7 @@ impl fmt::Display for Config {
             jconf.method = Some(svr.method().to_string());
             jconf.password = Some(svr.password().to_string());
             jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
-            jconf.plugin_opts = match svr.plugin() {
-                None => None,
-                Some(p) => p.plugin_opt.clone(),
-            };
+            jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
             jconf.timeout = svr.timeout().map(|t| t.as_secs());
             jconf.udp_timeout = svr.udp_timeout().map(|t| t.as_secs());
         } else if self.server.len() > 1 {
@@ -920,10 +901,7 @@ impl fmt::Display for Config {
                     password: svr.password().to_string(),
                     method: svr.method().to_string(),
                     plugin: svr.plugin().map(|p| p.plugin.to_string()),
-                    plugin_opts: match svr.plugin() {
-                        None => None,
-                        Some(p) => p.plugin_opt.clone(),
-                    },
+                    plugin_opts: svr.plugin().and_then(|p| p.plugin_opt.clone()),
                     timeout: svr.timeout().map(|t| t.as_secs()),
                     udp_timeout: svr.udp_timeout().map(|t| t.as_secs()),
                 });
