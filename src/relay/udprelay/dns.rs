@@ -84,7 +84,7 @@ struct PrettyPacket<'a> {
 
 impl<'a> PrettyPacket<'a> {
     pub fn new(pkt: &'a Packet<'a>) -> PrettyPacket<'a> {
-        PrettyPacket { pkt: pkt }
+        PrettyPacket { pkt }
     }
 }
 

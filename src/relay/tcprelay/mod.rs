@@ -502,7 +502,7 @@ impl<R: Read> Future for IgnoreUntilEnd<R> {
 
 /// Ignore all data from the reader
 pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
-    IgnoreUntilEnd::Pending { r: r, amt: 0 }
+    IgnoreUntilEnd::Pending { r, amt: 0 }
 }
 
 pub enum TimeoutFuture<T, F>

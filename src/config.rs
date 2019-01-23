@@ -220,12 +220,12 @@ impl ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
         trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
         ServerConfig {
-            addr: addr,
+            addr,
             password: pwd,
-            method: method,
-            timeout: timeout,
-            enc_key: enc_key,
-            plugin: plugin,
+            method,
+            timeout,
+            enc_key,
+            plugin,
             udp_timeout: None,
             plugin_addr: None,
         }
@@ -566,11 +566,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
-        Error {
-            kind: kind,
-            desc: desc,
-            detail: detail,
-        }
+        Error { kind, desc, detail }
     }
 }
 
@@ -608,7 +604,7 @@ impl Config {
             mode: Mode::TcpOnly,
             no_delay: false,
             manager_address: None,
-            config_type: config_type,
+            config_type,
         }
     }
 

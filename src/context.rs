@@ -27,7 +27,7 @@ impl Context {
     pub fn new(config: Config) -> Context {
         let resolver = create_resolver(config.get_dns_config());
         Context {
-            config: config,
+            config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: None,
             plugins: Arc::new(Vec::new()),
@@ -37,7 +37,7 @@ impl Context {
     pub fn new_dns(config: Config) -> Context {
         let resolver = create_resolver(config.get_dns_config());
         Context {
-            config: config,
+            config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: Some(Arc::new(Mutex::new(LruCache::new(1024)))),
             plugins: Arc::new(Vec::new()),

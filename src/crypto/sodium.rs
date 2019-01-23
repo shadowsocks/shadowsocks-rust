@@ -184,7 +184,7 @@ impl SodiumAeadCipher {
         SodiumAeadCipher {
             cipher_type: t,
             key: skey,
-            nonce: nonce,
+            nonce,
         }
     }
 

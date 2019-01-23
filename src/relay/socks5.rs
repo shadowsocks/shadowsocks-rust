@@ -28,7 +28,7 @@ pub use self::consts::{
 
 use super::utils::{write_bytes, WriteBytes};
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 mod consts {
     pub const SOCKS5_VERSION:                          u8 = 0x05;
 
@@ -69,7 +69,7 @@ pub enum Command {
 
 impl Command {
     #[inline]
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     fn as_u8(self) -> u8 {
         match self {
             Command::TcpConnect   => consts::SOCKS5_CMD_TCP_CONNECT,
@@ -79,7 +79,7 @@ impl Command {
     }
 
     #[inline]
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     fn from_u8(code: u8) -> Option<Command> {
         match code {
             consts::SOCKS5_CMD_TCP_CONNECT   => Some(Command::TcpConnect),
@@ -108,7 +108,7 @@ pub enum Reply {
 
 impl Reply {
     #[inline]
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     fn as_u8(self) -> u8 {
         match self {
             Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
@@ -125,7 +125,7 @@ impl Reply {
     }
 
     #[inline]
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     fn from_u8(code: u8) -> Reply {
         match code {
             consts::SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
@@ -143,7 +143,7 @@ impl Reply {
 }
 
 impl fmt::Display for Reply {
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Reply::Succeeded               => write!(f, "Succeeded"),
@@ -172,7 +172,7 @@ pub struct Error {
 impl Error {
     pub fn new(reply: Reply, message: &str) -> Error {
         Error {
-            reply: reply,
+            reply,
             message: message.to_string(),
         }
     }
@@ -586,10 +586,7 @@ impl TcpRequestHeader {
             })
             .and_then(|(r, command)| {
                 Address::read_from(r).map(move |(conn, address)| {
-                    let header = TcpRequestHeader {
-                        command: command,
-                        address: address,
-                    };
+                    let header = TcpRequestHeader { command, address };
 
                     (conn, header)
                 })
@@ -641,10 +638,7 @@ pub struct TcpResponseHeader {
 impl TcpResponseHeader {
     /// Creates a response header
     pub fn new(reply: Reply, address: Address) -> TcpResponseHeader {
-        TcpResponseHeader {
-            reply: reply,
-            address: address,
-        }
+        TcpResponseHeader { reply, address }
     }
 
     /// Read from a reader
@@ -668,7 +662,7 @@ impl TcpResponseHeader {
                 Address::read_from(r).map(move |(r, address)| {
                     let rep = TcpResponseHeader {
                         reply: Reply::from_u8(reply_code),
-                        address: address,
+                        address,
                     };
 
                     (r, rep)
@@ -714,7 +708,7 @@ pub struct HandshakeRequest {
 impl HandshakeRequest {
     /// Creates a handshake request
     pub fn new(methods: Vec<u8>) -> HandshakeRequest {
-        HandshakeRequest { methods: methods }
+        HandshakeRequest { methods }
     }
 
     /// Read from a reader
@@ -734,7 +728,7 @@ impl HandshakeRequest {
                 Ok((r, nmet))
             })
             .and_then(|(r, nmet)| read_exact(r, vec![0u8; nmet as usize]))
-            .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods: methods })))
+            .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods })))
     }
 
     /// Write to a writer
@@ -834,10 +828,7 @@ pub struct UdpAssociateHeader {
 impl UdpAssociateHeader {
     /// Creates a header
     pub fn new(frag: u8, address: Address) -> UdpAssociateHeader {
-        UdpAssociateHeader {
-            frag: frag,
-            address: address,
-        }
+        UdpAssociateHeader { frag, address }
     }
 
     /// Read from a reader

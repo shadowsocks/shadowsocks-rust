@@ -50,7 +50,7 @@ where
         CopyTimeout {
             r: Some(r),
             w: Some(w),
-            timeout: timeout,
+            timeout,
             amt: 0,
             timer: None,
             buf: [0u8; BUFFER_SIZE],

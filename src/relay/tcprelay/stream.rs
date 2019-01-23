@@ -35,7 +35,7 @@ where
         DecryptedReader {
             reader: r,
             buffer: BytesMut::with_capacity(buffer_size),
-            cipher: cipher,
+            cipher,
             pos: 0,
             sent_final: false,
         }

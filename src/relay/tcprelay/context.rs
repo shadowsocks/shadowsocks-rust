@@ -40,9 +40,9 @@ impl TcpServerContext {
         let ctx = TcpServerContext {
             tx: AtomicUsize::new(0),
             rx: AtomicUsize::new(0),
-            context: context,
+            context,
             stop_flag: stop_flag.clone(),
-            svr_cfg: svr_cfg,
+            svr_cfg,
         };
 
         let ctx = Arc::new(ctx);

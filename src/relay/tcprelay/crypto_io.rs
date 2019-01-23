@@ -135,7 +135,7 @@ where
         let buffer_size = w.buffer_size(&DUMMY_BUFFER);
         EncryptedWriteAll::Writing {
             writer: w,
-            buf: buf,
+            buf,
             pos: 0,
             enc_buf: BytesMut::with_capacity(buffer_size),
             encrypted: false,

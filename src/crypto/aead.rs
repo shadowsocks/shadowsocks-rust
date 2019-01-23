@@ -77,7 +77,7 @@ pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadDec
     }
 }
 
-const SUBKEY_INFO: &'static [u8] = b"ss-subkey";
+const SUBKEY_INFO: &[u8] = b"ss-subkey";
 
 /// Make Session key
 ///
