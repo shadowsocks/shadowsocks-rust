@@ -10,9 +10,11 @@ use std::{
     time::Duration,
 };
 
-use crate::config::{ServerAddr, ServerConfig};
-use crate::context::SharedContext;
-use crate::relay::{boxed_future, dns_resolver::resolve};
+use crate::{
+    config::{ServerAddr, ServerConfig},
+    context::SharedContext,
+    relay::{boxed_future, dns_resolver::resolve},
+};
 
 use futures::{future, Future, Stream};
 use tokio::{self, net::UdpSocket, timer::Interval};

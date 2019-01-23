@@ -64,8 +64,7 @@ use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
-use crate::crypto::cipher::CipherType;
-use crate::plugin::PluginConfig;
+use crate::{crypto::cipher::CipherType, plugin::PluginConfig};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
@@ -689,7 +688,6 @@ impl Config {
                 let udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
                 let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
-
 
                 nsvr.udp_timeout = udp_timeout;
 

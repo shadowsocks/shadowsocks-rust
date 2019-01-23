@@ -13,8 +13,7 @@ use tokio_io::{
     AsyncRead,
 };
 
-use crate::config::ServerConfig;
-use crate::context::SharedContext;
+use crate::{config::ServerConfig, context::SharedContext};
 
 use crate::relay::{
     boxed_future,

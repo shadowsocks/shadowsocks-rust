@@ -11,13 +11,15 @@ use futures::{self, Future, Stream};
 
 use tokio::{self, net::UdpSocket, util::FutureExt};
 
-use crate::config::{ServerAddr, ServerConfig};
-use crate::context::SharedContext;
-use crate::relay::{
-    boxed_future,
-    dns_resolver::resolve,
-    loadbalancing::server::{LoadBalancer, RoundRobin},
-    socks5::{Address, UdpAssociateHeader},
+use crate::{
+    config::{ServerAddr, ServerConfig},
+    context::SharedContext,
+    relay::{
+        boxed_future,
+        dns_resolver::resolve,
+        loadbalancing::server::{LoadBalancer, RoundRobin},
+        socks5::{Address, UdpAssociateHeader},
+    },
 };
 
 use super::{

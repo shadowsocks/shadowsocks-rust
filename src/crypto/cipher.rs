@@ -8,8 +8,8 @@ use std::{
     str::{self, FromStr},
 };
 
-use bytes::{BufMut, Bytes, BytesMut};
 use crate::crypto::digest::{self, Digest, DigestType};
+use bytes::{BufMut, Bytes, BytesMut};
 use openssl::symm;
 use rand::{self, RngCore};
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
