@@ -9,7 +9,6 @@ rust:
 os:
     - linux
     - osx
-    - windows
 
 env:
     - RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" RUSTDOCFLAGS="-Ctarget-feature=+aes,+ssse3"
