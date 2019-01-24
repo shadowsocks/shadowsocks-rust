@@ -1,11 +1,3 @@
-extern crate dns_parser;
-extern crate env_logger;
-extern crate rand;
-extern crate shadowsocks;
-extern crate tokio;
-#[macro_use]
-extern crate log;
-
 use std::{
     collections::HashSet,
     net::{SocketAddr, UdpSocket},
@@ -14,6 +6,7 @@ use std::{
 };
 
 use dns_parser::{Builder, Packet, QueryClass, QueryType};
+use log::trace;
 use shadowsocks::{
     config::{Config, ConfigType},
     run_dns,

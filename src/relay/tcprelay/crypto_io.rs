@@ -6,16 +6,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+use bytes::{BufMut, BytesMut};
 use futures::{Async, Future, Poll};
-
 use tokio::timer::Delay;
 use tokio_io::{
     io::{copy, Copy},
+    try_nb,
     AsyncRead,
     AsyncWrite,
 };
-
-use bytes::{BufMut, BytesMut};
 
 use super::{
     utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt},

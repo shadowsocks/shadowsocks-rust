@@ -3,10 +3,6 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-extern crate clap;
-extern crate qrcode;
-extern crate shadowsocks;
-
 use clap::{App, Arg};
 use qrcode::{types::Color, QrCode};
 

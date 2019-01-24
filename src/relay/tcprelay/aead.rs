@@ -40,6 +40,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
+use log::error;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};

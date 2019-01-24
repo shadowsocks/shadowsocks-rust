@@ -1,5 +1,6 @@
 use futures::{Future, Stream};
 use libc;
+use log::{error, info};
 use std::io;
 use tokio_signal::unix::Signal;
 

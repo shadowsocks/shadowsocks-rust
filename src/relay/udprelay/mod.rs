@@ -46,7 +46,7 @@ use std::{
 
 use tokio::net::UdpSocket;
 
-use futures::{Async, Future, Poll, Stream};
+use futures::{try_ready, Async, Future, Poll, Stream};
 
 pub mod dns;
 pub mod local;

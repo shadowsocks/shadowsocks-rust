@@ -1,12 +1,5 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
 
-extern crate bytes;
-extern crate env_logger;
-extern crate futures;
-extern crate shadowsocks;
-extern crate tokio;
-extern crate tokio_io;
-
 use std::{
     io::Cursor,
     net::SocketAddr,

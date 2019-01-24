@@ -1,14 +1,5 @@
 //! DNS over shadowsocks
 
-extern crate clap;
-extern crate shadowsocks;
-extern crate tokio;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-extern crate futures;
-extern crate time;
-
 use std::{
     env,
     io::{self, Write},
@@ -18,7 +9,7 @@ use std::{
 use clap::{App, Arg};
 use env_logger::{fmt::Formatter, Builder};
 use futures::Future;
-use log::{LevelFilter, Record};
+use log::{debug, error, info, LevelFilter, Record};
 use tokio::runtime::Runtime;
 
 use shadowsocks::{run_dns, Config, ConfigType, ServerAddr, ServerConfig};

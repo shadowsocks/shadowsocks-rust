@@ -14,9 +14,6 @@ use crate::{
 /// Relay server running under local environment.
 ///
 /// ```no_run
-/// extern crate tokio;
-/// extern crate shadowsocks;
-///
 /// use shadowsocks::{
 ///     config::{Config, ConfigType, ServerConfig},
 ///     crypto::CipherType,

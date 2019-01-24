@@ -60,6 +60,8 @@ use std::{
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use json5;
+use log::{error, trace};
+use serde::{Deserialize, Serialize};
 use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};

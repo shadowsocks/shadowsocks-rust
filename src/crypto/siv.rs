@@ -2,7 +2,7 @@
 
 use std::ptr;
 
-use miscreant::aead::{Aes128PmacSivAead, Aes256PmacSivAead, Aead};
+use miscreant::aead::{Aead, Aes128PmacSivAead, Aes256PmacSivAead};
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
@@ -13,9 +13,9 @@ use crate::crypto::{
     CipherType,
 };
 
-use bytes::{BufMut, BytesMut};
-
 use byte_string::ByteStr;
+use bytes::{BufMut, BytesMut};
+use log::error;
 
 /// AEAD ciphers provided by Miscreant
 pub enum MiscreantCryptoVariant {
