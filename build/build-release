@@ -81,6 +81,7 @@ SRC_PATH="/home/rust/src"
 CARGO_TARGET_DIR="${SRC_PATH}/build/target"
 CARGO_INSTALL_ROOT="${SRC_PATH}/build/install"
 LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
+RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"
 
 TARGET_NAME="x86_64-unknown-linux-musl"
 
@@ -89,7 +90,7 @@ if $BUILD_NIGHTLY; then
     docker run \
         -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
         -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
-        -e RUSTFLAGS="-Ctarget-feature=+aes" \
+        -e RUSTFLAGS="$RUSTFLAGS" \
         -e HTTP_PROXY="$ENV_HTTP_PROXY" \
         -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
         -v "${CUR_DIR}"/..:"$SRC_PATH" \
@@ -104,6 +105,7 @@ else
     docker run \
         -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
         -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
+        -e RUSTFLAGS="$RUSTFLAGS" \
         -e HTTP_PROXY="$ENV_HTTP_PROXY" \
         -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
         -v "${CUR_DIR}"/..:"$SRC_PATH" \
@@ -112,7 +114,7 @@ else
         /bin/bash -c \
         "sudo mkdir -p $CARGO_TARGET_DIR \
             && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && cargo install -f --path . \
+            && cargo install -f --features miscreant --path . \
             && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
 fi
 
