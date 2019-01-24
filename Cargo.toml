@@ -56,7 +56,6 @@ md-5 = "0.7"
 digest = "0.7"
 typenum = "1.10"
 qrcode = { version = "0.7", default-features = false }
-subprocess = "0.1"
 serde_urlencoded = "0.5"
 serde_derive = "1.0"
 serde = "1.0"
@@ -68,6 +67,7 @@ lru-cache = "0.1"
 dns-parser = "0.7"
 trust-dns-resolver = { version = "0.10", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 spin = { version = "0.4", default-features = false }
+tokio-process = "0.2.3"
 
 [target.'cfg(unix)'.dependencies]
 tokio-signal = "0.2"

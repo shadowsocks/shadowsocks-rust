@@ -7,57 +7,9 @@ use futures::{stream::futures_unordered, Future, Stream};
 use crate::{
     config::Config,
     context::{Context, SharedContext},
-    plugin::{launch_plugin, PluginMode},
+    plugin::{launch_plugins, PluginMode},
     relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
 };
-
-/// Options for Local server
-#[derive(Clone, Debug, Default)]
-pub struct Options {
-    /// Enable builtin signal monitor
-    pub enable_signal_monitor: bool,
-}
-
-/// Relay server running on server side.
-pub fn run_opt(config: Config, opt: Options) -> impl Future<Item = (), Error = io::Error> + Send {
-    futures::lazy(move || {
-        let mut context = Context::new(config);
-
-        let mut vf = Vec::new();
-
-        if opt.enable_signal_monitor {
-            let mon = crate::monitor::monitor_signal();
-            vf.push(boxed_future(mon));
-        }
-
-        if context.config().mode.enable_udp() {
-            // Clone config here, because the config for TCP relay will be modified
-            // after plugins started
-            let udp_context = SharedContext::new(context.clone());
-
-            // Run UDP relay before starting plugins
-            // Because plugins doesn't support UDP relay
-            let udp_fut = run_udp(udp_context);
-            vf.push(boxed_future(udp_fut));
-        }
-
-        if context.config().mode.enable_tcp() {
-            // Hold it here, kill all plugins when `tokio::run` is finished
-            let plugins = launch_plugin(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins");
-            context.set_plugins(plugins);
-
-            let tcp_fut = run_tcp(SharedContext::new(context));
-            vf.push(boxed_future(tcp_fut));
-        }
-
-        futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-            match res {
-                Ok(..) => Ok(()),
-                Err((err, ..)) => Err(err),
-            }
-        })
-    })
-}
 
 /// Relay server running on server side.
 ///
@@ -84,10 +36,38 @@ pub fn run_opt(config: Config, opt: Options) -> impl Future<Item = (), Error = i
 /// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
 pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
-    run_opt(
-        config,
-        Options {
-            enable_signal_monitor: true,
-        },
-    )
+    futures::lazy(move || {
+        let mut context = Context::new(config);
+
+        let mut vf = Vec::new();
+
+        if context.config().mode.enable_udp() {
+            // Clone config here, because the config for TCP relay will be modified
+            // after plugins started
+            let udp_context = SharedContext::new(context.clone());
+
+            // Run UDP relay before starting plugins
+            // Because plugins doesn't support UDP relay
+            let udp_fut = run_udp(udp_context);
+            vf.push(boxed_future(udp_fut));
+        }
+
+        if context.config().mode.enable_tcp() {
+            if let Some(plugins) =
+                launch_plugins(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins")
+            {
+                vf.push(boxed_future(plugins));
+            }
+
+            let tcp_fut = run_tcp(SharedContext::new(context));
+            vf.push(boxed_future(tcp_fut));
+        }
+
+        futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
+            match res {
+                Ok(..) => Ok(()),
+                Err((err, ..)) => Err(err),
+            }
+        })
+    })
 }

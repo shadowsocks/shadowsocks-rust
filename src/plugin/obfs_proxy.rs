@@ -1,10 +1,9 @@
-use std::net::SocketAddr;
-
-use subprocess::{Exec, Popen, Result as PopenResult};
-
-use crate::config::ServerAddr;
-
 use super::{PluginConfig, PluginMode};
+use crate::config::ServerAddr;
+use std::{
+    net::SocketAddr,
+    process::{Command, Stdio},
+};
 
 /// For obfsproxy, we use standalone mode for now.
 /// Managed mode needs to use SOCKS5 proxy as forwarder, which is not supported
@@ -30,23 +29,17 @@ use super::{PluginConfig, PluginMode};
 /// And the rest parameters are all assembled here.
 /// Some old obfsproxy will not be supported as it doesn't even support
 /// "--data-dir" option
-pub fn start_plugin(
-    plugin: &PluginConfig,
-    remote: &ServerAddr,
-    local: &SocketAddr,
-    mode: PluginMode,
-) -> PopenResult<Popen> {
-    let mut cmd = Exec::cmd(&plugin.plugin)
+pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, mode: PluginMode) -> Command {
+    let mut cmd = Command::new(&plugin.plugin);
+    cmd.stdin(Stdio::null())
         .arg("--data-dir")
         .arg(format!("/tmp/{}_{}_{}", plugin.plugin, remote, local)); // FIXME: Not compatible in Windows
 
     if let Some(ref opt) = plugin.plugin_opt {
-        for arg in opt.split(' ') {
-            cmd = cmd.arg(arg);
-        }
+        cmd.args(opt.split(' '));
     }
 
-    let cmd = match mode {
+    match mode {
         PluginMode::Client => cmd
             .arg("--dest")
             .arg(remote.to_string())
@@ -59,5 +52,5 @@ pub fn start_plugin(
             .arg(remote.to_string()),
     };
 
-    cmd.popen()
+    cmd
 }
