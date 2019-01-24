@@ -2,7 +2,7 @@
 
 use std::ptr;
 
-use miscreant::aead::{Aes128PmacSiv, Aes256PmacSiv, Algorithm};
+use miscreant::aead::{Aes128PmacSivAead, Aes256PmacSivAead, Aead};
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
@@ -19,8 +19,8 @@ use byte_string::ByteStr;
 
 /// AEAD ciphers provided by Miscreant
 pub enum MiscreantCryptoVariant {
-    Aes128(Aes128PmacSiv),
-    Aes256(Aes256PmacSiv),
+    Aes128(Aes128PmacSivAead),
+    Aes256(Aes256PmacSivAead),
 }
 
 /// AEAD Cipher context
@@ -58,12 +58,12 @@ impl MiscreantCipher {
             CipherType::Aes128PmacSiv => {
                 let mut skey = [0; 32];
                 skey.copy_from_slice(key);
-                MiscreantCryptoVariant::Aes128(Aes128PmacSiv::new(&skey))
+                MiscreantCryptoVariant::Aes128(Aes128PmacSivAead::new(&skey))
             }
             CipherType::Aes256PmacSiv => {
                 let mut skey = [0; 64];
                 skey.copy_from_slice(key);
-                MiscreantCryptoVariant::Aes256(Aes256PmacSiv::new(&skey))
+                MiscreantCryptoVariant::Aes256(Aes256PmacSivAead::new(&skey))
             }
             _ => panic!("unsupported cipher in miscreant {:?}", t),
         }
