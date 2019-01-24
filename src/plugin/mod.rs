@@ -41,15 +41,7 @@ pub enum PluginMode {
 /// Plugin holder
 #[derive(Debug)]
 pub struct Plugin {
-    addr: ServerAddr,
     process: Popen,
-}
-
-impl Plugin {
-    /// Get address of the plugin
-    pub fn addr(&self) -> &ServerAddr {
-        &self.addr
-    }
 }
 
 impl Drop for Plugin {
@@ -74,12 +66,9 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
                 Err(err) => {
                     panic!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
                 }
-                Ok(p) => {
+                Ok(process) => {
                     let svr_addr = ServerAddr::SocketAddr(local_addr);
-                    plugins.push(Plugin {
-                        addr: svr_addr.clone(),
-                        process: p,
-                    });
+                    plugins.push(Plugin { process });
 
                     // Replace addr with plugin
                     svr_addr

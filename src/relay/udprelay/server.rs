@@ -11,9 +11,11 @@ use futures::{self, stream::futures_unordered, Future, Stream};
 
 use tokio::{self, net::UdpSocket, util::FutureExt};
 
-use crate::config::ServerConfig;
-use crate::context::SharedContext;
-use crate::relay::{boxed_future, dns_resolver::resolve, socks5::Address};
+use crate::{
+    config::ServerConfig,
+    context::SharedContext,
+    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
+};
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},

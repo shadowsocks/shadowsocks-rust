@@ -73,7 +73,7 @@ impl PacketStream {
     /// Creates a new `PacketStream`
     pub fn new(udp: SharedUdpSocket) -> PacketStream {
         PacketStream {
-            udp: udp,
+            udp,
             buf: [0u8; MAXIMUM_UDP_PAYLOAD_SIZE],
         }
     }
@@ -106,11 +106,7 @@ pub struct SendDgramRc<B: AsRef<[u8]>> {
 impl<B: AsRef<[u8]>> SendDgramRc<B> {
     pub fn new(udp: SharedUdpSocket, buf: B, addr: SocketAddr) -> SendDgramRc<B> {
         SendDgramRc {
-            stat: SendDgramStat::Pending {
-                udp: udp,
-                buf: buf,
-                addr: addr,
-            },
+            stat: SendDgramStat::Pending { udp, buf, addr },
         }
     }
 }

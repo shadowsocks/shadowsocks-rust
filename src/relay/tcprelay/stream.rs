@@ -5,8 +5,8 @@ use std::{
     io::{self, BufRead, Read},
 };
 
-use bytes::{BufMut, BytesMut};
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode, StreamCipher};
+use bytes::{BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 use super::{DecryptedRead, EncryptedWrite, BUFFER_SIZE};
@@ -35,7 +35,7 @@ where
         DecryptedReader {
             reader: r,
             buffer: BytesMut::with_capacity(buffer_size),
-            cipher: cipher,
+            cipher,
             pos: 0,
             sent_final: false,
         }

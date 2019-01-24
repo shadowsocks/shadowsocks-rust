@@ -10,9 +10,11 @@ use std::{
     time::Duration,
 };
 
-use crate::config::{ServerAddr, ServerConfig};
-use crate::context::SharedContext;
-use crate::relay::{boxed_future, dns_resolver::resolve};
+use crate::{
+    config::{ServerAddr, ServerConfig},
+    context::SharedContext,
+    relay::{boxed_future, dns_resolver::resolve},
+};
 
 use futures::{future, Future, Stream};
 use tokio::{self, net::UdpSocket, timer::Interval};
@@ -38,9 +40,9 @@ impl TcpServerContext {
         let ctx = TcpServerContext {
             tx: AtomicUsize::new(0),
             rx: AtomicUsize::new(0),
-            context: context,
+            context,
             stop_flag: stop_flag.clone(),
-            svr_cfg: svr_cfg,
+            svr_cfg,
         };
 
         let ctx = Arc::new(ctx);

@@ -30,8 +30,8 @@ impl TableCipher {
         let a = bufr.read_u64::<LittleEndian>().unwrap();
 
         let mut table = [0u64; TABLE_SIZE];
-        for i in 0..TABLE_SIZE {
-            table[i] = i as u64;
+        for (i, element) in table.iter_mut().enumerate() {
+            *element = i as u64;
         }
 
         for i in 1..1024 {

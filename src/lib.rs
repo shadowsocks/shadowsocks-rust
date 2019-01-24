@@ -107,7 +107,7 @@ extern crate typenum;
 extern crate url;
 
 /// ShadowSocks version
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
     config::{ClientConfig, Config, ConfigType, Mode, ServerAddr, ServerConfig},

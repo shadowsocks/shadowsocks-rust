@@ -9,9 +9,7 @@ use std::{
 use lru_cache::LruCache;
 use trust_dns_resolver::AsyncResolver;
 
-use crate::config::Config;
-use crate::plugin::Plugin;
-use crate::relay::dns_resolver::create_resolver;
+use crate::{config::Config, plugin::Plugin, relay::dns_resolver::create_resolver};
 
 type DnsQueryCache = LruCache<u16, (SocketAddr, Instant)>;
 
@@ -29,7 +27,7 @@ impl Context {
     pub fn new(config: Config) -> Context {
         let resolver = create_resolver(config.get_dns_config());
         Context {
-            config: config,
+            config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: None,
             plugins: Arc::new(Vec::new()),
@@ -39,7 +37,7 @@ impl Context {
     pub fn new_dns(config: Config) -> Context {
         let resolver = create_resolver(config.get_dns_config());
         Context {
-            config: config,
+            config,
             dns_resolver: Arc::new(resolver),
             dns_query_cache: Some(Arc::new(Mutex::new(LruCache::new(1024)))),
             plugins: Arc::new(Vec::new()),

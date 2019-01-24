@@ -15,8 +15,8 @@ use shadowsocks::{
     VERSION,
 };
 
-const BLACK: &'static str = "\x1b[40m  \x1b[0m";
-const WHITE: &'static str = "\x1b[47m  \x1b[0m";
+const BLACK: &str = "\x1b[40m  \x1b[0m";
+const WHITE: &str = "\x1b[47m  \x1b[0m";
 
 fn print_qrcode(encoded: &str) {
     let qrcode = QrCode::new(encoded.as_bytes()).unwrap();
@@ -24,7 +24,7 @@ fn print_qrcode(encoded: &str) {
     for _ in 0..qrcode.width() + 2 {
         print!("{}", WHITE);
     }
-    println!("");
+    println!();
 
     for y in 0..qrcode.width() {
         print!("{}", WHITE);
@@ -42,7 +42,7 @@ fn print_qrcode(encoded: &str) {
     for _ in 0..qrcode.width() + 2 {
         print!("{}", WHITE);
     }
-    println!("");
+    println!();
 }
 
 fn encode(filename: &str, need_qrcode: bool) {

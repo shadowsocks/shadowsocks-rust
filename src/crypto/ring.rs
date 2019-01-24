@@ -48,10 +48,10 @@ impl RingAeadCipher {
         let skey = make_skey(t, key, salt);
         let cipher = RingAeadCipher::new_variant(t, &skey, &nonce, is_seal);
         RingAeadCipher {
-            cipher: cipher,
+            cipher,
             cipher_type: t,
             key: skey,
-            nonce: nonce,
+            nonce,
         }
     }
 

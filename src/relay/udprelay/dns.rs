@@ -18,9 +18,11 @@ use super::{
     SendDgramRc,
     SharedUdpSocket,
 };
-use crate::config::{ServerAddr, ServerConfig};
-use crate::context::SharedContext;
-use crate::relay::{boxed_future, dns_resolver::resolve, socks5::Address};
+use crate::{
+    config::{ServerAddr, ServerConfig},
+    context::SharedContext,
+    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
+};
 
 struct PrettyRRData<'a> {
     data: &'a RRData<'a>,
@@ -82,7 +84,7 @@ struct PrettyPacket<'a> {
 
 impl<'a> PrettyPacket<'a> {
     pub fn new(pkt: &'a Packet<'a>) -> PrettyPacket<'a> {
-        PrettyPacket { pkt: pkt }
+        PrettyPacket { pkt }
     }
 }
 

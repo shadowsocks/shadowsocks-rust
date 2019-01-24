@@ -83,11 +83,11 @@ impl TcpRelayClientHandshake {
                         try_timeout(fut, timeout)
                     })
                     .map(move |(r, addr)| TcpRelayClientPending {
-                        r: r,
-                        addr: addr,
+                        r,
+                        addr,
                         w: w_fut,
-                        timeout: timeout,
-                        svr_context: svr_context,
+                        timeout,
+                        svr_context,
                     })
             })
         })
@@ -160,7 +160,7 @@ where
             TcpRelayClientConnected {
                 server: stream.split(),
                 client: client_pair,
-                timeout: timeout,
+                timeout,
             }
         })
     }
@@ -218,10 +218,7 @@ fn handle_client(svr_context: SharedTcpServerContext, socket: TcpStream) -> impl
         trace!("Got connection, addr: {}", addr);
         trace!("Picked proxy server: {:?}", svr_context.svr_cfg());
 
-        let client = TcpRelayClientHandshake {
-            s: socket,
-            svr_context: svr_context,
-        };
+        let client = TcpRelayClientHandshake { s: socket, svr_context };
 
         client
             .handshake()

@@ -8,8 +8,7 @@ use tokio_io::IoFuture;
 
 use futures::{self, stream::futures_unordered, Future, Stream};
 
-use crate::plugin::Plugin;
-use crate::relay::boxed_future;
+use crate::{plugin::Plugin, relay::boxed_future};
 
 #[cfg(unix)]
 pub fn monitor_signal() -> impl Future<Item = (), Error = io::Error> + Send {
