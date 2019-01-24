@@ -93,7 +93,6 @@ extern crate serde_urlencoded;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
-extern crate subprocess;
 #[macro_use]
 extern crate tokio_io;
 extern crate dns_parser;

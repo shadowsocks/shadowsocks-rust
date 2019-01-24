@@ -7,7 +7,7 @@ use futures::{stream::futures_unordered, Future, Stream};
 use crate::{
     config::Config,
     context::{Context, SharedContext},
-    plugin::{launch_plugin, PluginMode},
+    plugin::{launch_plugins, PluginMode},
     relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
 };
 
@@ -53,9 +53,11 @@ pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
         }
 
         if context.config().mode.enable_tcp() {
-            // Hold it here, kill all plugins when `tokio::run` is finished
-            let plugins = launch_plugin(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins");
-            context.set_plugins(plugins);
+            if let Some(plugins) =
+                launch_plugins(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins")
+            {
+                vf.push(boxed_future(plugins));
+            }
 
             let tcp_fut = run_tcp(SharedContext::new(context));
             vf.push(boxed_future(tcp_fut));

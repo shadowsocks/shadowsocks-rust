@@ -12,14 +12,13 @@
 //! +------------+                    +---------------------------+
 //! ```
 
+use crate::config::{Config, ServerAddr};
+use futures::{stream::futures_unordered, Future, Stream};
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
 };
-
-use subprocess::{Popen, Result as PopenResult};
-
-use crate::config::{Config, ServerAddr};
+use tokio_process::{Child, CommandExt};
 
 mod obfs_proxy;
 mod ss_plugin;
@@ -38,21 +37,13 @@ pub enum PluginMode {
     Client,
 }
 
-/// Plugin holder
-#[derive(Debug)]
-pub struct Plugin {
-    process: Popen,
-}
-
-impl Drop for Plugin {
-    fn drop(&mut self) {
-        debug!("Killing Plugin {:?}", self.process);
-        let _ = self.process.terminate();
-    }
-}
-
-/// Launch plugins in config
-pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Plugin>> {
+/// Launch plugins in config. Returns a future that completes when any plugin terminates
+/// or there were an error in watching the subprocess. Returns `None` if no plugins
+/// were launched.
+pub fn launch_plugins(
+    config: &mut Config,
+    mode: PluginMode,
+) -> io::Result<Option<impl Future<Item = (), Error = io::Error>>> {
     let mut plugins = Vec::new();
 
     for svr in &mut config.server {
@@ -64,11 +55,12 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
 
             let svr_addr = match start_plugin(c, svr.addr(), &local_addr, mode) {
                 Err(err) => {
-                    panic!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
+                    error!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
+                    return Err(err);
                 }
                 Ok(process) => {
                     let svr_addr = ServerAddr::SocketAddr(local_addr);
-                    plugins.push(Plugin { process });
+                    plugins.push(process);
 
                     // Replace addr with plugin
                     svr_addr
@@ -88,20 +80,38 @@ pub fn launch_plugin(config: &mut Config, mode: PluginMode) -> io::Result<Vec<Pl
         }
     }
 
-    Ok(plugins)
+    if plugins.is_empty() {
+        Ok(None)
+    } else {
+        // Turn the vector of `Child` futures into a single future that
+        // completes with an error if any of them exits or waiting for it
+        // fails. When this future completes, the remaining `Child`ren will be
+        // dropped and as a result the rest of the plugins will be killed
+        // automatically.
+        let plugins_future =
+            futures_unordered(plugins)
+                .into_future()
+                .then(|first_plugin_result| match first_plugin_result {
+                    Ok((first_plugin_exit_status, _)) => {
+                        let msg = format!("Plugin exited unexpectedly with {}", first_plugin_exit_status.unwrap());
+                        Err(io::Error::new(io::ErrorKind::Other, msg))
+                    }
+                    Err((first_plugin_error, _)) => {
+                        error!("Error while waiting for plugin subprocess: {}", first_plugin_error);
+                        Err(first_plugin_error)
+                    }
+                });
+        Ok(Some(plugins_future))
+    }
 }
 
-fn start_plugin(
-    plugin: &PluginConfig,
-    remote: &ServerAddr,
-    local: &SocketAddr,
-    mode: PluginMode,
-) -> PopenResult<Popen> {
-    if plugin.plugin == "obfsproxy" {
-        obfs_proxy::start_plugin(plugin, remote, local, mode)
+fn start_plugin(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, mode: PluginMode) -> io::Result<Child> {
+    let mut cmd = if plugin.plugin == "obfsproxy" {
+        obfs_proxy::plugin_cmd(plugin, remote, local, mode)
     } else {
-        ss_plugin::start_plugin(plugin, remote, local, mode)
-    }
+        ss_plugin::plugin_cmd(plugin, remote, local, mode)
+    };
+    cmd.spawn_async()
 }
 
 fn get_local_port() -> io::Result<u16> {
