@@ -13,9 +13,9 @@ use crate::crypto::{
     CipherType,
 };
 
-use bytes::{BufMut, Bytes, BytesMut};
-
 use byte_string::ByteStr;
+use bytes::{BufMut, Bytes, BytesMut};
+use log::error;
 
 /// AEAD ciphers provided by Ring
 pub enum RingAeadCryptoVariant {

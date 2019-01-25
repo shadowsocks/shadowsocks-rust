@@ -1,6 +1,6 @@
 use std::io;
 
-use futures::{Async, Future, Poll};
+use futures::{try_ready, Async, Future, Poll};
 use tokio_io::{
     io::{write_all, WriteAll},
     AsyncWrite,

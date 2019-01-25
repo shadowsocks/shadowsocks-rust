@@ -7,15 +7,6 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-extern crate clap;
-extern crate env_logger;
-#[macro_use]
-extern crate log;
-extern crate futures;
-extern crate shadowsocks;
-extern crate time;
-extern crate tokio;
-
 use std::{
     env,
     io::{self, Write},
@@ -25,7 +16,7 @@ use std::{
 use clap::{App, Arg};
 use env_logger::{fmt::Formatter, Builder};
 use futures::{future::Either, Future};
-use log::{LevelFilter, Record};
+use log::{debug, error, info, LevelFilter, Record};
 use tokio::runtime::Runtime;
 
 use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};

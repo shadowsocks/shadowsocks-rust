@@ -1,4 +1,5 @@
 use futures::{self, Future, Stream};
+use log::{error, info};
 use std::io;
 use tokio_signal::windows::Event;
 

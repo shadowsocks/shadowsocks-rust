@@ -4,6 +4,7 @@ use std::{io, net::SocketAddr, sync::Arc};
 
 use futures::{self, stream::Stream, Future};
 
+use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},

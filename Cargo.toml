@@ -57,8 +57,7 @@ digest = "0.7"
 typenum = "1.10"
 qrcode = { version = "0.7", default-features = false }
 serde_urlencoded = "0.5"
-serde_derive = "1.0"
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 url = "1"
 byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }

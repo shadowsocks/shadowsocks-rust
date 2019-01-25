@@ -1,5 +1,6 @@
 use super::{PluginConfig, PluginMode};
 use crate::config::ServerAddr;
+use log::trace;
 use std::{
     net::SocketAddr,
     process::{Command, Stdio},

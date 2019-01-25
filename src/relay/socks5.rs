@@ -14,10 +14,9 @@ use std::{
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-
-use futures::{Async, Future, Poll};
-
-use tokio_io::{io::read_exact, AsyncRead, AsyncWrite};
+use futures::{try_ready, Async, Future, Poll};
+use log::error;
+use tokio_io::{io::read_exact, try_nb, AsyncRead, AsyncWrite};
 
 pub use self::consts::{
     SOCKS5_AUTH_METHOD_GSSAPI,

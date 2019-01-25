@@ -5,10 +5,10 @@ use std::{
     net::SocketAddr,
 };
 
+use futures::{self, Async, Future, Poll};
+use log::trace;
 use tokio::net::TcpStream;
 use tokio_io::{io::flush, AsyncRead, AsyncWrite};
-
-use futures::{self, Async, Future, Poll};
 
 use crate::relay::socks5::{
     self,

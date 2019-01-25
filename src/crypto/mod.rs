@@ -5,7 +5,7 @@ pub use self::{
     cipher::{CipherCategory, CipherResult, CipherType},
     stream::{new_stream, BoxStreamCipher, StreamCipher},
 };
-use crate::openssl::symm;
+use ::openssl::symm;
 use std::convert::From;
 
 pub mod aead;

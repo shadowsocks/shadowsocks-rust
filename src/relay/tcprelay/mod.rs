@@ -16,21 +16,20 @@ use crate::{
     relay::{boxed_future, dns_resolver::resolve, socks5::Address},
 };
 
+use byte_string::ByteStr;
+use bytes::{BufMut, BytesMut};
+use futures::{self, Async, Future, Poll};
+use log::{error, trace};
 use tokio::{
     net::{tcp::ConnectFuture, TcpStream},
     timer::Timeout,
 };
 use tokio_io::{
     io::{read_exact, write_all, ReadHalf, WriteHalf},
+    try_nb,
     AsyncRead,
     AsyncWrite,
 };
-
-use futures::{self, Async, Future, Poll};
-
-use bytes::{BufMut, BytesMut};
-
-use byte_string::ByteStr;
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
 

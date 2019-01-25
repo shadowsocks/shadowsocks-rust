@@ -1,10 +1,3 @@
-extern crate env_logger;
-extern crate futures;
-extern crate log;
-extern crate shadowsocks;
-extern crate tokio;
-extern crate tokio_io;
-
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     thread,

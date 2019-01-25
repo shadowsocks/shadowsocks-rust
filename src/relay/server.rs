@@ -14,9 +14,6 @@ use crate::{
 /// Relay server running on server side.
 ///
 /// ```no_run
-/// extern crate tokio;
-/// extern crate shadowsocks;
-///
 /// use shadowsocks::{
 ///     config::{Config, ConfigType, ServerConfig},
 ///     crypto::CipherType,

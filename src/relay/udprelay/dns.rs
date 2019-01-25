@@ -10,6 +10,7 @@ use std::{
 
 use dns_parser::{Packet, RRData};
 use futures::{self, future::join_all, stream::futures_unordered, Future, Stream};
+use log::{debug, error, info, trace};
 use tokio::{self, net::UdpSocket};
 
 use super::{

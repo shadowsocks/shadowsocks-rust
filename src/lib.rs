@@ -70,41 +70,6 @@
 #![crate_name = "shadowsocks"]
 #![recursion_limit = "128"]
 
-extern crate base64;
-extern crate byte_string;
-extern crate byteorder;
-extern crate bytes;
-extern crate digest;
-#[macro_use]
-extern crate futures;
-extern crate libc;
-#[cfg(feature = "sodium")]
-extern crate libsodium_ffi;
-#[macro_use]
-extern crate log;
-extern crate json5;
-extern crate md5;
-#[cfg(feature = "miscreant")]
-extern crate miscreant;
-extern crate openssl;
-extern crate rand;
-extern crate ring;
-extern crate serde_urlencoded;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde;
-#[macro_use]
-extern crate tokio_io;
-extern crate dns_parser;
-extern crate lru_cache;
-extern crate spin;
-extern crate tokio;
-#[cfg(any(unix, windows))]
-extern crate tokio_signal;
-extern crate trust_dns_resolver;
-extern crate typenum;
-extern crate url;
-
 /// ShadowSocks version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

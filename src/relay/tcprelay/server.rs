@@ -21,7 +21,7 @@ use futures::{
     stream::{futures_unordered, Stream},
     Future,
 };
-
+use log::{debug, error, info, trace};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},
