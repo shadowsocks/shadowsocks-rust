@@ -1,19 +1,22 @@
+sudo: false
 language: rust
-cache: cargo
+matrix:
+    include:
+        - os: windows
+          rust: stable
 
-rust:
-    - stable
-    - beta
-    - nightly
+        - os: osx
+          rust: stable
 
-os:
-    - linux
-    - osx
+        - os: linux
+          rust: stable
+        - os: linux
+          rust: beta
+        - os: linux
+          rust: nightly
 
 env:
     - RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" RUSTDOCFLAGS="-Ctarget-feature=+aes,+ssse3"
-
-sudo: false
 
 addons:
     apt:
@@ -27,5 +30,15 @@ install:
     #- export PKG_CONFIG_PATH=$HOME/installed_libsodium/lib/pkgconfig:$PKG_CONFIG_PATH
     #- export LD_LIBRARY_PATH=$HOME/installed_libsodium/lib:$LD_LIBRARY_PATH
     - export SODIUM_BUILD_STATIC=yes
+
+    # Install OpenSSL on Windows
+    - if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
+          curl -O http://slproweb.com/download/Win64OpenSSL-1_1_0j.exe;
+          cmd.exe /C 'Win64OpenSSL-1_1_0j.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"';
+          export OPENSSL_LIB_DIR=/c/OpenSSL/lib;
+          export OPENSSL_INCLUDE_DIR=/c/OpenSSL/include;
+          export OPENSSL_DIR=/c/OpenSSL/bin;
+      fi
+
 script:
     - cargo test --no-fail-fast --features miscreant
