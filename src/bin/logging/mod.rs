@@ -5,7 +5,7 @@ use std::{
     io::{self, Write},
 };
 
-pub fn init(without_time: bool, debug_level: u64) {
+pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
     let mut log_builder = Builder::new();
     log_builder.filter(None, LevelFilter::Info);
 
@@ -16,18 +16,18 @@ pub fn init(without_time: bool, debug_level: u64) {
         }
         1 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Debug);
+            log_builder.filter(Some(bin_name), LevelFilter::Debug);
         }
         2 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder
-                .filter(Some("sslocal"), LevelFilter::Debug)
+                .filter(Some(bin_name), LevelFilter::Debug)
                 .filter(Some("shadowsocks"), LevelFilter::Debug);
         }
         3 => {
             let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder
-                .filter(Some("sslocal"), LevelFilter::Trace)
+                .filter(Some(bin_name), LevelFilter::Trace)
                 .filter(Some("shadowsocks"), LevelFilter::Trace);
         }
         _ => {

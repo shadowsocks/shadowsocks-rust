@@ -93,7 +93,7 @@ fn main() {
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
     let debug_level = matches.occurrences_of("VERBOSE");
 
-    logging::init(without_time, debug_level);
+    logging::init(without_time, debug_level, "ssserver");
 
     let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {

@@ -78,7 +78,7 @@ fn main() {
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
     let debug_level = matches.occurrences_of("VERBOSE");
 
-    logging::init(without_time, debug_level);
+    logging::init(without_time, debug_level, "ssdns");
 
     let mut has_provided_config = false;
 
