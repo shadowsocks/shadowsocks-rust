@@ -4,57 +4,17 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use std::{
-    env,
-    io::{self, Write},
-    net::SocketAddr,
-    process,
-};
+use std::{net::SocketAddr, process};
 
 use clap::{App, Arg};
-use env_logger::{fmt::Formatter, Builder};
 use futures::{future::Either, Future};
-use log::{debug, error, info, LevelFilter, Record};
+use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
 use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
+mod logging;
 mod monitor;
-
-fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(fmt, "[{}] {}", record.level(), record.args())
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-            record.level(),
-            record.args()
-        )
-    }
-}
-
-fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(
-            fmt,
-            "[{}] [{}] {}",
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}] [{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    }
-}
 
 fn main() {
     let matches = App::new("shadowsocks")
@@ -134,44 +94,10 @@ fn main() {
         )
         .get_matches();
 
-    let mut log_builder = Builder::new();
-    log_builder.filter(None, LevelFilter::Info);
-
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
-
     let debug_level = matches.occurrences_of("VERBOSE");
-    match debug_level {
-        0 => {
-            // Default filter
-            log_builder.format(move |fmt, r| log_time(fmt, without_time, r));
-        }
-        1 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("sslocal"), LevelFilter::Debug);
-        }
-        2 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder
-                .filter(Some("sslocal"), LevelFilter::Debug)
-                .filter(Some("shadowsocks"), LevelFilter::Debug);
-        }
-        3 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder
-                .filter(Some("sslocal"), LevelFilter::Trace)
-                .filter(Some("shadowsocks"), LevelFilter::Trace);
-        }
-        _ => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(None, LevelFilter::Trace);
-        }
-    }
 
-    if let Ok(env_conf) = env::var("RUST_LOG") {
-        log_builder.parse(&env_conf);
-    }
-
-    log_builder.init();
+    logging::init(without_time, debug_level, "sslocal");
 
     let mut has_provided_config = false;
 

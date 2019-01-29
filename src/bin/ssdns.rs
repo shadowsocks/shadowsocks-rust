@@ -1,53 +1,15 @@
 //! DNS over shadowsocks
 
-use std::{
-    env,
-    io::{self, Write},
-    net::SocketAddr,
-};
+use std::net::SocketAddr;
 
 use clap::{App, Arg};
-use env_logger::{fmt::Formatter, Builder};
 use futures::Future;
-use log::{debug, error, info, LevelFilter, Record};
+use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
 use shadowsocks::{run_dns, Config, ConfigType, ServerAddr, ServerConfig};
 
-fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(fmt, "[{}] {}", record.level(), record.args())
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-            record.level(),
-            record.args()
-        )
-    }
-}
-
-fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(
-            fmt,
-            "[{}] [{}] {}",
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}] [{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    }
-}
+mod logging;
 
 fn main() {
     let matches = App::new("ssdns")
@@ -113,44 +75,10 @@ fn main() {
         )
         .get_matches();
 
-    let mut log_builder = Builder::new();
-    log_builder.filter(None, LevelFilter::Info);
-
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
-
     let debug_level = matches.occurrences_of("VERBOSE");
-    match debug_level {
-        0 => {
-            // Default filter
-            log_builder.format(move |fmt, r| log_time(fmt, without_time, r));
-        }
-        1 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(Some("ssdns"), LevelFilter::Debug);
-        }
-        2 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder
-                .filter(Some("ssdns"), LevelFilter::Debug)
-                .filter(Some("shadowsocks"), LevelFilter::Debug);
-        }
-        3 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder
-                .filter(Some("ssdns"), LevelFilter::Trace)
-                .filter(Some("shadowsocks"), LevelFilter::Trace);
-        }
-        _ => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
-            log_builder.filter(None, LevelFilter::Trace);
-        }
-    }
 
-    if let Ok(env_conf) = env::var("RUST_LOG") {
-        log_builder.parse(&env_conf);
-    }
-
-    log_builder.init();
+    logging::init(without_time, debug_level, "ssdns");
 
     let mut has_provided_config = false;
 
