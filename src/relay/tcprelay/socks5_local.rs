@@ -216,11 +216,13 @@ pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> 
     let listener =
         TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 
-    info!("ShadowSocks TCP Listening on {}", local_addr);
+    let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
+
+    info!("ShadowSocks TCP Listening on {}", actual_local_addr);
 
     let udp_conf = UdpConfig {
         enable_udp: context.config().mode.enable_udp(),
-        client_addr: local_addr,
+        client_addr: actual_local_addr,
     };
 
     let mut servers = RoundRobin::new(context.config());
