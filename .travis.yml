@@ -16,7 +16,7 @@ matrix:
           rust: nightly
 
 env:
-    - RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" RUSTDOCFLAGS="-Ctarget-feature=+aes,+ssse3"
+    - RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" RUSTDOCFLAGS="-Ctarget-feature=+aes,+ssse3" RUST_BACKTRACE=1
 
 addons:
     apt:
