@@ -9,8 +9,7 @@ use dns_parser::{Builder, Packet, QueryClass, QueryType};
 use log::trace;
 use shadowsocks::{
     config::{Config, ConfigType},
-    run_dns,
-    run_server,
+    run_dns, run_server,
 };
 use tokio::runtime::current_thread::Runtime;
 
@@ -22,7 +21,8 @@ const CONFIG: &'static str = r#"{
         "password": "abc",
         "timeout": 20,
         "method": "aes-256-gcm",
-        "mode": "tcp_and_udp"
+        "mode": "tcp_and_udp",
+        "remote_dns": "114.114.114.114:53"
     }"#;
 
 #[test]
