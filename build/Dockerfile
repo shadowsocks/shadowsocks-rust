@@ -1,7 +1,7 @@
 ARG TOOLCHAIN=stable
 FROM ekidd/rust-musl-builder:$TOOLCHAIN
 
-ENV SODIUM_VERS="1.0.16"
+ENV SODIUM_VERS="1.0.17"
 
 # Build a static copy of libsodium.
 RUN cd /home/rust/libs && \
