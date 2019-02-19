@@ -1,3 +1,38 @@
+shadowsocks-rust (1.7.0) unstable; urgency=medium
+
+  ## Refactors
+  * #141 Build with Rust 2018.
+  * #100 Migrated to Tokio Runtime.
+  * #139 Refactor for using as a library. Move signal monitor outside of shadowsocks library.
+
+  ## Dependencies
+  * Replaced `ToSocketAddrs` with `trust-dns`
+  * #111 Upgrade rand to v0.5 and use `ThreadRng`
+  * #132 Feature gate RC4 cipher
+  * `--feature miscreant` is now can be built with stable.
+
+  ## Configurations
+  * Support timeout key in the outer object in configuration ( `{ "timeout": 30 }` )
+  * UDP relay sets timeout with separated key `udp_timeout`
+  * #123 `set_nodelay` and `set_keepalive`, `no_delay` is configurable in configuration
+  * [Breaking] Replace `enable_udp` with `mode`, possible values are: `tcp_and_udp`, `tcp_only`, `udp_only`.
+
+  ## Bugfix
+  * [BUG-FIXED] #105 Fixed "Too many open files" in UDP relay.
+  * [BUG-FIXED] Fixed bug while starting UDP relay. While starting server with plugins, it should not change the listening addresses for UDP relay, which are only for TCP relay.
+  * [BUG-FIXED] #106 Server should not panic if accepted socket closed right after `accept()`.
+  * Implemented a new `ssdns` server, which can serve as a DNS server and proxy DNS queries via ShadowSocks' UDP relay.
+  * [FIXED-BUG] #118 #122 Fixed DNS resolving issue. It may failed to resolve remote server's address if you haven't configured any IP addresses in forbidden_ip section.
+
+  ## New features
+  * Uses `impl Trait` for functions
+  * #113 Supported `xchacha20-ietf-poly1305` encrypt method
+  * Removed all global states in client and servers, which will allow starting multiple ShadowSocks instances in one process.
+  * Uses `json5` to parse config file.
+  * #85 Support `ss-manager` report protocol. (Can co-operate with `ss-manager`)
+
+ -- Y. T. Chung <zonyitoo@gmail.com> Wed, 20 Jan 2019 01:14:55 +0800
+
 shadowsocks-rust (1.6.11) unstable; urgency=medium
 
   * Updated dependencies
