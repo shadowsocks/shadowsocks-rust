@@ -11,9 +11,7 @@ use futures::{Async, Future, Poll};
 use tokio::timer::Delay;
 use tokio_io::{
     io::{copy, Copy},
-    try_nb,
-    AsyncRead,
-    AsyncWrite,
+    try_nb, AsyncRead, AsyncWrite,
 };
 
 use super::{
@@ -408,7 +406,7 @@ where
             while self.pos < self.cap {
                 let i = try_nb!(self.write_or_set_timeout());
                 if i == 0 {
-                    let err = io::Error::new(io::ErrorKind::UnexpectedEof, "early eof");
+                    let err = io::Error::new(io::ErrorKind::WriteZero, "copied zero bytes into writer");
                     return Err(err);
                 }
                 self.amt += i as u64;
