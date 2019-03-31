@@ -7,11 +7,15 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
+use std::io::Result as IoResult;
 use std::process;
 
 use clap::{App, Arg};
 use futures::{future::Either, Future};
 use log::{debug, error, info};
+#[cfg(feature = "single-threaded")]
+use tokio::runtime::current_thread::Runtime;
+#[cfg(not(feature = "single-threaded"))]
 use tokio::runtime::Runtime;
 
 use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
@@ -188,6 +192,17 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
+    match launch_server(config) {
+        Ok(()) => {}
+        Err(err) => {
+            error!("Server exited unexpectly with error: {}", err);
+            process::exit(1);
+        }
+    }
+}
+
+#[cfg(not(feature = "single-threaded"))]
+fn launch_server(config: Config) -> IoResult<()> {
     let mut runtime = Runtime::new().expect("Creating runtime");
 
     let abort_signal = monitor::create_signal_monitor();
@@ -199,11 +214,25 @@ fn main() {
         // Server future resolved without an error. This should never happen.
         Ok(Either::A(_)) => panic!("Server exited unexpectly"),
         // Server future resolved with an error.
-        Err(Either::A((err, _))) => {
-            error!("Server exited unexpectly with error: {}", err);
-            process::exit(1);
-        }
+        Err(Either::A((err, _))) => Err(err),
         // The abort signal future resolved. Means we should just exit.
-        Ok(Either::B(..)) | Err(Either::B(..)) => (),
+        Ok(Either::B(..)) | Err(Either::B(..)) => Ok(()),
+    }
+}
+
+#[cfg(feature = "single-threaded")]
+fn launch_server(config: Config) -> IoResult<()> {
+    let mut runtime = Runtime::new().expect("Creating runtime");
+
+    let abort_signal = monitor::create_signal_monitor();
+    let result = runtime.block_on(run_server(config).select2(abort_signal));
+
+    match result {
+        // Server future resolved without an error. This should never happen.
+        Ok(Either::A(_)) => panic!("Server exited unexpectly"),
+        // Server future resolved with an error.
+        Err(Either::A((err, _))) => Err(err),
+        // The abort signal future resolved. Means we should just exit.
+        Ok(Either::B(..)) | Err(Either::B(..)) => Ok(()),
     }
 }

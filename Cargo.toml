@@ -35,6 +35,7 @@ lto = true
 default = ["sodium", "rc4"]
 sodium = ["libsodium-ffi"]
 rc4 = []
+single-threaded = []
 
 [dependencies]
 log = "0.4"
