@@ -16,6 +16,16 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
 ## Build & Install
 
+### Optional Features
+
+* `sodium` - Enabled linking to [`libsodium`](https://github.com/jedisct1/libsodium), which will also enable ciphers that depending on `libsodium`.
+
+* `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
+
+* `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
+
+Default features: `["sodium", "rc4"]`.
+
 ### **crates.io**
 
 Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
