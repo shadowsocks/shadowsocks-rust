@@ -18,7 +18,7 @@ use crate::{config::ServerConfig, context::SharedContext};
 
 use crate::relay::{
     boxed_future,
-    loadbalancing::server::{LoadBalancer, RoundRobin},
+    loadbalancing::server::{LoadBalancer, PingBalancer},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
     tcprelay::crypto_io::{DecryptedRead, EncryptedWrite},
 };
@@ -225,7 +225,7 @@ pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> 
         client_addr: actual_local_addr,
     };
 
-    let mut servers = RoundRobin::new(context.config());
+    let mut servers = PingBalancer::new(context.clone());
     listener.incoming().for_each(move |socket| {
         let server_cfg = servers.pick_server();
 

@@ -3,6 +3,7 @@
 use std::{
     io::{self, Read, Write},
     net::SocketAddr,
+    sync::Arc,
 };
 
 use futures::{self, Async, Future, Poll};
@@ -11,15 +12,10 @@ use tokio::net::TcpStream;
 use tokio_io::{io::flush, AsyncRead, AsyncWrite};
 
 use crate::relay::socks5::{
-    self,
-    Address,
-    Command,
-    HandshakeRequest,
-    HandshakeResponse,
-    Reply,
-    TcpRequestHeader,
-    TcpResponseHeader,
+    self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
 };
+
+use crate::{config::ServerConfig, context::SharedContext};
 
 /// Socks5 proxy client
 pub struct Socks5Client {
@@ -136,5 +132,23 @@ impl AsyncWrite for Socks5Client {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         // FIXME: Finalize the internal cipher
         Ok(Async::Ready(()))
+    }
+}
+
+pub(crate) struct ServerClient {
+    pub r: super::DecryptedHalf<TcpStream>,
+    pub w: super::EncryptedHalf<TcpStream>,
+}
+
+impl ServerClient {
+    pub(crate) fn connect(
+        context: SharedContext,
+        addr: Address,
+        svr_cfg: Arc<ServerConfig>,
+    ) -> impl Future<Item = ServerClient, Error = io::Error> {
+        super::connect_proxy_server(context, svr_cfg.clone())
+            .and_then(|svr_s| super::proxy_server_handshake(svr_s, svr_cfg, addr))
+            .and_then(|(svr_r, svr_w)| svr_r.join(svr_w))
+            .map(|(r, w)| ServerClient { r, w })
     }
 }
