@@ -8,8 +8,7 @@ use crate::{
 };
 
 use futures::{Future, Stream};
-use log::{debug, error, trace};
-use rand;
+use log::{debug, error};
 use tokio;
 use tokio::timer::{Interval, Timeout};
 
@@ -57,19 +56,19 @@ impl PingBalancer {
             let context = context.clone();
 
             tokio::spawn(
-                // Check every 60 seconds
-                Interval::new_interval(Duration::from_secs(3))
+                // Check every 10 seconds
+                Interval::new(Instant::now() + Duration::from_secs(1), Duration::from_secs(10))
                     .for_each(move |_| {
                         let sc = sc.clone();
                         let start = Instant::now();
                         let fut = ServerClient::connect(context.clone(), addr.clone(), sc.config.clone());
-                        Timeout::new(fut, Duration::from_secs(2)).then(move |res| {
+                        Timeout::new(fut, Duration::from_secs(5)).then(move |res| {
                             let elapsed = Instant::now() - start;
                             let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
                             match res {
                                 Ok(..) => {
                                     // Connected ... record its time
-                                    trace!(
+                                    debug!(
                                         "checked remote server {} connected with {} ms",
                                         sc.config.addr(),
                                         elapsed
@@ -80,13 +79,18 @@ impl PingBalancer {
                                     match err.into_inner() {
                                         Some(err) => {
                                             error!("failed to check server {}, error: {}", sc.config.addr(), err);
+
+                                            // NOTE: connection / handshake error, server is down
+                                            sc.available.store(false, Ordering::Release);
                                         }
                                         None => {
                                             // Timeout
                                             error!("checked remote server {} connect timeout", sc.config.addr());
+
+                                            // NOTE: timeout is still available, but server is too slow
+                                            sc.available.store(true, Ordering::Release);
                                         }
                                     }
-                                    sc.available.store(false, Ordering::Release);
                                 }
                             }
                             // Set elapsed anyway
@@ -109,40 +113,42 @@ impl LoadBalancer for PingBalancer {
             panic!("No server");
         }
 
-        let mut total = 0u64;
+        // Choose the best one
+        let mut choosen_svr = &self.servers[0];
+        let mut found_one = false;
+
         for svr in &self.servers {
-            if svr.available.load(Ordering::Acquire) {
-                total += svr.elapsed.load(Ordering::Acquire);
-            } else {
-                debug!("server {} is blocked for unavailable", svr.config.addr());
+            if svr.available.load(Ordering::Acquire)
+                && (!choosen_svr.available.load(Ordering::Acquire)
+                    || svr.elapsed.load(Ordering::Acquire) < choosen_svr.elapsed.load(Ordering::Acquire))
+            {
+                found_one = true;
+                choosen_svr = svr;
             }
         }
 
-        if total != 0 {
-            let ridx = rand::random::<u64>() % total;
-            let mut acc = 0u64;
+        if !found_one && !choosen_svr.available.load(Ordering::Acquire) {
+            // Just choose one available
             for svr in &self.servers {
                 if svr.available.load(Ordering::Acquire) {
-                    acc += svr.elapsed.load(Ordering::Acquire);
-                    if acc >= ridx {
-                        return svr.config.clone();
-                    }
-                } else {
-                    debug!("server {} is blocked for unavailable", svr.config.addr());
+                    choosen_svr = svr;
                 }
             }
+
+            debug!(
+                "cannot find any available servers, picked {} delay {} ms",
+                choosen_svr.config.addr(),
+                choosen_svr.elapsed.load(Ordering::Acquire)
+            );
+        } else {
+            debug!(
+                "choosen the best server {} delay {} ms",
+                choosen_svr.config.addr(),
+                choosen_svr.elapsed.load(Ordering::Acquire)
+            );
         }
 
-        // FALLBACK! Choose nothing
-        for svr in &self.servers {
-            if svr.available.load(Ordering::Acquire) {
-                return svr.config.clone();
-            }
-        }
-
-        // ALL UNAVAILABLE!
-        error!("all servers are unavailable!");
-        self.servers[0].config.clone()
+        choosen_svr.config.clone()
     }
 
     fn total(&self) -> usize {
