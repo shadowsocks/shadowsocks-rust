@@ -1,3 +1,4 @@
+use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -60,41 +61,21 @@ impl PingBalancer {
                 Interval::new(Instant::now() + Duration::from_secs(1), Duration::from_secs(10))
                     .for_each(move |_| {
                         let sc = sc.clone();
-                        let start = Instant::now();
-                        let fut = ServerClient::connect(context.clone(), addr.clone(), sc.config.clone());
-                        Timeout::new(fut, Duration::from_secs(5)).then(move |res| {
-                            let elapsed = Instant::now() - start;
-                            let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
+
+                        let fut1 = PingBalancer::check_delay(sc.clone(), context.clone(), addr.clone());
+                        let fut2 = PingBalancer::check_delay(sc.clone(), context.clone(), addr.clone());
+                        let fut3 = PingBalancer::check_delay(sc.clone(), context.clone(), addr.clone());
+
+                        fut1.join3(fut2, fut3).then(move |res| {
                             match res {
-                                Ok(..) => {
-                                    // Connected ... record its time
-                                    debug!(
-                                        "checked remote server {} connected with {} ms",
-                                        sc.config.addr(),
-                                        elapsed
-                                    );
+                                Ok((d1, d2, d3)) => {
                                     sc.available.store(true, Ordering::Release);
+                                    sc.elapsed.store((d1 + d2 + d3) / 3, Ordering::Release);
                                 }
-                                Err(err) => {
-                                    match err.into_inner() {
-                                        Some(err) => {
-                                            error!("failed to check server {}, error: {}", sc.config.addr(), err);
-
-                                            // NOTE: connection / handshake error, server is down
-                                            sc.available.store(false, Ordering::Release);
-                                        }
-                                        None => {
-                                            // Timeout
-                                            error!("checked remote server {} connect timeout", sc.config.addr());
-
-                                            // NOTE: timeout is still available, but server is too slow
-                                            sc.available.store(true, Ordering::Release);
-                                        }
-                                    }
+                                Err(..) => {
+                                    sc.available.store(false, Ordering::Release);
                                 }
                             }
-                            // Set elapsed anyway
-                            sc.elapsed.store(elapsed, Ordering::Release);
 
                             Ok(())
                         })
@@ -104,6 +85,47 @@ impl PingBalancer {
         }
 
         PingBalancer { servers }
+    }
+
+    fn check_delay(
+        sc: Arc<Server>,
+        context: SharedContext,
+        addr: Address,
+    ) -> impl Future<Item = u64, Error = io::Error> {
+        let start = Instant::now();
+        let fut = ServerClient::connect(context, addr, sc.config.clone());
+        Timeout::new(fut, Duration::from_secs(5)).then(move |res| {
+            let elapsed = Instant::now() - start;
+            let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
+            match res {
+                Ok(..) => {
+                    // Connected ... record its time
+                    debug!(
+                        "checked remote server {} connected with {} ms",
+                        sc.config.addr(),
+                        elapsed
+                    );
+                    Ok(elapsed)
+                }
+                Err(err) => {
+                    match err.into_inner() {
+                        Some(err) => {
+                            error!("failed to check server {}, error: {}", sc.config.addr(), err);
+
+                            // NOTE: connection / handshake error, server is down
+                            Err(err)
+                        }
+                        None => {
+                            // Timeout
+                            error!("checked remote server {} connect timeout", sc.config.addr());
+
+                            // NOTE: timeout is still available, but server is too slow
+                            Ok(elapsed)
+                        }
+                    }
+                }
+            }
+        })
     }
 }
 
