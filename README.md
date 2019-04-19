@@ -12,18 +12,18 @@ shadowsocks is a fast tunnel proxy that helps you <del>bypass firewalls</del>.
 
 ## Dependencies
 
-* libcrypto (OpenSSL)
-* libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
+*  libcrypto (OpenSSL)
+*  libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
 ## Build & Install
 
 ### Optional Features
 
-* `sodium` - Enabled linking to [`libsodium`](https://github.com/jedisct1/libsodium), which will also enable ciphers that depending on `libsodium`.
+*  `sodium` - Enabled linking to [`libsodium`](https://github.com/jedisct1/libsodium), which will also enable ciphers that depending on `libsodium`.
 
-* `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
+*  `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
 
-* `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
+*  `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
 
 Default features: `["sodium", "rc4"]`.
 
@@ -41,7 +41,7 @@ then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
 Requirements:
 
-* Linux x86\_64
+*  Linux x86\_64
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
@@ -73,7 +73,7 @@ For Windows users, if you have encountered any problem in building, check and di
 
 Requirements:
 
-* Docker
+*  Docker
 
 ```bash
 ./build/build-release
@@ -81,8 +81,8 @@ Requirements:
 
 Then `sslocal`, `ssserver` and `ssurl` will be packaged in
 
-- `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`
-- `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.xz`
+*  `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`
+*  `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.xz`
 
 Read `Cargo.toml` for more details.
 
@@ -134,15 +134,15 @@ Start local and server ShadowSocks with
 If you Build it with Makefile:
 
 ```bash
-$ sslocal -c config.json
-$ ssserver -c config.json
+sslocal -c config.json
+ssserver -c config.json
 ```
 
 If you Build it with Cargo:
 
 ```bash
-$ cargo run --bin sslocal -- -c config.json
-$ cargo run --bin ssserver -- -c config.json
+cargo run --bin sslocal -- -c config.json
+cargo run --bin ssserver -- -c config.json
 ```
 
 List all available arguments with `-h`.
@@ -153,33 +153,33 @@ Local client
 
 ```bash
 # Read local client configuration from file
-$ sslocal -c /path/to/shadowsocks.json
+sslocal -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-$ sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
+sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
 
 # Pass server with SIP002 URL
-$ sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
+sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
 ```
 
 Server
 
 ```bash
 # Read server configuration from file
-$ ssserver -c /path/to/shadowsocks.json
+ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-$ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
+ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
 ```
 
 DNS Local server
 
 ```bash
 # Read configuration from file
-$ ssdns -c /path/to/shadowsocks.json
+ssdns -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-$ ssdns -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --dns "8.8.8.8:53"
+ssdns -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --dns "8.8.8.8:53"
 ```
 
 For DNS relay server, you can set remote DNS server in configuration file with `dns` key in root object.
@@ -194,17 +194,17 @@ For DNS relay server, you can set remote DNS server in configuration file with `
 
 ### Stream Ciphers
 
-* `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
-* `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
-* `rc4`, `rc4-md5`
-* `chacha20`, `salsa20`, `chacha20-ietf`
-* `plain` (No encryption, just for debugging)
+*  `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
+*  `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
+*  `rc4`, `rc4-md5`
+*  `chacha20`, `salsa20`, `chacha20-ietf`
+*  `plain` (No encryption, just for debugging)
 
 ### AEAD Ciphers
 
-* `aes-128-gcm`, `aes-256-gcm`
-* `chacha20-ietf-poly1305`, `xchacha20-ietf-poly1305`
-* `aes-128-pmac-siv`, `aes-256-pmac-siv` (experimental)
+*  `aes-128-gcm`, `aes-256-gcm`
+*  `chacha20-ietf-poly1305`, `xchacha20-ietf-poly1305`
+*  `aes-128-pmac-siv`, `aes-256-pmac-siv` (experimental)
 
 ## Useful Tools
 
@@ -218,26 +218,26 @@ For DNS relay server, you can set remote DNS server in configuration file with `
 
 It supports the following features:
 
-- [x] Socks5 CONNECT command
-- [x] UDP ASSOCIATE command (partial)
-- [ ] <del>HTTP Proxy protocol</del> Deprecated, use `privoxy` instead.
-- [x] Various crypto algorithms
-- [x] Load balancing (multiple servers)
-- [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
-- [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
-- [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
+*  [x] Socks5 CONNECT command
+*  [x] UDP ASSOCIATE command (partial)
+*  [ ] <del>HTTP Proxy protocol</del> Deprecated, use `privoxy` instead.
+*  [x] Various crypto algorithms
+*  [x] Load balancing (multiple servers)
+*  [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
+*  [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
+*  [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
 
 ## TODO
 
-- [x] Documentation
-- [x] Extend configuration format
-- [x] Improved logging format (waiting for the new official log crate)
-- [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
-- [x] Windows support. <del>(Depending on mio and coio-rs)</del>
-- [x] Build with stable. <del>(Depending on coio)</del>
-- [ ] <del>Support HTTP Proxy protocol</del> (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
-- [ ] <del>One-time Auth.</del> (Already deprecated according to Shadowsocks' community)
-- [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
+*  [x] Documentation
+*  [x] Extend configuration format
+*  [x] Improved logging format (waiting for the new official log crate)
+*  [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
+*  [x] Windows support. <del>(Depending on mio and coio-rs)</del>
+*  [x] Build with stable. <del>(Depending on coio)</del>
+*  [ ] <del>Support HTTP Proxy protocol</del> (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
+*  [ ] <del>One-time Auth.</del> (Already deprecated according to Shadowsocks' community)
+*  [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 
 
 ## License
