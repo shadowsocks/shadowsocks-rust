@@ -40,23 +40,23 @@ single-threaded = []
 [dependencies]
 log = "0.4"
 byteorder = "1.2"
-rand = "0.5"
+rand = "0.6"
 time = "0.1"
 clap = "2"
-env_logger = "0.5"
+env_logger = "0.6"
 openssl = "0.10"
 libc = "0.2"
 futures = "0.1"
 tokio-io = "0.1"
 tokio = "0.1"
 json5 = "0.2"
-base64 = "0.9"
+base64 = "0.10"
 bytes = "0.4"
-ring = "0.13"
-md-5 = "0.7"
-digest = "0.7"
+ring = "0.14"
+md-5 = "0.8"
+digest = "0.8"
 typenum = "1.10"
-qrcode = { version = "0.7", default-features = false }
+qrcode = { version = "0.10", default-features = false }
 serde_urlencoded = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 url = "1"
@@ -64,9 +64,9 @@ byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
 miscreant = { version = "0.4.0-beta", optional = true }
 lru-cache = "0.1"
-dns-parser = "0.7"
-trust-dns-resolver = { version = "0.10", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-spin = { version = "0.4", default-features = false }
+dns-parser = "0.8"
+trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+spin = { version = "0.5", default-features = false }
 tokio-process = "0.2.3"
 
 [target.'cfg(unix)'.dependencies]

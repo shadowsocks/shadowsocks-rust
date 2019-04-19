@@ -37,7 +37,7 @@ pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
     }
 
     if let Ok(env_conf) = env::var("RUST_LOG") {
-        log_builder.parse(&env_conf);
+        log_builder.parse_filters(&env_conf);
     }
 
     log_builder.init();

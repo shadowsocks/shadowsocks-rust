@@ -4,6 +4,7 @@
 [![Build Status](https://img.shields.io/travis/shadowsocks/shadowsocks-rust.svg)](https://travis-ci.org/shadowsocks/shadowsocks-rust)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
+[![dependency status](https://deps.rs/repo/github/shadowsocks/shadowsocks-rust/status.svg)](https://deps.rs/repo/github/shadowsocks/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).

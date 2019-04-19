@@ -65,7 +65,7 @@ fn dns_relay() {
         sent_id.insert(id);
 
         let mut builder = Builder::new_query(id, false);
-        builder.add_question("www.example.com", QueryType::A, QueryClass::IN);
+        builder.add_question("www.example.com", false, QueryType::A, QueryClass::IN);
 
         let payload = builder.build().unwrap();
 

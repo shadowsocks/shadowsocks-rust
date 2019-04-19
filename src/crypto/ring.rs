@@ -2,15 +2,14 @@
 
 use std::{mem, ptr};
 
-use ring::aead::{open_in_place, seal_in_place, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
+use ring::aead::{
+    open_in_place, seal_in_place, Aad, Nonce, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305,
+};
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor,
-    AeadEncryptor,
-    CipherResult,
-    CipherType,
+    AeadDecryptor, AeadEncryptor, CipherResult, CipherType,
 };
 
 use byte_string::ByteStr;
@@ -105,7 +104,14 @@ impl AeadEncryptor for RingAeadCipher {
         }
 
         if let RingAeadCryptoVariant::Seal(ref key, ref nonce) = self.cipher {
-            seal_in_place(key, nonce, &[], &mut buf, tag_len).unwrap();
+            seal_in_place(
+                key,
+                Nonce::try_assume_unique_for_key(nonce).expect("AEAD cipher nonce length not match"),
+                Aad::empty(),
+                &mut buf,
+                tag_len,
+            )
+            .unwrap();
         } else {
             unreachable!("encrypt is called on a non-seal cipher");
         }
@@ -125,7 +131,13 @@ impl AeadDecryptor for RingAeadCipher {
         buf.put_slice(input);
 
         let r = if let RingAeadCryptoVariant::Open(ref key, ref nonce) = self.cipher {
-            match open_in_place(key, nonce, &[], 0, &mut buf) {
+            match open_in_place(
+                key,
+                Nonce::try_assume_unique_for_key(nonce).expect("AEAD cipher nonce length not match"),
+                Aad::empty(),
+                0,
+                &mut buf,
+            ) {
                 Ok(obuf) => {
                     output.copy_from_slice(obuf);
                     Ok(())
