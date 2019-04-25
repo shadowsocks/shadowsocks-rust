@@ -1,17 +1,24 @@
-use std::io;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 use crate::{
-    config::ServerConfig, context::SharedContext, relay::loadbalancing::server::LoadBalancer, relay::socks5::Address,
-    relay::tcprelay::client::ServerClient,
+    config::ServerConfig,
+    context::SharedContext,
+    relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
 };
 
 use futures::{Future, Stream};
 use log::{debug, error};
-use tokio;
-use tokio::timer::{Interval, Timeout};
+use tokio::{
+    self,
+    timer::{Interval, Timeout},
+};
 
 struct Server {
     config: Arc<ServerConfig>,

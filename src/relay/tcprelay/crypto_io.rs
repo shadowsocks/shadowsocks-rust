@@ -11,7 +11,9 @@ use futures::{Async, Future, Poll};
 use tokio::timer::Delay;
 use tokio_io::{
     io::{copy, Copy},
-    try_nb, AsyncRead, AsyncWrite,
+    try_nb,
+    AsyncRead,
+    AsyncWrite,
 };
 
 use super::{

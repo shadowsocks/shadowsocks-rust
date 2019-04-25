@@ -9,11 +9,12 @@ use dns_parser::{Builder, Packet, QueryClass, QueryType};
 use log::trace;
 use shadowsocks::{
     config::{Config, ConfigType},
-    run_dns, run_server,
+    run_dns,
+    run_server,
 };
 use tokio::runtime::current_thread::Runtime;
 
-const CONFIG: &'static str = r#"{
+const CONFIG: &str = r#"{
         "server": "127.0.0.1",
         "server_port": 8988,
         "local_port": 5030,

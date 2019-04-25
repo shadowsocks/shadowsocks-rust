@@ -12,7 +12,14 @@ use tokio::net::TcpStream;
 use tokio_io::{io::flush, AsyncRead, AsyncWrite};
 
 use crate::relay::socks5::{
-    self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
+    self,
+    Address,
+    Command,
+    HandshakeRequest,
+    HandshakeResponse,
+    Reply,
+    TcpRequestHeader,
+    TcpResponseHeader,
 };
 
 use crate::{config::ServerConfig, context::SharedContext};

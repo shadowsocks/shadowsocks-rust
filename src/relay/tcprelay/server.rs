@@ -34,12 +34,7 @@ use tokio_io::{
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
-    proxy_handshake,
-    try_timeout,
-    tunnel,
-    DecryptedHalf,
-    EncryptedHalf,
-    TcpStreamConnect,
+    proxy_handshake, try_timeout, tunnel, DecryptedHalf, EncryptedHalf, TcpStreamConnect,
 };
 
 /// Context for doing handshake with client
@@ -222,8 +217,8 @@ fn handle_client(svr_context: SharedTcpServerContext, socket: TcpStream) -> impl
 
         client
             .handshake()
-            .and_then(|c| c.connect())
-            .and_then(|c| c.tunnel())
+            .and_then(TcpRelayClientPending::connect)
+            .and_then(TcpRelayClientConnected::tunnel)
             .map_err(move |err| {
                 error!("Failed to handle client ({}): {}", addr, err);
             })

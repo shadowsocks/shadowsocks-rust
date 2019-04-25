@@ -8,8 +8,7 @@ use std::{
     fmt::{self, Debug, Formatter},
     io::{self, Cursor, Read, Write},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    u8,
-    vec,
+    u8, vec,
 };
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -19,10 +18,7 @@ use log::error;
 use tokio_io::{io::read_exact, try_nb, AsyncRead, AsyncWrite};
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI,
-    SOCKS5_AUTH_METHOD_NONE,
-    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
-    SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 use super::utils::{write_bytes, WriteBytes};
@@ -231,7 +227,7 @@ impl Address {
     /// Writes to writer
     #[inline]
     pub fn write_to<W: AsyncWrite>(self, writer: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(writer, buf.freeze())
     }
@@ -243,7 +239,7 @@ impl Address {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn serialized_len(&self) -> usize {
         get_addr_len(self)
     }
 }
@@ -302,11 +298,11 @@ where
 }
 
 enum ReadAddressState {
-    ReadingType,
-    ReadingIpv4,
-    ReadingIpv6,
-    ReadingDomainNameLength,
-    ReadingDomainName,
+    Type,
+    Ipv4,
+    Ipv6,
+    DomainNameLength,
+    DomainName,
 }
 
 impl<R> Future for ReadAddress<R>
@@ -321,23 +317,23 @@ where
 
         loop {
             match self.state {
-                ReadAddressState::ReadingType => {
+                ReadAddressState::Type => {
                     try_ready!(self.read_addr_type());
                 }
-                ReadAddressState::ReadingIpv4 => {
+                ReadAddressState::Ipv4 => {
                     let addr = try_ready!(self.read_ipv4());
                     let reader = self.reader.take().unwrap();
                     return Ok((reader, addr).into());
                 }
-                ReadAddressState::ReadingIpv6 => {
+                ReadAddressState::Ipv6 => {
                     let addr = try_ready!(self.read_ipv6());
                     let reader = self.reader.take().unwrap();
                     return Ok((reader, addr).into());
                 }
-                ReadAddressState::ReadingDomainNameLength => {
+                ReadAddressState::DomainNameLength => {
                     try_ready!(self.read_domain_name_length());
                 }
-                ReadAddressState::ReadingDomainName => {
+                ReadAddressState::DomainName => {
                     let addr = try_ready!(self.read_domain_name());
                     let reader = self.reader.take().unwrap();
                     return Ok((reader, addr).into());
@@ -354,7 +350,7 @@ where
     fn new(r: R) -> ReadAddress<R> {
         ReadAddress {
             reader: Some(r),
-            state: ReadAddressState::ReadingType,
+            state: ReadAddressState::Type,
             buf: None,
             already_read: 0,
         }
@@ -364,15 +360,15 @@ where
         let addr_type = try_nb!(self.reader.as_mut().unwrap().read_u8());
         match addr_type {
             consts::SOCKS5_ADDR_TYPE_IPV4 => {
-                self.state = ReadAddressState::ReadingIpv4;
+                self.state = ReadAddressState::Ipv4;
                 self.alloc_buf(6);
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
-                self.state = ReadAddressState::ReadingIpv6;
+                self.state = ReadAddressState::Ipv6;
                 self.alloc_buf(18);
             }
             consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-                self.state = ReadAddressState::ReadingDomainNameLength;
+                self.state = ReadAddressState::DomainNameLength;
             }
             _ => {
                 error!("Invalid address type {}", addr_type);
@@ -418,7 +414,7 @@ where
 
     fn read_domain_name_length(&mut self) -> Poll<(), Error> {
         let length = try_nb!(self.reader.as_mut().unwrap().read_u8());
-        self.state = ReadAddressState::ReadingDomainName;
+        self.state = ReadAddressState::DomainName;
         self.alloc_buf(length as usize + 2);
         Ok(Async::Ready(()))
     }
@@ -594,7 +590,7 @@ impl TcpRequestHeader {
 
     /// Write data into a writer
     pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(w, buf.freeze())
     }
@@ -612,8 +608,8 @@ impl TcpRequestHeader {
 
     /// Length in bytes
     #[inline]
-    pub fn len(&self) -> usize {
-        self.address.len() + 3
+    pub fn serialized_len(&self) -> usize {
+        self.address.serialized_len() + 3
     }
 }
 
@@ -671,7 +667,7 @@ impl TcpResponseHeader {
 
     /// Write to a writer
     pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(w, buf.freeze())
     }
@@ -685,8 +681,8 @@ impl TcpResponseHeader {
 
     /// Length in bytes
     #[inline]
-    pub fn len(&self) -> usize {
-        self.address.len() + 3
+    pub fn serialized_len(&self) -> usize {
+        self.address.serialized_len() + 3
     }
 }
 
@@ -732,7 +728,7 @@ impl HandshakeRequest {
 
     /// Write to a writer
     pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(w, buf.freeze())
     }
@@ -745,7 +741,7 @@ impl HandshakeRequest {
     }
 
     /// Get length of bytes
-    pub fn len(&self) -> usize {
+    pub fn serialized_len(&self) -> usize {
         2 + self.methods.len()
     }
 }
@@ -789,7 +785,7 @@ impl HandshakeResponse {
 
     /// Write to a writer
     pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(w, buf.freeze())
     }
@@ -800,7 +796,7 @@ impl HandshakeResponse {
     }
 
     /// Length in bytes
-    pub fn len(&self) -> usize {
+    pub fn serialized_len(&self) -> usize {
         2
     }
 }
@@ -846,7 +842,7 @@ impl UdpAssociateHeader {
 
     /// Write to a writer
     pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
-        let mut buf = BytesMut::with_capacity(self.len());
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
         write_bytes(w, buf.freeze())
     }
@@ -860,7 +856,7 @@ impl UdpAssociateHeader {
 
     /// Length in bytes
     #[inline]
-    pub fn len(&self) -> usize {
-        3 + self.address.len()
+    pub fn serialized_len(&self) -> usize {
+        3 + self.address.serialized_len()
     }
 }

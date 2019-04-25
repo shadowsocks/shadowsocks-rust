@@ -24,13 +24,13 @@ use shadowsocks::{
     run_server,
 };
 
-const SERVER_ADDR: &'static str = "127.0.0.1:8093";
-const LOCAL_ADDR: &'static str = "127.0.0.1:8291";
+const SERVER_ADDR: &str = "127.0.0.1:8093";
+const LOCAL_ADDR: &str = "127.0.0.1:8291";
 
-const UDP_ECHO_SERVER_ADDR: &'static str = "127.0.0.1:50403";
-const UDP_LOCAL_ADDR: &'static str = "127.0.0.1:9011";
+const UDP_ECHO_SERVER_ADDR: &str = "127.0.0.1:50403";
+const UDP_LOCAL_ADDR: &str = "127.0.0.1:9011";
 
-const PASSWORD: &'static str = "test-password";
+const PASSWORD: &str = "test-password";
 const METHOD: CipherType = CipherType::Aes128Cfb;
 
 fn get_svr_config() -> Config {
@@ -144,7 +144,7 @@ fn udp_relay() {
     l.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
 
     let header = UdpAssociateHeader::new(0, remote_addr);
-    let mut buf = BytesMut::with_capacity(header.len());
+    let mut buf = BytesMut::with_capacity(header.serialized_len());
     header.write_to_buf(&mut buf);
 
     let payload = b"HEllo WORld";

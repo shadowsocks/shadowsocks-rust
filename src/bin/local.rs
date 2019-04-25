@@ -4,8 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use std::io::Result as IoResult;
-use std::{net::SocketAddr, process};
+use std::{io::Result as IoResult, net::SocketAddr, process};
 
 use clap::{App, Arg};
 use futures::{future::Either, Future};

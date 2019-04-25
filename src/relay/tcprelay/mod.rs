@@ -309,7 +309,7 @@ where
     proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
         let w_fut = w_fut.and_then(move |enc_w| {
             // Send relay address to remote
-            let mut buf = BytesMut::with_capacity(relay_addr.len());
+            let mut buf = BytesMut::with_capacity(relay_addr.serialized_len());
             relay_addr.write_to_buf(&mut buf);
 
             trace!(

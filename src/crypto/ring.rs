@@ -3,13 +3,24 @@
 use std::{mem, ptr};
 
 use ring::aead::{
-    open_in_place, seal_in_place, Aad, Nonce, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305,
+    open_in_place,
+    seal_in_place,
+    Aad,
+    Nonce,
+    OpeningKey,
+    SealingKey,
+    AES_128_GCM,
+    AES_256_GCM,
+    CHACHA20_POLY1305,
 };
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor, AeadEncryptor, CipherResult, CipherType,
+    AeadDecryptor,
+    AeadEncryptor,
+    CipherResult,
+    CipherType,
 };
 
 use byte_string::ByteStr;

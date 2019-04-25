@@ -23,13 +23,7 @@ pub struct Socks5TestServer {
 }
 
 impl Socks5TestServer {
-    pub fn new<S, L>(
-        svr_addr: S,
-        local_addr: L,
-        pwd: &'static str,
-        method: CipherType,
-        enable_udp: bool,
-    ) -> Socks5TestServer
+    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherType, enable_udp: bool) -> Socks5TestServer
     where
         S: ToSocketAddrs,
         L: ToSocketAddrs,
@@ -38,7 +32,7 @@ impl Socks5TestServer {
         let local_addr = local_addr.to_socket_addrs().unwrap().next().unwrap();
 
         Socks5TestServer {
-            local_addr: local_addr,
+            local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
                 cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
@@ -82,10 +76,10 @@ impl Socks5TestServer {
 fn socks5_relay_stream() {
     let _ = env_logger::try_init();
 
-    const SERVER_ADDR: &'static str = "127.0.0.1:8100";
-    const LOCAL_ADDR: &'static str = "127.0.0.1:8200";
+    const SERVER_ADDR: &str = "127.0.0.1:8100";
+    const LOCAL_ADDR: &str = "127.0.0.1:8200";
 
-    const PASSWORD: &'static str = "test-password";
+    const PASSWORD: &str = "test-password";
     const METHOD: CipherType = CipherType::Aes256Cfb;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
@@ -114,10 +108,10 @@ fn socks5_relay_stream() {
 fn socks5_relay_aead() {
     let _ = env_logger::try_init();
 
-    const SERVER_ADDR: &'static str = "127.0.0.1:8110";
-    const LOCAL_ADDR: &'static str = "127.0.0.1:8210";
+    const SERVER_ADDR: &str = "127.0.0.1:8110";
+    const LOCAL_ADDR: &str = "127.0.0.1:8210";
 
-    const PASSWORD: &'static str = "test-password";
+    const PASSWORD: &str = "test-password";
     const METHOD: CipherType = CipherType::Aes256Gcm;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);

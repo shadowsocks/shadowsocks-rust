@@ -7,8 +7,7 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::io::Result as IoResult;
-use std::process;
+use std::{io::Result as IoResult, process};
 
 use clap::{App, Arg};
 use futures::{future::Either, Future};
