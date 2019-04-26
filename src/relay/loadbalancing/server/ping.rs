@@ -14,7 +14,7 @@ use crate::{
 };
 
 use futures::{Future, Stream};
-use log::{debug, error};
+use log::{debug, error, info};
 use tokio::{
     self,
     timer::{Interval, Timeout},
@@ -150,6 +150,18 @@ impl Inner {
             }
         })
     }
+
+    fn best_idx(&self) -> usize {
+        self.best_idx.load(Ordering::Acquire)
+    }
+
+    fn set_best_idx(&self, idx: usize) {
+        self.best_idx.store(idx, Ordering::Release)
+    }
+
+    fn best_server(&self) -> &Arc<Server> {
+        &self.servers[self.best_idx()]
+    }
 }
 
 #[derive(Clone)]
@@ -200,7 +212,15 @@ impl PingBalancer {
                     );
                 }
 
-                inner.best_idx.store(svr_idx, Ordering::Release);
+                if inner.best_idx() != svr_idx {
+                    info!(
+                        "switched server from {} to {}",
+                        inner.best_server().config.addr(),
+                        choosen_svr.config.addr()
+                    );
+                }
+
+                inner.set_best_idx(svr_idx);
 
                 Ok(())
             })
@@ -216,9 +236,7 @@ impl LoadBalancer for PingBalancer {
         if self.inner.servers.is_empty() {
             panic!("no server in configuration");
         }
-
-        let idx = self.inner.best_idx.load(Ordering::Acquire);
-        self.inner.servers[idx].config.clone()
+        self.inner.best_server().config.clone()
     }
 
     fn total(&self) -> usize {
