@@ -140,7 +140,11 @@ impl Inner {
                         }
                         None => {
                             // Timeout
-                            error!("checked remote server {} connect timeout", sc.config.addr());
+                            error!(
+                                "checked remote server {} connect timeout, elapsed {} ms",
+                                sc.config.addr(),
+                                elapsed
+                            );
 
                             // NOTE: timeout is still available, but server is too slow
                             Ok(elapsed)
@@ -200,13 +204,13 @@ impl PingBalancer {
                 if svr_idx == 0 && !choosen_svr.is_available() {
                     // Cannot find any usable servers, use the first one (svr_idx = 0)
                     error!(
-                        "cannot find any usable servers, picked {} delay {} ms",
+                        "cannot find any usable servers, picked {} (delay: {} ms)",
                         choosen_svr.config.addr(),
                         choosen_svr.delay()
                     );
                 } else {
                     debug!(
-                        "chosen the best server {} delay {} ms",
+                        "chosen the best server {} (delay: {} ms)",
                         choosen_svr.config.addr(),
                         choosen_svr.delay()
                     );
@@ -214,9 +218,11 @@ impl PingBalancer {
 
                 if inner.best_idx() != svr_idx {
                     info!(
-                        "switched server from {} to {}",
+                        "switched server from {} (delay: {} ms) to {} (delay: {} ms)",
                         inner.best_server().config.addr(),
-                        choosen_svr.config.addr()
+                        inner.best_server().delay(),
+                        choosen_svr.config.addr(),
+                        choosen_svr.delay(),
                     );
                 }
 
