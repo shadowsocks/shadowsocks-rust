@@ -19,11 +19,17 @@ impl OpenSSLCrypto {
     /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
         let t = match cipher_type {
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
             #[cfg(feature = "rc4")]

@@ -3,13 +3,13 @@
 use std::{
     convert::From,
     fmt::{self, Debug, Display},
-    io,
-    mem,
+    io, mem,
     str::{self, FromStr},
 };
 
 use crate::crypto::digest::{self, Digest, DigestType};
 use bytes::{BufMut, Bytes, BytesMut};
+#[cfg(feature = "openssl")]
 use openssl::symm;
 use rand::{self, RngCore};
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
@@ -20,6 +20,7 @@ pub type CipherResult<T> = Result<T, Error>;
 /// Cipher error
 pub enum Error {
     UnknownCipherType,
+    #[cfg(feature = "openssl")]
     OpenSSLError(::openssl::error::ErrorStack),
     IoError(io::Error),
     AeadDecryptFailed,
@@ -30,6 +31,7 @@ impl Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            #[cfg(feature = "openssl")]
             Error::OpenSSLError(ref err) => write!(f, "{:?}", err),
             Error::IoError(ref err) => write!(f, "{:?}", err),
             Error::AeadDecryptFailed => write!(f, "AEAD decrypt failed"),
@@ -42,6 +44,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Error::UnknownCipherType => write!(f, "UnknownCipherType"),
+            #[cfg(feature = "openssl")]
             Error::OpenSSLError(ref err) => write!(f, "{}", err),
             Error::IoError(ref err) => write!(f, "{}", err),
             Error::AeadDecryptFailed => write!(f, "AeadDecryptFailed"),
@@ -54,6 +57,7 @@ impl From<Error> for io::Error {
     fn from(e: Error) -> io::Error {
         match e {
             Error::UnknownCipherType => io::Error::new(io::ErrorKind::Other, "Unknown Cipher type"),
+            #[cfg(feature = "openssl")]
             Error::OpenSSLError(err) => From::from(err),
             Error::IoError(err) => err,
             Error::AeadDecryptFailed => io::Error::new(io::ErrorKind::Other, "AEAD decrypt error"),
@@ -62,20 +66,29 @@ impl From<Error> for io::Error {
     }
 }
 
+#[cfg(feature = "openssl")]
 impl From<::openssl::error::ErrorStack> for Error {
     fn from(e: ::openssl::error::ErrorStack) -> Error {
         Error::OpenSSLError(e)
     }
 }
 
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_128_CFB: &str = "aes-128-cfb";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_128_CFB_1: &str = "aes-128-cfb1";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_128_CFB_8: &str = "aes-128-cfb8";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_128_CFB_128: &str = "aes-128-cfb128";
 
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB: &str = "aes-256-cfb";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB_1: &str = "aes-256-cfb1";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB_8: &str = "aes-256-cfb8";
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB_128: &str = "aes-256-cfb128";
 
 #[cfg(feature = "rc4")]
@@ -113,14 +126,22 @@ pub enum CipherType {
     Table,
     Plain,
 
+    #[cfg(feature = "aes-cfb")]
     Aes128Cfb,
+    #[cfg(feature = "aes-cfb")]
     Aes128Cfb1,
+    #[cfg(feature = "aes-cfb")]
     Aes128Cfb8,
+    #[cfg(feature = "aes-cfb")]
     Aes128Cfb128,
 
+    #[cfg(feature = "aes-cfb")]
     Aes256Cfb,
+    #[cfg(feature = "aes-cfb")]
     Aes256Cfb1,
+    #[cfg(feature = "aes-cfb")]
     Aes256Cfb8,
+    #[cfg(feature = "aes-cfb")]
     Aes256Cfb128,
 
     #[cfg(feature = "rc4")]
@@ -165,11 +186,17 @@ impl CipherType {
         match self {
             CipherType::Table | CipherType::Plain => 0,
 
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
 
             #[cfg(feature = "rc4")]
@@ -234,21 +261,27 @@ impl CipherType {
         match self {
             CipherType::Table | CipherType::Plain => 0,
 
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1()
                 .iv_len()
                 .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb8 => symm::Cipher::aes_128_cfb8()
                 .iv_len()
                 .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128()
                 .iv_len()
                 .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1()
                 .iv_len()
                 .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8()
                 .iv_len()
                 .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128()
                 .iv_len()
                 .expect("iv_len should not be None"),
@@ -347,14 +380,22 @@ impl FromStr for CipherType {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
             CIPHER_PLAIN => Ok(CipherType::Plain),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_128_CFB => Ok(CipherType::Aes128Cfb),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_128_CFB_1 => Ok(CipherType::Aes128Cfb1),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_128_CFB_8 => Ok(CipherType::Aes128Cfb8),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_128_CFB_128 => Ok(CipherType::Aes128Cfb128),
 
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB => Ok(CipherType::Aes256Cfb),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB_1 => Ok(CipherType::Aes256Cfb1),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB_8 => Ok(CipherType::Aes256Cfb8),
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB_128 => Ok(CipherType::Aes256Cfb128),
 
             #[cfg(feature = "rc4")]
@@ -393,14 +434,22 @@ impl Display for CipherType {
         match *self {
             CipherType::Table => write!(f, "{}", CIPHER_TABLE),
             CipherType::Plain => write!(f, "{}", CIPHER_PLAIN),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb => write!(f, "{}", CIPHER_AES_128_CFB),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => write!(f, "{}", CIPHER_AES_128_CFB_1),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb8 => write!(f, "{}", CIPHER_AES_128_CFB_8),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb128 => write!(f, "{}", CIPHER_AES_128_CFB_128),
 
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb => write!(f, "{}", CIPHER_AES_256_CFB),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => write!(f, "{}", CIPHER_AES_256_CFB_1),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb8 => write!(f, "{}", CIPHER_AES_256_CFB_8),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb128 => write!(f, "{}", CIPHER_AES_256_CFB_128),
 
             #[cfg(feature = "rc4")]

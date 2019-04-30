@@ -13,7 +13,7 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 ## Dependencies
 
-* libcrypto (OpenSSL)
+* libcrypto (OpenSSL) (Required for `aes-cfb-*` and `rc4` ciphers)
 * libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
 ## Build & Install
@@ -24,9 +24,13 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
 
+* `aes-cfb` - Enabled `aes-cfb-*` encryption algorithm.
+
 * `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
 
-Default features: `["sodium", "rc4"]`.
+Default features: `["sodium", "rc4", "aes-cfb"]`.
+
+NOTE: To disable dependency of OpenSSL, just disable feature `"rc4"` and `"aes-cfb"`.
 
 ### **crates.io**
 

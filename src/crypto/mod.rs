@@ -5,13 +5,14 @@ pub use self::{
     cipher::{CipherCategory, CipherResult, CipherType},
     stream::{new_stream, BoxStreamCipher, StreamCipher},
 };
+#[cfg(feature = "openssl")]
 use ::openssl::symm;
-use std::convert::From;
 
 pub mod aead;
 pub mod cipher;
 pub mod digest;
 pub mod dummy;
+#[cfg(feature = "openssl")]
 pub mod openssl;
 #[cfg(feature = "rc4")]
 pub mod rc4_md5;
@@ -30,7 +31,8 @@ pub enum CryptoMode {
     Decrypt,
 }
 
-impl From<CryptoMode> for symm::Mode {
+#[cfg(feature = "openssl")]
+impl std::convert::From<CryptoMode> for symm::Mode {
     fn from(m: CryptoMode) -> symm::Mode {
         match m {
             CryptoMode::Encrypt => symm::Mode::Encrypt,

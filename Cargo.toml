@@ -32,9 +32,10 @@ path = "src/bin/ssdns.rs"
 lto = true
 
 [features]
-default = ["sodium", "rc4"]
+default = ["sodium", "rc4", "aes-cfb"]
 sodium = ["libsodium-ffi"]
-rc4 = []
+rc4 = ["openssl"]
+aes-cfb = ["openssl"]
 single-threaded = []
 
 [dependencies]
@@ -44,7 +45,7 @@ rand = "0.6"
 time = "0.1"
 clap = "2"
 env_logger = "0.6"
-openssl = "0.10"
+openssl = { version = "0.10", optional = true }
 libc = "0.2"
 futures = "0.1"
 tokio-io = "0.1"

@@ -2,16 +2,15 @@
 
 use std::ops::{Deref, DerefMut};
 
+#[cfg(feature = "openssl")]
+use crate::crypto::openssl;
 #[cfg(feature = "rc4")]
 use crate::crypto::rc4_md5;
 #[cfg(feature = "sodium")]
 use crate::crypto::sodium;
 use crate::crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
-    dummy,
-    openssl,
-    table,
-    CryptoMode,
+    dummy, table, CryptoMode,
 };
 
 use bytes::BufMut;
@@ -109,12 +108,14 @@ define_stream_ciphers! {
     pub DummyCipher => dummy::DummyCipher,
     #[cfg(feature = "rc4")]
     pub Rc4Md5Cipher => rc4_md5::Rc4Md5Cipher,
+    #[cfg(feature = "openssl")]
     pub OpenSSLCipher => openssl::OpenSSLCipher,
     #[cfg(feature = "sodium")]
     pub SodiumStreamCipher => sodium::SodiumStreamCipher,
 }
 
 /// Generate a specific Cipher with key and initialize vector
+#[allow(unused_variables)]
 pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> BoxStreamCipher {
     assert!(
         t.category() == CipherCategory::Stream,
@@ -133,7 +134,17 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         #[cfg(feature = "rc4")]
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
-        _ => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+        #[cfg(feature = "openssl")]
+        CipherType::Aes128Cfb
+        | CipherType::Aes128Cfb1
+        | CipherType::Aes128Cfb8
+        | CipherType::Aes128Cfb128
+        | CipherType::Aes256Cfb
+        | CipherType::Aes256Cfb1
+        | CipherType::Aes256Cfb8
+        | CipherType::Aes256Cfb128 => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+
+        _ => unreachable!("{} is not a stream cipher", t),
     };
     BoxStreamCipher {
         cipher: Box::new(cipher),
