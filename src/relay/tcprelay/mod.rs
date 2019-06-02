@@ -26,9 +26,7 @@ use tokio::{
 };
 use tokio_io::{
     io::{read_exact, write_all, ReadHalf, WriteHalf},
-    try_nb,
-    AsyncRead,
-    AsyncWrite,
+    try_nb, AsyncRead, AsyncWrite,
 };
 
 pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
