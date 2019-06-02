@@ -7,25 +7,17 @@ use std::{
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use libc::{c_ulonglong, uint32_t};
+use libc::c_ulonglong;
 use libsodium_ffi::{
-    crypto_aead_xchacha20poly1305_ietf_decrypt,
-    crypto_aead_xchacha20poly1305_ietf_encrypt,
-    crypto_stream_chacha20_ietf_xor_ic,
-    crypto_stream_chacha20_xor_ic,
-    crypto_stream_salsa20_xor_ic,
-    crypto_stream_xsalsa20_xor_ic,
-    sodium_init,
+    crypto_aead_xchacha20poly1305_ietf_decrypt, crypto_aead_xchacha20poly1305_ietf_encrypt,
+    crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic, crypto_stream_salsa20_xor_ic,
+    crypto_stream_xsalsa20_xor_ic, sodium_init,
 };
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor,
-    AeadEncryptor,
-    CipherResult,
-    CipherType,
-    StreamCipher,
+    AeadDecryptor, AeadEncryptor, CipherResult, CipherType, StreamCipher,
 };
 
 static SODIUM_INIT_FLAG: Once = ONCE_INIT;
@@ -113,7 +105,7 @@ fn crypto_stream_xor_ic<B: BufMut>(
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
-                ic as uint32_t,
+                ic as u32,
                 key.as_ptr(),
             ),
             CipherType::Salsa20 => crypto_stream_salsa20_xor_ic(
