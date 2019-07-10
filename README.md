@@ -107,7 +107,7 @@ Create a ShadowSocks' configuration file. Example
 }
 ```
 
-Detailed explaination could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki).
+Detailed explanation could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki).
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one servers:
 
