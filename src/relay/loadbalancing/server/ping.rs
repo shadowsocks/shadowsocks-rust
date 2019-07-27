@@ -60,16 +60,35 @@ impl ServerLatencyInner {
             self.latency_queue.pop_front();
         }
 
-        self.median()
+        self.representation()
     }
 
-    fn median(&self) -> u64 {
+    fn representation(&self) -> u64 {
         if self.latency_queue.is_empty() {
             return 0;
         }
 
-        let mut v = self.latency_queue.iter().cloned().collect::<Vec<u64>>();
+        let sum: u64 = self.latency_queue.iter().sum();
+        let avg = sum as f64 / self.latency_queue.len() as f64;
+        let s_sum: u64 = self.latency_queue.iter().map(|n| *n * *n).sum();
+        let dev = (s_sum as f64 / self.latency_queue.len() as f64 - avg * avg).sqrt();
+
+        let mut v = self
+            .latency_queue
+            .iter()
+            .cloned()
+            .filter(|n| *n as f64 >= (avg - dev) && *n as f64 <= (avg + dev))
+            .collect::<Vec<u64>>();
         v.sort();
+
+        debug!(
+            "Latency queue {:?}, avg {}, dev {}, sorted {:?}",
+            self.latency_queue, avg, dev, v
+        );
+
+        if v.is_empty() {
+            return 0;
+        }
 
         let mid = v.len() / 2;
         if (v.len() & 1) == 0 {
