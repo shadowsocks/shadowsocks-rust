@@ -25,23 +25,23 @@ use tokio::{
 
 struct Server {
     config: Arc<ServerConfig>,
-    elapsed: AtomicU64,
+    score: AtomicU64,
 }
 
 impl Server {
     fn new(config: ServerConfig) -> Server {
         Server {
             config: Arc::new(config),
-            elapsed: AtomicU64::new(0),
+            score: AtomicU64::new(0),
         }
     }
 
-    fn delay(&self) -> u64 {
-        self.elapsed.load(Ordering::Acquire)
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
     }
 }
 
-const MAX_LATENCY_QUEUE_SIZE: usize = 17;
+const MAX_LATENCY_QUEUE_SIZE: usize = 37;
 
 struct ServerLatencyInner {
     latency_queue: VecDeque<u64>,
@@ -60,12 +60,12 @@ impl ServerLatencyInner {
             self.latency_queue.pop_front();
         }
 
-        self.representation()
+        self.score()
     }
 
-    fn representation(&self) -> u64 {
+    fn score(&self) -> u64 {
         if self.latency_queue.is_empty() {
-            return 0;
+            return u64::max_value();
         }
 
         let sum: u64 = self.latency_queue.iter().sum();
@@ -77,25 +77,27 @@ impl ServerLatencyInner {
             .latency_queue
             .iter()
             .cloned()
-            .filter(|n| *n as f64 >= (avg - dev) && *n as f64 <= (avg + dev))
+            .filter(|n| *n as f64 >= (avg - 3.0 * dev) && *n as f64 <= (avg + 3.0 * dev))
             .collect::<Vec<u64>>();
         v.sort();
 
-        debug!(
-            "Latency queue {:?}, avg {}, dev {}, sorted {:?}",
-            self.latency_queue, avg, dev, v
-        );
-
         if v.is_empty() {
-            return 0;
+            return u64::max_value();
         }
 
         let mid = v.len() / 2;
-        if (v.len() & 1) == 0 {
+        let median = if (v.len() & 1) == 0 {
             (v[mid - 1] + v[mid]) / 2
         } else {
             v[mid]
-        }
+        };
+
+        debug!(
+            "latency queue {:?}, avg {}, dev {}, sorted {:?}, median {}",
+            self.latency_queue, avg, dev, v, median
+        );
+
+        (((median as f64 * 2.0) + (dev * 1.0)) / 2.0) as u64
     }
 }
 
@@ -124,7 +126,7 @@ impl fmt::Debug for ServerLatency {
     }
 }
 
-const DEFAULT_CHECK_INTERVAL_SEC: u64 = 10;
+const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
 const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5;
 
 struct Inner {
@@ -155,9 +157,9 @@ impl Inner {
             let latency = ServerLatency::new();
 
             tokio::spawn(
-                // Check every 10 seconds
+                // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 Interval::new(
-                    Instant::now() + Duration::from_secs(1),
+                    Instant::now() + Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                     Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                 )
                 .for_each(move |_| {
@@ -165,17 +167,12 @@ impl Inner {
                     let lat = latency.clone();
 
                     Inner::check_delay(sc.clone(), context.clone()).then(move |res| {
-                        let md = match res {
+                        let score = match res {
                             Ok(d) => lat.push(d),
                             Err(..) => lat.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
                         };
-                        debug!(
-                            "updated remote server {} (median: {} ms) {:?}",
-                            sc.config.addr(),
-                            md,
-                            lat
-                        );
-                        sc.elapsed.store(md, Ordering::Release);
+                        debug!("updated remote server {} (score: {})", sc.config.addr(), score);
+                        sc.score.store(score, Ordering::Release);
 
                         Ok(())
                     })
@@ -278,29 +275,25 @@ impl PingBalancer {
 
                 for (idx, svr) in inner.servers.iter().enumerate() {
                     let choosen_svr = &inner.servers[svr_idx];
-                    if choosen_svr.delay() == 0 {
-                        continue;
-                    }
-
-                    if svr.delay() < choosen_svr.delay() {
+                    if svr.score() < choosen_svr.score() {
                         svr_idx = idx;
                     }
                 }
 
                 let choosen_svr = &inner.servers[svr_idx];
                 debug!(
-                    "chosen the best server {} (delay: {} ms)",
+                    "chosen the best server {} (score: {})",
                     choosen_svr.config.addr(),
-                    choosen_svr.delay()
+                    choosen_svr.score()
                 );
 
                 if inner.best_idx() != svr_idx {
                     info!(
-                        "switched server from {} (latency: {} ms) to {} (latency: {} ms)",
+                        "switched server from {} (score: {}) to {} (score: {})",
                         inner.best_server().config.addr(),
-                        inner.best_server().delay(),
+                        inner.best_server().score(),
                         choosen_svr.config.addr(),
-                        choosen_svr.delay(),
+                        choosen_svr.score(),
                     );
                 }
 
