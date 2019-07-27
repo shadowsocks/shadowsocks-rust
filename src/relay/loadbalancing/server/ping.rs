@@ -278,6 +278,10 @@ impl PingBalancer {
 
                 for (idx, svr) in inner.servers.iter().enumerate() {
                     let choosen_svr = &inner.servers[svr_idx];
+                    if choosen_svr.delay() == 0 {
+                        continue;
+                    }
+
                     if svr.delay() < choosen_svr.delay() {
                         svr_idx = idx;
                     }
