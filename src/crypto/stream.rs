@@ -149,12 +149,12 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         | CipherType::Aes256Cfb128 => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
 
         #[cfg(feature = "aes-ctr")]
-        CipherType::Aes128Ctr
-        | CipherType::Aes192Ctr
-        | CipherType::Aes256Ctr => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+        CipherType::Aes128Ctr | CipherType::Aes192Ctr | CipherType::Aes256Ctr => {
+            StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode))
+        }
 
         #[cfg(feature = "camellia-cfb")]
-        | CipherType::Camellia128Cfb
+        CipherType::Camellia128Cfb
         | CipherType::Camellia128Cfb1
         | CipherType::Camellia128Cfb8
         | CipherType::Camellia128Cfb128
