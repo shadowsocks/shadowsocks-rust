@@ -32,7 +32,7 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
 
-Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "camellia-cfb"]`.
+Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr"]`.
 
 NOTE: To disable dependency of OpenSSL, just disable feature `"rc4"`, `"aes-cfb"`, `aes-ctr`, `camellia-cfb`.
 

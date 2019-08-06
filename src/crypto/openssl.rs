@@ -7,6 +7,7 @@ use crate::crypto::{cipher, CipherResult, CipherType, StreamCipher};
 use crate::crypto::CryptoMode;
 
 use bytes::{BufMut, BytesMut};
+#[cfg(feature = "camellia-cfb")]
 use openssl::nid::Nid;
 use openssl::symm;
 

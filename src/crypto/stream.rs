@@ -134,7 +134,7 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         #[cfg(feature = "rc4")]
         CipherType::Rc4Md5 => StreamCipherVariant::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
-        #[cfg(feature = "openssl")]
+        #[cfg(feature = "aes-cfb")]
         CipherType::Aes128Cfb
         | CipherType::Aes128Cfb1
         | CipherType::Aes128Cfb8
@@ -146,10 +146,14 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         | CipherType::Aes256Cfb
         | CipherType::Aes256Cfb1
         | CipherType::Aes256Cfb8
-        | CipherType::Aes256Cfb128
-        | CipherType::Aes128Ctr
+        | CipherType::Aes256Cfb128 => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+
+        #[cfg(feature = "aes-ctr")]
+        CipherType::Aes128Ctr
         | CipherType::Aes192Ctr
-        | CipherType::Aes256Ctr
+        | CipherType::Aes256Ctr => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+
+        #[cfg(feature = "camellia-cfb")]
         | CipherType::Camellia128Cfb
         | CipherType::Camellia128Cfb1
         | CipherType::Camellia128Cfb8

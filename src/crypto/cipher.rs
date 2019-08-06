@@ -9,7 +9,7 @@ use std::{
 
 use crate::crypto::digest::{self, Digest, DigestType};
 use bytes::{BufMut, Bytes, BytesMut};
-#[cfg(feature = "openssl")]
+#[cfg(feature = "camellia-cfb")]
 use openssl::nid::Nid;
 #[cfg(feature = "openssl")]
 use openssl::symm;
