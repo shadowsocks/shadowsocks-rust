@@ -68,36 +68,15 @@ impl ServerLatencyInner {
             return u64::max_value();
         }
 
-        let sum: u64 = self.latency_queue.iter().sum();
-        let avg = sum as f64 / self.latency_queue.len() as f64;
-        let s_sum: u64 = self.latency_queue.iter().map(|n| *n * *n).sum();
-        let dev = (s_sum as f64 / self.latency_queue.len() as f64 - avg * avg).sqrt();
-
-        let mut v = self
-            .latency_queue
-            .iter()
-            .cloned()
-            .filter(|n| *n as f64 >= (avg - 3.0 * dev) && *n as f64 <= (avg + 3.0 * dev))
-            .collect::<Vec<u64>>();
+        let mut v = self.latency_queue.iter().cloned().collect::<Vec<u64>>();
         v.sort();
 
-        if v.is_empty() {
-            return u64::max_value();
-        }
-
         let mid = v.len() / 2;
-        let median = if (v.len() & 1) == 0 {
+        if (v.len() & 1) == 0 {
             (v[mid - 1] + v[mid]) / 2
         } else {
             v[mid]
-        };
-
-        debug!(
-            "latency queue {:?}, avg {}, dev {}, sorted {:?}, median {}",
-            self.latency_queue, avg, dev, v, median
-        );
-
-        (((median as f64 * 2.0) + (dev * 1.0)) / 2.0) as u64
+        }
     }
 }
 
