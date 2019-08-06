@@ -26,11 +26,24 @@ impl OpenSSLCrypto {
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
             #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb => symm::Cipher::aes_192_cfb128(),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb1 => symm::Cipher::aes_192_cfb1(),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb128 => symm::Cipher::aes_192_cfb128(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
+
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes128Ctr => symm::Cipher::aes_128_ctr(),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes192Ctr => symm::Cipher::aes_192_ctr(),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes256Ctr => symm::Cipher::aes_256_ctr(),
 
             #[cfg(feature = "rc4")]
             CipherType::Rc4 => symm::Cipher::rc4(),
