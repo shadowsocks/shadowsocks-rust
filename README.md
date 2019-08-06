@@ -24,13 +24,17 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
 
-* `aes-cfb` - Enabled `aes-cfb-*` encryption algorithm.
+* `aes-cfb` - Enabled `aes-*-cfb` encryption algorithm.
+
+* `aes-ctr` - Enabled `aes-*-ctr` encryption algorithm.
+
+* `camellia-cfb` - Enabled `camellia-*-cfb` encryption algorithm.
 
 * `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
 
-Default features: `["sodium", "rc4", "aes-cfb"]`.
+Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "camellia-cfb"]`.
 
-NOTE: To disable dependency of OpenSSL, just disable feature `"rc4"` and `"aes-cfb"`.
+NOTE: To disable dependency of OpenSSL, just disable feature `"rc4"`, `"aes-cfb"`, `aes-ctr`, `camellia-cfb`.
 
 ### **crates.io**
 
@@ -200,7 +204,14 @@ For DNS relay server, you can set remote DNS server in configuration file with `
 ### Stream Ciphers
 
 * `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
+* `aes-192-cfb`, `aes-192-cfb1`, `aes-192-cfb8`, `aes-192-cfb128`
 * `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
+* `aes-128-ctr`
+* `aes-192-ctr`
+* `aes-256-ctr`
+* `camellia-128-cfb`, `camellia-128-cfb1`, `camellia-128-cfb8`, `camellia-128-cfb128`
+* `camellia-192-cfb`, `camellia-192-cfb1`, `camellia-192-cfb8`, `camellia-192-cfb128`
+* `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
 * `rc4`, `rc4-md5`
 * `chacha20`, `salsa20`, `chacha20-ietf`
 * `plain` (No encryption, just for debugging)
