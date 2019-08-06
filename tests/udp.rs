@@ -20,8 +20,7 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         tcprelay::client::Socks5Client,
     },
-    run_local,
-    run_server,
+    run_local, run_server,
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";

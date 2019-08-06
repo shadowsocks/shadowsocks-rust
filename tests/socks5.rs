@@ -12,8 +12,7 @@ use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
-    run_local,
-    run_server,
+    run_local, run_server,
 };
 
 pub struct Socks5TestServer {

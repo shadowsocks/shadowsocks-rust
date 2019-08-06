@@ -14,9 +14,7 @@ use tokio::{self, net::UdpSocket};
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    PacketStream,
-    SendDgramRc,
-    SharedUdpSocket,
+    PacketStream, SendDgramRc, SharedUdpSocket,
 };
 use crate::{
     config::{ServerAddr, ServerConfig},

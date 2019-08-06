@@ -7,10 +7,7 @@ use miscreant::aead::{Aead, Aes128PmacSivAead, Aes256PmacSivAead};
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor,
-    AeadEncryptor,
-    CipherResult,
-    CipherType,
+    AeadDecryptor, AeadEncryptor, CipherResult, CipherType,
 };
 
 use byte_string::ByteStr;

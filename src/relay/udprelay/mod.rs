@@ -38,8 +38,7 @@
 //! +-------+--------------+
 
 use std::{
-    io,
-    mem,
+    io, mem,
     net::SocketAddr,
     sync::{Arc, Mutex},
 };

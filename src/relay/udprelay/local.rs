@@ -24,9 +24,7 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    PacketStream,
-    SendDgramRc,
-    MAXIMUM_UDP_PAYLOAD_SIZE,
+    PacketStream, SendDgramRc, MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
 /// Resolves server address to SocketAddr

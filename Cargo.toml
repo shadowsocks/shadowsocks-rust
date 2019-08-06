@@ -32,11 +32,12 @@ path = "src/bin/ssdns.rs"
 lto = true
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "camellia-cfb"]
 sodium = ["libsodium-ffi"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
 aes-ctr = ["openssl"]
+camellia-cfb = ["openssl"]
 single-threaded = []
 
 [dependencies]
