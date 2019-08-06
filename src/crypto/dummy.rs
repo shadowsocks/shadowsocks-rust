@@ -10,12 +10,12 @@ use bytes::BufMut;
 pub struct DummyCipher;
 
 impl StreamCipher for DummyCipher {
-    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         out.put_slice(data);
         Ok(())
     }
 
-    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
         Ok(())
     }
 

@@ -5,7 +5,7 @@ use std::{
     io::{self, BufRead, Read},
 };
 
-use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode, StreamCipher};
+use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
 use bytes::{BufMut, BytesMut};
 use tokio_io::{AsyncRead, AsyncWrite};
 

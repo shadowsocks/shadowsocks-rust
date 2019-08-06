@@ -56,7 +56,7 @@ impl TableCipher {
         }
     }
 
-    fn process<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         let mut buf = BytesMut::with_capacity(self.buffer_size(data));
         unsafe {
             buf.set_len(self.buffer_size(data)); // Set length
@@ -64,17 +64,17 @@ impl TableCipher {
         for (idx, d) in data.iter().enumerate() {
             buf[idx] = self.table[*d as usize];
         }
-        out.put(buf);
+        out.put_slice(&buf);
         Ok(())
     }
 }
 
 impl StreamCipher for TableCipher {
-    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
         Ok(())
     }
 

@@ -790,7 +790,7 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crate::crypto::{new_stream, CipherType, CryptoMode, StreamCipher};
+    use crate::crypto::{new_stream, CipherType, CryptoMode};
 
     #[test]
     fn test_get_cipher() {

@@ -34,10 +34,10 @@ pub trait AeadDecryptor {
 }
 
 /// Variant `AeadDecryptor`
-pub type BoxAeadDecryptor = Box<AeadDecryptor + Send + 'static>;
+pub type BoxAeadDecryptor = Box<dyn AeadDecryptor + Send + 'static>;
 
 /// Variant `AeadEncryptor`
-pub type BoxAeadEncryptor = Box<AeadEncryptor + Send + 'static>;
+pub type BoxAeadEncryptor = Box<dyn AeadEncryptor + Send + 'static>;
 
 /// Generate a specific AEAD cipher encryptor
 pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadEncryptor {

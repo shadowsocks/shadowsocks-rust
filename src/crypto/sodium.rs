@@ -56,7 +56,7 @@ impl SodiumStreamCipher {
         self.counter % SODIUM_BLOCK_SIZE
     }
 
-    fn process<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         let padding = self.padding_len();
 
         let mut plain_text = vec![0u8; data.len() + padding];
@@ -140,11 +140,11 @@ fn crypto_stream_xor_ic<B: BufMut>(
 }
 
 impl StreamCipher for SodiumStreamCipher {
-    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
         Ok(())
     }
 
