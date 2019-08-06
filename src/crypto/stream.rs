@@ -139,10 +139,29 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         | CipherType::Aes128Cfb1
         | CipherType::Aes128Cfb8
         | CipherType::Aes128Cfb128
+        | CipherType::Aes192Cfb
+        | CipherType::Aes192Cfb1
+        | CipherType::Aes192Cfb8
+        | CipherType::Aes192Cfb128
         | CipherType::Aes256Cfb
         | CipherType::Aes256Cfb1
         | CipherType::Aes256Cfb8
-        | CipherType::Aes256Cfb128 => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+        | CipherType::Aes256Cfb128
+        | CipherType::Aes128Ctr
+        | CipherType::Aes192Ctr
+        | CipherType::Aes256Ctr
+        | CipherType::Camellia128Cfb
+        | CipherType::Camellia128Cfb1
+        | CipherType::Camellia128Cfb8
+        | CipherType::Camellia128Cfb128
+        | CipherType::Camellia192Cfb
+        | CipherType::Camellia192Cfb1
+        | CipherType::Camellia192Cfb8
+        | CipherType::Camellia192Cfb128
+        | CipherType::Camellia256Cfb
+        | CipherType::Camellia256Cfb1
+        | CipherType::Camellia256Cfb8
+        | CipherType::Camellia256Cfb128 => StreamCipherVariant::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
 
         _ => unreachable!("{} is not a stream cipher", t),
     };
