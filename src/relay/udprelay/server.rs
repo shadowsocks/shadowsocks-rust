@@ -42,13 +42,10 @@ async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
     w: &mut UdpSocketSendHalf,
-    pkt: &[u8],
+    decrypted_pkt: Vec<u8>,
     src: SocketAddr,
 ) -> io::Result<()> {
     const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
-
-    // First of all, decrypt payload CLIENT -> SERVER
-    let decrypted_pkt = decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt)?;
 
     // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
     let mut cur = Cursor::new(decrypted_pkt);
@@ -114,8 +111,17 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];
 
+        // First of all, decrypt payload CLIENT -> SERVER
+        let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
+            Ok(pkt) => pkt,
+            Err(err) => {
+                error!("Failed to decrypt pkt in UDP relay: {}", err);
+                continue;
+            }
+        };
+
         tokio::spawn(async {
-            match udp_associate(context.clone(), svr_cfg.clone(), &mut w, pkt, src).await {
+            match udp_associate(context.clone(), svr_cfg.clone(), &mut w, decrypted_pkt, src).await {
                 Ok(..) => (),
                 Err(err) => {
                     error!("Error occurs in UDP relay: {}", err);

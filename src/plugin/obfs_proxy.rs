@@ -1,9 +1,7 @@
 use super::{PluginConfig, PluginMode};
 use crate::config::ServerAddr;
-use std::{
-    net::SocketAddr,
-    process::{Command, Stdio},
-};
+use std::{net::SocketAddr, process::Stdio};
+use tokio_process::Command;
 
 /// For obfsproxy, we use standalone mode for now.
 /// Managed mode needs to use SOCKS5 proxy as forwarder, which is not supported

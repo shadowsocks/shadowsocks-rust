@@ -22,7 +22,7 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
 };
-use tokio_process::{Child, CommandExt};
+use tokio_process::Child;
 
 mod obfs_proxy;
 mod ss_plugin;
@@ -110,7 +110,7 @@ fn start_plugin(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, 
     } else {
         ss_plugin::plugin_cmd(plugin, remote, local, mode)
     };
-    cmd.spawn_async()
+    cmd.spawn()
 }
 
 fn get_local_port() -> io::Result<u16> {

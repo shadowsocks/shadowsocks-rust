@@ -48,7 +48,7 @@ async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
     l: &mut UdpSocketSendHalf,
-    pkt: &[u8],
+    pkt: Vec<u8>,
     src: SocketAddr,
 ) -> io::Result<()> {
     const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -140,7 +140,8 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let pkt = &pkt_buf[..recv_len];
+        // Copy bytes, because udp_associate runs in another tokio Task
+        let pkt = pkt_buf[..recv_len].to_vec();
 
         let svr_cfg = balancer.pick_server();
 
