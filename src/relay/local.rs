@@ -2,7 +2,12 @@
 
 use std::{io, pin::Pin};
 
-use futures::{future::select_all, select, Future, FutureExt};
+use futures::{
+    future::{select_all, BoxFuture},
+    select,
+    Future,
+    FutureExt,
+};
 
 use log::error;
 
@@ -10,7 +15,7 @@ use crate::{
     config::Config,
     context::{Context, SharedContext},
     plugin::{launch_plugins, PluginMode},
-    relay::tcprelay::local::run as run_tcp,
+    relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp},
 };
 
 /// Relay server running under local environment.
@@ -39,25 +44,24 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut vf = Vec::new();
 
-    // let udp_fut = if context.config().mode.enable_udp() {
-    //     // Clone config here, because the config for TCP relay will be modified
-    //     // after plugins started
-    //     let udp_context = SharedContext::new(context.clone());
+    if context.config().mode.enable_udp() {
+        // Clone config here, because the config for TCP relay will be modified
+        // after plugins started
+        let udp_context = SharedContext::new(context.clone());
 
-    //     // Run UDP relay before starting plugins
-    //     // Because plugins doesn't support UDP relay
-    //     run_udp(udp_context)
-    // } else {
-    //     pending::<io::Result<()>>()
-    // };
+        // Run UDP relay before starting plugins
+        // Because plugins doesn't support UDP relay
+        let udp_fut = run_udp(udp_context);
+        vf.push(Box::pin(udp_fut) as BoxFuture<io::Result<()>>);
+    }
 
     if context.config().has_server_plugins() {
         let plugins = launch_plugins(context.config_mut(), PluginMode::Client);
-        vf.push(Box::pin(plugins) as Pin<Box<dyn Future<Output = io::Result<()>> + Send>>);
+        vf.push(Box::pin(plugins) as BoxFuture<io::Result<()>>);
     }
 
     let tcp_fut = run_tcp(SharedContext::new(context));
-    vf.push(Box::pin(tcp_fut) as Pin<Box<dyn Future<Output = io::Result<()>> + Send>>);
+    vf.push(Box::pin(tcp_fut) as BoxFuture<io::Result<()>>);
 
     let (res, ..) = select_all(vf.into_iter()).await;
     error!("One of TCP servers exited unexpectly, result: {:?}", res);

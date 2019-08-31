@@ -7,19 +7,21 @@ use std::{
     time::Duration,
 };
 
-use futures::{self, stream::futures_unordered, Future, Stream};
+use futures::{self, stream::FuturesUnordered, Future, Stream, StreamExt};
 use log::{debug, error, info};
 use tokio::{self, net::UdpSocket, util::FutureExt};
 
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
+    relay::{dns_resolver::resolve, socks5::Address},
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    PacketStream, SendDgramRc, MAXIMUM_UDP_PAYLOAD_SIZE,
+    PacketStream,
+    SendDgramRc,
+    MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
 fn resolve_remote_addr(
@@ -139,25 +141,22 @@ fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> impl Future<Ite
 }
 
 /// Starts a UDP relay server
-pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
-    let mut vec_fut = Vec::new();
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    let mut vec_fut = FuturesUnordered::new();
 
     for svr in &context.config().server {
         let svr_cfg = Arc::new(svr.clone());
 
         let svr_fut = listen(context.clone(), svr_cfg);
-        vec_fut.push(boxed_future(svr_fut));
+        vec_fut.push(svr_fut);
     }
 
-    futures_unordered(vec_fut).into_future().then(|res| match res {
-        Ok(..) => {
-            error!("One of UDP servers exited unexpectly without error");
+    match vec_fut.into_future().await.0 {
+        Some(()) => {
+            error!("One of TCP servers exited unexpectly");
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }
-        Err((err, ..)) => {
-            error!("One of UDP servers exited unexpectly with error {}", err);
-            Err(err)
-        }
-    })
+        None => unreachable!(),
+    }
 }
