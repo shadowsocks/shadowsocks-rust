@@ -849,6 +849,16 @@ impl Config {
             Some(ip) => ip,
         }
     }
+
+    /// Check if there are any plugin are enabled with servers
+    pub fn has_server_plugins(&self) -> bool {
+        for server in &self.server {
+            if let Some(_) = server.plugin() {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl fmt::Display for Config {

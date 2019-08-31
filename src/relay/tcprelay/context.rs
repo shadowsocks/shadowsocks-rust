@@ -13,7 +13,7 @@ use std::{
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
-    relay::{boxed_future, dns_resolver::resolve},
+    relay::dns_resolver::resolve,
 };
 
 use futures::{future, Future, Stream};
@@ -49,21 +49,19 @@ impl TcpServerContext {
         let ctx = Arc::new(ctx);
 
         if ctx.context.config().manager_address.is_some() {
-            let ctx2 = ctx.clone();
-
-            let fut = Interval::new_interval(UPDATE_INTERVAL)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("timer error: {}", e)))
-                .for_each(move |_| {
-                    let ctx = ctx2.clone();
+            tokio::spawn(async move {
+                let mut interval = Interval::new_interval(UPDATE_INTERVAL);
+                while let Some(_) = interval.next().await {
                     if stop_flag.load(Ordering::Acquire) {
                         // Finished
-                        Err(io::Error::new(io::ErrorKind::Other, "server terminated"))
+                        break;
                     } else {
-                        tokio::spawn(ctx.stat_interval().map_err(|_| ()));
-                        Ok(())
+                        tokio::spawn(async {
+                            let _ = ctx.stat_interval().await;
+                        });
                     }
-                });
-            tokio::spawn(fut.map_err(|_| ()));
+                }
+            });
         }
 
         ctx
@@ -85,12 +83,12 @@ impl TcpServerContext {
         self.rx.fetch_add(x, Ordering::Release);
     }
 
-    fn stat_interval(&self) -> impl Future<Item = (), Error = io::Error> + Send {
-        let addr_fut = match self.context.config().manager_address {
-            Some(ServerAddr::SocketAddr(ref addr)) => boxed_future(future::ok(*addr)),
+    async fn stat_interval(&self) -> io::Result<()> {
+        let addr = match self.context.config().manager_address {
+            Some(ServerAddr::SocketAddr(ref addr)) => *addr,
             Some(ServerAddr::DomainName(ref domain, ref port)) => {
-                let fut = resolve(self.context.clone(), &domain[..], *port, false).map(|vec_ipaddr| vec_ipaddr[0]);
-                boxed_future(fut)
+                let addrs = resolve(self.context.clone(), &domain[..], *port, false).await?;
+                addrs[0]
             }
             None => unreachable!(),
         };
@@ -98,16 +96,14 @@ impl TcpServerContext {
         let svr_cfg = self.svr_cfg.clone();
         let transmission = self.tx.load(Ordering::Acquire) + self.rx.load(Ordering::Acquire);
 
-        addr_fut
-            .and_then(move |addr| {
-                let any_addr = "0.0.0.0:0".parse::<SocketAddr>().unwrap();
-                UdpSocket::bind(&any_addr).map(move |socket| (socket, addr))
-            })
-            .and_then(move |(socket, addr)| {
-                let payload = format!("stat: {{\"{}\": {}}}", svr_cfg.addr().port(), transmission);
-                debug!("Sending Tcp Relay to {}, payload: {}", addr, payload);
-                socket.send_dgram(payload, &addr).map(|_| ())
-            })
+        let any_addr = "0.0.0.0:0".parse::<SocketAddr>().unwrap();
+        let socket = UdpSocket::bind(&any_addr)?;
+
+        let payload = format!("stat: {{\"{}\": {}}}", svr_cfg.addr().port(), transmission);
+        debug!("Sending Tcp Relay to {}, payload: {}", addr, payload);
+        socket.send_to(payload.as_ref(), &addr).await?;
+
+        Ok(())
     }
 
     pub fn close(&self) {

@@ -69,14 +69,17 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 #![recursion_limit = "128"]
+#![feature(async_await)]
 
 /// ShadowSocks version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
     config::{ClientConfig, Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    relay::{dns::run as run_dns, local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
+    relay::{local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
 };
+
+// relay::{dns::run as run_dns},
 
 pub mod config;
 mod context;

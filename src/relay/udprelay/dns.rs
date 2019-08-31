@@ -14,28 +14,37 @@ use tokio::{self, net::UdpSocket};
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    PacketStream, SendDgramRc, SharedUdpSocket,
+    PacketStream,
+    SendDgramRc,
+    SharedUdpSocket,
 };
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
-    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
+    relay::{dns_resolver::resolve, socks5::Address},
 };
 
 /// Starts a UDP DNS server
-pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
+pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
-    futures::lazy(move || {
-        info!("ShadowSocks UDP DNS Listening on {}", local_addr);
-
-        UdpSocket::bind(&local_addr)
-    })
-    .and_then(move |l| listen(context, l))
+    let listener = UdpSocket::bind(&local_addr)?;
+    listen(context, listener).await
 }
 
-fn listen(context: SharedContext, l: UdpSocket) -> impl Future<Item = (), Error = io::Error> + Send {
+async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
     assert!(!context.config().server.is_empty());
+
+    for svr in &context.config().server {
+        let sock_addr = match *svr.addr() {
+            ServerAddr::SocketAddr(ref addr) => vec![*addr],
+            ServerAddr::DomainName(ref dom, ref port) => resolve(context.clone(), &*dom, *port, false).await?,
+        };
+
+        let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let s = UdpSocket::bind(&local_addr)?;
+        let svr_cfg = Arc::new(svr.clone());
+    }
 
     let mut svr_fut = Vec::with_capacity(context.config().server.len());
     for svr in &context.config().server {
@@ -86,11 +95,11 @@ fn listen(context: SharedContext, l: UdpSocket) -> impl Future<Item = (), Error 
         })
 }
 
-fn handle_l2r(
+async fn handle_l2r(
     context: SharedContext,
     l: SharedUdpSocket,
     server: Vec<(SharedUdpSocket, Arc<ServerConfig>, SocketAddr)>,
-) -> impl Future<Item = (), Error = io::Error> + Send {
+) -> io::Result<()> {
     assert!(!server.is_empty());
 
     let mut server_idx: usize = 0;

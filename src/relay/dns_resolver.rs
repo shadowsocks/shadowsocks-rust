@@ -5,8 +5,7 @@ use std::{
     net::SocketAddr,
 };
 
-use futures::Future;
-use tokio;
+use tokio::{self, future::Future};
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
 use crate::context::SharedContext;
@@ -48,15 +47,14 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
     resolver
 }
 
-fn inner_resolve(
+async fn inner_resolve(
     context: SharedContext,
     addr: &str,
     port: u16,
     check_forbidden: bool,
-) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
+) -> io::Result<Vec<SocketAddr>> {
     // let owned_addr = addr.to_owned();
-    let cloned_context = context.clone();
-    context.dns_resolver().lookup_ip(addr).then(move |r| match r {
+    match context.dns_resolver().lookup_ip(addr).await {
         Err(err) => {
             // error!("Failed to resolve {}, err: {}", owned_addr, err);
             Err(io::Error::new(
@@ -68,7 +66,7 @@ fn inner_resolve(
             let mut vaddr = Vec::new();
             for ip in lookup_result.iter() {
                 if check_forbidden {
-                    let forbidden_ip = &cloned_context.config().forbidden_ip;
+                    let forbidden_ip = context.config().forbidden_ip;
                     if forbidden_ip.contains(&ip) {
                         // debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
                         continue;
@@ -89,15 +87,15 @@ fn inner_resolve(
                 Ok(vaddr)
             }
         }
-    })
+    }
 }
 
 /// Resolve address to IP
-pub fn resolve(
+pub async fn resolve(
     context: SharedContext,
     addr: &str,
     port: u16,
     check_forbidden: bool,
-) -> impl Future<Item = Vec<SocketAddr>, Error = io::Error> + Send {
-    inner_resolve(context, addr, port, check_forbidden)
+) -> io::Result<Vec<SocketAddr>> {
+    inner_resolve(context, addr, port, check_forbidden).await
 }

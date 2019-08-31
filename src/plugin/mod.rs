@@ -13,7 +13,10 @@
 //! ```
 
 use crate::config::{Config, ServerAddr};
-use futures::{stream::futures_unordered, Future, Stream};
+use futures::{
+    future::pending,
+    stream::{FuturesUnordered, StreamExt},
+};
 use log::{error, info};
 use std::{
     io,
@@ -41,11 +44,8 @@ pub enum PluginMode {
 /// Launch plugins in config. Returns a future that completes when any plugin terminates
 /// or there were an error in watching the subprocess. Returns `None` if no plugins
 /// were launched.
-pub fn launch_plugins(
-    config: &mut Config,
-    mode: PluginMode,
-) -> io::Result<Option<impl Future<Item = (), Error = io::Error>>> {
-    let mut plugins = Vec::new();
+pub async fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<()> {
+    let mut plugins = FuturesUnordered::new();
 
     for svr in &mut config.server {
         let mut svr_addr_opt = None;
@@ -82,27 +82,25 @@ pub fn launch_plugins(
     }
 
     if plugins.is_empty() {
-        Ok(None)
+        panic!("Didn't find any plugins to start");
     } else {
         // Turn the vector of `Child` futures into a single future that
         // completes with an error if any of them exits or waiting for it
         // fails. When this future completes, the remaining `Child`ren will be
         // dropped and as a result the rest of the plugins will be killed
         // automatically.
-        let plugins_future =
-            futures_unordered(plugins)
-                .into_future()
-                .then(|first_plugin_result| match first_plugin_result {
-                    Ok((first_plugin_exit_status, _)) => {
-                        let msg = format!("Plugin exited unexpectedly with {}", first_plugin_exit_status.unwrap());
-                        Err(io::Error::new(io::ErrorKind::Other, msg))
-                    }
-                    Err((first_plugin_error, _)) => {
-                        error!("Error while waiting for plugin subprocess: {}", first_plugin_error);
-                        Err(first_plugin_error)
-                    }
-                });
-        Ok(Some(plugins_future))
+
+        match plugins.into_future().await {
+            (Some(Ok(first_plugin_exit_status)), _) => {
+                let msg = format!("Plugin exited unexpectedly with {}", first_plugin_exit_status);
+                Err(io::Error::new(io::ErrorKind::Other, msg))
+            }
+            (Some(Err(first_plugin_error)), _) => {
+                error!("Error while waiting for plugin subprocess: {}", first_plugin_error);
+                Err(first_plugin_error)
+            }
+            _ => unreachable!(),
+        }
     }
 }
 

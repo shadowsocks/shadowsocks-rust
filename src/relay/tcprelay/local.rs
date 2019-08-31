@@ -2,12 +2,10 @@
 
 use std::io;
 
-use futures::Future;
-
 use super::socks5_local;
 use crate::context::SharedContext;
 
 /// Starts a TCP local server
-pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
-    socks5_local::run(context)
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    socks5_local::run(context).await
 }

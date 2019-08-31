@@ -1,14 +1,21 @@
 //! Server side
 
-use std::io;
+use std::{io, pin::Pin};
 
-use futures::{stream::futures_unordered, Future, Stream};
+use futures::{
+    future::{pending, select_all},
+    select,
+    Future,
+    FutureExt,
+};
+
+use log::error;
 
 use crate::{
     config::Config,
     context::{Context, SharedContext},
     plugin::{launch_plugins, PluginMode},
-    relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
+    relay::tcprelay::server::run as run_tcp,
 };
 
 /// Relay server running on server side.
@@ -32,39 +39,34 @@ use crate::{
 /// let fut = run(config);
 /// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
 /// ```
-pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
-    futures::lazy(move || {
-        let mut context = Context::new(config);
+pub async fn run(config: Config) -> io::Result<()> {
+    let mut context = Context::new(config);
 
-        let mut vf = Vec::new();
+    let mut vf = Vec::new();
 
-        if context.config().mode.enable_udp() {
-            // Clone config here, because the config for TCP relay will be modified
-            // after plugins started
-            let udp_context = SharedContext::new(context.clone());
+    // let udp_fut = if context.config().mode.enable_udp() {
+    //     // Clone config here, because the config for TCP relay will be modified
+    //     // after plugins started
+    //     let udp_context = SharedContext::new(context.clone());
 
-            // Run UDP relay before starting plugins
-            // Because plugins doesn't support UDP relay
-            let udp_fut = run_udp(udp_context);
-            vf.push(boxed_future(udp_fut));
+    //     // Run UDP relay before starting plugins
+    //     // Because plugins doesn't support UDP relay
+    //     run_udp(udp_context)
+    // } else {
+    //     pending::<io::Result<()>>()
+    // };
+
+    if context.config().mode.enable_tcp() {
+        if context.config().has_server_plugins() {
+            let plugins = launch_plugins(context.config_mut(), PluginMode::Client);
+            vf.push(Box::pin(plugins) as Pin<Box<dyn Future<Output = io::Result<()>> + Send>>);
         }
 
-        if context.config().mode.enable_tcp() {
-            if let Some(plugins) =
-                launch_plugins(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins")
-            {
-                vf.push(boxed_future(plugins));
-            }
+        let tcp_fut = run_tcp(SharedContext::new(context));
+        vf.push(Box::pin(tcp_fut) as Pin<Box<dyn Future<Output = io::Result<()>> + Send>>);
+    }
 
-            let tcp_fut = run_tcp(SharedContext::new(context));
-            vf.push(boxed_future(tcp_fut));
-        }
-
-        futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-            match res {
-                Ok(..) => Ok(()),
-                Err((err, ..)) => Err(err),
-            }
-        })
-    })
+    let (res, ..) = select_all(vf.into_iter()).await;
+    error!("One of TCP servers exited unexpectly, result: {:?}", res);
+    Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }

@@ -35,13 +35,16 @@
 use std::{
     cmp,
     io::{self, BufRead, Read},
+    marker::Unpin,
+    pin::Pin,
+    task::{Context, Poll},
     u16,
 };
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use log::error;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::prelude::*;
 
 use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
@@ -57,10 +60,7 @@ enum ReadingStep {
 }
 
 /// Reader wrapper that will decrypt data automatically
-pub struct DecryptedReader<R>
-where
-    R: AsyncRead,
-{
+pub struct DecryptedReader<R> {
     reader: R,
     buffer: BytesMut,
     data: BytesMut,
@@ -71,10 +71,10 @@ where
     read_step: ReadingStep,
 }
 
-impl<R> DecryptedReader<R>
-where
-    R: AsyncRead,
-{
+// Forward Unpin
+impl<A: Unpin> Unpin for DecryptedReader<A> {}
+
+impl<R> DecryptedReader<R> {
     pub fn new(r: R, t: CipherType, key: &[u8], nounce: &[u8]) -> DecryptedReader<R> {
         DecryptedReader {
             reader: r,
@@ -87,55 +87,50 @@ where
             read_step: ReadingStep::Length,
         }
     }
+}
 
-    pub fn get_ref(&self) -> &R {
-        &self.reader
-    }
-
-    /// Gets a mutable reference to the underlying reader.
-    ///
-    /// # Warning
-    ///
-    /// It is inadvisable to read directly from or write directly to the
-    /// underlying reader.
-    pub fn get_mut(&mut self) -> &mut R {
-        &mut self.reader
-    }
-
-    /// Unwraps this `DecryptedReader`, returning the underlying reader.
-    ///
-    /// The internal buffer is flushed before returning the reader. Any leftover
-    /// data in the read buffer is lost.
-    pub fn into_inner(self) -> R {
-        self.reader
-    }
-
-    fn read_exact(&mut self, expect_length: usize, ignore_final: bool) -> io::Result<()> {
+impl<R> DecryptedReader<R>
+where
+    R: AsyncRead + Unpin,
+{
+    fn poll_read_exact(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        expect_length: usize,
+        ignore_final: bool,
+    ) -> Poll<io::Result<()>> {
         let mut incoming = [0u8; BUFFER_SIZE];
         self.buffer.reserve(expect_length);
 
         while self.buffer.len() < expect_length {
             let remain = expect_length - self.buffer.len();
             let rlen = cmp::min(remain, incoming.len());
-            match self.reader.read(&mut incoming[..rlen]) {
-                Ok(0) => {
-                    if ignore_final && self.buffer.is_empty() {
-                        self.sent_final = true;
-                        return Ok(());
-                    }
 
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof"));
+            let n = match Pin::new(&mut self.reader).poll_read(cx, &mut incoming[..rlen])? {
+                Poll::Ready(n) => n,
+                Poll::Pending => return Poll::Pending,
+            };
+
+            if n == 0 {
+                if ignore_final && self.buffer.is_empty() {
+                    self.sent_final = true;
+                    return Poll::Ready(Ok(()));
                 }
-                Ok(n) => self.buffer.put_slice(&incoming[..n]),
-                Err(e) => return Err(e),
+
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof")));
+            } else {
+                self.buffer.put_slice(&incoming[..n])
             }
         }
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 
-    fn read_length(&mut self) -> io::Result<()> {
+    fn poll_read_length(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let expect_length = 2 + self.tag_size;
-        self.read_exact(expect_length, true)?;
+        match self.poll_read_exact(cx, expect_length, true)? {
+            Poll::Ready(..) => (),
+            Poll::Pending => return Poll::Pending,
+        }
 
         if !self.sent_final {
             // Ok, read length finished
@@ -161,7 +156,7 @@ where
                             MAX_PACKET_SIZE, len
                         ),
                     );
-                    return Err(err);
+                    return Poll::Ready(Err(err));
                 }
 
                 self.read_step = ReadingStep::DataAndTag(len);
@@ -169,12 +164,15 @@ where
             self.buffer.clear();
         }
 
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 
-    fn read_data(&mut self, dlen: usize) -> io::Result<()> {
+    fn poll_read_data(self: Pin<&mut Self>, cx: &mut Context<'_>, dlen: usize) -> Poll<io::Result<()>> {
         let expect_length = dlen + self.tag_size;
-        self.read_exact(expect_length, false)?;
+        match self.poll_read_exact(cx, expect_length, false)? {
+            Poll::Ready(..) => (),
+            Poll::Pending => return Poll::Pending,
+        }
 
         if !self.sent_final {
             {
@@ -191,15 +189,21 @@ where
             self.buffer.clear();
         }
 
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 
-    fn read_some(&mut self) -> io::Result<()> {
+    fn poll_read_some(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         while !self.sent_final {
             match self.read_step {
-                ReadingStep::Length => self.read_length()?,
+                ReadingStep::Length => match self.poll_read_length(cx)? {
+                    Poll::Ready(..) => (),
+                    Poll::Pending => return Poll::Pending,
+                },
                 ReadingStep::DataAndTag(dlen) => {
-                    self.read_data(dlen)?;
+                    match self.poll_read_data(cx, dlen)? {
+                        Poll::Ready(..) => (),
+                        Poll::Pending => return Poll::Pending,
+                    }
                     break; // Read finished! Break out
                 }
                 ReadingStep::Done => {
@@ -208,74 +212,73 @@ where
                 }
             }
         }
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<R> BufRead for DecryptedReader<R>
+impl<R> AsyncBufRead for DecryptedReader<R>
 where
-    R: AsyncRead,
+    R: AsyncRead + Unpin,
 {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         while self.pos >= self.data.len() {
             if self.sent_final {
-                return Ok(&[]);
+                return Poll::Ready(Ok(&[]));
             }
 
-            self.read_some()?;
+            match self.poll_read_some(cx)? {
+                Poll::Ready(..) => (),
+                Poll::Pending => return Poll::Pending,
+            }
+
             if let ReadingStep::Done = self.read_step {
                 self.pos = 0;
             }
         }
 
-        Ok(&self.data[self.pos..])
+        Poll::Ready(Ok(&self.data[self.pos..]))
     }
 
-    fn consume(&mut self, amt: usize) {
+    fn consume(self: Pin<&mut Self>, amt: usize) {
         self.pos = cmp::min(self.pos + amt, self.data.len());
     }
 }
 
-impl<R> Read for DecryptedReader<R>
+impl<R> AsyncRead for DecryptedReader<R>
 where
-    R: AsyncRead,
+    R: AsyncRead + Unpin,
 {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let nread = {
-            let mut available = self.fill_buf()?;
-            available.read(buf)?
+            let mut available = match self.poll_fill_buf(cx)? {
+                Poll::Ready(a) => a,
+                Poll::Pending => return Poll::Pending,
+            };
+
+            let len = available.len().min(buf.len());
+            buf.copy_from_slice(&available[..len]);
+            len
         };
         self.consume(nread);
-        Ok(nread)
+        Poll::Ready(Ok(nread))
     }
 }
 
-impl<R> DecryptedRead for DecryptedReader<R>
-where
-    R: AsyncRead,
-{
+impl<R> DecryptedRead for DecryptedReader<R> {
     fn buffer_size(&self, data: &[u8]) -> usize {
         2 + self.tag_size // len and len_tag
         + data.len() + self.tag_size // data and data_tag
     }
 }
 
-impl<R> AsyncRead for DecryptedReader<R> where R: AsyncRead {}
-
 /// Writer wrapper that will encrypt data automatically
-pub struct EncryptedWriter<W>
-where
-    W: AsyncWrite,
-{
+pub struct EncryptedWriter<W> {
     writer: W,
     cipher: BoxAeadEncryptor,
     tag_size: usize,
 }
 
-impl<W> EncryptedWriter<W>
-where
-    W: AsyncWrite,
-{
+impl<W> EncryptedWriter<W> {
     /// Creates a new EncryptedWriter
     pub fn new(w: W, t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter<W> {
         EncryptedWriter {
@@ -286,18 +289,30 @@ where
     }
 }
 
+// Forward Unpin
+impl<A: Unpin> Unpin for EncryptedWriter<A> {}
+
+impl<W> AsyncWrite for EncryptedWriter<W>
+where
+    W: AsyncWrite + Unpin,
+{
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.writer).poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.writer).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.writer).poll_shutdown(cx)
+    }
+}
+
 impl<W> EncryptedWrite for EncryptedWriter<W>
 where
-    W: AsyncWrite,
+    W: AsyncWrite + Unpin,
 {
-    fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.writer.write(data)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
-    }
-
     fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
         // Data.Len is a 16-bit big-endian integer indicating the length of Data. It should be smaller than 0x3FFF.
         assert!(

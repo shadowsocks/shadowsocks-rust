@@ -9,18 +9,26 @@ use bytes::{BufMut, Bytes, BytesMut};
 
 use libc::c_ulonglong;
 use libsodium_ffi::{
-    crypto_aead_xchacha20poly1305_ietf_decrypt, crypto_aead_xchacha20poly1305_ietf_encrypt,
-    crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic, crypto_stream_salsa20_xor_ic,
-    crypto_stream_xsalsa20_xor_ic, sodium_init,
+    crypto_aead_xchacha20poly1305_ietf_decrypt,
+    crypto_aead_xchacha20poly1305_ietf_encrypt,
+    crypto_stream_chacha20_ietf_xor_ic,
+    crypto_stream_chacha20_xor_ic,
+    crypto_stream_salsa20_xor_ic,
+    crypto_stream_xsalsa20_xor_ic,
+    sodium_init,
 };
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor, AeadEncryptor, CipherResult, CipherType, StreamCipher,
+    AeadDecryptor,
+    AeadEncryptor,
+    CipherResult,
+    CipherType,
+    StreamCipher,
 };
 
-static SODIUM_INIT_FLAG: Once = ONCE_INIT;
+static SODIUM_INIT_FLAG: Once = Once::new();
 
 /// Cipher provided by `libsodium`
 pub struct SodiumStreamCipher {
