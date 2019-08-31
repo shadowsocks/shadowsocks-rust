@@ -4,7 +4,9 @@ use std::io::Cursor;
 
 use crate::crypto::{
     digest::{self, Digest, DigestType},
-    CipherResult, CryptoMode, StreamCipher,
+    CipherResult,
+    CryptoMode,
+    StreamCipher,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -56,7 +58,7 @@ impl TableCipher {
         }
     }
 
-    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         let mut buf = BytesMut::with_capacity(self.buffer_size(data));
         unsafe {
             buf.set_len(self.buffer_size(data)); // Set length
@@ -70,11 +72,11 @@ impl TableCipher {
 }
 
 impl StreamCipher for TableCipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut dyn BufMut) -> CipherResult<()> {
         Ok(())
     }
 

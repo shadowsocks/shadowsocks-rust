@@ -8,7 +8,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::{self, Future};
 use log::trace;
 use tokio::{
     net::{

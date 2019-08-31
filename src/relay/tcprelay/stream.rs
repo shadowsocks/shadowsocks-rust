@@ -2,7 +2,7 @@
 
 use std::{
     cmp,
-    io::{self, Read},
+    io,
     marker::Unpin,
     pin::Pin,
     task::{Context, Poll},

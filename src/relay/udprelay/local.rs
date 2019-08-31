@@ -7,8 +7,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{self, Future, Stream};
-use log::{debug, error, info};
+use log::{debug, error};
 use tokio::{
     self,
     net::{udp::split::UdpSocketSendHalf, UdpSocket},

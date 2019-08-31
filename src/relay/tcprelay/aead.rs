@@ -34,7 +34,7 @@
 
 use std::{
     cmp,
-    io::{self, BufRead, Read},
+    io::{self, BufRead},
     marker::Unpin,
     pin::Pin,
     task::{Context, Poll},

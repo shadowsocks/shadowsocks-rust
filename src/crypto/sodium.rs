@@ -1,9 +1,6 @@
 //! Cipher defined with libsodium
 
-use std::{
-    ptr,
-    sync::{Once, ONCE_INIT},
-};
+use std::{ptr, sync::Once};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -64,7 +61,7 @@ impl SodiumStreamCipher {
         self.counter % SODIUM_BLOCK_SIZE
     }
 
-    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         let padding = self.padding_len();
 
         let mut plain_text = vec![0u8; data.len() + padding];
@@ -148,11 +145,11 @@ fn crypto_stream_xor_ic<B: BufMut>(
 }
 
 impl StreamCipher for SodiumStreamCipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut dyn BufMut) -> CipherResult<()> {
         Ok(())
     }
 

@@ -1,17 +1,14 @@
 //! Server traffic monitor
 
 use std::{
-    io::{self, Read, Write},
+    io,
     marker::Unpin,
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
 };
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::context::SharedTcpServerContext;
 

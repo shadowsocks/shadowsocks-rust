@@ -3,7 +3,7 @@
 use std::{
     io::{self, Cursor},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Instant,
 };
 
@@ -11,12 +11,9 @@ use dns_parser::Packet;
 use futures::{
     self,
     future::{join_all, select_all, BoxFuture},
-    stream::FuturesUnordered,
-    Future,
-    Stream,
     StreamExt,
 };
-use log::{error, info, trace};
+use log::{error, trace};
 use tokio::{
     self,
     net::{

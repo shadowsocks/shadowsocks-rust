@@ -1,13 +1,13 @@
 //! UDP relay proxy server
 
 use std::{
-    io::{self, Cursor, ErrorKind},
+    io::{self, Cursor},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
-use futures::{self, stream::FuturesUnordered, Future, Stream, StreamExt};
+use futures::{self, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
 use tokio::{
     self,

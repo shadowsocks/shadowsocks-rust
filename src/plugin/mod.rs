@@ -13,10 +13,7 @@
 //! ```
 
 use crate::config::{Config, ServerAddr};
-use futures::{
-    future::pending,
-    stream::{FuturesUnordered, StreamExt},
-};
+use futures::stream::{FuturesUnordered, StreamExt};
 use log::{error, info};
 use std::{
     io,

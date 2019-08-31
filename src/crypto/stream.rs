@@ -8,7 +8,9 @@ use crate::crypto::rc4_md5;
 use crate::crypto::sodium;
 use crate::crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
-    dummy, table, CryptoMode,
+    dummy,
+    table,
+    CryptoMode,
 };
 
 use bytes::BufMut;
@@ -18,8 +20,8 @@ use bytes::BufMut;
 /// The `update` method could be called multiple times, and the `finalize` method will
 /// encrypt the last block
 pub trait StreamCipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()>;
-    fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()>;
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()>;
+    fn finalize(&mut self, out: &mut dyn BufMut) -> CipherResult<()>;
     fn buffer_size(&self, data: &[u8]) -> usize;
 }
 

@@ -2,14 +2,11 @@
 
 use std::{
     io::{self, BufRead, Read, Write},
-    iter::{IntoIterator, Iterator},
+    iter::Iterator,
     marker::Unpin,
-    mem,
-    net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
 
 use crate::{

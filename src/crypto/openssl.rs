@@ -109,7 +109,7 @@ impl OpenSSLCrypto {
     }
 
     /// Update data
-    pub fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    pub fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         let least_reserved = data.len() + self.cipher.block_size();
         let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
         unsafe {
@@ -122,7 +122,7 @@ impl OpenSSLCrypto {
     }
 
     /// Generate the final block
-    pub fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()> {
+    pub fn finalize(&mut self, out: &mut dyn BufMut) -> CipherResult<()> {
         let least_reserved = self.cipher.block_size();
         let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
         unsafe {
@@ -185,11 +185,11 @@ impl OpenSSLCipher {
 unsafe impl Send for OpenSSLCipher {}
 
 impl StreamCipher for OpenSSLCipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         self.worker.update(data, out)
     }
 
-    fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()> {
+    fn finalize(&mut self, out: &mut dyn BufMut) -> CipherResult<()> {
         self.worker.finalize(out)
     }
 

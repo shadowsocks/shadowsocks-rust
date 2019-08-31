@@ -17,17 +17,15 @@ use crate::{
         loadbalancing::server::LoadBalancer,
         socks5::Address,
         tcprelay::{client::ServerClient, EncryptedWrite},
-        utils::try_timeout,
     },
 };
 
-use futures::{Future, Stream};
 use log::{debug, error, info};
 use tokio::{
     self,
     future::FutureExt,
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt},
-    timer::{Interval, Timeout},
+    io::{AsyncReadExt, AsyncWriteExt},
+    timer::Interval,
 };
 
 struct Server {

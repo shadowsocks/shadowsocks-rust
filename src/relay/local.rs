@@ -1,13 +1,8 @@
 //! Local side
 
-use std::{io, pin::Pin};
+use std::io;
 
-use futures::{
-    future::{select_all, BoxFuture},
-    select,
-    Future,
-    FutureExt,
-};
+use futures::future::{select_all, BoxFuture};
 
 use log::error;
 

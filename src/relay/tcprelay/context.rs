@@ -16,7 +16,6 @@ use crate::{
     relay::dns_resolver::resolve,
 };
 
-use futures::{future, Future, Stream};
 use log::debug;
 use tokio::{self, net::UdpSocket, timer::Interval};
 

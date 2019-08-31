@@ -1,17 +1,8 @@
 //! Relay for TCP server that running on the server side
 
-use std::{
-    io::{self, ErrorKind},
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc};
 
-use crate::relay::{
-    dns_resolver::resolve,
-    socks5::Address,
-    tcprelay::crypto_io::{DecryptedRead, EncryptedWrite},
-};
+use crate::relay::{dns_resolver::resolve, socks5::Address};
 
 use crate::context::SharedContext;
 
@@ -20,21 +11,13 @@ use log::{debug, error, info, trace};
 use tokio::{
     self,
     future::FutureExt,
-    io::{AsyncRead, AsyncWrite},
-    net::{
-        tcp::split::{TcpStreamReadHalf, TcpStreamWriteHalf},
-        TcpListener,
-        TcpStream,
-    },
+    net::{TcpListener, TcpStream},
 };
 
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
     proxy_handshake,
-    tunnel,
-    DecryptedHalf,
-    EncryptedHalf,
 };
 
 use crate::relay::utils::try_timeout;
