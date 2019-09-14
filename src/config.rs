@@ -461,9 +461,9 @@ impl error::Error for UrlParseError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
-            UrlParseError::ParseError(ref err) => Some(err as &error::Error),
+            UrlParseError::ParseError(ref err) => Some(err as &dyn error::Error),
             UrlParseError::InvalidScheme => None,
             UrlParseError::InvalidUserInfo => None,
             UrlParseError::MissingHost => None,

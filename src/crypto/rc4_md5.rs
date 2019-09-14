@@ -28,11 +28,11 @@ impl Rc4Md5Cipher {
 }
 
 impl StreamCipher for Rc4Md5Cipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         self.crypto.update(data, out)
     }
 
-    fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()> {
+    fn finalize(&mut self, out: &mut dyn BufMut) -> CipherResult<()> {
         self.crypto.finalize(out)
     }
 
