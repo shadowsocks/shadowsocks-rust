@@ -167,9 +167,10 @@ impl Inner {
     }
 
     async fn check_request(sc: Arc<ServerConfig>, context: SharedContext) -> io::Result<()> {
-        static GET_BODY: &[u8] = b"GET / HTTP/1.1\r\nHost: www.example.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
+        static GET_BODY: &[u8] =
+            b"GET /generate_204 HTTP/1.1\r\nHost: dl.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
-        let addr = Address::DomainNameAddress("www.example.com".to_owned(), 80);
+        let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
         let ServerClient { r, w } = ServerClient::connect(context, &addr, sc).await?;
         w.encrypted_write_all(GET_BODY).await?;
