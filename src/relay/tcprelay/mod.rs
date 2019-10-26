@@ -78,7 +78,7 @@ pub async fn proxy_server_handshake(
     svr_cfg: Arc<ServerConfig>,
     relay_addr: &Address,
 ) -> io::Result<CryptoStream<TcpStream>> {
-    let mut stream = CryptoStream::handshake(remote_stream, svr_cfg.clone()).await?;
+    let mut stream = CryptoStream::new(remote_stream, svr_cfg.clone());
 
     trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 

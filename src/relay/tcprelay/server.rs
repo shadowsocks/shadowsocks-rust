@@ -51,13 +51,7 @@ async fn handle_client(
 
     // Do server-client handshake
     // Perform encryption IV exchange
-    let mut stream = match CryptoStream::handshake(stream, svr_context.svr_cfg().clone()).await {
-        Ok(o) => o,
-        Err(err) => {
-            error!("Failed to handshake with peer {}, {}", peer_addr, err);
-            return Err(err);
-        }
-    };
+    let mut stream = CryptoStream::new(stream, svr_context.svr_cfg().clone());
 
     let timeout = svr_context.svr_cfg().timeout();
 
