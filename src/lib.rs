@@ -69,7 +69,6 @@
 #![crate_type = "lib"]
 #![crate_name = "shadowsocks"]
 #![recursion_limit = "128"]
-#![feature(async_await)]
 
 /// ShadowSocks version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

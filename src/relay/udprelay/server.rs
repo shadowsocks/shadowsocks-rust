@@ -61,7 +61,7 @@ async fn udp_associate(
 
     // FIXME: Create one UdpSocket for one associate
     let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-    let mut remote_udp = UdpSocket::bind(&local_addr)?;
+    let mut remote_udp = UdpSocket::bind(&local_addr).await?;
 
     let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
 
@@ -100,7 +100,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
 
-    let listener = UdpSocket::bind(&listen_addr)?;
+    let listener = UdpSocket::bind(&listen_addr).await?;
     let (r, w) = listener.split();
 
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];

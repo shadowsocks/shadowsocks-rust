@@ -5,7 +5,7 @@ use std::{
     net::SocketAddr,
 };
 
-use tokio::{self, future::Future};
+use tokio;
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
 use crate::context::SharedContext;
@@ -66,7 +66,7 @@ async fn inner_resolve(
             let mut vaddr = Vec::new();
             for ip in lookup_result.iter() {
                 if check_forbidden {
-                    let forbidden_ip = context.config().forbidden_ip;
+                    let forbidden_ip = &context.config().forbidden_ip;
                     if forbidden_ip.contains(&ip) {
                         // debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
                         continue;

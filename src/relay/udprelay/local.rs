@@ -75,7 +75,7 @@ async fn udp_associate(
     // Binds to 0.0.0.0:0 (let system choose a random port)
     // FIXME: Create a UdpSocket for every UDP associate requests
     let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
-    let mut remote_udp = UdpSocket::bind(&local_addr)?;
+    let mut remote_udp = UdpSocket::bind(&local_addr).await?;
 
     // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
     let mut send_buf = Vec::new();
@@ -161,6 +161,6 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
-    let listener = UdpSocket::bind(&local_addr)?;
+    let listener = UdpSocket::bind(&local_addr).await?;
     listen(context, listener).await
 }

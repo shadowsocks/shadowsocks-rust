@@ -2,11 +2,12 @@
 
 use std::{io, net::SocketAddr, sync::Arc};
 
+use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
     net::{
-        tcp::split::{TcpStreamReadHalf, TcpStreamWriteHalf},
+        tcp::split::{ReadHalf, WriteHalf},
         TcpListener,
         TcpStream,
     },
@@ -18,11 +19,10 @@ use crate::{config::ServerConfig, context::SharedContext};
 use crate::relay::{
     loadbalancing::server::{LoadBalancer, PingBalancer},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
-    tcprelay::crypto_io::{DecryptedRead, EncryptedWrite},
     utils::try_timeout,
 };
 
-use super::{ignore_until_end, tunnel};
+use super::{ignore_until_end, BUFFER_SIZE};
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -30,9 +30,9 @@ struct UdpConfig {
     client_addr: SocketAddr,
 }
 
-async fn handle_socks5_connect(
+async fn handle_socks5_connect<'a>(
     context: SharedContext,
-    (mut r, mut w): (TcpStreamReadHalf, TcpStreamWriteHalf),
+    (mut r, mut w): (ReadHalf<'a>, WriteHalf<'a>),
     client_addr: SocketAddr,
     addr: &Address,
     svr_cfg: Arc<ServerConfig>,
@@ -41,7 +41,7 @@ async fn handle_socks5_connect(
 
     let svr_s = match super::connect_proxy_server(context, svr_cfg.clone()).await {
         Ok(svr_s) => {
-            trace!("Proxy server connected");
+            trace!("Proxy server connected, {:?}", svr_cfg);
 
             // Tell the client that we are ready
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(client_addr));
@@ -72,16 +72,60 @@ async fn handle_socks5_connect(
         }
     };
 
-    let (svr_r, svr_w) = super::proxy_server_handshake(svr_s, svr_cfg, addr).await?;
+    let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg.clone(), addr).await?;
+    let (mut svr_r, mut svr_w) = svr_s.split();
 
-    let rhalf = svr_w.encrypted_copy_from(&mut r, timeout);
-    let whalf = svr_r.decrypted_copy_to(&mut w, timeout);
-    tunnel(rhalf.fuse(), whalf.fuse()).await
+    let rhalf = async {
+        let mut buf = [0u8; BUFFER_SIZE];
+        loop {
+            let n = try_timeout(r.read(&mut buf), timeout).await?;
+            if n == 0 {
+                break;
+            }
+            try_timeout(svr_w.write_all(&buf[..n]), timeout).await?;
+        }
+        Result::<(), io::Error>::Ok(())
+    };
+
+    let whalf = async {
+        let mut buf = [0u8; BUFFER_SIZE];
+        loop {
+            let n = try_timeout(svr_r.read(&mut buf), timeout).await?;
+            if n == 0 {
+                break;
+            }
+            try_timeout(w.write_all(&buf[..n]), timeout).await?;
+        }
+        Result::<(), io::Error>::Ok(())
+    };
+
+    debug!("CONNECT relay established {} <-> {}", client_addr, svr_cfg.addr());
+
+    match future::select(rhalf.boxed(), whalf.boxed()).await {
+        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, svr_cfg.addr()),
+        Either::Left((Err(err), _)) => trace!(
+            "CONNECT relay {} -> {} closed with error {:?}",
+            client_addr,
+            svr_cfg.addr(),
+            err
+        ),
+        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, svr_cfg.addr()),
+        Either::Right((Err(err), _)) => trace!(
+            "CONNECT relay {} <- {} closed with error {:?}",
+            client_addr,
+            svr_cfg.addr(),
+            err
+        ),
+    }
+
+    debug!("CONNECT relay {} <-> {} closing", client_addr, svr_cfg.addr());
+
+    Ok(())
 }
 
 async fn handle_socks5_client(
     context: SharedContext,
-    s: TcpStream,
+    mut s: TcpStream,
     conf: Arc<ServerConfig>,
     udp_conf: UdpConfig,
 ) -> io::Result<()> {
@@ -96,7 +140,6 @@ async fn handle_socks5_client(
     }
 
     let client_addr = s.peer_addr()?;
-    let cloned_client_addr = client_addr;
 
     let (mut r, mut w) = s.split();
 
@@ -125,6 +168,8 @@ async fn handle_socks5_client(
     handshake_resp.write_to(&mut w).await?;
     w.flush().await?;
 
+    res?;
+
     // Fetch headers
     let header = match TcpRequestHeader::read_from(&mut r).await {
         Ok(h) => h,
@@ -145,7 +190,7 @@ async fn handle_socks5_client(
             if enable_tcp {
                 debug!("CONNECT {}", addr);
 
-                match handle_socks5_connect(context, (r, w), cloned_client_addr, &addr, conf).await {
+                match handle_socks5_connect(context, (r, w), client_addr, &addr, conf).await {
                     Ok(..) => Ok(()),
                     Err(err) => Err(io::Error::new(
                         err.kind(),
@@ -193,8 +238,9 @@ async fn handle_socks5_client(
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
-    let listener =
-        TcpListener::bind(&local_addr).unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
+    let mut listener = TcpListener::bind(&local_addr)
+        .await
+        .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
@@ -207,18 +253,19 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let mut servers = PingBalancer::new(context.clone());
 
-    while let (socket, peer_addr) = listener.accept().await? {
+    loop {
+        let (socket, peer_addr) = listener.accept().await?;
         let server_cfg = servers.pick_server();
 
         trace!("Got connection, addr: {}", peer_addr);
         trace!("Picked proxy server: {:?}", server_cfg);
 
-        tokio::spawn(async {
-            if let Err(err) = handle_socks5_client(context.clone(), socket, server_cfg, udp_conf.clone()).await {
+        let context = context.clone();
+        let udp_conf = udp_conf.clone();
+        tokio::spawn(async move {
+            if let Err(err) = handle_socks5_client(context, socket, server_cfg, udp_conf).await {
                 error!("Socks5 client {}", err);
             }
         });
     }
-
-    Ok(())
 }

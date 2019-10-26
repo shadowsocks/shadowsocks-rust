@@ -13,11 +13,7 @@ use std::{
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::{
-        loadbalancing::server::LoadBalancer,
-        socks5::Address,
-        tcprelay::{client::ServerClient, EncryptedWrite},
-    },
+    relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
 };
 
 use log::{debug, error, info};
@@ -172,11 +168,11 @@ impl Inner {
 
         let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
-        let ServerClient { r, w } = ServerClient::connect(context, &addr, sc).await?;
-        w.encrypted_write_all(GET_BODY).await?;
-        w.flush().await?;
+        let ServerClient { mut stream } = ServerClient::connect(context, &addr, sc).await?;
+        stream.write_all(GET_BODY).await?;
+        stream.flush().await?;
         let mut buf = [0u8; 1];
-        r.read_exact(&mut buf).await?;
+        stream.read_exact(&mut buf).await?;
 
         Ok(())
     }
@@ -204,7 +200,7 @@ impl Inner {
                 // NOTE: connection / handshake error, server is down
                 Err(err)
             }
-            Err(err) => {
+            Err(..) => {
                 // Timeout
                 debug!(
                     "checked remote server {} latency timeout, elapsed {} ms",
@@ -240,47 +236,52 @@ impl PingBalancer {
     pub fn new(context: SharedContext) -> PingBalancer {
         let inner = Arc::new(Inner::new(context));
 
-        tokio::spawn(async move {
-            let mut interval = Interval::new(
-                Instant::now() + Duration::from_secs(2),
-                Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-            );
+        if inner.servers.len() > 1 {
+            let cloned_inner = inner.clone();
+            tokio::spawn(async move {
+                let inner = cloned_inner;
 
-            while let Some(_) = interval.next().await {
-                if inner.servers.is_empty() {
-                    panic!("No server");
-                }
-
-                // Choose the best one
-                let mut svr_idx = 0;
-
-                for (idx, svr) in inner.servers.iter().enumerate() {
-                    let choosen_svr = &inner.servers[svr_idx];
-                    if svr.score() < choosen_svr.score() {
-                        svr_idx = idx;
-                    }
-                }
-
-                let choosen_svr = &inner.servers[svr_idx];
-                debug!(
-                    "chosen the best server {} (score: {})",
-                    choosen_svr.config.addr(),
-                    choosen_svr.score()
+                let mut interval = Interval::new(
+                    Instant::now() + Duration::from_secs(2),
+                    Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                 );
 
-                if inner.best_idx() != svr_idx {
-                    info!(
-                        "switched server from {} (score: {}) to {} (score: {})",
-                        inner.best_server().config.addr(),
-                        inner.best_server().score(),
-                        choosen_svr.config.addr(),
-                        choosen_svr.score(),
-                    );
-                }
+                while let Some(_) = interval.next().await {
+                    if inner.servers.is_empty() {
+                        panic!("No server");
+                    }
 
-                inner.set_best_idx(svr_idx);
-            }
-        });
+                    // Choose the best one
+                    let mut svr_idx = 0;
+
+                    for (idx, svr) in inner.servers.iter().enumerate() {
+                        let choosen_svr = &inner.servers[svr_idx];
+                        if svr.score() < choosen_svr.score() {
+                            svr_idx = idx;
+                        }
+                    }
+
+                    let choosen_svr = &inner.servers[svr_idx];
+                    debug!(
+                        "chosen the best server {} (score: {})",
+                        choosen_svr.config.addr(),
+                        choosen_svr.score()
+                    );
+
+                    if inner.best_idx() != svr_idx {
+                        info!(
+                            "switched server from {} (score: {}) to {} (score: {})",
+                            inner.best_server().config.addr(),
+                            inner.best_server().score(),
+                            choosen_svr.config.addr(),
+                            choosen_svr.score(),
+                        );
+                    }
+
+                    inner.set_best_idx(svr_idx);
+                }
+            });
+        }
 
         PingBalancer { inner }
     }

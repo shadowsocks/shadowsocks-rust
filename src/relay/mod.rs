@@ -7,5 +7,5 @@ pub mod local;
 pub mod server;
 pub mod socks5;
 pub mod tcprelay;
-pub mod udprelay;
+// pub mod udprelay;
 pub(crate) mod utils;

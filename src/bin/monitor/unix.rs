@@ -1,34 +1,22 @@
-use futures::{Future, Stream};
-use libc;
-use log::{error, info};
+use futures::{
+    future::{self, Either},
+    StreamExt,
+};
+use log::info;
 use std::io;
-use tokio_signal::unix::Signal;
+use tokio::signal::unix::{signal, SignalKind};
 
-pub fn create_signal_monitor() -> impl Future<Item = (), Error = io::Error> + Send {
+pub async fn create_signal_monitor() -> io::Result<()> {
     // Future resolving to two signal streams. Can fail if setting up signal monitoring fails
-    let signals_future = Signal::new(libc::SIGTERM).join(Signal::new(libc::SIGINT));
+    let sigterm = signal(SignalKind::terminate())?;
+    let sigint = signal(SignalKind::interrupt())?;
 
-    signals_future
-       // The future resolved into our two streams of signals
-       .and_then(|(sigterms, sigints)| {
-           // Stream of all signals we care about
-           let signals = sigterms.select(sigints);
-           // Take only the first signal in the stream and log that it was triggered
-           signals.take(1).for_each(|signal| {
-               let signal_name = match signal {
-                   libc::SIGTERM => "SIGTERM",
-                   libc::SIGINT => "SIGINT",
-                   _ => unreachable!(),
-               };
-               info!("Received {}, exiting", signal_name);
-               Ok(())
-           }).map_err(|error| {
-               error!("Error while listening on process signals: {:?}", error);
-               error
-           })
-       })
-       .map_err(|error| {
-           error!("Failed to set up process signal monitoring: {:?}", error);
-           error
-       })
+    let signal_name = match future::select(sigterm.into_future(), sigint.into_future()).await {
+        Either::Left(..) => "SIGTERM",
+        Either::Right(..) => "SIGINT",
+    };
+
+    info!("Received {}, exiting", signal_name);
+
+    Ok(())
 }

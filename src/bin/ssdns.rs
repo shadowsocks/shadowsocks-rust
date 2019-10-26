@@ -168,7 +168,7 @@ fn main() {
 
     let result = runtime.block_on(run_dns(config));
 
-    runtime.shutdown_now().wait().unwrap();
+    runtime.shutdown_now();
 
     panic!("Server exited unexpectly with result: {:?}", result);
 }

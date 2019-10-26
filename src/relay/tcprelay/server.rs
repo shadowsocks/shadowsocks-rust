@@ -6,18 +6,22 @@ use crate::relay::{dns_resolver::resolve, socks5::Address};
 
 use crate::context::SharedContext;
 
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::{
+    future::{self, Either},
+    stream::{FuturesUnordered, StreamExt},
+};
 use log::{debug, error, info, trace};
 use tokio::{
     self,
-    future::FutureExt,
     net::{TcpListener, TcpStream},
+    prelude::*,
 };
 
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
-    proxy_handshake,
+    CryptoStream,
+    BUFFER_SIZE,
 };
 
 use crate::relay::utils::try_timeout;
@@ -43,16 +47,11 @@ async fn handle_client(
         svr_context.svr_cfg()
     );
 
-    let (r, w) = socket.split();
+    let stream = TcpMonStream::new(svr_context.clone(), socket);
 
-    // Wraps for monitor
-    let r = TcpMonStream::new(svr_context, r);
-    let w = TcpMonStream::new(svr_context, w);
-
-    // 1. Handshake
     // Do server-client handshake
     // Perform encryption IV exchange
-    let (r, w) = match proxy_handshake(r, w, svr_context.svr_cfg().clone()).await {
+    let mut stream = match CryptoStream::handshake(stream, svr_context.svr_cfg().clone()).await {
         Ok(o) => o,
         Err(err) => {
             error!("Failed to handshake with peer {}, {}", peer_addr, err);
@@ -63,7 +62,7 @@ async fn handle_client(
     let timeout = svr_context.svr_cfg().timeout();
 
     // Read remote Address
-    let remote_addr = match try_timeout(Address::read_from(&mut r), timeout).await {
+    let remote_addr = match try_timeout(Address::read_from(&mut stream), timeout).await {
         Ok(o) => o,
         Err(err) => {
             error!(
@@ -74,11 +73,11 @@ async fn handle_client(
         }
     };
 
-    debug!("Received relay request {} <-> {}", peer_addr, remote_addr);
+    debug!("Relay {} <-> {} establishing", peer_addr, remote_addr);
 
     let context = svr_context.context();
 
-    let remote_stream = match remote_addr {
+    let mut remote_stream = match remote_addr {
         Address::SocketAddress(ref saddr) => {
             if context.config().forbidden_ip.contains(&saddr.ip()) {
                 error!("{} is forbidden, failed to connect {}", saddr.ip(), saddr);
@@ -90,14 +89,17 @@ async fn handle_client(
             }
 
             match try_timeout(TcpStream::connect(saddr), timeout).await {
-                Ok(s) => s,
+                Ok(s) => {
+                    debug!("Connected to remote {}", saddr);
+                    s
+                }
                 Err(err) => {
                     error!("Failed to connect remote {}, {}", saddr, err);
                     return Err(err);
                 }
             }
         }
-        Address::DomainNameAddress(dname, port) => {
+        Address::DomainNameAddress(ref dname, port) => {
             let addrs = match try_timeout(resolve(context.clone(), dname.as_str(), port, true), timeout).await {
                 Ok(r) => r,
                 Err(err) => {
@@ -122,7 +124,10 @@ async fn handle_client(
             }
 
             match stream_opt {
-                Some(s) => s,
+                Some(s) => {
+                    debug!("Connected to remote {}:{}", dname, port);
+                    s
+                }
                 None => {
                     let err = last_err.unwrap();
                     error!("Failed to connect remote {}:{}, {}", dname, port, err);
@@ -132,6 +137,46 @@ async fn handle_client(
         }
     };
 
+    debug!("Relay {} <-> {} established", peer_addr, remote_addr);
+
+    let (mut cr, mut cw) = stream.split();
+    let (mut sr, mut sw) = remote_stream.split();
+
+    // CLIENT -> SERVER
+    let rhalf = async {
+        let mut buf = [0u8; BUFFER_SIZE];
+        loop {
+            let n = try_timeout(cr.read(&mut buf), timeout).await?;
+            if n == 0 {
+                break;
+            }
+            try_timeout(sw.write_all(&buf[..n]), timeout).await?;
+        }
+        io::Result::Ok(())
+    };
+
+    // CLIENT <- SERVER
+    let whalf = async {
+        let mut buf = [0u8; BUFFER_SIZE];
+        loop {
+            let n = try_timeout(sr.read(&mut buf), timeout).await?;
+            if n == 0 {
+                break;
+            }
+            try_timeout(cw.write_all(&buf[..n]), timeout).await?;
+        }
+        io::Result::Ok(())
+    };
+
+    match future::select(rhalf.boxed(), whalf.boxed()).await {
+        Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),
+        Either::Left((Err(err), _)) => trace!("Relay {} -> {} closed with error {:?}", peer_addr, remote_addr, err),
+        Either::Right((Ok(_), _)) => trace!("Relay {} <- {} closed", peer_addr, remote_addr),
+        Either::Right((Err(err), _)) => trace!("Relay {} <- {} closed with error {:?}", peer_addr, remote_addr, err),
+    }
+
+    debug!("Relay {} <-> {} closing", peer_addr, remote_addr);
+
     Ok(())
 }
 
@@ -140,11 +185,13 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let mut vec_fut = FuturesUnordered::new();
 
     for svr_cfg in &context.config().server {
-        let listener = {
+        let mut listener = {
             let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
             let addr = addr.listen_addr();
 
-            let listener = TcpListener::bind(&addr).unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+            let listener = TcpListener::bind(&addr)
+                .await
+                .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
 
             info!("ShadowSocks TCP Listening on {}", addr);
             listener

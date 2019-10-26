@@ -48,14 +48,14 @@ clap = "2.33"
 env_logger = "0.6"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
-tokio = "0.2.0-alpha"
-tokio-process = "0.3.0-alpha"
-futures-preview = { version = "0.3.0-alpha", features = ["async-await", "nightly"] }
+# tokio = { version = "0.2.0-alpha", features = ["process"], default-features = true }
+tokio = { git = "https://github.com/tokio-rs/tokio", features = ["process", "signal"] }
+futures-preview = { version = "0.3.0-alpha", features = ["async-await", "std"] }
 json5 = "0.2"
 base64 = "0.10"
 bytes = "0.4"
 byteorder = "1"
-ring = "0.14"
+ring = "0.16"
 md-5 = "0.8"
 digest = "0.8"
 typenum = "1.10"
@@ -68,11 +68,11 @@ libsodium-ffi = { version = "0.1", optional = true }
 miscreant = { version = "0.4", optional = true }
 lru-cache = "0.1"
 dns-parser = "0.8"
-trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+# trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+# trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls"] }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 spin = { version = "0.5", default-features = false }
-
-[target.'cfg(unix)'.dependencies]
-tokio-signal = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-tokio-signal = "0.2"
+hkdf = "0.8"
+hmac = "0.7"
+sha-1 = "0.8.1"
+pin-project = "0.4"

@@ -10,124 +10,137 @@ use std::{
 
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
 use bytes::{BufMut, BytesMut};
+use futures::ready;
 use tokio::prelude::*;
 
-use super::{DecryptedRead, EncryptedWrite, BUFFER_SIZE};
+use super::BUFFER_SIZE;
 
 const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
 
 /// Reader wrapper that will decrypt data automatically
-pub struct DecryptedReader<R> {
-    reader: R,
+pub struct DecryptedReader {
     buffer: BytesMut,
     cipher: BoxStreamCipher,
     pos: usize,
-    sent_final: bool,
+    got_final: bool,
 }
 
-impl<R> DecryptedReader<R> {
-    pub fn new(r: R, t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader<R> {
+impl DecryptedReader {
+    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader {
         let cipher = new_stream(t, key, iv, CryptoMode::Decrypt);
         let buffer_size = cipher.buffer_size(&DUMMY_BUFFER);
         DecryptedReader {
-            reader: r,
             buffer: BytesMut::with_capacity(buffer_size),
             cipher,
             pos: 0,
-            sent_final: false,
+            got_final: false,
         }
     }
-}
 
-// Forward Unpin
-impl<A: Unpin> Unpin for DecryptedReader<A> {}
-
-impl<R> AsyncBufRead for DecryptedReader<R>
-where
-    R: AsyncRead + Unpin,
-{
-    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
+    pub fn poll_read_decrypted<R>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        r: &mut R,
+        dst: &mut [u8],
+    ) -> Poll<io::Result<usize>>
+    where
+        R: AsyncRead + Unpin,
+    {
         while self.pos >= self.buffer.len() {
-            if self.sent_final {
-                return Poll::Ready(Ok(&[]));
+            if self.got_final {
+                return Poll::Ready(Ok(0));
             }
 
             let mut incoming = [0u8; BUFFER_SIZE];
+
+            let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut incoming))?;
+
+            // Reset pointers
             self.buffer.clear();
-            let l = match Pin::new(&mut self.reader).poll_read(cx, &mut incoming)? {
-                Poll::Ready(t) => t,
-                Poll::Pending => return Poll::Pending,
-            };
-            if l == 0 {
-                // Ensure we have enough space
-                let buffer_len = self.buffer_size(&[]);
-                self.buffer.reserve(buffer_len);
+            self.pos = 0;
 
-                // EOF
+            if n == 0 {
+                // Finialize block
+                self.buffer.reserve(self.buffer_size(&[]));
                 self.cipher.finalize(&mut self.buffer)?;
-                self.sent_final = true;
+                self.got_final = true;
             } else {
-                let data = &incoming[..l];
-
+                let data = &incoming[..n];
                 // Ensure we have enough space
                 let buffer_len = self.buffer_size(data);
                 self.buffer.reserve(buffer_len);
-
                 self.cipher.update(data, &mut self.buffer)?;
             }
-
-            self.pos = 0;
         }
 
-        Poll::Ready(Ok(&self.buffer[self.pos..]))
+        let remaining_len = self.buffer.len() - self.pos;
+        let n = cmp::min(dst.len(), remaining_len);
+        (&mut dst[..n]).copy_from_slice(&self.buffer[self.pos..self.pos + n]);
+        self.pos += n;
+        Poll::Ready(Ok(n))
     }
 
-    fn consume(self: Pin<&mut Self>, amt: usize) {
-        self.pos = cmp::min(self.pos + amt, self.buffer.len());
-    }
-}
-
-impl<R> AsyncRead for DecryptedReader<R>
-where
-    R: AsyncRead + Unpin,
-{
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let nread = {
-            let mut available = match self.poll_fill_buf(cx)? {
-                Poll::Ready(a) => a,
-                Poll::Pending => return Poll::Pending,
-            };
-
-            let len = available.len().min(buf.len());
-            buf.copy_from_slice(&available[..len]);
-            len
-        };
-        self.consume(nread);
-        Poll::Ready(Ok(nread))
-    }
-}
-
-impl<R> DecryptedRead for DecryptedReader<R>
-where
-    R: AsyncRead + Unpin,
-{
     fn buffer_size(&self, data: &[u8]) -> usize {
         self.cipher.buffer_size(data)
     }
 }
 
-/// Writer wrapper that will encrypt data automatically
-pub struct EncryptedWriter<W> {
-    writer: W,
-    cipher: BoxStreamCipher,
+enum EncryptWriteStep {
+    Nothing,
+    Writing(BytesMut, usize),
 }
 
-impl<W> EncryptedWriter<W> {
+/// Writer wrapper that will encrypt data automatically
+pub struct EncryptedWriter {
+    cipher: BoxStreamCipher,
+    steps: EncryptWriteStep,
+}
+
+impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(w: W, t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter<W> {
+    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter {
         EncryptedWriter {
-            writer: w,
             cipher: new_stream(t, key, iv, CryptoMode::Encrypt),
+            steps: EncryptWriteStep::Nothing,
+        }
+    }
+
+    pub fn poll_write_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<usize>>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        ready!(self.poll_write_all_encrypted(ctx, w, data))?;
+        Poll::Ready(Ok(data.len()))
+    }
+
+    pub fn poll_write_all_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<()>>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        // FIXME: How about finalize?
+
+        loop {
+            match self.steps {
+                EncryptWriteStep::Nothing => {
+                    let mut buf = BytesMut::with_capacity(self.buffer_size(data));
+                    self.cipher_update(data, &mut buf)?;
+
+                    self.steps = EncryptWriteStep::Writing(buf, 0);
+                }
+                EncryptWriteStep::Writing(ref mut buf, ref mut pos) => {
+                    while *pos < buf.len() {
+                        let n = ready!(Pin::new(&mut *w).poll_write(ctx, &buf[*pos..]))?;
+                        if n == 0 {
+                            let err = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof");
+                            return Poll::Ready(Err(err));
+                        }
+                        *pos += n;
+                    }
+
+                    self.steps = EncryptWriteStep::Nothing;
+                    return Poll::Ready(Ok(()));
+                }
+            }
         }
     }
 
@@ -135,40 +148,12 @@ impl<W> EncryptedWriter<W> {
         self.cipher.update(data, buf).map_err(From::from)
     }
 
+    #[allow(dead_code)]
     fn cipher_finalize<B: BufMut>(&mut self, buf: &mut B) -> io::Result<()> {
         self.cipher.finalize(buf).map_err(From::from)
-    }
-}
-
-// Forward Unpin
-impl<A: Unpin> Unpin for EncryptedWriter<A> {}
-
-impl<W> EncryptedWrite for EncryptedWriter<W>
-where
-    W: AsyncWrite + Unpin,
-{
-    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
-        self.cipher_update(data, buf)
     }
 
     fn buffer_size(&self, data: &[u8]) -> usize {
         self.cipher.buffer_size(data)
-    }
-}
-
-impl<W> AsyncWrite for EncryptedWriter<W>
-where
-    W: AsyncWrite + Unpin,
-{
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.writer).poll_write(cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.writer).poll_flush(cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.writer).poll_shutdown(cx)
     }
 }

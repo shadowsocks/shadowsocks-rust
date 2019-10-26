@@ -271,7 +271,7 @@ impl Address {
                 let _ = stream.read_exact(&mut buf).await?;
 
                 let mut cursor = buf.into_buf();
-                let raw_addr = cursor.take(length).collect::<Vec<u8>>();
+                let raw_addr = Buf::take(&mut cursor, length).collect::<Vec<u8>>();
                 let addr = match String::from_utf8(raw_addr) {
                     Ok(addr) => addr,
                     Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
@@ -289,7 +289,7 @@ impl Address {
 
     /// Writes to writer
     #[inline]
-    pub async fn write_to<W>(self, writer: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, writer: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -451,7 +451,7 @@ impl TcpRequestHeader {
     }
 
     /// Write data into a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -525,7 +525,7 @@ impl TcpResponseHeader {
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -590,7 +590,7 @@ impl HandshakeRequest {
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -651,7 +651,7 @@ impl HandshakeResponse {
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -710,7 +710,7 @@ impl UdpAssociateHeader {
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {

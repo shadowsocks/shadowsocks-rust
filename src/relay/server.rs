@@ -9,8 +9,8 @@ use log::error;
 use crate::{
     config::Config,
     context::{Context, SharedContext},
-    plugin::{launch_plugins, PluginMode},
-    relay::{tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
+    plugin::{PluginMode, Plugins},
+    relay::tcprelay::server::run as run_tcp,
 };
 
 /// Relay server running on server side.
@@ -39,21 +39,21 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut vf = Vec::new();
 
-    if context.config().mode.enable_udp() {
-        // Clone config here, because the config for TCP relay will be modified
-        // after plugins started
-        let udp_context = SharedContext::new(context.clone());
+    // if context.config().mode.enable_udp() {
+    //     // Clone config here, because the config for TCP relay will be modified
+    //     // after plugins started
+    //     let udp_context = SharedContext::new(context.clone());
 
-        // Run UDP relay before starting plugins
-        // Because plugins doesn't support UDP relay
-        let udp_fut = run_udp(udp_context);
-        vf.push(Box::pin(udp_fut) as BoxFuture<io::Result<()>>);
-    }
+    //     // Run UDP relay before starting plugins
+    //     // Because plugins doesn't support UDP relay
+    //     let udp_fut = run_udp(udp_context);
+    //     vf.push(Box::pin(udp_fut) as BoxFuture<io::Result<()>>);
+    // }
 
     if context.config().mode.enable_tcp() {
         if context.config().has_server_plugins() {
-            let plugins = launch_plugins(context.config_mut(), PluginMode::Client);
-            vf.push(Box::pin(plugins) as BoxFuture<io::Result<()>>);
+            let plugins = Plugins::launch_plugins(context.config_mut(), PluginMode::Client)?;
+            vf.push(Box::pin(plugins.into_future()) as BoxFuture<io::Result<()>>);
         }
 
         let tcp_fut = run_tcp(SharedContext::new(context));

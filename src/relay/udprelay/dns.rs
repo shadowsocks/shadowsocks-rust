@@ -36,7 +36,7 @@ use crate::{
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
-    let listener = UdpSocket::bind(&local_addr)?;
+    let listener = UdpSocket::bind(&local_addr).await?;
     listen(context, listener).await
 }
 
@@ -50,13 +50,14 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         };
 
         let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let s = UdpSocket::bind(&local_addr)?;
+        let s = UdpSocket::bind(&local_addr).await?;
         let svr_cfg = Arc::new(svr.clone());
     }
 
     let mut svr_addr_futs = Vec::with_capacity(context.config().server.len());
     for svr in &context.config().server {
-        svr_addr_futs.push(async {
+        let context = context.clone();
+        svr_addr_futs.push(async move {
             match *svr.addr() {
                 ServerAddr::SocketAddr(ref addr) => Ok((Arc::new(svr.clone()), *addr)),
                 ServerAddr::DomainName(ref dname, port) => {
@@ -70,8 +71,8 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 
     let (mut r, mut w) = l.split();
 
-    let svr_fut = Vec::<BoxFuture<io::Result<()>>>::new();
-    let vec_remote = Vec::<(UdpSocketSendHalf, Arc<ServerConfig>, SocketAddr)>::new();
+    let mut svr_fut = Vec::<BoxFuture<io::Result<()>>>::new();
+    let mut vec_remote = Vec::<(UdpSocketSendHalf, Arc<ServerConfig>, SocketAddr)>::new();
 
     for svr_addr in join_all(svr_addr_futs.into_iter()).await {
         match svr_addr {
@@ -82,7 +83,7 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 
             Ok((svr_cfg, svr_addr)) => {
                 let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
-                let remote_udp = UdpSocket::bind(&local_addr)?;
+                let remote_udp = UdpSocket::bind(&local_addr).await?;
 
                 let (remote_r, remote_w) = remote_udp.split();
                 vec_remote.push((remote_w, svr_cfg.clone(), svr_addr));

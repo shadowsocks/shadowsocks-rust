@@ -48,6 +48,7 @@ impl TcpServerContext {
         let ctx = Arc::new(ctx);
 
         if ctx.context.config().manager_address.is_some() {
+            let ctx = ctx.clone();
             tokio::spawn(async move {
                 let mut interval = Interval::new_interval(UPDATE_INTERVAL);
                 while let Some(_) = interval.next().await {
@@ -55,7 +56,8 @@ impl TcpServerContext {
                         // Finished
                         break;
                     } else {
-                        tokio::spawn(async {
+                        let ctx = ctx.clone();
+                        tokio::spawn(async move {
                             let _ = ctx.stat_interval().await;
                         });
                     }
@@ -96,7 +98,7 @@ impl TcpServerContext {
         let transmission = self.tx.load(Ordering::Acquire) + self.rx.load(Ordering::Acquire);
 
         let any_addr = "0.0.0.0:0".parse::<SocketAddr>().unwrap();
-        let socket = UdpSocket::bind(&any_addr)?;
+        let mut socket = UdpSocket::bind(&any_addr).await?;
 
         let payload = format!("stat: {{\"{}\": {}}}", svr_cfg.addr().port(), transmission);
         debug!("Sending Tcp Relay to {}, payload: {}", addr, payload);

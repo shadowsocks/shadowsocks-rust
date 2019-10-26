@@ -1,25 +1,59 @@
 //! Cipher defined with Ring
 
-use std::{mem, ptr};
-
-use ring::aead::{
-    open_in_place, seal_in_place, Aad, Nonce, OpeningKey, SealingKey, AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305,
+use ring::{
+    aead::{
+        Aad,
+        Algorithm,
+        Nonce,
+        NonceSequence,
+        OpeningKey,
+        SealingKey,
+        UnboundKey,
+        AES_128_GCM,
+        AES_256_GCM,
+        CHACHA20_POLY1305,
+        NONCE_LEN,
+    },
+    error::Unspecified,
 };
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor, AeadEncryptor, CipherResult, CipherType,
+    AeadDecryptor,
+    AeadEncryptor,
+    CipherResult,
+    CipherType,
 };
 
 use byte_string::ByteStr;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use log::error;
 
 /// AEAD ciphers provided by Ring
 pub enum RingAeadCryptoVariant {
-    Seal(SealingKey, Bytes),
-    Open(OpeningKey, Bytes),
+    Seal(SealingKey<RingAeadNonceSequence>),
+    Open(OpeningKey<RingAeadNonceSequence>),
+}
+
+pub struct RingAeadNonceSequence {
+    nonce: [u8; NONCE_LEN],
+}
+
+impl RingAeadNonceSequence {
+    fn new() -> RingAeadNonceSequence {
+        RingAeadNonceSequence {
+            nonce: [0u8; NONCE_LEN],
+        }
+    }
+}
+
+impl NonceSequence for RingAeadNonceSequence {
+    fn advance(&mut self) -> Result<Nonce, Unspecified> {
+        let nonce = Nonce::assume_unique_for_key(self.nonce);
+        increase_nonce(&mut self.nonce);
+        Ok(nonce)
+    }
 }
 
 /// AEAD Cipher context
@@ -28,8 +62,6 @@ pub enum RingAeadCryptoVariant {
 pub struct RingAeadCipher {
     cipher: RingAeadCryptoVariant,
     cipher_type: CipherType,
-    key: Bytes,
-    nonce: BytesMut,
 }
 
 impl RingAeadCipher {
@@ -37,57 +69,34 @@ impl RingAeadCipher {
     pub fn new(t: CipherType, key: &[u8], salt: &[u8], is_seal: bool) -> RingAeadCipher {
         // TODO: Check if salt is duplicated
 
-        let nonce_size = t.iv_size();
-        let mut nonce = BytesMut::with_capacity(nonce_size);
-        unsafe {
-            nonce.set_len(nonce_size);
-            ptr::write_bytes(nonce.as_mut_ptr(), 0, nonce_size);
-        }
+        // Nonce is 12 bytes
+        assert_eq!(t.iv_size(), NONCE_LEN);
 
         let skey = make_skey(t, key, salt);
-        let cipher = RingAeadCipher::new_variant(t, &skey, &nonce, is_seal);
-        RingAeadCipher {
-            cipher,
-            cipher_type: t,
-            key: skey,
-            nonce,
-        }
+        let cipher = RingAeadCipher::new_variant(t, &skey, is_seal);
+        RingAeadCipher { cipher, cipher_type: t }
     }
 
-    fn new_variant(t: CipherType, key: &[u8], nonce: &[u8], is_seal: bool) -> RingAeadCryptoVariant {
-        macro_rules! seal_or_open {
-            ($item:ident, $key:ident, $crypt:ident) => {
-                RingAeadCryptoVariant::$item($key::new(&$crypt, key).unwrap(), Bytes::from(nonce))
-            };
-            ($crypt:ident) => {
-                if is_seal {
-                    seal_or_open!(Seal, SealingKey, $crypt)
-                } else {
-                    seal_or_open!(Open, OpeningKey, $crypt)
-                }
-            };
-        }
-
+    fn new_variant(t: CipherType, key: &[u8], is_seal: bool) -> RingAeadCryptoVariant {
         match t {
-            CipherType::Aes128Gcm => seal_or_open!(AES_128_GCM),
-            CipherType::Aes256Gcm => seal_or_open!(AES_256_GCM),
-            CipherType::ChaCha20IetfPoly1305 => seal_or_open!(CHACHA20_POLY1305),
+            CipherType::Aes128Gcm => RingAeadCipher::new_crypt(&AES_128_GCM, key, is_seal),
+            CipherType::Aes256Gcm => RingAeadCipher::new_crypt(&AES_256_GCM, key, is_seal),
+            CipherType::ChaCha20IetfPoly1305 => RingAeadCipher::new_crypt(&CHACHA20_POLY1305, key, is_seal),
             _ => panic!("unsupported cipher in ring {:?}", t),
         }
     }
 
-    fn increase_nonce(&mut self) {
-        increase_nonce(&mut self.nonce);
-    }
+    #[inline]
+    fn new_crypt(algorithm: &'static Algorithm, key: &[u8], is_seal: bool) -> RingAeadCryptoVariant {
+        use ring::aead::BoundKey;
 
-    fn reset(&mut self) {
-        self.increase_nonce();
-        let is_seal = match self.cipher {
-            RingAeadCryptoVariant::Seal(..) => true,
-            RingAeadCryptoVariant::Open(..) => false,
-        };
-        let var = RingAeadCipher::new_variant(self.cipher_type, &self.key, &self.nonce, is_seal);
-        mem::replace(&mut self.cipher, var);
+        let unbound_key = UnboundKey::new(algorithm, key).unwrap();
+
+        if is_seal {
+            RingAeadCryptoVariant::Seal(SealingKey::new(unbound_key, RingAeadNonceSequence::new()))
+        } else {
+            RingAeadCryptoVariant::Open(OpeningKey::new(unbound_key, RingAeadNonceSequence::new()))
+        }
     }
 }
 
@@ -99,26 +108,14 @@ impl AeadEncryptor for RingAeadCipher {
 
         let mut buf = BytesMut::with_capacity(output.len());
         buf.put_slice(input);
-        unsafe {
-            buf.set_len(output.len());
-        }
 
-        if let RingAeadCryptoVariant::Seal(ref key, ref nonce) = self.cipher {
-            seal_in_place(
-                key,
-                Nonce::try_assume_unique_for_key(nonce).expect("AEAD cipher nonce length not match"),
-                Aad::empty(),
-                &mut buf,
-                tag_len,
-            )
-            .unwrap();
+        if let RingAeadCryptoVariant::Seal(ref mut key) = self.cipher {
+            key.seal_in_place_append_tag(Aad::empty(), &mut buf).unwrap();
         } else {
             unreachable!("encrypt is called on a non-seal cipher");
         }
 
-        output.copy_from_slice(&buf);
-
-        self.reset();
+        output.copy_from_slice(&buf[..buf_len]);
     }
 }
 
@@ -130,36 +127,25 @@ impl AeadDecryptor for RingAeadCipher {
         let mut buf = BytesMut::with_capacity(input.len());
         buf.put_slice(input);
 
-        let r = if let RingAeadCryptoVariant::Open(ref key, ref nonce) = self.cipher {
-            match open_in_place(
-                key,
-                Nonce::try_assume_unique_for_key(nonce).expect("AEAD cipher nonce length not match"),
-                Aad::empty(),
-                0,
-                &mut buf,
-            ) {
+        if let RingAeadCryptoVariant::Open(ref mut key) = self.cipher {
+            match key.open_in_place(Aad::empty(), &mut buf) {
                 Ok(obuf) => {
                     output.copy_from_slice(obuf);
                     Ok(())
                 }
-                Err(err) => {
+                Err(..) => {
                     error!(
-                        "AEAD decrypt failed, nonce={:?}, input={:?}, tag={:?}, err: {:?}",
-                        ByteStr::new(nonce),
-                        ByteStr::new(&input[..tag_len]),
-                        ByteStr::new(&input[tag_len..]),
-                        err
+                        "AEAD decrypt failed, input={:?}, tag={:?}, opening: {:?}",
+                        ByteStr::new(&input[..output.len()]),
+                        ByteStr::new(&input[output.len()..]),
+                        key,
                     );
                     Err(Error::AeadDecryptFailed)
                 }
             }
         } else {
             unreachable!("decrypt is called on a non-open cipher");
-        };
-
-        self.reset();
-
-        r
+        }
     }
 }
 

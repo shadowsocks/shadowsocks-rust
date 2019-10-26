@@ -1,7 +1,7 @@
 use futures::{self, Future, Stream};
 use log::{error, info};
 use std::io;
-use tokio_signal::windows::Event;
+use tokio::net::signal::windows::Event;
 
 pub fn create_signal_monitor() -> impl Future<Item = (), Error = io::Error> + Send {
     // Must be wrapped with a future, because when `Event` is being created, it will spawn
