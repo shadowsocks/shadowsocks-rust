@@ -7,11 +7,9 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, error};
-use tokio::{
-    self,
-    net::{udp::split::UdpSocketSendHalf, UdpSocket},
-};
+use bytes::BytesMut;
+use log::{debug, error, warn};
+use tokio::{self, net::UdpSocket, sync::mpsc};
 
 use crate::{
     config::{ServerAddr, ServerConfig},
@@ -46,10 +44,9 @@ async fn resolve_server_addr(context: SharedContext, svr_cfg: Arc<ServerConfig>)
 async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
-    l: &mut UdpSocketSendHalf,
     pkt: Vec<u8>,
     src: SocketAddr,
-) -> io::Result<()> {
+) -> io::Result<Vec<u8>> {
     const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
     // PKT = UdpAssociateHeader + PAYLOAD
@@ -67,7 +64,7 @@ async fn udp_associate(
 
     // The remaining is PAYLOAD
     let mut payload = Vec::new();
-    cur.read_to_end(&mut payload)?;
+    Read::read_to_end(&mut cur, &mut payload)?;
 
     // Connect to server
     let remote_addr = resolve_server_addr(context, svr_cfg.clone()).await?;
@@ -81,7 +78,6 @@ async fn udp_associate(
     let mut send_buf = Vec::new();
     addr.write_to_buf(&mut send_buf);
     send_buf.extend_from_slice(&payload);
-    let send_buf = encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf)?;
 
     debug!(
         "UDP ASSOCIATE {} -> {}, payload length {} bytes",
@@ -93,18 +89,34 @@ async fn udp_associate(
     let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
 
     // Write to remote socket CLIENT -> SERVER
-    let send_len = try_timeout(remote_udp.send_to(&send_buf, &remote_addr), Some(timeout)).await?;
-    assert_eq!(send_buf.len(), send_len);
+    let mut encrypt_buf = BytesMut::new();
+    encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+    let send_n = try_timeout(remote_udp.send_to(&encrypt_buf, &remote_addr), Some(timeout)).await?;
+
+    if send_n != encrypt_buf.len() {
+        warn!(
+            "Sent packet length {}, but expected length {}",
+            send_n,
+            encrypt_buf.len()
+        );
+    }
 
     // Waiting for response from server SERVER -> CLIENT
     // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-    let mut remote_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-    let remote_recv_len = try_timeout(remote_udp.recv(&mut remote_buf), Some(timeout)).await?;
+    let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+    let recv_n = try_timeout(remote_udp.recv(&mut recv_buf), Some(timeout)).await?;
 
-    let recv_buf = decrypt_payload(svr_cfg.method(), svr_cfg.key(), &remote_buf[..remote_recv_len])?;
+    let decrypt_buf = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
+        None => {
+            error!("UDP packet too short, received length {}", recv_n);
+            let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
+            return Err(err);
+        }
+        Some(b) => b,
+    };
 
     // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
-    let mut cur = Cursor::new(&recv_buf);
+    let mut cur = Cursor::new(decrypt_buf);
 
     // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
     let _ = Address::read_from(&mut cur).await?;
@@ -119,13 +131,9 @@ async fn udp_associate(
     UdpAssociateHeader::new(0, Address::SocketAddress(src)).write_to_buf(&mut data);
 
     // Copy payload directly
-    cur.read_to_end(&mut data)?;
+    Read::read_to_end(&mut cur, &mut data)?;
 
-    // Write back
-    let send_len = l.send_to(&data, &src).await?;
-    assert_eq!(data.len(), send_len);
-
-    Ok(())
+    Ok(data)
 }
 
 async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
@@ -134,6 +142,19 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
     let (mut r, mut w) = l.split();
 
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+
+    // FIXME: Channel size 1024?
+    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
+    tokio::spawn(async move {
+        while let Some((src, pkt)) = rx.recv().await {
+            if let Err(err) = w.send_to(&pkt, &src).await {
+                error!("UDP packet send failed, err: {:?}", err);
+                break;
+            }
+        }
+
+        // FIXME: How to stop the outer listener Future?
+    });
 
     loop {
         let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
@@ -144,9 +165,16 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 
         let svr_cfg = balancer.pick_server();
 
-        let assoc = async {
-            match udp_associate(context.clone(), svr_cfg.clone(), &mut w, pkt, src).await {
-                Ok(..) => (),
+        let context = context.clone();
+        let svr_cfg = svr_cfg.clone();
+        let mut tx = tx.clone();
+        let assoc = async move {
+            match udp_associate(context, svr_cfg, pkt, src).await {
+                Ok(pkt) => {
+                    if let Err(..) = tx.send((src, pkt)).await {
+                        error!("UDP packet channel closed");
+                    }
+                }
                 Err(err) => {
                     error!("Error occurs in UDP relay: {}", err);
                 }

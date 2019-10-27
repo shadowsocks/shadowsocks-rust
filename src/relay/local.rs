@@ -10,7 +10,7 @@ use crate::{
     config::Config,
     context::{Context, SharedContext},
     plugin::{PluginMode, Plugins},
-    relay::tcprelay::local::run as run_tcp,
+    relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp},
 };
 
 /// Relay server running under local environment.
@@ -39,16 +39,16 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut vf = Vec::new();
 
-    // if context.config().mode.enable_udp() {
-    //     // Clone config here, because the config for TCP relay will be modified
-    //     // after plugins started
-    //     let udp_context = SharedContext::new(context.clone());
+    if context.config().mode.enable_udp() {
+        // Clone config here, because the config for TCP relay will be modified
+        // after plugins started
+        let udp_context = SharedContext::new(context.clone());
 
-    //     // Run UDP relay before starting plugins
-    //     // Because plugins doesn't support UDP relay
-    //     let udp_fut = run_udp(udp_context);
-    //     vf.push(Box::pin(udp_fut) as BoxFuture<io::Result<()>>);
-    // }
+        // Run UDP relay before starting plugins
+        // Because plugins doesn't support UDP relay
+        let udp_fut = run_udp(udp_context);
+        vf.push(udp_fut.boxed());
+    }
 
     if context.config().has_server_plugins() {
         let plugins = Plugins::launch_plugins(context.config_mut(), PluginMode::Client)?;

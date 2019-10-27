@@ -37,7 +37,7 @@
 //! | Fixed |   Variable   |
 //! +-------+--------------+
 
-pub mod dns;
+// pub mod dns;
 pub mod local;
 pub mod server;
 

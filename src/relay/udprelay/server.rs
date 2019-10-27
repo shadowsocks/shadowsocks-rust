@@ -7,12 +7,10 @@ use std::{
     time::Duration,
 };
 
+use bytes::BytesMut;
 use futures::{self, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
-use tokio::{
-    self,
-    net::{udp::split::UdpSocketSendHalf, UdpSocket},
-};
+use tokio::{self, net::UdpSocket, sync::mpsc};
 
 use crate::{
     config::ServerConfig,
@@ -41,10 +39,9 @@ async fn resolve_remote_addr(context: SharedContext, addr: &Address) -> io::Resu
 async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
-    w: &mut UdpSocketSendHalf,
     decrypted_pkt: Vec<u8>,
     src: SocketAddr,
-) -> io::Result<()> {
+) -> io::Result<Vec<u8>> {
     const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
     // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
@@ -80,20 +77,14 @@ async fn udp_associate(
     addr.write_to_buf(&mut send_buf);
     send_buf.extend_from_slice(&remote_buf[..remote_recv_len]);
 
-    // Encrypts
-    let response_pkt = encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf)?;
-
     debug!(
         "UDP ASSOCIATE {} <- {}, payload length {} bytes",
         src,
         addr,
-        response_pkt.len()
+        send_buf.len()
     );
 
-    let response_len = w.send_to(&response_pkt, &src).await?;
-    assert_eq!(response_pkt.len(), response_len);
-
-    Ok(())
+    Ok(send_buf)
 }
 
 async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
@@ -101,7 +92,31 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
     info!("ShadowSocks UDP listening on {}", listen_addr);
 
     let listener = UdpSocket::bind(&listen_addr).await?;
-    let (r, w) = listener.split();
+    let (mut r, mut w) = listener.split();
+
+    let svr_cfg_cloned = svr_cfg.clone();
+
+    // FIXME: Channel size 1024?
+    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
+    tokio::spawn(async move {
+        let svr_cfg = svr_cfg_cloned;
+
+        while let Some((src, pkt)) = rx.recv().await {
+            // Encrypts
+            let mut response_pkt = BytesMut::new();
+            if let Err(err) = encrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt, &mut response_pkt) {
+                error!("UDP packet encrypt failed, err: {:?}", err);
+                continue;
+            }
+
+            if let Err(err) = w.send_to(&response_pkt, &src).await {
+                error!("UDP packet send failed, err: {:?}", err);
+                break;
+            }
+        }
+
+        // FIXME: How to stop the outer listener Future?
+    });
 
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
@@ -113,16 +128,27 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
 
         // First of all, decrypt payload CLIENT -> SERVER
         let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
-            Ok(pkt) => pkt,
+            Ok(Some(pkt)) => pkt,
+            Ok(None) => {
+                error!("Failed to decrypt pkt in UDP relay, packet too short");
+                continue;
+            }
             Err(err) => {
                 error!("Failed to decrypt pkt in UDP relay: {}", err);
                 continue;
             }
         };
 
-        tokio::spawn(async {
-            match udp_associate(context.clone(), svr_cfg.clone(), &mut w, decrypted_pkt, src).await {
-                Ok(..) => (),
+        let context = context.clone();
+        let svr_cfg = svr_cfg.clone();
+        let mut tx = tx.clone();
+        tokio::spawn(async move {
+            match udp_associate(context, svr_cfg, decrypted_pkt, src).await {
+                Ok(pkt) => {
+                    if let Err(..) = tx.send((src, pkt)).await {
+                        error!("UDP packet channel closed");
+                    }
+                }
                 Err(err) => {
                     error!("Error occurs in UDP relay: {}", err);
                 }

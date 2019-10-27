@@ -22,59 +22,77 @@
 
 use std::io;
 
+use byte_string::ByteStr;
+use bytes::{BufMut, BytesMut};
+use log::trace;
+
 use crate::crypto::{self, CipherCategory, CipherType, CryptoMode};
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
-pub fn encrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+pub fn encrypt_payload(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
     match t.category() {
-        CipherCategory::Stream => encrypt_payload_stream(t, key, payload),
-        CipherCategory::Aead => encrypt_payload_aead(t, key, payload),
+        CipherCategory::Stream => encrypt_payload_stream(t, key, payload, dst),
+        CipherCategory::Aead => encrypt_payload_aead(t, key, payload, dst),
     }
 }
 
-fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
     let iv = t.gen_init_vec();
     let mut cipher = crypto::new_stream(t, key, &iv, CryptoMode::Encrypt);
 
-    let mut send_payload = Vec::with_capacity(iv.len() + payload.len());
-    send_payload.extend_from_slice(&iv);
-    cipher.update(&payload[..], &mut send_payload)?;
-    cipher.finalize(&mut send_payload)?;
-    Ok(send_payload)
+    trace!("UDP packet generated stream iv {:?}", ByteStr::new(&iv));
+
+    dst.reserve(iv.len() + payload.len());
+
+    // First of all, IV
+    dst.put_slice(&iv);
+
+    // Encrypted data
+    cipher.update(&payload[..], dst)?;
+    cipher.finalize(dst)?;
+
+    Ok(())
 }
 
-fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
     let salt = t.gen_salt();
     let tag_size = t.tag_size();
     let mut cipher = crypto::new_aead_encryptor(t, key, &salt);
 
-    let mut send_payload = Vec::with_capacity(salt.len() + payload.len() + tag_size);
-    send_payload.extend_from_slice(&salt);
-    let start_pos = send_payload.len();
-    send_payload.resize(start_pos + payload.len() + tag_size, 0);
+    trace!("UDP packet generated AEAD salt {:?}", ByteStr::new(&salt));
 
-    cipher.encrypt(payload, &mut send_payload[start_pos..]);
+    dst.reserve(salt.len() + payload.len() + tag_size);
 
-    Ok(send_payload)
+    // First of all, salt
+    dst.put_slice(&salt);
+
+    // Encrypted data
+    unsafe {
+        cipher.encrypt(payload, dst.bytes_mut());
+        dst.advance_mut(payload.len() + tag_size);
+    }
+
+    Ok(())
 }
 
 /// Decrypt payload from ShadowSocks UDP encrypted packet
-pub fn decrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+pub fn decrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     match t.category() {
         CipherCategory::Stream => decrypt_payload_stream(t, key, payload),
         CipherCategory::Aead => decrypt_payload_aead(t, key, payload),
     }
 }
 
-fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     let iv_size = t.iv_size();
     if payload.len() < iv_size {
-        let err = io::Error::new(io::ErrorKind::Other, "udp packet too short");
-        return Err(err);
+        return Ok(None);
     }
 
     let iv = &payload[..iv_size];
     let data = &payload[iv_size..];
+
+    trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
 
     let mut cipher = crypto::new_stream(t, key, iv, CryptoMode::Decrypt);
 
@@ -82,20 +100,22 @@ fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
     cipher.update(data, &mut recv_payload)?;
     cipher.finalize(&mut recv_payload)?;
 
-    Ok(recv_payload)
+    Ok(Some(recv_payload))
 }
 
-fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Vec<u8>> {
+fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     let tag_size = t.tag_size();
     let salt_size = t.salt_size();
 
     if payload.len() < tag_size + salt_size {
-        let err = io::Error::new(io::ErrorKind::Other, "udp packet too short");
-        return Err(err);
+        return Ok(None);
     }
 
     let salt = &payload[..salt_size];
     let data = &payload[salt_size..];
+
+    trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
+
     let data_length = payload.len() - tag_size - salt_size;
 
     let mut cipher = crypto::new_aead_decryptor(t, key, salt);
@@ -103,5 +123,5 @@ fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result
     let mut recv_payload = vec![0u8; data_length];
     cipher.decrypt(data, &mut recv_payload)?;
 
-    Ok(recv_payload)
+    Ok(Some(recv_payload))
 }
