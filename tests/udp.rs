@@ -1,7 +1,7 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
 
 use std::{
-    io::Cursor,
+    io::{self, Cursor},
     net::SocketAddr,
     sync::{Arc, Barrier},
     thread,
@@ -9,9 +9,7 @@ use std::{
 };
 
 use bytes::{BufMut, BytesMut};
-use futures::Future;
-use tokio::runtime::current_thread::Runtime;
-use tokio_io::io::read_to_end;
+use tokio::{prelude::*, runtime::current_thread::Runtime};
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
@@ -20,7 +18,8 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         tcprelay::client::Socks5Client,
     },
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
@@ -98,17 +97,20 @@ fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
         let mut runtime = Runtime::new().expect("Failed to create Runtime");
 
-        let c = Socks5Client::udp_associate(addr, get_client_addr());
-        let fut = c.and_then(|(c, addr)| {
-            assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
-
-            // Holds it forever
-            read_to_end(c, Vec::new()).map(|_| ())
-        });
-
         bar.wait();
 
-        runtime.block_on(fut).expect("Failed to run UDP socks5 client");
+        runtime
+            .block_on(async move {
+                let (mut c, addr) = Socks5Client::udp_associate(addr, &get_client_addr()).await?;
+                assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
+
+                // Holds it forever
+                let mut buf = Vec::new();
+                c.read_to_end(&mut buf).await?;
+
+                io::Result::Ok(())
+            })
+            .expect("Failed to run UDP socks5 client");
     });
 }
 
@@ -158,8 +160,12 @@ fn udp_relay() {
     let (amt, _) = l.recv_from(&mut buf).unwrap();
     println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
-    let cur = Cursor::new(buf[..amt].to_vec());
-    let (cur, header) = UdpAssociateHeader::read_from(cur).wait().expect("Invalid UDP header");
+    let mut runtime = Runtime::new().expect("Failed to create runtime");
+
+    let mut cur = Cursor::new(buf[..amt].to_vec());
+    let header = runtime
+        .block_on(UdpAssociateHeader::read_from(&mut cur))
+        .expect("Invalid UDP header");
     println!("{:?}", header);
     let header_len = cur.position() as usize;
     let buf = cur.into_inner();

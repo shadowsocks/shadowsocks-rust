@@ -14,26 +14,6 @@ use crate::{
 };
 
 /// Relay server running under local environment.
-///
-/// ```no_run
-/// use shadowsocks::{
-///     config::{Config, ConfigType, ServerConfig},
-///     crypto::CipherType,
-///     relay::local::run,
-/// };
-///
-/// use tokio::prelude::*;
-///
-/// let mut config = Config::new(ConfigType::Local);
-/// config.local = Some("127.0.0.1:1080".parse().unwrap());
-/// config.server = vec![ServerConfig::basic(
-///     "127.0.0.1:8388".parse().unwrap(),
-///     "server-password".to_string(),
-///     CipherType::Aes256Cfb,
-/// )];
-/// let fut = run(config);
-/// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
-/// ```
 pub async fn run(config: Config) -> io::Result<()> {
     let mut context = Context::new(config);
 
