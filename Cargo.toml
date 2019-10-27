@@ -24,10 +24,6 @@ path = "src/bin/server.rs"
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
-[[bin]]
-name = "ssdns"
-path = "src/bin/ssdns.rs"
-
 [profile.release]
 lto = true
 
@@ -66,8 +62,6 @@ url = "2.0"
 byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
 miscreant = { version = "0.4", optional = true }
-lru-cache = "0.1"
-dns-parser = "0.8"
 # trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 # trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls"] }
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
