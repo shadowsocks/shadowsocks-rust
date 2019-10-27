@@ -1,6 +1,14 @@
 //! Relay for TCP implementation
 
-use std::{io, marker::Unpin, sync::Arc};
+use std::{
+    io,
+    marker::Unpin,
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
@@ -9,9 +17,19 @@ use crate::{
 };
 
 use bytes::BytesMut;
-use futures::{future::FusedFuture, select};
+use futures::{
+    future::{self, FusedFuture, Pending},
+    ready,
+    select,
+    Future,
+};
 use log::{error, trace};
-use tokio::{net::TcpStream, prelude::*};
+use tokio::{
+    io::split::{self, ReadHalf, WriteHalf},
+    net::TcpStream,
+    prelude::*,
+    timer::Timeout,
+};
 
 mod aead;
 pub mod client;
@@ -28,8 +46,142 @@ pub use self::crypto_io::CryptoStream;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
+pub struct Connection<S> {
+    stream: S,
+    read_timer: Option<Timeout<Pending<()>>>,
+    write_timer: Option<Timeout<Pending<()>>>,
+    timeout: Option<Duration>,
+}
+
+impl<S> Connection<S> {
+    pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
+        Connection {
+            stream: stream,
+            read_timer: None,
+            write_timer: None,
+            timeout: timeout,
+        }
+    }
+
+    fn poll_read_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        loop {
+            if let Some(ref mut timer) = self.read_timer {
+                ready!(Pin::new(timer).poll(cx))?;
+            } else {
+                match self.timeout {
+                    Some(timeout) => self.read_timer = Some(Timeout::new(future::pending(), timeout)),
+                    None => break,
+                }
+            }
+        }
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_write_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        loop {
+            if let Some(ref mut timer) = self.write_timer {
+                ready!(Pin::new(timer).poll(cx))?;
+            } else {
+                match self.timeout {
+                    Some(timeout) => self.write_timer = Some(Timeout::new(future::pending(), timeout)),
+                    None => break,
+                }
+            }
+        }
+        Poll::Ready(Ok(()))
+    }
+
+    fn cancel_read_timeout(&mut self) {
+        let _ = self.read_timer.take();
+    }
+
+    fn cancel_write_timeout(&mut self) {
+        let _ = self.write_timer.take();
+    }
+}
+
+impl<S> Connection<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn split(self) -> (ReadHalf<Connection<S>>, WriteHalf<Connection<S>>) {
+        split::split(self)
+    }
+}
+
+impl<S> Deref for Connection<S> {
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stream
+    }
+}
+
+impl<S> DerefMut for Connection<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stream
+    }
+}
+
+impl<S: Unpin> Unpin for Connection<S> {}
+
+impl<S> AsyncRead for Connection<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        match Pin::new(&mut self.stream).poll_read(cx, buf) {
+            Poll::Ready(r) => {
+                self.cancel_read_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_read_timeout(cx))?;
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl<S> AsyncWrite for Connection<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        match Pin::new(&mut self.stream).poll_write(cx, buf) {
+            Poll::Ready(r) => {
+                self.cancel_write_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_write_timeout(cx))?;
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match Pin::new(&mut self.stream).poll_flush(cx) {
+            Poll::Ready(r) => {
+                self.cancel_write_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_write_timeout(cx))?;
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_shutdown(cx)
+    }
+}
+
+pub type STcpStream = Connection<TcpStream>;
+
 /// Connect to proxy server with `ServerConfig`
-async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<TcpStream> {
+async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<STcpStream> {
     let timeout = svr_cfg.timeout();
 
     let svr_addr = match context.config().config_type {
@@ -41,7 +193,7 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
-            Ok(stream)
+            Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
@@ -51,7 +203,7 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
             let mut last_err: Option<io::Error> = None;
             for addr in &vec_ipaddr {
                 match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => return Ok(s),
+                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         error!(
                             "Failed to connect {}:{}, resolved address {}, try another (err: {})",
@@ -74,10 +226,10 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
 
 /// Handshake logic for ShadowSocks Client
 pub async fn proxy_server_handshake(
-    remote_stream: TcpStream,
+    remote_stream: STcpStream,
     svr_cfg: Arc<ServerConfig>,
     relay_addr: &Address,
-) -> io::Result<CryptoStream<TcpStream>> {
+) -> io::Result<CryptoStream<STcpStream>> {
     let mut stream = CryptoStream::new(remote_stream, svr_cfg.clone());
 
     trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
@@ -85,7 +237,7 @@ pub async fn proxy_server_handshake(
     // Send relay address to remote
     let mut addr_buf = BytesMut::with_capacity(relay_addr.serialized_len());
     relay_addr.write_to_buf(&mut addr_buf);
-    try_timeout(stream.write_all(&addr_buf), svr_cfg.timeout()).await?;
+    stream.write_all(&addr_buf).await?;
 
     Ok(stream)
 }

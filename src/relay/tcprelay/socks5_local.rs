@@ -19,7 +19,6 @@ use crate::{config::ServerConfig, context::SharedContext};
 use crate::relay::{
     loadbalancing::server::{LoadBalancer, PingBalancer},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
-    utils::try_timeout,
 };
 
 use super::{ignore_until_end, BUFFER_SIZE};
@@ -37,16 +36,14 @@ async fn handle_socks5_connect<'a>(
     addr: &Address,
     svr_cfg: Arc<ServerConfig>,
 ) -> io::Result<()> {
-    let timeout = svr_cfg.timeout();
-
     let svr_s = match super::connect_proxy_server(context, svr_cfg.clone()).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
 
             // Tell the client that we are ready
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(client_addr));
-            try_timeout(header.write_to(&mut w), timeout).await?;
-            try_timeout(w.flush(), timeout).await?;
+            header.write_to(&mut w).await?;
+            w.flush().await?;
 
             trace!("Sent header: {:?}", header);
 
@@ -65,8 +62,8 @@ async fn handle_socks5_connect<'a>(
             };
 
             let header = TcpResponseHeader::new(reply, Address::SocketAddress(client_addr));
-            try_timeout(header.write_to(&mut w), timeout).await?;
-            try_timeout(w.flush(), timeout).await?;
+            header.write_to(&mut w).await?;
+            w.flush().await?;
 
             return Err(err);
         }
@@ -78,11 +75,11 @@ async fn handle_socks5_connect<'a>(
     let rhalf = async {
         let mut buf = [0u8; BUFFER_SIZE];
         loop {
-            let n = try_timeout(r.read(&mut buf), timeout).await?;
+            let n = r.read(&mut buf).await?;
             if n == 0 {
                 break;
             }
-            try_timeout(svr_w.write_all(&buf[..n]), timeout).await?;
+            svr_w.write_all(&buf[..n]).await?;
         }
         Result::<(), io::Error>::Ok(())
     };
@@ -90,11 +87,11 @@ async fn handle_socks5_connect<'a>(
     let whalf = async {
         let mut buf = [0u8; BUFFER_SIZE];
         loop {
-            let n = try_timeout(svr_r.read(&mut buf), timeout).await?;
+            let n = svr_r.read(&mut buf).await?;
             if n == 0 {
                 break;
             }
-            try_timeout(w.write_all(&buf[..n]), timeout).await?;
+            w.write_all(&buf[..n]).await?;
         }
         Result::<(), io::Error>::Ok(())
     };

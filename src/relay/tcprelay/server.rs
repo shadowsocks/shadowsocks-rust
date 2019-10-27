@@ -21,10 +21,8 @@ use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
     CryptoStream,
-    BUFFER_SIZE,
+    STcpStream,
 };
-
-use crate::relay::utils::try_timeout;
 
 async fn handle_client(
     svr_context: SharedTcpServerContext,
@@ -47,23 +45,24 @@ async fn handle_client(
         svr_context.svr_cfg()
     );
 
-    let stream = TcpMonStream::new(svr_context.clone(), socket);
+    let stream = TcpMonStream::new(
+        svr_context.clone(),
+        STcpStream::new(socket, svr_context.svr_cfg().timeout()),
+    );
 
     // Do server-client handshake
     // Perform encryption IV exchange
     let mut stream = CryptoStream::new(stream, svr_context.svr_cfg().clone());
 
-    let timeout = svr_context.svr_cfg().timeout();
-
     // Read remote Address
-    let remote_addr = match try_timeout(Address::read_from(&mut stream), timeout).await {
+    let remote_addr = match Address::read_from(&mut stream).await {
         Ok(o) => o,
         Err(err) => {
             error!(
                 "Failed to decode Address, may be wrong method or key, peer {}",
                 peer_addr
             );
-            return Err(err);
+            return Err(From::from(err));
         }
     };
 
@@ -82,7 +81,7 @@ async fn handle_client(
                 return Err(err);
             }
 
-            match try_timeout(TcpStream::connect(saddr), timeout).await {
+            match TcpStream::connect(saddr).await {
                 Ok(s) => {
                     debug!("Connected to remote {}", saddr);
                     s
@@ -94,7 +93,7 @@ async fn handle_client(
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            let addrs = match try_timeout(resolve(context.clone(), dname.as_str(), port, true), timeout).await {
+            let addrs = match resolve(context.clone(), dname.as_str(), port, true).await {
                 Ok(r) => r,
                 Err(err) => {
                     error!("Failed to resolve {}, {}", dname, err);
@@ -105,7 +104,7 @@ async fn handle_client(
             let mut last_err: Option<io::Error> = None;
             let mut stream_opt = None;
             for addr in &addrs {
-                match try_timeout(TcpStream::connect(addr), timeout).await {
+                match TcpStream::connect(addr).await {
                     Ok(s) => stream_opt = Some(s),
                     Err(err) => {
                         error!(
@@ -137,32 +136,12 @@ async fn handle_client(
     let (mut sr, mut sw) = remote_stream.split();
 
     // CLIENT -> SERVER
-    let rhalf = async {
-        let mut buf = [0u8; BUFFER_SIZE];
-        loop {
-            let n = try_timeout(cr.read(&mut buf), timeout).await?;
-            if n == 0 {
-                break;
-            }
-            try_timeout(sw.write_all(&buf[..n]), timeout).await?;
-        }
-        io::Result::Ok(())
-    };
+    let rhalf = cr.copy(&mut sw);
 
     // CLIENT <- SERVER
-    let whalf = async {
-        let mut buf = [0u8; BUFFER_SIZE];
-        loop {
-            let n = try_timeout(sr.read(&mut buf), timeout).await?;
-            if n == 0 {
-                break;
-            }
-            try_timeout(cw.write_all(&buf[..n]), timeout).await?;
-        }
-        io::Result::Ok(())
-    };
+    let whalf = sr.copy(&mut cw);
 
-    match future::select(rhalf.boxed(), whalf.boxed()).await {
+    match future::select(rhalf, whalf).await {
         Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),
         Either::Left((Err(err), _)) => trace!("Relay {} -> {} closed with error {:?}", peer_addr, remote_addr, err),
         Either::Right((Ok(_), _)) => trace!("Relay {} <- {} closed", peer_addr, remote_addr),
