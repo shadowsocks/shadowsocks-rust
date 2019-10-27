@@ -21,7 +21,7 @@ use crate::relay::{
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
 };
 
-use super::{ignore_until_end, BUFFER_SIZE};
+use super::ignore_until_end;
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -72,33 +72,12 @@ async fn handle_socks5_connect<'a>(
     let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg.clone(), addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
-    let rhalf = async {
-        let mut buf = [0u8; BUFFER_SIZE];
-        loop {
-            let n = r.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            svr_w.write_all(&buf[..n]).await?;
-        }
-        Result::<(), io::Error>::Ok(())
-    };
-
-    let whalf = async {
-        let mut buf = [0u8; BUFFER_SIZE];
-        loop {
-            let n = svr_r.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            w.write_all(&buf[..n]).await?;
-        }
-        Result::<(), io::Error>::Ok(())
-    };
+    let rhalf = r.copy(&mut svr_w);
+    let whalf = svr_r.copy(&mut w);
 
     debug!("CONNECT relay established {} <-> {}", client_addr, svr_cfg.addr());
 
-    match future::select(rhalf.boxed(), whalf.boxed()).await {
+    match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, svr_cfg.addr()),
         Either::Left((Err(err), _)) => trace!(
             "CONNECT relay {} -> {} closed with error {:?}",
