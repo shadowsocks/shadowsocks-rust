@@ -5,6 +5,7 @@ use std::{
     net::SocketAddr,
 };
 
+use log::{debug, error, trace};
 use tokio;
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
@@ -17,11 +18,22 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
         {
             if let Some(conf) = dns {
                 use trust_dns_resolver::config::ResolverOpts;
+                trace!(
+                    "Initializing DNS resolver with config {:?} opts {:?}",
+                    conf,
+                    ResolverOpts::default()
+                );
                 AsyncResolver::new(conf, ResolverOpts::default())
             } else {
                 use trust_dns_resolver::system_conf::read_system_conf;
                 // use the system resolver configuration
                 let (config, opts) = read_system_conf().expect("Failed to read global dns sysconf");
+                trace!(
+                    "Initializing DNS resolver with system-config {:?} opts {:?}",
+                    config,
+                    opts
+                );
+
                 AsyncResolver::new(config, opts)
             }
         }
@@ -33,9 +45,19 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
             use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
             if let Some(conf) = dns {
+                trace!(
+                    "Initializing DNS resolver with config {:?} opts {:?}",
+                    conf,
+                    ResolverOpts::default()
+                );
                 AsyncResolver::new(conf, ResolverOpts::default())
             } else {
                 // Get a new resolver with the google nameservers as the upstream recursive resolvers
+                trace!(
+                    "Initializing DNS resolver with google-config {:?} opts {:?}",
+                    ResolverConfig::google(),
+                    ResolverOpts::default()
+                );
                 AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
             }
         }
@@ -53,10 +75,9 @@ async fn inner_resolve(
     port: u16,
     check_forbidden: bool,
 ) -> io::Result<Vec<SocketAddr>> {
-    // let owned_addr = addr.to_owned();
     match context.dns_resolver().lookup_ip(addr).await {
         Err(err) => {
-            // error!("Failed to resolve {}, err: {}", owned_addr, err);
+            error!("Failed to resolve {}:{}, err: {}", addr, port, err);
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("dns resolve error: {}", err),
@@ -68,7 +89,7 @@ async fn inner_resolve(
                 if check_forbidden {
                     let forbidden_ip = &context.config().forbidden_ip;
                     if forbidden_ip.contains(&ip) {
-                        // debug!("Resolved {} => {}, which is skipped by forbidden_ip", owned_addr, ip);
+                        debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
                         continue;
                     }
                 }
@@ -76,14 +97,11 @@ async fn inner_resolve(
             }
 
             if vaddr.is_empty() {
-                let err = io::Error::new(
-                    ErrorKind::Other,
-                    // format!("resolved {} to empty address, all IPs are filtered", owned_addr),
-                    "resolved to empty address, all IPs are filtered",
-                );
+                error!("Failed to resolve {}:{}, all IPs are filtered", addr, port);
+                let err = io::Error::new(ErrorKind::Other, "resolved to empty address, all IPs are filtered");
                 Err(err)
             } else {
-                // debug!("Resolved {} => {:?}", owned_addr, vaddr);
+                debug!("Resolved {}:{} => {:?}", addr, port, vaddr);
                 Ok(vaddr)
             }
         }

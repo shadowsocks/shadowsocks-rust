@@ -7,25 +7,22 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::{io::Result as IoResult, process};
-
 use clap::{App, Arg};
 use futures::{
     future::{self, Either},
     FutureExt,
 };
 use log::{debug, error, info};
-#[cfg(feature = "single-threaded")]
-use tokio::runtime::current_thread::Runtime;
-#[cfg(not(feature = "single-threaded"))]
-use tokio::runtime::Runtime;
+use tokio;
 
 use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
 mod logging;
 mod monitor;
 
-fn main() {
+#[cfg_attr(feature = "single-threaded", tokio::main(current_thread))]
+#[cfg_attr(not(feature = "single-threaded"), tokio::main)]
+async fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
@@ -194,42 +191,8 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    match launch_server(config) {
-        Ok(()) => {}
-        Err(err) => {
-            error!("Server exited unexpectly with error: {}", err);
-            process::exit(1);
-        }
-    }
-}
-
-#[cfg(not(feature = "single-threaded"))]
-fn launch_server(config: Config) -> IoResult<()> {
-    let runtime = Runtime::new().expect("Creating runtime");
-
     let abort_signal = monitor::create_signal_monitor();
-    let result = runtime.block_on(future::select(run_server(config).boxed(), abort_signal.boxed()));
-
-    runtime.shutdown_now();
-
-    match result {
-        // Server future resolved without an error. This should never happen.
-        Either::Left(_) => panic!("Server exited unexpectly"),
-        // The abort signal future resolved. Means we should just exit.
-        Either::Right(_) => (),
-    }
-
-    Ok(())
-}
-
-#[cfg(feature = "single-threaded")]
-fn launch_server(config: Config) -> IoResult<()> {
-    let mut runtime = Runtime::new().expect("Creating runtime");
-
-    let abort_signal = monitor::create_signal_monitor();
-    let result = runtime.block_on(future::select(run_server(config).boxed(), abort_signal.boxed()));
-
-    match result {
+    match future::select(run_server(config).boxed(), abort_signal.boxed()).await {
         // Server future resolved without an error. This should never happen.
         Either::Left(_) => panic!("Server exited unexpectly"),
         // The abort signal future resolved. Means we should just exit.
