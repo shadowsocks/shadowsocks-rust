@@ -10,6 +10,7 @@ use futures::{
     FutureExt,
 };
 use log::{debug, error, info};
+use std::net::SocketAddr;
 use tokio;
 
 use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
