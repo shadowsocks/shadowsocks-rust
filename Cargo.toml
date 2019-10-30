@@ -44,7 +44,7 @@ clap = "2.33"
 env_logger = "0.6"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
-# tokio = { version = "0.2.0-alpha", features = ["process"], default-features = true }
+# tokio = { version = { git = "https://github.com/tokio-rs/tokio" }, features = ["process", "signal"] }
 tokio = { git = "https://github.com/tokio-rs/tokio", features = ["process", "signal"] }
 futures-preview = { version = "0.3.0-alpha", features = ["async-await", "std"] }
 json5 = "0.2"
@@ -63,10 +63,12 @@ byte_string = "1.0"
 libsodium-ffi = { version = "0.1", optional = true }
 miscreant = { version = "0.4", optional = true }
 # trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-# trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls"] }
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 spin = { version = "0.5", default-features = false }
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8.1"
 pin-project = "0.4"
+
+[patch.crates-io]
+tokio = { git = "https://github.com/tokio-rs/tokio" }
