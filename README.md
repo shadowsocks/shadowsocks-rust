@@ -183,6 +183,8 @@ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server"
 
 DNS Local server
 
+`ssserver` needs to enable udp relay with parameter `-u `
+
 ```bash
 # Read configuration from file
 ssdns -c /path/to/shadowsocks.json
