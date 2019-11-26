@@ -63,6 +63,7 @@ use json5;
 use log::{error, trace};
 use serde::{Deserialize, Serialize};
 use serde_urlencoded;
+#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
@@ -810,6 +811,7 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
+    #[cfg(feature = "trust-dns")]
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
         self.dns.as_ref().and_then(|ds| {
             match &ds[..] {

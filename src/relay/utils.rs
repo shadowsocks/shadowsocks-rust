@@ -1,6 +1,7 @@
+use std::future::Future;
 use std::{io, time::Duration};
 
-use tokio::prelude::*;
+use tokio::time;
 
 pub async fn try_timeout<T, E, F>(fut: F, timeout: Option<Duration>) -> io::Result<T>
 where
@@ -8,7 +9,7 @@ where
     io::Error: From<E>,
 {
     match timeout {
-        Some(t) => fut.timeout(t).await?,
+        Some(t) => time::timeout(t, fut).await?,
         None => fut.await,
     }
     .map_err(From::from)

@@ -1,13 +1,10 @@
 use std::{
     collections::VecDeque,
-    fmt,
-    io,
+    fmt, io,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc,
-        Mutex,
+        Arc, Mutex,
     },
-    time::{Duration, Instant},
 };
 
 use crate::{
@@ -19,9 +16,8 @@ use crate::{
 use log::{debug, error, info};
 use tokio::{
     self,
-    future::FutureExt,
     io::{AsyncReadExt, AsyncWriteExt},
-    timer::Interval,
+    time::{self, Duration, Instant},
 };
 
 struct Server {
@@ -139,12 +135,13 @@ impl Inner {
             tokio::spawn(
                 // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 async move {
-                    let mut interval = Interval::new(
+                    let mut interval = time::interval_at(
                         Instant::now() + Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                         Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                     );
 
-                    while let Some(_) = interval.next().await {
+                    loop {
+                        interval.tick().await;
                         let score = match Inner::check_delay(sc.clone(), context.clone()).await {
                             Ok(d) => latency.push(d),
                             Err(..) => latency.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
@@ -182,9 +179,7 @@ impl Inner {
 
         // Send HTTP GET and read the first byte
         let timeout = Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC);
-        let res = Inner::check_request(sc.config.clone(), context.clone())
-            .timeout(timeout)
-            .await;
+        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context.clone())).await;
 
         let elapsed = Instant::now() - start;
         let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
@@ -241,12 +236,13 @@ impl PingBalancer {
             tokio::spawn(async move {
                 let inner = cloned_inner;
 
-                let mut interval = Interval::new(
+                let mut interval = time::interval_at(
                     Instant::now() + Duration::from_secs(2),
                     Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                 );
 
-                while let Some(_) = interval.next().await {
+                loop {
+                    interval.tick().await;
                     if inner.servers.is_empty() {
                         panic!("No server");
                     }

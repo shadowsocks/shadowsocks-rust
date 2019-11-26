@@ -20,8 +20,7 @@ use tokio::{
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
-    CryptoStream,
-    STcpStream,
+    CryptoStream, STcpStream,
 };
 
 async fn handle_client(
@@ -135,11 +134,13 @@ async fn handle_client(
     let (mut cr, mut cw) = stream.split();
     let (mut sr, mut sw) = remote_stream.split();
 
+    use tokio::io::copy;
+
     // CLIENT -> SERVER
-    let rhalf = cr.copy(&mut sw);
+    let rhalf = copy(&mut cr, &mut sw);
 
     // CLIENT <- SERVER
-    let whalf = sr.copy(&mut cw);
+    let whalf = copy(&mut sr, &mut cw);
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),

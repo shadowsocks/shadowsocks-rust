@@ -5,14 +5,14 @@ use std::{
     time::Duration,
 };
 
-use tokio::{prelude::*, runtime::current_thread::Runtime};
+use tokio::prelude::*;
+use tokio::runtime::Builder as RuntimeBuilder;
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
-    run_local,
-    run_server,
+    run_local, run_server,
 };
 
 pub struct Socks5TestServer {
@@ -55,14 +55,20 @@ impl Socks5TestServer {
     pub fn run(&self) {
         let svr_cfg = self.svr_config.clone();
         thread::spawn(move || {
-            let mut runtime = Runtime::new().expect("Failed to create Runtime");
+            let mut runtime = RuntimeBuilder::new()
+                .basic_scheduler()
+                .build()
+                .expect("Failed to create Runtime");
             let fut = run_server(svr_cfg);
             runtime.block_on(fut).expect("Failed to run Server");
         });
 
         let client_cfg = self.cli_config.clone();
         thread::spawn(move || {
-            let mut runtime = Runtime::new().expect("Failed to create Runtime");
+            let mut runtime = RuntimeBuilder::new()
+                .basic_scheduler()
+                .build()
+                .expect("Failed to create Runtime");
             let fut = run_local(client_cfg);
             runtime.block_on(fut).expect("Failed to run Local");
         });
@@ -84,7 +90,10 @@ fn socks5_relay_stream() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run();
 
-    let mut runtime = Runtime::new().expect("Failed to create Runtime");
+    let mut runtime = RuntimeBuilder::new()
+        .basic_scheduler()
+        .build()
+        .expect("Failed to create Runtime");
     runtime
         .block_on(async move {
             let mut c = Socks5Client::connect(
@@ -120,7 +129,10 @@ fn socks5_relay_aead() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run();
 
-    let mut runtime = Runtime::new().expect("Failed to create Runtime");
+    let mut runtime = RuntimeBuilder::new()
+        .basic_scheduler()
+        .build()
+        .expect("Failed to create Runtime");
     runtime
         .block_on(async move {
             let mut c = Socks5Client::connect(

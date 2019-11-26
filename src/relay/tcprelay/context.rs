@@ -17,7 +17,7 @@ use crate::{
 };
 
 use log::debug;
-use tokio::{self, net::UdpSocket, timer::Interval};
+use tokio::{self, net::UdpSocket, time};
 
 /// TCP Relay Server Context
 pub struct TcpServerContext {
@@ -50,8 +50,9 @@ impl TcpServerContext {
         if ctx.context.config().manager_address.is_some() {
             let ctx = ctx.clone();
             tokio::spawn(async move {
-                let mut interval = Interval::new_interval(UPDATE_INTERVAL);
-                while let Some(_) = interval.next().await {
+                let mut interval = time::interval(UPDATE_INTERVAL);
+                loop {
+                    interval.tick().await;
                     if stop_flag.load(Ordering::Acquire) {
                         // Finished
                         break;

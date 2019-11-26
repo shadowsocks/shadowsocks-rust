@@ -35,6 +35,7 @@ aes-cfb = ["openssl"]
 aes-ctr = ["openssl"]
 camellia-cfb = ["openssl"]
 single-threaded = []
+trust-dns = ["trust-dns-resolver"]
 
 [dependencies]
 log = "0.4"
@@ -44,9 +45,8 @@ clap = "2.33"
 env_logger = "0.6"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
-# tokio = { version = { git = "https://github.com/tokio-rs/tokio" }, features = ["process", "signal"] }
-tokio = { git = "https://github.com/tokio-rs/tokio", features = ["process", "signal"] }
-futures-preview = { version = "0.3.0-alpha", features = ["async-await", "std"] }
+tokio = { version = "0.2", features = ["full"] }
+futures= { version = "0.3", features = ["async-await", "std"] }
 json5 = "0.2"
 base64 = "0.10"
 bytes = "0.4"
@@ -60,10 +60,11 @@ serde_urlencoded = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 url = "2.0"
 byte_string = "1.0"
-libsodium-ffi = { version = "0.1", optional = true }
+# libsodium-ffi = { version = "0.1", optional = true }
+libsodium-ffi = { git = "https://github.com/zonyitoo/libsodium-ffi", optional = true }
 miscreant = { version = "0.4", optional = true }
 # trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"] }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
 spin = { version = "0.5", default-features = false }
 hkdf = "0.8"
 hmac = "0.7"

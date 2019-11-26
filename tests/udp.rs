@@ -9,7 +9,8 @@ use std::{
 };
 
 use bytes::{BufMut, BytesMut};
-use tokio::{prelude::*, runtime::current_thread::Runtime};
+use tokio::prelude::*;
+use tokio::runtime::Builder as RuntimeBuilder;
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
@@ -18,8 +19,7 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         tcprelay::client::Socks5Client,
     },
-    run_local,
-    run_server,
+    run_local, run_server,
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
@@ -60,7 +60,10 @@ fn get_client_addr() -> SocketAddr {
 
 fn start_server(bar: Arc<Barrier>) {
     thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = RuntimeBuilder::new()
+            .basic_scheduler()
+            .build()
+            .expect("Failed to create Runtime");
 
         let fut = run_server(get_svr_config());
         bar.wait();
@@ -70,7 +73,10 @@ fn start_server(bar: Arc<Barrier>) {
 
 fn start_local(bar: Arc<Barrier>) {
     thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = RuntimeBuilder::new()
+            .basic_scheduler()
+            .build()
+            .expect("Failed to create Runtime");
 
         let fut = run_local(get_cli_config());
         bar.wait();
@@ -95,7 +101,10 @@ fn start_udp_echo_server(bar: Arc<Barrier>) {
 
 fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
     thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+        let mut runtime = RuntimeBuilder::new()
+            .basic_scheduler()
+            .build()
+            .expect("Failed to create Runtime");
 
         bar.wait();
 
@@ -160,7 +169,10 @@ fn udp_relay() {
     let (amt, _) = l.recv_from(&mut buf).unwrap();
     println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
-    let mut runtime = Runtime::new().expect("Failed to create runtime");
+    let mut runtime = RuntimeBuilder::new()
+        .basic_scheduler()
+        .build()
+        .expect("Failed to create Runtime");
 
     let mut cur = Cursor::new(buf[..amt].to_vec());
     let header = runtime

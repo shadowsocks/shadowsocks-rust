@@ -19,16 +19,14 @@ use crate::{
 use bytes::BytesMut;
 use futures::{
     future::{self, FusedFuture, Pending},
-    ready,
-    select,
-    Future,
+    ready, select, Future,
 };
 use log::{error, trace};
 use tokio::{
-    io::split::{self, ReadHalf, WriteHalf},
+    io::{ReadHalf, WriteHalf},
     net::TcpStream,
     prelude::*,
-    timer::Timeout,
+    time::{self, Timeout},
 };
 
 mod aead;
@@ -69,7 +67,7 @@ impl<S> Connection<S> {
                 ready!(Pin::new(timer).poll(cx))?;
             } else {
                 match self.timeout {
-                    Some(timeout) => self.read_timer = Some(Timeout::new(future::pending(), timeout)),
+                    Some(timeout) => self.read_timer = Some(time::timeout(timeout, future::pending())),
                     None => break,
                 }
             }
@@ -83,7 +81,7 @@ impl<S> Connection<S> {
                 ready!(Pin::new(timer).poll(cx))?;
             } else {
                 match self.timeout {
-                    Some(timeout) => self.write_timer = Some(Timeout::new(future::pending(), timeout)),
+                    Some(timeout) => self.write_timer = Some(time::timeout(timeout, future::pending())),
                     None => break,
                 }
             }
@@ -105,7 +103,8 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn split(self) -> (ReadHalf<Connection<S>>, WriteHalf<Connection<S>>) {
-        split::split(self)
+        use tokio::io::split;
+        split(self)
     }
 }
 
