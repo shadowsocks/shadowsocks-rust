@@ -101,6 +101,7 @@ async fn handle_socks5_connect<'a>(
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn handle_socks5_client(
     context: SharedContext,
     mut s: TcpStream,

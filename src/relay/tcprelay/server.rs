@@ -22,6 +22,7 @@ use super::{
     CryptoStream, STcpStream,
 };
 
+#[allow(clippy::cognitive_complexity)]
 async fn handle_client(
     svr_context: SharedTcpServerContext,
     socket: TcpStream,

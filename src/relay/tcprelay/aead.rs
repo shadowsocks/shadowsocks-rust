@@ -33,8 +33,7 @@
 //! ```
 
 use std::{
-    cmp,
-    io,
+    cmp, io,
     marker::Unpin,
     pin::Pin,
     task::{Context, Poll},
@@ -185,7 +184,7 @@ impl DecryptedReader {
                 let b = self.buffer.bytes_mut();
                 let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut b[..remaining]))?;
                 if n == 0 {
-                    if self.buffer.len() == 0 && allow_eof && !self.got_final {
+                    if self.buffer.is_empty() && allow_eof && !self.got_final {
                         // Read nothing
                         self.got_final = true;
                         return Poll::Ready(Ok(()));

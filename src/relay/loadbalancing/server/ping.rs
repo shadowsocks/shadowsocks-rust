@@ -135,12 +135,12 @@ impl Inner {
             tokio::spawn(
                 // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 async move {
-                    let mut interval = time::interval_at(
-                        Instant::now() + Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-                        Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-                    );
+                    // Wait until the server is ready (plugins are started)
+                    time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
 
-                    loop {
+                    let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
+
+                    while context.server_running() {
                         interval.tick().await;
                         let score = match Inner::check_delay(sc.clone(), context.clone()).await {
                             Ok(d) => latency.push(d),
@@ -229,23 +229,22 @@ pub struct PingBalancer {
 
 impl PingBalancer {
     pub fn new(context: SharedContext) -> PingBalancer {
-        let inner = Arc::new(Inner::new(context));
+        let inner = Arc::new(Inner::new(context.clone()));
 
         if inner.servers.len() > 1 {
             let cloned_inner = inner.clone();
             tokio::spawn(async move {
                 let inner = cloned_inner;
 
-                let mut interval = time::interval_at(
-                    Instant::now() + Duration::from_secs(2),
-                    Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-                );
+                // Wait until the server is ready (plugins are started)
+                time::delay_for(Duration::from_secs(2)).await;
 
-                loop {
+                let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
+
+                while context.server_running() {
                     interval.tick().await;
-                    if inner.servers.is_empty() {
-                        panic!("No server");
-                    }
+
+                    assert!(!inner.servers.is_empty());
 
                     // Choose the best one
                     let mut svr_idx = 0;

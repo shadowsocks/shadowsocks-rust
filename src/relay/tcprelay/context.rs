@@ -51,7 +51,7 @@ impl TcpServerContext {
             let ctx = ctx.clone();
             tokio::spawn(async move {
                 let mut interval = time::interval(UPDATE_INTERVAL);
-                loop {
+                while ctx.context.server_running() {
                     interval.tick().await;
                     if stop_flag.load(Ordering::Acquire) {
                         // Finished
