@@ -18,7 +18,7 @@ use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, Ser
 mod logging;
 mod monitor;
 
-#[cfg_attr(feature = "single-threaded", tokio::main(current_thread))]
+#[cfg_attr(feature = "single-threaded", tokio::main(basic_scheduler))]
 #[cfg_attr(not(feature = "single-threaded"), tokio::main)]
 async fn main() {
     let matches = App::new("shadowsocks")

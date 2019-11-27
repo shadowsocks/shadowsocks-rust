@@ -8,7 +8,7 @@ use std::{
 };
 
 use bytes::BytesMut;
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use tokio::{self, net::UdpSocket, sync::mpsc};
 
 use crate::{
@@ -190,5 +190,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
     let listener = UdpSocket::bind(&local_addr).await?;
+    info!("ShadowSocks UDP listening on {}", local_addr);
+
     listen(context, listener).await
 }

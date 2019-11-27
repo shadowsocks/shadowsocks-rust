@@ -60,7 +60,7 @@ use std::{
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use json5;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
 use serde_urlencoded;
 #[cfg(feature = "trust-dns")]
@@ -221,7 +221,6 @@ impl ServerConfig {
         plugin: Option<PluginConfig>,
     ) -> ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
-        trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
         ServerConfig {
             addr,
             password: pwd,

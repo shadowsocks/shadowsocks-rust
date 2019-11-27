@@ -1,12 +1,7 @@
-use std::{
-    io,
-    net::{SocketAddr, ToSocketAddrs},
-    thread,
-    time::Duration,
-};
+use std::net::{SocketAddr, ToSocketAddrs};
 
 use tokio::prelude::*;
-use tokio::runtime::Builder as RuntimeBuilder;
+use tokio::time::{self, Duration};
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
@@ -52,33 +47,19 @@ impl Socks5TestServer {
         &self.local_addr
     }
 
-    pub fn run(&self) {
+    pub async fn run(&self) {
         let svr_cfg = self.svr_config.clone();
-        thread::spawn(move || {
-            let mut runtime = RuntimeBuilder::new()
-                .basic_scheduler()
-                .build()
-                .expect("Failed to create Runtime");
-            let fut = run_server(svr_cfg);
-            runtime.block_on(fut).expect("Failed to run Server");
-        });
+        tokio::spawn(run_server(svr_cfg));
 
         let client_cfg = self.cli_config.clone();
-        thread::spawn(move || {
-            let mut runtime = RuntimeBuilder::new()
-                .basic_scheduler()
-                .build()
-                .expect("Failed to create Runtime");
-            let fut = run_local(client_cfg);
-            runtime.block_on(fut).expect("Failed to run Local");
-        });
+        tokio::spawn(run_local(client_cfg));
 
-        thread::sleep(Duration::from_secs(1));
+        time::delay_for(Duration::from_secs(1)).await;
     }
 }
 
-#[test]
-fn socks5_relay_stream() {
+#[tokio::test]
+async fn socks5_relay_stream() {
     let _ = env_logger::try_init();
 
     const SERVER_ADDR: &str = "127.0.0.1:8100";
@@ -88,36 +69,27 @@ fn socks5_relay_stream() {
     const METHOD: CipherType = CipherType::Aes256Cfb;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
-    svr.run();
+    svr.run().await;
 
-    let mut runtime = RuntimeBuilder::new()
-        .basic_scheduler()
-        .build()
-        .expect("Failed to create Runtime");
-    runtime
-        .block_on(async move {
-            let mut c = Socks5Client::connect(
-                Address::DomainNameAddress("www.example.com".to_owned(), 80),
-                svr.client_addr(),
-            )
-            .await?;
+    let mut c = Socks5Client::connect(
+        Address::DomainNameAddress("www.example.com".to_owned(), 80),
+        svr.client_addr(),
+    )
+    .await
+    .unwrap();
 
-            let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
-            c.write_all(req).await?;
-            c.flush().await?;
+    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    c.write_all(req).await.unwrap();
+    c.flush().await.unwrap();
 
-            let mut buf = Vec::new();
-            c.read_to_end(&mut buf).await?;
+    let mut buf = Vec::new();
+    c.read_to_end(&mut buf).await.unwrap();
 
-            println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
-
-            io::Result::Ok(())
-        })
-        .unwrap();
+    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
 }
 
-#[test]
-fn socks5_relay_aead() {
+#[tokio::test]
+async fn socks5_relay_aead() {
     let _ = env_logger::try_init();
 
     const SERVER_ADDR: &str = "127.0.0.1:8110";
@@ -127,30 +99,21 @@ fn socks5_relay_aead() {
     const METHOD: CipherType = CipherType::Aes256Gcm;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
-    svr.run();
+    svr.run().await;
 
-    let mut runtime = RuntimeBuilder::new()
-        .basic_scheduler()
-        .build()
-        .expect("Failed to create Runtime");
-    runtime
-        .block_on(async move {
-            let mut c = Socks5Client::connect(
-                Address::DomainNameAddress("www.example.com".to_owned(), 80),
-                svr.client_addr(),
-            )
-            .await?;
+    let mut c = Socks5Client::connect(
+        Address::DomainNameAddress("www.example.com".to_owned(), 80),
+        svr.client_addr(),
+    )
+    .await
+    .unwrap();
 
-            let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
-            c.write_all(req).await?;
-            c.flush().await?;
+    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    c.write_all(req).await.unwrap();
+    c.flush().await.unwrap();
 
-            let mut buf = Vec::new();
-            c.read_to_end(&mut buf).await?;
+    let mut buf = Vec::new();
+    c.read_to_end(&mut buf).await.unwrap();
 
-            println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
-
-            io::Result::Ok(())
-        })
-        .unwrap();
+    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
 }
