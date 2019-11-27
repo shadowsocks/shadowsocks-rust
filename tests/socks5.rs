@@ -58,7 +58,7 @@ impl Socks5TestServer {
     }
 }
 
-#[tokio::test]
+#[tokio::test(threaded_scheduler)]
 async fn socks5_relay_stream() {
     let _ = env_logger::try_init();
 
@@ -88,7 +88,7 @@ async fn socks5_relay_stream() {
     println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
 }
 
-#[tokio::test]
+#[tokio::test(threaded_scheduler)]
 async fn socks5_relay_aead() {
     let _ = env_logger::try_init();
 
