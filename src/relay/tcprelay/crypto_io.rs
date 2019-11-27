@@ -74,10 +74,10 @@ impl<S> CryptoStream<S> {
         };
 
         CryptoStream {
-            stream: stream,
+            stream,
             dec: None,
             enc: None,
-            svr_cfg: svr_cfg,
+            svr_cfg,
             read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize),
             write_status: WriteStatus::SendIv(local_iv, 0usize),
         }
@@ -186,7 +186,7 @@ impl<S> CryptoStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn split<'a>(&'a mut self) -> (CryptoStreamReadHalf<'a, S>, CryptoStreamWriteHalf<'a, S>) {
+    pub fn split(&mut self) -> (CryptoStreamReadHalf<'_, S>, CryptoStreamWriteHalf<'_, S>) {
         let p = self as *mut _;
         (
             CryptoStreamReadHalf(p, PhantomData),

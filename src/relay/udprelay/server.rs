@@ -159,7 +159,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
 
 /// Starts a UDP relay server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let mut vec_fut = FuturesUnordered::new();
+    let vec_fut = FuturesUnordered::new();
 
     for svr in &context.config().server {
         let svr_cfg = Arc::new(svr.clone());

@@ -855,7 +855,7 @@ impl Config {
     /// Check if there are any plugin are enabled with servers
     pub fn has_server_plugins(&self) -> bool {
         for server in &self.server {
-            if let Some(_) = server.plugin() {
+            if server.plugin().is_some() {
                 return true;
             }
         }

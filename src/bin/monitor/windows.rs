@@ -1,13 +1,15 @@
-use futures::{self, Either, FutureExt};
+use futures::future::{self, Either, FutureExt};
+use futures::Stream;
+use futures::StreamExt;
 use log::info;
 use std::io;
 use tokio::signal::{ctrl_c, windows::ctrl_break};
 
 pub async fn create_signal_monitor() -> io::Result<()> {
-    let cc = ctrl_c()?;
+    let cc = ctrl_c();
     let cb = ctrl_break()?;
 
-    let signal_name = match future::select(cc.recv().boxed(), cb.recv().boxed()).await {
+    let signal_name = match future::select(cc.recv().boxed(), cb.into_future().boxed()).await {
         Either::Left(..) => "CTRL-C",
         Either::Right(..) => "CTRL-BREAK",
     };

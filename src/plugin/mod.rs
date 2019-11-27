@@ -48,7 +48,7 @@ impl Plugins {
     ///
     /// Will modify servers' listen addresses to plugins' listen addresses.
     pub fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<Plugins> {
-        let mut plugins = FuturesUnordered::new();
+        let plugins = FuturesUnordered::new();
 
         for svr in &mut config.server {
             let mut svr_addr_opt = None;
@@ -88,7 +88,7 @@ impl Plugins {
             panic!("Didn't find any plugins to start");
         }
 
-        Ok(Plugins { plugins: plugins })
+        Ok(Plugins { plugins })
     }
 
     /// Returns a future that completes when any plugin terminates or there were an error in watching the subprocess.

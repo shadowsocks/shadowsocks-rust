@@ -14,7 +14,6 @@ use log::{debug, error, info, trace};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},
-    prelude::*,
 };
 
 use super::{
@@ -156,7 +155,7 @@ async fn handle_client(
 
 /// Runs the server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let mut vec_fut = FuturesUnordered::new();
+    let vec_fut = FuturesUnordered::new();
 
     for svr_cfg in &context.config().server {
         let mut listener = {

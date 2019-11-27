@@ -8,8 +8,7 @@ use std::{
     fmt::{self, Debug, Formatter},
     io::{self, Cursor},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    u8,
-    vec,
+    u8, vec,
 };
 
 use bytes::{Buf, BufMut, BytesMut, IntoBuf};
@@ -17,10 +16,7 @@ use log::error;
 use tokio::prelude::*;
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI,
-    SOCKS5_AUTH_METHOD_NONE,
-    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
-    SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 #[rustfmt::skip]
@@ -651,7 +647,7 @@ impl HandshakeResponse {
     }
 
     /// Write to a writer
-    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
@@ -661,12 +657,12 @@ impl HandshakeResponse {
     }
 
     /// Write to buffer
-    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+    pub fn write_to_buf<B: BufMut>(self, buf: &mut B) {
         buf.put_slice(&[consts::SOCKS5_VERSION, self.chosen_method]);
     }
 
     /// Length in bytes
-    pub fn serialized_len(&self) -> usize {
+    pub fn serialized_len(self) -> usize {
         2
     }
 }
