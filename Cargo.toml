@@ -70,6 +70,3 @@ hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8.1"
 pin-project = "0.4"
-
-[patch.crates-io]
-tokio = { git = "https://github.com/tokio-rs/tokio" }
