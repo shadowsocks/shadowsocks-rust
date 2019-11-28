@@ -69,4 +69,3 @@ spin = { version = "0.5", default-features = false }
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8.1"
-pin-project = "0.4"
