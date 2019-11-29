@@ -42,30 +42,29 @@ log = "0.4"
 rand = "0.7"
 time = "0.1"
 clap = "2.33"
-env_logger = "0.6"
+env_logger = "0.7"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
 tokio = { version = "0.2", features = ["full"] }
 futures = "0.3"
 json5 = "0.2"
-base64 = "0.10"
+base64 = "0.11"
 bytes = "0.5"
 byteorder = "1"
 ring = "0.16"
 md-5 = "0.8"
 digest = "0.8"
-typenum = "1.10"
-qrcode = { version = "0.10", default-features = false }
-serde_urlencoded = "0.5"
+typenum = "1.11"
+qrcode = { version = "0.11", default-features = false }
+serde_urlencoded = "0.6"
 serde = { version = "1.0", features = ["derive"] }
-url = "2.0"
+url = "2.1"
 byte_string = "1.0"
 # libsodium-ffi = { version = "0.1", optional = true }
 libsodium-ffi = { git = "https://github.com/zonyitoo/libsodium-ffi", optional = true }
 miscreant = { version = "0.4", optional = true }
 # trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
-spin = { version = "0.5", default-features = false }
 hkdf = "0.8"
 hmac = "0.7"
-sha-1 = "0.8.1"
+sha-1 = "0.8"
