@@ -15,7 +15,7 @@ use tokio::{self, net::UdpSocket, sync::mpsc};
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::{dns_resolver::resolve, socks5::Address, utils::try_timeout},
+    relay::{socks5::Address, utils::try_timeout},
 };
 
 use super::{
@@ -23,19 +23,7 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-async fn resolve_remote_addr(context: SharedContext, addr: &Address) -> io::Result<SocketAddr> {
-    match *addr {
-        // Return directly if it is a SocketAddr
-        Address::SocketAddress(ref addr) => Ok(*addr),
-        // Resolve domain name to SocketAddr
-        Address::DomainNameAddress(ref dname, port) => {
-            let vec_ipaddr = resolve(context, dname, port, false).await?;
-            assert!(!vec_ipaddr.is_empty());
-            Ok(vec_ipaddr[0])
-        }
-    }
-}
-
+#[allow(unused_variables)] // `context` is only used if trust-dns is enabled
 async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
@@ -63,8 +51,24 @@ async fn udp_associate(
     let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
 
     // Writes body to remote
-    let remote_addr = resolve_remote_addr(context, &addr).await?;
-    let send_len = try_timeout(remote_udp.send_to(&body, &remote_addr), Some(timeout)).await?;
+    let send_len = match addr {
+        Address::SocketAddress(ref remote_addr) => {
+            try_timeout(remote_udp.send_to(&body, remote_addr), Some(timeout)).await?
+        }
+        #[cfg(feature = "trust-dns")]
+        Address::DomainNameAddress(ref dname, port) => {
+            use crate::relay::dns_resolver::resolve;
+
+            let vec_ipaddr = resolve(context, dname, port, false).await?;
+            assert!(!vec_ipaddr.is_empty());
+
+            try_timeout(remote_udp.send_to(&body, &vec_ipaddr[0]), Some(timeout)).await?
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        Address::DomainNameAddress(ref dname, port) => {
+            try_timeout(remote_udp.send_to(&body, (dname.as_str(), port)), Some(timeout)).await?
+        }
+    };
     assert_eq!(body.len(), send_len);
 
     // Waiting for response from server SERVER -> CLIENT

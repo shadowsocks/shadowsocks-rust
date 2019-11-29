@@ -15,7 +15,6 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
     relay::{
-        dns_resolver::resolve,
         loadbalancing::server::{LoadBalancer, RoundRobin},
         socks5::{Address, UdpAssociateHeader},
         utils::try_timeout,
@@ -27,20 +26,7 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-/// Resolves server address to SocketAddr
-async fn resolve_server_addr(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<SocketAddr> {
-    match *svr_cfg.addr() {
-        // Return directly if it is a SocketAddr
-        ServerAddr::SocketAddr(ref addr) => Ok(*addr),
-        // Resolve domain name to SocketAddr
-        ServerAddr::DomainName(ref dname, port) => {
-            let vec_ipaddr = resolve(context, dname, port, false).await?;
-            assert!(!vec_ipaddr.is_empty());
-            Ok(vec_ipaddr[0])
-        }
-    }
-}
-
+#[allow(unused_variables)] // `context` is only used if trust-dns is enabled
 async fn udp_associate(
     context: SharedContext,
     svr_cfg: Arc<ServerConfig>,
@@ -66,9 +52,6 @@ async fn udp_associate(
     let mut payload = Vec::new();
     Read::read_to_end(&mut cur, &mut payload)?;
 
-    // Connect to server
-    let remote_addr = resolve_server_addr(context, svr_cfg.clone()).await?;
-
     // Binds to 0.0.0.0:0 (let system choose a random port)
     // FIXME: Create a UdpSocket for every UDP associate requests
     let local_addr = SocketAddr::new(IpAddr::from(Ipv4Addr::new(0, 0, 0, 0)), 0);
@@ -91,7 +74,23 @@ async fn udp_associate(
     // Write to remote socket CLIENT -> SERVER
     let mut encrypt_buf = BytesMut::new();
     encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
-    let send_n = try_timeout(remote_udp.send_to(&encrypt_buf, &remote_addr), Some(timeout)).await?;
+
+    let send_n = match *svr_cfg.addr() {
+        ServerAddr::SocketAddr(ref addr) => try_timeout(remote_udp.send_to(&encrypt_buf, addr), Some(timeout)).await?,
+        #[cfg(feature = "trust-dns")]
+        ServerAddr::DomainName(ref dname, port) => {
+            use crate::relay::dns_resolver::resolve;
+
+            let vec_ipaddr = resolve(context, dname, port, false).await?;
+            assert!(!vec_ipaddr.is_empty());
+
+            try_timeout(remote_udp.send_to(&encrypt_buf, &vec_ipaddr[0]), Some(timeout)).await?
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        ServerAddr::DomainName(ref dname, port) => {
+            try_timeout(remote_udp.send_to(&encrypt_buf, (dname.as_str(), port)), Some(timeout)).await?
+        }
+    };
 
     if send_n != encrypt_buf.len() {
         warn!(

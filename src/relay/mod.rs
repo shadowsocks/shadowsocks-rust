@@ -1,6 +1,6 @@
 //! Relay server in local and server side implementations.
 
-// pub mod dns;
+#[cfg(feature = "trust-dns")]
 pub(crate) mod dns_resolver;
 mod loadbalancing;
 pub mod local;

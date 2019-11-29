@@ -2,7 +2,7 @@
 
 use std::{io, net::SocketAddr, sync::Arc};
 
-use crate::relay::{dns_resolver::resolve, socks5::Address};
+use crate::relay::socks5::Address;
 
 use crate::context::SharedContext;
 
@@ -91,7 +91,10 @@ async fn handle_client(
                 }
             }
         }
+        #[cfg(feature = "trust-dns")]
         Address::DomainNameAddress(ref dname, port) => {
+            use crate::relay::dns_resolver::resolve;
+
             let addrs = match resolve(context.clone(), dname.as_str(), port, true).await {
                 Ok(r) => r,
                 Err(err) => {
@@ -126,6 +129,36 @@ async fn handle_client(
                     return Err(io::Error::new(io::ErrorKind::Other, err));
                 }
             }
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        Address::DomainNameAddress(ref dname, port) => {
+            let s = match TcpStream::connect((dname.as_str(), port)).await {
+                Ok(s) => {
+                    debug!("Connected to remote {}:{}", dname, port);
+                    s
+                }
+                Err(err) => {
+                    error!("Failed to connect remote {}:{}, {}", dname, port, err);
+                    return Err(err);
+                }
+            };
+
+            // Still need to check forbidden IPs
+            let forbidden_ip = &context.config().forbidden_ip;
+            if !forbidden_ip.is_empty() {
+                let peer_addr = s.peer_addr()?;
+
+                if forbidden_ip.contains(&peer_addr.ip()) {
+                    error!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr);
+                    let err = io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr),
+                    );
+                    return Err(err);
+                }
+            }
+
+            s
         }
     };
 
@@ -175,15 +208,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let context = context.clone();
         let svr_context = TcpServerContext::new(context.clone(), svr_cfg.clone());
 
-        struct CloseGuard(SharedTcpServerContext);
-        impl Drop for CloseGuard {
-            fn drop(&mut self) {
-                self.0.close();
-            }
-        }
-
-        let close_guard = CloseGuard(svr_context.clone());
-
         vec_fut.push(async move {
             loop {
                 match listener.accept().await {
@@ -199,8 +223,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     }
                 }
             }
-
-            drop(close_guard);
         });
     }
 

@@ -46,7 +46,7 @@ env_logger = "0.6"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
 tokio = { version = "0.2", features = ["full"] }
-futures= { version = "0.3", features = ["async-await", "std"] }
+futures = "0.3"
 json5 = "0.2"
 base64 = "0.10"
 bytes = "0.4"

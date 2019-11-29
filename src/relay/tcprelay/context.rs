@@ -4,7 +4,7 @@ use std::{
     io,
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -13,7 +13,6 @@ use std::{
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
-    relay::dns_resolver::resolve,
 };
 
 use log::debug;
@@ -24,7 +23,6 @@ pub struct TcpServerContext {
     tx: AtomicUsize,
     rx: AtomicUsize,
     context: SharedContext,
-    stop_flag: Arc<AtomicBool>,
     svr_cfg: Arc<ServerConfig>,
 }
 
@@ -35,13 +33,10 @@ pub type SharedTcpServerContext = Arc<TcpServerContext>;
 impl TcpServerContext {
     /// Create a new server context
     pub fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> SharedTcpServerContext {
-        let stop_flag = Arc::new(AtomicBool::new(false));
-
         let ctx = TcpServerContext {
             tx: AtomicUsize::new(0),
             rx: AtomicUsize::new(0),
             context,
-            stop_flag: stop_flag.clone(),
             svr_cfg,
         };
 
@@ -53,15 +48,11 @@ impl TcpServerContext {
                 let mut interval = time::interval(UPDATE_INTERVAL);
                 while ctx.context.server_running() {
                     interval.tick().await;
-                    if stop_flag.load(Ordering::Acquire) {
-                        // Finished
-                        break;
-                    } else {
-                        let ctx = ctx.clone();
-                        tokio::spawn(async move {
-                            let _ = ctx.stat_interval().await;
-                        });
-                    }
+
+                    let ctx = ctx.clone();
+                    tokio::spawn(async move {
+                        let _ = ctx.stat_interval().await;
+                    });
                 }
             });
         }
@@ -86,15 +77,6 @@ impl TcpServerContext {
     }
 
     async fn stat_interval(&self) -> io::Result<()> {
-        let addr = match self.context.config().manager_address {
-            Some(ServerAddr::SocketAddr(ref addr)) => *addr,
-            Some(ServerAddr::DomainName(ref domain, ref port)) => {
-                let addrs = resolve(self.context.clone(), &domain[..], *port, false).await?;
-                addrs[0]
-            }
-            None => unreachable!(),
-        };
-
         let svr_cfg = self.svr_cfg.clone();
         let transmission = self.tx.load(Ordering::Acquire) + self.rx.load(Ordering::Acquire);
 
@@ -102,13 +84,33 @@ impl TcpServerContext {
         let mut socket = UdpSocket::bind(&any_addr).await?;
 
         let payload = format!("stat: {{\"{}\": {}}}", svr_cfg.addr().port(), transmission);
-        debug!("Sending Tcp Relay to {}, payload: {}", addr, payload);
-        socket.send_to(payload.as_ref(), &addr).await?;
+
+        let maddr = self
+            .context
+            .config()
+            .manager_address
+            .as_ref()
+            .expect("manager_address must not be None");
+
+        debug!("Sending Tcp Relay to {}, payload: {}", maddr, payload);
+
+        match maddr {
+            ServerAddr::SocketAddr(ref addr) => {
+                socket.send_to(payload.as_ref(), addr).await?;
+            }
+            #[cfg(feature = "trust-dns")]
+            ServerAddr::DomainName(ref domain, ref port) => {
+                use crate::relay::dns_resolver::resolve;
+
+                let addrs = resolve(self.context.clone(), &domain[..], *port, false).await?;
+                socket.send_to(payload.as_ref(), addrs[0]).await?;
+            }
+            #[cfg(not(feature = "trust-dns"))]
+            ServerAddr::DomainName(ref domain, ref port) => {
+                socket.send_to(payload.as_ref(), (domain.as_str(), *port)).await?;
+            }
+        }
 
         Ok(())
-    }
-
-    pub fn close(&self) {
-        self.stop_flag.store(true, Ordering::Release)
     }
 }

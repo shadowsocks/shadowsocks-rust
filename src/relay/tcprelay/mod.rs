@@ -1,5 +1,9 @@
 //! Relay for TCP implementation
 
+// Allow for futures
+// Maybe removed in the future
+#![allow(clippy::unnecessary_mut_passed)]
+
 use std::{
     io,
     marker::Unpin,
@@ -13,7 +17,7 @@ use std::{
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
     context::SharedContext,
-    relay::{dns_resolver::resolve, socks5::Address, utils::try_timeout},
+    relay::{socks5::Address, utils::try_timeout},
 };
 
 use bytes::BytesMut;
@@ -21,7 +25,7 @@ use futures::{
     future::{self, FusedFuture, Pending},
     ready, select, Future,
 };
-use log::{error, trace};
+use log::trace;
 use tokio::{
     io::{ReadHalf, WriteHalf},
     net::TcpStream,
@@ -54,10 +58,10 @@ pub struct Connection<S> {
 impl<S> Connection<S> {
     pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
         Connection {
-            stream: stream,
+            stream,
             read_timer: None,
             write_timer: None,
-            timeout: timeout,
+            timeout,
         }
     }
 
@@ -194,7 +198,11 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
             Ok(STcpStream::new(stream, timeout))
         }
+        #[cfg(feature = "trust-dns")]
         ServerAddr::DomainName(ref domain, port) => {
+            use crate::relay::dns_resolver::resolve;
+            use log::error;
+
             let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
 
             assert!(!vec_ipaddr.is_empty());
@@ -219,6 +227,11 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
                 domain, port, err
             );
             Err(err)
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        ServerAddr::DomainName(ref domain, port) => {
+            let stream = try_timeout(TcpStream::connect((domain.as_str(), *port)), timeout).await?;
+            Ok(STcpStream::new(stream, timeout))
         }
     }
 }
@@ -252,48 +265,6 @@ where
         r1 = c2s => r1.map(|_| ()),
         r2 = s2c => r2.map(|_| ()),
     }
-
-    // let addr = Arc::new(addr);
-
-    // let cloned_addr = addr.clone();
-    // let c2s = c2s.then(move |res| {
-    //     match res {
-    //         Ok(..) => {
-    //             // Continue reading response from remote server
-    //             trace!("Relay {} client -> server is finished", cloned_addr);
-
-    //             Ok(TunnelDirection::Client2Server)
-    //         }
-    //         Err(err) => {
-    //             error!("Relay {} client -> server aborted: {}", cloned_addr, err);
-    //             Err(err)
-    //         }
-    //     }
-    // });
-
-    // let cloned_addr = addr.clone();
-    // let s2c = s2c.then(move |res| match res {
-    //     Ok(..) => {
-    //         trace!("Relay {} client <- server is finished", cloned_addr);
-
-    //         Ok(TunnelDirection::Server2Client)
-    //     }
-    //     Err(err) => {
-    //         error!("Relay {} client <- server aborted: {}", cloned_addr, err);
-    //         Err(err)
-    //     }
-    // });
-
-    // c2s.select(s2c)
-    //     .and_then(move |(dir, _)| {
-    //         match dir {
-    //             TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
-    //             TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
-    //         }
-
-    //         Ok(())
-    //     })
-    //     .map_err(|(err, _)| err)
 }
 
 pub async fn ignore_until_end<R>(r: &mut R) -> io::Result<u64>
