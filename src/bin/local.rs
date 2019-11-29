@@ -19,7 +19,7 @@ mod logging;
 mod monitor;
 
 #[cfg_attr(feature = "single-threaded", tokio::main(basic_scheduler))]
-#[cfg_attr(not(feature = "single-threaded"), tokio::main)]
+#[cfg_attr(not(feature = "single-threaded"), tokio::main(threaded_scheduler))]
 async fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
