@@ -46,7 +46,7 @@ mod utils;
 
 pub use self::crypto_io::CryptoStream;
 
-const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
+const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
 
 pub struct Connection<S> {
     stream: S,

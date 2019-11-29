@@ -1,8 +1,7 @@
 //! Stream protocol implementation
 
 use std::{
-    cmp,
-    io,
+    cmp, io,
     marker::Unpin,
     pin::Pin,
     task::{Context, Poll},
@@ -23,6 +22,7 @@ pub struct DecryptedReader {
     cipher: BoxStreamCipher,
     pos: usize,
     got_final: bool,
+    incoming_buffer: Vec<u8>,
 }
 
 impl DecryptedReader {
@@ -34,6 +34,7 @@ impl DecryptedReader {
             cipher,
             pos: 0,
             got_final: false,
+            incoming_buffer: vec![0u8; BUFFER_SIZE],
         }
     }
 
@@ -51,9 +52,7 @@ impl DecryptedReader {
                 return Poll::Ready(Ok(0));
             }
 
-            let mut incoming = [0u8; BUFFER_SIZE];
-
-            let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut incoming))?;
+            let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut self.incoming_buffer))?;
 
             // Reset pointers
             self.buffer.clear();
@@ -65,7 +64,7 @@ impl DecryptedReader {
                 self.cipher.finalize(&mut self.buffer)?;
                 self.got_final = true;
             } else {
-                let data = &incoming[..n];
+                let data = &self.incoming_buffer[..n];
                 // Ensure we have enough space
                 let buffer_len = self.buffer_size(data);
                 self.buffer.reserve(buffer_len);

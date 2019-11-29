@@ -49,7 +49,7 @@ tokio = { version = "0.2", features = ["full"] }
 futures = "0.3"
 json5 = "0.2"
 base64 = "0.10"
-bytes = "0.4"
+bytes = "0.5"
 byteorder = "1"
 ring = "0.16"
 md-5 = "0.8"

@@ -21,6 +21,7 @@
 //! ```
 
 use std::io;
+use std::slice;
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
@@ -68,7 +69,10 @@ fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8], dst: &mut Byt
 
     // Encrypted data
     unsafe {
-        cipher.encrypt(payload, dst.bytes_mut());
+        let remaining = dst.bytes_mut();
+        let b = slice::from_raw_parts_mut(remaining.as_mut_ptr() as *mut u8, remaining.len());
+
+        cipher.encrypt(payload, b);
         dst.advance_mut(payload.len() + tag_size);
     }
 

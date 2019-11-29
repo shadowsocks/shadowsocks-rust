@@ -11,7 +11,8 @@ use std::{
     u8, vec,
 };
 
-use bytes::{Buf, BufMut, BytesMut, IntoBuf};
+use bytes::buf::BufExt;
+use bytes::{Buf, BufMut, BytesMut};
 use log::error;
 use tokio::prelude::*;
 
@@ -229,9 +230,9 @@ impl Address {
                 buf.resize(6, 0);
                 let _ = stream.read_exact(&mut buf).await?;
 
-                let mut cursor = buf.into_buf();
+                let mut cursor = buf.to_bytes();
                 let v4addr = Ipv4Addr::new(cursor.get_u8(), cursor.get_u8(), cursor.get_u8(), cursor.get_u8());
-                let port = cursor.get_u16_be();
+                let port = cursor.get_u16();
                 Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
@@ -240,16 +241,16 @@ impl Address {
 
                 let mut cursor = Cursor::new(&buf);
                 let v6addr = Ipv6Addr::new(
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
-                    cursor.get_u16_be(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
                 );
-                let port = cursor.get_u16_be();
+                let port = cursor.get_u16();
 
                 Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
                     v6addr, port, 0, 0,
@@ -266,13 +267,14 @@ impl Address {
                 buf.resize(buf_length, 0);
                 let _ = stream.read_exact(&mut buf).await?;
 
-                let mut cursor = buf.into_buf();
-                let raw_addr = Buf::take(&mut cursor, length).collect::<Vec<u8>>();
+                let mut cursor = buf.to_bytes();
+                let mut raw_addr = Vec::with_capacity(length);
+                raw_addr.put(&mut BufExt::take(&mut cursor, length));
                 let addr = match String::from_utf8(raw_addr) {
                     Ok(addr) => addr,
                     Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
                 };
-                let port = cursor.get_u16_be();
+                let port = cursor.get_u16();
 
                 Ok(Address::DomainNameAddress(addr, port))
             }
@@ -352,15 +354,15 @@ impl From<(String, u16)> for Address {
 fn write_ipv4_address<B: BufMut>(addr: &SocketAddrV4, buf: &mut B) {
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_IPV4); // Address type
     buf.put_slice(&addr.ip().octets()); // Ipv4 bytes
-    buf.put_u16_be(addr.port()); // Port
+    buf.put_u16(addr.port()); // Port
 }
 
 fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_IPV6); // Address type
     for seg in &addr.ip().segments() {
-        buf.put_u16_be(*seg); // Ipv6 bytes
+        buf.put_u16(*seg); // Ipv6 bytes
     }
-    buf.put_u16_be(addr.port()); // Port
+    buf.put_u16(addr.port()); // Port
 }
 
 fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
@@ -369,7 +371,7 @@ fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
     buf.put_u8(dnaddr.len() as u8);
     buf.put_slice(dnaddr[..].as_bytes());
-    buf.put_u16_be(port);
+    buf.put_u16(port);
 }
 
 fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {

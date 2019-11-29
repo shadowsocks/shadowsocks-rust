@@ -36,6 +36,7 @@ use std::{
     cmp, io,
     marker::Unpin,
     pin::Pin,
+    slice,
     task::{Context, Poll},
     u16,
 };
@@ -150,8 +151,11 @@ impl DecryptedReader {
 
         // Done reading data, decrypt it
         unsafe {
-            let d = self.data.bytes_mut();
-            self.cipher.decrypt(&self.buffer[..], &mut d[..size])?;
+            // It has enough space, I am sure about that
+            let buffer = slice::from_raw_parts_mut(self.data.bytes_mut().as_mut_ptr() as *mut u8, size);
+            self.cipher.decrypt(&self.buffer[..], buffer)?;
+
+            // Move forward the pointer
             self.data.advance_mut(size);
         }
 
@@ -181,8 +185,9 @@ impl DecryptedReader {
         while self.buffer.len() < size {
             let remaining = size - self.buffer.len();
             unsafe {
-                let b = self.buffer.bytes_mut();
-                let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut b[..remaining]))?;
+                // It has enough space, I am sure about that
+                let buffer = slice::from_raw_parts_mut(self.buffer.bytes_mut().as_mut_ptr() as *mut u8, remaining);
+                let n = ready!(Pin::new(&mut *r).poll_read(ctx, buffer))?;
                 if n == 0 {
                     if self.buffer.is_empty() && allow_eof && !self.got_final {
                         // Read nothing
@@ -244,21 +249,21 @@ impl EncryptedWriter {
         loop {
             match self.steps {
                 EncryptWriteStep::Nothing => {
-                    let mut buf = BytesMut::with_capacity(self.buffer_size(data));
-
                     let output_length = self.buffer_size(data);
                     let data_length = data.len() as u16;
+
+                    let mut buf = BytesMut::with_capacity(output_length);
 
                     let mut data_len_buf = [0u8; 2];
                     BigEndian::write_u16(&mut data_len_buf, data_length);
 
-                    let output_length_size = 2 + self.tag_size;
-                    self.cipher
-                        .encrypt(&data_len_buf, unsafe { &mut buf.bytes_mut()[..output_length_size] });
-                    self.cipher
-                        .encrypt(data, unsafe { &mut buf.bytes_mut()[output_length_size..output_length] });
-
                     unsafe {
+                        let b = slice::from_raw_parts_mut(buf.bytes_mut().as_mut_ptr() as *mut u8, output_length);
+
+                        let output_length_size = 2 + self.tag_size;
+                        self.cipher.encrypt(&data_len_buf, &mut b[..output_length_size]);
+                        self.cipher.encrypt(data, &mut b[output_length_size..output_length]);
+
                         buf.advance_mut(output_length);
                     }
 
