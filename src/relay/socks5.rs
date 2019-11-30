@@ -2,14 +2,14 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-use std::{
-    convert::From,
-    error,
-    fmt::{self, Debug, Formatter},
-    io::{self, Cursor},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    u8, vec,
-};
+use std::convert::From;
+use std::error;
+use std::fmt::{self, Debug, Formatter};
+use std::io::{self, Cursor};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
+use std::str::FromStr;
+use std::u8;
+use std::vec;
 
 use bytes::buf::BufExt;
 use bytes::{Buf, BufMut, BytesMut};
@@ -348,6 +348,30 @@ impl From<SocketAddr> for Address {
 impl From<(String, u16)> for Address {
     fn from((dn, port): (String, u16)) -> Address {
         Address::DomainNameAddress(dn, port)
+    }
+}
+
+/// Parse `Address` error
+#[derive(Debug)]
+pub struct AddressError;
+
+impl FromStr for Address {
+    type Err = AddressError;
+
+    fn from_str(s: &str) -> Result<Address, AddressError> {
+        match s.parse::<SocketAddr>() {
+            Ok(addr) => Ok(Address::SocketAddress(addr)),
+            Err(..) => {
+                let mut sp = s.split(':');
+                match (sp.next(), sp.next()) {
+                    (Some(dn), Some(port)) => match port.parse::<u16>() {
+                        Ok(port) => Ok(Address::DomainNameAddress(dn.to_owned(), port)),
+                        Err(..) => Err(AddressError),
+                    },
+                    _ => Err(AddressError),
+                }
+            }
+        }
     }
 }
 

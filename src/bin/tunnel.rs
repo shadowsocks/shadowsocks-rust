@@ -13,7 +13,9 @@ use log::{debug, error, info};
 use std::net::SocketAddr;
 use tokio;
 
-use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+use shadowsocks::plugin::PluginConfig;
+use shadowsocks::relay::socks5::Address;
+use shadowsocks::{run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
 mod logging;
 mod monitor;
@@ -184,10 +186,10 @@ async fn main() {
     }
 
     if let Some(url) = matches.value_of("FORWARD_ADDR") {
-        let forward_addr = url.parse::<SocketAddr>().expect("Failed to parse `url`");
+        let forward_addr = url.parse::<Address>().expect("Failed to parse `url`");
 
         config.forward = Some(forward_addr);
-}
+    }
 
     if matches.is_present("UDP_ONLY") {
         if config.mode.enable_tcp() {
