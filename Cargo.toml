@@ -21,6 +21,10 @@ name = "ssserver"
 path = "src/bin/server.rs"
 
 [[bin]]
+name = "sstunnel"
+path = "src/bin/tunnel.rs"
+
+[[bin]]
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 

@@ -540,6 +540,7 @@ impl FromStr for Mode {
 pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
+    pub forward: Option<SocketAddr>,
     pub forbidden_ip: HashSet<IpAddr>,
     pub dns: Option<String>,
     pub remote_dns: Option<SocketAddr>,
@@ -600,6 +601,7 @@ impl Config {
         Config {
             server: Vec::new(),
             local: None,
+            forward: None,
             forbidden_ip: HashSet::new(),
             dns: None,
             remote_dns: None,
