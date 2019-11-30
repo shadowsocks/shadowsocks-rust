@@ -2,10 +2,8 @@
 
 use std::sync::Arc;
 
-use crate::{
-    config::{Config, ServerConfig},
-    relay::loadbalancing::server::LoadBalancer,
-};
+use crate::config::{Config, ServerConfig};
+use crate::relay::loadbalancing::server::LoadBalancer;
 
 #[derive(Clone)]
 pub struct RoundRobin {

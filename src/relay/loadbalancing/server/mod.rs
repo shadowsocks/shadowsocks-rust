@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-pub use self::{ping::PingBalancer, roundrobin::RoundRobin};
+pub use self::ping::PingBalancer;
+pub use self::roundrobin::RoundRobin;
 
 use crate::config::ServerConfig;
 

@@ -3,24 +3,20 @@
 use std::{io, net::SocketAddr, sync::Arc};
 
 use futures::future::{self, Either};
+use futures::FutureExt;
 use log::{debug, error, info, trace, warn};
-use tokio::{
-    self,
-    net::{
-        tcp::{ReadHalf, WriteHalf},
-        TcpListener, TcpStream,
-    },
-    prelude::*,
-};
+use tokio;
+use tokio::net::tcp::{ReadHalf, WriteHalf};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::prelude::*;
 
-use crate::{config::ServerConfig, context::SharedContext};
-
-use crate::relay::{
-    loadbalancing::server::{LoadBalancer, PingBalancer},
-    socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
-};
+use crate::config::ServerConfig;
+use crate::context::SharedContext;
+use crate::relay::loadbalancing::server::{LoadBalancer, PingBalancer};
+use crate::relay::socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader};
 
 use super::ignore_until_end;
+use super::utils::copy_timeout;
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -72,10 +68,8 @@ async fn handle_socks5_connect<'a>(
     let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg.clone(), addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
-    use tokio::io::copy;
-
-    let rhalf = copy(&mut r, &mut svr_w);
-    let whalf = copy(&mut svr_r, &mut w);
+    let rhalf = copy_timeout(&mut r, &mut svr_w, svr_cfg.timeout());
+    let whalf = copy_timeout(&mut svr_r, &mut w, svr_cfg.timeout());
 
     debug!(
         "CONNECT relay established {} <-> {} ({})",
@@ -84,22 +78,22 @@ async fn handle_socks5_connect<'a>(
         addr
     );
 
-    match future::select(rhalf, whalf).await {
+    match future::select(rhalf.boxed(), whalf.boxed()).await {
         Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Left((Err(err), _)) => trace!(
             "CONNECT relay {} -> {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            err,
             addr,
+            err,
         ),
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Right((Err(err), _)) => trace!(
             "CONNECT relay {} <- {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            err,
             addr,
+            err,
         ),
     }
 

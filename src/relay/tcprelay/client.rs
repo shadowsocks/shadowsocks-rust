@@ -9,13 +9,13 @@ use std::{
 };
 
 use log::trace;
-use tokio::{net::TcpStream, prelude::*};
+use tokio::net::TcpStream;
+use tokio::prelude::*;
 
+use super::CryptoStream;
 use crate::relay::socks5::{
     self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
 };
-
-use super::{CryptoStream, STcpStream};
 use crate::{config::ServerConfig, context::SharedContext};
 
 /// Socks5 proxy client
@@ -124,7 +124,7 @@ impl AsyncWrite for Socks5Client {
 }
 
 pub(crate) struct ServerClient {
-    pub stream: CryptoStream<STcpStream>,
+    pub stream: CryptoStream<TcpStream>,
 }
 
 impl ServerClient {
