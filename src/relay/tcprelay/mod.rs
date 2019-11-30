@@ -42,6 +42,7 @@ mod monitor;
 pub mod server;
 mod socks5_local;
 mod stream;
+mod tunnel_local;
 mod utils;
 
 pub use self::crypto_io::CryptoStream;
