@@ -123,92 +123,117 @@ async fn handle_socks5_client(
 
     let (mut r, mut w) = s.split();
 
-    let handshake_req = HandshakeRequest::read_from(&mut r).await?;
+    if let Some(fwd) = context.config().forward {
+        trace!("Tunnel to {:?}", fwd);
 
-    // Socks5 handshakes
-    trace!("Socks5 {:?}", handshake_req);
+        let addr = Address::SocketAddress(fwd);
 
-    let (handshake_resp, res) = if !handshake_req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
-        let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-        warn!("Currently shadowsocks-rust does not support authentication");
-        (
-            resp,
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Currently shadowsocks-rust does not support authentication",
-            )),
-        )
-    } else {
-        // Reply to client
-        let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
-        trace!("Reply handshake {:?}", resp);
-        (resp, Ok(()))
-    };
+        let enable_tcp = context.config().mode.enable_tcp();
+        if enable_tcp {
+            debug!("CONNECT {}", addr);
 
-    handshake_resp.write_to(&mut w).await?;
-    w.flush().await?;
-
-    res?;
-
-    // Fetch headers
-    let header = match TcpRequestHeader::read_from(&mut r).await {
-        Ok(h) => h,
-        Err(err) => {
-            error!("Failed to get TcpRequestHeader: {}", err);
-            let rh = TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr));
-            rh.write_to(&mut w).await?;
-            return Err(From::from(err));
-        }
-    };
-
-    trace!("Socks5 {:?}", header);
-
-    let addr = header.address;
-    match header.command {
-        socks5::Command::TcpConnect => {
-            let enable_tcp = context.config().mode.enable_tcp();
-            if enable_tcp {
-                debug!("CONNECT {}", addr);
-
-                match handle_socks5_connect(context, (r, w), client_addr, local_addr, &addr, conf).await {
-                    Ok(..) => Ok(()),
-                    Err(err) => Err(io::Error::new(
-                        err.kind(),
-                        format!("CONNECT {} failed with error \"{}\"", addr, err),
-                    )),
-                }
-            } else {
-                warn!("CONNECT is not enabled");
-                let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
-                rh.write_to(&mut w).await?;
-
-                Ok(())
+            match handle_socks5_connect(context, (r, w), client_addr, local_addr, &addr, conf).await {
+                Ok(..) => Ok(()),
+                Err(err) => Err(io::Error::new(
+                    err.kind(),
+                    format!("CONNECT {} failed with error \"{}\"", addr, err),
+                )),
             }
-        }
-        socks5::Command::TcpBind => {
-            warn!("BIND is not supported");
+        } else {
+            warn!("CONNECT is not enabled");
             let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
             rh.write_to(&mut w).await?;
 
             Ok(())
         }
-        socks5::Command::UdpAssociate => {
-            if udp_conf.enable_udp {
-                debug!("UDP ASSOCIATE {}", addr);
-                let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(udp_conf.client_addr));
+    } else {
+        let handshake_req = HandshakeRequest::read_from(&mut r).await?;
+
+        // Socks5 handshakes
+        trace!("Socks5 {:?}", handshake_req);
+
+        let (handshake_resp, res) = if !handshake_req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
+            let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
+            warn!("Currently shadowsocks-rust does not support authentication");
+            (
+                resp,
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Currently shadowsocks-rust does not support authentication",
+                )),
+            )
+        } else {
+            // Reply to client
+            let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
+            trace!("Reply handshake {:?}", resp);
+            (resp, Ok(()))
+        };
+
+        handshake_resp.write_to(&mut w).await?;
+        w.flush().await?;
+
+        res?;
+
+        // Fetch headers
+        let header = match TcpRequestHeader::read_from(&mut r).await {
+            Ok(h) => h,
+            Err(err) => {
+                error!("Failed to get TcpRequestHeader: {}", err);
+                let rh = TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr));
                 rh.write_to(&mut w).await?;
-                w.flush().await?;
+                return Err(From::from(err));
+            }
+        };
 
-                // Hold the connection until it ends by its own
-                ignore_until_end(&mut r).await?;
+        trace!("Socks5 {:?}", header);
 
-                Ok(())
-            } else {
-                warn!("UDP ASSOCIATE is not enabled");
+        let addr = header.address;
+        match header.command {
+            socks5::Command::TcpConnect => {
+                let enable_tcp = context.config().mode.enable_tcp();
+                if enable_tcp {
+                    debug!("CONNECT {}", addr);
+
+                    match handle_socks5_connect(context, (r, w), client_addr, local_addr, &addr, conf).await {
+                        Ok(..) => Ok(()),
+                        Err(err) => Err(io::Error::new(
+                            err.kind(),
+                            format!("CONNECT {} failed with error \"{}\"", addr, err),
+                        )),
+                    }
+                } else {
+                    warn!("CONNECT is not enabled");
+                    let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
+                    rh.write_to(&mut w).await?;
+
+                    Ok(())
+                }
+            }
+            socks5::Command::TcpBind => {
+                warn!("BIND is not supported");
                 let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
                 rh.write_to(&mut w).await?;
 
                 Ok(())
+            }
+            socks5::Command::UdpAssociate => {
+                if udp_conf.enable_udp {
+                    debug!("UDP ASSOCIATE {}", addr);
+                    let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(udp_conf.client_addr));
+                    rh.write_to(&mut w).await?;
+                    w.flush().await?;
+
+                    // Hold the connection until it ends by its own
+                    ignore_until_end(&mut r).await?;
+
+                    Ok(())
+                } else {
+                    warn!("UDP ASSOCIATE is not enabled");
+                    let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
+                    rh.write_to(&mut w).await?;
+
+                    Ok(())
+                }
             }
         }
     }
