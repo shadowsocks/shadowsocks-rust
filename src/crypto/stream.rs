@@ -8,9 +8,7 @@ use crate::crypto::rc4_md5;
 use crate::crypto::sodium;
 use crate::crypto::{
     cipher::{CipherCategory, CipherResult, CipherType},
-    dummy,
-    table,
-    CryptoMode,
+    dummy, table, CryptoMode,
 };
 
 use bytes::BufMut;

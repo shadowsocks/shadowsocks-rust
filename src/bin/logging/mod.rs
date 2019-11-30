@@ -1,9 +1,8 @@
+use std::env;
+use std::io::{self, Write};
+
 use env_logger::{fmt::Formatter, Builder};
 use log::{LevelFilter, Record};
-use std::{
-    env,
-    io::{self, Write},
-};
 
 pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
     let mut log_builder = Builder::new();
