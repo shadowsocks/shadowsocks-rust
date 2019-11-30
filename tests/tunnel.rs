@@ -8,7 +8,7 @@ use shadowsocks::config::{Config, ConfigType};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{run_local, run_server};
 
-#[tokio::test(threaded_scheduler)]
+#[tokio::test]
 async fn tcp_tunnel() {
     let _ = env_logger::try_init();
 
