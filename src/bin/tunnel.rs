@@ -60,7 +60,7 @@ async fn main() {
                 .short("f")
                 .long("foward-addr")
                 .takes_value(true)
-                .help("Forward address, forwaed to this address"),
+                .help("Forward address, forward to this address"),
         )
         .arg(
             Arg::with_name("PASSWORD")
