@@ -93,8 +93,8 @@ where
             while *pos < buf.len() {
                 let n = ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf[*pos..]))?;
                 if n == 0 {
-                    let err = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof");
-                    return Poll::Ready(Err(err));
+                    use std::io::ErrorKind;
+                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
                 *pos += n;
             }
@@ -138,8 +138,8 @@ where
             while *pos < iv.len() {
                 let n = ready!(Pin::new(&mut self.stream).poll_write(cx, &iv[*pos..]))?;
                 if n == 0 {
-                    let err = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof");
-                    return Poll::Ready(Err(err));
+                    use std::io::ErrorKind;
+                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
                 *pos += n;
             }

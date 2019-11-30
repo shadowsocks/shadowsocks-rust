@@ -130,8 +130,8 @@ impl EncryptedWriter {
                     while *pos < buf.len() {
                         let n = ready!(Pin::new(&mut *w).poll_write(ctx, &buf[*pos..]))?;
                         if n == 0 {
-                            let err = io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected eof");
-                            return Poll::Ready(Err(err));
+                            use std::io::ErrorKind;
+                            return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                         }
                         *pos += n;
                     }
