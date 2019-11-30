@@ -98,8 +98,6 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    remote_dns: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
@@ -543,7 +541,6 @@ pub struct Config {
     pub forward: Option<SocketAddr>,
     pub forbidden_ip: HashSet<IpAddr>,
     pub dns: Option<String>,
-    pub remote_dns: Option<SocketAddr>,
     pub mode: Mode,
     pub no_delay: bool,
     pub manager_address: Option<ServerAddr>,
@@ -604,7 +601,6 @@ impl Config {
             forward: None,
             forbidden_ip: HashSet::new(),
             dns: None,
-            remote_dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
             manager_address: None,
@@ -763,20 +759,6 @@ impl Config {
         // DNS
         nconfig.dns = config.dns;
 
-        if let Some(rdns) = config.remote_dns {
-            match rdns.parse::<SocketAddr>() {
-                Ok(r) => nconfig.remote_dns = Some(r),
-                Err(..) => {
-                    let e = Error::new(
-                        ErrorKind::Malformed,
-                        "malformed `remote_dns`, which must be a valid SocketAddr",
-                        None,
-                    );
-                    return Err(e);
-                }
-            }
-        }
-
         // Mode
         if let Some(m) = config.mode {
             match m.parse::<Mode>() {
@@ -844,13 +826,6 @@ impl Config {
                 }
             }
         })
-    }
-
-    pub fn get_remote_dns(&self) -> SocketAddr {
-        match self.remote_dns {
-            None => SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53)),
-            Some(ip) => ip,
-        }
     }
 
     /// Check if there are any plugin are enabled with servers
@@ -933,10 +908,6 @@ impl fmt::Display for Config {
 
         if let Some(ref dns) = self.dns {
             jconf.dns = Some(dns.to_string());
-        }
-
-        if let Some(ref remote_dns) = self.remote_dns {
-            jconf.remote_dns = Some(remote_dns.to_string());
         }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
