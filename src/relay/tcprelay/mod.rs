@@ -59,7 +59,7 @@ impl<S> Connection<S> {
         }
     }
 
-    fn poll_read_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_read_timeout(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         loop {
             if let Some(ref mut timer) = self.read_timer {
                 ready!(Pin::new(timer).poll(cx));
@@ -70,10 +70,10 @@ impl<S> Connection<S> {
                 }
             }
         }
-        Poll::Ready(Ok(()))
+        Poll::Ready(())
     }
 
-    fn poll_write_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_write_timeout(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         loop {
             if let Some(ref mut timer) = self.write_timer {
                 ready!(Pin::new(timer).poll(cx));
@@ -84,7 +84,7 @@ impl<S> Connection<S> {
                 }
             }
         }
-        Poll::Ready(Ok(()))
+        Poll::Ready(())
     }
 
     fn cancel_read_timeout(&mut self) {
@@ -133,7 +133,7 @@ where
                 Poll::Ready(r)
             }
             Poll::Pending => {
-                ready!(self.poll_read_timeout(cx))?;
+                ready!(self.poll_read_timeout(cx));
                 Poll::Pending
             }
         }
@@ -151,7 +151,7 @@ where
                 Poll::Ready(r)
             }
             Poll::Pending => {
-                ready!(self.poll_write_timeout(cx))?;
+                ready!(self.poll_write_timeout(cx));
                 Poll::Pending
             }
         }
@@ -164,7 +164,7 @@ where
                 Poll::Ready(r)
             }
             Poll::Pending => {
-                ready!(self.poll_write_timeout(cx))?;
+                ready!(self.poll_write_timeout(cx));
                 Poll::Pending
             }
         }
