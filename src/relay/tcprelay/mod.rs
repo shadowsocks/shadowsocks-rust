@@ -4,34 +4,27 @@
 // Maybe removed in the future
 #![allow(clippy::unnecessary_mut_passed)]
 
-use std::{
-    io,
-    marker::Unpin,
-    ops::{Deref, DerefMut},
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::io;
+use std::marker::Unpin;
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
-use crate::{
-    config::{ConfigType, ServerAddr, ServerConfig},
-    context::SharedContext,
-    relay::{socks5::Address, utils::try_timeout},
-};
+use crate::config::{ConfigType, ServerAddr, ServerConfig};
+use crate::context::SharedContext;
+use crate::relay::socks5::Address;
+use crate::relay::utils::try_timeout;
 
 use bytes::BytesMut;
-use futures::{
-    future::{self, FusedFuture, Pending},
-    ready, select, Future,
-};
+use futures::future::FusedFuture;
+use futures::{ready, select, Future};
 use log::trace;
-use tokio::{
-    io::{ReadHalf, WriteHalf},
-    net::TcpStream,
-    prelude::*,
-    time::{self, Timeout},
-};
+use tokio::io::{ReadHalf, WriteHalf};
+use tokio::net::TcpStream;
+use tokio::prelude::*;
+use tokio::time::{self, Delay};
 
 mod aead;
 pub mod client;
@@ -47,12 +40,12 @@ mod utils;
 
 pub use self::crypto_io::CryptoStream;
 
-const BUFFER_SIZE: usize = 32 * 1024; // 32K buffer
+const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
 pub struct Connection<S> {
     stream: S,
-    read_timer: Option<Timeout<Pending<()>>>,
-    write_timer: Option<Timeout<Pending<()>>>,
+    read_timer: Option<Delay>,
+    write_timer: Option<Delay>,
     timeout: Option<Duration>,
 }
 
@@ -69,10 +62,10 @@ impl<S> Connection<S> {
     fn poll_read_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             if let Some(ref mut timer) = self.read_timer {
-                ready!(Pin::new(timer).poll(cx))?;
+                ready!(Pin::new(timer).poll(cx));
             } else {
                 match self.timeout {
-                    Some(timeout) => self.read_timer = Some(time::timeout(timeout, future::pending())),
+                    Some(timeout) => self.read_timer = Some(time::delay_for(timeout)),
                     None => break,
                 }
             }
@@ -83,10 +76,10 @@ impl<S> Connection<S> {
     fn poll_write_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             if let Some(ref mut timer) = self.write_timer {
-                ready!(Pin::new(timer).poll(cx))?;
+                ready!(Pin::new(timer).poll(cx));
             } else {
                 match self.timeout {
-                    Some(timeout) => self.write_timer = Some(time::timeout(timeout, future::pending())),
+                    Some(timeout) => self.write_timer = Some(time::delay_for(timeout)),
                     None => break,
                 }
             }
