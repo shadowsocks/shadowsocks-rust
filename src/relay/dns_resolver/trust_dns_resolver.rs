@@ -1,7 +1,9 @@
 //! Asynchronous DNS resolver
 
-use std::io::{self, ErrorKind};
-use std::net::SocketAddr;
+use std::{
+    io::{self, ErrorKind},
+    net::SocketAddr,
+};
 
 use log::{debug, error, trace};
 use tokio;

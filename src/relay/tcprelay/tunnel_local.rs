@@ -5,7 +5,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use futures::future::{self, Either};
-use futures::FutureExt;
 use log::{debug, error, info, trace};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -13,8 +12,6 @@ use crate::config::ServerConfig;
 use crate::context::SharedContext;
 use crate::relay::loadbalancing::server::{LoadBalancer, PingBalancer};
 use crate::relay::socks5::Address;
-
-use super::utils::copy_timeout;
 
 /// Established Client Tunnel
 ///
@@ -42,8 +39,10 @@ async fn establish_client_tcp_tunnel<'a>(
 
     let (mut r, mut w) = s.split();
 
-    let rhalf = copy_timeout(&mut r, &mut svr_w, svr_cfg.timeout());
-    let whalf = copy_timeout(&mut svr_r, &mut w, svr_cfg.timeout());
+    use tokio::io::copy;
+
+    let rhalf = copy(&mut r, &mut svr_w);
+    let whalf = copy(&mut svr_r, &mut w);
 
     debug!(
         "TUNNEL relay established {} <-> {} ({})",
@@ -52,22 +51,22 @@ async fn establish_client_tcp_tunnel<'a>(
         addr
     );
 
-    match future::select(rhalf.boxed(), whalf.boxed()).await {
+    match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("TUNNEL relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Left((Err(err), _)) => trace!(
             "TUNNEL relay {} -> {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            addr,
             err,
+            addr,
         ),
         Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Right((Err(err), _)) => trace!(
             "TUNNEL relay {} <- {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            addr,
             err,
+            addr
         ),
     }
 

@@ -2,21 +2,25 @@
 
 use std::{io, net::SocketAddr, sync::Arc};
 
-use crate::context::SharedContext;
 use crate::relay::socks5::Address;
-use crate::relay::utils::try_timeout;
 
-use futures::future::{self, Either};
-use futures::stream::{FuturesUnordered, StreamExt};
-use futures::FutureExt;
+use crate::context::SharedContext;
+
+use futures::{
+    future::{self, Either},
+    stream::{FuturesUnordered, StreamExt},
+};
 use log::{debug, error, info, trace};
-use tokio;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    self,
+    net::{TcpListener, TcpStream},
+};
 
-use super::context::{SharedTcpServerContext, TcpServerContext};
-use super::monitor::TcpMonStream;
-use super::utils::copy_timeout;
-use super::CryptoStream;
+use super::{
+    context::{SharedTcpServerContext, TcpServerContext},
+    monitor::TcpMonStream,
+    CryptoStream, STcpStream,
+};
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_client(
@@ -40,21 +44,24 @@ async fn handle_client(
         svr_context.svr_cfg()
     );
 
-    let stream = TcpMonStream::new(svr_context.clone(), socket);
+    let stream = TcpMonStream::new(
+        svr_context.clone(),
+        STcpStream::new(socket, svr_context.svr_cfg().timeout()),
+    );
 
     // Do server-client handshake
     // Perform encryption IV exchange
     let mut stream = CryptoStream::new(stream, svr_context.svr_cfg().clone());
 
     // Read remote Address
-    let remote_addr = match try_timeout(Address::read_from(&mut stream), svr_context.svr_cfg().timeout()).await {
+    let remote_addr = match Address::read_from(&mut stream).await {
         Ok(o) => o,
         Err(err) => {
             error!(
                 "Failed to decode Address, may be wrong method or key, peer {}",
                 peer_addr
             );
-            return Err(err);
+            return Err(From::from(err));
         }
     };
 
@@ -160,13 +167,15 @@ async fn handle_client(
     let (mut cr, mut cw) = stream.split();
     let (mut sr, mut sw) = remote_stream.split();
 
+    use tokio::io::copy;
+
     // CLIENT -> SERVER
-    let rhalf = copy_timeout(&mut cr, &mut sw, svr_context.svr_cfg().timeout());
+    let rhalf = copy(&mut cr, &mut sw);
 
     // CLIENT <- SERVER
-    let whalf = copy_timeout(&mut sr, &mut cw, svr_context.svr_cfg().timeout());
+    let whalf = copy(&mut sr, &mut cw);
 
-    match future::select(rhalf.boxed(), whalf.boxed()).await {
+    match future::select(rhalf, whalf).await {
         Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),
         Either::Left((Err(err), _)) => trace!("Relay {} -> {} closed with error {:?}", peer_addr, remote_addr, err),
         Either::Right((Ok(_), _)) => trace!("Relay {} <- {} closed", peer_addr, remote_addr),
