@@ -39,6 +39,8 @@
 
 pub mod local;
 pub mod server;
+pub(crate) mod socks5_local;
+pub(crate) mod tunnel_local;
 
 mod crypto_io;
 

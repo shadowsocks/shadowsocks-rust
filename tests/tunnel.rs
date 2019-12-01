@@ -1,6 +1,6 @@
 use env_logger;
 use tokio;
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::prelude::*;
 use tokio::time::{self, Duration};
 
@@ -54,4 +54,60 @@ async fn tcp_tunnel() {
     stream.read_to_end(&mut buf).await.unwrap();
 
     println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+}
+
+#[tokio::test]
+async fn udp_tunnel() {
+    let _ = env_logger::try_init();
+
+    let mut local_config = Config::load_from_str(
+        r#"{
+            "local_port": 9110,
+            "local_address": "127.0.0.1",
+            "server": "127.0.0.1",
+            "server_port": 9120,
+            "password": "password",
+            "method": "aes-256-gcm",
+            "mode": "tcp_and_udp"
+        }"#,
+        ConfigType::Local,
+    )
+    .unwrap();
+
+    local_config.forward = Some("127.0.0.1:9130".parse::<Address>().unwrap());
+
+    let server_config = Config::load_from_str(
+        r#"{
+            "server": "127.0.0.1",
+            "server_port": 9120,
+            "password": "password",
+            "method": "aes-256-gcm",
+            "mode": "udp_only"
+        }"#,
+        ConfigType::Server,
+    )
+    .unwrap();
+
+    tokio::spawn(run_local(local_config));
+    tokio::spawn(run_server(server_config));
+
+    // Start a UDP echo server
+    tokio::spawn(async {
+        let mut socket = UdpSocket::bind("127.0.0.1:9130").await.unwrap();
+
+        let mut buf = vec![0u8; 65536];
+        let (n, src) = socket.recv_from(&mut buf).await.unwrap();
+
+        socket.send_to(&buf[..n], src).await.unwrap();
+    });
+
+    time::delay_for(Duration::from_secs(1)).await;
+
+    let mut socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    socket.send_to(b"HELLO WORLD", "127.0.0.1:9110").await.unwrap();
+
+    let mut buf = vec![0u8; 65536];
+    let n = socket.recv(&mut buf).await.unwrap();
+
+    println!("Got reply from server: {}", ::std::str::from_utf8(&buf[..n]).unwrap());
 }
