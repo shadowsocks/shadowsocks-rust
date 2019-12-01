@@ -30,11 +30,11 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `camellia-cfb` - Enabled `camellia-*-cfb` encryption algorithm.
 
-* `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using `tokio::current_thread::Runtime`).
+* `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using Tokio's `basic_scheduler`).
 
 Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr"]`.
 
-NOTE: To disable dependency of OpenSSL, just disable feature `"rc4"`, `"aes-cfb"`, `aes-ctr`, `camellia-cfb`.
+NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`.
 
 ### **crates.io**
 
@@ -158,7 +158,7 @@ List all available arguments with `-h`.
 
 ## Usage
 
-Local client
+### Socks5 Local client
 
 ```bash
 # Read local client configuration from file
@@ -171,7 +171,17 @@ sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --
 sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
 ```
 
-Server
+### Tunnel Local client
+
+```bash
+# Read local client configuration from file
+# Set 127.0.0.1:8080 as the target for forwarding to
+sstunnel -c /path/to/shadowsocks.json -f "127.0.0.1:8080"
+```
+
+`sstunnel` basically works the same as `sslocal`, only it doesn't have any client negociation process, just establishes a tunnel to the `forward` address.
+
+### Server
 
 ```bash
 # Read server configuration from file
@@ -179,26 +189,6 @@ ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
 ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
-```
-
-DNS Local server
-
-`ssserver` needs to enable udp relay with parameter `-u `
-
-```bash
-# Read configuration from file
-ssdns -c /path/to/shadowsocks.json
-
-# Pass all parameters via command line
-ssdns -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --dns "8.8.8.8:53"
-```
-
-For DNS relay server, you can set remote DNS server in configuration file with `dns` key in root object.
-
-```json
-{
-    "dns": "8.8.8.8"
-}
 ```
 
 ## Supported Ciphers
