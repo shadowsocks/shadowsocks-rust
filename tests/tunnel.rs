@@ -62,10 +62,10 @@ async fn udp_tunnel() {
 
     let mut local_config = Config::load_from_str(
         r#"{
-            "local_port": 9110,
+            "local_port": 9210,
             "local_address": "127.0.0.1",
             "server": "127.0.0.1",
-            "server_port": 9120,
+            "server_port": 9220,
             "password": "password",
             "method": "aes-256-gcm",
             "mode": "tcp_and_udp"
@@ -74,12 +74,12 @@ async fn udp_tunnel() {
     )
     .unwrap();
 
-    local_config.forward = Some("127.0.0.1:9130".parse::<Address>().unwrap());
+    local_config.forward = Some("127.0.0.1:9230".parse::<Address>().unwrap());
 
     let server_config = Config::load_from_str(
         r#"{
             "server": "127.0.0.1",
-            "server_port": 9120,
+            "server_port": 9220,
             "password": "password",
             "method": "aes-256-gcm",
             "mode": "udp_only"
@@ -93,7 +93,7 @@ async fn udp_tunnel() {
 
     // Start a UDP echo server
     tokio::spawn(async {
-        let mut socket = UdpSocket::bind("127.0.0.1:9130").await.unwrap();
+        let mut socket = UdpSocket::bind("127.0.0.1:9230").await.unwrap();
 
         let mut buf = vec![0u8; 65536];
         let (n, src) = socket.recv_from(&mut buf).await.unwrap();
@@ -104,7 +104,7 @@ async fn udp_tunnel() {
     time::delay_for(Duration::from_secs(1)).await;
 
     let mut socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    socket.send_to(b"HELLO WORLD", "127.0.0.1:9110").await.unwrap();
+    socket.send_to(b"HELLO WORLD", "127.0.0.1:9210").await.unwrap();
 
     let mut buf = vec![0u8; 65536];
     let n = socket.recv(&mut buf).await.unwrap();
