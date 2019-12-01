@@ -153,7 +153,11 @@ impl UdpAssociation {
                 debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
 
                 // try_timeout(remote_udp.send_to(body, (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!("tokio's UdpSocket SendHalf doesn't support ToSocketAddrs");
+                unimplemented!(
+                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
+                    dname,
+                    port
+                );
             }
         };
 

@@ -47,7 +47,7 @@ async fn parse_packet(pkt: &[u8]) -> io::Result<(Address, Vec<u8>)> {
 
 // Represent a UDP association
 struct UdpAssociation {
-    tx: mpsc::Sender<(Address, Vec<u8>)>,
+    tx: mpsc::Sender<Vec<u8>>,
 }
 
 impl UdpAssociation {
@@ -65,7 +65,7 @@ impl UdpAssociation {
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
-        let (tx, mut rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
@@ -75,12 +75,11 @@ impl UdpAssociation {
         // local -> remote
         let c_svr_cfg = svr_cfg.clone();
         tokio::spawn(async move {
-            while let Some((addr, pkt)) = rx.recv().await {
+            while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
-                if let Err(err) =
-                    UdpAssociation::relay_l2r(src_addr, &addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
+                if let Err(err) = UdpAssociation::relay_l2r(src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
-                    error!("Failed to send packet to {}, error: {}", addr, err);
+                    error!("Failed to send packet {} -> ..., error: {}", src_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
                 }
@@ -110,12 +109,13 @@ impl UdpAssociation {
     /// Relay packets from local to remote
     async fn relay_l2r(
         src: SocketAddr,
-        addr: &Address,
         remote_udp: &mut SendHalf,
-        payload: &[u8],
+        pkt: &[u8],
         timeout: Duration,
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
+        let (addr, payload) = parse_packet(&pkt).await?;
+
         debug!(
             "UDP ASSOCIATE {} -> {}, payload length {} bytes",
             src,
@@ -147,7 +147,11 @@ impl UdpAssociation {
             #[cfg(not(feature = "trust-dns"))]
             ServerAddr::DomainName(ref dname, port) => {
                 // try_timeout(remote_udp.send_to(&encrypt_buf[..], (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!("tokio's UdpSocket SendHalf doesn't support ToSocketAddrs");
+                unimplemented!(
+                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
+                    dname,
+                    port
+                );
             }
         };
 
@@ -206,8 +210,8 @@ impl UdpAssociation {
         Ok(())
     }
 
-    async fn send(&mut self, remote_addr: &Address, pkt: &[u8]) -> bool {
-        match self.tx.send((remote_addr.clone(), pkt.to_vec())).await {
+    async fn send(&mut self, pkt: &[u8]) -> bool {
+        match self.tx.send(pkt.to_vec()).await {
             Ok(..) => true,
             Err(err) => {
                 error!("Failed to send packet, error: {}", err);
@@ -249,21 +253,6 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 
         trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
 
-        let (addr, body) = match parse_packet(pkt).await {
-            Ok((addr, body)) => (addr, body),
-            Err(err) => {
-                error!("Failed to parse UDP associate packet, error: {}", err);
-                continue;
-            }
-        };
-
-        trace!(
-            "UDP relay request {} -> {}, payload length {} bytes",
-            src,
-            addr,
-            body.len()
-        );
-
         // Pick a server
         let svr_cfg = balancer.pick_server();
 
@@ -279,7 +268,7 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
                     ),
                 };
 
-                !assoc.send(&addr, &body[..]).await
+                !assoc.send(pkt).await
             };
 
             if retry {
