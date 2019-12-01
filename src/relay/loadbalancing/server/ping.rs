@@ -1,24 +1,19 @@
-use std::{
-    collections::VecDeque,
-    fmt, io,
-    sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-};
+use std::collections::VecDeque;
+use std::fmt;
+use std::io;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
-use crate::{
-    config::ServerConfig,
-    context::SharedContext,
-    relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
-};
+use crate::config::ServerConfig;
+use crate::context::SharedContext;
+use crate::relay::loadbalancing::server::LoadBalancer;
+use crate::relay::socks5::Address;
+use crate::relay::tcprelay::client::ServerClient;
 
-use log::{debug, error, info};
-use tokio::{
-    self,
-    io::{AsyncReadExt, AsyncWriteExt},
-    time::{self, Duration, Instant},
-};
+use log::{debug, info};
+use tokio;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::{self, Duration, Instant};
 
 struct Server {
     config: Arc<ServerConfig>,
@@ -190,7 +185,7 @@ impl Inner {
                 Ok(elapsed)
             }
             Ok(Err(err)) => {
-                error!("failed to check server {}, error: {}", sc.config.addr(), err);
+                debug!("failed to check server {}, error: {}", sc.config.addr(), err);
 
                 // NOTE: connection / handshake error, server is down
                 Err(err)
