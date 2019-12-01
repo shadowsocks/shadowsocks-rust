@@ -5,22 +5,19 @@ use std::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant},
 };
 
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::tcprelay::EncryptedWrite,
     relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
 };
 
-use futures::{Future, Stream};
 use log::{debug, error, info};
 use tokio::{
     self,
-    io::read_exact,
-    timer::{Interval, Timeout},
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::{self, Duration, Instant},
 };
 
 struct Server {
@@ -137,26 +134,22 @@ impl Inner {
 
             tokio::spawn(
                 // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
-                Interval::new(
-                    Instant::now() + Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-                    Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-                )
-                .for_each(move |_| {
-                    let sc = sc.clone();
-                    let lat = latency.clone();
+                async move {
+                    // Wait until the server is ready (plugins are started)
+                    time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
 
-                    Inner::check_delay(sc.clone(), context.clone()).then(move |res| {
-                        let score = match res {
-                            Ok(d) => lat.push(d),
-                            Err(..) => lat.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
+                    let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
+
+                    while context.server_running() {
+                        interval.tick().await;
+                        let score = match Inner::check_delay(sc.clone(), context.clone()).await {
+                            Ok(d) => latency.push(d),
+                            Err(..) => latency.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
                         };
                         debug!("updated remote server {} (score: {})", sc.config.addr(), score);
                         sc.score.store(score, Ordering::Release);
-
-                        Ok(())
-                    })
-                })
-                .map_err(|_| ()),
+                    }
+                },
             );
         }
 
@@ -166,52 +159,54 @@ impl Inner {
         }
     }
 
-    fn check_delay(sc: Arc<Server>, context: SharedContext) -> impl Future<Item = u64, Error = io::Error> {
-        static GET_BODY: &[u8] = b"GET / HTTP/1.1\r\nHost: www.example.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
+    async fn check_request(sc: Arc<ServerConfig>, context: SharedContext) -> io::Result<()> {
+        static GET_BODY: &[u8] =
+            b"GET /generate_204 HTTP/1.1\r\nHost: dl.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
-        let addr = Address::DomainNameAddress("www.example.com".to_owned(), 80);
+        let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
+        let ServerClient { mut stream } = ServerClient::connect(context, &addr, sc).await?;
+        stream.write_all(GET_BODY).await?;
+        stream.flush().await?;
+        let mut buf = [0u8; 1];
+        stream.read_exact(&mut buf).await?;
+
+        Ok(())
+    }
+
+    async fn check_delay(sc: Arc<Server>, context: SharedContext) -> io::Result<u64> {
         let start = Instant::now();
 
         // Send HTTP GET and read the first byte
-        let fut = ServerClient::connect(context, addr, sc.config.clone()).and_then(|ServerClient { r, w }| {
-            w.write_all(GET_BODY)
-                .and_then(|(mut w, _)| w.flush())
-                .and_then(move |_| read_exact(r, [0u8, 1]))
-        });
+        let timeout = Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC);
+        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context.clone())).await;
 
-        Timeout::new(fut, Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC)).then(move |res| {
-            let elapsed = Instant::now() - start;
-            let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
-            match res {
-                Ok(..) => {
-                    // Got the result ... record its time
-                    debug!("checked remote server {} latency with {} ms", sc.config.addr(), elapsed);
-                    Ok(elapsed)
-                }
-                Err(err) => {
-                    match err.into_inner() {
-                        Some(err) => {
-                            error!("failed to check server {}, error: {}", sc.config.addr(), err);
-
-                            // NOTE: connection / handshake error, server is down
-                            Err(err)
-                        }
-                        None => {
-                            // Timeout
-                            debug!(
-                                "checked remote server {} latency timeout, elapsed {} ms",
-                                sc.config.addr(),
-                                elapsed
-                            );
-
-                            // NOTE: timeout is still available, but server is too slow
-                            Ok(elapsed)
-                        }
-                    }
-                }
+        let elapsed = Instant::now() - start;
+        let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
+        match res {
+            Ok(Ok(..)) => {
+                // Got the result ... record its time
+                debug!("checked remote server {} latency with {} ms", sc.config.addr(), elapsed);
+                Ok(elapsed)
             }
-        })
+            Ok(Err(err)) => {
+                error!("failed to check server {}, error: {}", sc.config.addr(), err);
+
+                // NOTE: connection / handshake error, server is down
+                Err(err)
+            }
+            Err(..) => {
+                // Timeout
+                debug!(
+                    "checked remote server {} latency timeout, elapsed {} ms",
+                    sc.config.addr(),
+                    elapsed
+                );
+
+                // NOTE: timeout is still available, but server is too slow
+                Ok(elapsed)
+            }
+        }
     }
 
     fn best_idx(&self) -> usize {
@@ -234,54 +229,54 @@ pub struct PingBalancer {
 
 impl PingBalancer {
     pub fn new(context: SharedContext) -> PingBalancer {
-        let inner = Arc::new(Inner::new(context));
+        let inner = Arc::new(Inner::new(context.clone()));
 
-        let inner_cloned = inner.clone();
-        tokio::spawn(
-            Interval::new(
-                Instant::now() + Duration::from_secs(2),
-                Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
-            )
-            .for_each(move |_| {
-                let inner = inner_cloned.clone();
+        if inner.servers.len() > 1 {
+            let cloned_inner = inner.clone();
+            tokio::spawn(async move {
+                let inner = cloned_inner;
 
-                if inner.servers.is_empty() {
-                    panic!("No server");
-                }
+                // Wait until the server is ready (plugins are started)
+                time::delay_for(Duration::from_secs(2)).await;
 
-                // Choose the best one
-                let mut svr_idx = 0;
+                let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
 
-                for (idx, svr) in inner.servers.iter().enumerate() {
-                    let choosen_svr = &inner.servers[svr_idx];
-                    if svr.score() < choosen_svr.score() {
-                        svr_idx = idx;
+                while context.server_running() {
+                    interval.tick().await;
+
+                    assert!(!inner.servers.is_empty());
+
+                    // Choose the best one
+                    let mut svr_idx = 0;
+
+                    for (idx, svr) in inner.servers.iter().enumerate() {
+                        let choosen_svr = &inner.servers[svr_idx];
+                        if svr.score() < choosen_svr.score() {
+                            svr_idx = idx;
+                        }
                     }
-                }
 
-                let choosen_svr = &inner.servers[svr_idx];
-                debug!(
-                    "chosen the best server {} (score: {})",
-                    choosen_svr.config.addr(),
-                    choosen_svr.score()
-                );
-
-                if inner.best_idx() != svr_idx {
-                    info!(
-                        "switched server from {} (score: {}) to {} (score: {})",
-                        inner.best_server().config.addr(),
-                        inner.best_server().score(),
+                    let choosen_svr = &inner.servers[svr_idx];
+                    debug!(
+                        "chosen the best server {} (score: {})",
                         choosen_svr.config.addr(),
-                        choosen_svr.score(),
+                        choosen_svr.score()
                     );
+
+                    if inner.best_idx() != svr_idx {
+                        info!(
+                            "switched server from {} (score: {}) to {} (score: {})",
+                            inner.best_server().config.addr(),
+                            inner.best_server().score(),
+                            choosen_svr.config.addr(),
+                            choosen_svr.score(),
+                        );
+                    }
+
+                    inner.set_best_idx(svr_idx);
                 }
-
-                inner.set_best_idx(svr_idx);
-
-                Ok(())
-            })
-            .map_err(|_| ()),
-        );
+            });
+        }
 
         PingBalancer { inner }
     }

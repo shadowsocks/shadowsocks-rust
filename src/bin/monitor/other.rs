@@ -1,8 +1,8 @@
-use futures::{self, Future};
+use futures;
 use std::io;
 
-pub fn create_signal_monitor() -> impl Future<Item = (), Error = io::Error> + Send {
+pub async fn create_signal_monitor() -> io::Result<()> {
     // FIXME: What can I do ...
     // Blocks forever
-    futures::empty::<(), io::Error>()
+    futures::empty::<(), io::Error>().await
 }

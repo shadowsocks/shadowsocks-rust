@@ -41,32 +41,33 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-use std::{
-    collections::HashSet,
-    convert::From,
-    default::Default,
-    error,
-    fmt::{self, Debug, Display, Formatter},
-    fs::OpenOptions,
-    io::Read,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-    option::Option,
-    path::Path,
-    str::FromStr,
-    string::ToString,
-    time::Duration,
-};
+use std::collections::HashSet;
+use std::convert::From;
+use std::default::Default;
+use std::error;
+use std::fmt::{self, Debug, Display, Formatter};
+use std::fs::OpenOptions;
+use std::io::Read;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::option::Option;
+use std::path::Path;
+use std::str::FromStr;
+use std::string::ToString;
+use std::time::Duration;
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use json5;
-use log::{error, trace};
+use log::error;
 use serde::{Deserialize, Serialize};
 use serde_urlencoded;
+#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
-use crate::{crypto::cipher::CipherType, plugin::PluginConfig};
+use crate::crypto::cipher::CipherType;
+use crate::plugin::PluginConfig;
+use crate::relay::socks5::Address;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
@@ -96,8 +97,6 @@ struct SSConfig {
     forbidden_ip: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    remote_dns: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -220,7 +219,6 @@ impl ServerConfig {
         plugin: Option<PluginConfig>,
     ) -> ServerConfig {
         let enc_key = method.bytes_to_key(pwd.as_bytes());
-        trace!("Initialize config with pwd: {:?}, key: {:?}", pwd, enc_key);
         ServerConfig {
             addr,
             password: pwd,
@@ -461,9 +459,9 @@ impl error::Error for UrlParseError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
-            UrlParseError::ParseError(ref err) => Some(err as &error::Error),
+            UrlParseError::ParseError(ref err) => Some(err as &dyn error::Error),
             UrlParseError::InvalidScheme => None,
             UrlParseError::InvalidUserInfo => None,
             UrlParseError::MissingHost => None,
@@ -540,9 +538,9 @@ impl FromStr for Mode {
 pub struct Config {
     pub server: Vec<ServerConfig>,
     pub local: Option<ClientConfig>,
+    pub forward: Option<Address>,
     pub forbidden_ip: HashSet<IpAddr>,
     pub dns: Option<String>,
-    pub remote_dns: Option<SocketAddr>,
     pub mode: Mode,
     pub no_delay: bool,
     pub manager_address: Option<ServerAddr>,
@@ -600,9 +598,9 @@ impl Config {
         Config {
             server: Vec::new(),
             local: None,
+            forward: None,
             forbidden_ip: HashSet::new(),
             dns: None,
-            remote_dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
             manager_address: None,
@@ -761,20 +759,6 @@ impl Config {
         // DNS
         nconfig.dns = config.dns;
 
-        if let Some(rdns) = config.remote_dns {
-            match rdns.parse::<SocketAddr>() {
-                Ok(r) => nconfig.remote_dns = Some(r),
-                Err(..) => {
-                    let e = Error::new(
-                        ErrorKind::Malformed,
-                        "malformed `remote_dns`, which must be a valid SocketAddr",
-                        None,
-                    );
-                    return Err(e);
-                }
-            }
-        }
-
         // Mode
         if let Some(m) = config.mode {
             match m.parse::<Mode>() {
@@ -810,6 +794,7 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
+    #[cfg(feature = "trust-dns")]
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
         self.dns.as_ref().and_then(|ds| {
             match &ds[..] {
@@ -843,11 +828,14 @@ impl Config {
         })
     }
 
-    pub fn get_remote_dns(&self) -> SocketAddr {
-        match self.remote_dns {
-            None => SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(8, 8, 8, 8), 53)),
-            Some(ip) => ip,
+    /// Check if there are any plugin are enabled with servers
+    pub fn has_server_plugins(&self) -> bool {
+        for server in &self.server {
+            if server.plugin().is_some() {
+                return true;
+            }
         }
+        false
     }
 }
 
@@ -920,10 +908,6 @@ impl fmt::Display for Config {
 
         if let Some(ref dns) = self.dns {
             jconf.dns = Some(dns.to_string());
-        }
-
-        if let Some(ref remote_dns) = self.remote_dns {
-            jconf.remote_dns = Some(remote_dns.to_string());
         }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())

@@ -2,69 +2,50 @@
 
 use std::io;
 
-use futures::{stream::futures_unordered, Future, Stream};
+use futures::future::{select_all, FutureExt};
+
+use log::error;
 
 use crate::{
     config::Config,
-    context::{Context, SharedContext},
-    plugin::{launch_plugins, PluginMode},
-    relay::{boxed_future, tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
+    context::{Context, SharedServerState},
+    plugin::{PluginMode, Plugins},
+    relay::{tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
 };
 
 /// Relay server running on server side.
-///
-/// ```no_run
-/// use shadowsocks::{
-///     config::{Config, ConfigType, ServerConfig},
-///     crypto::CipherType,
-///     relay::server::run,
-/// };
-///
-/// use tokio::prelude::*;
-///
-/// let mut config = Config::new(ConfigType::Server);
-/// config.server = vec![ServerConfig::basic(
-///     "127.0.0.1:8388".parse().unwrap(),
-///     "server-password".to_string(),
-///     CipherType::Aes256Cfb,
-/// )];
-///
-/// let fut = run(config);
-/// tokio::run(fut.map_err(|err| panic!("Server run failed with error {}", err)));
-/// ```
-pub fn run(config: Config) -> impl Future<Item = (), Error = io::Error> + Send {
-    futures::lazy(move || {
-        let mut context = Context::new(config);
+pub async fn run(mut config: Config) -> io::Result<()> {
+    // Create a context containing a DNS resolver and server running state flag.
+    let state = SharedServerState::new(&config);
 
-        let mut vf = Vec::new();
+    let mut vf = Vec::new();
 
-        if context.config().mode.enable_udp() {
-            // Clone config here, because the config for TCP relay will be modified
-            // after plugins started
-            let udp_context = SharedContext::new(context.clone());
+    if config.mode.enable_udp() {
+        // Clone config here, because the config for TCP relay will be modified
+        // after plugins started
+        let udp_context = Context::new_shared(config.clone(), state.clone());
 
-            // Run UDP relay before starting plugins
-            // Because plugins doesn't support UDP relay
-            let udp_fut = run_udp(udp_context);
-            vf.push(boxed_future(udp_fut));
+        // Run UDP relay before starting plugins
+        // Because plugins doesn't support UDP relay
+        let udp_fut = run_udp(udp_context);
+        vf.push(udp_fut.boxed());
+    }
+
+    if config.mode.enable_tcp() {
+        if config.has_server_plugins() {
+            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
+            vf.push(plugins.into_future().boxed());
         }
 
-        if context.config().mode.enable_tcp() {
-            if let Some(plugins) =
-                launch_plugins(context.config_mut(), PluginMode::Server).expect("Failed to launch plugins")
-            {
-                vf.push(boxed_future(plugins));
-            }
+        let tcp_fut = run_tcp(Context::new_shared(config, state.clone()));
+        vf.push(tcp_fut.boxed());
+    }
 
-            let tcp_fut = run_tcp(SharedContext::new(context));
-            vf.push(boxed_future(tcp_fut));
-        }
+    let (res, ..) = select_all(vf.into_iter()).await;
+    error!("One of TCP servers exited unexpectly, result: {:?}", res);
 
-        futures_unordered(vf).into_future().then(|res| -> io::Result<()> {
-            match res {
-                Ok(..) => Ok(()),
-                Err((err, ..)) => Err(err),
-            }
-        })
-    })
+    // Tells all detached tasks to exit
+    state.server_stopped();
+
+    Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }

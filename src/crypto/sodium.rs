@@ -1,9 +1,6 @@
 //! Cipher defined with libsodium
 
-use std::{
-    ptr,
-    sync::{Once, ONCE_INIT},
-};
+use std::{ptr, sync::Once};
 
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -20,7 +17,7 @@ use crate::crypto::{
     AeadDecryptor, AeadEncryptor, CipherResult, CipherType, StreamCipher,
 };
 
-static SODIUM_INIT_FLAG: Once = ONCE_INIT;
+static SODIUM_INIT_FLAG: Once = Once::new();
 
 /// Cipher provided by `libsodium`
 pub struct SodiumStreamCipher {
@@ -56,7 +53,7 @@ impl SodiumStreamCipher {
         self.counter % SODIUM_BLOCK_SIZE
     }
 
-    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         let padding = self.padding_len();
 
         let mut plain_text = vec![0u8; data.len() + padding];
@@ -88,12 +85,12 @@ fn crypto_stream_xor_ic<B: BufMut>(
     data: &[u8],
     out: &mut B,
 ) -> CipherResult<()> {
-    assert!(data.len() <= unsafe { out.bytes_mut().len() });
+    assert!(data.len() <= out.bytes_mut().len());
 
     let ret = unsafe {
         match t {
             CipherType::ChaCha20 => crypto_stream_chacha20_xor_ic(
-                out.bytes_mut().as_mut_ptr(),
+                out.bytes_mut().as_mut_ptr() as *mut u8,
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
@@ -101,7 +98,7 @@ fn crypto_stream_xor_ic<B: BufMut>(
                 key.as_ptr(),
             ),
             CipherType::ChaCha20Ietf => crypto_stream_chacha20_ietf_xor_ic(
-                out.bytes_mut().as_mut_ptr(),
+                out.bytes_mut().as_mut_ptr() as *mut u8,
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
@@ -109,7 +106,7 @@ fn crypto_stream_xor_ic<B: BufMut>(
                 key.as_ptr(),
             ),
             CipherType::Salsa20 => crypto_stream_salsa20_xor_ic(
-                out.bytes_mut().as_mut_ptr(),
+                out.bytes_mut().as_mut_ptr() as *mut u8,
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
@@ -117,7 +114,7 @@ fn crypto_stream_xor_ic<B: BufMut>(
                 key.as_ptr(),
             ),
             CipherType::XSalsa20 => crypto_stream_xsalsa20_xor_ic(
-                out.bytes_mut().as_mut_ptr(),
+                out.bytes_mut().as_mut_ptr() as *mut u8,
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
@@ -140,11 +137,11 @@ fn crypto_stream_xor_ic<B: BufMut>(
 }
 
 impl StreamCipher for SodiumStreamCipher {
-    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut dyn BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut dyn BufMut) -> CipherResult<()> {
         Ok(())
     }
 

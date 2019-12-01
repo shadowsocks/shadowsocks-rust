@@ -1,450 +1,254 @@
 //! IO facilities for TCP relay
 
 use std::{
-    io::{self, BufRead, Read},
-    mem,
-    time::{Duration, Instant},
+    io,
+    marker::{PhantomData, Unpin},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
 };
 
-use bytes::{BufMut, BytesMut};
-use futures::{Async, Future, Poll};
-use tokio::timer::Delay;
-use tokio_io::{
-    io::{copy, Copy},
-    try_nb, AsyncRead, AsyncWrite,
-};
+use byte_string::ByteStr;
+use bytes::Bytes;
+use futures::ready;
+use log::trace;
+use tokio::prelude::*;
 
 use super::{
-    utils::{copy_timeout, copy_timeout_opt, CopyTimeout, CopyTimeoutOpt},
-    BUFFER_SIZE,
+    aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
+    stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
 };
 
-static DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
+use crate::{config::ServerConfig, crypto::CipherCategory};
 
-/// Reader to read data from ShadowSocks protocol
-///
-/// This trait requires `BufRead`, because obviously this reader has to contain a buffer inside,
-/// which stores the decrypted data.
-pub trait DecryptedRead: BufRead + AsyncRead {
-    /// Decrypt buffer size
-    fn buffer_size(&self, data: &[u8]) -> usize;
-
-    /// Copies all data to `w`
-    fn copy<W>(self, w: W) -> Copy<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
-    {
-        copy(self, w)
-    }
-
-    /// Copies all data to `w`, return `TimedOut` if timeout reaches
-    fn copy_timeout<W>(self, w: W, timeout: Duration) -> CopyTimeout<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
-    {
-        copy_timeout(self, w, timeout)
-    }
-
-    /// The same as `copy_timeout`, but has optional `timeout`
-    fn copy_timeout_opt<W>(self, w: W, timeout: Option<Duration>) -> CopyTimeoutOpt<Self, W>
-    where
-        Self: Sized,
-        W: AsyncWrite,
-    {
-        copy_timeout_opt(self, w, timeout)
-    }
+enum DecryptedReader {
+    Aead(AeadDecryptedReader),
+    Stream(StreamDecryptedReader),
 }
 
-/// Writer that encrypt data and write it as ShadowSocks protocol
-///
-/// The writer cannot implement `io::Write`, because you cannot ensure that you can write all the data in a batch
-/// in non-blocking I/O environment.
-pub trait EncryptedWrite {
-    /// Writes raw bytes directly to the writer
-    fn write_raw(&mut self, data: &[u8]) -> io::Result<usize>;
-    /// Flush the writer
-    fn flush(&mut self) -> io::Result<()>;
-    /// Encrypt data into buffer for writing
-    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()>;
-    /// Encrypt buffer size
-    fn buffer_size(&self, data: &[u8]) -> usize;
-
-    /// Encrypt data in `buf` and write all to the writer
-    fn write_all<B: AsRef<[u8]>>(self, buf: B) -> EncryptedWriteAll<Self, B>
-    where
-        Self: Sized,
-    {
-        EncryptedWriteAll::new(self, buf)
-    }
-
-    /// Copies all data from `r`
-    fn copy<R: Read>(self, r: R) -> EncryptedCopy<R, Self>
-    where
-        Self: Sized,
-    {
-        EncryptedCopy::new(r, self)
-    }
-
-    /// Copies all data from `r` with timeout
-    fn copy_timeout<R: Read>(self, r: R, timeout: Duration) -> EncryptedCopyTimeout<R, Self>
-    where
-        Self: Sized,
-    {
-        EncryptedCopyTimeout::new(r, self, timeout)
-    }
-
-    /// Copies all data from `r` with optional timeout
-    fn copy_timeout_opt<R: Read>(self, r: R, timeout: Option<Duration>) -> EncryptedCopyOpt<R, Self>
-    where
-        Self: Sized,
-    {
-        match timeout {
-            Some(t) => EncryptedCopyOpt::CopyTimeout(self.copy_timeout(r, t)),
-            None => EncryptedCopyOpt::Copy(self.copy(r)),
-        }
-    }
+enum EncryptedWriter {
+    Aead(AeadEncryptedWriter),
+    Stream(StreamEncryptedWriter),
 }
 
-/// Write all data encrypted
-pub enum EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
-{
-    Writing {
-        writer: W,
-        buf: B,
-        pos: usize,
-        enc_buf: BytesMut,
-        encrypted: bool,
-    },
-    Empty,
+enum ReadStatus {
+    WaitIv(Vec<u8>, usize),
+    Established,
 }
 
-impl<W, B> EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
-{
-    fn new(w: W, buf: B) -> EncryptedWriteAll<W, B> {
-        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedWriteAll::Writing {
-            writer: w,
-            buf,
-            pos: 0,
-            enc_buf: BytesMut::with_capacity(buffer_size),
-            encrypted: false,
-        }
-    }
+enum WriteStatus {
+    SendIv(Bytes, usize),
+    Established,
 }
 
-impl<W, B> Future for EncryptedWriteAll<W, B>
-where
-    W: EncryptedWrite,
-    B: AsRef<[u8]>,
-{
-    type Error = io::Error;
-    type Item = (W, B);
+pub struct CryptoStream<S> {
+    stream: S,
+    dec: Option<DecryptedReader>,
+    enc: Option<EncryptedWriter>,
+    svr_cfg: Arc<ServerConfig>,
+    read_status: ReadStatus,
+    write_status: WriteStatus,
+}
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match *self {
-            EncryptedWriteAll::Empty => panic!("poll after EncryptedWriteAll finished"),
-            EncryptedWriteAll::Writing {
-                ref mut writer,
-                ref buf,
-                ref mut pos,
-                ref mut enc_buf,
-                ref mut encrypted,
-            } => {
-                if !*encrypted {
-                    *encrypted = true;
+impl<S: Unpin> Unpin for CryptoStream<S> {}
 
-                    // Ensure buffer has enough space
-                    let buffer_len = writer.buffer_size(buf.as_ref());
-                    enc_buf.reserve(buffer_len);
+impl<S> CryptoStream<S> {
+    pub fn new(stream: S, svr_cfg: Arc<ServerConfig>) -> CryptoStream<S> {
+        let method = svr_cfg.method();
+        let prev_len = match method.category() {
+            CipherCategory::Stream => method.iv_size(),
+            CipherCategory::Aead => method.salt_size(),
+        };
 
-                    writer.encrypt(buf.as_ref(), enc_buf)?;
-                }
-
-                while *pos < enc_buf.len() {
-                    let n = try_nb!(writer.write_raw(&enc_buf[*pos..]));
-                    *pos += n;
-                    if n == 0 {
-                        let err = io::Error::new(io::ErrorKind::Other, "zero-length write");
-                        return Err(err);
-                    }
-                }
+        let local_iv = match method.category() {
+            CipherCategory::Stream => {
+                let local_iv = method.gen_init_vec();
+                trace!("Generated Stream cipher IV {:?}", local_iv);
+                local_iv
             }
-        }
+            CipherCategory::Aead => {
+                let local_salt = method.gen_salt();
+                trace!("Generated AEAD cipher salt {:?}", local_salt);
+                local_salt
+            }
+        };
 
-        match mem::replace(self, EncryptedWriteAll::Empty) {
-            EncryptedWriteAll::Writing { writer, buf, .. } => Ok((writer, buf).into()),
-            EncryptedWriteAll::Empty => unreachable!(),
-        }
-    }
-}
-
-/// Encrypted copy
-pub struct EncryptedCopy<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
-{
-    reader: Option<R>,
-    writer: Option<W>,
-    read_done: bool,
-    amt: u64,
-    pos: usize,
-    cap: usize,
-    buf: BytesMut,
-}
-
-impl<R, W> EncryptedCopy<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
-{
-    fn new(r: R, w: W) -> EncryptedCopy<R, W> {
-        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedCopy {
-            reader: Some(r),
-            writer: Some(w),
-            read_done: false,
-            amt: 0,
-            pos: 0,
-            cap: 0,
-            buf: BytesMut::with_capacity(buffer_size),
+        CryptoStream {
+            stream,
+            dec: None,
+            enc: None,
+            svr_cfg,
+            read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize),
+            write_status: WriteStatus::SendIv(local_iv, 0usize),
         }
     }
 }
 
-impl<R, W> Future for EncryptedCopy<R, W>
+impl<S> CryptoStream<S>
 where
-    R: Read,
-    W: EncryptedWrite,
+    S: AsyncRead + Unpin,
 {
-    type Error = io::Error;
-    type Item = (u64, R, W);
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut local_buf = [0u8; BUFFER_SIZE];
-        loop {
-            // If our buffer is empty, then we need to read some data to
-            // continue.
-            if self.pos == self.cap && !self.read_done {
-                let n = try_nb!(self.reader.as_mut().unwrap().read(&mut local_buf[..]));
-                self.buf.clear();
+    fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if let ReadStatus::WaitIv(ref mut buf, ref mut pos) = self.read_status {
+            while *pos < buf.len() {
+                let n = ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf[*pos..]))?;
                 if n == 0 {
-                    self.read_done = true;
-                } else {
-                    let data = &local_buf[..n];
-                    // Ensure we have enough space
-                    let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
-                    self.buf.reserve(buffer_len);
-
-                    self.writer.as_mut().unwrap().encrypt(data, &mut self.buf)?;
+                    use std::io::ErrorKind;
+                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
-                self.pos = 0;
-                self.cap = self.buf.len();
+                *pos += n;
             }
 
-            // If our buffer has some data, let's write it out!
-            while self.pos < self.cap {
-                let i = try_nb!(self.writer.as_mut().unwrap().write_raw(&self.buf[self.pos..self.cap]));
-                self.pos += i;
-                self.amt += i as u64;
-            }
+            let method = self.svr_cfg.method();
+            let dec = match method.category() {
+                CipherCategory::Stream => {
+                    trace!("Got Stream cipher IV {:?}", ByteStr::new(&buf));
+                    DecryptedReader::Stream(StreamDecryptedReader::new(method, self.svr_cfg.key(), &buf))
+                }
+                CipherCategory::Aead => {
+                    trace!("Got AEAD cipher salt {:?}", ByteStr::new(&buf));
+                    DecryptedReader::Aead(AeadDecryptedReader::new(method, self.svr_cfg.key(), &buf))
+                }
+            };
 
-            // If we've written al the data and we've seen EOF, flush out the
-            // data and finish the transfer.
-            // done with the entire transfer.
-            if self.pos == self.cap && self.read_done {
-                try_nb!(self.writer.as_mut().unwrap().flush());
-                return Ok((self.amt, self.reader.take().unwrap(), self.writer.take().unwrap()).into());
-            }
+            self.dec = Some(dec);
+            self.read_status = ReadStatus::Established;
+        }
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn priv_poll_read(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        ready!(self.poll_read_handshake(ctx))?;
+
+        let stream = unsafe { &mut *(&mut self.stream as *mut _) };
+        match *self.dec.as_mut().unwrap() {
+            DecryptedReader::Aead(ref mut r) => r.poll_read_decrypted(ctx, stream, buf),
+            DecryptedReader::Stream(ref mut r) => r.poll_read_decrypted(ctx, stream, buf),
         }
     }
 }
 
-/// Encrypted copy
-pub struct EncryptedCopyTimeout<R, W>
+impl<S> CryptoStream<S>
 where
-    R: Read,
-    W: EncryptedWrite,
+    S: AsyncWrite + Unpin,
 {
-    reader: Option<R>,
-    writer: Option<W>,
-    read_done: bool,
-    amt: u64,
-    pos: usize,
-    cap: usize,
-    timeout: Duration,
-    timer: Option<Delay>,
-    read_buf: [u8; BUFFER_SIZE],
-    write_buf: BytesMut,
-}
-
-impl<R, W> EncryptedCopyTimeout<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
-{
-    fn new(r: R, w: W, dur: Duration) -> EncryptedCopyTimeout<R, W> {
-        let buffer_size = w.buffer_size(&DUMMY_BUFFER);
-        EncryptedCopyTimeout {
-            reader: Some(r),
-            writer: Some(w),
-            read_done: false,
-            amt: 0,
-            pos: 0,
-            cap: 0,
-            timeout: dur,
-            timer: None,
-            read_buf: [0u8; BUFFER_SIZE],
-            write_buf: BytesMut::with_capacity(buffer_size),
-        }
-    }
-
-    fn try_poll_timeout(&mut self) -> io::Result<()> {
-        match self.timer.as_mut() {
-            None => Ok(()),
-            Some(t) => match t.poll() {
-                Err(err) => panic!("Failed to poll on timer, err: {}", err),
-                Ok(Async::Ready(..)) => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                Ok(Async::NotReady) => Ok(()),
-            },
-        }
-    }
-
-    fn clear_timer(&mut self) {
-        let _ = self.timer.take();
-    }
-
-    fn read_or_set_timeout(&mut self) -> io::Result<usize> {
-        // First, return if timeout
-        self.try_poll_timeout()?;
-
-        // Then, unset the previous timeout
-        self.clear_timer();
-
-        self.write_buf.clear();
-        match self.reader.as_mut().unwrap().read(&mut self.read_buf) {
-            Ok(0) => {
-                self.cap = 0;
-                self.pos = 0;
-                Ok(0)
-            }
-            Ok(n) => {
-                let data = &self.read_buf[..n];
-                // Ensoure we have enough space
-                let buffer_len = self.writer.as_mut().unwrap().buffer_size(data);
-                self.write_buf.reserve(buffer_len);
-
-                self.writer.as_mut().unwrap().encrypt(data, &mut self.write_buf)?;
-                self.cap = self.write_buf.len();
-                self.pos = 0;
-                Ok(n)
-            }
-            Err(e) => {
-                if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
-                }
-                Err(e)
-            }
-        }
-    }
-
-    fn write_or_set_timeout(&mut self) -> io::Result<usize> {
-        // First, return if timeout
-        self.try_poll_timeout()?;
-
-        // Then, unset the previous timeout
-        self.clear_timer();
-
-        match self
-            .writer
-            .as_mut()
-            .unwrap()
-            .write_raw(&self.write_buf[self.pos..self.cap])
-        {
-            Ok(n) => {
-                self.pos += n;
-                Ok(n)
-            }
-            Err(e) => {
-                if e.kind() == io::ErrorKind::WouldBlock {
-                    self.timer = Some(Delay::new(Instant::now() + self.timeout));
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
-impl<R, W> Future for EncryptedCopyTimeout<R, W>
-where
-    R: Read,
-    W: EncryptedWrite,
-{
-    type Error = io::Error;
-    type Item = (u64, R, W);
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            // If our buffer is empty, then we need to read some data to
-            // continue.
-            if self.pos == self.cap && !self.read_done {
-                let n = try_nb!(self.read_or_set_timeout());
+    fn poll_write_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if let WriteStatus::SendIv(ref iv, ref mut pos) = self.write_status {
+            while *pos < iv.len() {
+                let n = ready!(Pin::new(&mut self.stream).poll_write(cx, &iv[*pos..]))?;
                 if n == 0 {
-                    self.read_done = true;
+                    use std::io::ErrorKind;
+                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
+                *pos += n;
             }
 
-            // If our buffer has some data, let's write it out!
-            while self.pos < self.cap {
-                let i = try_nb!(self.write_or_set_timeout());
-                if i == 0 {
-                    let err = io::Error::new(io::ErrorKind::WriteZero, "copied zero bytes into writer");
-                    return Err(err);
+            let method = self.svr_cfg.method();
+            let enc = match method.category() {
+                CipherCategory::Stream => {
+                    trace!("Sent Stream cipher IV {:?}", ByteStr::new(&iv));
+                    EncryptedWriter::Stream(StreamEncryptedWriter::new(method, self.svr_cfg.key(), &iv))
                 }
-                self.amt += i as u64;
-            }
+                CipherCategory::Aead => {
+                    trace!("Sent AEAD cipher salt {:?}", ByteStr::new(&iv));
+                    EncryptedWriter::Aead(AeadEncryptedWriter::new(method, self.svr_cfg.key(), &iv))
+                }
+            };
 
-            // If we've written al the data and we've seen EOF, flush out the
-            // data and finish the transfer.
-            // done with the entire transfer.
-            if self.pos == self.cap && self.read_done {
-                try_nb!(self.writer.as_mut().unwrap().flush());
-                return Ok((self.amt, self.reader.take().unwrap(), self.writer.take().unwrap()).into());
-            }
+            self.enc = Some(enc);
+            self.write_status = WriteStatus::Established;
         }
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn priv_poll_write(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        ready!(self.poll_write_handshake(ctx))?;
+
+        let stream = unsafe { &mut *(&mut self.stream as *mut _) };
+        match *self.enc.as_mut().unwrap() {
+            EncryptedWriter::Aead(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
+            EncryptedWriter::Stream(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
+        }
+    }
+
+    fn priv_poll_flush(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(Pin::new(&mut self.stream), ctx)
+    }
+
+    fn priv_poll_shutdown(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_shutdown(Pin::new(&mut self.stream), ctx)
     }
 }
 
-/// Work for both timeout or no timeout
-pub enum EncryptedCopyOpt<R, W>
+impl<S> CryptoStream<S>
 where
-    R: Read,
-    W: EncryptedWrite,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
-    Copy(EncryptedCopy<R, W>),
-    CopyTimeout(EncryptedCopyTimeout<R, W>),
+    pub fn split(&mut self) -> (CryptoStreamReadHalf<'_, S>, CryptoStreamWriteHalf<'_, S>) {
+        let p = self as *mut _;
+        (
+            CryptoStreamReadHalf(p, PhantomData),
+            CryptoStreamWriteHalf(p, PhantomData),
+        )
+    }
 }
 
-impl<R, W> Future for EncryptedCopyOpt<R, W>
+impl<S> AsyncRead for CryptoStream<S>
 where
-    R: Read,
-    W: EncryptedWrite,
+    S: AsyncRead + Unpin,
 {
-    type Error = io::Error;
-    type Item = (u64, R, W);
+    fn poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        self.priv_poll_read(ctx, buf)
+    }
+}
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match *self {
-            EncryptedCopyOpt::Copy(ref mut c) => c.poll(),
-            EncryptedCopyOpt::CopyTimeout(ref mut c) => c.poll(),
-        }
+impl<S> AsyncWrite for CryptoStream<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        self.priv_poll_write(ctx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.priv_poll_flush(ctx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.priv_poll_shutdown(ctx)
+    }
+}
+
+pub struct CryptoStreamReadHalf<'a, S: 'a>(*mut CryptoStream<S>, PhantomData<&'a S>);
+
+unsafe impl<'a, S: Send + 'a> Send for CryptoStreamReadHalf<'a, S> {}
+
+impl<'a, S: AsyncRead + Unpin + 'a> AsyncRead for CryptoStreamReadHalf<'a, S> {
+    fn poll_read(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let stream = unsafe { &mut *self.0 };
+        Pin::new(stream).priv_poll_read(ctx, buf)
+    }
+}
+
+pub struct CryptoStreamWriteHalf<'a, S: 'a>(*mut CryptoStream<S>, PhantomData<&'a S>);
+
+unsafe impl<'a, S: Send + 'a> Send for CryptoStreamWriteHalf<'a, S> {}
+
+impl<'a, S: AsyncWrite + Unpin + 'a> AsyncWrite for CryptoStreamWriteHalf<'a, S> {
+    fn poll_write(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let stream = unsafe { &mut *self.0 };
+        Pin::new(stream).priv_poll_write(ctx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let stream = unsafe { &mut *self.0 };
+        Pin::new(stream).priv_poll_flush(ctx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let stream = unsafe { &mut *self.0 };
+        Pin::new(stream).priv_poll_shutdown(ctx)
     }
 }

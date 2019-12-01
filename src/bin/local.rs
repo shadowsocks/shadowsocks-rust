@@ -4,22 +4,23 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use std::{io::Result as IoResult, net::SocketAddr, process};
-
 use clap::{App, Arg};
-use futures::{future::Either, Future};
+use futures::{
+    future::{self, Either},
+    FutureExt,
+};
 use log::{debug, error, info};
-#[cfg(feature = "single-threaded")]
-use tokio::runtime::current_thread::Runtime;
-#[cfg(not(feature = "single-threaded"))]
-use tokio::runtime::Runtime;
+use std::net::SocketAddr;
+use tokio;
 
 use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
 
 mod logging;
 mod monitor;
 
-fn main() {
+#[cfg_attr(feature = "single-threaded", tokio::main(basic_scheduler))]
+#[cfg_attr(not(feature = "single-threaded"), tokio::main)]
+async fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
@@ -207,47 +208,11 @@ fn main() {
 
     debug!("Config: {:?}", config);
 
-    match launch_server(config) {
-        Ok(()) => {}
-        Err(err) => {
-            error!("Server exited unexpectly with error: {}", err);
-            process::exit(1);
-        }
-    }
-}
-
-#[cfg(feature = "single-threaded")]
-fn launch_server(config: Config) -> IoResult<()> {
-    let mut runtime = Runtime::new().expect("Creating runtime");
-
     let abort_signal = monitor::create_signal_monitor();
-    let result = runtime.block_on(run_local(config).select2(abort_signal));
-
-    match result {
+    match future::select(run_local(config).boxed(), abort_signal.boxed()).await {
         // Server future resolved without an error. This should never happen.
-        Ok(Either::A(_)) => panic!("Server exited unexpectly"),
-        // Server future resolved with an error.
-        Err(Either::A((err, _))) => Err(err),
+        Either::Left(_) => panic!("Server exited unexpectly"),
         // The abort signal future resolved. Means we should just exit.
-        Ok(Either::B(..)) | Err(Either::B(..)) => Ok(()),
-    }
-}
-
-#[cfg(not(feature = "single-threaded"))]
-fn launch_server(config: Config) -> IoResult<()> {
-    let mut runtime = Runtime::new().expect("Creating runtime");
-
-    let abort_signal = monitor::create_signal_monitor();
-    let result = runtime.block_on(run_local(config).select2(abort_signal));
-
-    runtime.shutdown_now().wait().unwrap();
-
-    match result {
-        // Server future resolved without an error. This should never happen.
-        Ok(Either::A(_)) => panic!("Server exited unexpectly"),
-        // Server future resolved with an error.
-        Err(Either::A((err, _))) => Err(err),
-        // The abort signal future resolved. Means we should just exit.
-        Ok(Either::B(..)) | Err(Either::B(..)) => Ok(()),
+        Either::Right(_) => (),
     }
 }

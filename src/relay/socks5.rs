@@ -2,26 +2,23 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-use std::{
-    convert::From,
-    error,
-    fmt::{self, Debug, Formatter},
-    io::{self, Cursor, Read, Write},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    u8, vec,
-};
+use std::convert::From;
+use std::error;
+use std::fmt::{self, Debug, Formatter};
+use std::io::{self, Cursor};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
+use std::str::FromStr;
+use std::u8;
+use std::vec;
 
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use futures::{try_ready, Async, Future, Poll};
+use bytes::buf::BufExt;
+use bytes::{Buf, BufMut, BytesMut};
 use log::error;
-use tokio_io::{io::read_exact, try_nb, AsyncRead, AsyncWrite};
+use tokio::prelude::*;
 
 pub use self::consts::{
     SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
 };
-
-use super::utils::{write_bytes, WriteBytes};
 
 #[rustfmt::skip]
 mod consts {
@@ -192,7 +189,7 @@ impl error::Error for Error {
         &self.message[..]
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }
@@ -219,17 +216,84 @@ pub enum Address {
 }
 
 impl Address {
-    #[inline]
-    pub fn read_from<R: AsyncRead>(stream: R) -> ReadAddress<R> {
-        ReadAddress::new(stream)
+    pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut addr_type_buf = [0u8; 1];
+        let _ = stream.read_exact(&mut addr_type_buf).await?;
+
+        let addr_type = addr_type_buf[0];
+        match addr_type {
+            consts::SOCKS5_ADDR_TYPE_IPV4 => {
+                let mut buf = BytesMut::with_capacity(6);
+                buf.resize(6, 0);
+                let _ = stream.read_exact(&mut buf).await?;
+
+                let mut cursor = buf.to_bytes();
+                let v4addr = Ipv4Addr::new(cursor.get_u8(), cursor.get_u8(), cursor.get_u8(), cursor.get_u8());
+                let port = cursor.get_u16();
+                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
+            }
+            consts::SOCKS5_ADDR_TYPE_IPV6 => {
+                let mut buf = [0u8; 18];
+                let _ = stream.read_exact(&mut buf).await?;
+
+                let mut cursor = Cursor::new(&buf);
+                let v6addr = Ipv6Addr::new(
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                    cursor.get_u16(),
+                );
+                let port = cursor.get_u16();
+
+                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                    v6addr, port, 0, 0,
+                ))))
+            }
+            consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                let mut length_buf = [0u8; 1];
+                let _ = stream.read_exact(&mut length_buf).await?;
+                let length = length_buf[0] as usize;
+
+                // Len(Domain) + Len(Port)
+                let buf_length = length + 2;
+                let mut buf = BytesMut::with_capacity(buf_length);
+                buf.resize(buf_length, 0);
+                let _ = stream.read_exact(&mut buf).await?;
+
+                let mut cursor = buf.to_bytes();
+                let mut raw_addr = Vec::with_capacity(length);
+                raw_addr.put(&mut BufExt::take(&mut cursor, length));
+                let addr = match String::from_utf8(raw_addr) {
+                    Ok(addr) => addr,
+                    Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
+                };
+                let port = cursor.get_u16();
+
+                Ok(Address::DomainNameAddress(addr, port))
+            }
+            _ => {
+                error!("Invalid address type {}", addr_type);
+                Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"))
+            }
+        }
     }
 
     /// Writes to writer
     #[inline]
-    pub fn write_to<W: AsyncWrite>(self, writer: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(&self, writer: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(writer, buf.freeze())
+        writer.write_all(&buf).await
     }
 
     /// Writes to buffer
@@ -287,215 +351,42 @@ impl From<(String, u16)> for Address {
     }
 }
 
-pub struct ReadAddress<R>
-where
-    R: AsyncRead,
-{
-    reader: Option<R>,
-    state: ReadAddressState,
-    buf: Option<BytesMut>,
-    already_read: usize,
-}
+/// Parse `Address` error
+#[derive(Debug)]
+pub struct AddressError;
 
-enum ReadAddressState {
-    Type,
-    Ipv4,
-    Ipv6,
-    DomainNameLength,
-    DomainName,
-}
+impl FromStr for Address {
+    type Err = AddressError;
 
-impl<R> Future for ReadAddress<R>
-where
-    R: AsyncRead,
-{
-    type Error = Error;
-    type Item = (R, Address);
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        debug_assert!(self.reader.is_some());
-
-        loop {
-            match self.state {
-                ReadAddressState::Type => {
-                    try_ready!(self.read_addr_type());
+    fn from_str(s: &str) -> Result<Address, AddressError> {
+        match s.parse::<SocketAddr>() {
+            Ok(addr) => Ok(Address::SocketAddress(addr)),
+            Err(..) => {
+                let mut sp = s.split(':');
+                match (sp.next(), sp.next()) {
+                    (Some(dn), Some(port)) => match port.parse::<u16>() {
+                        Ok(port) => Ok(Address::DomainNameAddress(dn.to_owned(), port)),
+                        Err(..) => Err(AddressError),
+                    },
+                    _ => Err(AddressError),
                 }
-                ReadAddressState::Ipv4 => {
-                    let addr = try_ready!(self.read_ipv4());
-                    let reader = self.reader.take().unwrap();
-                    return Ok((reader, addr).into());
-                }
-                ReadAddressState::Ipv6 => {
-                    let addr = try_ready!(self.read_ipv6());
-                    let reader = self.reader.take().unwrap();
-                    return Ok((reader, addr).into());
-                }
-                ReadAddressState::DomainNameLength => {
-                    try_ready!(self.read_domain_name_length());
-                }
-                ReadAddressState::DomainName => {
-                    let addr = try_ready!(self.read_domain_name());
-                    let reader = self.reader.take().unwrap();
-                    return Ok((reader, addr).into());
-                }
-            };
-        }
-    }
-}
-
-impl<R> ReadAddress<R>
-where
-    R: AsyncRead,
-{
-    fn new(r: R) -> ReadAddress<R> {
-        ReadAddress {
-            reader: Some(r),
-            state: ReadAddressState::Type,
-            buf: None,
-            already_read: 0,
-        }
-    }
-
-    fn read_addr_type(&mut self) -> Poll<(), Error> {
-        let addr_type = try_nb!(self.reader.as_mut().unwrap().read_u8());
-        match addr_type {
-            consts::SOCKS5_ADDR_TYPE_IPV4 => {
-                self.state = ReadAddressState::Ipv4;
-                self.alloc_buf(6);
-            }
-            consts::SOCKS5_ADDR_TYPE_IPV6 => {
-                self.state = ReadAddressState::Ipv6;
-                self.alloc_buf(18);
-            }
-            consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
-                self.state = ReadAddressState::DomainNameLength;
-            }
-            _ => {
-                error!("Invalid address type {}", addr_type);
-                return Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"));
-            }
-        };
-
-        Ok(Async::Ready(()))
-    }
-
-    fn read_ipv4(&mut self) -> Poll<Address, Error> {
-        try_ready!(self.read_data());
-        let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v4addr = Ipv4Addr::new(
-            stream.read_u8()?,
-            stream.read_u8()?,
-            stream.read_u8()?,
-            stream.read_u8()?,
-        );
-        let port = stream.read_u16::<BigEndian>()?;
-        let addr = Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port)));
-        Ok(Async::Ready(addr))
-    }
-
-    fn read_ipv6(&mut self) -> Poll<Address, Error> {
-        try_ready!(self.read_data());
-        let mut stream: Cursor<Bytes> = self.freeze_buf().into_buf();
-        let v6addr = Ipv6Addr::new(
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-            stream.read_u16::<BigEndian>()?,
-        );
-        let port = stream.read_u16::<BigEndian>()?;
-
-        let addr = Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(v6addr, port, 0, 0)));
-        Ok(Async::Ready(addr))
-    }
-
-    fn read_domain_name_length(&mut self) -> Poll<(), Error> {
-        let length = try_nb!(self.reader.as_mut().unwrap().read_u8());
-        self.state = ReadAddressState::DomainName;
-        self.alloc_buf(length as usize + 2);
-        Ok(Async::Ready(()))
-    }
-
-    fn read_domain_name(&mut self) -> Poll<Address, Error> {
-        try_ready!(self.read_data());
-        let buf = self.freeze_buf();
-        let addr_len = buf.len() - 2;
-        let mut stream: Cursor<Bytes> = buf.into_buf();
-
-        let mut raw_addr = Vec::with_capacity(addr_len);
-        unsafe {
-            raw_addr.set_len(addr_len);
-        }
-        stream.read_exact(&mut raw_addr)?;
-
-        let addr = match String::from_utf8(raw_addr) {
-            Ok(addr) => addr,
-            Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
-        };
-        let port = stream.read_u16::<BigEndian>()?;
-
-        let addr = Address::DomainNameAddress(addr, port);
-        Ok(Async::Ready(addr))
-    }
-
-    fn alloc_buf(&mut self, size: usize) {
-        let mut buf = BytesMut::with_capacity(size);
-        unsafe {
-            buf.set_len(size);
-        }
-        self.buf = Some(buf);
-    }
-
-    fn read_data(&mut self) -> Poll<(), io::Error> {
-        let buf = self.buf.as_mut().unwrap();
-
-        while self.already_read < buf.len() {
-            match self.reader.as_mut().unwrap().read(&mut buf[self.already_read..]) {
-                Ok(0) => {
-                    let err = io::Error::new(io::ErrorKind::Other, "Unexpected EOF");
-                    return Err(err);
-                }
-                Ok(n) => self.already_read += n,
-                Err(err) => return Err(err),
             }
         }
-
-        Ok(Async::Ready(()))
-    }
-
-    fn freeze_buf(&mut self) -> Bytes {
-        let buf = self.buf.take().unwrap();
-        buf.freeze()
     }
 }
 
 fn write_ipv4_address<B: BufMut>(addr: &SocketAddrV4, buf: &mut B) {
-    let mut dbuf = [0u8; 1 + 4 + 2];
-    {
-        let mut cur = Cursor::new(&mut dbuf[..]);
-        let _ = cur.write_u8(consts::SOCKS5_ADDR_TYPE_IPV4); // Address type
-        let _ = cur.write_all(&addr.ip().octets()); // Ipv4 bytes
-        let _ = cur.write_u16::<BigEndian>(addr.port());
-    }
-    buf.put_slice(&dbuf[..]);
+    buf.put_u8(consts::SOCKS5_ADDR_TYPE_IPV4); // Address type
+    buf.put_slice(&addr.ip().octets()); // Ipv4 bytes
+    buf.put_u16(addr.port()); // Port
 }
 
 fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
-    let mut dbuf = [0u8; 1 + 16 + 2];
-
-    {
-        let mut cur = Cursor::new(&mut dbuf[..]);
-        let _ = cur.write_u8(consts::SOCKS5_ADDR_TYPE_IPV6);
-        for seg in &addr.ip().segments() {
-            let _ = cur.write_u16::<BigEndian>(*seg);
-        }
-        let _ = cur.write_u16::<BigEndian>(addr.port());
+    buf.put_u8(consts::SOCKS5_ADDR_TYPE_IPV6); // Address type
+    for seg in &addr.ip().segments() {
+        buf.put_u16(*seg); // Ipv6 bytes
     }
-
-    buf.put_slice(&dbuf[..]);
+    buf.put_u16(addr.port()); // Port
 }
 
 fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
@@ -504,7 +395,7 @@ fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
     buf.put_u8(dnaddr.len() as u8);
     buf.put_slice(dnaddr[..].as_bytes());
-    buf.put_u16_be(port);
+    buf.put_u16(port);
 }
 
 fn write_socket_address<B: BufMut>(addr: &SocketAddr, buf: &mut B) {
@@ -557,42 +448,38 @@ impl TcpRequestHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpRequestHeader), Error = Error> + Send
+    pub async fn read_from<R>(r: &mut R) -> Result<TcpRequestHeader, Error>
     where
-        R: AsyncRead + Send + 'static,
+        R: AsyncRead + Unpin,
     {
-        read_exact(r, [0u8; 3])
-            .map_err(From::from)
-            .and_then(|(r, buf)| {
-                let ver = buf[0];
-                if ver != consts::SOCKS5_VERSION {
-                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
-                }
+        let mut buf = [0u8; 3];
+        let _ = r.read_exact(&mut buf).await?;
 
-                let cmd = buf[1];
-                let command = match Command::from_u8(cmd) {
-                    Some(c) => c,
-                    None => {
-                        return Err(Error::new(Reply::CommandNotSupported, "Unsupported command"));
-                    }
-                };
+        let ver = buf[0];
+        if ver != consts::SOCKS5_VERSION {
+            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+        }
 
-                Ok((r, command))
-            })
-            .and_then(|(r, command)| {
-                Address::read_from(r).map(move |(conn, address)| {
-                    let header = TcpRequestHeader { command, address };
+        let cmd = buf[1];
+        let command = match Command::from_u8(cmd) {
+            Some(c) => c,
+            None => {
+                return Err(Error::new(Reply::CommandNotSupported, "Unsupported command"));
+            }
+        };
 
-                    (conn, header)
-                })
-            })
+        let address = Address::read_from(r).await?;
+        Ok(TcpRequestHeader { command, address })
     }
 
     /// Write data into a writer
-    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(w, buf.freeze())
+        w.write_all(&buf).await
     }
 
     /// Writes to buffer
@@ -637,39 +524,36 @@ impl TcpResponseHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R>(r: R) -> impl Future<Item = (R, TcpResponseHeader), Error = Error> + Send
+    pub async fn read_from<R>(r: &mut R) -> Result<TcpResponseHeader, Error>
     where
-        R: AsyncRead + Send + 'static,
+        R: AsyncRead + Unpin,
     {
-        read_exact(r, [0u8; 3])
-            .map_err(From::from)
-            .and_then(|(r, buf)| {
-                let ver = buf[0];
-                let reply_code = buf[1];
+        let mut buf = [0u8; 3];
+        let _ = r.read_exact(&mut buf).await?;
 
-                if ver != consts::SOCKS5_VERSION {
-                    return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
-                }
+        let ver = buf[0];
+        let reply_code = buf[1];
 
-                Ok((r, reply_code))
-            })
-            .and_then(|(r, reply_code)| {
-                Address::read_from(r).map(move |(r, address)| {
-                    let rep = TcpResponseHeader {
-                        reply: Reply::from_u8(reply_code),
-                        address,
-                    };
+        if ver != consts::SOCKS5_VERSION {
+            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+        }
 
-                    (r, rep)
-                })
-            })
+        let address = Address::read_from(r).await?;
+
+        Ok(TcpResponseHeader {
+            reply: Reply::from_u8(reply_code),
+            address,
+        })
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(w, buf.freeze())
+        w.write_all(&buf).await
     }
 
     /// Writes to buffer
@@ -707,30 +591,34 @@ impl HandshakeRequest {
     }
 
     /// Read from a reader
-    pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeRequest), Error = io::Error>
+    pub async fn read_from<R>(r: &mut R) -> io::Result<HandshakeRequest>
     where
-        R: AsyncRead + Send + 'static,
+        R: AsyncRead + Unpin,
     {
-        read_exact(r, [0u8, 0u8])
-            .and_then(|(r, buf)| {
-                let ver = buf[0];
-                let nmet = buf[1];
+        let mut buf = [0u8; 2];
+        let _ = r.read_exact(&mut buf).await?;
 
-                if ver != consts::SOCKS5_VERSION {
-                    return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
-                }
+        let ver = buf[0];
+        let nmet = buf[1];
 
-                Ok((r, nmet))
-            })
-            .and_then(|(r, nmet)| read_exact(r, vec![0u8; nmet as usize]))
-            .and_then(|(r, methods)| Ok((r, HandshakeRequest { methods })))
+        if ver != consts::SOCKS5_VERSION {
+            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
+        }
+
+        let mut methods = vec![0u8; nmet as usize];
+        let _ = r.read_exact(&mut methods).await?;
+
+        Ok(HandshakeRequest { methods })
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(w, buf.freeze())
+        w.write_all(&buf).await
     }
 
     /// Write to buffer
@@ -767,36 +655,40 @@ impl HandshakeResponse {
     }
 
     /// Read from a reader
-    pub fn read_from<R>(r: R) -> impl Future<Item = (R, HandshakeResponse), Error = io::Error>
+    pub async fn read_from<R>(r: &mut R) -> io::Result<HandshakeResponse>
     where
-        R: AsyncRead + Send + 'static,
+        R: AsyncRead + Unpin,
     {
-        read_exact(r, [0u8, 0u8]).and_then(|(r, buf)| {
-            let ver = buf[0];
-            let met = buf[1];
+        let mut buf = [0u8; 2];
+        let _ = r.read_exact(&mut buf).await?;
 
-            if ver != consts::SOCKS5_VERSION {
-                Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
-            } else {
-                Ok((r, HandshakeResponse { chosen_method: met }))
-            }
-        })
+        let ver = buf[0];
+        let met = buf[1];
+
+        if ver != consts::SOCKS5_VERSION {
+            Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
+        } else {
+            Ok(HandshakeResponse { chosen_method: met })
+        }
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(w, buf.freeze())
+        w.write_all(&buf).await
     }
 
     /// Write to buffer
-    pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+    pub fn write_to_buf<B: BufMut>(self, buf: &mut B) {
         buf.put_slice(&[consts::SOCKS5_VERSION, self.chosen_method]);
     }
 
     /// Length in bytes
-    pub fn serialized_len(&self) -> usize {
+    pub fn serialized_len(self) -> usize {
         2
     }
 }
@@ -827,24 +719,26 @@ impl UdpAssociateHeader {
     }
 
     /// Read from a reader
-    pub fn read_from<R>(r: R) -> impl Future<Item = (R, UdpAssociateHeader), Error = Error> + Send
+    pub async fn read_from<R>(r: &mut R) -> Result<UdpAssociateHeader, Error>
     where
-        R: AsyncRead + Send + 'static,
+        R: AsyncRead + Unpin,
     {
-        read_exact(r, [0u8; 3]).map_err(From::from).and_then(|(r, buf)| {
-            let frag = buf[2];
-            Address::read_from(r).map(move |(r, address)| {
-                let h = UdpAssociateHeader::new(frag, address);
-                (r, h)
-            })
-        })
+        let mut buf = [0u8; 3];
+        let _ = r.read_exact(&mut buf).await?;
+
+        let frag = buf[2];
+        let address = Address::read_from(r).await?;
+        Ok(UdpAssociateHeader::new(frag, address))
     }
 
     /// Write to a writer
-    pub fn write_to<W: AsyncWrite>(self, w: W) -> WriteBytes<W, Bytes> {
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
         let mut buf = BytesMut::with_capacity(self.serialized_len());
         self.write_to_buf(&mut buf);
-        write_bytes(w, buf.freeze())
+        w.write_all(&buf).await
     }
 
     /// Write to buffer

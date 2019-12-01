@@ -1,40 +1,30 @@
 //! Relay for TCP implementation
 
-use std::{
-    io::{self, BufRead, Read, Write},
-    iter::{IntoIterator, Iterator},
-    mem,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+// Allow for futures
+// Maybe removed in the future
+#![allow(clippy::unnecessary_mut_passed)]
 
-use crate::{
-    config::{ConfigType, ServerAddr, ServerConfig},
-    context::SharedContext,
-    crypto::CipherCategory,
-    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
-};
+use std::io;
+use std::marker::Unpin;
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
 
-use byte_string::ByteStr;
-use bytes::{BufMut, BytesMut};
-use futures::{self, Async, Future, Poll};
-use log::{error, trace};
-use tokio::{
-    net::{tcp::ConnectFuture, TcpStream},
-    timer::Timeout,
-};
-use tokio_io::{
-    io::{read_exact, write_all, ReadHalf, WriteHalf},
-    try_nb, AsyncRead, AsyncWrite,
-};
+use crate::config::{ConfigType, ServerAddr, ServerConfig};
+use crate::context::SharedContext;
+use crate::relay::socks5::Address;
+use crate::relay::utils::try_timeout;
 
-pub use self::crypto_io::{DecryptedRead, EncryptedWrite};
-
-use self::{
-    aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
-    stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
-};
+use bytes::BytesMut;
+use futures::future::FusedFuture;
+use futures::{ready, select, Future};
+use log::trace;
+use tokio::io::{ReadHalf, WriteHalf};
+use tokio::net::TcpStream;
+use tokio::prelude::*;
+use tokio::time::{self, Delay};
 
 mod aead;
 pub mod client;
@@ -45,224 +35,144 @@ mod monitor;
 pub mod server;
 mod socks5_local;
 mod stream;
+mod tunnel_local;
 mod utils;
+
+pub use self::crypto_io::CryptoStream;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
-// /// Directions in the tunnel
-// #[derive(Debug, Copy, Clone)]
-// pub enum TunnelDirection {
-//     /// Client -> Server
-//     Client2Server,
-//     /// Client <- Server
-//     Server2Client,
-// }
-
-type TcpReadHalf<S /* : Read + Write + AsyncRead + AsyncWrite + Send */> = ReadHalf<S>;
-type TcpWriteHalf<S /* : Read + Write + AsyncRead + AsyncWrite + Send */> = WriteHalf<S>;
-
-/// `ReadHalf `of `TcpStream` with decryption
-pub enum DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    Stream(StreamDecryptedReader<TcpReadHalf<S>>),
-    Aead(AeadDecryptedReader<TcpReadHalf<S>>),
+/// Shadowsocks' Connection
+///
+/// The only feature: Supports timeout
+pub struct Connection<S> {
+    // Actual connection socket
+    stream: S,
+    // Timer instance
+    // Read and Write operations shares the same timer
+    timer: Option<Delay>,
+    // User defined server timeout
+    timeout: Option<Duration>,
 }
 
-macro_rules! ref_half_do {
-    ($self:expr,$t:ident,$m:ident$(,$p:expr)*) => {
-        match *$self {
-            $t::Stream(ref d) => d.$m($($p),*),
-            $t::Aead(ref d) => d.$m($($p),*),
+impl<S> Connection<S> {
+    pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
+        Connection {
+            stream,
+            timer: None,
+            timeout,
         }
     }
-}
 
-macro_rules! mut_half_do {
-    ($self:expr,$t:ident,$m:ident$(,$p:expr)*) => {
-        match *$self {
-            $t::Stream(ref mut  d) => d.$m($($p),*),
-            $t::Aead(ref mut d) => d.$m($($p),*),
-        }
-    }
-}
-
-impl<S> Read for DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        mut_half_do!(self, DecryptedHalf, read, buf)
-    }
-}
-
-impl<S> DecryptedRead for DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn buffer_size(&self, data: &[u8]) -> usize {
-        ref_half_do!(self, DecryptedHalf, buffer_size, data)
-    }
-}
-
-impl<S> AsyncRead for DecryptedHalf<S> where S: Read + Write + AsyncRead + AsyncWrite + Send {}
-
-impl<S> BufRead for DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        mut_half_do!(self, DecryptedHalf, fill_buf)
-    }
-
-    fn consume(&mut self, amt: usize) {
-        mut_half_do!(self, DecryptedHalf, consume, amt)
-    }
-}
-
-impl<S> From<StreamDecryptedReader<TcpReadHalf<S>>> for DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn from(r: StreamDecryptedReader<TcpReadHalf<S>>) -> DecryptedHalf<S> {
-        DecryptedHalf::Stream(r)
-    }
-}
-
-impl<S> From<AeadDecryptedReader<TcpReadHalf<S>>> for DecryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn from(r: AeadDecryptedReader<TcpReadHalf<S>>) -> DecryptedHalf<S> {
-        DecryptedHalf::Aead(r)
-    }
-}
-
-/// `WriteHalf` of `TcpStream` with encryption
-pub enum EncryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    Stream(StreamEncryptedWriter<TcpWriteHalf<S>>),
-    Aead(AeadEncryptedWriter<TcpWriteHalf<S>>),
-}
-
-impl<S> EncryptedWrite for EncryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn write_raw(&mut self, data: &[u8]) -> io::Result<usize> {
-        mut_half_do!(self, EncryptedHalf, write_raw, data)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        mut_half_do!(self, EncryptedHalf, flush)
-    }
-
-    fn encrypt<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
-        mut_half_do!(self, EncryptedHalf, encrypt, data, buf)
-    }
-
-    fn buffer_size(&self, data: &[u8]) -> usize {
-        ref_half_do!(self, EncryptedHalf, buffer_size, data)
-    }
-}
-
-impl<S> From<StreamEncryptedWriter<TcpWriteHalf<S>>> for EncryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn from(d: StreamEncryptedWriter<TcpWriteHalf<S>>) -> EncryptedHalf<S> {
-        EncryptedHalf::Stream(d)
-    }
-}
-
-impl<S> From<AeadEncryptedWriter<TcpWriteHalf<S>>> for EncryptedHalf<S>
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send,
-{
-    fn from(d: AeadEncryptedWriter<TcpWriteHalf<S>>) -> EncryptedHalf<S> {
-        EncryptedHalf::Aead(d)
-    }
-}
-
-/// Try to connect every IPs one by one
-enum TcpStreamConnect<I: Iterator<Item = SocketAddr>> {
-    Empty,
-    Connect {
-        last_err: Option<io::Error>,
-        addr_iter: I,
-        opt_stream_new: Option<(ConnectFuture, SocketAddr)>,
-    },
-}
-
-impl<I: Iterator<Item = SocketAddr>> TcpStreamConnect<I> {
-    fn new(iter: I) -> TcpStreamConnect<I> {
-        TcpStreamConnect::Connect {
-            last_err: None,
-            addr_iter: iter,
-            opt_stream_new: None,
-        }
-    }
-}
-
-impl<I: Iterator<Item = SocketAddr>> Future for TcpStreamConnect<I> {
-    type Error = io::Error;
-    type Item = TcpStream;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn make_timeout_error() -> io::Error {
         use std::io::ErrorKind;
+        ErrorKind::TimedOut.into()
+    }
 
-        match *self {
-            TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect {
-                ref mut last_err,
-                ref mut addr_iter,
-                ref mut opt_stream_new,
-            } => {
-                loop {
-                    // 1. Poll before doing anything else
-                    if let Some((ref mut stream_new, ref addr)) = *opt_stream_new {
-                        match stream_new.poll() {
-                            Ok(Async::Ready(stream)) => return Ok(Async::Ready(stream)),
-                            Ok(Async::NotReady) => return Ok(Async::NotReady),
-                            Err(ref err) if err.kind() == ErrorKind::WouldBlock => return Ok(Async::NotReady),
-                            Err(err) => {
-                                error!("Failed to connect {}: {}", addr, err);
-
-                                *last_err = Some(err);
-                            }
-                        }
-                    }
-
-                    match addr_iter.next() {
-                        None => break,
-                        Some(addr) => {
-                            *opt_stream_new = Some((TcpStream::connect(&addr), addr));
-                        }
-                    }
+    fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        loop {
+            if let Some(ref mut timer) = self.timer {
+                ready!(Pin::new(timer).poll(cx));
+                // FIXME: Clear self.timer or not?
+                return Poll::Ready(Err(Connection::<S>::make_timeout_error()));
+            } else {
+                match self.timeout {
+                    Some(timeout) => self.timer = Some(time::delay_for(timeout)),
+                    None => break,
                 }
             }
         }
+        Poll::Ready(Ok(()))
+    }
 
-        match mem::replace(self, TcpStreamConnect::Empty) {
-            TcpStreamConnect::Empty => unreachable!(),
-            TcpStreamConnect::Connect { last_err, .. } => match last_err {
-                None => {
-                    let err = io::Error::new(ErrorKind::Other, "connect TCP without any addresses");
-                    Err(err)
-                }
-                Some(err) => Err(err),
-            },
+    fn cancel_timeout(&mut self) {
+        let _ = self.timer.take();
+    }
+}
+
+impl<S> Connection<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn split(self) -> (ReadHalf<Connection<S>>, WriteHalf<Connection<S>>) {
+        use tokio::io::split;
+        split(self)
+    }
+}
+
+impl<S> Deref for Connection<S> {
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stream
+    }
+}
+
+impl<S> DerefMut for Connection<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stream
+    }
+}
+
+impl<S: Unpin> Unpin for Connection<S> {}
+
+impl<S> AsyncRead for Connection<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        match Pin::new(&mut self.stream).poll_read(cx, buf) {
+            Poll::Ready(r) => {
+                self.cancel_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_timeout(cx))?;
+                Poll::Pending
+            }
         }
     }
 }
 
-fn connect_proxy_server(
-    context: SharedContext,
-    svr_cfg: Arc<ServerConfig>,
-) -> impl Future<Item = TcpStream, Error = io::Error> + Send {
+impl<S> AsyncWrite for Connection<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        match Pin::new(&mut self.stream).poll_write(cx, buf) {
+            Poll::Ready(r) => {
+                self.cancel_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_timeout(cx))?;
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match Pin::new(&mut self.stream).poll_flush(cx) {
+            Poll::Ready(r) => {
+                self.cancel_timeout();
+                Poll::Ready(r)
+            }
+            Poll::Pending => {
+                ready!(self.poll_timeout(cx))?;
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_shutdown(cx)
+    }
+}
+
+pub type STcpStream = Connection<TcpStream>;
+
+/// Connect to proxy server with `ServerConfig`
+async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<STcpStream> {
     let timeout = svr_cfg.timeout();
 
     let svr_addr = match context.config().config_type {
@@ -273,286 +183,90 @@ fn connect_proxy_server(
     trace!("Connecting to proxy {:?}, timeout: {:?}", svr_addr, timeout);
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
-            let fut = try_timeout(TcpStream::connect(addr), timeout);
-            boxed_future(fut)
+            let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
+            Ok(STcpStream::new(stream, timeout))
         }
+        #[cfg(feature = "trust-dns")]
         ServerAddr::DomainName(ref domain, port) => {
-            let fut = {
-                try_timeout(resolve(context, &domain[..], *port, false), timeout).and_then(move |vec_ipaddr| {
-                    let fut = TcpStreamConnect::new(vec_ipaddr.into_iter());
-                    try_timeout(fut, timeout)
-                })
-            };
-            boxed_future(fut)
+            use crate::relay::dns_resolver::resolve;
+            use log::error;
+
+            let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
+
+            assert!(!vec_ipaddr.is_empty());
+
+            let mut last_err: Option<io::Error> = None;
+            for addr in &vec_ipaddr {
+                match try_timeout(TcpStream::connect(addr), timeout).await {
+                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
+                    Err(e) => {
+                        error!(
+                            "Failed to connect {}:{}, resolved address {}, try another (err: {})",
+                            domain, port, addr, e
+                        );
+                        last_err = Some(e);
+                    }
+                }
+            }
+
+            let err = last_err.unwrap();
+            error!(
+                "Failed to connect {}:{}, tried all addresses but still failed (last err: {})",
+                domain, port, err
+            );
+            Err(err)
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        ServerAddr::DomainName(ref domain, port) => {
+            let stream = try_timeout(TcpStream::connect((domain.as_str(), *port)), timeout).await?;
+            Ok(STcpStream::new(stream, timeout))
         }
     }
 }
 
 /// Handshake logic for ShadowSocks Client
-pub fn proxy_server_handshake<S>(
-    remote_stream: S,
+pub async fn proxy_server_handshake(
+    remote_stream: STcpStream,
     svr_cfg: Arc<ServerConfig>,
-    relay_addr: Address,
-) -> impl Future<
-    Item = (
-        impl Future<Item = DecryptedHalf<S>, Error = io::Error> + Send,
-        impl Future<Item = EncryptedHalf<S>, Error = io::Error> + Send,
-    ),
-    Error = io::Error,
-> + Send
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send + 'static,
-{
-    let timeout = svr_cfg.timeout();
-    proxy_handshake(remote_stream, svr_cfg).and_then(move |(r_fut, w_fut)| {
-        let w_fut = w_fut.and_then(move |enc_w| {
-            // Send relay address to remote
-            let mut buf = BytesMut::with_capacity(relay_addr.serialized_len());
-            relay_addr.write_to_buf(&mut buf);
+    relay_addr: &Address,
+) -> io::Result<CryptoStream<STcpStream>> {
+    let mut stream = CryptoStream::new(remote_stream, svr_cfg.clone());
 
-            trace!(
-                "Got encrypt stream and going to send addr: {:?}, buf: {:?}",
-                relay_addr,
-                buf
-            );
+    trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 
-            try_timeout(enc_w.write_all(buf), timeout).map(|(w, _)| w)
-        });
+    // Send relay address to remote
+    let mut addr_buf = BytesMut::with_capacity(relay_addr.serialized_len());
+    relay_addr.write_to_buf(&mut addr_buf);
+    stream.write_all(&addr_buf).await?;
 
-        Ok((r_fut, w_fut))
-    })
-}
-
-/// ShadowSocks Client-Server handshake protocol
-/// Exchange cipher IV and creates stream wrapper
-pub fn proxy_handshake<S>(
-    remote_stream: S,
-    svr_cfg: Arc<ServerConfig>,
-) -> impl Future<
-    Item = (
-        impl Future<Item = DecryptedHalf<S>, Error = io::Error> + Send,
-        impl Future<Item = EncryptedHalf<S>, Error = io::Error> + Send,
-    ),
-    Error = io::Error,
-> + Send
-where
-    S: Read + Write + AsyncRead + AsyncWrite + Send + 'static,
-{
-    futures::lazy(|| Ok(remote_stream.split())).and_then(move |(r, w)| {
-        let timeout = svr_cfg.timeout();
-
-        let svr_cfg_cloned = svr_cfg.clone();
-
-        let enc = {
-            // Encrypt data to remote server
-
-            // Send initialize vector to remote and create encryptor
-
-            let method = svr_cfg.method();
-            let prev_buf = match method.category() {
-                CipherCategory::Stream => {
-                    let local_iv = method.gen_init_vec();
-                    trace!("Going to send initialize vector: {:?}", local_iv);
-                    local_iv
-                }
-                CipherCategory::Aead => {
-                    let local_salt = method.gen_salt();
-                    trace!("Going to send salt: {:?}", local_salt);
-                    local_salt
-                }
-            };
-
-            try_timeout(write_all(w, prev_buf), timeout).and_then(move |(w, prev_buf)| {
-                match svr_cfg.method().category() {
-                    CipherCategory::Stream => {
-                        let local_iv = prev_buf;
-                        let wtr = StreamEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_iv);
-                        Ok(From::from(wtr))
-                    }
-                    CipherCategory::Aead => {
-                        let local_salt = prev_buf;
-                        let wtr = AeadEncryptedWriter::new(w, svr_cfg.method(), svr_cfg.key(), &local_salt[..]);
-                        Ok(From::from(wtr))
-                    }
-                }
-            })
-        };
-
-        let dec = {
-            let svr_cfg = svr_cfg_cloned;
-
-            // Decrypt data from remote server
-
-            let method = svr_cfg.method();
-            let prev_len = match method.category() {
-                CipherCategory::Stream => method.iv_size(),
-                CipherCategory::Aead => method.salt_size(),
-            };
-
-            try_timeout(read_exact(r, vec![0u8; prev_len]), timeout).and_then(move |(r, remote_iv)| {
-                match svr_cfg.method().category() {
-                    CipherCategory::Stream => {
-                        trace!("Got initialize vector {:?}", ByteStr::new(&remote_iv));
-                        let decrypt_stream = StreamDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                        Ok(From::from(decrypt_stream))
-                    }
-                    CipherCategory::Aead => {
-                        trace!("Got salt {:?}", ByteStr::new(&remote_iv));
-                        let dr = AeadDecryptedReader::new(r, svr_cfg.method(), svr_cfg.key(), &remote_iv);
-                        Ok(From::from(dr))
-                    }
-                }
-            })
-        };
-
-        Ok((dec, enc))
-    })
+    Ok(stream)
 }
 
 /// Establish tunnel between server and client
 // pub fn tunnel<CF, CFI, SF, SFI>(addr: Address, c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
-pub fn tunnel<CF, CFI, SF, SFI>(c2s: CF, s2c: SF) -> impl Future<Item = (), Error = io::Error> + Send
+pub async fn tunnel<CF, CFI, SF, SFI>(mut c2s: CF, mut s2c: SF) -> io::Result<()>
 where
-    CF: Future<Item = CFI, Error = io::Error> + Send + 'static,
-    SF: Future<Item = SFI, Error = io::Error> + Send + 'static,
+    CF: Future<Output = io::Result<CFI>> + Unpin + FusedFuture,
+    SF: Future<Output = io::Result<SFI>> + Unpin + FusedFuture,
 {
-    c2s.map(|_| ()).select(s2c.map(|_| ())).then(|r| match r {
-        Ok(..) => Ok(()),
-        Err((err, _)) => Err(err),
-    })
-
-    // let addr = Arc::new(addr);
-
-    // let cloned_addr = addr.clone();
-    // let c2s = c2s.then(move |res| {
-    //     match res {
-    //         Ok(..) => {
-    //             // Continue reading response from remote server
-    //             trace!("Relay {} client -> server is finished", cloned_addr);
-
-    //             Ok(TunnelDirection::Client2Server)
-    //         }
-    //         Err(err) => {
-    //             error!("Relay {} client -> server aborted: {}", cloned_addr, err);
-    //             Err(err)
-    //         }
-    //     }
-    // });
-
-    // let cloned_addr = addr.clone();
-    // let s2c = s2c.then(move |res| match res {
-    //     Ok(..) => {
-    //         trace!("Relay {} client <- server is finished", cloned_addr);
-
-    //         Ok(TunnelDirection::Server2Client)
-    //     }
-    //     Err(err) => {
-    //         error!("Relay {} client <- server aborted: {}", cloned_addr, err);
-    //         Err(err)
-    //     }
-    // });
-
-    // c2s.select(s2c)
-    //     .and_then(move |(dir, _)| {
-    //         match dir {
-    //             TunnelDirection::Server2Client => trace!("Relay {} client <- server is closed, abort connection", addr),
-    //             TunnelDirection::Client2Server => trace!("Relay {} server -> client is closed, abort connection", addr),
-    //         }
-
-    //         Ok(())
-    //     })
-    //     .map_err(|(err, _)| err)
-}
-
-/// Read until EOF, and ignore
-pub enum IgnoreUntilEnd<R: Read> {
-    Pending { r: R, amt: u64 },
-    Empty,
-}
-
-impl<R: Read> Future for IgnoreUntilEnd<R> {
-    type Error = io::Error;
-    type Item = u64;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match *self {
-            IgnoreUntilEnd::Empty => panic!("poll IgnoreUntilEnd after it is finished"),
-            IgnoreUntilEnd::Pending { ref mut r, ref mut amt } => {
-                let mut buf = [0u8; 4096];
-                loop {
-                    let n = try_nb!(r.read(&mut buf));
-                    *amt += n as u64;
-
-                    if n == 0 {
-                        break;
-                    }
-                }
-            }
-        }
-
-        match mem::replace(self, IgnoreUntilEnd::Empty) {
-            IgnoreUntilEnd::Pending { amt, .. } => Ok(amt.into()),
-            IgnoreUntilEnd::Empty => unreachable!(),
-        }
+    select! {
+        r1 = c2s => r1.map(|_| ()),
+        r2 = s2c => r2.map(|_| ()),
     }
 }
 
-/// Ignore all data from the reader
-pub fn ignore_until_end<R: Read>(r: R) -> IgnoreUntilEnd<R> {
-    IgnoreUntilEnd::Pending { r, amt: 0 }
-}
-
-pub enum TimeoutFuture<T, F>
+pub async fn ignore_until_end<R>(r: &mut R) -> io::Result<u64>
 where
-    T: 'static,
-    F: Future<Item = T, Error = io::Error> + Send + 'static,
+    R: AsyncRead + Unpin,
 {
-    Direct(F),
-    Wait(Timeout<F>),
-}
-
-impl<T, F> Future for TimeoutFuture<T, F>
-where
-    T: 'static,
-    F: Future<Item = T, Error = io::Error> + Send + 'static,
-{
-    type Error = io::Error;
-    type Item = T;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match *self {
-            TimeoutFuture::Direct(ref mut f) => f.poll(),
-            TimeoutFuture::Wait(ref mut f) => match f.poll() {
-                Ok(Async::NotReady) => Ok(Async::NotReady),
-                Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
-                Err(err) => match err.into_inner() {
-                    Some(e) => Err(e),
-                    None => Err(io::Error::new(io::ErrorKind::TimedOut, "connection timed out")),
-                },
-            },
+    let mut buf = [0u8; BUFFER_SIZE];
+    let mut amt = 0u64;
+    loop {
+        let n = r.read(&mut buf).await?;
+        if n == 0 {
+            break;
         }
+        amt += n as u64;
     }
+    Ok(amt)
 }
-
-fn try_timeout<T, F>(fut: F, dur: Option<Duration>) -> impl Future<Item = T, Error = io::Error> + Send
-where
-    F: Future<Item = T, Error = io::Error> + Send + 'static,
-    T: 'static,
-{
-    use tokio::prelude::*;
-
-    match dur {
-        Some(dur) => TimeoutFuture::Wait(fut.timeout(dur)),
-        None => TimeoutFuture::Direct(fut),
-    }
-}
-
-// fn io_timeout<T, F>(fut: F, dur: Duration) -> impl Future<Item = T, Error = io::Error> + Send
-// where
-//     F: Future<Item = T, Error = io::Error> + Send + 'static,
-//     T: 'static,
-// {
-//     use tokio::prelude::*;
-
-//     TimeoutFuture::Wait(fut.timeout(dur))
-// }

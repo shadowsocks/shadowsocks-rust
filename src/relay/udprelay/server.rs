@@ -1,163 +1,183 @@
 //! UDP relay proxy server
 
 use std::{
-    io::{self, Cursor, ErrorKind},
+    io::{self, Cursor},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::Duration,
 };
 
-use futures::{self, stream::futures_unordered, Future, Stream};
+use bytes::BytesMut;
+use futures::{self, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info};
-use tokio::{self, net::UdpSocket, util::FutureExt};
+use tokio::{self, net::UdpSocket, sync::mpsc};
 
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::{boxed_future, dns_resolver::resolve, socks5::Address},
+    relay::{socks5::Address, utils::try_timeout},
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    PacketStream, SendDgramRc, MAXIMUM_UDP_PAYLOAD_SIZE,
+    MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-fn resolve_remote_addr(
+#[allow(unused_variables)] // `context` is only used if trust-dns is enabled
+async fn udp_associate(
     context: SharedContext,
-    addr: Address,
-) -> impl Future<Item = SocketAddr, Error = io::Error> + Send {
-    match addr {
-        Address::SocketAddress(s) => {
-            if context.config().forbidden_ip.contains(&s.ip()) {
-                let err = io::Error::new(
-                    ErrorKind::Other,
-                    format!("{} is forbidden, failed to connect {}", s.ip(), s),
-                );
-                return boxed_future(futures::done(Err(err)));
+    svr_cfg: Arc<ServerConfig>,
+    decrypted_pkt: Vec<u8>,
+    src: SocketAddr,
+) -> io::Result<Vec<u8>> {
+    const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+
+    // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
+    let mut cur = Cursor::new(decrypted_pkt);
+
+    let addr = Address::read_from(&mut cur).await?;
+
+    // Take out internal buffer for optimizing one byte copy
+    let header_len = cur.position() as usize;
+    let decrypted_pkt = cur.into_inner();
+    let body = &decrypted_pkt[header_len..];
+
+    debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
+
+    // FIXME: Create one UdpSocket for one associate
+    let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+    let mut remote_udp = UdpSocket::bind(&local_addr).await?;
+
+    let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
+
+    // Writes body to remote
+    let send_len = match addr {
+        Address::SocketAddress(ref remote_addr) => {
+            try_timeout(remote_udp.send_to(&body, remote_addr), Some(timeout)).await?
+        }
+        #[cfg(feature = "trust-dns")]
+        Address::DomainNameAddress(ref dname, port) => {
+            use crate::relay::dns_resolver::resolve;
+
+            let vec_ipaddr = resolve(context, dname, port, false).await?;
+            assert!(!vec_ipaddr.is_empty());
+
+            try_timeout(remote_udp.send_to(&body, &vec_ipaddr[0]), Some(timeout)).await?
+        }
+        #[cfg(not(feature = "trust-dns"))]
+        Address::DomainNameAddress(ref dname, port) => {
+            try_timeout(remote_udp.send_to(&body, (dname.as_str(), port)), Some(timeout)).await?
+        }
+    };
+    assert_eq!(body.len(), send_len);
+
+    // Waiting for response from server SERVER -> CLIENT
+    // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+    let mut remote_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+    let remote_recv_len = try_timeout(remote_udp.recv(&mut remote_buf), Some(timeout)).await?;
+
+    // Making response packet, SERVER -> CLIENT: ADDRESS + PAYLOAD
+    let mut send_buf = Vec::new();
+    addr.write_to_buf(&mut send_buf);
+    send_buf.extend_from_slice(&remote_buf[..remote_recv_len]);
+
+    debug!(
+        "UDP ASSOCIATE {} <- {}, payload length {} bytes",
+        src,
+        addr,
+        send_buf.len()
+    );
+
+    Ok(send_buf)
+}
+
+async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
+    let listen_addr = *svr_cfg.addr().listen_addr();
+    info!("ShadowSocks UDP listening on {}", listen_addr);
+
+    let listener = UdpSocket::bind(&listen_addr).await?;
+    let (mut r, mut w) = listener.split();
+
+    let svr_cfg_cloned = svr_cfg.clone();
+
+    // FIXME: Channel size 1024?
+    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
+    tokio::spawn(async move {
+        let svr_cfg = svr_cfg_cloned;
+
+        while let Some((src, pkt)) = rx.recv().await {
+            // Encrypts
+            let mut response_pkt = BytesMut::new();
+            if let Err(err) = encrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt, &mut response_pkt) {
+                error!("UDP packet encrypt failed, err: {:?}", err);
+                continue;
             }
 
-            boxed_future(futures::finished(s))
+            if let Err(err) = w.send_to(&response_pkt, &src).await {
+                error!("UDP packet send failed, err: {:?}", err);
+                break;
+            }
         }
-        Address::DomainNameAddress(dname, port) => {
-            let fut = resolve(context, &dname, port, true).map(move |vec_ipaddr| {
-                assert!(!vec_ipaddr.is_empty());
-                vec_ipaddr[0]
-            });
-            boxed_future(fut)
-        }
+
+        // FIXME: How to stop the outer listener Future?
+    });
+
+    let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+
+    loop {
+        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
+
+        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+        let pkt = &pkt_buf[..recv_len];
+
+        // First of all, decrypt payload CLIENT -> SERVER
+        let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
+            Ok(Some(pkt)) => pkt,
+            Ok(None) => {
+                error!("Failed to decrypt pkt in UDP relay, packet too short");
+                continue;
+            }
+            Err(err) => {
+                error!("Failed to decrypt pkt in UDP relay: {}", err);
+                continue;
+            }
+        };
+
+        let context = context.clone();
+        let svr_cfg = svr_cfg.clone();
+        let mut tx = tx.clone();
+        tokio::spawn(async move {
+            match udp_associate(context, svr_cfg, decrypted_pkt, src).await {
+                Ok(pkt) => {
+                    if let Err(..) = tx.send((src, pkt)).await {
+                        error!("UDP packet channel closed");
+                    }
+                }
+                Err(err) => {
+                    error!("Error occurs in UDP relay: {}", err);
+                }
+            }
+        });
     }
 }
 
-fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> impl Future<Item = (), Error = io::Error> + Send {
-    let listen_addr = *svr_cfg.addr().listen_addr();
-    info!("ShadowSocks UDP listening on {}", listen_addr);
-    futures::lazy(move || UdpSocket::bind(&listen_addr)).and_then(move |socket| {
-        let socket = Arc::new(Mutex::new(socket));
-        PacketStream::new(socket.clone()).for_each(move |(pkt, src)| {
-            let svr_cfg = svr_cfg.clone();
-            let svr_cfg_cloned = svr_cfg.clone();
-            let socket = socket.clone();
-            let context = context.clone();
-            let timeout = svr_cfg.timeout();
-            let rel = futures::lazy(move || decrypt_payload(svr_cfg.method(), svr_cfg.key(), &pkt))
-                .and_then(move |payload| {
-                    // Read Address in the front (ShadowSocks protocol)
-                    Address::read_from(Cursor::new(payload))
-                        .map_err(From::from)
-                        .and_then(move |(r, addr)| {
-                            let header_len = r.position() as usize;
-                            let mut payload = r.into_inner();
-                            payload.drain(..header_len);
-                            let body = payload;
-
-                            debug!("UDP ASSOCIATE {} -> {}, payload length {} bytes", src, addr, body.len());
-                            Ok((addr, body))
-                        })
-                        .and_then(|(addr, body)| {
-                            let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-                            UdpSocket::bind(&local_addr).map(|remote_udp| (remote_udp, addr, body))
-                        })
-                        .and_then(|(remote_udp, addr, body)| {
-                            resolve_remote_addr(context, addr.clone())
-                                .and_then(|addr| remote_udp.send_dgram(body, &addr))
-                                .map(|(remote_udp, _)| (remote_udp, addr))
-                        })
-                })
-                .and_then(move |(remote_udp, addr)| {
-                    let buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-                    let to = timeout.unwrap_or(Duration::from_secs(5));
-                    let caddr = addr.clone();
-                    remote_udp
-                        .recv_dgram(buf)
-                        .timeout(to)
-                        .map_err(move |err| match err.into_inner() {
-                            Some(e) => e,
-                            None => {
-                                error!(
-                                    "Udp associate waiting datagram {} -> {} timed out in {:?}",
-                                    src, caddr, to
-                                );
-                                io::Error::new(io::ErrorKind::TimedOut, "udp recv timed out")
-                            }
-                        })
-                        .and_then(|(_remote_udp, buf, n, _from)| {
-                            let svr_cfg = svr_cfg_cloned;
-
-                            let mut send_buf = Vec::new();
-                            addr.write_to_buf(&mut send_buf);
-                            send_buf.extend_from_slice(&buf[..n]);
-                            encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf).map(|buf| (buf, addr))
-                        })
-                })
-                .and_then(move |(buf, addr)| {
-                    debug!("UDP ASSOCIATE {} <- {}, payload length {} bytes", src, addr, buf.len());
-
-                    let to = timeout.unwrap_or(Duration::from_secs(5));
-                    let caddr = addr.clone();
-                    SendDgramRc::new(socket, buf, src)
-                        .timeout(to)
-                        .map_err(move |err| match err.into_inner() {
-                            Some(e) => e,
-                            None => {
-                                error!(
-                                    "Udp associate sending datagram {} <- {} timed out in {:?}",
-                                    src, caddr, to
-                                );
-                                io::Error::new(io::ErrorKind::TimedOut, "udp send timed out")
-                            }
-                        })
-                })
-                .map(|_| ());
-
-            tokio::spawn(rel.map_err(|err| {
-                error!("Udp relay error: {}", err);
-            }));
-
-            Ok(())
-        })
-    })
-}
-
 /// Starts a UDP relay server
-pub fn run(context: SharedContext) -> impl Future<Item = (), Error = io::Error> + Send {
-    let mut vec_fut = Vec::new();
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    let vec_fut = FuturesUnordered::new();
 
     for svr in &context.config().server {
         let svr_cfg = Arc::new(svr.clone());
 
         let svr_fut = listen(context.clone(), svr_cfg);
-        vec_fut.push(boxed_future(svr_fut));
+        vec_fut.push(svr_fut);
     }
 
-    futures_unordered(vec_fut).into_future().then(|res| match res {
-        Ok(..) => {
-            error!("One of UDP servers exited unexpectly without error");
+    match vec_fut.into_future().await.0 {
+        Some(res) => {
+            error!("One of TCP servers exited unexpectly, result: {:?}", res);
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }
-        Err((err, ..)) => {
-            error!("One of UDP servers exited unexpectly with error {}", err);
-            Err(err)
-        }
-    })
+        None => unreachable!(),
+    }
 }

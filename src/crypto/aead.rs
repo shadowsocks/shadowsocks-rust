@@ -9,7 +9,8 @@ use crate::crypto::siv::MiscreantCipher;
 use crate::crypto::sodium::SodiumAeadCipher;
 
 use bytes::{Bytes, BytesMut};
-use ring::{digest::SHA1, hkdf, hmac::SigningKey};
+use hkdf::Hkdf;
+use sha1::Sha1;
 
 /// Encryptor API for AEAD ciphers
 pub trait AeadEncryptor {
@@ -110,14 +111,14 @@ const SUBKEY_INFO: &[u8] = b"ss-subkey";
 pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
     assert!(t.category() == CipherCategory::Aead);
 
-    let salt = SigningKey::new(&SHA1, salt);
+    let hkdf = Hkdf::<Sha1>::new(Some(salt), key);
 
     let mut skey = BytesMut::with_capacity(key.len());
     unsafe {
         skey.set_len(key.len());
     }
 
-    hkdf::extract_and_expand(&salt, key, SUBKEY_INFO, &mut skey);
+    hkdf.expand(SUBKEY_INFO, &mut skey).unwrap();
 
     skey.freeze()
 }

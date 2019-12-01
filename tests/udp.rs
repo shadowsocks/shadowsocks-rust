@@ -1,17 +1,14 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
 
 use std::{
-    io::Cursor,
+    io::{self, Cursor},
     net::SocketAddr,
-    sync::{Arc, Barrier},
-    thread,
-    time::Duration,
 };
 
 use bytes::{BufMut, BytesMut};
-use futures::Future;
-use tokio::runtime::current_thread::Runtime;
-use tokio_io::io::read_to_end;
+use log::debug;
+use tokio::prelude::*;
+use tokio::time::{self, Duration};
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
@@ -59,88 +56,67 @@ fn get_client_addr() -> SocketAddr {
     LOCAL_ADDR.parse().unwrap()
 }
 
-fn start_server(bar: Arc<Barrier>) {
-    thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+fn start_server() {
+    tokio::spawn(run_server(get_svr_config()));
+}
 
-        let fut = run_server(get_svr_config());
-        bar.wait();
-        runtime.block_on(fut).expect("Failed to run Server");
+fn start_local() {
+    tokio::spawn(run_local(get_cli_config()));
+}
+
+fn start_udp_echo_server() {
+    use tokio::net::UdpSocket;
+
+    tokio::spawn(async {
+        let mut l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).await.unwrap();
+
+        debug!("UDP echo server started {}", UDP_ECHO_SERVER_ADDR);
+
+        let mut buf = vec![0u8; 65536];
+        let (amt, src) = l.recv_from(&mut buf).await.unwrap();
+
+        debug!("UDP echo received {} bytes from {}", amt, src);
+
+        l.send_to(&buf[..amt], &src).await.unwrap();
+
+        debug!("UDP echo sent {} bytes to {}", amt, src);
     });
 }
 
-fn start_local(bar: Arc<Barrier>) {
-    thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
+fn start_udp_request_holder(addr: Address) {
+    tokio::spawn(async move {
+        let (mut c, addr) = Socks5Client::udp_associate(addr, &get_client_addr()).await?;
+        assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
 
-        let fut = run_local(get_cli_config());
-        bar.wait();
-        runtime.block_on(fut).expect("Failed to run Local");
+        debug!("TCP sent UDP associate {} request", addr);
+
+        // Holds it forever
+        let mut buf = Vec::new();
+        c.read_to_end(&mut buf).await?;
+
+        io::Result::Ok(())
     });
 }
 
-fn start_udp_echo_server(bar: Arc<Barrier>) {
-    use std::net::UdpSocket;
-
-    thread::spawn(move || {
-        let l = UdpSocket::bind(UDP_ECHO_SERVER_ADDR).unwrap();
-
-        bar.wait();
-
-        let mut buf = [0u8; 65536];
-        let (amt, src) = l.recv_from(&mut buf).unwrap();
-
-        l.send_to(&buf[..amt], &src).unwrap();
-    });
-}
-
-fn start_udp_request_holder(bar: Arc<Barrier>, addr: Address) {
-    thread::spawn(move || {
-        let mut runtime = Runtime::new().expect("Failed to create Runtime");
-
-        let c = Socks5Client::udp_associate(addr, get_client_addr());
-        let fut = c.and_then(|(c, addr)| {
-            assert_eq!(addr, Address::SocketAddress(LOCAL_ADDR.parse().unwrap()));
-
-            // Holds it forever
-            read_to_end(c, Vec::new()).map(|_| ())
-        });
-
-        bar.wait();
-
-        runtime.block_on(fut).expect("Failed to run UDP socks5 client");
-    });
-}
-
-#[test]
-fn udp_relay() {
-    use std::net::UdpSocket;
+#[tokio::test]
+async fn udp_relay() {
+    use tokio::net::UdpSocket;
 
     let _ = env_logger::try_init();
 
     let remote_addr = Address::SocketAddress(UDP_ECHO_SERVER_ADDR.parse().unwrap());
 
-    let bar = Arc::new(Barrier::new(4));
+    start_server();
+    start_local();
 
-    start_server(bar.clone());
-    start_local(bar.clone());
-
-    start_udp_echo_server(bar.clone());
-
-    bar.wait();
+    start_udp_echo_server();
 
     // Wait until all server starts
-    thread::sleep(Duration::from_secs(1));
+    time::delay_for(Duration::from_secs(1)).await;
 
-    let bar = Arc::new(Barrier::new(2));
+    start_udp_request_holder(remote_addr.clone());
 
-    start_udp_request_holder(bar.clone(), remote_addr.clone());
-
-    bar.wait();
-
-    let l = UdpSocket::bind(UDP_LOCAL_ADDR).unwrap();
-    l.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    l.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+    let mut l = UdpSocket::bind(UDP_LOCAL_ADDR).await.unwrap();
 
     let header = UdpAssociateHeader::new(0, remote_addr);
     let mut buf = BytesMut::with_capacity(header.serialized_len());
@@ -152,14 +128,17 @@ fn udp_relay() {
     buf.put_slice(payload);
 
     let local_addr = LOCAL_ADDR.parse::<SocketAddr>().unwrap();
-    l.send_to(&buf[..], &local_addr).unwrap();
+    l.send_to(&buf[..], &local_addr).await.unwrap();
 
-    let mut buf = [0u8; 65536];
-    let (amt, _) = l.recv_from(&mut buf).unwrap();
+    let mut buf = vec![0u8; 65536];
+    let (amt, _) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
     println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
-    let cur = Cursor::new(buf[..amt].to_vec());
-    let (cur, header) = UdpAssociateHeader::read_from(cur).wait().expect("Invalid UDP header");
+    let mut cur = Cursor::new(buf[..amt].to_vec());
+    let header = UdpAssociateHeader::read_from(&mut cur).await.unwrap();
     println!("{:?}", header);
     let header_len = cur.position() as usize;
     let buf = cur.into_inner();

@@ -1,47 +1,16 @@
-use std::io;
+use std::future::Future;
+use std::{io, time::Duration};
 
-use futures::{try_ready, Async, Future, Poll};
-use tokio_io::{
-    io::{write_all, WriteAll},
-    AsyncWrite,
-};
+use tokio::time;
 
-/// Write all bytes without returning the internal bytes buffer
-pub struct WriteBytes<W, B>
+pub async fn try_timeout<T, E, F>(fut: F, timeout: Option<Duration>) -> io::Result<T>
 where
-    W: AsyncWrite,
-    B: AsRef<[u8]>,
+    F: Future<Output = Result<T, E>>,
+    io::Error: From<E>,
 {
-    inner: WriteAll<W, B>,
-}
-
-impl<W, B> WriteBytes<W, B>
-where
-    W: AsyncWrite,
-    B: AsRef<[u8]>,
-{
-    fn new(writer: W, bytes: B) -> WriteBytes<W, B> {
-        WriteBytes {
-            inner: write_all(writer, bytes),
-        }
+    match timeout {
+        Some(t) => time::timeout(t, fut).await?,
+        None => fut.await,
     }
-}
-
-impl<W, B> Future for WriteBytes<W, B>
-where
-    W: AsyncWrite,
-    B: AsRef<[u8]>,
-{
-    type Error = io::Error;
-    type Item = W;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (w, _) = try_ready!(self.inner.poll());
-        Ok(Async::Ready(w))
-    }
-}
-
-/// Write all bytes without returning the internal bytes buffer
-pub fn write_bytes<W: AsyncWrite, B: AsRef<[u8]>>(w: W, b: B) -> WriteBytes<W, B> {
-    WriteBytes::new(w, b)
+    .map_err(From::from)
 }

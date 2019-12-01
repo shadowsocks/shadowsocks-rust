@@ -1,67 +1,74 @@
 //! Server traffic monitor
 
 use std::{
-    io::{self, Read, Write},
+    io,
+    marker::Unpin,
     ops::{Deref, DerefMut},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-    prelude::Async,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::context::SharedTcpServerContext;
 
-pub struct TcpMonStream {
-    stream: TcpStream,
+pub struct TcpMonStream<S> {
+    stream: S,
     context: SharedTcpServerContext,
 }
 
-impl TcpMonStream {
-    pub fn new(c: SharedTcpServerContext, s: TcpStream) -> TcpMonStream {
+impl<S> TcpMonStream<S> {
+    pub fn new(c: SharedTcpServerContext, s: S) -> TcpMonStream<S> {
         TcpMonStream { stream: s, context: c }
     }
 }
 
-impl Read for TcpMonStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.stream.read(buf)?;
+impl<S> AsyncRead for TcpMonStream<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let n = match Pin::new(&mut self.stream).poll_read(cx, buf)? {
+            Poll::Ready(n) => n,
+            Poll::Pending => return Poll::Pending,
+        };
         self.context.incr_rx(n);
-        Ok(n)
+        Poll::Ready(Ok(n))
     }
 }
 
-impl Write for TcpMonStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.stream.write(buf)?;
+impl<S> AsyncWrite for TcpMonStream<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let n = match Pin::new(&mut self.stream).poll_write(cx, buf)? {
+            Poll::Ready(n) => n,
+            Poll::Pending => return Poll::Pending,
+        };
         self.context.incr_tx(n);
-        Ok(n)
+        Poll::Ready(Ok(n))
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        self.stream.flush()
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
     }
-}
 
-impl AsyncRead for TcpMonStream {}
-
-impl AsyncWrite for TcpMonStream {
-    fn shutdown(&mut self) -> Result<Async<()>, io::Error> {
-        AsyncWrite::shutdown(&mut self.stream)
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 }
 
-impl Deref for TcpMonStream {
-    type Target = TcpStream;
+impl<S> Deref for TcpMonStream<S> {
+    type Target = S;
 
-    fn deref(&self) -> &TcpStream {
+    fn deref(&self) -> &Self::Target {
         &self.stream
     }
 }
 
-impl DerefMut for TcpMonStream {
-    fn deref_mut(&mut self) -> &mut TcpStream {
+impl<S> DerefMut for TcpMonStream<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
