@@ -140,10 +140,12 @@ pub fn increase_nonce(nonce: &mut [u8]) {
 /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
 #[cfg(not(feature = "sodium"))]
 pub fn increase_nonce(nonce: &mut [u8]) {
-    let mut prev: u16 = 1;
     for i in nonce {
-        prev += *i as u16;
-        *i = prev as u8;
-        prev >>= 8;
+        if std::u8::MAX == *i {
+            *i = 0;
+        } else {
+            *i += 1;
+            return;
+        }
     }
 }
