@@ -21,7 +21,7 @@ use bytes::BytesMut;
 use futures::future::FusedFuture;
 use futures::{ready, select, Future};
 use log::trace;
-use tokio::io::{ReadHalf, WriteHalf};
+use tokio::io::{BufReader, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::prelude::*;
 use tokio::time::{self, Delay};
@@ -47,7 +47,7 @@ const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 /// The only feature: Supports timeout
 pub struct Connection<S> {
     // Actual connection socket
-    stream: S,
+    stream: BufReader<S>,
     // Timer instance
     // Read and Write operations shares the same timer
     timer: Option<Delay>,
@@ -55,15 +55,20 @@ pub struct Connection<S> {
     timeout: Option<Duration>,
 }
 
-impl<S> Connection<S> {
+impl<S> Connection<S>
+where
+    S: AsyncRead,
+{
     pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
         Connection {
-            stream,
+            stream: BufReader::new(stream),
             timer: None,
             timeout,
         }
     }
+}
 
+impl<S> Connection<S> {
     fn make_timeout_error() -> io::Error {
         use std::io::ErrorKind;
         ErrorKind::TimedOut.into()
@@ -100,17 +105,23 @@ where
     }
 }
 
-impl<S> Deref for Connection<S> {
+impl<S> Deref for Connection<S>
+where
+    S: AsyncRead,
+{
     type Target = S;
 
     fn deref(&self) -> &Self::Target {
-        &self.stream
+        self.stream.get_ref()
     }
 }
 
-impl<S> DerefMut for Connection<S> {
+impl<S> DerefMut for Connection<S>
+where
+    S: AsyncRead,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.stream
+        self.stream.get_mut()
     }
 }
 
@@ -136,7 +147,7 @@ where
 
 impl<S> AsyncWrite for Connection<S>
 where
-    S: AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         match Pin::new(&mut self.stream).poll_write(cx, buf) {
@@ -198,7 +209,7 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
             let mut last_err: Option<io::Error> = None;
             for addr in &vec_ipaddr {
                 match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
+                    Ok(s) => return Ok(STcpStream::new(BufReader::new(s), timeout)),
                     Err(e) => {
                         error!(
                             "Failed to connect {}:{}, resolved address {}, try another (err: {})",

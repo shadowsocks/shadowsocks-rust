@@ -1,26 +1,21 @@
 //! Relay for TCP server that running on the server side
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::io;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-use crate::relay::socks5::Address;
+use futures::future::{self, Either};
+use futures::stream::{FuturesUnordered, StreamExt};
+use log::{debug, error, info, trace};
+use tokio;
+use tokio::net::{TcpListener, TcpStream};
 
 use crate::context::SharedContext;
+use crate::relay::socks5::Address;
 
-use futures::{
-    future::{self, Either},
-    stream::{FuturesUnordered, StreamExt},
-};
-use log::{debug, error, info, trace};
-use tokio::{
-    self,
-    net::{TcpListener, TcpStream},
-};
-
-use super::{
-    context::{SharedTcpServerContext, TcpServerContext},
-    monitor::TcpMonStream,
-    CryptoStream, STcpStream,
-};
+use super::context::{SharedTcpServerContext, TcpServerContext};
+use super::monitor::TcpMonStream;
+use super::{CryptoStream, STcpStream};
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_client(
