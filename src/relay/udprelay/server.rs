@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{
     config::ServerConfig,
-    context::SharedContext,
+    context::{Context, SharedContext},
     relay::{socks5::Address, utils::try_timeout},
 };
 
@@ -41,6 +41,7 @@ struct UdpAssociation {
 impl UdpAssociation {
     /// Create an association with addr
     async fn associate(
+        context: SharedContext,
         svr_cfg: Arc<ServerConfig>,
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
@@ -65,7 +66,8 @@ impl UdpAssociation {
         tokio::spawn(async move {
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
-                if let Err(err) = UdpAssociation::relay_l2r(src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
+                if let Err(err) =
+                    UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
                     error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
@@ -95,7 +97,9 @@ impl UdpAssociation {
     }
 
     /// Relay packets from local to remote
+    #[cfg_attr(not(feature = "trust-dns"), allow(unused_variables))]
     async fn relay_l2r(
+        context: &Context,
         src: SocketAddr,
         remote_udp: &mut SendHalf,
         pkt: &[u8],
@@ -225,7 +229,7 @@ impl UdpAssociation {
     }
 }
 
-async fn listen(_context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
+async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
 
@@ -264,7 +268,7 @@ async fn listen(_context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resu
                 let assoc = match assoc_map.entry(src.to_string()) {
                     Entry::Occupied(oc) => oc.into_mut(),
                     Entry::Vacant(vc) => vc.insert(
-                        UdpAssociation::associate(svr_cfg.clone(), src, tx.clone())
+                        UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
                             .await
                             .expect("Failed to create udp association"),
                     ),

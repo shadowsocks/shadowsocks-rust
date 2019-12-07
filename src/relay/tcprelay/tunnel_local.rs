@@ -8,7 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 use crate::{
     config::ServerConfig,
-    context::SharedContext,
+    context::{Context, SharedContext},
     relay::{
         loadbalancing::server::{LoadBalancer, PingBalancer},
         socks5::Address,
@@ -19,13 +19,13 @@ use crate::{
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
 async fn establish_client_tcp_tunnel<'a>(
-    context: SharedContext,
+    context: &Context,
     mut s: TcpStream,
     client_addr: SocketAddr,
     addr: &Address,
     svr_cfg: Arc<ServerConfig>,
 ) -> io::Result<()> {
-    let svr_s = match super::connect_proxy_server(context, svr_cfg.clone()).await {
+    let svr_s = match super::connect_proxy_server(context, &*svr_cfg).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
             svr_s
@@ -77,7 +77,7 @@ async fn establish_client_tcp_tunnel<'a>(
     Ok(())
 }
 
-async fn handle_tunnel_client(context: SharedContext, s: TcpStream, conf: Arc<ServerConfig>) -> io::Result<()> {
+async fn handle_tunnel_client(context: &Context, s: TcpStream, conf: Arc<ServerConfig>) -> io::Result<()> {
     if let Err(err) = s.set_keepalive(conf.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
@@ -93,7 +93,7 @@ async fn handle_tunnel_client(context: SharedContext, s: TcpStream, conf: Arc<Se
     // forward must not be None, it is already checked in local.rs
     let target_addr = context.config().forward.as_ref().unwrap();
 
-    establish_client_tcp_tunnel(context.clone(), s, client_addr, target_addr, conf).await
+    establish_client_tcp_tunnel(context, s, client_addr, target_addr, conf).await
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
@@ -123,7 +123,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         let context = context.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_tunnel_client(context, socket, server_cfg).await {
+            if let Err(err) = handle_tunnel_client(&*context, socket, server_cfg).await {
                 error!("TCP Tunnel client {}", err);
             }
         });

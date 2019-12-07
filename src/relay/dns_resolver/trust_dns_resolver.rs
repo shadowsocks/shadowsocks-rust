@@ -9,7 +9,7 @@ use log::{debug, error, trace};
 use tokio;
 use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
 
-use crate::context::SharedContext;
+use crate::context::Context;
 
 pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
     let (resolver, bg) = {
@@ -69,12 +69,7 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
     resolver
 }
 
-async fn inner_resolve(
-    context: SharedContext,
-    addr: &str,
-    port: u16,
-    check_forbidden: bool,
-) -> io::Result<Vec<SocketAddr>> {
+async fn inner_resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
     match context.dns_resolver().lookup_ip(addr).await {
         Err(err) => {
             error!("Failed to resolve {}:{}, err: {}", addr, port, err);
@@ -109,11 +104,6 @@ async fn inner_resolve(
 }
 
 /// Resolve address to IP
-pub async fn resolve(
-    context: SharedContext,
-    addr: &str,
-    port: u16,
-    check_forbidden: bool,
-) -> io::Result<Vec<SocketAddr>> {
+pub async fn resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
     inner_resolve(context, addr, port, check_forbidden).await
 }

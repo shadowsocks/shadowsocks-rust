@@ -5,17 +5,17 @@ use std::sync::{
     Arc,
 };
 
-#[cfg(futures = "trust-dns")]
+#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::AsyncResolver;
 
 use crate::config::Config;
 
-#[cfg(futures = "trust-dns")]
+#[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
 
 #[derive(Clone)]
 pub struct SharedServerState {
-    #[cfg(futures = "trust-dns")]
+    #[cfg(feature = "trust-dns")]
     dns_resolver: Arc<AsyncResolver>,
     server_running: Arc<AtomicBool>,
 }
@@ -24,7 +24,7 @@ impl SharedServerState {
     #[allow(unused_variables)]
     pub fn new(config: &Config) -> SharedServerState {
         SharedServerState {
-            #[cfg(futures = "trust-dns")]
+            #[cfg(feature = "trust-dns")]
             dns_resolver: Arc::new(create_resolver(config.get_dns_config())),
             server_running: Arc::new(AtomicBool::new(true)),
         }
@@ -41,7 +41,7 @@ impl SharedServerState {
     }
 
     /// Get the global shared resolver
-    #[cfg(futures = "trust-dns")]
+    #[cfg(feature = "trust-dns")]
     pub fn dns_resolver(&self) -> &AsyncResolver {
         &*self.dns_resolver
     }
@@ -78,7 +78,7 @@ impl Context {
     }
 
     /// Get the global shared resolver
-    #[cfg(futures = "trust-dns")]
+    #[cfg(feature = "trust-dns")]
     pub fn dns_resolver(&self) -> &AsyncResolver {
         self.server_state.dns_resolver()
     }

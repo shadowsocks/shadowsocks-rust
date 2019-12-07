@@ -10,13 +10,13 @@ use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{self, Poll},
     time::Duration,
 };
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
-    context::SharedContext,
+    context::Context,
     relay::{socks5::Address, utils::try_timeout},
 };
 
@@ -24,9 +24,8 @@ use bytes::BytesMut;
 use futures::{future::FusedFuture, ready, select, Future};
 use log::trace;
 use tokio::{
-    io::{BufReader, ReadHalf, WriteHalf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::TcpStream,
-    prelude::*,
     time::{self, Delay},
 };
 
@@ -78,7 +77,7 @@ impl<S> Connection<S> {
         ErrorKind::TimedOut.into()
     }
 
-    fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_timeout(&mut self, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         loop {
             if let Some(ref mut timer) = self.timer {
                 ready!(Pin::new(timer).poll(cx));
@@ -135,7 +134,7 @@ impl<S> AsyncRead for Connection<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         match Pin::new(&mut self.stream).poll_read(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
@@ -153,7 +152,7 @@ impl<S> AsyncWrite for Connection<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         match Pin::new(&mut self.stream).poll_write(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
@@ -166,7 +165,7 @@ where
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         match Pin::new(&mut self.stream).poll_flush(cx) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
@@ -179,7 +178,7 @@ where
         }
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 }
@@ -187,7 +186,7 @@ where
 pub type STcpStream = Connection<TcpStream>;
 
 /// Connect to proxy server with `ServerConfig`
-async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<STcpStream> {
+async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
     let timeout = svr_cfg.timeout();
 
     let svr_addr = match context.config().config_type {
@@ -213,7 +212,7 @@ async fn connect_proxy_server(context: SharedContext, svr_cfg: Arc<ServerConfig>
             let mut last_err: Option<io::Error> = None;
             for addr in &vec_ipaddr {
                 match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => return Ok(STcpStream::new(BufReader::new(s), timeout)),
+                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         error!(
                             "Failed to connect {}:{}, resolved address {}, try another (err: {})",

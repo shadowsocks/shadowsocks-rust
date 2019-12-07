@@ -1,17 +1,15 @@
 use std::{
     collections::VecDeque,
-    fmt,
-    io,
+    fmt, io,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc,
-        Mutex,
+        Arc, Mutex,
     },
 };
 
 use crate::{
     config::ServerConfig,
-    context::SharedContext,
+    context::{Context, SharedContext},
     relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
 };
 
@@ -144,7 +142,7 @@ impl Inner {
 
                     while context.server_running() {
                         interval.tick().await;
-                        let score = match Inner::check_delay(sc.clone(), context.clone()).await {
+                        let score = match Inner::check_delay(&*sc, &*context).await {
                             Ok(d) => latency.push(d),
                             Err(..) => latency.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
                         };
@@ -161,7 +159,7 @@ impl Inner {
         }
     }
 
-    async fn check_request(sc: Arc<ServerConfig>, context: SharedContext) -> io::Result<()> {
+    async fn check_request(sc: Arc<ServerConfig>, context: &Context) -> io::Result<()> {
         static GET_BODY: &[u8] =
             b"GET /generate_204 HTTP/1.1\r\nHost: dl.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
@@ -176,12 +174,12 @@ impl Inner {
         Ok(())
     }
 
-    async fn check_delay(sc: Arc<Server>, context: SharedContext) -> io::Result<u64> {
+    async fn check_delay(sc: &Server, context: &Context) -> io::Result<u64> {
         let start = Instant::now();
 
         // Send HTTP GET and read the first byte
         let timeout = Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC);
-        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context.clone())).await;
+        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context)).await;
 
         let elapsed = Instant::now() - start;
         let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms

@@ -21,7 +21,7 @@ use tokio::{
 
 use crate::{
     config::{ServerAddr, ServerConfig},
-    context::SharedContext,
+    context::{Context, SharedContext},
     relay::{
         loadbalancing::server::{LoadBalancer, RoundRobin},
         socks5::{Address, UdpAssociateHeader},
@@ -65,6 +65,7 @@ struct UdpAssociation {
 impl UdpAssociation {
     /// Create an association with addr
     async fn associate(
+        context: SharedContext,
         svr_cfg: Arc<ServerConfig>,
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
@@ -89,7 +90,8 @@ impl UdpAssociation {
         tokio::spawn(async move {
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
-                if let Err(err) = UdpAssociation::relay_l2r(src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
+                if let Err(err) =
+                    UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
                     error!("Failed to send packet {} -> ..., error: {}", src_addr, err);
 
@@ -119,7 +121,9 @@ impl UdpAssociation {
     }
 
     /// Relay packets from local to remote
+    #[cfg_attr(not(feature = "trust-dns"), allow(unused_variables))]
     async fn relay_l2r(
+        context: &Context,
         src: SocketAddr,
         remote_udp: &mut SendHalf,
         pkt: &[u8],
@@ -151,7 +155,7 @@ impl UdpAssociation {
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
-                let vec_ipaddr = resolve(context, dname, port, false).await?;
+                let vec_ipaddr = resolve(context, dname, *port, false).await?;
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
@@ -274,7 +278,7 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
                 let assoc = match assoc_map.entry(src.to_string()) {
                     Entry::Occupied(oc) => oc.into_mut(),
                     Entry::Vacant(vc) => vc.insert(
-                        UdpAssociation::associate(svr_cfg.clone(), src, tx.clone())
+                        UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
                             .await
                             .expect("Failed to create udp association"),
                     ),

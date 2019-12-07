@@ -8,13 +8,15 @@ use tokio::{
     self,
     net::{
         tcp::{ReadHalf, WriteHalf},
-        TcpListener,
-        TcpStream,
+        TcpListener, TcpStream,
     },
     prelude::*,
 };
 
-use crate::{config::ServerConfig, context::SharedContext};
+use crate::{
+    config::ServerConfig,
+    context::{Context, SharedContext},
+};
 
 use crate::relay::{
     loadbalancing::server::{LoadBalancer, PingBalancer},
@@ -30,14 +32,14 @@ struct UdpConfig {
 }
 
 async fn handle_socks5_connect<'a>(
-    context: SharedContext,
+    context: &Context,
     (mut r, mut w): (ReadHalf<'a>, WriteHalf<'a>),
     client_addr: SocketAddr,
     local_addr: SocketAddr,
     addr: &Address,
     svr_cfg: Arc<ServerConfig>,
 ) -> io::Result<()> {
-    let svr_s = match super::connect_proxy_server(context, svr_cfg.clone()).await {
+    let svr_s = match super::connect_proxy_server(context, &*svr_cfg).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
 
@@ -116,7 +118,7 @@ async fn handle_socks5_connect<'a>(
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_socks5_client(
-    context: SharedContext,
+    context: &Context,
     mut s: TcpStream,
     conf: Arc<ServerConfig>,
     udp_conf: UdpConfig,
@@ -256,7 +258,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let context = context.clone();
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_socks5_client(context, socket, server_cfg, udp_conf).await {
+            if let Err(err) = handle_socks5_client(&*context, socket, server_cfg, udp_conf).await {
                 error!("Socks5 client {}", err);
             }
         });

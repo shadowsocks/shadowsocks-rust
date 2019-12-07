@@ -11,5 +11,5 @@ RUN cd /home/rust/libs && \
     V=1 make && sudo make install && \
     cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
 
-ENV SODIUM_STATIC=yes
+#ENV SODIUM_STATIC=yes
 ENV SODIUM_LIB_DIR=/usr/local/musl/lib

@@ -17,8 +17,7 @@ use crate::{context::SharedContext, relay::socks5::Address};
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
-    CryptoStream,
-    STcpStream,
+    CryptoStream, STcpStream,
 };
 
 #[allow(clippy::cognitive_complexity)]
@@ -94,7 +93,7 @@ async fn handle_client(
         Address::DomainNameAddress(ref dname, port) => {
             use crate::relay::dns_resolver::resolve;
 
-            let addrs = match resolve(context.clone(), dname.as_str(), port, true).await {
+            let addrs = match resolve(&*context, dname.as_str(), port, true).await {
                 Ok(r) => r,
                 Err(err) => {
                     error!("Failed to resolve {}, {}", dname, err);

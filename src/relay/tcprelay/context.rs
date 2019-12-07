@@ -102,7 +102,7 @@ impl TcpServerContext {
             ServerAddr::DomainName(ref domain, ref port) => {
                 use crate::relay::dns_resolver::resolve;
 
-                let addrs = resolve(self.context.clone(), &domain[..], *port, false).await?;
+                let addrs = resolve(&*self.context, &domain[..], *port, false).await?;
                 socket.send_to(payload.as_ref(), addrs[0]).await?;
             }
             #[cfg(not(feature = "trust-dns"))]

@@ -5,25 +5,18 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{self, Poll},
 };
 
 use log::trace;
 use tokio::{net::TcpStream, prelude::*};
 
 use crate::relay::socks5::{
-    self,
-    Address,
-    Command,
-    HandshakeRequest,
-    HandshakeResponse,
-    Reply,
-    TcpRequestHeader,
-    TcpResponseHeader,
+    self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
 };
 
 use super::{CryptoStream, STcpStream};
-use crate::{config::ServerConfig, context::SharedContext};
+use crate::{config::ServerConfig, context::Context};
 
 /// Socks5 proxy client
 pub struct Socks5Client {
@@ -111,21 +104,21 @@ impl Socks5Client {
 }
 
 impl AsyncRead for Socks5Client {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.stream).poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for Socks5Client {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.stream).poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.stream).poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 }
@@ -136,11 +129,11 @@ pub(crate) struct ServerClient {
 
 impl ServerClient {
     pub(crate) async fn connect(
-        context: SharedContext,
+        context: &Context,
         addr: &Address,
         svr_cfg: Arc<ServerConfig>,
     ) -> io::Result<ServerClient> {
-        let stream = super::connect_proxy_server(context, svr_cfg.clone()).await?;
+        let stream = super::connect_proxy_server(context, &*svr_cfg).await?;
         Ok(ServerClient {
             stream: super::proxy_server_handshake(stream, svr_cfg, addr).await?,
         })

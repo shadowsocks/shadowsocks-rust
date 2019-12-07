@@ -32,7 +32,7 @@ path = "src/bin/ssurl.rs"
 lto = true
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]
 sodium = ["libsodium-ffi"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
@@ -64,11 +64,9 @@ serde_urlencoded = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 url = "2.1"
 byte_string = "1.0"
-# libsodium-ffi = { version = "0.1", optional = true }
-libsodium-ffi = { git = "https://github.com/zonyitoo/libsodium-ffi", optional = true }
+libsodium-ffi = { version = "0.2", optional = true }
 miscreant = { version = "0.4", optional = true }
-# trust-dns-resolver = { version = "0.11", features = ["dns-over-rustls", "dns-over-https-rustls"] }
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
+trust-dns-resolver = { version = "0.18.0-alpha", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8"

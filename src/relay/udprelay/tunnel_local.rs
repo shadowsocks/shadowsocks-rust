@@ -133,7 +133,7 @@ impl UdpAssociation {
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
-                let vec_ipaddr = resolve(context, dname, port, false).await?;
+                let vec_ipaddr = resolve(context, dname, *port, false).await?;
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
