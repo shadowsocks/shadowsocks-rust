@@ -124,7 +124,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let context = context.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_tunnel_client(context, socket, server_cfg).await {
-                error!("Socks5 client {}", err);
+                error!("TCP Tunnel client {}", err);
             }
         });
     }
