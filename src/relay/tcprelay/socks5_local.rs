@@ -8,7 +8,8 @@ use tokio::{
     self,
     net::{
         tcp::{ReadHalf, WriteHalf},
-        TcpListener, TcpStream,
+        TcpListener,
+        TcpStream,
     },
     prelude::*,
 };

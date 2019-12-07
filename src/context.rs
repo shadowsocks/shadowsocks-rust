@@ -1,7 +1,9 @@
 //! Shadowsocks Server Context
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 #[cfg(futures = "trust-dns")]
 use trust_dns_resolver::AsyncResolver;

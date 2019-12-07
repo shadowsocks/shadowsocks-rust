@@ -4,7 +4,9 @@ use std::io::Cursor;
 
 use crate::crypto::{
     digest::{self, Digest, DigestType},
-    CipherResult, CryptoMode, StreamCipher,
+    CipherResult,
+    CryptoMode,
+    StreamCipher,
 };
 
 use byteorder::{LittleEndian, ReadBytesExt};

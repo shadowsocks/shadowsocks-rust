@@ -1,19 +1,26 @@
-use std::collections::VecDeque;
-use std::fmt;
-use std::io;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::VecDeque,
+    fmt,
+    io,
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc,
+        Mutex,
+    },
+};
 
-use crate::config::ServerConfig;
-use crate::context::SharedContext;
-use crate::relay::loadbalancing::server::LoadBalancer;
-use crate::relay::socks5::Address;
-use crate::relay::tcprelay::client::ServerClient;
+use crate::{
+    config::ServerConfig,
+    context::SharedContext,
+    relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
+};
 
 use log::{debug, info};
-use tokio;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::time::{self, Duration, Instant};
+use tokio::{
+    self,
+    io::{AsyncReadExt, AsyncWriteExt},
+    time::{self, Duration, Instant},
+};
 
 struct Server {
     config: Arc<ServerConfig>,

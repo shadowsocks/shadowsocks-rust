@@ -1,17 +1,19 @@
 //! Local server that establish a TCP tunnel with server
 
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{io, net::SocketAddr, sync::Arc};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::config::ServerConfig;
-use crate::context::SharedContext;
-use crate::relay::loadbalancing::server::{LoadBalancer, PingBalancer};
-use crate::relay::socks5::Address;
+use crate::{
+    config::ServerConfig,
+    context::SharedContext,
+    relay::{
+        loadbalancing::server::{LoadBalancer, PingBalancer},
+        socks5::Address,
+    },
+};
 
 /// Established Client Tunnel
 ///

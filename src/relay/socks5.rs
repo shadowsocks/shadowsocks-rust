@@ -2,22 +2,26 @@
 //!
 //! Implements [SOCKS Protocol Version 5](https://www.ietf.org/rfc/rfc1928.txt) proxy protocol
 
-use std::convert::From;
-use std::error;
-use std::fmt::{self, Debug, Formatter};
-use std::io::{self, Cursor};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
-use std::str::FromStr;
-use std::u8;
-use std::vec;
+use std::{
+    convert::From,
+    error,
+    fmt::{self, Debug, Formatter},
+    io::{self, Cursor},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    str::FromStr,
+    u8,
+    vec,
+};
 
-use bytes::buf::BufExt;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{buf::BufExt, Buf, BufMut, BytesMut};
 use log::error;
 use tokio::prelude::*;
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI,
+    SOCKS5_AUTH_METHOD_NONE,
+    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
+    SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 #[rustfmt::skip]

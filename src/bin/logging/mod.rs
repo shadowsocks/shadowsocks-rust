@@ -1,5 +1,7 @@
-use std::env;
-use std::io::{self, Write};
+use std::{
+    env,
+    io::{self, Write},
+};
 
 use env_logger::{fmt::Formatter, Builder};
 use log::{LevelFilter, Record};

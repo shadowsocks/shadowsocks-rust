@@ -1,5 +1,4 @@
-use std::future::Future;
-use std::{io, time::Duration};
+use std::{future::Future, io, time::Duration};
 
 use tokio::time;
 

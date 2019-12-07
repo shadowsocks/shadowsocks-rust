@@ -1,26 +1,35 @@
 //! UDP relay proxy server
 
-use std::io::{self, Cursor};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-use std::time::Duration;
+use std::{
+    io::{self, Cursor},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use bytes::BytesMut;
-use futures::stream::FuturesUnordered;
-use futures::{self, StreamExt};
+use futures::{self, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info, trace};
 use lru_time_cache::{Entry, LruCache};
-use tokio;
-use tokio::net::udp::{RecvHalf, SendHalf};
-use tokio::net::UdpSocket;
-use tokio::sync::mpsc;
+use tokio::{
+    self,
+    net::{
+        udp::{RecvHalf, SendHalf},
+        UdpSocket,
+    },
+    sync::mpsc,
+};
 
-use crate::config::ServerConfig;
-use crate::context::SharedContext;
-use crate::relay::{socks5::Address, utils::try_timeout};
+use crate::{
+    config::ServerConfig,
+    context::SharedContext,
+    relay::{socks5::Address, utils::try_timeout},
+};
 
-use super::crypto_io::{decrypt_payload, encrypt_payload};
-use super::MAXIMUM_UDP_PAYLOAD_SIZE;
+use super::{
+    crypto_io::{decrypt_payload, encrypt_payload},
+    MAXIMUM_UDP_PAYLOAD_SIZE,
+};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 

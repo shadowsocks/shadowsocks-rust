@@ -1,13 +1,16 @@
 use std::net::{SocketAddr, ToSocketAddrs};
 
-use tokio::prelude::*;
-use tokio::time::{self, Duration};
+use tokio::{
+    prelude::*,
+    time::{self, Duration},
+};
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 pub struct Socks5TestServer {

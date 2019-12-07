@@ -4,27 +4,31 @@
 // Maybe removed in the future
 #![allow(clippy::unnecessary_mut_passed)]
 
-use std::io;
-use std::marker::Unpin;
-use std::ops::{Deref, DerefMut};
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::{
+    io,
+    marker::Unpin,
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use crate::config::{ConfigType, ServerAddr, ServerConfig};
-use crate::context::SharedContext;
-use crate::relay::socks5::Address;
-use crate::relay::utils::try_timeout;
+use crate::{
+    config::{ConfigType, ServerAddr, ServerConfig},
+    context::SharedContext,
+    relay::{socks5::Address, utils::try_timeout},
+};
 
 use bytes::BytesMut;
-use futures::future::FusedFuture;
-use futures::{ready, select, Future};
+use futures::{future::FusedFuture, ready, select, Future};
 use log::trace;
-use tokio::io::{BufReader, ReadHalf, WriteHalf};
-use tokio::net::TcpStream;
-use tokio::prelude::*;
-use tokio::time::{self, Delay};
+use tokio::{
+    io::{BufReader, ReadHalf, WriteHalf},
+    net::TcpStream,
+    prelude::*,
+    time::{self, Delay},
+};
 
 mod aead;
 pub mod client;

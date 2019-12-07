@@ -1,7 +1,8 @@
 //! Stream protocol implementation
 
 use std::{
-    cmp, io,
+    cmp,
+    io,
     marker::Unpin,
     pin::Pin,
     task::{Context, Poll},

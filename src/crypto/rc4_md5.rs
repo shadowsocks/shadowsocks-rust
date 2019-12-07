@@ -3,7 +3,10 @@
 use crate::crypto::{
     digest::{self, Digest, DigestType},
     openssl::OpenSSLCrypto,
-    CipherResult, CipherType, CryptoMode, StreamCipher,
+    CipherResult,
+    CipherType,
+    CryptoMode,
+    StreamCipher,
 };
 
 use bytes::{BufMut, BytesMut};

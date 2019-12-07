@@ -20,8 +20,7 @@
 //! +--------+-----------+-----------+
 //! ```
 
-use std::io;
-use std::slice;
+use std::{io, slice};
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};

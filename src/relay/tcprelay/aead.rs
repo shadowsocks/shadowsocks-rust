@@ -33,7 +33,8 @@
 //! ```
 
 use std::{
-    cmp, io,
+    cmp,
+    io,
     marker::Unpin,
     pin::Pin,
     slice,

@@ -12,7 +12,14 @@ use log::trace;
 use tokio::{net::TcpStream, prelude::*};
 
 use crate::relay::socks5::{
-    self, Address, Command, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
+    self,
+    Address,
+    Command,
+    HandshakeRequest,
+    HandshakeResponse,
+    Reply,
+    TcpRequestHeader,
+    TcpResponseHeader,
 };
 
 use super::{CryptoStream, STcpStream};

@@ -41,19 +41,21 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-use std::collections::HashSet;
-use std::convert::From;
-use std::default::Default;
-use std::error;
-use std::fmt::{self, Debug, Display, Formatter};
-use std::fs::OpenOptions;
-use std::io::Read;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::option::Option;
-use std::path::Path;
-use std::str::FromStr;
-use std::string::ToString;
-use std::time::Duration;
+use std::{
+    collections::HashSet,
+    convert::From,
+    default::Default,
+    error,
+    fmt::{self, Debug, Display, Formatter},
+    fs::OpenOptions,
+    io::Read,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    option::Option,
+    path::Path,
+    str::FromStr,
+    string::ToString,
+    time::Duration,
+};
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
@@ -65,9 +67,7 @@ use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
-use crate::crypto::cipher::CipherType;
-use crate::plugin::PluginConfig;
-use crate::relay::socks5::Address;
+use crate::{crypto::cipher::CipherType, plugin::PluginConfig, relay::socks5::Address};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {

@@ -1,12 +1,17 @@
 use env_logger;
-use tokio;
-use tokio::net::{TcpStream, UdpSocket};
-use tokio::prelude::*;
-use tokio::time::{self, Duration};
+use tokio::{
+    self,
+    net::{TcpStream, UdpSocket},
+    prelude::*,
+    time::{self, Duration},
+};
 
-use shadowsocks::config::{Config, ConfigType};
-use shadowsocks::relay::socks5::Address;
-use shadowsocks::{run_local, run_server};
+use shadowsocks::{
+    config::{Config, ConfigType},
+    relay::socks5::Address,
+    run_local,
+    run_server,
+};
 
 #[tokio::test]
 async fn tcp_tunnel() {

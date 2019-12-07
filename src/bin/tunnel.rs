@@ -13,9 +13,16 @@ use log::{debug, error, info};
 use std::net::SocketAddr;
 use tokio;
 
-use shadowsocks::plugin::PluginConfig;
-use shadowsocks::relay::socks5::Address;
-use shadowsocks::{run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+use shadowsocks::{
+    plugin::PluginConfig,
+    relay::socks5::Address,
+    run_local,
+    Config,
+    ConfigType,
+    Mode,
+    ServerAddr,
+    ServerConfig,
+};
 
 mod logging;
 mod monitor;

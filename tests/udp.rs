@@ -7,8 +7,10 @@ use std::{
 
 use bytes::{BufMut, BytesMut};
 use log::debug;
-use tokio::prelude::*;
-use tokio::time::{self, Duration};
+use tokio::{
+    prelude::*,
+    time::{self, Duration},
+};
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
@@ -17,7 +19,8 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         tcprelay::client::Socks5Client,
     },
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
