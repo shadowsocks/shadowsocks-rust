@@ -1,0 +1,37 @@
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
+FROM rustembedded/cross:x86_64-pc-windows-gnu
+
+ARG SODIUM_VERS="1.0.18"
+ARG OPENSSL_VERS="1.0.2t"
+
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y libclang-dev curl ca-certificates m4 make perl llvm
+
+# Build a static copy of openssl
+RUN curl -LO https://www.openssl.org/source/openssl-${OPENSSL_VERS}.tar.gz && \
+    tar xzf openssl-${OPENSSL_VERS}.tar.gz && cd openssl-${OPENSSL_VERS} && \
+    AR=x86_64-w64-mingw32-ar CC=x86_64-w64-mingw32-gcc ./Configure --prefix=/usr/local/musl mingw64 -fPIC no-shared && \
+    make -j${nprocs} && make install && \
+    cd .. && rm -rf openssl-${OPENSSL_VERS}.tar.gz openssl-${OPENSSL_VERS}
+
+ENV OPENSSL_DIR=/usr/local/musl \
+    OPENSSL_INCLUDE_DIR=/usr/local/musl/include \
+    OPENSSL_LIB_DIR=/usr/local/musl/lib \
+    OPENSSL_STATIC=1 \
+    TARGET=musl
+
+# Build a static copy of libsodium.
+RUN curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM_VERS.tar.gz && \
+    tar xzf libsodium-$SODIUM_VERS.tar.gz && cd libsodium-$SODIUM_VERS && \
+    AR=x86_64-w64-mingw32-ar CC=x86_64-w64-mingw32-gcc ./configure --prefix=/usr/local/musl --enable-shared=no --host=x86_64-pc-windows-gnu && \
+    V=1 make -j${nprocs} && make install && \
+    cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
+
+ENV SODIUM_BUILD_INCLUDE_DIR=/usr/local/x86_64-w64-mingw32/include \
+    SODIUM_STATIC=1
+
+ENV PKG_CONFIG_ALLOW_CROSS=true \
+    PKG_CONFIG_ALL_STATIC=true \
+    PKG_CONFIG_PATH=/usr/local/musl/lib/pkgconfig

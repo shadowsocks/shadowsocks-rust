@@ -2,155 +2,42 @@
 
 CUR_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' ${CUR_DIR}/../Cargo.toml | awk '{print $3}' | sed 's/"//g')
-ENABLE_GZ=false
-BUILD_DOCKER_IMG=false
-BUILD_NIGHTLY=false
 
-while getopts "v:ghbn" opt; do
-    case $opt in
-        v)
-            VERSION=$OPTARG
-            ;;
-        g)
-            ENABLE_GZ=true
-            ;;
-        b)
-            BUILD_DOCKER_IMG=true
-            ;;
-        n)
-            BUILD_NIGHTLY=true
-            ;;
-        h|\?)
-            echo "$0 [-v VERSION] [-g] [-h] [-b] [-n]"
-            echo "    -v VERSION        Specify VERSION in output package name"
-            echo "    -g                Enable GZip"
-            echo "    -b                Re-build docker image"
-            echo "    -n                Build with nightly rust"
-            echo "    -h                Show this image"
-            exit 0
-            ;;
-    esac
-done
-
-if $BUILD_NIGHTLY; then
-    RELEASE_NAME="nightly";
-else
-    RELEASE_NAME="stable";
-fi
-
-echo "* Building ${RELEASE_NAME} package ${VERSION} ..."
-
-if $BUILD_NIGHTLY; then
-    IMAGE='shadowsocks-rust:nightly'
-else
-    IMAGE='shadowsocks-rust:stable'
-fi
-
-if [[ "$http_proxy" != "" ]]; then
-    ENV_HTTP_PROXY=$http_proxy
-elif [[ "$HTTP_PROXY" != "" ]]; then
-    ENV_HTTP_PROXY=$HTTP_PROXY
-fi
-
-if [[ "$https_proxy" != "" ]]; then
-    ENV_HTTPS_PROXY=$https_proxy
-elif [[ "$HTTPS_PROXY" != "" ]]; then
-    ENV_HTTPS_PROXY=$HTTPS_PROXY
-fi
-
-if $BUILD_DOCKER_IMG; then
-    echo "* Rebuild docker image ${IMAGE} ...";
-    if $BUILD_NIGHTLY; then
-        docker build \
-            -t "${IMAGE}" \
-            "$CUR_DIR" \
-            --build-arg TOOLCHAIN=nightly \
-            --build-arg HTTP_PROXY="$ENV_HTTP_PROXY" \
-            --build-arg HTTPS_PROXY="$ENV_HTTPS_PROXY";
-    else
-        docker build \
-            -t "${IMAGE}" \
-            "$CUR_DIR" \
-            --build-arg TOOLCHAIN=stable \
-            --build-arg HTTP_PROXY="$ENV_HTTP_PROXY" \
-            --build-arg HTTPS_PROXY="$ENV_HTTPS_PROXY";
-    fi
-fi
-
-SRC_PATH="/home/rust/src"
-CARGO_TARGET_DIR="${SRC_PATH}/build/target"
-CARGO_INSTALL_ROOT="${SRC_PATH}/build/install"
-LOCAL_USER=$( id -u "$USER" ):$( id -g "$USER" )
-RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"
-
-TARGET_NAME="x86_64-unknown-linux-musl"
-
-if $BUILD_NIGHTLY; then
-    ## -- BUILD nightly version
-    docker run \
-        -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
-        -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
-        -e RUSTFLAGS="$RUSTFLAGS" \
-        -e HTTP_PROXY="$ENV_HTTP_PROXY" \
-        -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
-        -v "${CUR_DIR}"/..:"$SRC_PATH" \
-        -v "${CUR_DIR}/target/musl-builder/cargo-cache":/home/rust/.cargo/registry \
-        "${IMAGE}" \
-        /bin/bash -c \
-        "sudo mkdir -p $CARGO_TARGET_DIR \
-            && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && cargo install -f --features miscreant --path . \
-            && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
-else
-    docker run \
-        -e CARGO_TARGET_DIR="${CARGO_TARGET_DIR}" \
-        -e CARGO_INSTALL_ROOT="${CARGO_INSTALL_ROOT}" \
-        -e RUSTFLAGS="$RUSTFLAGS" \
-        -e HTTP_PROXY="$ENV_HTTP_PROXY" \
-        -e HTTPS_PROXY="$ENV_HTTPS_PROXY" \
-        -v "${CUR_DIR}"/..:"$SRC_PATH" \
-        -v "${CUR_DIR}/target/musl-builder/cargo-cache":/home/rust/.cargo/registry \
-        "${IMAGE}" \
-        /bin/bash -c \
-        "sudo mkdir -p $CARGO_TARGET_DIR \
-            && sudo rm -rf $CARGO_INSTALL_ROOT \
-            && cargo install -f --features miscreant --path . \
-            && sudo chown -R $LOCAL_USER $CARGO_INSTALL_ROOT";
-fi
-
-if [[ $? -ne "0" ]]; then
-    exit 1;
-fi
-
-TARGET_DIR="$CUR_DIR/install/bin"
-cd "$TARGET_DIR"
-
-echo "* Finished building, target in ${TARGET_DIR}"
+cd "$CUR_DIR/.."
 
 ## Disable OS X ACL file
 export COPYFILE_DISABLE=1
 
-if $ENABLE_GZ; then
-    PKG_NAME="shadowsocks-v${VERSION}-${RELEASE_NAME}.${TARGET_NAME}.tar.gz"
-    PKG_PATH="${CUR_DIR}/${PKG_NAME}"
-    echo "* Packaging GZip in ${PKG_PATH} ..."
+function build() {
+    TARGET=$1
+    echo "* Building ${TARGET} package ${VERSION} ..."
 
-    tar -czf ${PKG_PATH} \
+    RELEASE_DIR="target/${TARGET}/release"
+    PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.tar.xz"
+    PKG_PATH="${CUR_DIR}/${PKG_NAME}"
+
+    cross build --target "${TARGET}" \
+                --features "miscreant" \
+                --release
+
+    if [[ $? != "0" ]]; then
+        exit $?
+    fi
+
+    echo "* Packaging XZ in ${PKG_PATH} ..."
+    cd ${RELEASE_DIR}
+    tar -cJf ${PKG_PATH} \
         "sslocal" \
         "ssserver" \
-        "ssurl";
+        "ssurl" \
+        "sstunnel"
+
+    if [[ $? != "0" ]]; then
+        exit $?
+    fi
 
     echo "* Done build package ${PKG_NAME}"
-fi
+}
 
-PKG_NAME="shadowsocks-v${VERSION}-${RELEASE_NAME}.${TARGET_NAME}.tar.xz"
-PKG_PATH="${CUR_DIR}/${PKG_NAME}"
-echo "* Packaging XZ in ${PKG_PATH} ..."
-
-tar -cJf ${PKG_PATH} \
-    "sslocal" \
-    "ssserver" \
-    "ssurl" \
-    "ssdns"
-
-echo "* Done build package ${PKG_NAME}"
+build "x86_64-unknown-linux-musl"
+#build "x86_64-pc-windows-gnu"
