@@ -3,6 +3,7 @@
 use std::{
     io::{self, Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::atomic::{AtomicBool, Ordering},
     sync::Arc,
     time::Duration,
 };
@@ -17,6 +18,7 @@ use tokio::{
         UdpSocket,
     },
     sync::mpsc,
+    time,
 };
 
 use crate::{
@@ -34,11 +36,20 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 // Represent a UDP association
 struct UdpAssociation {
     tx: mpsc::Sender<Vec<u8>>,
+    closed: Arc<AtomicBool>,
+}
+
+impl Drop for UdpAssociation {
+    fn drop(&mut self) {
+        // 1. Drops tx, will close local -> remote task
+        // 2. Drops closed, will close local <- remote task
+        self.closed.store(true, Ordering::Release);
+    }
 }
 
 impl UdpAssociation {
@@ -59,6 +70,8 @@ impl UdpAssociation {
         // FIXME: Channel size 1024?
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
+        let close_flag = Arc::new(AtomicBool::new(false));
+
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
 
@@ -78,25 +91,34 @@ impl UdpAssociation {
                 }
             }
 
-            debug!("UDP ASSOCIATE {} -> .. finished", src_addr);
+            debug!("UDP TUNNEL {} -> .. finished", src_addr);
         });
 
         // local <- remote
+        let closed = close_flag.clone();
         tokio::spawn(async move {
-            loop {
+            while !closed.load(Ordering::Acquire) {
+                use std::io::ErrorKind;
+
                 // Read and send back to source
-                if let Err(err) =
-                    UdpAssociation::relay_r2l(src_addr, &mut receiver, timeout, &mut response_tx, &*svr_cfg).await
-                {
-                    error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
-                    break;
+                match UdpAssociation::relay_r2l(src_addr, &mut receiver, timeout, &mut response_tx, &*svr_cfg).await {
+                    Ok(..) => {}
+                    Err(ref err) if err.kind() == ErrorKind::TimedOut => {
+                        trace!("Receive packet timeout, {} <- ...", src_addr);
+                    }
+                    Err(err) => {
+                        error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
+
+                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
+                        // break;
+                    }
                 }
             }
 
-            debug!("UDP ASSOCIATE {} <- .. finished", src_addr);
+            debug!("UDP TUNNEL {} <- .. finished", src_addr);
         });
 
-        Ok(UdpAssociation { tx })
+        Ok(UdpAssociation { tx, closed: close_flag })
     }
 
     /// Relay packets from local to remote
@@ -110,12 +132,7 @@ impl UdpAssociation {
     ) -> io::Result<()> {
         let addr = context.config().forward.as_ref().unwrap();
 
-        debug!(
-            "UDP ASSOCIATE {} -> {}, payload length {} bytes",
-            src,
-            addr,
-            payload.len()
-        );
+        debug!("UDP TUNNEL {} -> {}, payload length {} bytes", src, addr, payload.len());
 
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
         let mut send_buf = Vec::new();
@@ -165,6 +182,7 @@ impl UdpAssociation {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+
         let (recv_n, remote_addr) = try_timeout(remote_udp.recv_from(&mut recv_buf), Some(timeout)).await?;
 
         let decrypt_buf = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
@@ -184,7 +202,7 @@ impl UdpAssociation {
         cur.read_to_end(&mut payload)?;
 
         debug!(
-            "UDP ASSOCIATE {} <- {}, payload length {} bytes",
+            "UDP TUNNEL {} <- {}, payload length {} bytes",
             src_addr,
             remote_addr,
             payload.len()
@@ -231,11 +249,19 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         // FIXME: How to stop the outer listener Future?
     });
 
-    // let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
-    let mut assoc_map = LruCache::with_expiry_duration(DEFAULT_TIMEOUT);
+    let mut assoc_map =
+        LruCache::with_expiry_duration_and_capacity(DEFAULT_TIMEOUT, 1024 /* Conservative, ulimit */);
 
     loop {
-        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
+        let (recv_len, src) = match time::timeout(DEFAULT_TIMEOUT, r.recv_from(&mut pkt_buf)).await {
+            Ok(r) => r?,
+            Err(..) => {
+                // Cleanup expired association
+                // Do not consume this iterator, it will updates expire time of items that traversed
+                let _ = assoc_map.iter();
+                continue;
+            }
+        };
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task
