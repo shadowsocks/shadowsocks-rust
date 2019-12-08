@@ -35,7 +35,6 @@ async fn handle_socks5_connect<'a>(
     context: &Context,
     (mut r, mut w): (ReadHalf<'a>, WriteHalf<'a>),
     client_addr: SocketAddr,
-    local_addr: SocketAddr,
     addr: &Address,
     svr_cfg: Arc<ServerConfig>,
 ) -> io::Result<()> {
@@ -44,7 +43,7 @@ async fn handle_socks5_connect<'a>(
             trace!("Proxy server connected, {:?}", svr_cfg);
 
             // Tell the client that we are ready
-            let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(local_addr));
+            let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(svr_s.local_addr()?));
             header.write_to(&mut w).await?;
             w.flush().await?;
 
@@ -64,7 +63,10 @@ async fn handle_socks5_connect<'a>(
                 _ => Reply::NetworkUnreachable,
             };
 
-            let header = TcpResponseHeader::new(reply, Address::SocketAddress(local_addr));
+            let header = TcpResponseHeader::new(
+                reply,
+                Address::SocketAddress("0.0.0.0:0".parse::<SocketAddr>().unwrap()),
+            );
             header.write_to(&mut w).await?;
             w.flush().await?;
 
@@ -134,7 +136,6 @@ async fn handle_socks5_client(
     }
 
     let client_addr = s.peer_addr()?;
-    let local_addr = s.local_addr()?;
 
     let (mut r, mut w) = s.split();
 
@@ -185,7 +186,7 @@ async fn handle_socks5_client(
             if enable_tcp {
                 debug!("CONNECT {}", addr);
 
-                match handle_socks5_connect(context, (r, w), client_addr, local_addr, &addr, conf).await {
+                match handle_socks5_connect(context, (r, w), client_addr, &addr, conf).await {
                     Ok(..) => Ok(()),
                     Err(err) => Err(io::Error::new(
                         err.kind(),
