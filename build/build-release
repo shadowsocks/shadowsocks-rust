@@ -3,12 +3,12 @@
 CUR_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' ${CUR_DIR}/../Cargo.toml | awk '{print $3}' | sed 's/"//g')
 
-cd "$CUR_DIR/.."
-
 ## Disable OS X ACL file
 export COPYFILE_DISABLE=1
 
 function build() {
+    cd "$CUR_DIR/.."
+
     TARGET=$1
     echo "* Building ${TARGET} package ${VERSION} ..."
 
@@ -24,20 +24,34 @@ function build() {
         exit $?
     fi
 
-    echo "* Packaging XZ in ${PKG_PATH} ..."
-    cd ${RELEASE_DIR}
-    tar -cJf ${PKG_PATH} \
-        "sslocal" \
-        "ssserver" \
-        "ssurl" \
-        "sstunnel"
+    if [[ "$TARGET" == *"-linux-"* ]]; then
+        echo "* Packaging XZ in ${PKG_PATH} ..."
+        cd ${RELEASE_DIR}
+        tar -cJf ${PKG_PATH} \
+            "sslocal" \
+            "ssserver" \
+            "ssurl" \
+            "sstunnel"
 
-    if [[ $? != "0" ]]; then
-        exit $?
+        if [[ $? != "0" ]]; then
+            exit $?
+        fi
+    elif [[ "$TARGET" == *"-windows-"* ]]; then
+        echo "* Packaging ZIP in ${PKG_PATH} ..."
+        cd ${RELEASE_DIR}
+        zip ${PKG_PATH} \
+            "sslocal.exe" \
+            "ssserver.exe" \
+            "ssurl.exe" \
+            "sstunnel.exe"
+
+        if [[ $? != "0" ]]; then
+            exit $?
+        fi
     fi
 
     echo "* Done build package ${PKG_NAME}"
 }
 
 build "x86_64-unknown-linux-musl"
-#build "x86_64-pc-windows-gnu"
+build "x86_64-pc-windows-gnu"
