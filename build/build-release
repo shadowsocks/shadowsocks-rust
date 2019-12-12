@@ -13,8 +13,6 @@ function build() {
     echo "* Building ${TARGET} package ${VERSION} ..."
 
     RELEASE_DIR="target/${TARGET}/release"
-    PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.tar.xz"
-    PKG_PATH="${CUR_DIR}/${PKG_NAME}"
 
     cross build --target "${TARGET}" \
                 --features "miscreant" \
@@ -25,6 +23,9 @@ function build() {
     fi
 
     if [[ "$TARGET" == *"-linux-"* ]]; then
+        PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.tar.xz"
+        PKG_PATH="${CUR_DIR}/${PKG_NAME}"
+
         echo "* Packaging XZ in ${PKG_PATH} ..."
         cd ${RELEASE_DIR}
         tar -cJf ${PKG_PATH} \
@@ -37,6 +38,9 @@ function build() {
             exit $?
         fi
     elif [[ "$TARGET" == *"-windows-"* ]]; then
+        PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.zip"
+        PKG_PATH="${CUR_DIR}/${PKG_NAME}"
+
         echo "* Packaging ZIP in ${PKG_PATH} ..."
         cd ${RELEASE_DIR}
         zip ${PKG_PATH} \
