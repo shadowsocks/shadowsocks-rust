@@ -3,8 +3,10 @@
 use std::{
     io::{self, Cursor},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -57,7 +59,7 @@ impl UdpAssociation {
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
     ) -> io::Result<UdpAssociation> {
-        debug!("Created UDP Association for {}", src_addr);
+        debug!("created UDP Association for {}", src_addr);
 
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
@@ -82,7 +84,7 @@ impl UdpAssociation {
                 if let Err(err) =
                     UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
-                    error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
+                    error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
                 }
@@ -101,10 +103,10 @@ impl UdpAssociation {
                 match UdpAssociation::relay_r2l(src_addr, &mut receiver, timeout, &mut response_tx, &*svr_cfg).await {
                     Ok(..) => {}
                     Err(ref err) if err.kind() == ErrorKind::TimedOut => {
-                        trace!("Receive packet timeout, {} <- ...", src_addr);
+                        trace!("receive packet timeout, {} <- ...", src_addr);
                     }
                     Err(err) => {
-                        error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
+                        error!("railed to receive packet, {} <- .., error: {}", src_addr, err);
 
                         // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
                         // break;
@@ -132,12 +134,12 @@ impl UdpAssociation {
         let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
             Ok(Some(pkt)) => pkt,
             Ok(None) => {
-                error!("Failed to decrypt pkt in UDP relay, packet too short");
+                error!("failed to decrypt pkt in UDP relay, packet too short");
                 let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
                 return Err(err);
             }
             Err(err) => {
-                error!("Failed to decrypt pkt in UDP relay: {}", err);
+                error!("failed to decrypt pkt in UDP relay: {}", err);
                 let err = io::Error::new(io::ErrorKind::InvalidData, "decrypt failed");
                 return Err(err);
             }
@@ -232,7 +234,7 @@ impl UdpAssociation {
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
-            error!("Failed to send packet into response channel, error: {}", err);
+            error!("failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
         }
@@ -244,7 +246,7 @@ impl UdpAssociation {
         match self.tx.send(pkt.to_vec()).await {
             Ok(..) => true,
             Err(err) => {
-                error!("Failed to send packet, error: {}", err);
+                error!("failed to send packet, error: {}", err);
                 false
             }
         }
@@ -290,7 +292,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];
 
-        trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
+        trace!("received UDP packet from {}, length {} bytes", src, recv_len);
 
         // Check or (re)create an association
         loop {
@@ -329,7 +331,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     match vec_fut.into_future().await.0 {
         Some(res) => {
-            error!("One of TCP servers exited unexpectly, result: {:?}", res);
+            error!("one of TCP servers exited unexpectly, result: {:?}", res);
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }

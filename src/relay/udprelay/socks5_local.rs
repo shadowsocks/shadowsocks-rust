@@ -3,8 +3,10 @@
 use std::{
     io::{self, Cursor, ErrorKind, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -45,7 +47,7 @@ async fn parse_packet(pkt: &[u8]) -> io::Result<(Address, Vec<u8>)> {
     let header = UdpAssociateHeader::read_from(&mut cur).await?;
 
     if header.frag != 0 {
-        error!("Received UDP associate with frag != 0, which is not supported by ShadowSocks");
+        error!("received UDP associate with frag != 0, which is not supported by ShadowSocks");
         let err = io::Error::new(ErrorKind::Other, "unsupported UDP fragmentation");
         return Err(err);
     }
@@ -81,7 +83,7 @@ impl UdpAssociation {
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
     ) -> io::Result<UdpAssociation> {
-        debug!("Created UDP Association for {}", src_addr);
+        debug!("created UDP Association for {}", src_addr);
 
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
@@ -106,7 +108,7 @@ impl UdpAssociation {
                 if let Err(err) =
                     UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
-                    error!("Failed to send packet {} -> ..., error: {}", src_addr, err);
+                    error!("failed to send packet {} -> ..., error: {}", src_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
                 }
@@ -123,10 +125,10 @@ impl UdpAssociation {
                 match UdpAssociation::relay_r2l(src_addr, &mut receiver, timeout, &mut response_tx, &*svr_cfg).await {
                     Ok(..) => {}
                     Err(ref err) if err.kind() == ErrorKind::TimedOut => {
-                        trace!("Receive packet timeout, {} <- ...", src_addr);
+                        trace!("receive packet timeout, {} <- ...", src_addr);
                     }
                     Err(err) => {
-                        error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
+                        error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
 
                         // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
                         // break;
@@ -238,7 +240,7 @@ impl UdpAssociation {
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, payload)).await {
-            error!("Failed to send packet into response channel, error: {}", err);
+            error!("failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
         }
@@ -250,7 +252,7 @@ impl UdpAssociation {
         match self.tx.send(pkt.to_vec()).await {
             Ok(..) => true,
             Err(err) => {
-                error!("Failed to send packet, error: {}", err);
+                error!("failed to send packet, error: {}", err);
                 false
             }
         }
@@ -295,7 +297,7 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         // Copy bytes, because udp_associate runs in another tokio Task
         let pkt = &pkt_buf[..recv_len];
 
-        trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
+        trace!("received UDP packet from {}, length {} bytes", src, recv_len);
 
         // Pick a server
         let svr_cfg = balancer.pick_server();

@@ -1,9 +1,11 @@
 use std::{
     collections::VecDeque,
-    fmt, io,
+    fmt,
+    io,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
-        Arc, Mutex,
+        Arc,
+        Mutex,
     },
 };
 
@@ -40,8 +42,14 @@ impl Server {
 
 const MAX_LATENCY_QUEUE_SIZE: usize = 37;
 
+#[derive(Debug, Copy, Clone)]
+enum Score {
+    Latency(u64),
+    Errored,
+}
+
 struct ServerLatencyInner {
-    latency_queue: VecDeque<u64>,
+    latency_queue: VecDeque<Score>,
 }
 
 impl ServerLatencyInner {
@@ -51,7 +59,7 @@ impl ServerLatencyInner {
         }
     }
 
-    fn push(&mut self, lat: u64) -> u64 {
+    fn push(&mut self, lat: Score) -> u64 {
         self.latency_queue.push_back(lat);
         if self.latency_queue.len() > MAX_LATENCY_QUEUE_SIZE {
             self.latency_queue.pop_front();
@@ -62,18 +70,45 @@ impl ServerLatencyInner {
 
     fn score(&self) -> u64 {
         if self.latency_queue.is_empty() {
-            return u64::max_value();
+            // Never checked, assume it is the worst of all
+            return 2 * 1000;
         }
 
-        let mut v = self.latency_queue.iter().cloned().collect::<Vec<u64>>();
-        v.sort();
+        // 1. Mid Latency
+        // 2. Proportion of Errors
+        let mut vec_lat = Vec::with_capacity(self.latency_queue.len());
+        let mut acc_err = 0;
+        for lat in &self.latency_queue {
+            match lat {
+                Score::Latency(l) => vec_lat.push(l),
+                Score::Errored => acc_err += 1,
+            }
+        }
 
-        let mid = v.len() / 2;
-        if (v.len() & 1) == 0 {
-            (v[mid - 1] + v[mid]) / 2
+        let max_lat = DEFAULT_CHECK_TIMEOUT_SEC * 1000;
+
+        // Find the mid of latencies
+        let mid_lat = if vec_lat.is_empty() {
+            // The whole array are errors
+            max_lat
         } else {
-            v[mid]
-        }
+            vec_lat.sort();
+            let mid = vec_lat.len() / 2;
+            if vec_lat.len() % 2 == 0 {
+                (vec_lat[mid] + vec_lat[mid - 1]) / 2
+            } else {
+                *vec_lat[mid]
+            }
+        };
+
+        // Score = norm_lat + prop_err
+        //
+        // 1. The lower latency, the better
+        // 2. The lower errored count, the better
+        let norm_lat = mid_lat as f64 / max_lat as f64;
+        let prop_err = acc_err as f64 / self.latency_queue.len() as f64;
+
+        ((norm_lat + prop_err) * 1000.0) as u64
     }
 }
 
@@ -89,7 +124,7 @@ impl ServerLatency {
         }
     }
 
-    fn push(&self, lat: u64) -> u64 {
+    fn push(&self, lat: Score) -> u64 {
         let mut inner = self.inner.lock().unwrap();
         inner.push(lat)
     }
@@ -135,20 +170,22 @@ impl Inner {
             tokio::spawn(
                 // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 async move {
-                    // Wait until the server is ready (plugins are started)
-                    time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
-
                     let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
 
                     while context.server_running() {
-                        interval.tick().await;
+                        // First round may be failed, plugins are started asynchronously
+
                         let score = match Inner::check_delay(&*sc, &*context).await {
-                            Ok(d) => latency.push(d),
-                            Err(..) => latency.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
+                            Ok(d) => latency.push(Score::Latency(d)),
+                            Err(..) => latency.push(Score::Errored), // Penalty
                         };
                         debug!("updated remote server {} (score: {})", sc.config.addr(), score);
                         sc.score.store(score, Ordering::Release);
+
+                        interval.tick().await;
                     }
+
+                    debug!("server {} latency ping task stopped", sc.config.addr());
                 },
             );
         }
@@ -236,12 +273,10 @@ impl PingBalancer {
             tokio::spawn(async move {
                 let inner = cloned_inner;
 
-                // Wait until the server is ready (plugins are started)
-                time::delay_for(Duration::from_secs(2)).await;
-
                 let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
 
                 while context.server_running() {
+                    // Must be here, wait for the first checking round
                     interval.tick().await;
 
                     assert!(!inner.servers.is_empty());
@@ -257,13 +292,7 @@ impl PingBalancer {
                     }
 
                     let choosen_svr = &inner.servers[svr_idx];
-                    debug!(
-                        "chosen the best server {} (score: {})",
-                        choosen_svr.config.addr(),
-                        choosen_svr.score()
-                    );
-
-                    if inner.best_idx() != svr_idx {
+                    if choosen_svr.score() != inner.servers[inner.best_idx()].score() {
                         info!(
                             "switched server from {} (score: {}) to {} (score: {})",
                             inner.best_server().config.addr(),
@@ -271,9 +300,9 @@ impl PingBalancer {
                             choosen_svr.config.addr(),
                             choosen_svr.score(),
                         );
-                    }
 
-                    inner.set_best_idx(svr_idx);
+                        inner.set_best_idx(svr_idx);
+                    }
                 }
             });
         }
