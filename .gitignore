@@ -1,6 +1,7 @@
 /target
 /build/*.tar.gz
 /build/*.tar.xz
+/build/*.zip
 /build/target
 /build/install
 /dev

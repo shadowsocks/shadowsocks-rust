@@ -8,7 +8,8 @@ use tokio::{
     self,
     net::{
         tcp::{ReadHalf, WriteHalf},
-        TcpListener, TcpStream,
+        TcpListener,
+        TcpStream,
     },
     prelude::*,
 };
@@ -55,7 +56,7 @@ async fn handle_socks5_connect<'a>(
             use crate::relay::socks5::Reply;
             use std::io::ErrorKind;
 
-            error!("Failed to connect remote server, err: {}", err);
+            error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
 
             let reply = match err.kind() {
                 ErrorKind::ConnectionRefused => Reply::ConnectionRefused,

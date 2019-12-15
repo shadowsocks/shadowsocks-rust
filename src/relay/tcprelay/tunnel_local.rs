@@ -32,6 +32,7 @@ async fn establish_client_tcp_tunnel<'a>(
         }
         Err(err) => {
             // Just close the connection.
+            error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
             return Err(err);
         }
     };
