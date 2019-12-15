@@ -11,7 +11,7 @@ use futures::{
 };
 use log::{debug, error, info};
 use std::net::SocketAddr;
-use tokio;
+use tokio::runtime::Builder;
 
 use shadowsocks::{
     plugin::PluginConfig,
@@ -27,9 +27,7 @@ use shadowsocks::{
 mod logging;
 mod monitor;
 
-#[cfg_attr(feature = "single-threaded", tokio::main(basic_scheduler))]
-#[cfg_attr(not(feature = "single-threaded"), tokio::main)]
-async fn main() {
+fn main() {
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
@@ -230,11 +228,22 @@ async fn main() {
 
     debug!("Config: {:?}", config);
 
-    let abort_signal = monitor::create_signal_monitor();
-    match future::select(run_local(config).boxed(), abort_signal.boxed()).await {
-        // Server future resolved without an error. This should never happen.
-        Either::Left(_) => panic!("Server exited unexpectly"),
-        // The abort signal future resolved. Means we should just exit.
-        Either::Right(_) => (),
+    let mut builder = Builder::new();
+    if cfg!(feature = "single-threaded") {
+        builder.basic_scheduler();
+    } else {
+        builder.threaded_scheduler();
     }
+    let mut runtime = builder.enable_all().build().expect("Unable to create Tokio Runtime");
+    let rt_handle = runtime.handle().clone();
+
+    runtime.block_on(async move {
+        let abort_signal = monitor::create_signal_monitor();
+        match future::select(run_local(config, rt_handle).boxed(), abort_signal.boxed()).await {
+            // Server future resolved without an error. This should never happen.
+            Either::Left(_) => panic!("Server exited unexpectly"),
+            // The abort signal future resolved. Means we should just exit.
+            Either::Right(_) => (),
+        }
+    })
 }

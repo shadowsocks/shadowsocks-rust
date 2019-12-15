@@ -2,6 +2,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 
 use tokio::{
     prelude::*,
+    runtime::{Builder, Handle},
     time::{self, Duration},
 };
 
@@ -50,19 +51,19 @@ impl Socks5TestServer {
         &self.local_addr
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&self, rt_handle: Handle) {
         let svr_cfg = self.svr_config.clone();
-        tokio::spawn(run_server(svr_cfg));
+        tokio::spawn(run_server(svr_cfg, rt_handle.clone()));
 
         let client_cfg = self.cli_config.clone();
-        tokio::spawn(run_local(client_cfg));
+        tokio::spawn(run_local(client_cfg, rt_handle));
 
         time::delay_for(Duration::from_secs(1)).await;
     }
 }
 
-#[tokio::test]
-async fn socks5_relay_stream() {
+#[test]
+fn socks5_relay_stream() {
     let _ = env_logger::try_init();
 
     const SERVER_ADDR: &str = "127.0.0.1:8100";
@@ -71,28 +72,33 @@ async fn socks5_relay_stream() {
     const PASSWORD: &str = "test-password";
     const METHOD: CipherType = CipherType::Aes256Cfb;
 
-    let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
-    svr.run().await;
+    let mut rt = Builder::new().basic_scheduler().enable_all().build().unwrap();
+    let rt_handle = rt.handle().clone();
 
-    let mut c = Socks5Client::connect(
-        Address::DomainNameAddress("www.example.com".to_owned(), 80),
-        svr.client_addr(),
-    )
-    .await
-    .unwrap();
+    rt.block_on(async move {
+        let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
+        svr.run(rt_handle).await;
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
-    c.write_all(req).await.unwrap();
-    c.flush().await.unwrap();
+        let mut c = Socks5Client::connect(
+            Address::DomainNameAddress("www.example.com".to_owned(), 80),
+            svr.client_addr(),
+        )
+        .await
+        .unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+        let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+        c.write_all(req).await.unwrap();
+        c.flush().await.unwrap();
 
-    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+        let mut buf = Vec::new();
+        c.read_to_end(&mut buf).await.unwrap();
+
+        println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+    });
 }
 
-#[tokio::test]
-async fn socks5_relay_aead() {
+#[test]
+fn socks5_relay_aead() {
     let _ = env_logger::try_init();
 
     const SERVER_ADDR: &str = "127.0.0.1:8110";
@@ -101,22 +107,27 @@ async fn socks5_relay_aead() {
     const PASSWORD: &str = "test-password";
     const METHOD: CipherType = CipherType::Aes256Gcm;
 
-    let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
-    svr.run().await;
+    let mut rt = Builder::new().basic_scheduler().enable_all().build().unwrap();
+    let rt_handle = rt.handle().clone();
 
-    let mut c = Socks5Client::connect(
-        Address::DomainNameAddress("www.example.com".to_owned(), 80),
-        svr.client_addr(),
-    )
-    .await
-    .unwrap();
+    rt.block_on(async move {
+        let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
+        svr.run(rt_handle).await;
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
-    c.write_all(req).await.unwrap();
-    c.flush().await.unwrap();
+        let mut c = Socks5Client::connect(
+            Address::DomainNameAddress("www.example.com".to_owned(), 80),
+            svr.client_addr(),
+        )
+        .await
+        .unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+        let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+        c.write_all(req).await.unwrap();
+        c.flush().await.unwrap();
 
-    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+        let mut buf = Vec::new();
+        c.read_to_end(&mut buf).await.unwrap();
+
+        println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+    });
 }

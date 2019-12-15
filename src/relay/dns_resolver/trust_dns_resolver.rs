@@ -6,13 +6,14 @@ use std::{
 };
 
 use log::{debug, error, trace};
-use tokio;
-use trust_dns_resolver::{config::ResolverConfig, AsyncResolver};
+use tokio::{self, runtime::Handle};
+use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
 use crate::context::Context;
 
-pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
-    let (resolver, bg) = {
+/// Create a `trust-dns` asynchronous DNS resolver
+pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Result<TokioAsyncResolver> {
+    {
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
         #[cfg(any(unix, windows))]
         {
@@ -23,7 +24,7 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
                     conf,
                     ResolverOpts::default()
                 );
-                AsyncResolver::new(conf, ResolverOpts::default())
+                TokioAsyncResolver::new(conf, ResolverOpts::default(), rt)
             } else {
                 use trust_dns_resolver::system_conf::read_system_conf;
                 // use the system resolver configuration
@@ -34,7 +35,7 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
                     opts
                 );
 
-                AsyncResolver::new(config, opts)
+                TokioAsyncResolver::new(config, opts, rt)
             }
         }
 
@@ -50,7 +51,7 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
                     conf,
                     ResolverOpts::default()
                 );
-                AsyncResolver::new(conf, ResolverOpts::default())
+                TokioAsyncResolver::new(conf, ResolverOpts::default(), rt)
             } else {
                 // Get a new resolver with the google nameservers as the upstream recursive resolvers
                 trace!(
@@ -58,15 +59,15 @@ pub fn create_resolver(dns: Option<ResolverConfig>) -> AsyncResolver {
                     ResolverConfig::google(),
                     ResolverOpts::default()
                 );
-                AsyncResolver::new(ResolverConfig::google(), ResolverOpts::default())
+                TokioAsyncResolver::new(ResolverConfig::google(), ResolverOpts::default(), rt)
             }
         }
-    };
-
-    // NOTE: resolving will always be called inside a future.
-    tokio::spawn(bg);
-
-    resolver
+    }
+    .await
+    .map_err(|err| {
+        error!("Failed to create trust-dns DNS Resolver, {}", err);
+        io::Error::new(ErrorKind::Other, "failed to create trust-dns DNS resolver")
+    })
 }
 
 async fn inner_resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {

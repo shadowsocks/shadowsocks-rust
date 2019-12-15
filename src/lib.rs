@@ -51,19 +51,27 @@
 //! Example to write a local server
 //!
 //! ```no_run
+//! use tokio::runtime::Runtime;
 //! use shadowsocks::{run_local, Config, ConfigType};
 //!
+//! let mut rt = Runtime::new().expect("Failed to create runtime");
+//! let rt_handle = rt.handle().clone();
+//!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
-//! run_local(config);
+//! rt.block_on(run_local(config, rt_handle));
 //! ```
 //!
 //! That's all! And let me show you how to run a proxy server
 //!
 //! ```no_run
+//! use tokio::runtime::Runtime;
 //! use shadowsocks::{run_server, Config, ConfigType};
 //!
+//! let mut rt = Runtime::new().expect("Failed to create runtime");
+//! let rt_handle = rt.handle().clone();
+//!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
-//! run_server(config);
+//! rt.block_on(run_server(config, rt_handle));
 //! ```
 
 #![crate_type = "lib"]
