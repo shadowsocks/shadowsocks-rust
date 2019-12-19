@@ -8,3 +8,4 @@
 /*.log
 /debian/*.log
 /.vscode
+Cargo.lock
