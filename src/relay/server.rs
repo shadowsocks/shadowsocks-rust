@@ -42,7 +42,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     }
 
     let (res, ..) = select_all(vf.into_iter()).await;
-    error!("One of TCP servers exited unexpectly, result: {:?}", res);
+    error!("one of servers exited unexpectly, result: {:?}", res);
 
     // Tells all detached tasks to exit
     state.server_stopped();

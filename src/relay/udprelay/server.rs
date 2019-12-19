@@ -331,7 +331,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     match vec_fut.into_future().await.0 {
         Some(res) => {
-            error!("one of TCP servers exited unexpectly, result: {:?}", res);
+            error!("one of UDP servers exited unexpectly, result: {:?}", res);
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }
