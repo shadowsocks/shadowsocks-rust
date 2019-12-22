@@ -5,7 +5,7 @@ use std::{ptr, sync::Once};
 use bytes::{BufMut, Bytes, BytesMut};
 
 use libc::c_ulonglong;
-use libsodium_ffi::{
+use libsodium_sys::{
     crypto_aead_xchacha20poly1305_ietf_decrypt,
     crypto_aead_xchacha20poly1305_ietf_encrypt,
     crypto_stream_chacha20_ietf_xor_ic,

@@ -33,7 +33,7 @@ lto = true
 
 [features]
 default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]
-sodium = ["libsodium-ffi"]
+sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
 aes-ctr = ["openssl"]
@@ -64,7 +64,7 @@ serde_urlencoded = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 url = "2.1"
 byte_string = "1.0"
-libsodium-ffi = { version = "0.2", optional = true }
+libsodium-sys = { version = "0.2", optional = true }
 miscreant = { version = "0.4", optional = true }
 trust-dns-resolver = { version = "0.18.0-alpha", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
 hkdf = "0.8"

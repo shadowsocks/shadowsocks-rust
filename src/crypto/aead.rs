@@ -128,7 +128,7 @@ pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
 /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
 #[cfg(feature = "sodium")]
 pub fn increase_nonce(nonce: &mut [u8]) {
-    use libsodium_ffi::sodium_increment;
+    use libsodium_sys::sodium_increment;
 
     unsafe {
         sodium_increment(nonce.as_mut_ptr(), nonce.len());

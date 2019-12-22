@@ -33,17 +33,5 @@ install:
     export OPENSSL_DIR=/c/OpenSSL/bin;
     fi
 
-  # Install libsodium on Windows
-  - if [ "#{TRAVIS_OS_NAME}" = "windows" ]; then
-    curl -O "https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable-mingw.tar.gz";
-    mkdir -p "/c/libsodium";
-    tar -xf libsodium-1.0.18-stable-mingw.tar.gz -C "/c/libsodium";
-    export SODIUM_INCLUDE_DIR=/c/libsodium/libsodium-win64/include;
-    export SODIUM_LIB_DIR=/c/libsodium/libsodium-win64/lib;
-    export SODIUM_STATIC=yes;
-    else
-    export SODIUM_BUILD_STATIC=yes;
-    fi
-
 script:
   - cargo test --no-fail-fast --features miscreant
