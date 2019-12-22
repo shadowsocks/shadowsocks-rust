@@ -321,7 +321,13 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         trace!("received UDP packet from {}, length {} bytes", src, recv_len);
 
         if recv_len == 0 {
-            // Interestingly some clients may send a empty packet to server
+            // For windows, it will generate a ICMP Port Unreachable Message
+            // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
+            // Which will result in recv_from return 0.
+            //
+            // It cannot be solved here, because `WSAGetLastError` is already set.
+            //
+            // See `relay::udprelay::utils::create_socket` for more detail.
             continue;
         }
 
