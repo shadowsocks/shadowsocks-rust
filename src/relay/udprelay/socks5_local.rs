@@ -35,6 +35,7 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
+    utils::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -86,7 +87,7 @@ impl UdpAssociation {
 
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = UdpSocket::bind(&local_addr).await?;
+        let remote_udp = create_socket(&local_addr).await?;
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -357,7 +358,7 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
-    let listener = UdpSocket::bind(&local_addr).await?;
+    let listener = create_socket(&local_addr).await?;
     info!("ShadowSocks UDP listening on {}", local_addr);
 
     listen(context, listener).await

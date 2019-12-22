@@ -71,3 +71,6 @@ hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8"
 lru_time_cache = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

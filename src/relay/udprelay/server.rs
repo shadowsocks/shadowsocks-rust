@@ -16,10 +16,7 @@ use log::{debug, error, info, trace};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
-    net::{
-        udp::{RecvHalf, SendHalf},
-        UdpSocket,
-    },
+    net::udp::{RecvHalf, SendHalf},
     sync::{mpsc, Mutex},
     time,
 };
@@ -32,6 +29,7 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
+    utils::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -62,7 +60,7 @@ impl UdpAssociation {
 
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = UdpSocket::bind(&local_addr).await?;
+        let remote_udp = create_socket(&local_addr).await?;
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -256,7 +254,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
     let listen_addr = *svr_cfg.addr().listen_addr();
     info!("ShadowSocks UDP listening on {}", listen_addr);
 
-    let listener = UdpSocket::bind(&listen_addr).await?;
+    let listener = create_socket(&listen_addr).await?;
     let (mut r, mut w) = listener.split();
 
     // NOTE: Associations are only eliminated by expire time
