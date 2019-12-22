@@ -20,7 +20,7 @@ use tokio::{
         udp::{RecvHalf, SendHalf},
         UdpSocket,
     },
-    sync::mpsc,
+    sync::{mpsc, Mutex},
     time,
 };
 
@@ -32,10 +32,9 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
+    DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
-
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 // Represent a UDP association
 struct UdpAssociation {
@@ -74,7 +73,7 @@ impl UdpAssociation {
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
 
-        let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
+        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
         // local -> remote
         let c_svr_cfg = svr_cfg.clone();
@@ -260,10 +259,33 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
     let listener = UdpSocket::bind(&listen_addr).await?;
     let (mut r, mut w) = listener.split();
 
+    // NOTE: Associations are only eliminated by expire time
+    // So it may exhaust all available file descriptors
+    let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+    let assoc_map = Arc::new(Mutex::new(LruCache::with_expiry_duration(timeout)));
+    let assoc_map_cloned = assoc_map.clone();
+
     // FIXME: Channel size 1024?
     let (tx, mut rx) = mpsc::channel::<(SocketAddr, BytesMut)>(1024);
     tokio::spawn(async move {
+        let assoc_map = assoc_map_cloned;
+
         while let Some((src, pkt)) = rx.recv().await {
+            let cache_key = src.to_string();
+            {
+                let mut amap = assoc_map.lock().await;
+
+                // Check or update expire time
+                if amap.get(&cache_key).is_none() {
+                    debug!(
+                        "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
+                        src,
+                        pkt.len()
+                    );
+                    continue;
+                }
+            }
+
             if let Err(err) = w.send_to(&pkt, &src).await {
                 error!("UDP packet send failed, err: {:?}", err);
                 break;
@@ -273,9 +295,6 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         // FIXME: How to stop the outer listener Future?
     });
 
-    let timeout = svr_cfg.udp_timeout().unwrap_or(DEFAULT_TIMEOUT);
-    let mut assoc_map = LruCache::with_expiry_duration_and_capacity(timeout, 1024 /* Conservative, ulimit */);
-
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
@@ -284,6 +303,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
             Err(..) => {
                 // Cleanup expired association
                 // Do not consume this iterator, it will updates expire time of items that traversed
+                let mut assoc_map = assoc_map.lock().await;
                 let _ = assoc_map.iter();
                 continue;
             }
@@ -294,8 +314,15 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
 
         trace!("received UDP packet from {}, length {} bytes", src, recv_len);
 
+        if recv_len == 0 {
+            // Interestingly some clients may send a empty packet to server
+            continue;
+        }
+
         // Check or (re)create an association
         loop {
+            let mut assoc_map = assoc_map.lock().await;
+
             let retry = {
                 let assoc = match assoc_map.entry(src.to_string()) {
                     Entry::Occupied(oc) => oc.into_mut(),

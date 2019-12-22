@@ -115,8 +115,6 @@ struct SSServerExtConfig {
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    udp_timeout: Option<u64>,
 }
 
 /// Server address
@@ -203,8 +201,6 @@ pub struct ServerConfig {
     enc_key: Bytes,
     /// Plugin config
     plugin: Option<PluginConfig>,
-    /// UDP timeout
-    udp_timeout: Option<Duration>,
     /// Plugin address
     plugin_addr: Option<ServerAddr>,
 }
@@ -226,7 +222,6 @@ impl ServerConfig {
             timeout,
             enc_key,
             plugin,
-            udp_timeout: None,
             plugin_addr: None,
         }
     }
@@ -281,11 +276,6 @@ impl ServerConfig {
     /// Get plugin
     pub fn plugin(&self) -> Option<&PluginConfig> {
         self.plugin.as_ref()
-    }
-
-    /// Get UDP timeout
-    pub fn udp_timeout(&self) -> &Option<Duration> {
-        &self.udp_timeout
     }
 
     /// Set plugin address
@@ -545,6 +535,7 @@ pub struct Config {
     pub no_delay: bool,
     pub manager_address: Option<ServerAddr>,
     pub config_type: ConfigType,
+    pub udp_timeout: Option<Duration>,
 }
 
 /// Configuration parsing error kind
@@ -605,6 +596,7 @@ impl Config {
             no_delay: false,
             manager_address: None,
             config_type,
+            udp_timeout: None,
         }
     }
 
@@ -681,11 +673,7 @@ impl Config {
                 };
 
                 let timeout = config.timeout.map(Duration::from_secs);
-                let udp_timeout = config.udp_timeout.map(Duration::from_secs);
-
-                let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
-
-                nsvr.udp_timeout = udp_timeout;
+                let nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
 
                 nconfig.server.push(nsvr);
             }
@@ -732,11 +720,7 @@ impl Config {
                 };
 
                 let timeout = svr.timeout.map(Duration::from_secs);
-                let udp_timeout = config.udp_timeout.map(Duration::from_secs);
-
-                let mut nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
-
-                nsvr.udp_timeout = udp_timeout;
+                let nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
 
                 nconfig.server.push(nsvr);
             }
@@ -778,6 +762,9 @@ impl Config {
         if let Some(b) = config.no_delay {
             nconfig.no_delay = b;
         }
+
+        // UDP
+        nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
         Ok(nconfig)
     }
@@ -852,43 +839,45 @@ impl fmt::Display for Config {
 
         // Servers
         // For 1 servers, uses standard configure format
-        if self.server.len() == 1 {
-            let svr = &self.server[0];
+        match self.server.len() {
+            0 => {}
+            1 => {
+                let svr = &self.server[0];
 
-            jconf.server = Some(match *svr.addr() {
-                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-            });
-            jconf.server_port = Some(match *svr.addr() {
-                ServerAddr::SocketAddr(ref sa) => sa.port(),
-                ServerAddr::DomainName(.., port) => port,
-            });
-            jconf.method = Some(svr.method().to_string());
-            jconf.password = Some(svr.password().to_string());
-            jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
-            jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
-            jconf.timeout = svr.timeout().map(|t| t.as_secs());
-            jconf.udp_timeout = svr.udp_timeout().map(|t| t.as_secs());
-        } else if self.server.len() > 1 {
-            let mut vsvr = Vec::new();
-
-            for svr in &self.server {
-                vsvr.push(SSServerExtConfig {
-                    address: match *svr.addr() {
-                        ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                        ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                    },
-                    port: match *svr.addr() {
-                        ServerAddr::SocketAddr(ref sa) => sa.port(),
-                        ServerAddr::DomainName(.., port) => port,
-                    },
-                    password: svr.password().to_string(),
-                    method: svr.method().to_string(),
-                    plugin: svr.plugin().map(|p| p.plugin.to_string()),
-                    plugin_opts: svr.plugin().and_then(|p| p.plugin_opt.clone()),
-                    timeout: svr.timeout().map(|t| t.as_secs()),
-                    udp_timeout: svr.udp_timeout().map(|t| t.as_secs()),
+                jconf.server = Some(match *svr.addr() {
+                    ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                    ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
                 });
+                jconf.server_port = Some(match *svr.addr() {
+                    ServerAddr::SocketAddr(ref sa) => sa.port(),
+                    ServerAddr::DomainName(.., port) => port,
+                });
+                jconf.method = Some(svr.method().to_string());
+                jconf.password = Some(svr.password().to_string());
+                jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
+                jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
+                jconf.timeout = svr.timeout().map(|t| t.as_secs());
+            }
+            _ => {
+                let mut vsvr = Vec::new();
+
+                for svr in &self.server {
+                    vsvr.push(SSServerExtConfig {
+                        address: match *svr.addr() {
+                            ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                            ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                        },
+                        port: match *svr.addr() {
+                            ServerAddr::SocketAddr(ref sa) => sa.port(),
+                            ServerAddr::DomainName(.., port) => port,
+                        },
+                        password: svr.password().to_string(),
+                        method: svr.method().to_string(),
+                        plugin: svr.plugin().map(|p| p.plugin.to_string()),
+                        plugin_opts: svr.plugin().and_then(|p| p.plugin_opt.clone()),
+                        timeout: svr.timeout().map(|t| t.as_secs()),
+                    });
+                }
             }
         }
 
@@ -909,6 +898,8 @@ impl fmt::Display for Config {
         if let Some(ref dns) = self.dns {
             jconf.dns = Some(dns.to_string());
         }
+
+        jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
     }

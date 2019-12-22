@@ -37,6 +37,8 @@
 //! | Fixed |   Variable   |
 //! +-------+--------------+
 
+use std::time::Duration;
+
 pub mod local;
 pub mod server;
 pub(crate) mod socks5_local;
@@ -50,3 +52,6 @@ mod crypto_io;
 /// Socks5 UDP ASSOCIATE packet size. The only thing I can find is
 /// [here](http://support.microsoft.com/kb/822061/)*
 pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
+
+/// Default association expire time
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
