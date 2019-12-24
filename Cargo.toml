@@ -66,7 +66,7 @@ url = "2.1"
 byte_string = "1.0"
 libsodium-sys = { version = "0.2", optional = true }
 miscreant = { version = "0.4", optional = true }
-trust-dns-resolver = { version = "0.18.0-alpha", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
+trust-dns-resolver = { version = "0.18", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8"
