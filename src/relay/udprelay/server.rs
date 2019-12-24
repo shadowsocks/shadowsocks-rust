@@ -34,18 +34,40 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-// Represent a UDP association
-struct UdpAssociation {
-    tx: mpsc::Sender<Vec<u8>>,
-    closed: Arc<AtomicBool>,
+struct UdpAssociationState {
+    closed: AtomicBool,
 }
 
-impl Drop for UdpAssociation {
+impl UdpAssociationState {
+    fn new() -> UdpAssociationState {
+        UdpAssociationState {
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Acquire)
+    }
+}
+
+impl Drop for UdpAssociationState {
     fn drop(&mut self) {
         // 1. Drops tx, will close local -> remote task
         // 2. Drops closed, will close local <- remote task
         self.closed.store(true, Ordering::Release);
     }
+}
+
+// Represent a UDP association
+#[derive(Clone)]
+struct UdpAssociation {
+    // local -> remote Queue
+    // Drops tx, will close local -> remote task
+    tx: mpsc::Sender<Vec<u8>>,
+
+    // local <- remote relay task
+    // Drops state, will close local <- remote task
+    state: Arc<UdpAssociationState>,
 }
 
 impl UdpAssociation {
@@ -66,7 +88,7 @@ impl UdpAssociation {
         // FIXME: Channel size 1024?
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
-        let close_flag = Arc::new(AtomicBool::new(false));
+        let close_flag = Arc::new(UdpAssociationState::new());
 
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
@@ -93,7 +115,7 @@ impl UdpAssociation {
         // local <- remote
         let closed = close_flag.clone();
         tokio::spawn(async move {
-            while !closed.load(Ordering::Acquire) {
+            while !closed.is_closed() {
                 use std::io::ErrorKind;
 
                 // Read and send back to source
@@ -114,7 +136,7 @@ impl UdpAssociation {
             debug!("UDP ASSOCIATE {} <- .. finished", src_addr);
         });
 
-        Ok(UdpAssociation { tx, closed: close_flag })
+        Ok(UdpAssociation { tx, state: close_flag })
     }
 
     /// Relay packets from local to remote
@@ -239,13 +261,13 @@ impl UdpAssociation {
         Ok(())
     }
 
-    async fn send(&mut self, pkt: &[u8]) -> bool {
-        match self.tx.send(pkt.to_vec()).await {
-            Ok(..) => true,
-            Err(err) => {
-                error!("failed to send packet, error: {}", err);
-                false
-            }
+    // Send packet to remote
+    //
+    // Return `Err` if receiver have been closed
+    async fn send(&mut self, pkt: Vec<u8>) {
+        if let Err(..) = self.tx.send(pkt).await {
+            // SHOULDn't HAPPEN
+            unreachable!("UDP Association local -> remote Queue closed unexpectly");
         }
     }
 }
@@ -324,28 +346,27 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         }
 
         // Check or (re)create an association
-        loop {
+        let mut assoc = {
+            // Locks the whole association map
             let mut assoc_map = assoc_map.lock().await;
 
-            let retry = {
-                let assoc = match assoc_map.entry(src.to_string()) {
-                    Entry::Occupied(oc) => oc.into_mut(),
-                    Entry::Vacant(vc) => vc.insert(
-                        UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
-                            .await
-                            .expect("Failed to create udp association"),
-                    ),
-                };
-
-                !assoc.send(pkt).await
+            // Get or create an association
+            let assoc = match assoc_map.entry(src.to_string()) {
+                Entry::Occupied(oc) => oc.into_mut(),
+                Entry::Vacant(vc) => vc.insert(
+                    UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
+                        .await
+                        .expect("Failed to create udp association"),
+                ),
             };
 
-            if retry {
-                assoc_map.remove(&src.to_string());
-            } else {
-                break;
-            }
-        }
+            // Clone the handle and release the lock.
+            // Make sure we keep the critical section small
+            assoc.clone()
+        };
+
+        // Send to local -> remote task
+        assoc.send(pkt.to_vec()).await;
     }
 }
 
