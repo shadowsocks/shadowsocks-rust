@@ -5,6 +5,7 @@ use std::{
 
 use env_logger::{fmt::Formatter, Builder};
 use log::{LevelFilter, Record};
+use time::{Date, Time};
 
 pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
     let mut log_builder = Builder::new();
@@ -50,8 +51,9 @@ fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Res
     } else {
         writeln!(
             fmt,
-            "[{}][{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+            "[{}][{}][{}] {}",
+            Date::today().format("%Y-%m-%d"),
+            Time::now().format("%H:%M:%S"),
             record.level(),
             record.args()
         )
@@ -70,8 +72,9 @@ fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> 
     } else {
         writeln!(
             fmt,
-            "[{}][{}] [{}] {}",
-            time::now().strftime("%Y-%m-%d][%H:%M:%S.%f").unwrap(),
+            "[{}][{}][{}] [{}] {}",
+            Date::today().format("%Y-%m-%d"),
+            Time::now().format("%H:%M:%S"),
             record.level(),
             record.module_path().unwrap_or("*"),
             record.args()
