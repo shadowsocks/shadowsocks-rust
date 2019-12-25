@@ -326,9 +326,6 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
             continue;
         }
 
-        // Pick a server
-        let svr_cfg = balancer.pick_server();
-
         // Check or (re)create an association
         let mut assoc = {
             // Locks the whole association map
@@ -337,11 +334,16 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
             // Get or create an association
             let assoc = match assoc_map.entry(src.to_string()) {
                 Entry::Occupied(oc) => oc.into_mut(),
-                Entry::Vacant(vc) => vc.insert(
-                    UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
-                        .await
-                        .expect("Failed to create udp association"),
-                ),
+                Entry::Vacant(vc) => {
+                    // Pick a server
+                    let svr_cfg = balancer.pick_server();
+
+                    vc.insert(
+                        UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
+                            .await
+                            .expect("Failed to create udp association"),
+                    )
+                }
             };
 
             // Clone the handle and release the lock.
