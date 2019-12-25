@@ -282,6 +282,7 @@ impl UdpAssociation {
 }
 
 async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
+    // FIXME: Shouldn't use RoundRobin. Choose the best one by ping
     let mut balancer = RoundRobin::new(context.config());
 
     let (mut r, mut w) = l.split();

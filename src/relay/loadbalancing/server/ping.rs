@@ -7,6 +7,7 @@ use std::{
         Arc,
         Mutex,
     },
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -19,7 +20,8 @@ use log::{debug, info};
 use tokio::{
     self,
     io::{AsyncReadExt, AsyncWriteExt},
-    time::{self, Duration, Instant},
+    sync::Barrier,
+    time,
 };
 
 struct Server {
@@ -138,7 +140,7 @@ impl fmt::Debug for ServerLatency {
 }
 
 const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
-const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5;
+const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 2 secs, that's too long
 
 struct Inner {
     servers: Vec<Arc<Server>>,
@@ -146,14 +148,15 @@ struct Inner {
 }
 
 impl Inner {
-    fn new(context: SharedContext) -> Inner {
+    async fn new(context: SharedContext) -> Inner {
         let config = context.config();
+        assert!(!config.server.is_empty());
 
-        if config.server.is_empty() {
-            panic!("no servers");
-        }
-
+        // Load balancer is only required in multi-server configuration
         let check_required = config.server.len() > 1;
+
+        // Wait for all ping tasks to be started
+        let barrier = Arc::new(Barrier::new(config.server.len() + 1));
 
         let mut servers = Vec::new();
         for svr in &config.server {
@@ -166,11 +169,30 @@ impl Inner {
 
             let context = context.clone();
             let latency = ServerLatency::new();
+            let barrier = barrier.clone();
 
             tokio::spawn(
                 // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 async move {
-                    let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
+                    let start_time = Instant::now();
+
+                    debug!("server {} latency ping task initializing", sc.config.addr());
+
+                    // Quickly collect some latency data
+                    while Instant::now() - start_time < Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC) {
+                        let score = match Inner::check_delay(&*sc, &*context).await {
+                            Ok(d) => latency.push(Score::Latency(d)),
+                            Err(..) => latency.push(Score::Errored), // Penalty
+                        };
+                        debug!("updated remote server {} (score: {})", sc.config.addr(), score);
+                        sc.score.store(score, Ordering::Release);
+                    }
+
+                    // Wait until all the other tasks are finished initializing
+                    barrier.wait().await;
+                    drop(barrier);
+
+                    debug!("server {} latency ping task started", sc.config.addr());
 
                     while context.server_running() {
                         // First round may be failed, plugins are started asynchronously
@@ -182,13 +204,15 @@ impl Inner {
                         debug!("updated remote server {} (score: {})", sc.config.addr(), score);
                         sc.score.store(score, Ordering::Release);
 
-                        interval.tick().await;
+                        time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
                     }
 
                     debug!("server {} latency ping task stopped", sc.config.addr());
                 },
             );
         }
+
+        barrier.wait().await;
 
         Inner {
             servers,
@@ -259,28 +283,29 @@ impl Inner {
     }
 }
 
+/// Load balancer based on pinging latencies of all servers
 #[derive(Clone)]
 pub struct PingBalancer {
     inner: Arc<Inner>,
 }
 
 impl PingBalancer {
-    pub fn new(context: SharedContext) -> PingBalancer {
-        let inner = Arc::new(Inner::new(context.clone()));
+    /// Create a PingBalancer
+    pub async fn new(context: SharedContext) -> PingBalancer {
+        let inner = Arc::new(Inner::new(context.clone()).await);
 
         if inner.servers.len() > 1 {
+            let barrier = Arc::new(Barrier::new(2));
+
             let cloned_inner = inner.clone();
+            let cloned_barrier = barrier.clone();
             tokio::spawn(async move {
                 let inner = cloned_inner;
+                assert!(!inner.servers.is_empty());
 
-                let mut interval = time::interval(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC));
+                let mut opt_barrier = Some(cloned_barrier);
 
                 while context.server_running() {
-                    // Must be here, wait for the first checking round
-                    interval.tick().await;
-
-                    assert!(!inner.servers.is_empty());
-
                     // Choose the best one
                     let mut svr_idx = 0;
 
@@ -293,18 +318,29 @@ impl PingBalancer {
 
                     let choosen_svr = &inner.servers[svr_idx];
                     if choosen_svr.score() != inner.servers[inner.best_idx()].score() {
-                        info!(
-                            "switched server from {} (score: {}) to {} (score: {})",
-                            inner.best_server().config.addr(),
-                            inner.best_server().score(),
-                            choosen_svr.config.addr(),
-                            choosen_svr.score(),
-                        );
+                        if opt_barrier.is_none() {
+                            info!(
+                                "switched server from {} (score: {}) to {} (score: {})",
+                                inner.best_server().config.addr(),
+                                inner.best_server().score(),
+                                choosen_svr.config.addr(),
+                                choosen_svr.score(),
+                            );
+                        }
 
                         inner.set_best_idx(svr_idx);
                     }
+
+                    if let Some(barrier) = opt_barrier.take() {
+                        barrier.wait().await;
+                        debug!("ping server choosing task started");
+                    }
+
+                    time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
                 }
             });
+
+            barrier.wait().await;
         }
 
         PingBalancer { inner }

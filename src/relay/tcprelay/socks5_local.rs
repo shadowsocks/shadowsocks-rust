@@ -241,14 +241,13 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
-    info!("ShadowSocks TCP Listening on {}", actual_local_addr);
-
     let udp_conf = UdpConfig {
         enable_udp: context.config().mode.enable_udp(),
         client_addr: actual_local_addr,
     };
 
-    let mut servers = PingBalancer::new(context.clone());
+    let mut servers = PingBalancer::new(context.clone()).await;
+    info!("ShadowSocks TCP Listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
