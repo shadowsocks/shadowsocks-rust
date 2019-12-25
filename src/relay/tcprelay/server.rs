@@ -17,7 +17,8 @@ use crate::{context::SharedContext, relay::socks5::Address};
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
-    CryptoStream, STcpStream,
+    CryptoStream,
+    STcpStream,
 };
 
 #[allow(clippy::cognitive_complexity)]

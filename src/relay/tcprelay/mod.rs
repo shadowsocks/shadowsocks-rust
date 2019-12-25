@@ -22,7 +22,7 @@ use crate::{
 
 use bytes::BytesMut;
 use futures::{future::FusedFuture, ready, select, Future};
-use log::trace;
+use log::{debug, error, trace};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -185,16 +185,11 @@ where
 
 pub type STcpStream = Connection<TcpStream>;
 
-/// Connect to proxy server with `ServerConfig`
-async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
-    let timeout = svr_cfg.timeout();
-
-    let svr_addr = match context.config().config_type {
-        ConfigType::Server => svr_cfg.addr(),
-        ConfigType::Local => svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr()),
-    };
-
-    trace!("Connecting to proxy {:?}, timeout: {:?}", svr_addr, timeout);
+async fn connect_proxy_server_internal(
+    context: &Context,
+    svr_addr: &ServerAddr,
+    timeout: Option<Duration>,
+) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
@@ -203,7 +198,6 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
         #[cfg(feature = "trust-dns")]
         ServerAddr::DomainName(ref domain, port) => {
             use crate::relay::dns_resolver::resolve;
-            use log::error;
 
             let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
 
@@ -236,6 +230,45 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
             Ok(STcpStream::new(stream, timeout))
         }
     }
+}
+
+/// Connect to proxy server with `ServerConfig`
+async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
+    let timeout = svr_cfg.timeout();
+
+    let svr_addr = match context.config().config_type {
+        ConfigType::Server => svr_cfg.addr(),
+        ConfigType::Local => svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr()),
+    };
+
+    // Retry if connect failed
+    //
+    // FIXME: This won't work if server is actually down.
+    //        Probably we should retry with another server.
+    const RETRY_TIMES: i32 = 3;
+
+    trace!("Connecting to proxy {}, timeout: {:?}", svr_addr, timeout);
+    let mut last_err = None;
+    for retry_time in 0..RETRY_TIMES {
+        match connect_proxy_server_internal(context, svr_addr, timeout).await {
+            Ok(s) => return Ok(s),
+            Err(err) => {
+                // Connection failure, retry
+                debug!(
+                    "Failed to connect {}, retried {} times (last err: {})",
+                    svr_addr, retry_time, err
+                );
+                last_err = Some(err);
+            }
+        }
+    }
+
+    let last_err = last_err.unwrap();
+    error!(
+        "Failed to connect {}, retried {} times, last_err: {}",
+        svr_addr, RETRY_TIMES, last_err
+    );
+    Err(last_err)
 }
 
 /// Handshake logic for ShadowSocks Client
