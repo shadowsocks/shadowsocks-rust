@@ -2,6 +2,7 @@ use std::{
     collections::VecDeque,
     fmt,
     io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
@@ -13,7 +14,12 @@ use std::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-    relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
+    relay::{
+        loadbalancing::server::LoadBalancer,
+        socks5::Address,
+        tcprelay::client::ServerClient as TcpServerClient,
+        udprelay::client::ServerClient as UdpServerClient,
+    },
 };
 
 use log::{debug, info};
@@ -148,7 +154,7 @@ struct Inner {
 }
 
 impl Inner {
-    async fn new(context: SharedContext) -> Inner {
+    async fn new(context: SharedContext, server_type: ServerType) -> Inner {
         let config = context.config();
         assert!(!config.server.is_empty());
 
@@ -176,38 +182,73 @@ impl Inner {
                 async move {
                     let start_time = Instant::now();
 
-                    debug!("server {} latency ping task initializing", sc.config.addr());
+                    debug!(
+                        "{:?} server {} latency ping task initializing",
+                        server_type,
+                        sc.config.addr()
+                    );
 
                     // Quickly collect some latency data
+                    //
+                    // Maximum wait duration: DEFAULT_CHECK_TIMEOUT_SEC
                     while Instant::now() - start_time < Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC) {
-                        let score = match Inner::check_delay(&*sc, &*context).await {
-                            Ok(d) => latency.push(Score::Latency(d)),
-                            Err(..) => latency.push(Score::Errored), // Penalty
+                        let mut succ = false;
+
+                        let score = match Inner::check_delay(&*sc, &*context, server_type).await {
+                            Ok(d) => {
+                                succ = true;
+                                latency.push(Score::Latency(d))
+                            }
+                            Err(..) => {
+                                latency.push(Score::Errored) // Penalty
+                            }
                         };
-                        debug!("updated remote server {} (score: {})", sc.config.addr(), score);
+                        debug!(
+                            "updated remote {:?} server {} (score: {})",
+                            server_type,
+                            sc.config.addr(),
+                            score
+                        );
                         sc.score.store(score, Ordering::Release);
+
+                        if succ {
+                            break;
+                        }
                     }
 
                     // Wait until all the other tasks are finished initializing
                     barrier.wait().await;
                     drop(barrier);
 
-                    debug!("server {} latency ping task started", sc.config.addr());
+                    debug!(
+                        "{:?} server {} latency ping task started",
+                        server_type,
+                        sc.config.addr()
+                    );
 
                     while context.server_running() {
                         // First round may be failed, plugins are started asynchronously
 
-                        let score = match Inner::check_delay(&*sc, &*context).await {
+                        let score = match Inner::check_delay(&*sc, &*context, server_type).await {
                             Ok(d) => latency.push(Score::Latency(d)),
                             Err(..) => latency.push(Score::Errored), // Penalty
                         };
-                        debug!("updated remote server {} (score: {})", sc.config.addr(), score);
+                        debug!(
+                            "updated remote {:?} server {} (score: {})",
+                            server_type,
+                            sc.config.addr(),
+                            score
+                        );
                         sc.score.store(score, Ordering::Release);
 
                         time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
                     }
 
-                    debug!("server {} latency ping task stopped", sc.config.addr());
+                    debug!(
+                        "{:?} server {} latency ping task stopped",
+                        server_type,
+                        sc.config.addr()
+                    );
                 },
             );
         }
@@ -220,13 +261,13 @@ impl Inner {
         }
     }
 
-    async fn check_request(sc: Arc<ServerConfig>, context: &Context) -> io::Result<()> {
+    async fn check_request_tcp(sc: Arc<ServerConfig>, context: &Context) -> io::Result<()> {
         static GET_BODY: &[u8] =
             b"GET /generate_204 HTTP/1.1\r\nHost: dl.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
         let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
-        let ServerClient { mut stream } = ServerClient::connect(context, &addr, sc).await?;
+        let TcpServerClient { mut stream } = TcpServerClient::connect(context, &addr, sc).await?;
         stream.write_all(GET_BODY).await?;
         stream.flush().await?;
         let mut buf = [0u8; 1];
@@ -235,23 +276,52 @@ impl Inner {
         Ok(())
     }
 
-    async fn check_delay(sc: &Server, context: &Context) -> io::Result<u64> {
+    async fn check_request_udp(sc: Arc<ServerConfig>, context: &Context) -> io::Result<()> {
+        static DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x05\x62\x61\x69\x64\x75\x03\x63\x6f\x6d\x00\x00\x01\x00\x01";
+
+        let addr = Address::SocketAddress(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53));
+
+        let mut client = UdpServerClient::new(sc).await?;
+        client.send_to(context, &addr, DNS_QUERY).await?;
+        let _ = client.recv_from(context).await?;
+
+        Ok(())
+    }
+
+    async fn check_request(sc: Arc<ServerConfig>, context: &Context, server_type: ServerType) -> io::Result<()> {
+        match server_type {
+            ServerType::Tcp => Inner::check_request_tcp(sc, context).await,
+            ServerType::Udp => Inner::check_request_udp(sc, context).await,
+        }
+    }
+
+    async fn check_delay(sc: &Server, context: &Context, server_type: ServerType) -> io::Result<u64> {
         let start = Instant::now();
 
         // Send HTTP GET and read the first byte
         let timeout = Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC);
-        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context)).await;
+        let res = time::timeout(timeout, Inner::check_request(sc.config.clone(), context, server_type)).await;
 
         let elapsed = Instant::now() - start;
         let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
         match res {
             Ok(Ok(..)) => {
                 // Got the result ... record its time
-                debug!("checked remote server {} latency with {} ms", sc.config.addr(), elapsed);
+                debug!(
+                    "checked remote {:?} server {} latency with {} ms",
+                    server_type,
+                    sc.config.addr(),
+                    elapsed
+                );
                 Ok(elapsed)
             }
             Ok(Err(err)) => {
-                debug!("failed to check server {}, error: {}", sc.config.addr(), err);
+                debug!(
+                    "failed to check {:?} server {}, error: {}",
+                    server_type,
+                    sc.config.addr(),
+                    err
+                );
 
                 // NOTE: connection / handshake error, server is down
                 Err(err)
@@ -259,7 +329,8 @@ impl Inner {
             Err(..) => {
                 // Timeout
                 debug!(
-                    "checked remote server {} latency timeout, elapsed {} ms",
+                    "checked remote {:?} server {} latency timeout, elapsed {} ms",
+                    server_type,
                     sc.config.addr(),
                     elapsed
                 );
@@ -283,6 +354,12 @@ impl Inner {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ServerType {
+    Tcp,
+    Udp,
+}
+
 /// Load balancer based on pinging latencies of all servers
 #[derive(Clone)]
 pub struct PingBalancer {
@@ -291,8 +368,9 @@ pub struct PingBalancer {
 
 impl PingBalancer {
     /// Create a PingBalancer
-    pub async fn new(context: SharedContext) -> PingBalancer {
-        let inner = Arc::new(Inner::new(context.clone()).await);
+    pub async fn new(context: SharedContext, server_type: ServerType) -> PingBalancer {
+        // Wait until all tasks are started
+        let inner = Arc::new(Inner::new(context.clone(), server_type).await);
 
         if inner.servers.len() > 1 {
             let barrier = Arc::new(Barrier::new(2));
@@ -320,7 +398,8 @@ impl PingBalancer {
                     if choosen_svr.score() != inner.servers[inner.best_idx()].score() {
                         if opt_barrier.is_none() {
                             info!(
-                                "switched server from {} (score: {}) to {} (score: {})",
+                                "switched {:?} server from {} (score: {}) to {} (score: {})",
+                                server_type,
                                 inner.best_server().config.addr(),
                                 inner.best_server().score(),
                                 choosen_svr.config.addr(),
@@ -333,7 +412,7 @@ impl PingBalancer {
 
                     if let Some(barrier) = opt_barrier.take() {
                         barrier.wait().await;
-                        debug!("ping server choosing task started");
+                        debug!("ping {:?} server choosing task started", server_type);
                     }
 
                     time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;

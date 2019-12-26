@@ -15,10 +15,7 @@ use log::{debug, error, info, trace};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
-    net::{
-        udp::{RecvHalf, SendHalf},
-        UdpSocket,
-    },
+    net::udp::{RecvHalf, SendHalf},
     sync::{mpsc, Mutex},
     time,
 };
@@ -27,7 +24,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{LoadBalancer, RoundRobin},
+        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
         socks5::Address,
         utils::try_timeout,
     },
@@ -253,11 +250,17 @@ impl UdpAssociation {
     }
 }
 
-async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
-    // FIXME: Shouldn't use RoundRobin. Choose the best one by ping
-    let mut balancer = RoundRobin::new(context.config());
+/// Starts a UDP local server
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    let local_addr = *context.config().local.as_ref().unwrap();
+
+    let l = create_socket(&local_addr).await?;
+
+    let mut balancer = PingBalancer::new(context.clone(), ping::ServerType::Udp).await;
 
     let (mut r, mut w) = l.split();
+
+    info!("ShadowSocks UDP Tunnel listening on {}", local_addr);
 
     // NOTE: Associations are only eliminated by expire time
     // So it may exhaust all available file descriptors
@@ -354,14 +357,4 @@ async fn listen(context: SharedContext, l: UdpSocket) -> io::Result<()> {
         // Send to local -> remote task
         assoc.send(pkt.to_vec()).await;
     }
-}
-
-/// Starts a UDP local server
-pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = *context.config().local.as_ref().unwrap();
-
-    let listener = create_socket(&local_addr).await?;
-    info!("ShadowSocks UDP listening on {}", local_addr);
-
-    listen(context, listener).await
 }

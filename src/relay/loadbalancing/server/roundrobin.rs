@@ -1,5 +1,7 @@
 //! Load balancer using round robin strategy
 
+#![allow(dead_code)]
+
 use std::sync::Arc;
 
 use crate::{

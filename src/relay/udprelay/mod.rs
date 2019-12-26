@@ -39,6 +39,7 @@
 
 use std::time::Duration;
 
+pub mod client;
 pub mod local;
 pub mod server;
 pub(crate) mod socks5_local;

@@ -20,7 +20,7 @@ use crate::{
 };
 
 use crate::relay::{
-    loadbalancing::server::{LoadBalancer, PingBalancer},
+    loadbalancing::server::{ping, LoadBalancer, PingBalancer},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
 };
 
@@ -246,7 +246,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         client_addr: actual_local_addr,
     };
 
-    let mut servers = PingBalancer::new(context.clone()).await;
+    let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
     info!("ShadowSocks TCP Listening on {}", actual_local_addr);
 
     loop {

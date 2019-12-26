@@ -24,6 +24,7 @@ use bytes::BytesMut;
 use futures::{future::FusedFuture, ready, select, Future};
 use log::{debug, error, trace};
 use tokio::{
+    self,
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::TcpStream,
     time::{self, Delay},
@@ -245,6 +246,8 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     //
     // FIXME: This won't work if server is actually down.
     //        Probably we should retry with another server.
+    //
+    // Also works if plugin is starting
     const RETRY_TIMES: i32 = 3;
 
     trace!("Connecting to proxy {}, timeout: {:?}", svr_addr, timeout);
@@ -259,6 +262,9 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
                     svr_addr, retry_time, err
                 );
                 last_err = Some(err);
+
+                // Retry 100ms later
+                time::delay_for(Duration::from_millis(100)).await;
             }
         }
     }

@@ -10,7 +10,7 @@ use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{LoadBalancer, PingBalancer},
+        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
         socks5::Address,
     },
 };
@@ -111,7 +111,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
-    let mut servers = PingBalancer::new(context.clone()).await;
+    let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
     info!("ShadowSocks TCP Tunnel Listening on {}", actual_local_addr);
 
     loop {
