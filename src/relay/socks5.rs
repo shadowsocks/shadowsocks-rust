@@ -166,10 +166,13 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(reply: Reply, message: &str) -> Error {
+    pub fn new<S>(reply: Reply, message: S) -> Error
+    where
+        S: Into<String>,
+    {
         Error {
             reply,
-            message: message.to_string(),
+            message: message.into(),
         }
     }
 }
@@ -188,19 +191,11 @@ impl fmt::Display for Error {
     }
 }
 
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        &self.message[..]
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
-        None
-    }
-}
+impl error::Error for Error {}
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::new(Reply::GeneralFailure, <io::Error as error::Error>::description(&err))
+        Error::new(Reply::GeneralFailure, err.to_string())
     }
 }
 

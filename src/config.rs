@@ -437,19 +437,7 @@ impl fmt::Display for UrlParseError {
 }
 
 impl error::Error for UrlParseError {
-    fn description(&self) -> &str {
-        match *self {
-            UrlParseError::ParseError(ref err) => error::Error::description(err),
-            UrlParseError::InvalidScheme => "URL must have \"ss://\" scheme",
-            UrlParseError::InvalidUserInfo => "invalid user info",
-            UrlParseError::MissingHost => "missing host",
-            UrlParseError::InvalidAuthInfo => "invalid authentication info",
-            UrlParseError::InvalidServerAddr => "invalid server address",
-            UrlParseError::InvalidQueryString => "invalid query string",
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             UrlParseError::ParseError(ref err) => Some(err as &dyn error::Error),
             UrlParseError::InvalidScheme => None,
