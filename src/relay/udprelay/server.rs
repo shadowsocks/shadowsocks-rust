@@ -3,21 +3,18 @@
 use std::{
     io::{self, Cursor},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
 use bytes::BytesMut;
-use futures::{self, stream::FuturesUnordered, StreamExt};
+use futures::{self, future, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::{debug, error, info, trace};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
     net::udp::{RecvHalf, SendHalf},
-    sync::{mpsc, Mutex},
+    sync::{mpsc, oneshot, Mutex},
     time,
 };
 
@@ -34,29 +31,7 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-struct UdpAssociationState {
-    closed: AtomicBool,
-}
-
-impl UdpAssociationState {
-    fn new() -> UdpAssociationState {
-        UdpAssociationState {
-            closed: AtomicBool::new(false),
-        }
-    }
-
-    fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire)
-    }
-}
-
-impl Drop for UdpAssociationState {
-    fn drop(&mut self) {
-        // 1. Drops tx, will close local -> remote task
-        // 2. Drops closed, will close local <- remote task
-        self.closed.store(true, Ordering::Release);
-    }
-}
+struct UdpAssociationWatcher(oneshot::Sender<()>);
 
 // Represent a UDP association
 #[derive(Clone)]
@@ -65,9 +40,8 @@ struct UdpAssociation {
     // Drops tx, will close local -> remote task
     tx: mpsc::Sender<Vec<u8>>,
 
-    // local <- remote relay task
-    // Drops state, will close local <- remote task
-    state: Arc<UdpAssociationState>,
+    // local <- remote task life watcher
+    watcher: Arc<UdpAssociationWatcher>,
 }
 
 impl UdpAssociation {
@@ -88,7 +62,10 @@ impl UdpAssociation {
         // FIXME: Channel size 1024?
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
-        let close_flag = Arc::new(UdpAssociationState::new());
+        // Create a watcher for local <- remote task
+        let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
+
+        let close_flag = Arc::new(UdpAssociationWatcher(watcher_tx));
 
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
@@ -113,30 +90,32 @@ impl UdpAssociation {
         });
 
         // local <- remote
-        let closed = close_flag.clone();
         tokio::spawn(async move {
-            while !closed.is_closed() {
-                use std::io::ErrorKind;
+            let transfer_fut = async move {
+                loop {
+                    // Read and send back to source
+                    match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, &*svr_cfg).await {
+                        Ok(..) => {}
+                        Err(err) => {
+                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
 
-                // Read and send back to source
-                match UdpAssociation::relay_r2l(src_addr, &mut receiver, timeout, &mut response_tx, &*svr_cfg).await {
-                    Ok(..) => {}
-                    Err(ref err) if err.kind() == ErrorKind::TimedOut => {
-                        trace!("receive packet timeout, {} <- ...", src_addr);
-                    }
-                    Err(err) => {
-                        error!("railed to receive packet, {} <- .., error: {}", src_addr, err);
-
-                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
-                        // break;
+                            // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
+                            // break;
+                        }
                     }
                 }
-            }
+            };
+
+            // Resolved only if watcher_rx resolved
+            let _ = future::select(transfer_fut.boxed(), watcher_rx.boxed()).await;
 
             debug!("UDP ASSOCIATE {} <- .. finished", src_addr);
         });
 
-        Ok(UdpAssociation { tx, state: close_flag })
+        Ok(UdpAssociation {
+            tx,
+            watcher: close_flag,
+        })
     }
 
     /// Relay packets from local to remote
@@ -226,14 +205,13 @@ impl UdpAssociation {
     async fn relay_r2l(
         src_addr: SocketAddr,
         remote_udp: &mut RecvHalf,
-        timeout: Duration,
         response_tx: &mut mpsc::Sender<(SocketAddr, BytesMut)>,
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut remote_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        let (remote_recv_len, remote_addr) = try_timeout(remote_udp.recv_from(&mut remote_buf), Some(timeout)).await?;
+        let (remote_recv_len, remote_addr) = remote_udp.recv_from(&mut remote_buf).await?;
 
         debug!(
             "UDP ASSOCIATE {} <- {}, payload length {} bytes",

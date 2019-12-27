@@ -3,7 +3,7 @@
 use std::io;
 
 use futures::{future::select_all, FutureExt};
-use log::error;
+use log::{error, trace};
 use tokio::runtime::Handle;
 
 use crate::{
@@ -15,6 +15,8 @@ use crate::{
 
 /// Relay server running under local environment.
 pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
+    trace!("{:?}", config);
+
     // Create a context containing a DNS resolver and server running state flag.
     let state = SharedServerState::new(&config, rt).await?;
 
