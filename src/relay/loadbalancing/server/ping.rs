@@ -253,7 +253,9 @@ impl Inner {
             );
         }
 
-        barrier.wait().await;
+        if check_required {
+            barrier.wait().await;
+        }
 
         Inner {
             servers,
