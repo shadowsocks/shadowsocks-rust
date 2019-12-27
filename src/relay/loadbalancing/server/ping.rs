@@ -177,80 +177,42 @@ impl Inner {
             let latency = ServerLatency::new();
             let barrier = barrier.clone();
 
-            tokio::spawn(
-                // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
-                async move {
-                    let start_time = Instant::now();
+            // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
+            tokio::spawn(async move {
+                debug!(
+                    "{:?} server {} latency ping task initializing",
+                    server_type,
+                    sc.config.addr()
+                );
 
-                    debug!(
-                        "{:?} server {} latency ping task initializing",
-                        server_type,
-                        sc.config.addr()
-                    );
+                // Quickly collect some latency data
+                //
+                // Maximum wait duration: DEFAULT_CHECK_TIMEOUT_SEC
+                Inner::check_update_score(&latency, &*sc, &*context, server_type).await;
 
-                    // Quickly collect some latency data
-                    //
-                    // Maximum wait duration: DEFAULT_CHECK_TIMEOUT_SEC
-                    while Instant::now() - start_time < Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC) {
-                        let mut succ = false;
+                // Wait until all the other tasks are finished initializing
+                barrier.wait().await;
+                drop(barrier);
 
-                        let score = match Inner::check_delay(&*sc, &*context, server_type).await {
-                            Ok(d) => {
-                                succ = true;
-                                latency.push(Score::Latency(d))
-                            }
-                            Err(..) => {
-                                latency.push(Score::Errored) // Penalty
-                            }
-                        };
-                        debug!(
-                            "updated remote {:?} server {} (score: {})",
-                            server_type,
-                            sc.config.addr(),
-                            score
-                        );
-                        sc.score.store(score, Ordering::Release);
+                debug!(
+                    "{:?} server {} latency ping task started",
+                    server_type,
+                    sc.config.addr()
+                );
 
-                        if succ {
-                            break;
-                        }
-                    }
+                while context.server_running() {
+                    // First round may be failed, plugins are started asynchronously
+                    Inner::check_update_score(&latency, &*sc, &*context, server_type).await;
 
-                    // Wait until all the other tasks are finished initializing
-                    barrier.wait().await;
-                    drop(barrier);
+                    time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
+                }
 
-                    debug!(
-                        "{:?} server {} latency ping task started",
-                        server_type,
-                        sc.config.addr()
-                    );
-
-                    while context.server_running() {
-                        // First round may be failed, plugins are started asynchronously
-
-                        let score = match Inner::check_delay(&*sc, &*context, server_type).await {
-                            Ok(d) => latency.push(Score::Latency(d)),
-                            Err(..) => latency.push(Score::Errored), // Penalty
-                        };
-                        debug!(
-                            "updated remote {:?} server {} (score: {})",
-                            server_type,
-                            sc.config.addr(),
-                            score
-                        );
-                        sc.score.store(score, Ordering::Release);
-
-                        time::delay_for(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
-                    }
-
-                    debug!(
-                        "{:?} server {} latency ping task stopped",
-                        server_type,
-                        sc.config.addr()
-                    );
-                },
-            );
+                debug!(
+                    "{:?} server {} latency ping task stopped",
+                    server_type,
+                    sc.config.addr()
+                );
+            });
         }
 
         if check_required {
@@ -261,6 +223,20 @@ impl Inner {
             servers,
             best_idx: AtomicUsize::new(0),
         }
+    }
+
+    async fn check_update_score(latency: &ServerLatency, sc: &Server, context: &Context, server_type: ServerType) {
+        let score = match Inner::check_delay(&*sc, &*context, server_type).await {
+            Ok(d) => latency.push(Score::Latency(d)),
+            Err(..) => latency.push(Score::Errored), // Penalty
+        };
+        debug!(
+            "updated remote {:?} server {} (score: {})",
+            server_type,
+            sc.config.addr(),
+            score
+        );
+        sc.score.store(score, Ordering::Release);
     }
 
     async fn check_request_tcp(sc: Arc<ServerConfig>, context: &Context) -> io::Result<()> {
