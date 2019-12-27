@@ -65,6 +65,7 @@ fn main() {
                 .short("f")
                 .long("foward-addr")
                 .takes_value(true)
+                .required(true)
                 .help("Forward address, forward to this address"),
         )
         .arg(
