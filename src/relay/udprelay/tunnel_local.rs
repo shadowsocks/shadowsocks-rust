@@ -260,7 +260,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let (mut r, mut w) = l.split();
 
-    info!("ShadowSocks UDP Tunnel listening on {}", local_addr);
+    info!(
+        "ShadowSocks UDP Tunnel listening on {}, forward to {}",
+        local_addr,
+        context.config().forward.as_ref().unwrap()
+    );
 
     // NOTE: Associations are only eliminated by expire time
     // So it may exhaust all available file descriptors

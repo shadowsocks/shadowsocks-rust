@@ -112,7 +112,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
     let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
-    info!("ShadowSocks TCP Tunnel Listening on {}", actual_local_addr);
+    info!(
+        "ShadowSocks TCP Tunnel Listening on {}, forward to {}",
+        actual_local_addr,
+        context.config().forward.as_ref().unwrap()
+    );
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
