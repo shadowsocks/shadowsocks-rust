@@ -32,13 +32,20 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         vf.push(udp_fut.boxed());
     }
 
-    if config.has_server_plugins() {
-        let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
-        vf.push(plugins.into_future().boxed());
-    }
+    if config.mode.enable_tcp() || config.forward.is_none() {
+        // Run TCP local server if
+        //
+        //  1. Enabled TCP relay
+        //  2. Not in tunnel mode. (Socks5 UDP relay requires TCP port enabled)
 
-    let tcp_fut = run_tcp(Context::new_shared(config, state.clone()));
-    vf.push(tcp_fut.boxed());
+        if config.has_server_plugins() {
+            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
+            vf.push(plugins.into_future().boxed());
+        }
+
+        let tcp_fut = run_tcp(Context::new_shared(config, state.clone()));
+        vf.push(tcp_fut.boxed());
+    }
 
     let (res, ..) = select_all(vf.into_iter()).await;
     error!("one of servers exited unexpectly, result: {:?}", res);
