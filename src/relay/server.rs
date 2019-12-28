@@ -7,7 +7,7 @@ use log::{error, trace};
 use tokio::runtime::Handle;
 
 use crate::{
-    config::Config,
+    config::{Config, ConfigType},
     context::{Context, SharedServerState},
     plugin::{PluginMode, Plugins},
     relay::{tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
@@ -16,6 +16,7 @@ use crate::{
 /// Relay server running on server side.
 pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     trace!("{:?}", config);
+    assert!(config.config_type == ConfigType::Server);
 
     // Create a context containing a DNS resolver and server running state flag.
     let state = SharedServerState::new(&config, rt).await?;

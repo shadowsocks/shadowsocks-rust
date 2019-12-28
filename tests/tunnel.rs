@@ -27,7 +27,7 @@ fn tcp_tunnel() {
             "password": "password",
             "method": "aes-256-gcm"
         }"#,
-        ConfigType::Local,
+        ConfigType::TunnelLocal,
     )
     .unwrap();
 
@@ -81,7 +81,7 @@ fn udp_tunnel() {
             "method": "aes-256-gcm",
             "mode": "tcp_and_udp"
         }"#,
-        ConfigType::Local,
+        ConfigType::TunnelLocal,
     )
     .unwrap();
 

@@ -454,12 +454,23 @@ impl error::Error for UrlParseError {
 pub type ClientConfig = SocketAddr;
 
 /// Server config type
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConfigType {
-    /// Config for local
+    /// Config for socks5 local
     ///
     /// Requires `local` configuration
-    Local,
+    Socks5Local,
+
+    /// Config for HTTP local
+    ///
+    /// Requires `local` configuration
+    HttpLocal,
+
+    /// Config for tunnel local
+    ///
+    /// Requires `local` and `forward` configuration
+    TunnelLocal,
+
     /// Config for server
     Server,
 }
@@ -590,7 +601,7 @@ impl Config {
 
     fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
         let check_local = match config_type {
-            ConfigType::Local => true,
+            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => true,
             ConfigType::Server => false,
         };
 

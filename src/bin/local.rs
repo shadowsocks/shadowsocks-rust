@@ -94,6 +94,12 @@ fn main() {
                 .takes_value(false)
                 .help("Set no-delay option for socket"),
         )
+        .arg(
+            Arg::with_name("PROTOCOL")
+                .long("protocol")
+                .takes_value(true)
+                .help("Protocol that uses to communicates with clients, `socks5` or `http`, default is `socks5`"),
+        )
         .get_matches();
 
     let without_time = matches.is_present("LOG_WITHOUT_TIME");
@@ -103,8 +109,15 @@ fn main() {
 
     let mut has_provided_config = false;
 
+    let config_type = match matches.value_of("PROTOCOL") {
+        Some("socks5") => ConfigType::Socks5Local,
+        Some("http") => ConfigType::HttpLocal,
+        Some(..) => panic!("`protocol` only supports `socks5` or `http`"),
+        None => ConfigType::Socks5Local,
+    };
+
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+        Some(cpath) => match Config::load_from_file(cpath, config_type) {
             Ok(cfg) => {
                 has_provided_config = true;
                 cfg
@@ -114,7 +127,7 @@ fn main() {
                 return;
             }
         },
-        None => Config::new(ConfigType::Local),
+        None => Config::new(config_type),
     };
 
     let mut has_provided_server_config = match (

@@ -60,20 +60,20 @@ async fn establish_client_tcp_tunnel<'a>(
             "TUNNEL relay {} -> {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            err,
             addr,
+            err,
         ),
         Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Right((Err(err), _)) => trace!(
             "TUNNEL relay {} <- {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
+            addr,
             err,
-            addr
         ),
     }
 
-    debug!("TUNNEL relay {} <-> {} ({}) closing", client_addr, svr_cfg.addr(), addr);
+    debug!("TUNNEL relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 
     Ok(())
 }

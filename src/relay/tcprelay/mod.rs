@@ -34,6 +34,7 @@ mod aead;
 pub mod client;
 mod context;
 mod crypto_io;
+mod http_local;
 pub mod local;
 mod monitor;
 pub mod server;
@@ -239,7 +240,9 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),
-        ConfigType::Local => svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr()),
+        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::HttpLocal => {
+            svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr())
+        }
     };
 
     // Retry if connect failed

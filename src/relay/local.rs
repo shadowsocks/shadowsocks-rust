@@ -7,7 +7,7 @@ use log::{error, trace};
 use tokio::runtime::Handle;
 
 use crate::{
-    config::Config,
+    config::{Config, ConfigType},
     context::{Context, SharedServerState},
     plugin::{PluginMode, Plugins},
     relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp},
@@ -16,13 +16,19 @@ use crate::{
 /// Relay server running under local environment.
 pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     trace!("{:?}", config);
+    assert!(config.config_type != ConfigType::Server);
 
     // Create a context containing a DNS resolver and server running state flag.
     let state = SharedServerState::new(&config, rt).await?;
 
     let mut vf = Vec::new();
 
-    if config.mode.enable_udp() {
+    let enable_udp = match config.config_type {
+        ConfigType::Socks5Local | ConfigType::TunnelLocal => config.mode.enable_udp(),
+        _ => false,
+    };
+
+    if enable_udp {
         // Clone config here, because the config for TCP relay will be modified
         // after plugins started.
         // But DNS resolver and running state flag is still shared.
@@ -34,7 +40,18 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         vf.push(udp_fut.boxed());
     }
 
-    if config.mode.enable_tcp() || config.forward.is_none() {
+    let enable_tcp = match config.config_type {
+        // Socks5 always true, because UDP associate command also requires a TCP connection
+        ConfigType::Socks5Local => true,
+        // Only tunnel mode controlled by this flag
+        ConfigType::TunnelLocal => config.mode.enable_tcp(),
+        // HTTP must be TCP
+        ConfigType::HttpLocal => true,
+
+        _ => false,
+    };
+
+    if enable_tcp {
         // Run TCP local server if
         //
         //  1. Enabled TCP relay

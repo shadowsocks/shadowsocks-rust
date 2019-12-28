@@ -96,25 +96,20 @@ async fn handle_socks5_connect<'a>(
             "CONNECT relay {} -> {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            err,
             addr,
+            err,
         ),
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Right((Err(err), _)) => trace!(
             "CONNECT relay {} <- {} ({}) closed with error {:?}",
             client_addr,
             svr_cfg.addr(),
-            err,
             addr,
+            err,
         ),
     }
 
-    debug!(
-        "CONNECT relay {} <-> {} ({}) closing",
-        client_addr,
-        svr_cfg.addr(),
-        addr
-    );
+    debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 
     Ok(())
 }

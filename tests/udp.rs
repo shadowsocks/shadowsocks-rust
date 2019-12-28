@@ -45,7 +45,7 @@ fn get_svr_config() -> Config {
 }
 
 fn get_cli_config() -> Config {
-    let mut cfg = Config::new(ConfigType::Local);
+    let mut cfg = Config::new(ConfigType::Socks5Local);
     cfg.local = Some(LOCAL_ADDR.parse().unwrap());
     cfg.server = vec![ServerConfig::basic(
         SERVER_ADDR.parse().unwrap(),

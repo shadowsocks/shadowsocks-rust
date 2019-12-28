@@ -2,13 +2,15 @@
 
 use std::io;
 
-use super::{socks5_local, tunnel_local};
-use crate::context::SharedContext;
+use super::{http_local, socks5_local, tunnel_local};
+use crate::{config::ConfigType, context::SharedContext};
 
 /// Starts a TCP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    match context.config().forward {
-        Some(..) => tunnel_local::run(context).await,
-        None => socks5_local::run(context).await,
+    match context.config().config_type {
+        ConfigType::TunnelLocal => tunnel_local::run(context).await,
+        ConfigType::Socks5Local => socks5_local::run(context).await,
+        ConfigType::HttpLocal => http_local::run(context).await,
+        ConfigType::Server => unreachable!(),
     }
 }

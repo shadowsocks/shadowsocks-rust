@@ -121,7 +121,7 @@ fn main() {
     let mut has_provided_config = false;
 
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::TunnelLocal) {
             Ok(cfg) => {
                 has_provided_config = true;
                 cfg
@@ -131,7 +131,7 @@ fn main() {
                 return;
             }
         },
-        None => Config::new(ConfigType::Local),
+        None => Config::new(ConfigType::TunnelLocal),
     };
 
     let mut has_provided_server_config = match (
