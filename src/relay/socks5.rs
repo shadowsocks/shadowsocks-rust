@@ -367,6 +367,10 @@ impl FromStr for Address {
                         Ok(port) => Ok(Address::DomainNameAddress(dn.to_owned(), port)),
                         Err(..) => Err(AddressError),
                     },
+                    (Some(dn), None) => {
+                        // Assume it is 80 (http's default port)
+                        Ok(Address::DomainNameAddress(dn.to_owned(), 80))
+                    }
                     _ => Err(AddressError),
                 }
             }

@@ -402,6 +402,14 @@ impl PingBalancer {
 
         PingBalancer { inner }
     }
+
+    pub fn servers(&self) -> Vec<Arc<ServerConfig>> {
+        let mut vec = Vec::new();
+        for svr in &self.inner.servers {
+            vec.push(svr.config.clone());
+        }
+        vec
+    }
 }
 
 impl LoadBalancer for PingBalancer {

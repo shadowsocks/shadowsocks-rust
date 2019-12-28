@@ -1,13 +1,28 @@
 //! HTTP Proxy client server
 
-use std::{convert::Infallible, io, net::SocketAddr, sync::Arc};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    future::Future,
+    io,
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    sync::Arc,
+    task::{self, Poll},
+};
 
-use futures::{future, future::Either};
+use futures::{
+    future,
+    future::{BoxFuture, Either},
+    FutureExt,
+};
 use hyper::{
+    client::connect::{Connected, Connection},
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
     upgrade::Upgraded,
     Body,
+    Client,
     Method,
     Request,
     Response,
@@ -16,7 +31,9 @@ use hyper::{
     Uri,
 };
 use log::{debug, error, info, trace};
+use pin_project::pin_project;
 use tokio;
+use tower;
 
 use super::{CryptoStream, STcpStream};
 use crate::{
@@ -28,8 +45,116 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
+struct ShadowSocksConnector {
+    context: SharedContext,
+    svr_cfg: Arc<ServerConfig>,
+}
+
+impl ShadowSocksConnector {
+    fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> ShadowSocksConnector {
+        ShadowSocksConnector { context, svr_cfg }
+    }
+}
+
+impl tower::Service<Address> for ShadowSocksConnector {
+    type Error = io::Error;
+    type Future = ShadowSocksConnecting;
+    type Response = CryptoStream<STcpStream>;
+
+    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, addr: Address) -> Self::Future {
+        let svr_cfg = self.svr_cfg.clone();
+        let context = self.context.clone();
+
+        ShadowSocksConnecting {
+            fut: async move {
+                let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
+                super::proxy_server_handshake(stream, svr_cfg.clone(), &addr).await
+            }
+            .boxed(),
+        }
+    }
+}
+
+impl tower::Service<Uri> for ShadowSocksConnector {
+    type Error = io::Error;
+    type Future = ShadowSocksConnecting;
+    type Response = CryptoStream<STcpStream>;
+
+    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        let svr_cfg = self.svr_cfg.clone();
+        let context = self.context.clone();
+
+        ShadowSocksConnecting {
+            fut: async move {
+                match host_addr(&dst) {
+                    None => {
+                        use std::io::{Error, ErrorKind};
+
+                        error!("HTTP target URI must be a valid address, but found: {}", dst);
+
+                        let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
+                        Err(err)
+                    }
+                    Some(addr) => {
+                        let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
+                        super::proxy_server_handshake(stream, svr_cfg.clone(), &addr).await
+                    }
+                }
+            }
+            .boxed(),
+        }
+    }
+}
+
+#[pin_project]
+struct ShadowSocksConnecting {
+    #[pin]
+    fut: BoxFuture<'static, io::Result<CryptoStream<STcpStream>>>,
+}
+
+impl Future for ShadowSocksConnecting {
+    type Output = io::Result<CryptoStream<STcpStream>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+        self.project().fut.poll(cx)
+    }
+}
+
 fn host_addr(uri: &Uri) -> Option<Address> {
-    uri.authority().and_then(|auth| auth.as_str().parse().ok())
+    let port = match uri.port_u16() {
+        Some(p) => p,
+        None => {
+            match uri.scheme_str() {
+                None => 80, // Assume it is http
+                Some("http") => 80,
+                Some("https") => 443,
+                _ => return None, // Not supported
+            }
+        }
+    };
+
+    match uri.host() {
+        None => None,
+        Some(host_str) => match host_str.parse::<IpAddr>() {
+            Ok(ip) => Some(Address::from(SocketAddr::new(ip, port))),
+            Err(..) => Some(Address::DomainNameAddress(host_str.to_owned(), port)),
+        },
+    }
+}
+
+impl Connection for CryptoStream<STcpStream> {
+    fn connected(&self) -> Connected {
+        Connected::new()
+    }
 }
 
 async fn establish_connect_tunnel(
@@ -76,11 +201,14 @@ async fn establish_connect_tunnel(
     debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 }
 
+type ShadowSocksClient = Client<ShadowSocksConnector>;
+
 async fn server_dispatch(
     context: SharedContext,
     req: Request<Body>,
     svr_cfg: Arc<ServerConfig>,
     client_addr: SocketAddr,
+    client: ShadowSocksClient,
 ) -> Result<Response<Body>, io::Error> {
     if Method::CONNECT == req.method() {
         // Establish a TCP tunnel
@@ -149,7 +277,50 @@ async fn server_dispatch(
             }
         }
     } else {
-        unimplemented!();
+        let method = req.method().clone();
+
+        let host = match host_addr(req.uri()) {
+            None => {
+                error!("HTTP {} URI is not a valid address. URI: {}", method, req.uri());
+
+                let mut resp = Response::new(Body::from("URI must be a valid Address"));
+                *resp.status_mut() = StatusCode::BAD_REQUEST;
+
+                return Ok(resp);
+            }
+            Some(h) => h,
+        };
+
+        debug!("HTTP {} {}", method, host);
+
+        let res = match client.request(req).await {
+            Ok(res) => res,
+            Err(err) => {
+                error!(
+                    "HTTP {} {} <-> {} ({}) relay failed, error: {}",
+                    method,
+                    client_addr,
+                    svr_cfg.addr(),
+                    host,
+                    err
+                );
+
+                let mut resp = Response::new(Body::from(format!("Relay failed to {}", host)));
+                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+
+                return Ok(resp);
+            }
+        };
+
+        debug!(
+            "HTTP {} relay {} <-> {} ({}) finished",
+            method,
+            client_addr,
+            svr_cfg.addr(),
+            host
+        );
+
+        Ok(res)
     }
 }
 
@@ -159,14 +330,27 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
 
+    let mut server_clients = HashMap::new();
+
+    // Create HTTP clients for each remote servers
+    for svr_cfg in servers.servers() {
+        let addr_str = svr_cfg.addr().to_string();
+        let client = Client::builder().build::<_, Body>(ShadowSocksConnector::new(context.clone(), svr_cfg));
+        server_clients.insert(addr_str, client);
+    }
+
     let make_service = make_service_fn(|socket: &AddrStream| {
         let client_addr = socket.remote_addr();
         let svr_cfg = servers.pick_server();
         let context = context.clone();
 
+        // Keep connections for clients
+        let addr_str = svr_cfg.addr().to_string();
+        let client = server_clients.get(&addr_str).unwrap().clone();
+
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                server_dispatch(context.clone(), req, svr_cfg.clone(), client_addr)
+                server_dispatch(context.clone(), req, svr_cfg.clone(), client_addr, client.clone())
             }))
         }
     });
