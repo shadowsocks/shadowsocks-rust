@@ -1,3 +1,41 @@
+shadowsocks-rust (1.8.0) unstable; urgency=medium
+
+  ## Features
+
+  - A new binary `sstunnel`. Establish TCP and UDP tunnels to remote. Discussion: #177 
+      ```
+      # Establish an UDP tunnel to 8.8.8.8:53 (just like what ssdns did in the past)
+      sstunnel -c config.json -f '8.8.8.8:53' -u
+      ```
+  - Uses `async/await` syntax (requires `rustc` version >= `v1.40.0`)
+  - Dependencies
+      * `tokio` - `v0.2`
+      * `trust-dns-resolver` - `v0.18`
+      * `libsodium-sys` (switched from `libsodium-ffi` for better build process)
+  - Ping balancer
+      * Calculate scores not only with servers' latency, but also availablity
+      * Supports UDP relay
+  - Retry 3 times if it connects failed to remote proxy server automatically
+
+  ## Bug Resolved
+
+  - Refactored UDP relay. Now it works just like NAT. Discussion: #168 
+  - Temporary workaround for UdpSocket `WSAECONNRESET`. Discussion: #179 
+      - Ref: https://stackoverflow.com/questions/30749423/is-winsock-error-10054-wsaeconnreset-normal-with-udp-to-from-localhost
+
+  ## Breaking Changes
+
+  - Removed `ssdns`. `sstunnel` can fulfill its job.
+
+  ## Releases
+
+  - `shadowsocks-v1.8.0-stable.x86_64-unknown-linux-musl.tar.xz`
+      * SHA256 `5ec41d5a306715e455b1012de0ddaa33273970689b6df48ffbb0da5fb6083531`
+  - `shadowsocks-v1.8.0-stable.x86_64-pc-windows-gnu.zip`
+      * SHA256 `f7e23a145ca42a0ce73349263650256c9cc3e05caf637c2396699d72801d6966`
+
+ -- Y. T. Chung <zonyitoo@gmail.com> Sat, 28 Dec 2019 00:00:00 +0800
+
 shadowsocks-rust (1.7.0) unstable; urgency=medium
 
   ## Refactors
