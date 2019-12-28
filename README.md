@@ -171,6 +171,15 @@ sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --
 sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
 ```
 
+### HTTP Local client
+
+```bash
+# Read local client configuration from file
+sslocal -c /path/to/shadowsocks.json --protocol http
+```
+
+All parameters are the same as Socks5 client, except `--protocol http`.
+
 ### Tunnel Local client
 
 ```bash
@@ -242,7 +251,7 @@ It supports the following features:
 * [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 * [x] Windows support.
 * [x] Build with stable.
-* [ ] Support HTTP Proxy protocol (it is easy to use another tools to convert HTTP proxy protocol to Socks5, like `privoxy`)
+* [x] Support HTTP Proxy protocol
 * [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
 * [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 * [x] Choose server based on delay #152
