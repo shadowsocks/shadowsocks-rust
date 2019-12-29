@@ -210,86 +210,77 @@ async fn server_dispatch(
     client_addr: SocketAddr,
     client: ShadowSocksClient,
 ) -> Result<Response<Body>, io::Error> {
+    // Parse URI
+    //
+    // Proxy request URI must contains a host
+    let host = match host_addr(req.uri()) {
+        None => {
+            error!("HTTP {} URI is not a valid address. URI: {}", req.method(), req.uri());
+
+            let mut resp = Response::new(Body::from("URI must be a valid Address"));
+            *resp.status_mut() = StatusCode::BAD_REQUEST;
+
+            return Ok(resp);
+        }
+        Some(h) => h,
+    };
+
     if Method::CONNECT == req.method() {
         // Establish a TCP tunnel
         // https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01
 
-        match host_addr(req.uri()) {
-            Some(addr) => {
-                debug!("CONNECT {}", addr);
+        debug!("HTTP CONNECT {}", host);
 
-                // Connect to Shadowsocks' remote
-                //
-                // FIXME: What STATUS should I return for connection error?
-                let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                let stream = super::proxy_server_handshake(stream, svr_cfg.clone(), &addr).await?;
+        // Connect to Shadowsocks' remote
+        //
+        // FIXME: What STATUS should I return for connection error?
+        let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
+        let stream = super::proxy_server_handshake(stream, svr_cfg.clone(), &host).await?;
 
-                debug!(
-                    "CONNECT relay connected {} <-> {} ({})",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr
-                );
+        debug!(
+            "CONNECT relay connected {} <-> {} ({})",
+            client_addr,
+            svr_cfg.addr(),
+            host
+        );
 
-                // Upgrade to a TCP tunnel
-                //
-                // Note: only after client received an empty body with STATUS_OK can the
-                // connection be upgraded, so we can't return a response inside
-                // `on_upgrade` future.
-                tokio::spawn(async move {
-                    match req.into_body().on_upgrade().await {
-                        Ok(upgraded) => {
-                            trace!(
-                                "CONNECT tunnel upgrade success, {} <-> {} ({})",
-                                client_addr,
-                                svr_cfg.addr(),
-                                addr
-                            );
+        // Upgrade to a TCP tunnel
+        //
+        // Note: only after client received an empty body with STATUS_OK can the
+        // connection be upgraded, so we can't return a response inside
+        // `on_upgrade` future.
+        tokio::spawn(async move {
+            match req.into_body().on_upgrade().await {
+                Ok(upgraded) => {
+                    trace!(
+                        "CONNECT tunnel upgrade success, {} <-> {} ({})",
+                        client_addr,
+                        svr_cfg.addr(),
+                        host
+                    );
 
-                            establish_connect_tunnel(upgraded, stream, svr_cfg, client_addr, addr).await
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to upgrade TCP tunnel {} <-> {} ({}), error: {}",
-                                client_addr,
-                                svr_cfg.addr(),
-                                addr,
-                                e
-                            );
-                        }
-                    }
-                });
-
-                let resp = Response::builder()
-                    .header("Proxy-Agent", format!("ShadowSocks/{}", crate::VERSION))
-                    .body(Body::empty())
-                    .unwrap();
-
-                Ok(resp)
+                    establish_connect_tunnel(upgraded, stream, svr_cfg, client_addr, host).await
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to upgrade TCP tunnel {} <-> {} ({}), error: {}",
+                        client_addr,
+                        svr_cfg.addr(),
+                        host,
+                        e
+                    );
+                }
             }
-            None => {
-                error!("HTTP CONNECT URI is not a valid address. URI: {}", req.uri());
+        });
 
-                let mut resp = Response::new(Body::from("CONNECT URI must be a valid Address"));
-                *resp.status_mut() = StatusCode::BAD_REQUEST;
+        let resp = Response::builder()
+            .header("Proxy-Agent", format!("ShadowSocks/{}", crate::VERSION))
+            .body(Body::empty())
+            .unwrap();
 
-                Ok(resp)
-            }
-        }
+        Ok(resp)
     } else {
         let method = req.method().clone();
-
-        let host = match host_addr(req.uri()) {
-            None => {
-                error!("HTTP {} URI is not a valid address. URI: {}", method, req.uri());
-
-                let mut resp = Response::new(Body::from("URI must be a valid Address"));
-                *resp.status_mut() = StatusCode::BAD_REQUEST;
-
-                return Ok(resp);
-            }
-            Some(h) => h,
-        };
 
         debug!("HTTP {} {}", method, host);
 
