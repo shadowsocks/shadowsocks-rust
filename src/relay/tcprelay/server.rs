@@ -7,16 +7,14 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use log::{debug, error, info, trace};
-use tokio::{
-    self,
-    net::{TcpListener, TcpStream},
-};
+use tokio;
 
 use crate::{context::SharedContext, relay::socks5::Address};
 
 use super::{
     context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
+    utils::{TcpListener, TcpStream},
     CryptoStream,
     STcpStream,
 };
@@ -27,7 +25,9 @@ async fn handle_client(
     socket: TcpStream,
     peer_addr: SocketAddr,
 ) -> io::Result<()> {
-    if let Err(err) = socket.set_keepalive(svr_context.svr_cfg().timeout()) {
+    let timeout = svr_context.svr_cfg().timeout();
+
+    if let Err(err) = socket.set_keepalive(timeout) {
         error!("Failed to set keep alive: {:?}", err);
     }
 
@@ -43,10 +43,7 @@ async fn handle_client(
         svr_context.svr_cfg()
     );
 
-    let stream = TcpMonStream::new(
-        svr_context.clone(),
-        STcpStream::new(socket, svr_context.svr_cfg().timeout()),
-    );
+    let stream = TcpMonStream::new(svr_context.clone(), STcpStream::new(socket, timeout));
 
     // Do server-client handshake
     // Perform encryption IV exchange
@@ -68,98 +65,8 @@ async fn handle_client(
 
     let context = svr_context.context();
 
-    let mut remote_stream = match remote_addr {
-        Address::SocketAddress(ref saddr) => {
-            if context.config().forbidden_ip.contains(&saddr.ip()) {
-                error!("{} is forbidden, failed to connect {}", saddr.ip(), saddr);
-                let err = io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr),
-                );
-                return Err(err);
-            }
-
-            match TcpStream::connect(saddr).await {
-                Ok(s) => {
-                    debug!("Connected to remote {}", saddr);
-                    s
-                }
-                Err(err) => {
-                    error!("Failed to connect remote {}, {}", saddr, err);
-                    return Err(err);
-                }
-            }
-        }
-        #[cfg(feature = "trust-dns")]
-        Address::DomainNameAddress(ref dname, port) => {
-            use crate::relay::dns_resolver::resolve;
-
-            let addrs = match resolve(&*context, dname.as_str(), port, true).await {
-                Ok(r) => r,
-                Err(err) => {
-                    error!("Failed to resolve {}, {}", dname, err);
-                    return Err(err);
-                }
-            };
-
-            let mut last_err: Option<io::Error> = None;
-            let mut stream_opt = None;
-            for addr in &addrs {
-                match TcpStream::connect(addr).await {
-                    Ok(s) => stream_opt = Some(s),
-                    Err(err) => {
-                        error!(
-                            "Failed to connect remote {}:{} (resolved: {}), {}, try others",
-                            dname, port, addr, err
-                        );
-                        last_err = Some(err);
-                    }
-                }
-            }
-
-            match stream_opt {
-                Some(s) => {
-                    debug!("Connected to remote {}:{}", dname, port);
-                    s
-                }
-                None => {
-                    let err = last_err.unwrap();
-                    error!("Failed to connect remote {}:{}, {}", dname, port, err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err));
-                }
-            }
-        }
-        #[cfg(not(feature = "trust-dns"))]
-        Address::DomainNameAddress(ref dname, port) => {
-            let s = match TcpStream::connect((dname.as_str(), port)).await {
-                Ok(s) => {
-                    debug!("Connected to remote {}:{}", dname, port);
-                    s
-                }
-                Err(err) => {
-                    error!("Failed to connect remote {}:{}, {}", dname, port, err);
-                    return Err(err);
-                }
-            };
-
-            // Still need to check forbidden IPs
-            let forbidden_ip = &context.config().forbidden_ip;
-            if !forbidden_ip.is_empty() {
-                let peer_addr = s.peer_addr()?;
-
-                if forbidden_ip.contains(&peer_addr.ip()) {
-                    error!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr);
-                    let err = io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr),
-                    );
-                    return Err(err);
-                }
-            }
-
-            s
-        }
-    };
+    let mut remote_stream =
+        TcpStream::connect_remote(&*context, &remote_addr, timeout, context.config().fast_open).await?;
 
     debug!("Relay {} <-> {} established", peer_addr, remote_addr);
 
@@ -195,9 +102,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
             let addr = addr.listen_addr();
 
-            let listener = TcpListener::bind(&addr)
-                .await
-                .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+            let listener = TcpListener::bind(&addr, context.config().fast_open).await?;
 
             info!("ShadowSocks TCP Listening on {}", addr);
             listener

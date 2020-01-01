@@ -144,7 +144,6 @@ impl UdpAssociation {
     }
 
     /// Relay packets from local to remote
-    #[cfg_attr(not(feature = "trust-dns"), allow(unused_variables))]
     async fn relay_l2r(
         context: &Context,
         src: SocketAddr,
@@ -174,7 +173,6 @@ impl UdpAssociation {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
@@ -182,15 +180,6 @@ impl UdpAssociation {
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref dname, port) => {
-                // try_timeout(remote_udp.send_to(&encrypt_buf[..], (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!(
-                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
-                    dname,
-                    port
-                );
             }
         };
 

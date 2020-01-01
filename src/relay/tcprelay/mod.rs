@@ -14,21 +14,22 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    config::{ConfigType, ServerAddr, ServerConfig},
-    context::Context,
-    relay::{socks5::Address, utils::try_timeout},
-};
-
 use bytes::BytesMut;
 use futures::{future::FusedFuture, ready, select, Future};
 use log::{debug, error, trace};
 use tokio::{
     self,
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
-    net::TcpStream,
     time::{self, Delay},
 };
+
+use crate::{
+    config::{ConfigType, ServerAddr, ServerConfig},
+    context::Context,
+    relay::socks5::Address,
+};
+
+use self::utils::TcpStream;
 
 mod aead;
 pub mod client;
@@ -191,47 +192,11 @@ async fn connect_proxy_server_internal(
     context: &Context,
     svr_addr: &ServerAddr,
     timeout: Option<Duration>,
+    fast_open: bool,
 ) -> io::Result<STcpStream> {
-    match svr_addr {
-        ServerAddr::SocketAddr(ref addr) => {
-            let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
-            Ok(STcpStream::new(stream, timeout))
-        }
-        #[cfg(feature = "trust-dns")]
-        ServerAddr::DomainName(ref domain, port) => {
-            use crate::relay::dns_resolver::resolve;
-
-            let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
-
-            assert!(!vec_ipaddr.is_empty());
-
-            let mut last_err: Option<io::Error> = None;
-            for addr in &vec_ipaddr {
-                match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
-                    Err(e) => {
-                        error!(
-                            "Failed to connect {}:{}, resolved address {}, try another (err: {})",
-                            domain, port, addr, e
-                        );
-                        last_err = Some(e);
-                    }
-                }
-            }
-
-            let err = last_err.unwrap();
-            error!(
-                "Failed to connect {}:{}, tried all addresses but still failed (last err: {})",
-                domain, port, err
-            );
-            Err(err)
-        }
-        #[cfg(not(feature = "trust-dns"))]
-        ServerAddr::DomainName(ref domain, port) => {
-            let stream = try_timeout(TcpStream::connect((domain.as_str(), *port)), timeout).await?;
-            Ok(STcpStream::new(stream, timeout))
-        }
-    }
+    TcpStream::connect_server(context, svr_addr, timeout, fast_open)
+        .await
+        .map(|s| STcpStream::new(s, timeout))
 }
 
 /// Connect to proxy server with `ServerConfig`
@@ -256,7 +221,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     trace!("Connecting to proxy {}, timeout: {:?}", svr_addr, timeout);
     let mut last_err = None;
     for retry_time in 0..RETRY_TIMES {
-        match connect_proxy_server_internal(context, svr_addr, timeout).await {
+        match connect_proxy_server_internal(context, svr_addr, timeout, context.config().fast_open).await {
             Ok(s) => return Ok(s),
             Err(err) => {
                 // Connection failure, retry

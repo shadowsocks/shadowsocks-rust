@@ -4,27 +4,25 @@ use std::{io, net::SocketAddr, sync::Arc};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
-use tokio::{
-    self,
-    net::{
-        tcp::{ReadHalf, WriteHalf},
-        TcpListener,
-        TcpStream,
-    },
-    prelude::*,
-};
+use tokio::{self, prelude::*};
 
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
+    relay::{
+        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
+        socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
+    },
 };
 
-use crate::relay::{
-    loadbalancing::server::{ping, LoadBalancer, PingBalancer},
-    socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
+use super::{
+    ignore_until_end,
+    utils::{
+        split::{ReadHalf, WriteHalf},
+        TcpListener,
+        TcpStream,
+    },
 };
-
-use super::ignore_until_end;
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -230,7 +228,7 @@ async fn handle_socks5_client(
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
-    let mut listener = TcpListener::bind(&local_addr)
+    let mut listener = TcpListener::bind(&local_addr, context.config().fast_open)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 

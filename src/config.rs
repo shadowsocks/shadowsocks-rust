@@ -63,7 +63,6 @@ use json5;
 use log::error;
 use serde::{Deserialize, Serialize};
 use serde_urlencoded;
-#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
@@ -101,6 +100,8 @@ struct SSConfig {
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fast_open: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -535,6 +536,7 @@ pub struct Config {
     pub manager_address: Option<ServerAddr>,
     pub config_type: ConfigType,
     pub udp_timeout: Option<Duration>,
+    pub fast_open: bool,
 }
 
 /// Configuration parsing error kind
@@ -596,6 +598,7 @@ impl Config {
             manager_address: None,
             config_type,
             udp_timeout: None,
+            fast_open: false,
         }
     }
 
@@ -765,6 +768,9 @@ impl Config {
         // UDP
         nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
+        // TCP Fast Open
+        nconfig.fast_open = config.fast_open.unwrap_or(false);
+
         Ok(nconfig)
     }
 
@@ -780,7 +786,6 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
-    #[cfg(feature = "trust-dns")]
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
         self.dns.as_ref().and_then(|ds| {
             match &ds[..] {
@@ -899,6 +904,8 @@ impl fmt::Display for Config {
         }
 
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
+
+        jconf.fast_open = Some(self.fast_open);
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
     }

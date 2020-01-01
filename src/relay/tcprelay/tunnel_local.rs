@@ -4,7 +4,6 @@ use std::{io, net::SocketAddr, sync::Arc};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
-use tokio::net::{TcpListener, TcpStream};
 
 use crate::{
     config::ServerConfig,
@@ -14,6 +13,8 @@ use crate::{
         socks5::Address,
     },
 };
+
+use super::utils::{TcpListener, TcpStream};
 
 /// Established Client Tunnel
 ///
@@ -105,7 +106,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
-    let mut listener = TcpListener::bind(&local_addr)
+    let mut listener = TcpListener::bind(&local_addr, context.config().fast_open)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 

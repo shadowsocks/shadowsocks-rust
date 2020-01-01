@@ -98,16 +98,11 @@ impl TcpServerContext {
             ServerAddr::SocketAddr(ref addr) => {
                 socket.send_to(payload.as_ref(), addr).await?;
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref domain, ref port) => {
                 use crate::relay::dns_resolver::resolve;
 
                 let addrs = resolve(&*self.context, &domain[..], *port, false).await?;
                 socket.send_to(payload.as_ref(), addrs[0]).await?;
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref domain, ref port) => {
-                socket.send_to(payload.as_ref(), (domain.as_str(), *port)).await?;
             }
         }
 

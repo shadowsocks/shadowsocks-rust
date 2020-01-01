@@ -60,7 +60,6 @@ impl ServerClient {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
@@ -68,15 +67,6 @@ impl ServerClient {
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(self.socket.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref dname, port) => {
-                // try_timeout(self.socket.send_to(&encrypt_buf[..], (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!(
-                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
-                    dname,
-                    port
-                );
             }
         };
 
