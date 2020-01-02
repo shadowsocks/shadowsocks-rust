@@ -19,7 +19,11 @@ pub struct ReadHalf<'a> {
 }
 
 impl<'a> ReadHalf<'a> {
-    fn stream(&self) -> &'a mut TcpStream {
+    fn stream(&self) -> &'a TcpStream {
+        unsafe { &mut *self.stream }
+    }
+
+    fn stream_mut(&mut self) -> &'a mut TcpStream {
         unsafe { &mut *self.stream }
     }
 }
@@ -35,16 +39,20 @@ impl AsyncRead for ReadHalf<'_> {
         self.stream().prepare_uninitialized_buffer(buf)
     }
 
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> task::Poll<io::Result<usize>> {
-        Pin::new(self.stream()).poll_read(cx, buf)
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &mut [u8],
+    ) -> task::Poll<io::Result<usize>> {
+        Pin::new(self.stream_mut()).poll_read(cx, buf)
     }
 
     fn poll_read_buf<B: BufMut>(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &mut B,
     ) -> task::Poll<io::Result<usize>> {
-        Pin::new(self.stream()).poll_read_buf(cx, buf)
+        Pin::new(self.stream_mut()).poll_read_buf(cx, buf)
     }
 }
 
@@ -61,7 +69,7 @@ pub struct WriteHalf<'a> {
 }
 
 impl<'a> WriteHalf<'a> {
-    fn stream(&self) -> &'a mut TcpStream {
+    fn stream_mut(&mut self) -> &'a mut TcpStream {
         unsafe { &mut *self.stream }
     }
 }
@@ -74,27 +82,27 @@ impl AsRef<TcpStream> for WriteHalf<'_> {
 
 impl AsyncWrite for WriteHalf<'_> {
     fn poll_write(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &[u8],
     ) -> task::Poll<Result<usize, io::Error>> {
-        Pin::new(self.stream()).poll_write(cx, buf)
+        Pin::new(self.stream_mut()).poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Result<(), io::Error>> {
-        Pin::new(self.stream()).poll_flush(cx)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Result<(), io::Error>> {
+        Pin::new(self.stream_mut()).poll_flush(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Result<(), io::Error>> {
-        Pin::new(self.stream()).poll_shutdown(cx)
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Result<(), io::Error>> {
+        Pin::new(self.stream_mut()).poll_shutdown(cx)
     }
 
     fn poll_write_buf<B: Buf>(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &mut B,
     ) -> task::Poll<Result<usize, io::Error>> {
-        Pin::new(self.stream()).poll_write_buf(cx, buf)
+        Pin::new(self.stream_mut()).poll_write_buf(cx, buf)
     }
 }
 

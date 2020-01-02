@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
 use tokio::prelude::*;
 
@@ -94,14 +94,16 @@ enum EncryptWriteStep {
 pub struct EncryptedWriter {
     cipher: BoxStreamCipher,
     steps: EncryptWriteStep,
+    iv_opt: Option<Bytes>,
 }
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter {
+    pub fn new(t: CipherType, key: &[u8], iv: Bytes) -> EncryptedWriter {
         EncryptedWriter {
-            cipher: new_stream(t, key, iv, CryptoMode::Encrypt),
+            cipher: new_stream(t, key, &iv, CryptoMode::Encrypt),
             steps: EncryptWriteStep::Nothing,
+            iv_opt: Some(iv),
         }
     }
 
@@ -122,7 +124,16 @@ impl EncryptedWriter {
         loop {
             match self.steps {
                 EncryptWriteStep::Nothing => {
-                    let mut buf = BytesMut::with_capacity(self.buffer_size(data));
+                    let iv_len = match self.iv_opt {
+                        Some(ref iv) => iv.len(),
+                        None => 0,
+                    };
+
+                    let mut buf = BytesMut::with_capacity(iv_len + self.buffer_size(data));
+                    if let Some(iv) = self.iv_opt.take() {
+                        buf.extend(iv);
+                    }
+
                     self.cipher_update(data, &mut buf)?;
 
                     self.steps = EncryptWriteStep::Writing(buf, 0);

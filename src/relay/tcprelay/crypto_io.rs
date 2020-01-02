@@ -9,7 +9,6 @@ use std::{
 };
 
 use byte_string::ByteStr;
-use bytes::Bytes;
 use futures::ready;
 use log::trace;
 use tokio::prelude::*;
@@ -36,18 +35,12 @@ enum ReadStatus {
     Established,
 }
 
-enum WriteStatus {
-    SendIv(Bytes, usize),
-    Established,
-}
-
 pub struct CryptoStream<S> {
     stream: S,
     dec: Option<DecryptedReader>,
-    enc: Option<EncryptedWriter>,
+    enc: EncryptedWriter,
     svr_cfg: Arc<ServerConfig>,
     read_status: ReadStatus,
-    write_status: WriteStatus,
 }
 
 impl<S: Unpin> Unpin for CryptoStream<S> {}
@@ -73,13 +66,24 @@ impl<S> CryptoStream<S> {
             }
         };
 
+        let method = svr_cfg.method();
+        let enc = match method.category() {
+            CipherCategory::Stream => {
+                trace!("Sent Stream cipher IV {:?}", ByteStr::new(&local_iv));
+                EncryptedWriter::Stream(StreamEncryptedWriter::new(method, svr_cfg.key(), local_iv))
+            }
+            CipherCategory::Aead => {
+                trace!("Sent AEAD cipher salt {:?}", ByteStr::new(&local_iv));
+                EncryptedWriter::Aead(AeadEncryptedWriter::new(method, svr_cfg.key(), local_iv))
+            }
+        };
+
         CryptoStream {
             stream,
             dec: None,
-            enc: None,
+            enc,
             svr_cfg,
             read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize),
-            write_status: WriteStatus::SendIv(local_iv, 0usize),
         }
     }
 }
@@ -133,41 +137,9 @@ impl<S> CryptoStream<S>
 where
     S: AsyncWrite + Unpin,
 {
-    fn poll_write_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        if let WriteStatus::SendIv(ref iv, ref mut pos) = self.write_status {
-            while *pos < iv.len() {
-                let n = ready!(Pin::new(&mut self.stream).poll_write(cx, &iv[*pos..]))?;
-                if n == 0 {
-                    use std::io::ErrorKind;
-                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
-                }
-                *pos += n;
-            }
-
-            let method = self.svr_cfg.method();
-            let enc = match method.category() {
-                CipherCategory::Stream => {
-                    trace!("Sent Stream cipher IV {:?}", ByteStr::new(&iv));
-                    EncryptedWriter::Stream(StreamEncryptedWriter::new(method, self.svr_cfg.key(), &iv))
-                }
-                CipherCategory::Aead => {
-                    trace!("Sent AEAD cipher salt {:?}", ByteStr::new(&iv));
-                    EncryptedWriter::Aead(AeadEncryptedWriter::new(method, self.svr_cfg.key(), &iv))
-                }
-            };
-
-            self.enc = Some(enc);
-            self.write_status = WriteStatus::Established;
-        }
-
-        Poll::Ready(Ok(()))
-    }
-
     fn priv_poll_write(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        ready!(self.poll_write_handshake(ctx))?;
-
         let stream = unsafe { &mut *(&mut self.stream as *mut _) };
-        match *self.enc.as_mut().unwrap() {
+        match self.enc {
             EncryptedWriter::Aead(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
             EncryptedWriter::Stream(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
         }
