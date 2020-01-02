@@ -15,6 +15,9 @@ cfg_if! {
             } else if #[cfg(target_os = "macos")] {
                 #[path = "macos.rs"]
                 mod sys;
+            } else if #[cfg(any(target_os = "freebsd", target_os = "fuchsia"))] {
+                #[path = "bsd.rs"]
+                mod sys;
             } else {
                 compile_error!("TFO is not supported on this platform yet");
             }
