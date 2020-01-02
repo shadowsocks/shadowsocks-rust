@@ -35,7 +35,7 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         if ret != 0 {
             error!("Failed to listen on {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
-            return Err(Error::from_raw_os_error(*libc::__error()));
+            return Err(Error::last_os_error());
         }
     }
 
@@ -75,7 +75,7 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
         if ret != 0 {
             error!("Failed to connect to {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
-            return Err(Error::from_raw_os_error(*libc::__error()));
+            return Err(Error::last_os_error());
         }
     }
 
