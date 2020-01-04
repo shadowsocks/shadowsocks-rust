@@ -43,7 +43,7 @@ use std::{
 };
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
 use tokio::prelude::*;
 
@@ -217,15 +217,17 @@ pub struct EncryptedWriter {
     cipher: BoxAeadEncryptor,
     tag_size: usize,
     steps: EncryptWriteStep,
+    nonce: Option<Bytes>,
 }
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(t: CipherType, key: &[u8], nonce: Bytes) -> EncryptedWriter {
         EncryptedWriter {
-            cipher: crypto::new_aead_encryptor(t, key, nonce),
+            cipher: crypto::new_aead_encryptor(t, key, &nonce),
             tag_size: t.tag_size(),
             steps: EncryptWriteStep::Nothing,
+            nonce: Some(nonce),
         }
     }
 
@@ -253,7 +255,18 @@ impl EncryptedWriter {
                     let output_length = self.buffer_size(data);
                     let data_length = data.len() as u16;
 
-                    let mut buf = BytesMut::with_capacity(output_length);
+                    // Send the first packet with nonce
+                    let nonce_length = match self.nonce {
+                        Some(ref n) => n.len(),
+                        None => 0,
+                    };
+
+                    let mut buf = BytesMut::with_capacity(nonce_length + output_length);
+
+                    // Put nonce first
+                    if let Some(n) = self.nonce.take() {
+                        buf.extend(n);
+                    }
 
                     let mut data_len_buf = [0u8; 2];
                     BigEndian::write_u16(&mut data_len_buf, data_length);
