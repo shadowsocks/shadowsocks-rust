@@ -15,7 +15,7 @@ cfg_if! {
             } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
                 #[path = "macos.rs"]
                 mod sys;
-            } else if #[cfg(any(target_os = "freebsd", target_os = "fuchsia"))] {
+            } else if #[cfg(any(target_os = "freebsd", target_os = "fuchsia", target_os = "dragonfly", target_os = "netbsd"))] {
                 #[path = "bsd.rs"]
                 mod sys;
             } else {
@@ -29,4 +29,4 @@ cfg_if! {
     }
 }
 
-pub use sys::{bind_listener, connect_stream};
+pub use sys::{bind_listener, connect_stream, ConnectContext};

@@ -3,14 +3,14 @@
 use std::{
     io::{self, Error},
     mem,
-    net::{self, SocketAddr},
-    os::unix::io::FromRawFd,
+    net::{SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream},
+    os::unix::io::{FromRawFd, RawFd},
     ptr,
 };
 
 use libc;
 use log::error;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream};
 
 fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
     unsafe {
@@ -26,8 +26,9 @@ fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
             libc::fcntl(sockfd, libc::F_GETFL) | libc::O_NONBLOCK,
         );
         if ret == -1 {
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
         let ret = libc::fcntl(
@@ -36,15 +37,16 @@ fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
             libc::fcntl(sockfd, libc::F_GETFD) | libc::FD_CLOEXEC,
         );
         if ret == -1 {
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
         Ok(sockfd)
     }
 }
 
-pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
+pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TokioTcpListener> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
         SocketAddr::V6(..) => libc::AF_INET6,
@@ -65,8 +67,9 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         );
 
         if ret == -1 {
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
         // bind & listen
@@ -74,14 +77,16 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         let (saddr, saddr_len) = addr2raw(addr);
         let ret = libc::bind(sockfd, saddr, saddr_len);
         if ret == -1 {
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
         let ret = libc::listen(sockfd, 1024 /* Set just like libstd and mio does */);
         if ret == -1 {
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
         // TCP_FASTOPEN was supported since
@@ -100,15 +105,42 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         if ret == -1 {
             error!("Failed to listen on {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
-        TcpListener::from_std(net::TcpListener::from_raw_fd(sockfd))
+        TokioTcpListener::from_std(StdTcpListener::from_raw_fd(sockfd))
     }
 }
 
-pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
+pub struct ConnectContext {
+    // Reference to the partial connected socket fd
+    // This struct doesn't own the fd, so do not close it while dropping
+    socket: RawFd,
+}
+
+impl ConnectContext {
+    /// Performing actual connect operation
+    pub fn connect_with_data(self, buf: &[u8]) -> io::Result<usize> {
+        unsafe {
+            // For Darwin, call send directly after connectx
+            let ret = libc::send(
+                self.socket,
+                buf.as_ptr() as *const _ as *const libc::c_void,
+                buf.len(),
+                0,
+            );
+            if ret < 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ret as usize)
+            }
+        }
+    }
+}
+
+pub async fn connect_stream(addr: &SocketAddr) -> io::Result<(TokioTcpStream, ConnectContext)> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
         SocketAddr::V6(..) => libc::AF_INET6,
@@ -139,12 +171,13 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
         if ret != 0 {
             error!("Failed to connect to {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
+            let err = Error::last_os_error();
             let _ = libc::close(sockfd);
-            return Err(Error::last_os_error());
+            return Err(err);
         }
 
-        let stream = net::TcpStream::from_raw_fd(sockfd);
-        TcpStream::from_std(stream)
+        let stream = StdTcpStream::from_raw_fd(sockfd);
+        TokioTcpStream::from_std(stream).map(|s| (s, ConnectContext { socket: sockfd }))
     }
 }
 

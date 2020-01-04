@@ -91,6 +91,39 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
     }
 }
 
+pub struct ConnectContext {
+    // Reference to the partial connected socket fd
+    // This struct doesn't own the fd, so do not close it while dropping
+    socket: RawFd,
+
+    // Target address for calling `sendto`
+    remote_addr: SocketAddr,
+}
+
+impl ConnectContext {
+    /// Performing actual connect operation
+    pub fn connect_with_data(self, buf: &[u8]) -> io::Result<usize> {
+        unsafe {
+            let (saddr, saddr_len) = addr2raw(&self.remote_addr);
+
+            let ret = libc::sendto(
+                self.socket,
+                buf.as_ptr() as *const _ as *const libc::c_void,
+                buf.len(),
+                0,
+                saddr,
+                saddr_len,
+            );
+
+            if ret < 0 {
+                Err(Error::last_os_error())
+            } else {
+                Ok(ret as usize)
+            }
+        }
+    }
+}
+
 pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,

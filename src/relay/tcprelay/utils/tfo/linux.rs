@@ -3,13 +3,13 @@
 use std::{
     io::{self, Error},
     mem,
-    net::{self, SocketAddr},
-    os::unix::io::AsRawFd,
+    net::{SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream},
+    os::unix::io::{FromRawFd, RawFd},
 };
 
 use libc;
 use log::error;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream};
 
 fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
     unsafe {
@@ -22,7 +22,7 @@ fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
     }
 }
 
-pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
+pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TokioTcpListener> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
         SocketAddr::V6(..) => libc::AF_INET6,
@@ -84,11 +84,78 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
             return Err(Error::last_os_error());
         }
 
-        TcpListener::from_std(net::TcpListener::from_raw_fd(sockfd))
+        TokioTcpListener::from_std(StdTcpListener::from_raw_fd(sockfd))
     }
 }
 
-pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
+pub struct ConnectContext {
+    // Reference to the partial connected socket fd
+    // This struct doesn't own the fd, so do not close it while dropping
+    socket: RawFd,
+
+    // Target address
+    // For Linux Kernal >= 4.11, TCP_FASTOPEN_CONNECT doesn't need to call sendto with remote_addr
+    // Just call send as normal connection
+    remote_addr: Option<SocketAddr>,
+}
+
+impl ConnectContext {
+    /// Performing actual connect operation
+    pub fn connect_with_data(self, buf: &[u8]) -> io::Result<usize> {
+        unsafe {
+            match self.remote_addr {
+                Some(addr) => {
+                    // Kernal < 4.11, uses `sendto` as BSD-like systems
+                    // But flags should be `MSG_FASTOPEN`
+
+                    let (saddr, saddr_len) = addr2raw(&addr);
+
+                    let ret = libc::sendto(
+                        self.socket,
+                        buf.as_ptr() as *const _ as *const libc::c_void,
+                        buf.len(),
+                        libc::MSG_FASTOPEN,
+                        saddr,
+                        saddr_len,
+                    );
+
+                    if ret < 0 {
+                        let err = Error::last_os_error();
+                        match err.raw_os_error() {
+                            Some(libc::EOPNOTSUPP) => {
+                                // `sendto` with flag `MSG_FASTOPEN` is not supported
+
+                                error!("Failed to connect {} with TFO enabled, supported after Linux 3.7", addr);
+                            }
+                            _ => {}
+                        }
+                        Err(err)
+                    } else {
+                        Ok(ret as usize)
+                    }
+                }
+                None => {
+                    // Kernal >= 4.11, already connected with `TCP_FASTOPEN_CONNECT`
+                    // Just call send directly
+
+                    let ret = libc::send(
+                        self.socket,
+                        buf.as_ptr() as *const _ as *const libc::c_void,
+                        buf.len(),
+                        0, // no flags
+                    );
+                    if ret < 0 {
+                        Err(Error::last_os_error())
+                    } else {
+                        Ok(ret as usize)
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub async fn connect_stream(addr: &SocketAddr) -> io::Result<(TokioTcpStream, ConnectContext)> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
         SocketAddr::V6(..) => libc::AF_INET6,
@@ -99,9 +166,7 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
     unsafe {
         // TCP_FASTOPEN was supported since Linux 3.7
 
-        let (saddr, saddr_len) = addr2raw(addr);
-
-        // After 4.11, Linux has a new option TCP_FASTOPEN_CONNECT
+        // After 4.11, Linux has a new option `TCP_FASTOPEN_CONNECT`
         // Set it before connect
 
         let enable: libc::c_int = 1;
@@ -114,52 +179,44 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
             mem::size_of_val(&enable) as libc::socklen_t,
         );
 
-        if ret == -1 {
-            let errno = *libc::__errno_location();
+        let remote_addr = if ret == -1 {
+            let err = Error::last_os_error();
 
-            if errno == libc::ENOPROTOOPT {
-                // TCP_FASTOPEN_CONNECT is not supported, maybe kernel version < 4.11
-                // Ignore it
+            match err.raw_os_error() {
+                Some(libc::ENOPROTOOPT) => {
+                    // `TCP_FASTOPEN_CONNECT` is not supported, maybe kernel version < 4.11
+                    // Fallback to `sendto` with `MSG_FASTOPEN` (Supported after 3.7)
 
-                // FIXME: Fallback to `sendto` with `MSG_FASTOPEN`
-
-                let empty_buf: [u8; 0] = [];
-
-                let ret = libc::sendto(
-                    sockfd,
-                    empty_buf.as_ptr() as *const libc::c_void,
-                    0,
-                    libc::MSG_FASTOPEN,
-                    saddr,
-                    saddr_len,
-                );
-                if ret < 0 {
-                    let errno = *libc::__errno_location();
-
-                    if errno == libc::EOPNOTSUPP {
-                        error!(
-                            "Failed to connect to {} with TFO enabled, supported after Linux 3.7",
-                            addr
-                        );
-                    }
-
-                    let _ = libc::close(sockfd);
-                    return Err(Error::from_raw_os_error(errno));
+                    Some(*addr)
                 }
-            } else {
-                let _ = libc::close(sockfd);
-                return Err(Error::from_raw_os_error(errno));
+                _ => {
+                    let _ = libc::close(sockfd);
+                    return Err(err);
+                }
             }
         } else {
+            let (saddr, saddr_len) = addr2raw(addr);
+
             // Call connect as normal
             let ret = libc::connect(sockfd, saddr, saddr_len);
             if ret == -1 {
+                let err = Error::last_os_error();
                 let _ = libc::close(sockfd);
-                return Err(Error::last_os_error());
+                return Err(err);
             }
-        }
 
-        TcpStream::from_std(net::TcpStream::from_raw_fd(sockfd))
+            None
+        };
+
+        TokioTcpStream::from_std(StdTcpStream::from_raw_fd(sockfd)).map(|s| {
+            (
+                s,
+                ConnectContext {
+                    socket: sockfd,
+                    remote_addr,
+                },
+            )
+        })
     }
 }
 
