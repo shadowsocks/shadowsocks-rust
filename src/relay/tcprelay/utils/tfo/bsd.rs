@@ -3,13 +3,13 @@
 use std::{
     io::{self, Error},
     mem,
-    net::{self, SocketAddr},
+    net::{SocketAddr, TcpListener as StdTcpListener, TcpStream as StdTcpStream},
     os::unix::io::AsRawFd,
 };
 
 use libc;
 use log::error;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream};
 
 fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
     unsafe {
@@ -87,7 +87,7 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
             return Err(Error::last_os_error());
         }
 
-        TcpListener::from_std(net::TcpListener::from_raw_fd(sockfd))
+        TcpListener::from_std(StdTcpListener::from_raw_fd(sockfd))
     }
 }
 
@@ -124,7 +124,7 @@ impl ConnectContext {
     }
 }
 
-pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
+pub async fn connect_stream(addr: &SocketAddr) -> io::Result<(TcpStream, ConnectContext)> {
     let domain = match addr {
         SocketAddr::V4(..) => libc::AF_INET,
         SocketAddr::V6(..) => libc::AF_INET6,
@@ -176,10 +176,16 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
             return Err(Error::last_os_error());
         }
 
-        TcpStream::from_std(net::TcpStream::from_raw_fd(sockfd))
+        TcpStream::from_std(StdTcpStream::from_raw_fd(sockfd)).map(|s| {
+            (
+                s,
+                ConnectContext {
+                    socket: sockfd,
+                    remote_addr: *addr,
+                },
+            )
+        })
     }
-
-    TcpStream::from_std(stream)
 }
 
 // Borrowed from net2

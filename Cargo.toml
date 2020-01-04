@@ -79,6 +79,7 @@ cfg-if = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
+lazy_static = "1.4"
 
 # [patch.crates-io]
 # libc = { git = "https://github.com/zonyitoo/libc.git", branch = "feature-linux-fastopen-connect", optional = true }
