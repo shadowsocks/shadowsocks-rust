@@ -3,54 +3,118 @@
 use std::{
     io::{self, Error},
     mem,
-    net::{self, IpAddr, SocketAddr},
-    os::unix::io::AsRawFd,
+    net::{self, SocketAddr},
+    os::unix::io::FromRawFd,
     ptr,
 };
 
 use libc;
 use log::error;
-use net2::TcpBuilder;
 use tokio::net::{TcpListener, TcpStream};
 
-pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
-    let listener = net::TcpListener::bind(addr)?;
+fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
+    unsafe {
+        let sockfd = libc::socket(domain, libc::SOCK_STREAM, 0);
+        if sockfd == -1 {
+            return Err(Error::last_os_error());
+        }
 
-    let fd = listener.as_raw_fd();
+        // macOS doesn't have SOCK_NONBLOCK or SOCK_CLOEXEC
+        let ret = libc::fcntl(
+            sockfd,
+            libc::F_SETFL,
+            libc::fcntl(sockfd, libc::F_GETFL) | libc::O_NONBLOCK,
+        );
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        let ret = libc::fcntl(
+            sockfd,
+            libc::F_SETFD,
+            libc::fcntl(sockfd, libc::F_GETFD) | libc::FD_CLOEXEC,
+        );
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        Ok(sockfd)
+    }
+}
+
+pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
+    let domain = match addr {
+        SocketAddr::V4(..) => libc::AF_INET,
+        SocketAddr::V6(..) => libc::AF_INET6,
+    };
+
+    let sockfd = create_socket(domain)?;
 
     unsafe {
+        // Set SO_REUSEADDR (mirrors what libstd does).
+        let enable: libc::c_int = 1;
+
+        let ret = libc::setsockopt(
+            sockfd,
+            libc::SOL_SOCKET,
+            libc::SO_REUSEADDR,
+            &enable as *const _ as *const libc::c_void,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        // bind & listen
+        // NOTE: Must call before setting TCP_FASTOPEN
+        let (saddr, saddr_len) = addr2raw(addr);
+        let ret = libc::bind(sockfd, saddr, saddr_len);
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        let ret = libc::listen(sockfd, 1024 /* Set just like libstd and mio does */);
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
         // TCP_FASTOPEN was supported since
         // macosx(10.11), ios(9.0), tvos(9.0), watchos(2.0)
 
         let enable: libc::c_int = 1;
 
         let ret = libc::setsockopt(
-            fd,
+            sockfd,
             libc::IPPROTO_TCP,
             libc::TCP_FASTOPEN,
             &enable as *const _ as *const libc::c_void,
             mem::size_of_val(&enable) as libc::socklen_t,
         );
 
-        if ret != 0 {
+        if ret == -1 {
             error!("Failed to listen on {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
+            let _ = libc::close(sockfd);
             return Err(Error::last_os_error());
         }
-    }
 
-    TcpListener::from_std(listener)
+        TcpListener::from_std(net::TcpListener::from_raw_fd(sockfd))
+    }
 }
 
 pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
-    let builder = match addr.ip() {
-        IpAddr::V4(..) => TcpBuilder::new_v4()?,
-        IpAddr::V6(..) => TcpBuilder::new_v6()?,
+    let domain = match addr {
+        SocketAddr::V4(..) => libc::AF_INET,
+        SocketAddr::V6(..) => libc::AF_INET6,
     };
 
-    // Build it first, to retrive the socket fd
-    let stream = builder.to_tcp_stream()?;
-    let sockfd = stream.as_raw_fd();
+    let sockfd = create_socket(domain)?;
 
     unsafe {
         // TCP_FASTOPEN was supported since
@@ -75,11 +139,13 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
         if ret != 0 {
             error!("Failed to connect to {} with TFO enabled, supported after Mac OS X 10.11, iOS 9.0, tvOS 9.0, watchOS 2.0", addr);
 
+            let _ = libc::close(sockfd);
             return Err(Error::last_os_error());
         }
-    }
 
-    TcpStream::from_std(stream)
+        let stream = net::TcpStream::from_raw_fd(sockfd);
+        TcpStream::from_std(stream)
+    }
 }
 
 // Borrowed from net2

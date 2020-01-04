@@ -9,10 +9,10 @@ cfg_if! {
             if #[cfg(windows)] {
                 #[path = "windows.rs"]
                 mod sys;
-            } else if #[cfg(target_os = "linux")] {
+            } else if #[cfg(any(target_os = "linux", target_os = "android"))] {
                 #[path = "linux.rs"]
                 mod sys;
-            } else if #[cfg(target_os = "macos")] {
+            } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
                 #[path = "macos.rs"]
                 mod sys;
             } else if #[cfg(any(target_os = "freebsd", target_os = "fuchsia"))] {

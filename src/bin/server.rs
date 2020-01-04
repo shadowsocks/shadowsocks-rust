@@ -12,7 +12,7 @@ use futures::{
     future::{self, Either},
     FutureExt,
 };
-use log::{debug, error, info};
+use log::{error, info};
 use tokio::runtime::Builder;
 
 use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
@@ -186,8 +186,6 @@ fn main() {
     }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
-
-    debug!("Config: {:?}", config);
 
     let mut builder = Builder::new();
     if cfg!(feature = "single-threaded") {

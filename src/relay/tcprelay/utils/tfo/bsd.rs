@@ -3,21 +3,65 @@
 use std::{
     io::{self, Error},
     mem,
-    net::{self, IpAddr, SocketAddr},
+    net::{self, SocketAddr},
     os::unix::io::AsRawFd,
 };
 
 use libc;
 use log::error;
-use net2::TcpBuilder;
 use tokio::net::{TcpListener, TcpStream};
 
-pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
-    let listener = net::TcpListener::bind(addr)?;
+fn create_socket(domain: libc::c_int) -> io::Result<libc::c_int> {
+    unsafe {
+        let sockfd = libc::socket(domain, libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC, 0);
+        if sockfd == -1 {
+            return Err(Error::last_os_error());
+        }
 
-    let fd = listener.as_raw_fd();
+        Ok(sockfd)
+    }
+}
+
+pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
+    let domain = match addr {
+        SocketAddr::V4(..) => libc::AF_INET,
+        SocketAddr::V6(..) => libc::AF_INET6,
+    };
+
+    let sockfd = create_socket(domain)?;
 
     unsafe {
+        // Set SO_REUSEADDR (mirrors what libstd does).
+        let enable: libc::c_int = 1;
+
+        let ret = libc::setsockopt(
+            sockfd,
+            libc::SOL_SOCKET,
+            libc::SO_REUSEADDR,
+            &enable as *const _ as *const libc::c_void,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        // bind & listen
+        // NOTE: Must call before setting TCP_FASTOPEN
+        let (saddr, saddr_len) = addr2raw(addr);
+        let ret = libc::bind(sockfd, saddr, saddr_len);
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
+        let ret = libc::listen(sockfd, 1024 /* Set just like libstd and mio does */);
+        if ret == -1 {
+            let _ = libc::close(sockfd);
+            return Err(Error::last_os_error());
+        }
+
         // TCP_FASTOPEN was supported since FreeBSD 12.0
         //
         // Example program:
@@ -26,7 +70,7 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         let enable: libc::c_int = 1;
 
         let ret = libc::setsockopt(
-            fd,
+            sockfd,
             libc::IPPROTO_TCP,
             libc::TCP_FASTOPEN,
             &enable as *const _ as *const libc::c_void,
@@ -39,22 +83,21 @@ pub async fn bind_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
                 addr
             );
 
+            let _ = libc::close(sockfd);
             return Err(Error::last_os_error());
         }
-    }
 
-    TcpListener::from_std(listener)
+        TcpListener::from_std(net::TcpListener::from_raw_fd(sockfd))
+    }
 }
 
 pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
-    let builder = match addr.ip() {
-        IpAddr::V4(..) => TcpBuilder::new_v4()?,
-        IpAddr::V6(..) => TcpBuilder::new_v6()?,
+    let domain = match addr {
+        SocketAddr::V4(..) => libc::AF_INET,
+        SocketAddr::V6(..) => libc::AF_INET6,
     };
 
-    // Build it first, to retrive the socket fd
-    let stream = builder.to_tcp_stream()?;
-    let sockfd = stream.as_raw_fd();
+    let sockfd = create_socket(domain)?;
 
     unsafe {
         // TCP_FASTOPEN was supported since FreeBSD 12.0
@@ -78,6 +121,7 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
                 addr
             );
 
+            let _ = libc::close(sockfd);
             return Err(Error::last_os_error());
         }
 
@@ -95,8 +139,11 @@ pub async fn connect_stream(addr: &SocketAddr) -> io::Result<TcpStream> {
         );
 
         if ret != 0 {
+            let _ = libc::close(sockfd);
             return Err(Error::last_os_error());
         }
+
+        TcpStream::from_std(net::TcpStream::from_raw_fd(sockfd))
     }
 
     TcpStream::from_std(stream)

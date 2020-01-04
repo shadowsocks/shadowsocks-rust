@@ -3,7 +3,7 @@
 use std::{io, mem::MaybeUninit, net::SocketAddr, pin::Pin, task, time::Duration};
 
 use bytes::{Buf, BufMut};
-use log::error;
+use log::{error, trace};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net,
@@ -74,7 +74,11 @@ impl TcpStream {
         fast_open: bool,
     ) -> io::Result<TcpStream> {
         match *svr_addr {
-            ServerAddr::SocketAddr(ref addr) => TcpStream::connect(addr, fast_open).await,
+            ServerAddr::SocketAddr(ref addr) => {
+                let s = TcpStream::connect(addr, fast_open).await?;
+                trace!("Connected proxy server {}", svr_addr);
+                Ok(s)
+            }
             ServerAddr::DomainName(ref domain, port) => {
                 let vec_ipaddr = try_timeout(resolve(ctx, &domain[..], port, false), timeout).await?;
                 assert!(!vec_ipaddr.is_empty());
@@ -83,7 +87,10 @@ impl TcpStream {
                 let mut last_err: Option<io::Error> = None;
                 for addr in &vec_ipaddr {
                     match TcpStream::connect(addr, fast_open).await {
-                        Ok(s) => return Ok(s),
+                        Ok(s) => {
+                            trace!("Connected proxy server {}:{} (resolved: {})", domain, port, addr);
+                            return Ok(s);
+                        }
                         Err(e) => {
                             error!(
                                 "Failed to connect {}:{} (resolved: {}), try another (err: {})",
@@ -113,7 +120,11 @@ impl TcpStream {
         fast_open: bool,
     ) -> io::Result<TcpStream> {
         match *svr_addr {
-            Address::SocketAddress(ref addr) => TcpStream::connect(addr, fast_open).await,
+            Address::SocketAddress(ref addr) => {
+                let s = TcpStream::connect(addr, fast_open).await?;
+                trace!("Connected remote server {}", svr_addr);
+                Ok(s)
+            }
             Address::DomainNameAddress(ref domain, port) => {
                 let vec_ipaddr = try_timeout(resolve(ctx, &domain[..], port, false), timeout).await?;
                 assert!(!vec_ipaddr.is_empty());
@@ -122,7 +133,10 @@ impl TcpStream {
                 let mut last_err: Option<io::Error> = None;
                 for addr in &vec_ipaddr {
                     match TcpStream::connect(addr, fast_open).await {
-                        Ok(s) => return Ok(s),
+                        Ok(s) => {
+                            trace!("Connected remote server {}:{} (resolved: {})", domain, port, addr);
+                            return Ok(s);
+                        }
                         Err(e) => {
                             error!(
                                 "Failed to connect {}:{} (resolved: {}), try another (err: {})",
@@ -188,7 +202,19 @@ impl AsyncRead for TcpStream {
         cx: &mut task::Context<'_>,
         buf: &mut [u8],
     ) -> task::Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
+        // Pin::new(&mut self.inner).poll_read(cx, buf)
+
+        match Pin::new(&mut self.inner).poll_read(cx, buf) {
+            task::Poll::Pending => task::Poll::Pending,
+            task::Poll::Ready(Ok(n)) => {
+                println!("READ {}", n);
+                task::Poll::Ready(Ok(n))
+            }
+            task::Poll::Ready(Err(err)) => {
+                println!("READ ERR {:?}", err);
+                task::Poll::Ready(Err(err))
+            }
+        }
     }
 
     fn poll_read_buf<B: BufMut>(
@@ -206,7 +232,17 @@ impl AsyncWrite for TcpStream {
         cx: &mut task::Context<'_>,
         buf: &[u8],
     ) -> task::Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
+        match Pin::new(&mut self.inner).poll_write(cx, buf) {
+            task::Poll::Pending => task::Poll::Pending,
+            task::Poll::Ready(Ok(n)) => {
+                println!("WRITE {}", n);
+                task::Poll::Ready(Ok(n))
+            }
+            task::Poll::Ready(Err(err)) => {
+                println!("WRITE ERR {:?}", err);
+                task::Poll::Ready(Err(err))
+            }
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Result<(), io::Error>> {
