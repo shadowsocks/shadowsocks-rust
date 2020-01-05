@@ -57,7 +57,7 @@
 //! let mut rt = Runtime::new().expect("Failed to create runtime");
 //! let rt_handle = rt.handle().clone();
 //!
-//! let config = Config::load_from_file("shadowsocks.json", ConfigType::Local).unwrap();
+//! let config = Config::load_from_file("shadowsocks.json", ConfigType::Socks5Local).unwrap();
 //! rt.block_on(run_local(config, rt_handle));
 //! ```
 //!
@@ -85,8 +85,6 @@ pub use self::{
     config::{ClientConfig, Config, ConfigType, Mode, ServerAddr, ServerConfig},
     relay::{local::run as run_local, server::run as run_server, tcprelay::client::Socks5Client},
 };
-
-// relay::{dns::run as run_dns},
 
 pub mod config;
 mod context;
