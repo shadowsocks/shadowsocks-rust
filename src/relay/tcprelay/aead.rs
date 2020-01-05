@@ -231,19 +231,28 @@ impl EncryptedWriter {
         }
     }
 
-    pub fn poll_write_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<usize>>
+    pub fn poll_write_encrypted<W>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        w: &mut W,
+        mut data: &[u8],
+    ) -> Poll<io::Result<usize>>
     where
         W: AsyncWrite + Unpin,
     {
+        // Data.Len is a 16-bit big-endian integer indicating the length of Data. It must be smaller than 0x3FFF.
+        if data.len() > MAX_PACKET_SIZE {
+            data = &data[..MAX_PACKET_SIZE];
+        }
+
         ready!(self.poll_write_all_encrypted(ctx, w, data))?;
         Poll::Ready(Ok(data.len()))
     }
 
-    pub fn poll_write_all_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<()>>
+    fn poll_write_all_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<()>>
     where
         W: AsyncWrite + Unpin,
     {
-        // Data.Len is a 16-bit big-endian integer indicating the length of Data. It should be smaller than 0x3FFF.
         assert!(
             data.len() <= MAX_PACKET_SIZE,
             "Buffer size too large, AEAD encryption protocol requires buffer to be smaller than 0x3FFF"

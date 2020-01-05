@@ -115,7 +115,7 @@ impl EncryptedWriter {
         Poll::Ready(Ok(data.len()))
     }
 
-    pub fn poll_write_all_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<()>>
+    fn poll_write_all_encrypted<W>(&mut self, ctx: &mut Context<'_>, w: &mut W, data: &[u8]) -> Poll<io::Result<()>>
     where
         W: AsyncWrite + Unpin,
     {
