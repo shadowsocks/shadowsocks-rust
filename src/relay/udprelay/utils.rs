@@ -33,7 +33,7 @@ pub async fn create_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
         // https://stackoverflow.com/questions/30749423/is-winsock-error-10054-wsaeconnreset-normal-with-udp-to-from-localhost
         //
         // This is because `UdpSocket::recv_from` may return WSAECONNRESET
-        // if you called `UdpSocket::send_to` a distination that is not existed (may be closed).
+        // if you called `UdpSocket::send_to` a destination that is not existed (may be closed).
         //
         // It is not an error. Could be ignored completely.
         // We have to ignore it here because it will crash the server.
