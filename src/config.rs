@@ -63,7 +63,6 @@ use json5;
 use log::error;
 use serde::{Deserialize, Serialize};
 use serde_urlencoded;
-#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
@@ -256,6 +255,11 @@ impl ServerConfig {
     /// Get encryption key
     pub fn key(&self) -> &[u8] {
         &self.enc_key[..]
+    }
+
+    /// Clone encryption key
+    pub fn clone_key(&self) -> Bytes {
+        self.enc_key.clone()
     }
 
     /// Get password
@@ -780,7 +784,6 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
-    #[cfg(feature = "trust-dns")]
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
         self.dns.as_ref().and_then(|ds| {
             match &ds[..] {

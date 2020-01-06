@@ -1,6 +1,13 @@
 //! Local server that establish a TCP tunnel with server
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{
+    io,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
@@ -10,7 +17,7 @@ use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
+        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
     },
 };
@@ -23,7 +30,7 @@ async fn establish_client_tcp_tunnel<'a>(
     mut s: TcpStream,
     client_addr: SocketAddr,
     addr: &Address,
-    svr_cfg: Arc<ServerConfig>,
+    svr_cfg: &ServerConfig,
 ) -> io::Result<()> {
     let svr_s = match super::connect_proxy_server(context, &*svr_cfg).await {
         Ok(svr_s) => {
@@ -37,7 +44,7 @@ async fn establish_client_tcp_tunnel<'a>(
         }
     };
 
-    let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg.clone(), addr).await?;
+    let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     let (mut r, mut w) = s.split();
@@ -78,7 +85,9 @@ async fn establish_client_tcp_tunnel<'a>(
     Ok(())
 }
 
-async fn handle_tunnel_client(context: &Context, s: TcpStream, conf: Arc<ServerConfig>) -> io::Result<()> {
+async fn handle_tunnel_client(context: &Context, s: TcpStream, server_score: Arc<ServerScore>) -> io::Result<()> {
+    let conf = server_score.server_config();
+
     if let Err(err) = s.set_keepalive(conf.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
@@ -97,6 +106,35 @@ async fn handle_tunnel_client(context: &Context, s: TcpStream, conf: Arc<ServerC
     establish_client_tcp_tunnel(context, s, client_addr, target_addr, conf).await
 }
 
+struct ServerScore {
+    svr_cfg: ServerConfig,
+    score: AtomicU64,
+}
+
+impl ServerScore {
+    fn new(config: &ServerConfig) -> Arc<ServerScore> {
+        let s = ServerScore {
+            svr_cfg: config.clone(),
+            score: AtomicU64::new(0),
+        };
+        Arc::new(s)
+    }
+}
+
+impl PingServer for ServerScore {
+    fn server_config(&self) -> &ServerConfig {
+        &self.svr_cfg
+    }
+
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
+    }
+
+    fn set_score(&self, score: u64) {
+        self.score.store(score, Ordering::Release);
+    }
+}
+
 pub async fn run(context: SharedContext) -> io::Result<()> {
     assert!(
         context.config().mode.enable_tcp(),
@@ -111,7 +149,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
-    let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
+    let servers = context.config().server.iter().map(ServerScore::new).collect();
+    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
     info!(
         "ShadowSocks TCP Tunnel Listening on {}, forward to {}",
         actual_local_addr,
@@ -123,7 +162,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let server_cfg = servers.pick_server();
 
         trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server_cfg);
+        trace!("Picked proxy server: {:?}", server_cfg.server_config());
 
         let context = context.clone();
         tokio::spawn(async move {

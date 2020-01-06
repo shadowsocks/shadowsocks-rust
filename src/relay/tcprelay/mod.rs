@@ -9,7 +9,6 @@ use std::{
     marker::Unpin,
     ops::{Deref, DerefMut},
     pin::Pin,
-    sync::Arc,
     task::{self, Poll},
     time::Duration,
 };
@@ -32,12 +31,12 @@ use tokio::{
 
 mod aead;
 pub mod client;
-mod context;
 mod crypto_io;
 mod http_local;
 pub mod local;
 mod monitor;
 pub mod server;
+mod server_context;
 mod socks5_local;
 mod stream;
 mod tunnel_local;
@@ -197,7 +196,6 @@ async fn connect_proxy_server_internal(
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
             Ok(STcpStream::new(stream, timeout))
         }
-        #[cfg(feature = "trust-dns")]
         ServerAddr::DomainName(ref domain, port) => {
             use crate::relay::dns_resolver::resolve;
 
@@ -225,11 +223,6 @@ async fn connect_proxy_server_internal(
                 domain, port, err
             );
             Err(err)
-        }
-        #[cfg(not(feature = "trust-dns"))]
-        ServerAddr::DomainName(ref domain, port) => {
-            let stream = try_timeout(TcpStream::connect((domain.as_str(), *port)), timeout).await?;
-            Ok(STcpStream::new(stream, timeout))
         }
     }
 }
@@ -283,10 +276,10 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 /// Handshake logic for ShadowSocks Client
 pub async fn proxy_server_handshake(
     remote_stream: STcpStream,
-    svr_cfg: Arc<ServerConfig>,
+    svr_cfg: &ServerConfig,
     relay_addr: &Address,
 ) -> io::Result<CryptoStream<STcpStream>> {
-    let mut stream = CryptoStream::new(remote_stream, svr_cfg.clone());
+    let mut stream = CryptoStream::new(remote_stream, svr_cfg);
 
     trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 

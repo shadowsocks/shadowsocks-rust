@@ -23,8 +23,14 @@ pub struct TcpServerContext {
     tx: AtomicUsize,
     rx: AtomicUsize,
     context: SharedContext,
-    svr_cfg: Arc<ServerConfig>,
+    // This is a pointer referencing one of the ServerConfig inside context's config (self referencing)
+    // And because SharedContext is a Arc<Context>, svr_cfg should have the same lifetime as context.
+    // I don't know how to convince rustc that it is safe.
+    svr_cfg: *const ServerConfig,
 }
+
+unsafe impl Send for TcpServerContext {}
+unsafe impl Sync for TcpServerContext {}
 
 const UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -32,12 +38,12 @@ pub type SharedTcpServerContext = Arc<TcpServerContext>;
 
 impl TcpServerContext {
     /// Create a new server context
-    pub fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> SharedTcpServerContext {
+    pub fn new(context: SharedContext, svr_cfg: &ServerConfig) -> SharedTcpServerContext {
         let ctx = TcpServerContext {
             tx: AtomicUsize::new(0),
             rx: AtomicUsize::new(0),
             context,
-            svr_cfg,
+            svr_cfg: svr_cfg as *const _,
         };
 
         let ctx = Arc::new(ctx);
@@ -64,10 +70,6 @@ impl TcpServerContext {
         &self.context
     }
 
-    pub fn svr_cfg(&self) -> &Arc<ServerConfig> {
-        &self.svr_cfg
-    }
-
     pub fn incr_tx(&self, x: usize) {
         self.tx.fetch_add(x, Ordering::Release);
     }
@@ -76,14 +78,17 @@ impl TcpServerContext {
         self.rx.fetch_add(x, Ordering::Release);
     }
 
+    pub fn svr_cfg(&self) -> &ServerConfig {
+        unsafe { &*self.svr_cfg }
+    }
+
     async fn stat_interval(&self) -> io::Result<()> {
-        let svr_cfg = self.svr_cfg.clone();
         let transmission = self.tx.load(Ordering::Acquire) + self.rx.load(Ordering::Acquire);
 
         let any_addr = "0.0.0.0:0".parse::<SocketAddr>().unwrap();
         let mut socket = UdpSocket::bind(&any_addr).await?;
 
-        let payload = format!("stat: {{\"{}\": {}}}", svr_cfg.addr().port(), transmission);
+        let payload = format!("stat: {{\"{}\": {}}}", self.svr_cfg().addr().port(), transmission);
 
         let maddr = self
             .context
@@ -98,16 +103,11 @@ impl TcpServerContext {
             ServerAddr::SocketAddr(ref addr) => {
                 socket.send_to(payload.as_ref(), addr).await?;
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref domain, ref port) => {
                 use crate::relay::dns_resolver::resolve;
 
                 let addrs = resolve(&*self.context, &domain[..], *port, false).await?;
                 socket.send_to(payload.as_ref(), addrs[0]).await?;
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref domain, ref port) => {
-                socket.send_to(payload.as_ref(), (domain.as_str(), *port)).await?;
             }
         }
 

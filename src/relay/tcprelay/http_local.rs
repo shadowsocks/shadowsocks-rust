@@ -1,13 +1,15 @@
 //! HTTP Proxy client server
 
 use std::{
-    collections::HashMap,
     convert::Infallible,
     future::Future,
     io,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{self, Poll},
 };
 
@@ -40,7 +42,7 @@ use crate::{
     config::ServerConfig,
     context::SharedContext,
     relay::{
-        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
+        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
     },
 };
@@ -73,7 +75,7 @@ impl tower::Service<Address> for ShadowSocksConnector {
         ShadowSocksConnecting {
             fut: async move {
                 let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                super::proxy_server_handshake(stream, svr_cfg.clone(), &addr).await
+                super::proxy_server_handshake(stream, &*svr_cfg, &addr).await
             }
             .boxed(),
         }
@@ -106,7 +108,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                     }
                     Some(addr) => {
                         let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                        super::proxy_server_handshake(stream, svr_cfg.clone(), &addr).await
+                        super::proxy_server_handshake(stream, &*svr_cfg, &addr).await
                     }
                 }
             }
@@ -198,7 +200,7 @@ impl Connection for CryptoStream<STcpStream> {
 async fn establish_connect_tunnel(
     upgraded: Upgraded,
     mut stream: CryptoStream<STcpStream>,
-    svr_cfg: Arc<ServerConfig>,
+    svr_cfg: &ServerConfig,
     client_addr: SocketAddr,
     addr: Address,
 ) {
@@ -244,7 +246,7 @@ type ShadowSocksClient = Client<ShadowSocksConnector>;
 async fn server_dispatch(
     context: SharedContext,
     req: Request<Body>,
-    svr_cfg: Arc<ServerConfig>,
+    svr_score: Arc<ServerScore>,
     client_addr: SocketAddr,
     client: ShadowSocksClient,
 ) -> Result<Response<Body>, io::Error> {
@@ -272,13 +274,17 @@ async fn server_dispatch(
         // Connect to Shadowsocks' remote
         //
         // FIXME: What STATUS should I return for connection error?
-        let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-        let stream = super::proxy_server_handshake(stream, svr_cfg.clone(), &host).await?;
+        let stream = {
+            let svr_cfg = svr_score.server_config();
+
+            let stream = super::connect_proxy_server(&*context, svr_cfg).await?;
+            super::proxy_server_handshake(stream, svr_cfg, &host).await?
+        };
 
         debug!(
             "CONNECT relay connected {} <-> {} ({})",
             client_addr,
-            svr_cfg.addr(),
+            svr_score.server_config().addr(),
             host
         );
 
@@ -288,6 +294,8 @@ async fn server_dispatch(
         // connection be upgraded, so we can't return a response inside
         // `on_upgrade` future.
         tokio::spawn(async move {
+            let svr_cfg = svr_score.server_config();
+
             match req.into_body().on_upgrade().await {
                 Ok(upgraded) => {
                     trace!(
@@ -322,6 +330,8 @@ async fn server_dispatch(
 
         debug!("HTTP {} {}", method, host);
 
+        let svr_cfg = svr_score.server_config();
+
         let res = match client.request(req).await {
             Ok(res) => res,
             Err(err) => {
@@ -353,33 +363,64 @@ async fn server_dispatch(
     }
 }
 
+type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
+
+struct ServerScore {
+    svr_cfg: Arc<ServerConfig>,
+    score: AtomicU64,
+    client: ShadowSocksHttpClient,
+}
+
+impl ServerScore {
+    fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> Arc<ServerScore> {
+        let s = ServerScore {
+            svr_cfg: svr_cfg.clone(),
+            score: AtomicU64::new(0),
+            // Create HTTP clients for each remote servers
+            // It may reuse keep-alive connections
+            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context.clone(), svr_cfg)),
+        };
+        Arc::new(s)
+    }
+}
+
+impl PingServer for ServerScore {
+    fn server_config(&self) -> &ServerConfig {
+        &*self.svr_cfg
+    }
+
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
+    }
+
+    fn set_score(&self, score: u64) {
+        self.score.store(score, Ordering::Release);
+    }
+}
+
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
 
-    let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
-
-    let mut server_clients = HashMap::new();
-
-    // Create HTTP clients for each remote servers
-    for svr_cfg in servers.servers() {
-        let addr_str = svr_cfg.addr().to_string();
-        let client = Client::builder().build::<_, Body>(ShadowSocksConnector::new(context.clone(), svr_cfg));
-        server_clients.insert(addr_str, client);
-    }
+    let servers = context
+        .config()
+        .server
+        .iter()
+        .map(|sc| ServerScore::new(context.clone(), Arc::new(sc.clone())))
+        .collect();
+    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
 
     let make_service = make_service_fn(|socket: &AddrStream| {
         let client_addr = socket.remote_addr();
-        let svr_cfg = servers.pick_server();
+        let svr_score = servers.pick_server();
         let context = context.clone();
 
         // Keep connections for clients
-        let addr_str = svr_cfg.addr().to_string();
-        let client = server_clients.get(&addr_str).unwrap().clone();
+        let client = svr_score.client.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                server_dispatch(context.clone(), req, svr_cfg.clone(), client_addr, client.clone())
+                server_dispatch(context.clone(), req, svr_score.clone(), client_addr, client.clone())
             }))
         }
     });

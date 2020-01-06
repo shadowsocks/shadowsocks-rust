@@ -1,6 +1,13 @@
 //! Local server that accepts SOCKS 5 protocol
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{
+    io,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
@@ -20,7 +27,7 @@ use crate::{
 };
 
 use crate::relay::{
-    loadbalancing::server::{ping, LoadBalancer, PingBalancer},
+    loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
     socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
 };
 
@@ -37,9 +44,9 @@ async fn handle_socks5_connect<'a>(
     (mut r, mut w): (ReadHalf<'a>, WriteHalf<'a>),
     client_addr: SocketAddr,
     addr: &Address,
-    svr_cfg: Arc<ServerConfig>,
+    svr_cfg: &ServerConfig,
 ) -> io::Result<()> {
-    let svr_s = match super::connect_proxy_server(context, &*svr_cfg).await {
+    let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
 
@@ -75,7 +82,7 @@ async fn handle_socks5_connect<'a>(
         }
     };
 
-    let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg.clone(), addr).await?;
+    let mut svr_s = super::proxy_server_handshake(svr_s, svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     use tokio::io::copy;
@@ -118,9 +125,11 @@ async fn handle_socks5_connect<'a>(
 async fn handle_socks5_client(
     context: &Context,
     mut s: TcpStream,
-    conf: Arc<ServerConfig>,
+    server_conf: Arc<ServerScore>,
     udp_conf: UdpConfig,
 ) -> io::Result<()> {
+    let conf = server_conf.server_config();
+
     if let Err(err) = s.set_keepalive(conf.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
@@ -226,6 +235,35 @@ async fn handle_socks5_client(
     }
 }
 
+struct ServerScore {
+    svr_cfg: ServerConfig,
+    score: AtomicU64,
+}
+
+impl ServerScore {
+    fn new(config: &ServerConfig) -> Arc<ServerScore> {
+        let s = ServerScore {
+            svr_cfg: config.clone(),
+            score: AtomicU64::new(0),
+        };
+        Arc::new(s)
+    }
+}
+
+impl PingServer for ServerScore {
+    fn server_config(&self) -> &ServerConfig {
+        &self.svr_cfg
+    }
+
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
+    }
+
+    fn set_score(&self, score: u64) {
+        self.score.store(score, Ordering::Release);
+    }
+}
+
 /// Starts a TCP local server with Socks5 proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().expect("Missing local config");
@@ -241,7 +279,9 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         client_addr: actual_local_addr,
     };
 
-    let mut servers = PingBalancer::new(context.clone(), ping::ServerType::Tcp).await;
+    let servers = context.config().server.iter().map(ServerScore::new).collect();
+    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
+
     info!("ShadowSocks TCP Listening on {}", actual_local_addr);
 
     loop {
@@ -249,7 +289,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let server_cfg = servers.pick_server();
 
         trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server_cfg);
+        trace!("Picked proxy server: {:?}", server_cfg.server_config());
 
         let context = context.clone();
         let udp_conf = udp_conf.clone();

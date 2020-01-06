@@ -2,14 +2,16 @@
 
 use std::sync::Arc;
 
-pub use self::{ping::PingBalancer, roundrobin::RoundRobin};
-
-use crate::config::ServerConfig;
+pub use self::ping::{PingBalancer, Server as PingServer, ServerType as PingServerType};
 
 pub mod ping;
-pub mod roundrobin;
 
 pub trait LoadBalancer {
-    fn pick_server(&mut self) -> Arc<ServerConfig>;
+    type Server;
+
+    // Pick a server for connecting
+    fn pick_server(&mut self) -> Arc<Self::Server>;
+
+    // Total servers this balancer is holding
     fn total(&self) -> usize;
 }

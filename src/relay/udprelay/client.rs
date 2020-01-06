@@ -4,16 +4,16 @@ use std::{
     io,
     io::{Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
 };
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use log::{debug, error};
 use tokio::net::UdpSocket;
 
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
+    crypto::CipherType,
     relay::{socks5::Address, utils::try_timeout},
 };
 
@@ -26,19 +26,24 @@ use super::{
 
 pub struct ServerClient {
     socket: UdpSocket,
-    svr_cfg: Arc<ServerConfig>,
+    method: CipherType,
+    key: Bytes,
+    server_addr: ServerAddr,
 }
 
 impl ServerClient {
     /// Create a client to communicate with Shadowsocks' UDP server
-    pub async fn new(svr_cfg: Arc<ServerConfig>) -> io::Result<ServerClient> {
+    pub async fn new(svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         Ok(ServerClient {
             socket: create_socket(&local_addr).await?,
-            svr_cfg,
+            method: svr_cfg.method(),
+            key: svr_cfg.clone_key(),
+            server_addr: svr_cfg.addr().clone(),
         })
     }
 
+    /// Send a UDP packet to addr through proxy
     pub async fn send_to(&mut self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
         debug!(
             "UDP server client send to {}, payload length {} bytes",
@@ -54,29 +59,19 @@ impl ServerClient {
         send_buf.extend_from_slice(payload);
 
         let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(self.svr_cfg.method(), self.svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+        encrypt_payload(self.method, &self.key, &send_buf, &mut encrypt_buf)?;
 
-        let send_len = match self.svr_cfg.addr() {
+        let send_len = match self.server_addr {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
-                let vec_ipaddr = resolve(context, dname, *port, false).await?;
+                let vec_ipaddr = resolve(context, dname, port, false).await?;
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(self.socket.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref dname, port) => {
-                // try_timeout(self.socket.send_to(&encrypt_buf[..], (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!(
-                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
-                    dname,
-                    port
-                );
             }
         };
 
@@ -94,7 +89,7 @@ impl ServerClient {
         let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (recv_n, ..) = try_timeout(self.socket.recv_from(&mut recv_buf), Some(timeout)).await?;
 
-        let decrypt_buf = match decrypt_payload(self.svr_cfg.method(), self.svr_cfg.key(), &recv_buf[..recv_n])? {
+        let decrypt_buf = match decrypt_payload(self.method, &self.key, &recv_buf[..recv_n])? {
             None => {
                 error!("UDP packet too short, received length {}", recv_n);
                 let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");

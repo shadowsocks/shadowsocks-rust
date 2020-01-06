@@ -4,7 +4,6 @@ use std::{
     io,
     net::SocketAddr,
     pin::Pin,
-    sync::Arc,
     task::{self, Poll},
 };
 
@@ -135,12 +134,8 @@ pub(crate) struct ServerClient {
 }
 
 impl ServerClient {
-    pub(crate) async fn connect(
-        context: &Context,
-        addr: &Address,
-        svr_cfg: Arc<ServerConfig>,
-    ) -> io::Result<ServerClient> {
-        let stream = super::connect_proxy_server(context, &*svr_cfg).await?;
+    pub(crate) async fn connect(context: &Context, addr: &Address, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
+        let stream = super::connect_proxy_server(context, svr_cfg).await?;
         Ok(ServerClient {
             stream: super::proxy_server_handshake(stream, svr_cfg, addr).await?,
         })

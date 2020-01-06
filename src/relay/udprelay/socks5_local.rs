@@ -3,7 +3,10 @@
 use std::{
     io::{self, Cursor, ErrorKind, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -22,7 +25,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{ping, LoadBalancer, PingBalancer},
+        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::{Address, UdpAssociateHeader},
         utils::try_timeout,
     },
@@ -73,7 +76,7 @@ impl UdpAssociation {
     /// Create an association with addr
     async fn associate(
         context: SharedContext,
-        svr_cfg: Arc<ServerConfig>,
+        svr_cfg: Arc<ServerScore>,
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
     ) -> io::Result<UdpAssociation> {
@@ -100,10 +103,12 @@ impl UdpAssociation {
         // local -> remote
         let c_svr_cfg = svr_cfg.clone();
         tokio::spawn(async move {
+            let svr_cfg = c_svr_cfg.server_config();
+
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
                 if let Err(err) =
-                    UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
+                    UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
                 {
                     error!("failed to send packet {} -> ..., error: {}", src_addr, err);
 
@@ -117,9 +122,11 @@ impl UdpAssociation {
         // local <- remote
         tokio::spawn(async move {
             let transfer_fut = async move {
+                let svr_cfg = svr_cfg.server_config();
+
                 loop {
                     // Read and send back to source
-                    match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, &*svr_cfg).await {
+                    match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, svr_cfg).await {
                         Ok(..) => {}
                         Err(err) => {
                             error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
@@ -144,7 +151,6 @@ impl UdpAssociation {
     }
 
     /// Relay packets from local to remote
-    #[cfg_attr(not(feature = "trust-dns"), allow(unused_variables))]
     async fn relay_l2r(
         context: &Context,
         src: SocketAddr,
@@ -174,7 +180,6 @@ impl UdpAssociation {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            #[cfg(feature = "trust-dns")]
             ServerAddr::DomainName(ref dname, port) => {
                 use crate::relay::dns_resolver::resolve;
 
@@ -182,15 +187,6 @@ impl UdpAssociation {
                 assert!(!vec_ipaddr.is_empty());
 
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
-            }
-            #[cfg(not(feature = "trust-dns"))]
-            ServerAddr::DomainName(ref dname, port) => {
-                // try_timeout(remote_udp.send_to(&encrypt_buf[..], (dname.as_str(), port)), Some(timeout)).await?
-                unimplemented!(
-                    "tokio's UdpSocket SendHalf doesn't support ToSocketAddrs, {}:{}",
-                    dname,
-                    port
-                );
             }
         };
 
@@ -259,13 +255,43 @@ impl UdpAssociation {
     }
 }
 
+struct ServerScore {
+    svr_cfg: ServerConfig,
+    score: AtomicU64,
+}
+
+impl ServerScore {
+    fn new(config: &ServerConfig) -> Arc<ServerScore> {
+        let s = ServerScore {
+            svr_cfg: config.clone(),
+            score: AtomicU64::new(0),
+        };
+        Arc::new(s)
+    }
+}
+
+impl PingServer for ServerScore {
+    fn server_config(&self) -> &ServerConfig {
+        &self.svr_cfg
+    }
+
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
+    }
+
+    fn set_score(&self, score: u64) {
+        self.score.store(score, Ordering::Release);
+    }
+}
+
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = *context.config().local.as_ref().unwrap();
 
     let l = create_socket(&local_addr).await?;
 
-    let mut balancer = PingBalancer::new(context.clone(), ping::ServerType::Udp).await;
+    let servers = context.config().server.iter().map(ServerScore::new).collect();
+    let mut balancer = PingBalancer::new(context.clone(), servers, PingServerType::Udp).await;
 
     let (mut r, mut w) = l.split();
 

@@ -1,6 +1,6 @@
 //! Relay for TCP server that running on the server side
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{io, net::SocketAddr};
 
 use futures::{
     future::{self, Either},
@@ -15,8 +15,8 @@ use tokio::{
 use crate::{context::SharedContext, relay::socks5::Address};
 
 use super::{
-    context::{SharedTcpServerContext, TcpServerContext},
     monitor::TcpMonStream,
+    server_context::{SharedTcpServerContext, TcpServerContext},
     CryptoStream,
     STcpStream,
 };
@@ -50,7 +50,7 @@ async fn handle_client(
 
     // Do server-client handshake
     // Perform encryption IV exchange
-    let mut stream = CryptoStream::new(stream, svr_context.svr_cfg().clone());
+    let mut stream = CryptoStream::new(stream, svr_context.svr_cfg());
 
     // Read remote Address
     let remote_addr = match Address::read_from(&mut stream).await {
@@ -90,7 +90,6 @@ async fn handle_client(
                 }
             }
         }
-        #[cfg(feature = "trust-dns")]
         Address::DomainNameAddress(ref dname, port) => {
             use crate::relay::dns_resolver::resolve;
 
@@ -128,36 +127,6 @@ async fn handle_client(
                     return Err(io::Error::new(io::ErrorKind::Other, err));
                 }
             }
-        }
-        #[cfg(not(feature = "trust-dns"))]
-        Address::DomainNameAddress(ref dname, port) => {
-            let s = match TcpStream::connect((dname.as_str(), port)).await {
-                Ok(s) => {
-                    debug!("Connected to remote {}:{}", dname, port);
-                    s
-                }
-                Err(err) => {
-                    error!("Failed to connect remote {}:{}, {}", dname, port, err);
-                    return Err(err);
-                }
-            };
-
-            // Still need to check forbidden IPs
-            let forbidden_ip = &context.config().forbidden_ip;
-            if !forbidden_ip.is_empty() {
-                let peer_addr = s.peer_addr()?;
-
-                if forbidden_ip.contains(&peer_addr.ip()) {
-                    error!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr);
-                    let err = io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("{} is forbidden, failed to connect {}", peer_addr.ip(), peer_addr),
-                    );
-                    return Err(err);
-                }
-            }
-
-            s
         }
     };
 
@@ -203,9 +172,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             listener
         };
 
-        let svr_cfg = Arc::new(svr_cfg.clone());
-        let context = context.clone();
-        let svr_context = TcpServerContext::new(context.clone(), svr_cfg.clone());
+        // Creates a shared context for spawning new clients
+        let svr_context = TcpServerContext::new(context.clone(), svr_cfg);
 
         vec_fut.push(async move {
             loop {

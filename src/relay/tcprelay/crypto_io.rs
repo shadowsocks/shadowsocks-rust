@@ -4,21 +4,24 @@ use std::{
     io,
     marker::{PhantomData, Unpin},
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
 use byte_string::ByteStr;
+use bytes::Bytes;
 use futures::ready;
 use log::trace;
 use tokio::prelude::*;
+
+use crate::{
+    config::ServerConfig,
+    crypto::{CipherCategory, CipherType},
+};
 
 use super::{
     aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
     stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
 };
-
-use crate::{config::ServerConfig, crypto::CipherCategory};
 
 enum DecryptedReader {
     Aead(AeadDecryptedReader),
@@ -30,23 +33,30 @@ enum EncryptedWriter {
     Stream(StreamEncryptedWriter),
 }
 
+/// Steps for initializing a DecryptedReader
 enum ReadStatus {
-    WaitIv(Vec<u8>, usize),
+    /// Waiting for initializing vector (or nonce for AEAD ciphers)
+    ///
+    /// (Buffer, already_read_bytes, method, key)
+    WaitIv(Vec<u8>, usize, CipherType, Bytes),
+
+    /// Connection is established, DecryptedReader is initialized
     Established,
 }
 
+/// A bidirectional stream for communicating with ShadowSocks' server
 pub struct CryptoStream<S> {
     stream: S,
     dec: Option<DecryptedReader>,
     enc: EncryptedWriter,
-    svr_cfg: Arc<ServerConfig>,
     read_status: ReadStatus,
 }
 
 impl<S: Unpin> Unpin for CryptoStream<S> {}
 
 impl<S> CryptoStream<S> {
-    pub fn new(stream: S, svr_cfg: Arc<ServerConfig>) -> CryptoStream<S> {
+    /// Create a new CryptoStream with the underlying stream connection
+    pub fn new(stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
         let method = svr_cfg.method();
         let prev_len = match method.category() {
             CipherCategory::Stream => method.iv_size(),
@@ -76,8 +86,7 @@ impl<S> CryptoStream<S> {
             stream,
             dec: None,
             enc,
-            svr_cfg,
-            read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize),
+            read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
         }
     }
 }
@@ -87,7 +96,7 @@ where
     S: AsyncRead + Unpin,
 {
     fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        if let ReadStatus::WaitIv(ref mut buf, ref mut pos) = self.read_status {
+        if let ReadStatus::WaitIv(ref mut buf, ref mut pos, method, ref key) = self.read_status {
             while *pos < buf.len() {
                 let n = ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf[*pos..]))?;
                 if n == 0 {
@@ -97,15 +106,14 @@ where
                 *pos += n;
             }
 
-            let method = self.svr_cfg.method();
             let dec = match method.category() {
                 CipherCategory::Stream => {
                     trace!("Got Stream cipher IV {:?}", ByteStr::new(&buf));
-                    DecryptedReader::Stream(StreamDecryptedReader::new(method, self.svr_cfg.key(), &buf))
+                    DecryptedReader::Stream(StreamDecryptedReader::new(method, key, &buf))
                 }
                 CipherCategory::Aead => {
                     trace!("Got AEAD cipher salt {:?}", ByteStr::new(&buf));
-                    DecryptedReader::Aead(AeadDecryptedReader::new(method, self.svr_cfg.key(), &buf))
+                    DecryptedReader::Aead(AeadDecryptedReader::new(method, key, &buf))
                 }
             };
 
