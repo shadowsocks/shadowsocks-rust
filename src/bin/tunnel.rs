@@ -95,11 +95,6 @@ fn main() {
                 .help("Set SIP003 plugin options"),
         )
         .arg(
-            Arg::with_name("LOG_WITHOUT_TIME")
-                .long("log-without-time")
-                .help("Disable time in log"),
-        )
-        .arg(
             Arg::with_name("URL")
                 .long("server-url")
                 .takes_value(true)
@@ -113,10 +108,8 @@ fn main() {
         )
         .get_matches();
 
-    let without_time = matches.is_present("LOG_WITHOUT_TIME");
     let debug_level = matches.occurrences_of("VERBOSE");
-
-    logging::init(without_time, debug_level, "sslocal");
+    logging::init(debug_level, "sstunnel");
 
     let mut has_provided_config = false;
 

@@ -1,39 +1,30 @@
-use std::{
-    env,
-    io::{self, Write},
-};
+use std::env;
 
-use env_logger::{fmt::Formatter, Builder};
-use log::{LevelFilter, Record};
-use time::{Date, Time};
+use env_logger::Builder;
+use log::LevelFilter;
 
-pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
+pub fn init(debug_level: u64, bin_name: &str) {
     let mut log_builder = Builder::new();
-    log_builder.filter(None, LevelFilter::Info);
+    log_builder.filter(None, LevelFilter::Info).default_format();
 
     match debug_level {
         0 => {
             // Default filter
-            log_builder.format(move |fmt, r| log_time(fmt, without_time, r));
         }
         1 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder.filter(Some(bin_name), LevelFilter::Debug);
         }
         2 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder
                 .filter(Some(bin_name), LevelFilter::Debug)
                 .filter(Some("shadowsocks"), LevelFilter::Debug);
         }
         3 => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder
                 .filter(Some(bin_name), LevelFilter::Trace)
                 .filter(Some("shadowsocks"), LevelFilter::Trace);
         }
         _ => {
-            let log_builder = log_builder.format(move |fmt, r| log_time_module(fmt, without_time, r));
             log_builder.filter(None, LevelFilter::Trace);
         }
     }
@@ -43,41 +34,4 @@ pub fn init(without_time: bool, debug_level: u64, bin_name: &str) {
     }
 
     log_builder.init();
-}
-
-fn log_time(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(fmt, "[{}] {}", record.level(), record.args())
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}][{}] {}",
-            Date::today().format("%Y-%m-%d"),
-            Time::now().format("%H:%M:%S"),
-            record.level(),
-            record.args()
-        )
-    }
-}
-
-fn log_time_module(fmt: &mut Formatter, without_time: bool, record: &Record) -> io::Result<()> {
-    if without_time {
-        writeln!(
-            fmt,
-            "[{}] [{}] {}",
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    } else {
-        writeln!(
-            fmt,
-            "[{}][{}][{}] [{}] {}",
-            Date::today().format("%Y-%m-%d"),
-            Time::now().format("%H:%M:%S"),
-            record.level(),
-            record.module_path().unwrap_or("*"),
-            record.args()
-        )
-    }
 }

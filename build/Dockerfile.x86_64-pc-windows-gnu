@@ -7,7 +7,7 @@ ARG SODIUM_VERS="1.0.18"
 ARG OPENSSL_VERS="1.1.1d"
 
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y libclang-dev curl libcurl4-openssl-dev ca-certificates m4 make perl llvm libnghttp2-dev libidn2-dev librtmp-dev libpsl-dev libgssapi-krb5-2 libkrb5-dev libk5crypto3 libldap2-dev
+    apt-get install --no-install-recommends -y curl
 
 # Build a static copy of openssl
 RUN curl -LO https://www.openssl.org/source/openssl-${OPENSSL_VERS}.tar.gz && \
