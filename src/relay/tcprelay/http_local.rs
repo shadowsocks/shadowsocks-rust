@@ -378,7 +378,7 @@ impl ServerScore {
             score: AtomicU64::new(0),
             // Create HTTP clients for each remote servers
             // It may reuse keep-alive connections
-            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context.clone(), svr_cfg)),
+            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context, svr_cfg)),
         };
         Arc::new(s)
     }

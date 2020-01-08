@@ -174,7 +174,7 @@ fn main() {
         None => false,
     };
 
-    if !has_provided_config && !(has_provided_server_config && has_provided_local_config) {
+    if !(has_provided_config || (has_provided_server_config && has_provided_local_config)) {
         println!("You have to specify a configuration file or pass arguments by argument list");
         println!("{}", matches.usage());
         return;

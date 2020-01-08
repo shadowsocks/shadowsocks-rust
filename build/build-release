@@ -1,10 +1,24 @@
-#!/bin/sh
+#!/bin/bash
 
 CUR_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' ${CUR_DIR}/../Cargo.toml | awk '{print $3}' | sed 's/"//g')
 
 ## Disable OS X ACL file
 export COPYFILE_DISABLE=1
+
+targets=()
+
+while getopt "t:" opt; do
+    case $opt in
+        t)
+            targets+=($OPTARG)
+            ;;
+    esac
+done
+
+if [[ "${#targets[@]}" == "0" ]]; then
+    targets=("x86_64-unknown-linux-musl", "x86_64-pc-windows-gnu")
+fi
 
 function build() {
     cd "$CUR_DIR/.."
@@ -57,5 +71,6 @@ function build() {
     echo "* Done build package ${PKG_NAME}"
 }
 
-build "x86_64-unknown-linux-musl"
-build "x86_64-pc-windows-gnu"
+for target in "${targets[*]}"; do
+    build "$target";
+done
