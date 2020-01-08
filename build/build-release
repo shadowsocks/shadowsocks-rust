@@ -8,16 +8,19 @@ export COPYFILE_DISABLE=1
 
 targets=()
 
-while getopt "t:" opt; do
+while getopts "t:" opt; do
     case $opt in
         t)
             targets+=($OPTARG)
+            ;;
+        ?)
+            echo "Usage: $(basename $0) [-t <target-triple>]"
             ;;
     esac
 done
 
 if [[ "${#targets[@]}" == "0" ]]; then
-    targets=("x86_64-unknown-linux-musl", "x86_64-pc-windows-gnu")
+    targets=("x86_64-unknown-linux-musl" "x86_64-pc-windows-gnu")
 fi
 
 function build() {
@@ -71,6 +74,6 @@ function build() {
     echo "* Done build package ${PKG_NAME}"
 }
 
-for target in "${targets[*]}"; do
+for target in "${targets[@]}"; do
     build "$target";
 done
