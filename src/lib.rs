@@ -78,6 +78,10 @@
 #![crate_name = "shadowsocks"]
 #![recursion_limit = "128"]
 
+use std::io;
+
+use tokio::runtime::Handle;
+
 /// ShadowSocks version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -91,3 +95,13 @@ mod context;
 pub mod crypto;
 pub mod plugin;
 pub mod relay;
+
+/// Start a ShadowSocks' server
+///
+/// For `config.config_type` in `Socks5Local`, `HttpLocal` and `TunnelLocal`, server will run in Local mode.
+pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
+    match config.config_type {
+        ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => run_local(config, rt).await,
+        ConfigType::Server => run_server(config, rt).await,
+    }
+}
