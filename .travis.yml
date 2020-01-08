@@ -39,4 +39,4 @@ install:
     fi
 
 script:
-  - cargo test --no-fail-fast --features miscreant --tests
+  - cargo test --no-fail-fast --features miscreant
