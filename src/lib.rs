@@ -100,8 +100,9 @@ pub mod relay;
 ///
 /// For `config.config_type` in `Socks5Local`, `HttpLocal` and `TunnelLocal`, server will run in Local mode.
 pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
-    match config.config_type {
-        ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => run_local(config, rt).await,
-        ConfigType::Server => run_server(config, rt).await,
+    if config.config_type.is_local() {
+        run_local(config, rt).await
+    } else {
+        run_server(config, rt).await
     }
 }

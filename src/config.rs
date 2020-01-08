@@ -479,6 +479,24 @@ pub enum ConfigType {
     Server,
 }
 
+impl ConfigType {
+    /// Check if it is local server type
+    pub fn is_local(self) -> bool {
+        match self {
+            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => true,
+            ConfigType::Server => false,
+        }
+    }
+
+    /// Check if it is remote server type
+    pub fn is_server(self) -> bool {
+        match self {
+            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => false,
+            ConfigType::Server => true,
+        }
+    }
+}
+
 /// Server mode
 #[derive(Clone, Copy, Debug)]
 pub enum Mode {
@@ -629,10 +647,7 @@ impl Config {
     }
 
     fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
-        let check_local = match config_type {
-            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => true,
-            ConfigType::Server => false,
-        };
+        let check_local = config_type.is_local();
 
         if check_local && (config.local_address.is_none() || config.local_port.is_none()) {
             let err = Error::new(
