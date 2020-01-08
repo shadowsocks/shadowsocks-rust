@@ -63,6 +63,9 @@ impl<S> Connection<S>
 where
     S: AsyncRead,
 {
+    /// Create a Connection with a stream S
+    ///
+    /// If `timeout` is Some(..), it will set a timer for both read and write operation.
     pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
         Connection {
             stream: BufReader::new(stream),
@@ -184,6 +187,7 @@ where
     }
 }
 
+/// Secured TcpStream
 pub type STcpStream = Connection<TcpStream>;
 
 async fn connect_proxy_server_internal(
@@ -304,6 +308,7 @@ where
     }
 }
 
+/// Hold the connection until EOF
 pub async fn ignore_until_end<R>(r: &mut R) -> io::Result<u64>
 where
     R: AsyncRead + Unpin,

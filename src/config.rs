@@ -529,25 +529,50 @@ impl FromStr for Mode {
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
+    /// Remote ShadowSocks server configurations
     pub server: Vec<ServerConfig>,
+    /// Local server's bind address
     pub local: Option<ClientConfig>,
+    /// Destination address for tunnel
     pub forward: Option<Address>,
+    /// Ignored IPs
+    ///
+    /// Suggested list: `["127.0.0.1", "::1"]`
     pub forbidden_ip: HashSet<IpAddr>,
+    /// DNS configuration, uses system-wide DNS configuration by default
+    ///
+    /// Value could be a `IpAddr`, uses UDP DNS protocol with port `53`. For example: `8.8.8.8`
+    ///
+    /// Also Value could be some pre-defined DNS server names:
+    ///
+    /// - `google`
+    /// - `cloudflare`, `cloudflare_tls`, `cloudflare_https`
+    /// - `quad9`, `quad9_tls`
     pub dns: Option<String>,
+    /// Server mode, `tcp_only`, `tcp_and_udp`, and `udp_only`
     pub mode: Mode,
+    /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
+    /// Address of `ss-manager`. Send servers' statistic data to the manager server
     pub manager_address: Option<ServerAddr>,
+    /// Config is for Client or Server
     pub config_type: ConfigType,
+    /// Timeout for UDP Associations, default is 5 minutes
     pub udp_timeout: Option<Duration>,
 }
 
 /// Configuration parsing error kind
 #[derive(Copy, Clone, Debug)]
 pub enum ErrorKind {
+    /// Missing required fields in JSON configuration
     MissingField,
+    /// Missing some keys that must be provided together
     Malformed,
+    /// Invalid value of some configuration keys
     Invalid,
+    /// Invalid JSON
     JsonParsingError,
+    /// `std::io::Error`
     IoError,
 }
 
@@ -772,11 +797,13 @@ impl Config {
         Ok(nconfig)
     }
 
+    /// Load Config from a `str`
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let c = json5::from_str::<SSConfig>(s)?;
         Config::load_from_ssconfig(c, config_type)
     }
 
+    /// Load Config from a File
     pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
         let mut reader = OpenOptions::new().read(true).open(&Path::new(filename))?;
         let mut content = String::new();
@@ -784,6 +811,8 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
+    #[doc(hidden)]
+    /// Get `trust-dns`'s `ResolverConfig` by DNS configuration string
     pub fn get_dns_config(&self) -> Option<ResolverConfig> {
         self.dns.as_ref().and_then(|ds| {
             match &ds[..] {

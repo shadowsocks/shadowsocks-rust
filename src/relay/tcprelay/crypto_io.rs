@@ -160,6 +160,9 @@ impl<S> CryptoStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    /// Split connection into reader and writer
+    ///
+    /// The two halfs share the same `CryptoStream<S>`
     pub fn split(&mut self) -> (CryptoStreamReadHalf<'_, S>, CryptoStreamWriteHalf<'_, S>) {
         let p = self as *mut _;
         (

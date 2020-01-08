@@ -24,6 +24,7 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
+/// UDP client for communicating with ShadowSocks' server
 pub struct ServerClient {
     socket: UdpSocket,
     method: CipherType,
