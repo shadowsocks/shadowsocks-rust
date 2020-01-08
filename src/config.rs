@@ -549,7 +549,7 @@ impl FromStr for Mode {
 pub struct Config {
     /// Remote ShadowSocks server configurations
     pub server: Vec<ServerConfig>,
-    /// Local server's bind address
+    /// Local server's bind address, or ShadowSocks server's outbound address
     pub local: Option<ClientConfig>,
     /// Destination address for tunnel
     pub forward: Option<Address>,

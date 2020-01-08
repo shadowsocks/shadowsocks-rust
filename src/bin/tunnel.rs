@@ -170,7 +170,9 @@ fn main() {
 
     let has_provided_local_config = match matches.value_of("LOCAL_ADDR") {
         Some(local_addr) => {
-            let local_addr: SocketAddr = local_addr.parse().expect("`local-addr` is not a valid IP address");
+            let local_addr = local_addr
+                .parse::<SocketAddr>()
+                .expect("`local-addr` is not a valid SocketAddr (IP:port)");
 
             config.local = Some(local_addr);
             true

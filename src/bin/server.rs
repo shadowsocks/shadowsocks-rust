@@ -7,6 +7,8 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
+use std::net::SocketAddr;
+
 use clap::{App, Arg};
 use futures::{
     future::{self, Either},
@@ -45,6 +47,13 @@ fn main() {
                 .long("server-addr")
                 .takes_value(true)
                 .help("Server address"),
+        )
+        .arg(
+            Arg::with_name("BIND_ADDR")
+                .short("b")
+                .long("bind-addr")
+                .takes_value(true)
+                .help("Bind address, outbound socket will bind this address"),
         )
         .arg(
             Arg::with_name("PASSWORD")
@@ -141,6 +150,14 @@ fn main() {
         println!("You have to specify a configuration file or pass arguments from argument list");
         println!("{}", matches.usage());
         return;
+    }
+
+    if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
+        let bind_addr = bind_addr
+            .parse::<SocketAddr>()
+            .expect("`bind-addr` is not a valid SocketAddr (IP:port)");
+
+        config.local = Some(bind_addr);
     }
 
     if matches.is_present("UDP_ONLY") {

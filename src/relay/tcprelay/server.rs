@@ -17,6 +17,7 @@ use crate::{context::SharedContext, relay::socks5::Address};
 use super::{
     monitor::TcpMonStream,
     server_context::{SharedTcpServerContext, TcpServerContext},
+    utils::connect_tcp_stream,
     CryptoStream,
     STcpStream,
 };
@@ -68,6 +69,8 @@ async fn handle_client(
 
     let context = svr_context.context();
 
+    let bind_addr = &context.config().local;
+
     let mut remote_stream = match remote_addr {
         Address::SocketAddress(ref saddr) => {
             if context.config().forbidden_ip.contains(&saddr.ip()) {
@@ -79,7 +82,7 @@ async fn handle_client(
                 return Err(err);
             }
 
-            match TcpStream::connect(saddr).await {
+            match connect_tcp_stream(saddr, bind_addr).await {
                 Ok(s) => {
                     debug!("Connected to remote {}", saddr);
                     s
@@ -104,7 +107,7 @@ async fn handle_client(
             let mut last_err: Option<io::Error> = None;
             let mut stream_opt = None;
             for addr in &addrs {
-                match TcpStream::connect(addr).await {
+                match connect_tcp_stream(addr, bind_addr).await {
                     Ok(s) => stream_opt = Some(s),
                     Err(err) => {
                         error!(
