@@ -2,6 +2,7 @@
 
 use std::{io, net::SocketAddr};
 
+use log::trace;
 use socket2::{Domain, SockAddr, Socket, Type};
 use tokio::net::TcpStream;
 
@@ -11,12 +12,16 @@ use tokio::net::TcpStream;
 pub async fn connect_tcp_stream(addr: &SocketAddr, outbound_addr: &Option<SocketAddr>) -> io::Result<TcpStream> {
     match *outbound_addr {
         None => {
+            trace!("Connecting {}", addr);
+
             // Connect with tokio's default API directly
             TcpStream::connect(addr).await
         }
         Some(ref bind_addr) => {
             // Create TcpStream manually from socket
             // These functions may not behave exactly the same as tokio's TcpStream::connect
+
+            trace!("Connecting {} from {}", addr, bind_addr);
 
             let socket = match *addr {
                 SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::stream(), None)?,
