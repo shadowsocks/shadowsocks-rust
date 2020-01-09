@@ -4,6 +4,7 @@
 /build/*.zip
 /build/target
 /build/install
+/build/*.sha256
 /dev
 /*.log
 /debian/*.log

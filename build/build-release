@@ -54,6 +54,9 @@ function build() {
         if [[ $? != "0" ]]; then
             exit $?
         fi
+
+        cd "${CUR_DIR}"
+        shasum -a 256 "${PKG_NAME}" > "${PKG_NAME}.sha256"
     elif [[ "$TARGET" == *"-windows-"* ]]; then
         PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.zip"
         PKG_PATH="${CUR_DIR}/${PKG_NAME}"
@@ -69,6 +72,9 @@ function build() {
         if [[ $? != "0" ]]; then
             exit $?
         fi
+
+        cd "${CUR_DIR}"
+        shasum -a 256 "${PKG_NAME}" > "${PKG_NAME}.sha256"
     fi
 
     echo "* Done build package ${PKG_NAME}"
