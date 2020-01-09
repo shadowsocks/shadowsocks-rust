@@ -1,62 +1,44 @@
 //! Utility functions
 
-use std::{
-    io,
-    net::{SocketAddr, TcpStream as StdTcpStream},
-};
+use std::{io, net::SocketAddr};
 
-use tokio::net::TcpStream as TokioTcpStream;
-#[cfg(windows)]
-use winapi::um::winsock2::SOCKET;
+use socket2::{Domain, SockAddr, Socket, Type};
+use tokio::net::TcpStream;
 
-use crate::relay::utils::{bind_socket, close_socket, create_socket_nonblock};
+/// Connecting to a specific target with TCP protocol
+///
+/// Optionally we can bind to a local address for connecting
+pub async fn connect_tcp_stream(addr: &SocketAddr, outbound_addr: &Option<SocketAddr>) -> io::Result<TcpStream> {
+    match *outbound_addr {
+        None => {
+            // Connect with tokio's default API directly
+            TcpStream::connect(addr).await
+        }
+        Some(ref bind_addr) => {
+            // Create TcpStream manually from socket
+            // These functions may not behave exactly the same as tokio's TcpStream::connect
 
-#[cfg(unix)]
-fn new_socket(addr: &SocketAddr) -> io::Result<libc::c_int> {
-    let domain = match *addr {
-        SocketAddr::V4(..) => libc::AF_INET,
-        SocketAddr::V6(..) => libc::AF_INET6,
-    };
+            let socket = match *addr {
+                SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::stream(), None)?,
+                SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::stream(), None)?,
+            };
 
-    create_socket_nonblock(domain, libc::SOCK_STREAM)
-}
+            // Bind to local outbound address
+            //
+            // Common failure: EADDRINUSE
+            let bind_addr = SockAddr::from(*bind_addr);
+            socket.bind(&bind_addr)?;
 
-#[cfg(windows)]
-fn new_socket(addr: &SocketAddr) -> io::Result<SOCKET> {
-    use winapi::um::winsock2::{PF_INET, PF_INET6, SOCK_STREAM};
-
-    let af = match *addr {
-        SocketAddr::V4(..) => PF_INET,
-        SocketAddr::V6(..) => PF_INET6,
-    };
-
-    create_socket_nonblock(af, SOCK_STREAM)
-}
-
-#[cfg(unix)]
-fn create_tcp_stream(socket: libc::c_int) -> StdTcpStream {
-    use std::os::unix::io::FromRawFd;
-    unsafe { StdTcpStream::from_raw_fd(socket) }
-}
-
-#[cfg(windows)]
-fn create_tcp_stream(socket: SOCKET) -> StdTcpStream {
-    use std::os::windows::io::{FromRawSocket, RawSocket};
-    unsafe { StdTcpStream::from_raw_socket(socket as RawSocket) }
-}
-
-pub async fn connect_tcp_stream(addr: &SocketAddr, outbound_addr: &Option<SocketAddr>) -> io::Result<TokioTcpStream> {
-    let socket = new_socket(addr)?;
-
-    if let Some(ref bind_addr) = outbound_addr {
-        if let Err(err) = bind_socket(socket, bind_addr) {
-            let _ = close_socket(socket);
-            return Err(err);
+            // Connect to the target
+            //
+            // FIXME: This function is not documented as it may be deleted in the future
+            //
+            // mio 0.6.x (tokio 0.2.x is depending on it) will set stream into non-block mode
+            // unix: https://github.com/tokio-rs/mio/blob/v0.6.x/src/sys/unix/tcp.rs#L28
+            // windows: https://github.com/tokio-rs/mio/blob/v0.6.x/src/sys/windows/tcp.rs#L118
+            //
+            // We have to let tokio calls connect for us. Because we don't have a chance to wait until the socket is actually connected
+            TcpStream::connect_std(socket.into_tcp_stream(), addr).await
         }
     }
-
-    let stream = create_tcp_stream(socket);
-
-    // FIXME: connect_std is marked as not recommended
-    TokioTcpStream::connect_std(stream, addr).await
 }
