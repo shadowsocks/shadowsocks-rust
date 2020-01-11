@@ -4,6 +4,7 @@ use std::{
     convert::Infallible,
     future::Future,
     io,
+    io::ErrorKind,
     net::{IpAddr, SocketAddr},
     pin::Pin,
     sync::{
@@ -99,7 +100,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
             fut: async move {
                 match host_addr(&dst) {
                     None => {
-                        use std::io::{Error, ErrorKind};
+                        use std::io::Error;
 
                         error!("HTTP target URI must be a valid address, but found: {}", dst);
 
@@ -221,21 +222,45 @@ async fn establish_connect_tunnel(
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Left((Err(err), _)) => trace!(
-            "CONNECT relay {} -> {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Left((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "CONNECT relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "CONNECT relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Right((Err(err), _)) => trace!(
-            "CONNECT relay {} <- {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Right((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "CONNECT relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "CONNECT relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
     }
 
     debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
@@ -430,7 +455,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     info!("ShadowSocks HTTP Listening on {}", server.local_addr());
 
     if let Err(err) = server.await {
-        use std::io::{Error, ErrorKind};
+        use std::io::Error;
 
         error!("Hyper Server error: {}", err);
         return Err(Error::new(ErrorKind::Other, err));

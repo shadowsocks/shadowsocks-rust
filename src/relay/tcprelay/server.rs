@@ -1,6 +1,6 @@
 //! Relay for TCP server that running on the server side
 
-use std::{io, net::SocketAddr};
+use std::{io, io::ErrorKind, net::SocketAddr};
 
 use futures::{
     future::{self, Either},
@@ -143,9 +143,21 @@ async fn handle_client(
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),
-        Either::Left((Err(err), _)) => trace!("Relay {} -> {} closed with error {:?}", peer_addr, remote_addr, err),
+        Either::Left((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!("Relay {} -> {} closed with error {}", peer_addr, remote_addr, err);
+            } else {
+                error!("Relay {} -> {} closed with error {}", peer_addr, remote_addr, err);
+            }
+        }
         Either::Right((Ok(_), _)) => trace!("Relay {} <- {} closed", peer_addr, remote_addr),
-        Either::Right((Err(err), _)) => trace!("Relay {} <- {} closed with error {:?}", peer_addr, remote_addr, err),
+        Either::Right((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!("Relay {} <- {} closed with error {}", peer_addr, remote_addr, err);
+            } else {
+                error!("Relay {} <- {} closed with error {}", peer_addr, remote_addr, err);
+            }
+        }
     }
 
     debug!("Relay {} <-> {} closing", peer_addr, remote_addr);

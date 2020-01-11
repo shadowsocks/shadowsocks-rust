@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    io::ErrorKind,
     net::SocketAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -63,21 +64,45 @@ async fn establish_client_tcp_tunnel<'a>(
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("TUNNEL relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Left((Err(err), _)) => trace!(
-            "TUNNEL relay {} -> {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Left((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "TUNNEL relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "TUNNEL relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
         Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Right((Err(err), _)) => trace!(
-            "TUNNEL relay {} <- {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Right((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "TUNNEL relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "TUNNEL relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
     }
 
     debug!("TUNNEL relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);

@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    io::ErrorKind,
     net::SocketAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -60,7 +61,6 @@ async fn handle_socks5_connect<'a>(
         }
         Err(err) => {
             use crate::relay::socks5::Reply;
-            use std::io::ErrorKind;
 
             error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
 
@@ -98,21 +98,45 @@ async fn handle_socks5_connect<'a>(
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Left((Err(err), _)) => trace!(
-            "CONNECT relay {} -> {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Left((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "CONNECT relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "CONNECT relay {} -> {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
-        Either::Right((Err(err), _)) => trace!(
-            "CONNECT relay {} <- {} ({}) closed with error {:?}",
-            client_addr,
-            svr_cfg.addr(),
-            addr,
-            err,
-        ),
+        Either::Right((Err(err), _)) => {
+            if let ErrorKind::TimedOut = err.kind() {
+                trace!(
+                    "CONNECT relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            } else {
+                error!(
+                    "CONNECT relay {} <- {} ({}) closed with error {}",
+                    client_addr,
+                    svr_cfg.addr(),
+                    addr,
+                    err,
+                );
+            }
+        }
     }
 
     debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);

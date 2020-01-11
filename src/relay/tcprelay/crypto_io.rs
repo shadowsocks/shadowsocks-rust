@@ -10,7 +10,7 @@ use std::{
 use byte_string::ByteStr;
 use bytes::Bytes;
 use futures::ready;
-use log::{error, trace};
+use log::{debug, trace};
 use tokio::prelude::*;
 
 use crate::{
@@ -131,7 +131,7 @@ where
             if ctx.check_nonce_and_set(buf) {
                 use std::io::{Error, ErrorKind};
 
-                error!("Detected repeated iv/salt {:?}", ByteStr::new(buf));
+                debug!("Detected repeated iv/salt {:?}", ByteStr::new(buf));
 
                 let err = Error::new(ErrorKind::Other, "detected repeated iv/salt");
                 return Poll::Ready(Err(err));
