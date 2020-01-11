@@ -85,11 +85,12 @@ impl PingPongBloom {
 
         if self.bloom_count[self.current] >= self.item_count {
             // Current bloom filter is full,
-            // Create a new one and use the next one as current.
-            self.bloom_count[self.current] = 0;
-            self.blooms[self.current].clear();
+            // Create a new one and use that one as current.
 
             self.current = (self.current + 1) % 2;
+
+            self.bloom_count[self.current] = 0;
+            self.blooms[self.current].clear();
         }
 
         // Cannot be optimized by `check_and_set`
