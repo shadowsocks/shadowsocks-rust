@@ -77,6 +77,12 @@ impl PingPongBloom {
     //
     // Return `true` if data exist in bloom filter.
     fn check_and_set(&mut self, buf: &[u8]) -> bool {
+        for bloom in &self.blooms {
+            if bloom.check(buf) {
+                return true;
+            }
+        }
+
         if self.bloom_count[self.current] >= self.item_count {
             // Current bloom filter is full,
             // Create a new one and use the next one as current.
@@ -86,12 +92,12 @@ impl PingPongBloom {
             self.current = (self.current + 1) % 2;
         }
 
-        if !self.blooms[self.current].check_and_set(buf) {
-            self.bloom_count[self.current] += 1;
-            false
-        } else {
-            true
-        }
+        // Cannot be optimized by `check_and_set`
+        // Because we have to check every filters in `blooms` before `set`
+        self.blooms[self.current].set(buf);
+        self.bloom_count[self.current] += 1;
+
+        false
     }
 }
 
