@@ -25,7 +25,6 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::{Address, UdpAssociateHeader},
         utils::try_timeout,
@@ -81,11 +80,12 @@ impl UdpAssociation {
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
     ) -> io::Result<UdpAssociation> {
-        debug!("created UDP Association for {}", src_addr);
-
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         let remote_udp = create_socket(&local_addr).await?;
+
+        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
+        debug!("Created UDP Association for {} from {}", src_addr, local_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -111,7 +111,7 @@ impl UdpAssociation {
                 if let Err(err) =
                     UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
                 {
-                    error!("failed to send packet {} -> ..., error: {}", src_addr, err);
+                    error!("Failed to send packet {} -> ..., error: {}", src_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
                 }
@@ -130,7 +130,7 @@ impl UdpAssociation {
                     match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, svr_cfg).await {
                         Ok(..) => {}
                         Err(err) => {
-                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
+                            error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
 
                             // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
                             // break;
@@ -233,7 +233,7 @@ impl UdpAssociation {
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, payload)).await {
-            error!("failed to send packet into response channel, error: {}", err);
+            error!("Failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
         }
@@ -284,7 +284,7 @@ impl PingServer for ServerScore {
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
-    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
+    let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let l = create_socket(&bind_addr).await?;
     let local_addr = l.local_addr().expect("Could not determine port bound to");
@@ -350,7 +350,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         // Copy bytes, because udp_associate runs in another tokio Task
         let pkt = &pkt_buf[..recv_len];
 
-        trace!("received UDP packet from {}, length {} bytes", src, recv_len);
+        trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
 
         if recv_len == 0 {
             // For windows, it will generate a ICMP Port Unreachable Message

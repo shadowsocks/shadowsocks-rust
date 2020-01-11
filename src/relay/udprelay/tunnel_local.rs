@@ -25,7 +25,6 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
         utils::try_timeout,
@@ -61,11 +60,12 @@ impl UdpAssociation {
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
     ) -> io::Result<UdpAssociation> {
-        debug!("Created UDP Association for {}", src_addr);
-
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         let remote_udp = create_socket(&local_addr).await?;
+
+        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
+        debug!("Created UDP Association for {} from {}", src_addr, local_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -256,7 +256,7 @@ impl PingServer for ServerScore {
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
-    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
+    let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let l = create_socket(&bind_addr).await?;
     let local_addr = l.local_addr().expect("Could not determine port bound to");

@@ -42,7 +42,6 @@ use crate::{
     config::ServerConfig,
     context::SharedContext,
     relay::{
-        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
     },
@@ -402,7 +401,7 @@ impl PingServer for ServerScore {
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
-    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
+    let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let servers = context
         .config()

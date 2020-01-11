@@ -12,10 +12,7 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{
-    context::SharedContext,
-    relay::{dns_resolver::resolve_bind_addr, socks5::Address},
-};
+use crate::{context::SharedContext, relay::socks5::Address};
 
 use super::{
     monitor::TcpMonStream,
@@ -75,7 +72,7 @@ async fn handle_client(
     let bind_addr = match context.config().local {
         None => None,
         Some(ref addr) => {
-            let ba = resolve_bind_addr(context, addr).await?;
+            let ba = addr.bind_addr(context).await?;
             Some(ba)
         }
     };
@@ -161,7 +158,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     for svr_cfg in &context.config().server {
         let mut listener = {
             let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
-            let addr = resolve_bind_addr(&*context, addr).await?;
+            let addr = addr.bind_addr(&*context).await?;
 
             let listener = TcpListener::bind(&addr)
                 .await

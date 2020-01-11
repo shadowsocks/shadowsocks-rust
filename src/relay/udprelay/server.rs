@@ -21,7 +21,7 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-    relay::{dns_resolver::resolve_bind_addr, socks5::Address, utils::try_timeout},
+    relay::{socks5::Address, utils::try_timeout},
 };
 
 use super::{
@@ -52,11 +52,21 @@ impl UdpAssociation {
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
     ) -> io::Result<UdpAssociation> {
-        debug!("created UDP Association for {}", src_addr);
-
         // Create a socket for receiving packets
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let local_addr = match context.config().local {
+            None => {
+                // Let system allocate an address for us
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
+            }
+            Some(ref addr) => {
+                // Uses configured local address
+                addr.bind_addr(&*context).await?
+            }
+        };
         let remote_udp = create_socket(&local_addr).await?;
+
+        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
+        debug!("Created UDP Association for {} from {}", src_addr, local_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -80,7 +90,7 @@ impl UdpAssociation {
                 if let Err(err) =
                     UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
-                    error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
+                    error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
                 }
@@ -97,7 +107,7 @@ impl UdpAssociation {
                     match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, &*svr_cfg).await {
                         Ok(..) => {}
                         Err(err) => {
-                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
+                            error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
 
                             // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
                             // break;
@@ -131,12 +141,12 @@ impl UdpAssociation {
         let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
             Ok(Some(pkt)) => pkt,
             Ok(None) => {
-                error!("failed to decrypt pkt in UDP relay, packet too short");
+                error!("Failed to decrypt pkt in UDP relay, packet too short");
                 let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
                 return Err(err);
             }
             Err(err) => {
-                error!("failed to decrypt pkt in UDP relay: {}", err);
+                error!("Failed to decrypt pkt in UDP relay: {}", err);
                 let err = io::Error::new(io::ErrorKind::InvalidData, "decrypt failed");
                 return Err(err);
             }
@@ -225,7 +235,7 @@ impl UdpAssociation {
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
-            error!("failed to send packet into response channel, error: {}", err);
+            error!("Failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
         }
@@ -245,7 +255,7 @@ impl UdpAssociation {
 }
 
 async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
-    let listen_addr = resolve_bind_addr(&*context, svr_cfg.addr()).await?;
+    let listen_addr = svr_cfg.addr().bind_addr(&*context).await?;
 
     let listener = create_socket(&listen_addr).await?;
     let local_addr = listener.local_addr().expect("Could not determine port bound to");
@@ -306,7 +316,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];
 
-        trace!("received UDP packet from {}, length {} bytes", src, recv_len);
+        trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
 
         if recv_len == 0 {
             // For windows, it will generate a ICMP Port Unreachable Message
@@ -357,7 +367,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     match vec_fut.into_future().await.0 {
         Some(res) => {
-            error!("one of UDP servers exited unexpectly, result: {:?}", res);
+            error!("One of UDP servers exited unexpectly, result: {:?}", res);
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }

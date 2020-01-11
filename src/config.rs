@@ -48,7 +48,7 @@ use std::{
     error,
     fmt::{self, Debug, Display, Formatter},
     fs::OpenOptions,
-    io::Read,
+    io::{self, Read},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     option::Option,
     path::Path,
@@ -67,7 +67,12 @@ use serde_urlencoded;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
-use crate::{crypto::cipher::CipherType, plugin::PluginConfig, relay::socks5::Address};
+use crate::{
+    context::Context,
+    crypto::cipher::CipherType,
+    plugin::PluginConfig,
+    relay::{dns_resolver::resolve_bind_addr, socks5::Address},
+};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
@@ -140,6 +145,17 @@ impl ServerAddr {
         match *self {
             ServerAddr::SocketAddr(ref s) => s.port(),
             ServerAddr::DomainName(_, p) => p,
+        }
+    }
+
+    /// Convert for calling `bind()`
+    pub async fn bind_addr(&self, context: &Context) -> io::Result<SocketAddr> {
+        match resolve_bind_addr(context, self).await {
+            Ok(s) => Ok(s),
+            Err(err) => {
+                error!("Failed to resolve {} for bind(), error: {}", self, err);
+                Err(err)
+            }
         }
     }
 }
