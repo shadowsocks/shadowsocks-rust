@@ -24,11 +24,11 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-};
-
-use crate::relay::{
-    loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
-    socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
+    relay::{
+        dns_resolver::resolve_bind_addr,
+        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
+        socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
+    },
 };
 
 use super::ignore_until_end;
@@ -266,9 +266,10 @@ impl PingServer for ServerScore {
 
 /// Starts a TCP local server with Socks5 proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = *context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
 
-    let mut listener = TcpListener::bind(&local_addr)
+    let mut listener = TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 

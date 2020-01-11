@@ -21,7 +21,7 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-    relay::{socks5::Address, utils::try_timeout},
+    relay::{dns_resolver::resolve_bind_addr, socks5::Address, utils::try_timeout},
 };
 
 use super::{
@@ -186,7 +186,8 @@ impl UdpAssociation {
                         Err(err)
                     }
                 }
-            })?,
+            })
+            .map(|(_, l)| l)?,
         };
 
         assert_eq!(body.len(), send_len);
@@ -244,10 +245,12 @@ impl UdpAssociation {
 }
 
 async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
-    let listen_addr = *svr_cfg.addr().listen_addr();
-    info!("ShadowSocks UDP listening on {}", listen_addr);
+    let listen_addr = resolve_bind_addr(&*context, svr_cfg.addr()).await?;
 
     let listener = create_socket(&listen_addr).await?;
+    let local_addr = listener.local_addr().expect("Could not determine port bound to");
+    info!("ShadowSocks UDP listening on {}", local_addr);
+
     let (mut r, mut w) = listener.split();
 
     // NOTE: Associations are only eliminated by expire time

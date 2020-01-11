@@ -17,6 +17,7 @@ use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
     relay::{
+        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
     },
@@ -141,9 +142,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         "You must enable TCP relay for tunneling"
     );
 
-    let local_addr = *context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
 
-    let mut listener = TcpListener::bind(&local_addr)
+    let mut listener = TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 

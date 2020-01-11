@@ -7,7 +7,7 @@ use tokio::{
 };
 
 use shadowsocks::{
-    config::{Config, ConfigType, Mode, ServerConfig},
+    config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
     crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
     run_local,
@@ -39,7 +39,7 @@ impl Socks5TestServer {
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Socks5Local);
-                cfg.local = Some(local_addr);
+                cfg.local = Some(ServerAddr::from(local_addr));
                 cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg

@@ -12,7 +12,10 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{context::SharedContext, relay::socks5::Address};
+use crate::{
+    context::SharedContext,
+    relay::{dns_resolver::resolve_bind_addr, socks5::Address},
+};
 
 use super::{
     monitor::TcpMonStream,
@@ -69,11 +72,17 @@ async fn handle_client(
 
     let context = svr_context.context();
 
-    let bind_addr = &context.config().local;
+    let bind_addr = match context.config().local {
+        None => None,
+        Some(ref addr) => {
+            let ba = resolve_bind_addr(context, addr).await?;
+            Some(ba)
+        }
+    };
 
     let mut remote_stream = match remote_addr {
         Address::SocketAddress(ref saddr) => {
-            if context.config().forbidden_ip.contains(&saddr.ip()) {
+            if context.check_forbidden_ip(&saddr.ip()) {
                 error!("{} is forbidden, failed to connect {}", saddr.ip(), saddr);
                 let err = io::Error::new(
                     io::ErrorKind::Other,
@@ -82,7 +91,7 @@ async fn handle_client(
                 return Err(err);
             }
 
-            match connect_tcp_stream(saddr, bind_addr).await {
+            match connect_tcp_stream(saddr, &bind_addr).await {
                 Ok(s) => {
                     debug!("Connected to remote {}", saddr);
                     s
@@ -94,40 +103,27 @@ async fn handle_client(
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            use crate::relay::dns_resolver::resolve;
-
-            let addrs = match resolve(&*context, dname.as_str(), port, true).await {
-                Ok(r) => r,
-                Err(err) => {
-                    error!("Failed to resolve {}, {}", dname, err);
-                    return Err(err);
-                }
-            };
-
-            let mut last_err: Option<io::Error> = None;
-            let mut stream_opt = None;
-            for addr in addrs {
-                match connect_tcp_stream(&addr, bind_addr).await {
-                    Ok(s) => stream_opt = Some(s),
+            let result = lookup_then!(&*context, dname.as_str(), port, true, |addr| {
+                match connect_tcp_stream(&addr, &bind_addr).await {
+                    Ok(s) => Ok(s),
                     Err(err) => {
-                        error!(
+                        debug!(
                             "Failed to connect remote {}:{} (resolved: {}), {}, try others",
                             dname, port, addr, err
                         );
-                        last_err = Some(err);
+                        Err(err)
                     }
                 }
-            }
+            });
 
-            match stream_opt {
-                Some(s) => {
-                    debug!("Connected to remote {}:{}", dname, port);
+            match result {
+                Ok((addr, s)) => {
+                    trace!("Connected remote {}:{} (resolved: {})", dname, port, addr);
                     s
                 }
-                None => {
-                    let err = last_err.unwrap();
+                Err(err) => {
                     error!("Failed to connect remote {}:{}, {}", dname, port, err);
-                    return Err(io::Error::new(io::ErrorKind::Other, err));
+                    return Err(err);
                 }
             }
         }
@@ -165,13 +161,15 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     for svr_cfg in &context.config().server {
         let mut listener = {
             let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
-            let addr = addr.listen_addr();
+            let addr = resolve_bind_addr(&*context, addr).await?;
 
             let listener = TcpListener::bind(&addr)
                 .await
-                .unwrap_or_else(|err| panic!("Failed to listen, {}", err));
+                .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", addr, err));
 
-            info!("ShadowSocks TCP Listening on {}", addr);
+            let local_addr = listener.local_addr().expect("Could not determine port bound to");
+            info!("ShadowSocks TCP Listening on {}", local_addr);
+
             listener
         };
 

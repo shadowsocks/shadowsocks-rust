@@ -42,6 +42,7 @@ use crate::{
     config::ServerConfig,
     context::SharedContext,
     relay::{
+        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::Address,
     },
@@ -400,7 +401,8 @@ impl PingServer for ServerScore {
 
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = *context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
 
     let servers = context
         .config()
@@ -425,11 +427,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         }
     });
 
-    let server = Server::bind(&local_addr).serve(make_service);
-
-    let actual_local_addr = server.local_addr();
-
-    info!("ShadowSocks HTTP Listening on {}", actual_local_addr);
+    let server = Server::bind(&bind_addr).serve(make_service);
+    info!("ShadowSocks HTTP Listening on {}", server.local_addr());
 
     if let Err(err) = server.await {
         use std::io::{Error, ErrorKind};

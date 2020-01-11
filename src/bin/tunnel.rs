@@ -10,7 +10,6 @@ use futures::{
     FutureExt,
 };
 use log::{debug, error, info};
-use std::net::SocketAddr;
 use tokio::runtime::Builder;
 
 use shadowsocks::{
@@ -141,7 +140,9 @@ fn main() {
             };
 
             let sc = ServerConfig::new(
-                svr_addr.parse::<ServerAddr>().expect("Invalid server addr"),
+                svr_addr
+                    .parse::<ServerAddr>()
+                    .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
                 password.to_owned(),
                 method,
                 None,
@@ -171,8 +172,8 @@ fn main() {
     let has_provided_local_config = match matches.value_of("LOCAL_ADDR") {
         Some(local_addr) => {
             let local_addr = local_addr
-                .parse::<SocketAddr>()
-                .expect("`local-addr` is not a valid SocketAddr (IP:port)");
+                .parse::<ServerAddr>()
+                .expect("`local-addr` invalid, \"IP:Port\" or \"Domain:Port\"");
 
             config.local = Some(local_addr);
             true

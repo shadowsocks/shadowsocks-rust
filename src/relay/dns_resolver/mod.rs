@@ -1,7 +1,11 @@
 //! Asynchronous DNS resolver
 #![macro_use]
 
+use std::{io, net::SocketAddr};
+
 use cfg_if::cfg_if;
+
+use crate::{config::ServerAddr, context::Context};
 
 cfg_if! {
     if #[cfg(feature = "trust-dns")] {
@@ -26,7 +30,7 @@ macro_rules! lookup_then {
         for $resolved_addr in resolve($context, $addr, $port, $check_forbidden).await? {
             match $body {
                 Ok(r) => {
-                    result = Some(Ok(r));
+                    result = Some(Ok(($resolved_addr, r)));
                     break;
                 }
                 Err(err) => {
@@ -37,4 +41,15 @@ macro_rules! lookup_then {
 
         result.expect("resolved empty address")
     }};
+}
+
+/// Resolve `ServerAddr` for `bind()`
+pub async fn resolve_bind_addr(context: &Context, addr: &ServerAddr) -> io::Result<SocketAddr> {
+    match addr {
+        ServerAddr::SocketAddr(ref a) => Ok(*a),
+        ServerAddr::DomainName(ref dname, port) => {
+            let mut addrs = self::resolve(context, dname, *port, false).await?;
+            Ok(addrs.next().expect("resolved empty addresses"))
+        }
+    }
 }

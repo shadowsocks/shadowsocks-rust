@@ -68,7 +68,8 @@ impl ServerClient {
             }
             ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, port, false, |addr| {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], addr), Some(timeout)).await
-            })?,
+            })
+            .map(|(_, l)| l)?,
         };
 
         assert_eq!(encrypt_buf.len(), send_len);

@@ -127,15 +127,6 @@ pub enum ServerAddr {
 }
 
 impl ServerAddr {
-    /// Get address for server listener
-    /// Panic if address is domain name
-    pub fn listen_addr(&self) -> &SocketAddr {
-        match *self {
-            ServerAddr::SocketAddr(ref s) => s,
-            _ => panic!("Cannot use domain name as server listen address"),
-        }
-    }
-
     /// Get string representation of domain
     pub fn host(&self) -> String {
         match *self {
@@ -183,6 +174,18 @@ impl Display for ServerAddr {
             ServerAddr::SocketAddr(ref a) => write!(f, "{}", a),
             ServerAddr::DomainName(ref d, port) => write!(f, "{}:{}", d, port),
         }
+    }
+}
+
+impl From<SocketAddr> for ServerAddr {
+    fn from(addr: SocketAddr) -> ServerAddr {
+        ServerAddr::SocketAddr(addr)
+    }
+}
+
+impl From<(String, u16)> for ServerAddr {
+    fn from((dname, port): (String, u16)) -> ServerAddr {
+        ServerAddr::DomainName(dname, port)
     }
 }
 
@@ -456,7 +459,7 @@ impl error::Error for UrlParseError {
 }
 
 /// Listening address
-pub type ClientConfig = SocketAddr;
+pub type ClientConfig = ServerAddr;
 
 /// Server config type
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -650,12 +653,8 @@ impl Config {
     fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
         let check_local = config_type.is_local();
 
-        if check_local && (config.local_address.is_none() || config.local_port.is_none()) {
-            let err = Error::new(
-                ErrorKind::Malformed,
-                "`local_address` and `local_port` are required in client",
-                None,
-            );
+        if check_local && config.local_address.is_none() {
+            let err = Error::new(ErrorKind::Malformed, "`local_address` is required for client", None);
             return Err(err);
         }
 
@@ -664,21 +663,15 @@ impl Config {
         // Standard config
         // Client
         if let Some(la) = config.local_address {
-            let port = config.local_port.unwrap();
+            // Let system allocate port by default
+            let port = config.local_port.unwrap_or(0);
 
-            let local = match la.parse::<Ipv4Addr>() {
-                Ok(v4) => SocketAddr::V4(SocketAddrV4::new(v4, port)),
-                Err(..) => match la.parse::<Ipv6Addr>() {
-                    Ok(v6) => SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0)),
-                    Err(..) => {
-                        let err = Error::new(
-                            ErrorKind::Malformed,
-                            "`local_address` must be an ipv4 or ipv6 address",
-                            None,
-                        );
-                        return Err(err);
-                    }
-                },
+            let local = match la.parse::<IpAddr>() {
+                Ok(ip) => ServerAddr::from(SocketAddr::new(ip, port)),
+                Err(..) => {
+                    // treated as domain
+                    ServerAddr::from((la, port))
+                }
             };
 
             nconfig.local = Some(local);
@@ -886,8 +879,16 @@ impl fmt::Display for Config {
         let mut jconf = SSConfig::default();
 
         if let Some(ref client) = self.local {
-            jconf.local_address = Some(client.ip().to_string());
-            jconf.local_port = Some(client.port());
+            match *client {
+                ServerAddr::SocketAddr(ref sa) => {
+                    jconf.local_address = Some(sa.ip().to_string());
+                    jconf.local_port = Some(sa.port());
+                }
+                ServerAddr::DomainName(ref dname, port) => {
+                    jconf.local_address = Some(dname.to_owned());
+                    jconf.local_port = Some(port);
+                }
+            }
         }
 
         // Servers

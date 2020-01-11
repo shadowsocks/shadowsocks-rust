@@ -198,20 +198,34 @@ async fn connect_proxy_server_internal(
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
+            debug!("Connected proxy {}", addr);
             Ok(STcpStream::new(stream, timeout))
         }
-        ServerAddr::DomainName(ref domain, port) => lookup_then!(context, domain.as_str(), *port, false, |addr| {
-            match try_timeout(TcpStream::connect(addr), timeout).await {
-                Ok(s) => return Ok(STcpStream::new(s, timeout)),
-                Err(e) => {
-                    error!(
-                        "Failed to connect {}:{} ({}), try another (err: {})",
-                        domain, port, addr, e
-                    );
-                    Err(e)
+        ServerAddr::DomainName(ref domain, port) => {
+            let result = lookup_then!(context, domain.as_str(), *port, false, |addr| {
+                match try_timeout(TcpStream::connect(addr), timeout).await {
+                    Ok(s) => Ok(STcpStream::new(s, timeout)),
+                    Err(e) => {
+                        debug!(
+                            "Failed to connect proxy {}:{} ({}), try another (err: {})",
+                            domain, port, addr, e
+                        );
+                        Err(e)
+                    }
+                }
+            });
+
+            match result {
+                Ok((addr, s)) => {
+                    debug!("Connected proxy {}:{} ({})", domain, port, addr);
+                    Ok(s)
+                }
+                Err(err) => {
+                    error!("Failed to connect proxy {}:{}, {}", domain, port, err);
+                    Err(err)
                 }
             }
-        }),
+        }
     }
 }
 

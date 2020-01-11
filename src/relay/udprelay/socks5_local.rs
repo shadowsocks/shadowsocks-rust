@@ -25,6 +25,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
+        dns_resolver::resolve_bind_addr,
         loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
         socks5::{Address, UdpAssociateHeader},
         utils::try_timeout,
@@ -182,7 +183,8 @@ impl UdpAssociation {
             }
             ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, *port, false, |addr| {
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], &addr), Some(timeout)).await
-            })?,
+            })
+            .map(|(_, l)| l)?,
         };
 
         assert_eq!(encrypt_buf.len(), send_len);
@@ -281,9 +283,11 @@ impl PingServer for ServerScore {
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = *context.config().local.as_ref().unwrap();
+    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let bind_addr = resolve_bind_addr(&*context, local_addr).await?;
 
-    let l = create_socket(&local_addr).await?;
+    let l = create_socket(&bind_addr).await?;
+    let local_addr = l.local_addr().expect("Could not determine port bound to");
 
     let servers = context.config().server.iter().map(ServerScore::new).collect();
     let mut balancer = PingBalancer::new(context.clone(), servers, PingServerType::Udp).await;
