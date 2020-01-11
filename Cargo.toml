@@ -49,7 +49,7 @@ clap = "2.33"
 env_logger = "0.7"
 openssl = { version = "0.10", optional = true }
 libc = "0.2"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "^0.2.7", features = ["full"] }
 futures = "0.3"
 json5 = "0.2"
 base64 = "0.11"
@@ -76,8 +76,7 @@ tower = "0.3"
 pin-project = "0.4"
 socket2 = "0.3"
 cfg-if = "0.1"
-# bloomfilter = "1.0"
-bloomfilter = { git = "https://github.com/zonyitoo/rust-bloom-filter.git" }
+bloomfilter = "^1.0.2"
 spin = "0.5"
 
 [target.'cfg(windows)'.dependencies]
