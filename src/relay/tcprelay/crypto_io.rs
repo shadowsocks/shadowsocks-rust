@@ -10,11 +10,12 @@ use std::{
 use byte_string::ByteStr;
 use bytes::Bytes;
 use futures::ready;
-use log::trace;
+use log::{error, trace};
 use tokio::prelude::*;
 
 use crate::{
     config::ServerConfig,
+    context::{self, SharedServerState},
     crypto::{CipherCategory, CipherType},
 };
 
@@ -37,8 +38,8 @@ enum EncryptedWriter {
 enum ReadStatus {
     /// Waiting for initializing vector (or nonce for AEAD ciphers)
     ///
-    /// (Buffer, already_read_bytes, method, key)
-    WaitIv(Vec<u8>, usize, CipherType, Bytes),
+    /// (context, Buffer, already_read_bytes, method, key)
+    WaitIv(SharedServerState, Vec<u8>, usize, CipherType, Bytes),
 
     /// Connection is established, DecryptedReader is initialized
     Established,
@@ -56,7 +57,7 @@ impl<S: Unpin> Unpin for CryptoStream<S> {}
 
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
-    pub fn new(stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
+    pub fn new(context: &context::Context, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
         let method = svr_cfg.method();
         let prev_len = match method.category() {
             CipherCategory::Stream => method.iv_size(),
@@ -65,12 +66,26 @@ impl<S> CryptoStream<S> {
 
         let iv = match method.category() {
             CipherCategory::Stream => {
-                let local_iv = method.gen_init_vec();
+                let local_iv = loop {
+                    let iv = method.gen_init_vec();
+                    if context.check_nonce_and_set(&iv) {
+                        // IV exist, generate another one
+                        continue;
+                    }
+                    break iv;
+                };
                 trace!("Generated Stream cipher IV {:?}", local_iv);
                 local_iv
             }
             CipherCategory::Aead => {
-                let local_salt = method.gen_salt();
+                let local_salt = loop {
+                    let salt = method.gen_salt();
+                    if context.check_nonce_and_set(&salt) {
+                        // Salt exist, generate another one
+                        continue;
+                    }
+                    break salt;
+                };
                 trace!("Generated AEAD cipher salt {:?}", local_salt);
                 local_salt
             }
@@ -86,7 +101,13 @@ impl<S> CryptoStream<S> {
             stream,
             dec: None,
             enc,
-            read_status: ReadStatus::WaitIv(vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
+            read_status: ReadStatus::WaitIv(
+                context.clone_server_state(),
+                vec![0u8; prev_len],
+                0usize,
+                method,
+                svr_cfg.clone_key(),
+            ),
         }
     }
 }
@@ -96,7 +117,7 @@ where
     S: AsyncRead + Unpin,
 {
     fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        if let ReadStatus::WaitIv(ref mut buf, ref mut pos, method, ref key) = self.read_status {
+        if let ReadStatus::WaitIv(ref ctx, ref mut buf, ref mut pos, method, ref key) = self.read_status {
             while *pos < buf.len() {
                 let n = ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf[*pos..]))?;
                 if n == 0 {
@@ -104,6 +125,16 @@ where
                     return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
                 *pos += n;
+            }
+
+            // Got iv/salt, check if it is repeated
+            if ctx.check_nonce_and_set(buf) {
+                use std::io::{Error, ErrorKind};
+
+                error!("Detected repeated iv/salt {:?}", ByteStr::new(buf));
+
+                let err = Error::new(ErrorKind::Other, "detected repeated iv/salt");
+                return Poll::Ready(Err(err));
             }
 
             let dec = match method.category() {

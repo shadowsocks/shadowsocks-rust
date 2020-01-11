@@ -84,11 +84,12 @@ impl UdpAssociation {
 
         // local -> remote
         let c_svr_cfg = svr_cfg.clone();
+        let c_context = context.clone();
         tokio::spawn(async move {
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
                 if let Err(err) =
-                    UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
+                    UdpAssociation::relay_l2r(&*c_context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
                 {
                     error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
@@ -104,7 +105,9 @@ impl UdpAssociation {
             let transfer_fut = async move {
                 loop {
                     // Read and send back to source
-                    match UdpAssociation::relay_r2l(src_addr, &mut receiver, &mut response_tx, &*svr_cfg).await {
+                    match UdpAssociation::relay_r2l(&*context, src_addr, &mut receiver, &mut response_tx, &*svr_cfg)
+                        .await
+                    {
                         Ok(..) => {}
                         Err(err) => {
                             error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
@@ -138,7 +141,7 @@ impl UdpAssociation {
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
         // First of all, decrypt payload CLIENT -> SERVER
-        let decrypted_pkt = match decrypt_payload(svr_cfg.method(), svr_cfg.key(), pkt) {
+        let decrypted_pkt = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), pkt) {
             Ok(Some(pkt)) => pkt,
             Ok(None) => {
                 error!("Failed to decrypt pkt in UDP relay, packet too short");
@@ -207,6 +210,7 @@ impl UdpAssociation {
 
     /// Relay packets from remote to local
     async fn relay_r2l(
+        context: &Context,
         src_addr: SocketAddr,
         remote_udp: &mut RecvHalf,
         response_tx: &mut mpsc::Sender<(SocketAddr, BytesMut)>,
@@ -231,7 +235,7 @@ impl UdpAssociation {
         send_buf.extend_from_slice(&remote_buf[..remote_recv_len]);
 
         let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+        encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {

@@ -13,12 +13,6 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    config::{ConfigType, ServerAddr, ServerConfig},
-    context::Context,
-    relay::{socks5::Address, utils::try_timeout},
-};
-
 use bytes::BytesMut;
 use futures::{future::FusedFuture, ready, select, Future};
 use log::{debug, error, trace};
@@ -27,6 +21,12 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::TcpStream,
     time::{self, Delay},
+};
+
+use crate::{
+    config::{ConfigType, ServerAddr, ServerConfig},
+    context::Context,
+    relay::{socks5::Address, utils::try_timeout},
 };
 
 mod aead;
@@ -277,11 +277,12 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 
 /// Handshake logic for ShadowSocks Client
 pub async fn proxy_server_handshake(
+    context: &Context,
     remote_stream: STcpStream,
     svr_cfg: &ServerConfig,
     relay_addr: &Address,
 ) -> io::Result<CryptoStream<STcpStream>> {
-    let mut stream = CryptoStream::new(remote_stream, svr_cfg);
+    let mut stream = CryptoStream::new(context, remote_stream, svr_cfg);
 
     trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 

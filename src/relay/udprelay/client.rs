@@ -60,7 +60,7 @@ impl ServerClient {
         send_buf.extend_from_slice(payload);
 
         let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(self.method, &self.key, &send_buf, &mut encrypt_buf)?;
+        encrypt_payload(context, self.method, &self.key, &send_buf, &mut encrypt_buf)?;
 
         let send_len = match self.server_addr {
             ServerAddr::SocketAddr(ref remote_addr) => {
@@ -86,7 +86,7 @@ impl ServerClient {
         let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (recv_n, ..) = try_timeout(self.socket.recv_from(&mut recv_buf), Some(timeout)).await?;
 
-        let decrypt_buf = match decrypt_payload(self.method, &self.key, &recv_buf[..recv_n])? {
+        let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
             None => {
                 error!("UDP packet too short, received length {}", recv_n);
                 let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");

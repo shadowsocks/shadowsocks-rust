@@ -9,13 +9,91 @@ use std::{
     },
 };
 
+use bloomfilter::Bloom;
+use spin::Mutex;
 use tokio::runtime::Handle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
-use crate::config::Config;
+use crate::config::{Config, ConfigType};
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
+
+// Entries for server's bloom filter
+//
+// Borrowed from shadowsocks-libev's default value
+const BF_NUM_ENTRIES_FOR_SERVER: usize = 1_000_000;
+
+// Entries for client's bloom filter
+//
+// Borrowed from shadowsocks-libev's default value
+const BF_NUM_ENTRIES_FOR_CLIENT: usize = 10_000;
+
+// Error rate for server's bloom filter
+//
+// Borrowed from shadowsocks-libev's default value
+const BF_ERROR_RATE_FOR_SERVER: f64 = 1e-6;
+
+// Error rate for client's bloom filter
+//
+// Borrowed from shadowsocks-libev's default value
+const BF_ERROR_RATE_FOR_CLIENT: f64 = 1e-15;
+
+// A bloom filter borrowed from shadowsocks-libev's `ppbloom`
+//
+// It contains 2 bloom filters and each one holds 1/2 entries.
+// Use them as a ring buffer.
+struct PingPongBloom {
+    blooms: [Bloom<[u8]>; 2],
+    bloom_count: [usize; 2],
+    item_count: usize,
+    current: usize,
+}
+
+impl PingPongBloom {
+    fn new(ty: ConfigType) -> PingPongBloom {
+        let (mut item_count, fp_p) = if ty.is_local() {
+            (BF_NUM_ENTRIES_FOR_CLIENT, BF_ERROR_RATE_FOR_CLIENT)
+        } else {
+            (BF_NUM_ENTRIES_FOR_SERVER, BF_ERROR_RATE_FOR_SERVER)
+        };
+
+        item_count /= 2;
+
+        PingPongBloom {
+            blooms: [
+                Bloom::new_for_fp_rate(item_count, fp_p),
+                Bloom::new_for_fp_rate(item_count, fp_p),
+            ],
+            bloom_count: [0, 0],
+            item_count,
+            current: 0,
+        }
+    }
+
+    // Check if data in `buf` exist.
+    //
+    // Set into the current bloom filter if not exist.
+    //
+    // Return `true` if data exist in bloom filter.
+    fn check_and_set(&mut self, buf: &[u8]) -> bool {
+        if self.bloom_count[self.current] >= self.item_count {
+            // Current bloom filter is full,
+            // Create a new one and use the next one as current.
+            self.bloom_count[self.current] = 0;
+            self.blooms[self.current].clear();
+
+            self.current = (self.current + 1) % 2;
+        }
+
+        if !self.blooms[self.current].check_and_set(buf) {
+            self.bloom_count[self.current] += 1;
+            false
+        } else {
+            true
+        }
+    }
+}
 
 /// Server's global running status
 ///
@@ -24,6 +102,7 @@ pub struct ServerState {
     #[cfg(feature = "trust-dns")]
     dns_resolver: TokioAsyncResolver,
     server_running: AtomicBool,
+    nonce_ppbloom: Mutex<PingPongBloom>,
 }
 
 impl ServerState {
@@ -33,6 +112,7 @@ impl ServerState {
             #[cfg(feature = "trust-dns")]
             dns_resolver: create_resolver(config.get_dns_config(), rt).await?,
             server_running: AtomicBool::new(true),
+            nonce_ppbloom: Mutex::new(PingPongBloom::new(config.config_type)),
         };
 
         Ok(Arc::new(state))
@@ -48,10 +128,18 @@ impl ServerState {
         self.server_running.store(false, Ordering::Release)
     }
 
-    #[cfg(feature = "trust-dns")]
     /// Get the global shared resolver
+    #[cfg(feature = "trust-dns")]
     pub fn dns_resolver(&self) -> &TokioAsyncResolver {
         &self.dns_resolver
+    }
+
+    /// Check if nonce exist or not
+    ///
+    /// If not, set into the current bloom filter
+    pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
+        let mut ppbloom = self.nonce_ppbloom.lock();
+        ppbloom.check_and_set(nonce)
     }
 }
 
@@ -68,12 +156,19 @@ pub struct Context {
 pub type SharedContext = Arc<Context>;
 
 impl Context {
+    /// Create a non-shared Context
     pub fn new(config: Config, server_state: SharedServerState) -> Context {
         Context { config, server_state }
     }
 
+    /// Create a shared Context, wrapped in `Arc`
     pub fn new_shared(config: Config, server_state: SharedServerState) -> SharedContext {
         SharedContext::new(Context::new(config, server_state))
+    }
+
+    /// Clone the internal `ServerState`
+    pub fn clone_server_state(&self) -> SharedServerState {
+        self.server_state.clone()
     }
 
     /// Config for TCP server
@@ -107,5 +202,12 @@ impl Context {
     /// Check if IP is in forbidden list
     pub fn check_forbidden_ip(&self, ip: &IpAddr) -> bool {
         self.config.check_forbidden_ip(ip)
+    }
+
+    /// Check if nonce exist or not
+    ///
+    /// If not, set into the current bloom filter
+    pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
+        self.server_state.check_nonce_and_set(nonce)
     }
 }

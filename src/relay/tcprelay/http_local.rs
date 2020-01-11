@@ -75,7 +75,7 @@ impl tower::Service<Address> for ShadowSocksConnector {
         ShadowSocksConnecting {
             fut: async move {
                 let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                super::proxy_server_handshake(stream, &*svr_cfg, &addr).await
+                super::proxy_server_handshake(&*context, stream, &*svr_cfg, &addr).await
             }
             .boxed(),
         }
@@ -108,7 +108,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                     }
                     Some(addr) => {
                         let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                        super::proxy_server_handshake(stream, &*svr_cfg, &addr).await
+                        super::proxy_server_handshake(&*context, stream, &*svr_cfg, &addr).await
                     }
                 }
             }
@@ -278,7 +278,7 @@ async fn server_dispatch(
             let svr_cfg = svr_score.server_config();
 
             let stream = super::connect_proxy_server(&*context, svr_cfg).await?;
-            super::proxy_server_handshake(stream, svr_cfg, &host).await?
+            super::proxy_server_handshake(&*context, stream, svr_cfg, &host).await?
         };
 
         debug!(

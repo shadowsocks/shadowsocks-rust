@@ -76,6 +76,9 @@ tower = "0.3"
 pin-project = "0.4"
 socket2 = "0.3"
 cfg-if = "0.1"
+# bloomfilter = "1.0"
+bloomfilter = { git = "https://github.com/zonyitoo/rust-bloom-filter.git" }
+spin = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

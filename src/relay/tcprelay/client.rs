@@ -137,7 +137,7 @@ impl ServerClient {
     pub(crate) async fn connect(context: &Context, addr: &Address, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let stream = super::connect_proxy_server(context, svr_cfg).await?;
         Ok(ServerClient {
-            stream: super::proxy_server_handshake(stream, svr_cfg, addr).await?,
+            stream: super::proxy_server_handshake(context, stream, svr_cfg, addr).await?,
         })
     }
 }

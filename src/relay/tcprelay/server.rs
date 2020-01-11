@@ -32,7 +32,9 @@ async fn handle_client(
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    if svr_context.context().config().no_delay {
+    let context = svr_context.context();
+
+    if context.config().no_delay {
         if let Err(err) = socket.set_nodelay(true) {
             error!("Failed to set no delay: {:?}", err);
         }
@@ -51,7 +53,7 @@ async fn handle_client(
 
     // Do server-client handshake
     // Perform encryption IV exchange
-    let mut stream = CryptoStream::new(stream, svr_context.svr_cfg());
+    let mut stream = CryptoStream::new(context, stream, svr_context.svr_cfg());
 
     // Read remote Address
     let remote_addr = match Address::read_from(&mut stream).await {

@@ -24,20 +24,41 @@ use std::{io, slice};
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
-use log::trace;
+use log::{error, trace};
 
-use crate::crypto::{self, CipherCategory, CipherType, CryptoMode};
+use crate::{
+    context::Context,
+    crypto::{self, CipherCategory, CipherType, CryptoMode},
+};
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
-pub fn encrypt_payload(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
+pub fn encrypt_payload(
+    context: &Context,
+    t: CipherType,
+    key: &[u8],
+    payload: &[u8],
+    dst: &mut BytesMut,
+) -> io::Result<()> {
     match t.category() {
-        CipherCategory::Stream => encrypt_payload_stream(t, key, payload, dst),
-        CipherCategory::Aead => encrypt_payload_aead(t, key, payload, dst),
+        CipherCategory::Stream => encrypt_payload_stream(context, t, key, payload, dst),
+        CipherCategory::Aead => encrypt_payload_aead(context, t, key, payload, dst),
     }
 }
 
-fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
-    let iv = t.gen_init_vec();
+fn encrypt_payload_stream(
+    context: &Context,
+    t: CipherType,
+    key: &[u8],
+    payload: &[u8],
+    dst: &mut BytesMut,
+) -> io::Result<()> {
+    let iv = loop {
+        let iv = t.gen_init_vec();
+        if context.check_nonce_and_set(&iv) {
+            continue;
+        }
+        break iv;
+    };
     let mut cipher = crypto::new_stream(t, key, &iv, CryptoMode::Encrypt);
 
     trace!("UDP packet generated stream iv {:?}", ByteStr::new(&iv));
@@ -54,8 +75,20 @@ fn encrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8], dst: &mut B
     Ok(())
 }
 
-fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8], dst: &mut BytesMut) -> io::Result<()> {
-    let salt = t.gen_salt();
+fn encrypt_payload_aead(
+    context: &Context,
+    t: CipherType,
+    key: &[u8],
+    payload: &[u8],
+    dst: &mut BytesMut,
+) -> io::Result<()> {
+    let salt = loop {
+        let salt = t.gen_salt();
+        if context.check_nonce_and_set(&salt) {
+            continue;
+        }
+        break salt;
+    };
     let tag_size = t.tag_size();
     let mut cipher = crypto::new_aead_encryptor(t, key, &salt);
 
@@ -79,20 +112,29 @@ fn encrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8], dst: &mut Byt
 }
 
 /// Decrypt payload from ShadowSocks UDP encrypted packet
-pub fn decrypt_payload(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+pub fn decrypt_payload(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     match t.category() {
-        CipherCategory::Stream => decrypt_payload_stream(t, key, payload),
-        CipherCategory::Aead => decrypt_payload_aead(t, key, payload),
+        CipherCategory::Stream => decrypt_payload_stream(context, t, key, payload),
+        CipherCategory::Aead => decrypt_payload_aead(context, t, key, payload),
     }
 }
 
-fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+fn decrypt_payload_stream(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     let iv_size = t.iv_size();
     if payload.len() < iv_size {
         return Ok(None);
     }
 
     let iv = &payload[..iv_size];
+    if context.check_nonce_and_set(iv) {
+        use std::io::{Error, ErrorKind};
+
+        error!("Detected repeated iv {:?}", ByteStr::new(iv));
+
+        let err = Error::new(ErrorKind::Other, "detected repeated iv");
+        return Err(err);
+    }
+
     let data = &payload[iv_size..];
 
     trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
@@ -106,7 +148,7 @@ fn decrypt_payload_stream(t: CipherType, key: &[u8], payload: &[u8]) -> io::Resu
     Ok(Some(recv_payload))
 }
 
-fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+fn decrypt_payload_aead(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     let tag_size = t.tag_size();
     let salt_size = t.salt_size();
 
@@ -115,6 +157,15 @@ fn decrypt_payload_aead(t: CipherType, key: &[u8], payload: &[u8]) -> io::Result
     }
 
     let salt = &payload[..salt_size];
+    if context.check_nonce_and_set(salt) {
+        use std::io::{Error, ErrorKind};
+
+        error!("Detected repeated salt {:?}", ByteStr::new(salt));
+
+        let err = Error::new(ErrorKind::Other, "detected repeated salt");
+        return Err(err);
+    }
+
     let data = &payload[salt_size..];
 
     trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
