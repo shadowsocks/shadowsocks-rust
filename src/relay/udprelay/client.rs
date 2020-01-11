@@ -66,14 +66,9 @@ impl ServerClient {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            ServerAddr::DomainName(ref dname, port) => {
-                use crate::relay::dns_resolver::resolve;
-
-                let vec_ipaddr = resolve(context, dname, port, false).await?;
-                assert!(!vec_ipaddr.is_empty());
-
-                try_timeout(self.socket.send_to(&encrypt_buf[..], &vec_ipaddr[0]), Some(timeout)).await?
-            }
+            ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, port, false, |addr| {
+                try_timeout(self.socket.send_to(&encrypt_buf[..], addr), Some(timeout)).await
+            })?,
         };
 
         assert_eq!(encrypt_buf.len(), send_len);

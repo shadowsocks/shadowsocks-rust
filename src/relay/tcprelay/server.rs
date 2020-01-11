@@ -106,8 +106,8 @@ async fn handle_client(
 
             let mut last_err: Option<io::Error> = None;
             let mut stream_opt = None;
-            for addr in &addrs {
-                match connect_tcp_stream(addr, bind_addr).await {
+            for addr in addrs {
+                match connect_tcp_stream(&addr, bind_addr).await {
                     Ok(s) => stream_opt = Some(s),
                     Err(err) => {
                         error!(

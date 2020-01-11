@@ -102,15 +102,24 @@ impl TcpServerContext {
         match maddr {
             ServerAddr::SocketAddr(ref addr) => {
                 socket.send_to(payload.as_ref(), addr).await?;
+                Ok(())
             }
             ServerAddr::DomainName(ref domain, ref port) => {
                 use crate::relay::dns_resolver::resolve;
 
                 let addrs = resolve(&*self.context, &domain[..], *port, false).await?;
-                socket.send_to(payload.as_ref(), addrs[0]).await?;
+
+                let mut last_err = None;
+                for addr in addrs {
+                    match socket.send_to(payload.as_ref(), addr).await {
+                        Ok(..) => return Ok(()),
+                        Err(err) => {
+                            last_err = Some(err);
+                        }
+                    }
+                }
+                Err(last_err.unwrap())
             }
         }
-
-        Ok(())
     }
 }

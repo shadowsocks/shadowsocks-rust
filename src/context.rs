@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    net::IpAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -9,12 +10,16 @@ use std::{
 };
 
 use tokio::runtime::Handle;
+#[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
-use crate::{config::Config, relay::dns_resolver::create_resolver};
+use crate::config::Config;
+#[cfg(feature = "trust-dns")]
+use crate::relay::dns_resolver::create_resolver;
 
 #[derive(Clone)]
 pub struct SharedServerState {
+    #[cfg(feature = "trust-dns")]
     dns_resolver: Arc<TokioAsyncResolver>,
     server_running: Arc<AtomicBool>,
 }
@@ -23,6 +28,7 @@ impl SharedServerState {
     #[allow(unused_variables)]
     pub async fn new(config: &Config, rt: Handle) -> io::Result<SharedServerState> {
         let state = SharedServerState {
+            #[cfg(feature = "trust-dns")]
             dns_resolver: Arc::new(create_resolver(config.get_dns_config(), rt).await?),
             server_running: Arc::new(AtomicBool::new(true)),
         };
@@ -40,6 +46,7 @@ impl SharedServerState {
         self.server_running.store(false, Ordering::Release)
     }
 
+    #[cfg(feature = "trust-dns")]
     /// Get the global shared resolver
     pub fn dns_resolver(&self) -> &TokioAsyncResolver {
         &*self.dns_resolver
@@ -76,6 +83,7 @@ impl Context {
         &mut self.config
     }
 
+    #[cfg(feature = "trust-dns")]
     /// Get the global shared resolver
     pub fn dns_resolver(&self) -> &TokioAsyncResolver {
         self.server_state.dns_resolver()
@@ -89,5 +97,10 @@ impl Context {
     /// Stops the server, kills all detached running tasks
     pub fn server_stopped(&self) {
         self.server_state.server_stopped()
+    }
+
+    /// Check if IP is in forbidden list
+    pub fn check_forbidden_ip(&self, ip: &IpAddr) -> bool {
+        self.config.check_forbidden_ip(ip)
     }
 }

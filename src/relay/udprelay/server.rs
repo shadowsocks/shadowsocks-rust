@@ -163,24 +163,30 @@ impl UdpAssociation {
                 );
                 try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
             }
-            Address::DomainNameAddress(ref dname, port) => {
-                use crate::relay::dns_resolver::resolve;
-
-                let vec_ipaddr = resolve(context, dname, port, false).await?;
-                assert!(!vec_ipaddr.is_empty());
-
-                let remote_addr = &vec_ipaddr[0];
-
-                debug!(
-                    "UDP ASSOCIATE {} -> {} ({}), payload length {} bytes",
-                    src,
-                    addr,
-                    remote_addr,
-                    body.len()
-                );
-
-                try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
-            }
+            Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, false, |remote_addr| {
+                match try_timeout(remote_udp.send_to(body, &remote_addr), Some(timeout)).await {
+                    Ok(l) => {
+                        debug!(
+                            "UDP ASSOCIATE {} -> {} ({}), payload length {} bytes",
+                            src,
+                            addr,
+                            remote_addr,
+                            body.len()
+                        );
+                        Ok(l)
+                    }
+                    Err(err) => {
+                        error!(
+                            "UDP ASSOCIATE {} -> {} ({}), payload length {} bytes",
+                            src,
+                            addr,
+                            remote_addr,
+                            body.len()
+                        );
+                        Err(err)
+                    }
+                }
+            })?,
         };
 
         assert_eq!(body.len(), send_len);

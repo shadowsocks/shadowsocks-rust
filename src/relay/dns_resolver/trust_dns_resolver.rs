@@ -1,7 +1,7 @@
 //! Asynchronous DNS resolver
 
 use std::{
-    io::{self, ErrorKind},
+    io::{self, Error, ErrorKind},
     net::SocketAddr,
 };
 
@@ -66,45 +66,43 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
     .await
     .map_err(|err| {
         error!("Failed to create trust-dns DNS Resolver, {}", err);
-        io::Error::new(ErrorKind::Other, "failed to create trust-dns DNS resolver")
+        Error::new(ErrorKind::Other, "failed to create trust-dns DNS resolver")
     })
 }
 
-async fn inner_resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
+/// Perform a DNS resolution
+pub async fn resolve(
+    context: &Context,
+    addr: &str,
+    port: u16,
+    check_forbidden: bool,
+) -> io::Result<impl Iterator<Item = SocketAddr>> {
     match context.dns_resolver().lookup_ip(addr).await {
         Err(err) => {
-            error!("Failed to resolve {}:{}, err: {}", addr, port, err);
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("dns resolve error: {}", err),
-            ))
+            let err = Error::new(ErrorKind::Other, format!("dns resolve {}:{}, {}", addr, port, err));
+            Err(err)
         }
         Ok(lookup_result) => {
             let mut vaddr = Vec::new();
             for ip in lookup_result.iter() {
-                if check_forbidden {
-                    let forbidden_ip = &context.config().forbidden_ip;
-                    if forbidden_ip.contains(&ip) {
-                        debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
-                        continue;
-                    }
+                if check_forbidden && context.check_forbidden_ip(&ip) {
+                    debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
+                    continue;
                 }
+
                 vaddr.push(SocketAddr::new(ip, port));
             }
 
             if vaddr.is_empty() {
-                error!("Failed to resolve {}:{}, all IPs are filtered", addr, port);
-                let err = io::Error::new(ErrorKind::Other, "resolved to empty address, all IPs are filtered");
+                let err = Error::new(
+                    ErrorKind::Other,
+                    format!("resolved {}:{}, but all IPs are filtered", addr, port),
+                );
                 Err(err)
             } else {
                 debug!("Resolved {}:{} => {:?}", addr, port, vaddr);
-                Ok(vaddr)
+                Ok(vaddr.into_iter())
             }
         }
     }
-}
-
-/// Resolve address to IP
-pub async fn resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
-    inner_resolve(context, addr, port, check_forbidden).await
 }

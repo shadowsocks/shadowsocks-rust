@@ -200,34 +200,18 @@ async fn connect_proxy_server_internal(
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
             Ok(STcpStream::new(stream, timeout))
         }
-        ServerAddr::DomainName(ref domain, port) => {
-            use crate::relay::dns_resolver::resolve;
-
-            let vec_ipaddr = try_timeout(resolve(context, &domain[..], *port, false), timeout).await?;
-
-            assert!(!vec_ipaddr.is_empty());
-
-            let mut last_err: Option<io::Error> = None;
-            for addr in &vec_ipaddr {
-                match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => return Ok(STcpStream::new(s, timeout)),
-                    Err(e) => {
-                        error!(
-                            "Failed to connect {}:{}, resolved address {}, try another (err: {})",
-                            domain, port, addr, e
-                        );
-                        last_err = Some(e);
-                    }
+        ServerAddr::DomainName(ref domain, port) => lookup_then!(context, domain.as_str(), *port, false, |addr| {
+            match try_timeout(TcpStream::connect(addr), timeout).await {
+                Ok(s) => return Ok(STcpStream::new(s, timeout)),
+                Err(e) => {
+                    error!(
+                        "Failed to connect {}:{} ({}), try another (err: {})",
+                        domain, port, addr, e
+                    );
+                    Err(e)
                 }
             }
-
-            let err = last_err.unwrap();
-            error!(
-                "Failed to connect {}:{}, tried all addresses but still failed (last err: {})",
-                domain, port, err
-            );
-            Err(err)
-        }
+        }),
     }
 }
 
