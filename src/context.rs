@@ -17,23 +17,25 @@ use crate::config::Config;
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
 
-#[derive(Clone)]
-pub struct SharedServerState {
+/// Server's global running status
+///
+/// Shared between UDP and TCP servers
+pub struct ServerState {
     #[cfg(feature = "trust-dns")]
-    dns_resolver: Arc<TokioAsyncResolver>,
-    server_running: Arc<AtomicBool>,
+    dns_resolver: TokioAsyncResolver,
+    server_running: AtomicBool,
 }
 
-impl SharedServerState {
+impl ServerState {
     #[allow(unused_variables)]
     pub async fn new(config: &Config, rt: Handle) -> io::Result<SharedServerState> {
-        let state = SharedServerState {
+        let state = ServerState {
             #[cfg(feature = "trust-dns")]
-            dns_resolver: Arc::new(create_resolver(config.get_dns_config(), rt).await?),
-            server_running: Arc::new(AtomicBool::new(true)),
+            dns_resolver: create_resolver(config.get_dns_config(), rt).await?,
+            server_running: AtomicBool::new(true),
         };
 
-        Ok(state)
+        Ok(Arc::new(state))
     }
 
     /// Check if the server is still in running state
@@ -49,9 +51,12 @@ impl SharedServerState {
     #[cfg(feature = "trust-dns")]
     /// Get the global shared resolver
     pub fn dns_resolver(&self) -> &TokioAsyncResolver {
-        &*self.dns_resolver
+        &self.dns_resolver
     }
 }
+
+/// `ServerState` wrapped in `Arc`
+pub type SharedServerState = Arc<ServerState>;
 
 /// Shared basic configuration for the whole server
 pub struct Context {

@@ -8,7 +8,7 @@ use tokio::runtime::Handle;
 
 use crate::{
     config::{Config, ConfigType},
-    context::{Context, SharedServerState},
+    context::{Context, ServerState},
     plugin::{PluginMode, Plugins},
     relay::{tcprelay::server::run as run_tcp, udprelay::server::run as run_udp},
 };
@@ -19,7 +19,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     assert!(config.config_type == ConfigType::Server);
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = SharedServerState::new(&config, rt).await?;
+    let state = ServerState::new(&config, rt).await?;
 
     let mut vf = Vec::new();
 
