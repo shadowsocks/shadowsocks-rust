@@ -14,7 +14,6 @@ use std::{
 };
 
 use bytes::{buf::BufExt, Buf, BufMut, BytesMut};
-use log::error;
 use tokio::prelude::*;
 
 pub use self::consts::{
@@ -271,15 +270,18 @@ impl Address {
                 raw_addr.put(&mut BufExt::take(&mut cursor, length));
                 let addr = match String::from_utf8(raw_addr) {
                     Ok(addr) => addr,
-                    Err(..) => return Err(Error::new(Reply::GeneralFailure, "Invalid address encoding")),
+                    Err(..) => return Err(Error::new(Reply::GeneralFailure, "invalid address encoding")),
                 };
                 let port = cursor.get_u16();
 
                 Ok(Address::DomainNameAddress(addr, port))
             }
             _ => {
-                error!("Invalid address type {}", addr_type);
-                Err(Error::new(Reply::AddressTypeNotSupported, "Not supported address type"))
+                // Wrong Address Type . Socks5 only supports ipv4, ipv6 and domain name
+                Err(Error::new(
+                    Reply::AddressTypeNotSupported,
+                    format!("not supported address type {:#x}", addr_type),
+                ))
             }
         }
     }
@@ -460,14 +462,20 @@ impl TcpRequestHeader {
 
         let ver = buf[0];
         if ver != consts::SOCKS5_VERSION {
-            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+            return Err(Error::new(
+                Reply::ConnectionRefused,
+                format!("unsupported socks version {:#x}", ver),
+            ));
         }
 
         let cmd = buf[1];
         let command = match Command::from_u8(cmd) {
             Some(c) => c,
             None => {
-                return Err(Error::new(Reply::CommandNotSupported, "Unsupported command"));
+                return Err(Error::new(
+                    Reply::CommandNotSupported,
+                    format!("unsupported command {:#x}", cmd),
+                ));
             }
         };
 
@@ -538,7 +546,10 @@ impl TcpResponseHeader {
         let reply_code = buf[1];
 
         if ver != consts::SOCKS5_VERSION {
-            return Err(Error::new(Reply::ConnectionRefused, "Unsupported Socks version"));
+            return Err(Error::new(
+                Reply::ConnectionRefused,
+                format!("unsupported socks version {:#x}", ver),
+            ));
         }
 
         let address = Address::read_from(r).await?;
@@ -605,7 +616,9 @@ impl HandshakeRequest {
         let nmet = buf[1];
 
         if ver != consts::SOCKS5_VERSION {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"));
+            use std::io::{Error, ErrorKind};
+            let err = Error::new(ErrorKind::InvalidData, format!("unsupported socks version {:#x}", ver));
+            return Err(err);
         }
 
         let mut methods = vec![0u8; nmet as usize];
@@ -669,7 +682,9 @@ impl HandshakeResponse {
         let met = buf[1];
 
         if ver != consts::SOCKS5_VERSION {
-            Err(io::Error::new(io::ErrorKind::Other, "Invalid Socks5 version"))
+            use std::io::{Error, ErrorKind};
+            let err = Error::new(ErrorKind::InvalidData, format!("unsupported socks version {:#x}", ver));
+            Err(err)
         } else {
             Ok(HandshakeResponse { chosen_method: met })
         }

@@ -60,8 +60,8 @@ async fn handle_client(
         Ok(o) => o,
         Err(err) => {
             error!(
-                "Failed to decode Address, may be wrong method or key, peer {}",
-                peer_addr
+                "Failed to decode Address, may be wrong method or key, peer {}, error: {}",
+                peer_addr, err
             );
             return Err(From::from(err));
         }
