@@ -51,6 +51,7 @@ then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 Requirements:
 
 * Linux x86\_64
+* Windows x86\_64
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
