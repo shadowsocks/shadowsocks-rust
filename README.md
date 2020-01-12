@@ -237,12 +237,14 @@ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server"
 It supports the following features:
 
 * [x] Socks5 CONNECT command
-* [x] UDP ASSOCIATE command (partial)
+* [x] Socks5 UDP ASSOCIATE command (partial)
 * [x] Various crypto algorithms
 * [x] Load balancing (multiple servers) and server delay checking
 * [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
 * [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
 * [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
+* [x] HTTP Proxy Supports ([RFC 7230](http://tools.ietf.org/html/rfc7230) and [CONNECT](https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01))
+* [x] Defend against replay attacks, [shadowsocks/shadowsocks-org#44](https://github.com/shadowsocks/shadowsocks-org/issues/44)
 
 ## TODO
 
@@ -251,11 +253,12 @@ It supports the following features:
 * [x] Improved logging format (waiting for the new official log crate)
 * [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 * [x] Windows support.
-* [x] Build with stable.
+* [x] Build with stable `rustc`.
 * [x] Support HTTP Proxy protocol
 * [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
 * [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 * [x] Choose server based on delay #152
+* [ ] Support TCP Fast Open
 
 ## License
 
