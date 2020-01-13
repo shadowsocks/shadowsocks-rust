@@ -65,10 +65,19 @@ Use cargo to build.
 cargo build --release
 ```
 
-NOTE: If you haven't installed the correct version of `libsodium` in your system, you can set a environment variable `SODIUM_BUILD_STATIC=yes` to let `libsodium-ffi` to build `libsodium` from source, which requires you to have build tools (including GCC, libtools, etc.) installed.
+NOTE: [`libsodium-sys`](https://crates.io/crates/libsodium-sys) builds and links statically to the `libsodium` in its package. Here are some useful environment variables for customizing build processes:
+
+* Find `libsodium` installed in customized path:
+
+  * `SODIUM_LIB_DIR` - Directory path to `libsodium.a` or `sodium.lib`
+  * `SODIUM_SHARED` - Dynamic-link instead of default static-link
+
+* Find `libsodium` with `pkg-config` (*nix), `vcpkg` (MSVC)
+
+  * `SODIUM_USE_PKG_CONFIG=1`
 
 ```bash
-SODIUM_BUILD_STATIC=yes cargo build --release
+SODIUM_USE_PKG_CONFIG=1 cargo build --release
 ```
 
 Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
@@ -77,7 +86,7 @@ Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it wor
 make install TARGET=release
 ```
 
-Then `sslocal`, `ssserver` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
+Then `sslocal`, `ssserver`, `sstunnel` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
 
 For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
 
@@ -91,10 +100,10 @@ Requirements:
 ./build/build-release
 ```
 
-Then `sslocal`, `ssserver` and `ssurl` will be packaged in
+Then `sslocal`, `ssserver`, `sstunnel` and `ssurl` will be packaged in
 
-* `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.gz`
-* `./build/shadowsocks-latest-release.x86_64-unknown-linux-musl.tar.xz`
+* `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
+* `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
 
