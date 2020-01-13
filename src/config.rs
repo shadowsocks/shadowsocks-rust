@@ -106,7 +106,6 @@ struct SSConfig {
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
-    #[cfg(unix)]
     #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
 }

@@ -93,6 +93,13 @@ fn main() {
                 .takes_value(true)
                 .help("ShadowSocks Manager (ssmgr) address"),
         )
+        .arg(
+            Arg::with_name("NOFILE")
+                .short("n")
+                .long("nofile")
+                .takes_value(true)
+                .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
+        )
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
@@ -194,7 +201,15 @@ fn main() {
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
         config.manager_address = Some(
             m.parse::<ServerAddr>()
-                .expect("Expecting a valid ServerAddr for manager_address"),
+                .expect("Expecting \"IP:Port\" or \"Domain:Port\" for `manager_address`"),
+        );
+    }
+
+    if let Some(nofile) = matches.value_of("NOFILE") {
+        config.nofile = Some(
+            nofile
+                .parse::<u64>()
+                .expect("Expecting an unsigned integer for `nofile`"),
         );
     }
 

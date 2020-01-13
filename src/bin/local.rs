@@ -94,6 +94,13 @@ fn main() {
                 .takes_value(true)
                 .help("Protocol that uses to communicates with clients, `socks5` or `http`, default is `socks5`"),
         )
+        .arg(
+            Arg::with_name("NOFILE")
+                .short("n")
+                .long("nofile")
+                .takes_value(true)
+                .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
+        )
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
@@ -210,6 +217,14 @@ fn main() {
             svr.set_plugin(plugin.clone());
         }
     };
+
+    if let Some(nofile) = matches.value_of("NOFILE") {
+        config.nofile = Some(
+            nofile
+                .parse::<u64>()
+                .expect("Expecting an unsigned integer for `nofile`"),
+        );
+    }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
