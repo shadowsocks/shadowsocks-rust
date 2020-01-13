@@ -7,6 +7,8 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
+use std::net::{IpAddr, SocketAddr};
+
 use clap::{App, Arg};
 use futures::{
     future::{self, Either},
@@ -153,9 +155,10 @@ fn main() {
     }
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
-        let bind_addr = bind_addr
-            .parse::<ServerAddr>()
-            .expect("`bind-addr` invalid, (IP:Port) or (Domain:Port)");
+        let bind_addr = match bind_addr.parse::<IpAddr>() {
+            Ok(ip) => ServerAddr::from(SocketAddr::new(ip, 0)),
+            Err(..) => ServerAddr::from((bind_addr, 0)),
+        };
 
         config.local = Some(bind_addr);
     }

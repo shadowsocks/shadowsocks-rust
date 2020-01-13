@@ -199,9 +199,9 @@ impl From<SocketAddr> for ServerAddr {
     }
 }
 
-impl From<(String, u16)> for ServerAddr {
-    fn from((dname, port): (String, u16)) -> ServerAddr {
-        ServerAddr::DomainName(dname, port)
+impl<I: Into<String>> From<(I, u16)> for ServerAddr {
+    fn from((dname, port): (I, u16)) -> ServerAddr {
+        ServerAddr::DomainName(dname.into(), port)
     }
 }
 
@@ -679,8 +679,18 @@ impl Config {
         // Standard config
         // Client
         if let Some(la) = config.local_address {
-            // Let system allocate port by default
-            let port = config.local_port.unwrap_or(0);
+            let port = match config.local_port {
+                // Let system allocate port by default
+                None => 0,
+                Some(p) => {
+                    if config_type.is_server() {
+                        // Server can only bind to address, port should always be 0
+                        0
+                    } else {
+                        p
+                    }
+                }
+            };
 
             let local = match la.parse::<IpAddr>() {
                 Ok(ip) => ServerAddr::from(SocketAddr::new(ip, port)),
