@@ -106,6 +106,9 @@ struct SSConfig {
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
+    #[cfg(unix)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nofile: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -597,6 +600,8 @@ pub struct Config {
     pub config_type: ConfigType,
     /// Timeout for UDP Associations, default is 5 minutes
     pub udp_timeout: Option<Duration>,
+    /// `RLIMIT_NOFILE` option for *nix systems
+    pub nofile: Option<u64>,
 }
 
 /// Configuration parsing error kind
@@ -663,6 +668,7 @@ impl Config {
             manager_address: None,
             config_type,
             udp_timeout: None,
+            nofile: None,
         }
     }
 
@@ -829,6 +835,9 @@ impl Config {
         // UDP
         nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
+        // RLIMIT_NOFILE
+        nconfig.nofile = config.nofile;
+
         Ok(nconfig)
     }
 
@@ -980,6 +989,8 @@ impl fmt::Display for Config {
         }
 
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
+
+        jconf.nofile = self.nofile;
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
     }

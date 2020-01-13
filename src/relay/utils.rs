@@ -17,3 +17,26 @@ where
     }
     .map_err(From::from)
 }
+
+#[cfg(unix)]
+pub fn set_nofile(nofile: u64) -> io::Result<()> {
+    unsafe {
+        // set both soft and hard limit
+        let lim = libc::rlimit {
+            rlim_cur: nofile,
+            rlim_max: nofile,
+        };
+
+        if libc::setrlimit(libc::RLIMIT_NOFILE, &lim as *const _) < 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn set_nofile(nofile: u64) -> io::Result<()> {
+    // set_rlimit only works on *nix systems
+    Ok(())
+}
