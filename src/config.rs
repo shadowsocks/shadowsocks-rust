@@ -497,6 +497,11 @@ pub enum ConfigType {
     /// Requires `local` and `forward` configuration
     TunnelLocal,
 
+    /// Config for redir local
+    ///
+    /// Requires `local` configuration
+    RedirLocal,
+
     /// Config for server
     Server,
 }
@@ -505,7 +510,7 @@ impl ConfigType {
     /// Check if it is local server type
     pub fn is_local(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => true,
+            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => true,
             ConfigType::Server => false,
         }
     }
@@ -513,7 +518,7 @@ impl ConfigType {
     /// Check if it is remote server type
     pub fn is_server(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal => false,
+            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => false,
             ConfigType::Server => true,
         }
     }

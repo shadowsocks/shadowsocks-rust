@@ -42,7 +42,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     let mut vf = Vec::new();
 
     let enable_udp = match config.config_type {
-        ConfigType::Socks5Local | ConfigType::TunnelLocal => config.mode.enable_udp(),
+        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::RedirLocal => config.mode.enable_udp(),
         _ => false,
     };
 
@@ -61,10 +61,12 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     let enable_tcp = match config.config_type {
         // Socks5 always true, because UDP associate command also requires a TCP connection
         ConfigType::Socks5Local => true,
-        // Only tunnel mode controlled by this flag
+        // Tunnel mode controlled by this flag
         ConfigType::TunnelLocal => config.mode.enable_tcp(),
         // HTTP must be TCP
         ConfigType::HttpLocal => true,
+        // Redir mode controlled by this flag
+        ConfigType::RedirLocal => config.mode.enable_tcp(),
 
         _ => false,
     };

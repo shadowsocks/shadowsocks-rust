@@ -35,6 +35,7 @@ mod crypto_io;
 mod http_local;
 pub mod local;
 mod monitor;
+mod redir_local;
 pub mod server;
 mod server_context;
 mod socks5_local;
@@ -235,7 +236,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),
-        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::HttpLocal => {
+        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::HttpLocal | ConfigType::RedirLocal => {
             svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr())
         }
     };

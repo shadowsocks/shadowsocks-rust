@@ -319,7 +319,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_socks5_client(&*context, socket, server_cfg, udp_conf).await {
-                error!("Socks5 client {}", err);
+                error!("TCP Socks5 client, error: {:?}", err);
             }
         });
     }

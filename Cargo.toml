@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.8.7"
+version = "1.8.8"
 authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/zonyitoo/shadowsocks-rust"
@@ -25,6 +25,10 @@ name = "sstunnel"
 path = "src/bin/tunnel.rs"
 
 [[bin]]
+name = "ssredir"
+path = "src/bin/redir.rs"
+
+[[bin]]
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
@@ -40,6 +44,7 @@ aes-ctr = ["openssl"]
 camellia-cfb = ["openssl"]
 single-threaded = []
 trust-dns = ["trust-dns-resolver"]
+redir = []
 
 [dependencies]
 log = "0.4"

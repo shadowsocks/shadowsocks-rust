@@ -1,4 +1,4 @@
-//! Local server that establish a TCP tunnel with server
+//! Local server that establish a TCP Transparent Proxy with server
 
 use std::{
     io,
@@ -23,10 +23,86 @@ use crate::{
     },
 };
 
-/// Established Client Tunnel
+#[cfg(not(target_os = "linux"))]
+pub fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
+    unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
+    use std::{
+        io::Error,
+        mem,
+        net::{SocketAddrV4, SocketAddrV6},
+        os::unix::io::AsRawFd,
+    };
+
+    let fd = s.as_raw_fd();
+
+    unsafe {
+        let mut target_addr: libc::sockaddr_storage = mem::zeroed();
+        let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
+
+        // Check if it is IPv6 address
+        let ret = libc::getsockopt(
+            fd,
+            libc::SOL_IPV6,
+            libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
+            &mut target_addr as *mut _ as *mut _,
+            &mut target_addr_len,
+        );
+
+        if ret != 0 {
+            let err = Error::last_os_error();
+            match err.raw_os_error() {
+                Some(libc::ENOPROTOOPT) | Some(libc::EOPNOTSUPP) => {
+                    // The option is unknown at the level indicated.
+                    //
+                    // - The current system doesn't support IPv6 netfilter
+                    // - This is not an IPv6 connection
+                    //
+                    // Continue with IPv4
+                }
+                _ => {
+                    return Err(err);
+                }
+            }
+
+            let ret = libc::getsockopt(
+                fd,
+                libc::SOL_IP,
+                libc::SO_ORIGINAL_DST,
+                &mut target_addr as *mut _ as *mut _,
+                &mut target_addr_len,
+            );
+
+            if ret != 0 {
+                return Err(Error::last_os_error());
+            }
+        }
+
+        // Convert sockaddr_storage to SocketAddr
+        match target_addr.ss_family as libc::c_int {
+            libc::AF_INET => {
+                let addr: SocketAddrV4 = mem::transmute_copy(&target_addr);
+                Ok(SocketAddr::V4(addr))
+            }
+            libc::AF_INET6 => {
+                let addr: SocketAddrV6 = mem::transmute_copy(&target_addr);
+                Ok(SocketAddr::V6(addr))
+            }
+            _ => {
+                let err = Error::new(ErrorKind::InvalidData, "family must be either AF_INET or AF_INET6");
+                return Err(err);
+            }
+        }
+    }
+}
+
+/// Established Client Transparent Proxy
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
-async fn establish_client_tcp_tunnel<'a>(
+async fn establish_client_tcp_redir<'a>(
     context: &Context,
     mut s: TcpStream,
     client_addr: SocketAddr,
@@ -56,18 +132,18 @@ async fn establish_client_tcp_tunnel<'a>(
     let whalf = copy(&mut svr_r, &mut w);
 
     debug!(
-        "TUNNEL relay established {} <-> {} ({})",
+        "REDIR relay established {} <-> {} ({})",
         client_addr,
         svr_cfg.addr(),
         addr
     );
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("TUNNEL relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Left((Ok(..), _)) => trace!("REDIR relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
                 trace!(
-                    "TUNNEL relay {} -> {} ({}) closed with error {}",
+                    "REDIR relay {} -> {} ({}) closed with error {}",
                     client_addr,
                     svr_cfg.addr(),
                     addr,
@@ -75,7 +151,7 @@ async fn establish_client_tcp_tunnel<'a>(
                 );
             } else {
                 error!(
-                    "TUNNEL relay {} -> {} ({}) closed with error {}",
+                    "REDIR relay {} -> {} ({}) closed with error {}",
                     client_addr,
                     svr_cfg.addr(),
                     addr,
@@ -83,11 +159,11 @@ async fn establish_client_tcp_tunnel<'a>(
                 );
             }
         }
-        Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Right((Ok(..), _)) => trace!("REDIR relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
                 trace!(
-                    "TUNNEL relay {} <- {} ({}) closed with error {}",
+                    "REDIR relay {} <- {} ({}) closed with error {}",
                     client_addr,
                     svr_cfg.addr(),
                     addr,
@@ -95,7 +171,7 @@ async fn establish_client_tcp_tunnel<'a>(
                 );
             } else {
                 error!(
-                    "TUNNEL relay {} <- {} ({}) closed with error {}",
+                    "REDIR relay {} <- {} ({}) closed with error {}",
                     client_addr,
                     svr_cfg.addr(),
                     addr,
@@ -105,12 +181,12 @@ async fn establish_client_tcp_tunnel<'a>(
         }
     }
 
-    debug!("TUNNEL relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
+    debug!("REDIR relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 
     Ok(())
 }
 
-async fn handle_tunnel_client(context: &Context, s: TcpStream, server_score: Arc<ServerScore>) -> io::Result<()> {
+async fn handle_redir_client(context: &Context, mut s: TcpStream, server_score: Arc<ServerScore>) -> io::Result<()> {
     let conf = server_score.server_config();
 
     if let Err(err) = s.set_keepalive(conf.timeout()) {
@@ -125,10 +201,12 @@ async fn handle_tunnel_client(context: &Context, s: TcpStream, server_score: Arc
 
     let client_addr = s.peer_addr()?;
 
-    // forward must not be None, it is already checked in local.rs
-    let target_addr = context.config().forward.as_ref().unwrap();
+    // Get forward address from socket
+    let target_addr = Address::from(get_original_destination_addr(&mut s)?);
 
-    establish_client_tcp_tunnel(context, s, client_addr, target_addr, conf).await
+    trace!("REDIR target address {}", target_addr);
+
+    establish_client_tcp_redir(context, s, client_addr, &target_addr, conf).await
 }
 
 struct ServerScore {
@@ -161,9 +239,13 @@ impl PingServer for ServerScore {
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
+    if cfg!(not(target_os = "linux")) {
+        unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
+    }
+
     assert!(
         context.config().mode.enable_tcp(),
-        "You must enable TCP relay for tunneling"
+        "You must enable TCP relay for transparent proxy"
     );
 
     let local_addr = context.config().local.as_ref().expect("Missing local config");
@@ -177,11 +259,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let servers = context.config().server.iter().map(ServerScore::new).collect();
     let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
-    info!(
-        "ShadowSocks TCP Tunnel Listening on {}, forward to {}",
-        actual_local_addr,
-        context.config().forward.as_ref().unwrap()
-    );
+    info!("ShadowSocks TCP Redir Listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
@@ -192,8 +270,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         let context = context.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_tunnel_client(&*context, socket, server_cfg).await {
-                error!("TCP Tunnel client, error: {:?}", err);
+            if let Err(err) = handle_redir_client(&*context, socket, server_cfg).await {
+                error!("TCP Redir client, error: {:?}", err);
             }
         });
     }
