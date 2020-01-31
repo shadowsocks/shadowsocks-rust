@@ -10,6 +10,7 @@ use std::{
     },
 };
 
+use cfg_if::cfg_if;
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
 use tokio::net::{TcpListener, TcpStream};
@@ -23,78 +24,79 @@ use crate::{
     },
 };
 
-#[cfg(not(target_os = "linux"))]
-pub fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
-    unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
-}
-
-#[cfg(target_os = "linux")]
-pub fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
-    use std::{
-        io::Error,
-        mem,
-        net::{SocketAddrV4, SocketAddrV6},
-        os::unix::io::AsRawFd,
-    };
-
-    let fd = s.as_raw_fd();
-
-    unsafe {
-        let mut target_addr: libc::sockaddr_storage = mem::zeroed();
-        let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
-
-        // Check if it is IPv6 address
-        let ret = libc::getsockopt(
-            fd,
-            libc::SOL_IPV6,
-            libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
-            &mut target_addr as *mut _ as *mut _,
-            &mut target_addr_len,
-        );
-
-        if ret != 0 {
-            let err = Error::last_os_error();
-            match err.raw_os_error() {
-                Some(libc::ENOPROTOOPT) | Some(libc::EOPNOTSUPP) => {
-                    // The option is unknown at the level indicated.
-                    //
-                    // - The current system doesn't support IPv6 netfilter
-                    // - This is not an IPv6 connection
-                    //
-                    // Continue with IPv4
+cfg_if! {
+    if #[cfg(any(target_os = "linux", target_os = "android"))] {
+        fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
+            use std::{
+                io::Error,
+                mem,
+                net::{SocketAddrV4, SocketAddrV6},
+                os::unix::io::AsRawFd,
+            };
+            let fd = s.as_raw_fd();
+            unsafe {
+                let mut target_addr: libc::sockaddr_storage = mem::zeroed();
+                let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
+                // Check if it is IPv6 address
+                let ret = libc::getsockopt(
+                    fd,
+                    libc::SOL_IPV6,
+                    libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
+                    &mut target_addr as *mut _ as *mut _,
+                    &mut target_addr_len,
+                );
+                if ret != 0 {
+                    let err = Error::last_os_error();
+                    match err.raw_os_error() {
+                        Some(libc::ENOPROTOOPT) | Some(libc::EOPNOTSUPP) => {
+                            // The option is unknown at the level indicated.
+                            //
+                            // - The current system doesn't support IPv6 netfilter
+                            // - This is not an IPv6 connection
+                            //
+                            // Continue with IPv4
+                        }
+                        _ => {
+                            return Err(err);
+                        }
+                    }
+                    let ret = libc::getsockopt(
+                        fd,
+                        libc::SOL_IP,
+                        libc::SO_ORIGINAL_DST,
+                        &mut target_addr as *mut _ as *mut _,
+                        &mut target_addr_len,
+                    );
+                    if ret != 0 {
+                        return Err(Error::last_os_error());
+                    }
                 }
-                _ => {
-                    return Err(err);
+                // Convert sockaddr_storage to SocketAddr
+                match target_addr.ss_family as libc::c_int {
+                    libc::AF_INET => {
+                        let addr: SocketAddrV4 = mem::transmute_copy(&target_addr);
+                        Ok(SocketAddr::V4(addr))
+                    }
+                    libc::AF_INET6 => {
+                        let addr: SocketAddrV6 = mem::transmute_copy(&target_addr);
+                        Ok(SocketAddr::V6(addr))
+                    }
+                    _ => {
+                        let err = Error::new(ErrorKind::InvalidData, "family must be either AF_INET or AF_INET6");
+                        return Err(err);
+                    }
                 }
-            }
-
-            let ret = libc::getsockopt(
-                fd,
-                libc::SOL_IP,
-                libc::SO_ORIGINAL_DST,
-                &mut target_addr as *mut _ as *mut _,
-                &mut target_addr_len,
-            );
-
-            if ret != 0 {
-                return Err(Error::last_os_error());
             }
         }
-
-        // Convert sockaddr_storage to SocketAddr
-        match target_addr.ss_family as libc::c_int {
-            libc::AF_INET => {
-                let addr: SocketAddrV4 = mem::transmute_copy(&target_addr);
-                Ok(SocketAddr::V4(addr))
-            }
-            libc::AF_INET6 => {
-                let addr: SocketAddrV6 = mem::transmute_copy(&target_addr);
-                Ok(SocketAddr::V6(addr))
-            }
-            _ => {
-                let err = Error::new(ErrorKind::InvalidData, "family must be either AF_INET or AF_INET6");
-                return Err(err);
-            }
+    } else if #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))] {
+        fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
+            // On FreeBSD, Mac OS X, OpenBSD, ... use fwd action in IPFW or PF
+            // Retrieve original destination address with getsockname()
+            s.local_addr()
+        }
+    } else {
+        fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
+            unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
         }
     }
 }
@@ -239,10 +241,6 @@ impl PingServer for ServerScore {
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    if cfg!(not(target_os = "linux")) {
-        unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
-    }
-
     assert!(
         context.config().mode.enable_tcp(),
         "You must enable TCP relay for transparent proxy"
