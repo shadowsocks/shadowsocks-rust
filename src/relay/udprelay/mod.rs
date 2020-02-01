@@ -51,9 +51,10 @@ use std::time::Duration;
 
 pub mod client;
 pub mod local;
+mod redir_local;
 pub mod server;
-pub(crate) mod socks5_local;
-pub(crate) mod tunnel_local;
+mod socks5_local;
+mod tunnel_local;
 mod utils;
 
 mod crypto_io;
