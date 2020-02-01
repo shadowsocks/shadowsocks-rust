@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    utils::create_socket,
+    sys::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };

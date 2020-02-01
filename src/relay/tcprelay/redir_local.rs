@@ -30,9 +30,10 @@ cfg_if! {
             use std::{
                 io::Error,
                 mem,
-                net::{SocketAddrV4, SocketAddrV6},
                 os::unix::io::AsRawFd,
             };
+            use crate::relay::utils::sockaddr_to_std;
+
             let fd = s.as_raw_fd();
             unsafe {
                 let mut target_addr: libc::sockaddr_storage = mem::zeroed();
@@ -71,21 +72,9 @@ cfg_if! {
                         return Err(Error::last_os_error());
                     }
                 }
+
                 // Convert sockaddr_storage to SocketAddr
-                match target_addr.ss_family as libc::c_int {
-                    libc::AF_INET => {
-                        let addr: SocketAddrV4 = mem::transmute_copy(&target_addr);
-                        Ok(SocketAddr::V4(addr))
-                    }
-                    libc::AF_INET6 => {
-                        let addr: SocketAddrV6 = mem::transmute_copy(&target_addr);
-                        Ok(SocketAddr::V6(addr))
-                    }
-                    _ => {
-                        let err = Error::new(ErrorKind::InvalidData, "family must be either AF_INET or AF_INET6");
-                        return Err(err);
-                    }
-                }
+                sockaddr_to_std(&target_addr)
             }
         }
     } else if #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))] {
@@ -96,7 +85,7 @@ cfg_if! {
         }
     } else {
         fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
-            unimplemented!("Transparent Proxy (redir) doesn't work on this platform");
+            unimplemented!("TCP Transparent Proxy (redir) is not supported on this platform");
         }
     }
 }

@@ -83,6 +83,7 @@ socket2 = "0.3"
 cfg-if = "0.1"
 bloomfilter = "^1.0.2"
 spin = "0.5"
+mio = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
