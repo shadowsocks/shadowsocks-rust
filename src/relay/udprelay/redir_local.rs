@@ -98,12 +98,22 @@ impl UdpAssociation {
         let c_context = context.clone();
         tokio::spawn(async move {
             let svr_cfg = c_svr_cfg.server_config();
+            let dst_addr = Address::from(dst_addr);
 
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
-                if let Err(err) =
-                    UdpAssociation::relay_l2r(&*c_context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
-                {
+                let res = UdpAssociation::relay_l2r(
+                    &*c_context,
+                    &src_addr,
+                    &dst_addr,
+                    &mut sender,
+                    &pkt[..],
+                    timeout,
+                    svr_cfg,
+                )
+                .await;
+
+                if let Err(err) = res {
                     error!("failed to send packet {} -> {}, error: {}", src_addr, dst_addr, err);
 
                     // FIXME: Ignore? Or how to deal with it?
@@ -120,14 +130,14 @@ impl UdpAssociation {
             let transfer_fut = async move {
                 loop {
                     // Read and send back to source
-                    match UdpAssociation::relay_r2l(&*context, src_addr, &mut receiver, &mut local_udp, svr_cfg).await {
-                        Ok(..) => {}
-                        Err(err) => {
-                            error!("failed to receive packet, {} <- {}, error: {}", src_addr, dst_addr, err);
+                    let res =
+                        UdpAssociation::relay_r2l(&*context, &src_addr, &mut receiver, &mut local_udp, svr_cfg).await;
 
-                            // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
-                            // break;
-                        }
+                    if let Err(err) = res {
+                        error!("failed to receive packet, {} <- {}, error: {}", src_addr, dst_addr, err);
+
+                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
+                        // break;
                     }
 
                     let cache_key = cache_key(&src_addr, &dst_addr);
@@ -155,19 +165,18 @@ impl UdpAssociation {
     /// Relay packets from local to remote
     async fn relay_l2r(
         context: &Context,
-        src: SocketAddr,
+        src: &SocketAddr,
+        dst: &Address,
         remote_udp: &mut SendHalf,
         payload: &[u8],
         timeout: Duration,
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
-        let addr = context.config().forward.as_ref().unwrap();
-
-        debug!("UDP REDIR {} -> {}, payload length {} bytes", src, addr, payload.len());
+        debug!("UDP REDIR {} -> {}, payload length {} bytes", src, dst, payload.len());
 
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
         let mut send_buf = Vec::new();
-        addr.write_to_buf(&mut send_buf);
+        dst.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
 
         let mut encrypt_buf = BytesMut::new();
@@ -191,7 +200,7 @@ impl UdpAssociation {
     /// Relay packets from remote to local
     async fn relay_r2l(
         context: &Context,
-        src_addr: SocketAddr,
+        src_addr: &SocketAddr,
         remote_udp: &mut RecvHalf,
         local_udp: &mut TProxyUdpSocket,
         svr_cfg: &ServerConfig,
@@ -226,7 +235,7 @@ impl UdpAssociation {
         );
 
         // Send back to src_addr
-        local_udp.send_to(&payload, &src_addr).await.map(|_| ())
+        local_udp.send_to(&payload, src_addr).await.map(|_| ())
     }
 
     // Send packet to remote

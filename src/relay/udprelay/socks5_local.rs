@@ -110,7 +110,7 @@ impl UdpAssociation {
             while let Some(pkt) = rx.recv().await {
                 // pkt is already a raw packet, so just send it
                 if let Err(err) =
-                    UdpAssociation::relay_l2r(&*c_context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
+                    UdpAssociation::relay_l2r(&*c_context, &src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
                 {
                     error!("Failed to send packet {} -> ..., error: {}", src_addr, err);
 
@@ -156,7 +156,7 @@ impl UdpAssociation {
     /// Relay packets from local to remote
     async fn relay_l2r(
         context: &Context,
-        src: SocketAddr,
+        src: &SocketAddr,
         remote_udp: &mut SendHalf,
         pkt: &[u8],
         timeout: Duration,
