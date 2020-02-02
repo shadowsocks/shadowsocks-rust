@@ -124,7 +124,7 @@ pub fn recv_from_with_destination(socket: &UdpSocket, buf: &mut [u8]) -> io::Res
         msg.msg_iovlen = 1;
 
         msg.msg_control = control_buf.as_mut_ptr() as *mut _;
-        msg.msg_controllen = control_buf.len() as libc::socklen_t;
+        msg.msg_controllen = control_buf.len() as libc::size_t;
 
         let fd = socket.as_raw_fd();
         let ret = libc::recvmsg(fd, &mut msg, 0);
