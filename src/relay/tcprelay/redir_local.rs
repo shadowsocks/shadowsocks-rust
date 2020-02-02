@@ -10,10 +10,9 @@ use std::{
     },
 };
 
-use cfg_if::cfg_if;
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
 use crate::{
     config::ServerConfig,
@@ -24,71 +23,7 @@ use crate::{
     },
 };
 
-cfg_if! {
-    if #[cfg(any(target_os = "linux", target_os = "android"))] {
-        fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
-            use std::{
-                io::Error,
-                mem,
-                os::unix::io::AsRawFd,
-            };
-            use crate::relay::utils::sockaddr_to_std;
-
-            let fd = s.as_raw_fd();
-            unsafe {
-                let mut target_addr: libc::sockaddr_storage = mem::zeroed();
-                let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
-                // Check if it is IPv6 address
-                let ret = libc::getsockopt(
-                    fd,
-                    libc::SOL_IPV6,
-                    libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
-                    &mut target_addr as *mut _ as *mut _,
-                    &mut target_addr_len,
-                );
-                if ret != 0 {
-                    let err = Error::last_os_error();
-                    match err.raw_os_error() {
-                        Some(libc::ENOPROTOOPT) | Some(libc::EOPNOTSUPP) => {
-                            // The option is unknown at the level indicated.
-                            //
-                            // - The current system doesn't support IPv6 netfilter
-                            // - This is not an IPv6 connection
-                            //
-                            // Continue with IPv4
-                        }
-                        _ => {
-                            return Err(err);
-                        }
-                    }
-                    let ret = libc::getsockopt(
-                        fd,
-                        libc::SOL_IP,
-                        libc::SO_ORIGINAL_DST,
-                        &mut target_addr as *mut _ as *mut _,
-                        &mut target_addr_len,
-                    );
-                    if ret != 0 {
-                        return Err(Error::last_os_error());
-                    }
-                }
-
-                // Convert sockaddr_storage to SocketAddr
-                sockaddr_to_std(&target_addr)
-            }
-        }
-    } else if #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))] {
-        fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
-            // On FreeBSD, Mac OS X, OpenBSD, ... use fwd action in IPFW or PF
-            // Retrieve original destination address with getsockname()
-            s.local_addr()
-        }
-    } else {
-        fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
-            unimplemented!("TCP Transparent Proxy (redir) is not supported on this platform");
-        }
-    }
-}
+use super::sys::{create_redir_listener, get_original_destination_addr};
 
 /// Established Client Transparent Proxy
 ///
@@ -230,15 +165,14 @@ impl PingServer for ServerScore {
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    assert!(
-        context.config().mode.enable_tcp(),
-        "You must enable TCP relay for transparent proxy"
-    );
+    if let Err(err) = super::sys::check_support_tproxy() {
+        panic!("{}", err);
+    }
 
     let local_addr = context.config().local.as_ref().expect("Missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let mut listener = TcpListener::bind(&bind_addr)
+    let mut listener = create_redir_listener(&bind_addr)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 

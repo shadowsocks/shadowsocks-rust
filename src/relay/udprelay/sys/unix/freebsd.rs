@@ -9,7 +9,7 @@ use std::{
 use mio::net::UdpSocket;
 use socket2::Socket;
 
-use crate::relay::utils::sockaddr_to_std;
+use crate::relay::sys::sockaddr_to_std;
 
 pub fn check_support_tproxy() -> io::Result<()> {
     Ok(())

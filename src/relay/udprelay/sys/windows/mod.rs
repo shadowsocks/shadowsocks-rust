@@ -1,5 +1,4 @@
 use std::{
-    io,
     io::{self, Error, ErrorKind},
     mem,
     net::SocketAddr,
@@ -7,9 +6,9 @@ use std::{
     ptr,
 };
 
-use mio::net::UdpSocket;
+use mio::net::UdpSocket as MioUdpSocket;
 use socket2::Socket;
-use tokio::net::UdpSocket;
+use tokio::net::UdpSocket as TokioUdpSocket;
 use winapi::{
     shared::minwindef::{BOOL, DWORD, FALSE, LPDWORD, LPVOID},
     um::{
@@ -21,7 +20,7 @@ use winapi::{
 /// Create a `UdpSocket` binded to `addr`
 ///
 /// It also disables `WSAECONNRESET` for UDP socket
-pub async fn create_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
+pub async fn create_socket(addr: &SocketAddr) -> io::Result<TokioUdpSocket> {
     // FIXME: Temporary solution. Should be replaced by tokio's UdpSocket::as_raw_socket
     // https://github.com/tokio-rs/tokio/issues/2017
 
@@ -63,7 +62,7 @@ pub async fn create_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
         }
     }
 
-    UdpSocket::from_std(socket)
+    TokioUdpSocket::from_std(socket)
 }
 
 pub fn check_support_tproxy() -> io::Result<()> {
@@ -77,6 +76,9 @@ pub fn set_socket_before_bind(_addr: &SocketAddr, _socket: &Socket) -> io::Resul
     unimplemented!("Windows doesn't support UDP transparent proxy");
 }
 
-pub fn recv_from_with_destination(_socket: &UdpSocket, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+pub fn recv_from_with_destination(
+    _socket: &MioUdpSocket,
+    _buf: &mut [u8],
+) -> io::Result<(usize, SocketAddr, SocketAddr)> {
     unimplemented!("Windows doesn't support UDP transparent proxy");
 }

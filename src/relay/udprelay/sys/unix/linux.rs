@@ -1,4 +1,5 @@
 use std::{
+    convert::TryFrom,
     io::{self, Error, ErrorKind},
     mem,
     net::SocketAddr,
@@ -9,7 +10,7 @@ use std::{
 use mio::net::UdpSocket;
 use socket2::Socket;
 
-use crate::relay::utils::sockaddr_to_std;
+use crate::relay::sys::sockaddr_to_std;
 
 pub fn check_support_tproxy() -> io::Result<()> {
     Ok(())
@@ -111,7 +112,8 @@ pub fn recv_from_with_destination(socket: &UdpSocket, buf: &mut [u8]) -> io::Res
         msg.msg_iovlen = 1;
 
         msg.msg_control = control_buf.as_mut_ptr() as *mut _;
-        msg.msg_controllen = control_buf.len() as libc::size_t;
+        // This is f*** s***, some platform define msg_controllen as size_t, some define as u32
+        msg.msg_controllen = TryFrom::try_from(control_buf.len()).expect("failed to convert usize to msg_controllen");
 
         let fd = socket.as_raw_fd();
         let ret = libc::recvmsg(fd, &mut msg, 0);
