@@ -34,22 +34,17 @@ async fn handle_client(
 
     let context = svr_context.context();
 
-    if context.config().no_delay {
-        if let Err(err) = socket.set_nodelay(true) {
-            error!("Failed to set no delay: {:?}", err);
-        }
-    }
-
     trace!(
         "Got connection addr: {} with proxy server: {:?}",
         peer_addr,
         svr_context.svr_cfg()
     );
 
-    let stream = TcpMonStream::new(
-        svr_context.clone(),
-        STcpStream::new(socket, svr_context.svr_cfg().timeout()),
-    );
+    let mut stream = STcpStream::new(socket, svr_context.svr_cfg().timeout());
+    stream.set_nodelay(context.config().no_delay)?;
+
+    // Wrap with a data transfer monitor
+    let stream = TcpMonStream::new(svr_context.clone(), stream);
 
     // Do server-client handshake
     // Perform encryption IV exchange

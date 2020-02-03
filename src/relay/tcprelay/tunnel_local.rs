@@ -119,7 +119,7 @@ async fn handle_tunnel_client(context: &Context, s: TcpStream, server_score: Arc
 
     if context.config().no_delay {
         if let Err(err) = s.set_nodelay(true) {
-            error!("Failed to set no delay: {:?}", err);
+            error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
         }
     }
 

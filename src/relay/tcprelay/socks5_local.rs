@@ -14,12 +14,7 @@ use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
-    net::{
-        tcp::{ReadHalf, WriteHalf},
-        TcpListener,
-        TcpStream,
-    },
-    prelude::*,
+    net::{TcpListener, TcpStream},
 };
 
 use crate::{
@@ -41,7 +36,7 @@ struct UdpConfig {
 
 async fn handle_socks5_connect<'a>(
     context: &Context,
-    (mut r, mut w): (ReadHalf<'a>, WriteHalf<'a>),
+    stream: &mut TcpStream,
     client_addr: SocketAddr,
     addr: &Address,
     svr_cfg: &ServerConfig,
@@ -52,8 +47,7 @@ async fn handle_socks5_connect<'a>(
 
             // Tell the client that we are ready
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(svr_s.local_addr()?));
-            header.write_to(&mut w).await?;
-            w.flush().await?;
+            header.write_to(stream).await?;
 
             trace!("Sent header: {:?}", header);
 
@@ -74,8 +68,7 @@ async fn handle_socks5_connect<'a>(
                 reply,
                 Address::SocketAddress("0.0.0.0:0".parse::<SocketAddr>().unwrap()),
             );
-            header.write_to(&mut w).await?;
-            w.flush().await?;
+            header.write_to(stream).await?;
 
             return Err(err);
         }
@@ -83,6 +76,15 @@ async fn handle_socks5_connect<'a>(
 
     let mut svr_s = super::proxy_server_handshake(context, svr_s, svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
+
+    // Reset `TCP_NODELAY` after Socks5 handshake
+    if !context.config().no_delay {
+        if let Err(err) = stream.set_nodelay(false) {
+            error!("Failed to reset TCP_NODELAY on socket, error: {:?}", err);
+        }
+    }
+
+    let (mut r, mut w) = stream.split();
 
     use tokio::io::copy;
 
@@ -157,17 +159,14 @@ async fn handle_socks5_client(
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    if context.config().no_delay {
-        if let Err(err) = s.set_nodelay(true) {
-            error!("Failed to set no delay: {:?}", err);
-        }
+    // Enable TCP_NODELAY for quick handshaking
+    if let Err(err) = s.set_nodelay(true) {
+        error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
     }
 
     let client_addr = s.peer_addr()?;
 
-    let (mut r, mut w) = s.split();
-
-    let handshake_req = HandshakeRequest::read_from(&mut r).await?;
+    let handshake_req = HandshakeRequest::read_from(&mut s).await?;
 
     // Socks5 handshakes
     trace!("Socks5 {:?}", handshake_req);
@@ -189,18 +188,17 @@ async fn handle_socks5_client(
         (resp, Ok(()))
     };
 
-    handshake_resp.write_to(&mut w).await?;
-    w.flush().await?;
+    handshake_resp.write_to(&mut s).await?;
 
     res?;
 
     // Fetch headers
-    let header = match TcpRequestHeader::read_from(&mut r).await {
+    let header = match TcpRequestHeader::read_from(&mut s).await {
         Ok(h) => h,
         Err(err) => {
             error!("Failed to get TcpRequestHeader: {}", err);
             let rh = TcpResponseHeader::new(err.reply, Address::SocketAddress(client_addr));
-            rh.write_to(&mut w).await?;
+            rh.write_to(&mut s).await?;
             return Err(From::from(err));
         }
     };
@@ -214,7 +212,7 @@ async fn handle_socks5_client(
             if enable_tcp {
                 debug!("CONNECT {}", addr);
 
-                match handle_socks5_connect(context, (r, w), client_addr, &addr, conf).await {
+                match handle_socks5_connect(context, &mut s, client_addr, &addr, conf).await {
                     Ok(..) => Ok(()),
                     Err(err) => Err(io::Error::new(
                         err.kind(),
@@ -224,7 +222,7 @@ async fn handle_socks5_client(
             } else {
                 warn!("CONNECT is not enabled");
                 let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
-                rh.write_to(&mut w).await?;
+                rh.write_to(&mut s).await?;
 
                 Ok(())
             }
@@ -232,7 +230,7 @@ async fn handle_socks5_client(
         socks5::Command::TcpBind => {
             warn!("BIND is not supported");
             let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
-            rh.write_to(&mut w).await?;
+            rh.write_to(&mut s).await?;
 
             Ok(())
         }
@@ -240,17 +238,16 @@ async fn handle_socks5_client(
             if udp_conf.enable_udp {
                 debug!("UDP ASSOCIATE {}", addr);
                 let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(udp_conf.client_addr));
-                rh.write_to(&mut w).await?;
-                w.flush().await?;
+                rh.write_to(&mut s).await?;
 
                 // Hold the connection until it ends by its own
-                ignore_until_end(&mut r).await?;
+                ignore_until_end(&mut s).await?;
 
                 Ok(())
             } else {
                 warn!("UDP ASSOCIATE is not enabled");
                 let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, addr);
-                rh.write_to(&mut w).await?;
+                rh.write_to(&mut s).await?;
 
                 Ok(())
             }

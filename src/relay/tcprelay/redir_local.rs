@@ -121,7 +121,7 @@ async fn handle_redir_client(context: &Context, mut s: TcpStream, server_score: 
 
     if context.config().no_delay {
         if let Err(err) = s.set_nodelay(true) {
-            error!("Failed to set no delay: {:?}", err);
+            error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
         }
     }
 

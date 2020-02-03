@@ -48,6 +48,17 @@ pub use self::crypto_io::CryptoStream;
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
+/// Methods required for a TCP Connection
+pub trait TcpConnection {
+    fn set_nodelay(&self, nodelay: bool) -> io::Result<()>;
+}
+
+impl TcpConnection for TcpStream {
+    fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
+        TcpStream::set_nodelay(self, nodelay)
+    }
+}
+
 /// Shadowsocks' Connection
 ///
 /// The only feature: Supports timeout
@@ -59,21 +70,49 @@ pub struct Connection<S> {
     timer: Option<Delay>,
     // User defined server timeout
     timeout: Option<Duration>,
+    // TCP_NODELAY
+    nodelay: bool,
+    // Written the first packet flag
+    //
+    // Connection is usually wrapped inside a `CryptoStream`, which will send IV/Nonce within the first data packet.
+    // `TCP_NODELAY` is already set on the internal socket for lower handshake latency.
+    //
+    // After the first packet, if `nodelay` is `false`, `TCP_NODELAY` status should be reset.
+    written_first_packet: bool,
 }
 
 impl<S> Connection<S>
 where
-    S: AsyncRead,
+    S: AsyncRead + TcpConnection,
 {
     /// Create a Connection with a stream S
     ///
     /// If `timeout` is Some(..), it will set a timer for both read and write operation.
     pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
+        // Set `TCP_NODELAY` for quick handshaking
+        if let Err(err) = stream.set_nodelay(true) {
+            error!("Failed to set TCP_NODELAY on socket, error: {:?}", err);
+        }
+
         Connection {
             stream: BufReader::new(stream),
             timer: None,
             timeout,
+            nodelay: false,
+            written_first_packet: false,
         }
+    }
+
+    /// Set `TCP_NODELAY` on socket
+    pub fn set_nodelay(&mut self, nodelay: bool) -> io::Result<()> {
+        self.nodelay = nodelay;
+
+        // If first packet hasn't sent, resetting nodelay is delayed
+        if self.written_first_packet {
+            self.stream.get_ref().set_nodelay(nodelay)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -106,7 +145,7 @@ impl<S> Connection<S> {
 
 impl<S> Connection<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + TcpConnection + Unpin,
 {
     pub fn split(self) -> (ReadHalf<Connection<S>>, WriteHalf<Connection<S>>) {
         use tokio::io::split;
@@ -156,12 +195,24 @@ where
 
 impl<S> AsyncWrite for Connection<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + TcpConnection + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         match Pin::new(&mut self.stream).poll_write(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
+
+                if !self.written_first_packet {
+                    self.written_first_packet = true;
+
+                    if !self.nodelay {
+                        // Reset `TCP_NODELAY`
+                        if let Err(err) = self.stream.get_ref().set_nodelay(false) {
+                            error!("Failed to reset TCP_NODELAY on socket, error: {:?}", err);
+                        }
+                    }
+                }
+
                 Poll::Ready(r)
             }
             Poll::Pending => {
@@ -254,7 +305,14 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     let mut last_err = None;
     for retry_time in 0..RETRY_TIMES {
         match connect_proxy_server_internal(context, svr_addr, timeout).await {
-            Ok(s) => return Ok(s),
+            Ok(mut s) => {
+                // IMPOSSIBLE, won't fail, but just a guard
+                if let Err(err) = s.set_nodelay(context.config().no_delay) {
+                    error!("Failed to set TCP_NODELAY on remote socket, error: {:?}", err);
+                }
+
+                return Ok(s);
+            }
             Err(err) => {
                 // Connection failure, retry
                 debug!(
@@ -289,9 +347,20 @@ pub async fn proxy_server_handshake(
     trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
 
     // Send relay address to remote
+    //
+    // NOTE: `Address` handshake packets are very small in most cases,
+    // so it will be sent with the IV/Nonce data (implemented inside `CryptoStream`).
+    //
+    // For lower latency, first packet should be sent back quickly,
+    // so TCP_NODELAY should be kept enabled until the first data packet is received.
     let mut addr_buf = BytesMut::with_capacity(relay_addr.serialized_len());
     relay_addr.write_to_buf(&mut addr_buf);
     stream.write_all(&addr_buf).await?;
+
+    // Here we should keep the TCP_NODELAY set until the first packet is received.
+    // https://github.com/shadowsocks/shadowsocks-libev/pull/746
+    //
+    // Reset TCP_NODELAY after the first packet is received and sent back.
 
     Ok(stream)
 }
