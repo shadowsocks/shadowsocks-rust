@@ -79,6 +79,11 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
 
         if config.has_server_plugins() {
             let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
+
+            // Wait until all plugins actually start
+            // Some plugins require quite a lot bootstrap time
+            Plugins::check_plugins_started(&config).await?;
+
             vf.push(plugins.into_future().boxed());
         }
 

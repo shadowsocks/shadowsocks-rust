@@ -12,14 +12,20 @@
 //! +------------+                    +---------------------------+
 //! ```
 
-use crate::config::{Config, ServerAddr};
-use futures::stream::{FuturesUnordered, StreamExt};
-use log::{error, info};
 use std::{
-    io,
+    io::{self, Error, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    time::Duration,
 };
-use tokio::process::Child;
+
+use futures::{
+    future,
+    stream::{FuturesUnordered, StreamExt},
+};
+use log::{debug, error, info, trace};
+use tokio::{net::TcpStream, process::Child, time};
+
+use crate::config::{Config, ServerAddr};
 
 mod obfs_proxy;
 mod ss_plugin;
@@ -102,7 +108,7 @@ impl Plugins {
         match self.plugins.into_future().await {
             (Some(Ok(first_plugin_exit_status)), _) => {
                 let msg = format!("Plugin exited unexpectedly with {}", first_plugin_exit_status);
-                Err(io::Error::new(io::ErrorKind::Other, msg))
+                Err(Error::new(io::ErrorKind::Other, msg))
             }
             (Some(Err(first_plugin_error)), _) => {
                 error!("Error while waiting for plugin subprocess: {}", first_plugin_error);
@@ -110,6 +116,44 @@ impl Plugins {
             }
             _ => unreachable!(),
         }
+    }
+
+    /// Check plugin started
+    ///
+    /// This future won't resolve until all plugins are started
+    pub async fn check_plugins_started(config: &Config) -> io::Result<()> {
+        if !config.has_server_plugins() {
+            return Ok(());
+        }
+
+        let mut v = Vec::new();
+
+        for svr in &config.server {
+            if let Some(ref saddr) = svr.plugin_addr() {
+                let addr = match *saddr {
+                    ServerAddr::SocketAddr(a) => a,
+                    ServerAddr::DomainName(..) => unreachable!("Impossible, plugin_addr shouldn't be domain name"),
+                };
+
+                v.push(async move {
+                    // Try to connect plugin 10 times (nearly 10 seconds)
+                    for r in 0..10 {
+                        if let Ok(..) = TcpStream::connect(&addr).await {
+                            debug!("Plugin \"{}\" is started", addr);
+                            return Ok(());
+                        }
+
+                        trace!("Plugin \"{}\" haven't started yet, tried {} times", addr, r);
+                        time::delay_for(Duration::from_secs(1)).await;
+                    }
+
+                    let err = Error::new(ErrorKind::Other, format!("failed to connect plugin \"{}\"", addr));
+                    Err(err)
+                });
+            }
+        }
+
+        future::try_join_all(v).await.map(|_| ())
     }
 }
 
