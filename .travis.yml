@@ -31,11 +31,11 @@ addons:
 install:
   # Install OpenSSL on Windows
   - if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
-    curl -O "http://slproweb.com/download/Win64OpenSSL-1_1_0L.exe";
-    cmd.exe /C 'Win64OpenSSL-1_1_0L.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"';
-    export OPENSSL_LIB_DIR=/c/OpenSSL/lib;
-    export OPENSSL_INCLUDE_DIR=/c/OpenSSL/include;
-    export OPENSSL_DIR=/c/OpenSSL/bin;
+    curl -Lo "openssl-1.0.2c-win64-mingw.zip" "https://dl.bintray.com/vszakats/generic/openssl-1.0.2c-win64-mingw.zip";
+    unzip "openssl-1.0.2c-win64-mingw.zip" -d "/c/OpenSSL";
+    export OPENSSL_LIB_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
+    export OPENSSL_INCLUDE_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw/include;
+    export OPENSSL_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
     fi
 
 script:
