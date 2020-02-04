@@ -245,13 +245,14 @@ pub type STcpStream = Connection<TcpStream>;
 
 async fn connect_proxy_server_internal(
     context: &Context,
+    orig_svr_addr: &ServerAddr,
     svr_addr: &ServerAddr,
     timeout: Option<Duration>,
 ) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
-            debug!("Connected proxy {}", addr);
+            debug!("Connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
@@ -260,8 +261,8 @@ async fn connect_proxy_server_internal(
                     Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         debug!(
-                            "Failed to connect proxy {}:{} ({}), try another (err: {})",
-                            domain, port, addr, e
+                            "Failed to connect proxy {} ({}:{} ({})) try another (err: {})",
+                            orig_svr_addr, domain, port, addr, e
                         );
                         Err(e)
                     }
@@ -270,11 +271,14 @@ async fn connect_proxy_server_internal(
 
             match result {
                 Ok((addr, s)) => {
-                    debug!("Connected proxy {}:{} ({})", domain, port, addr);
+                    debug!("Connected proxy {} ({}:{} ({}))", orig_svr_addr, domain, port, addr);
                     Ok(s)
                 }
                 Err(err) => {
-                    error!("Failed to connect proxy {}:{}, {}", domain, port, err);
+                    error!(
+                        "Failed to connect proxy {} ({}:{}), {}",
+                        orig_svr_addr, domain, port, err
+                    );
                     Err(err)
                 }
             }
@@ -301,10 +305,17 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     // Also works if plugin is starting
     const RETRY_TIMES: i32 = 3;
 
-    trace!("Connecting to proxy {}, timeout: {:?}", svr_addr, timeout);
+    let orig_svr_addr = svr_cfg.addr();
+    trace!(
+        "Connecting to proxy {} ({}), timeout: {:?}",
+        orig_svr_addr,
+        svr_addr,
+        timeout
+    );
+
     let mut last_err = None;
     for retry_time in 0..RETRY_TIMES {
-        match connect_proxy_server_internal(context, svr_addr, timeout).await {
+        match connect_proxy_server_internal(context, orig_svr_addr, svr_addr, timeout).await {
             Ok(mut s) => {
                 // IMPOSSIBLE, won't fail, but just a guard
                 if let Err(err) = s.set_nodelay(context.config().no_delay) {
