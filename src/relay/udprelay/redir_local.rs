@@ -3,10 +3,7 @@
 use std::{
     io::{self, Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -25,7 +22,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
+        loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::Address,
         utils::try_timeout,
     },
@@ -60,8 +57,7 @@ struct UdpAssociation {
 impl UdpAssociation {
     /// Create an association with addr
     async fn associate(
-        context: SharedContext,
-        svr_cfg: Arc<ServerScore>,
+        server: SharedPlainServerStatistic,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         assoc_map: SharedAssocMap,
@@ -91,47 +87,51 @@ impl UdpAssociation {
         // Create a socket for sending packets back
         let mut local_udp = TProxyUdpSocket::bind(&dst_addr)?;
 
-        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+        let timeout = server.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
-        // local -> remote
-        let c_svr_cfg = svr_cfg.clone();
-        let c_context = context.clone();
-        tokio::spawn(async move {
-            let svr_cfg = c_svr_cfg.server_config();
-            let dst_addr = Address::from(dst_addr);
+        {
+            // local -> remote
 
-            while let Some(pkt) = rx.recv().await {
-                // pkt is already a raw packet, so just send it
-                let res = UdpAssociation::relay_l2r(
-                    &*c_context,
-                    &src_addr,
-                    &dst_addr,
-                    &mut sender,
-                    &pkt[..],
-                    timeout,
-                    svr_cfg,
-                )
-                .await;
+            let server = server.clone();
+            tokio::spawn(async move {
+                let svr_cfg = server.server_config();
+                let context = server.context();
+                let dst_addr = Address::from(dst_addr);
 
-                if let Err(err) = res {
-                    error!("failed to send packet {} -> {}, error: {}", src_addr, dst_addr, err);
+                while let Some(pkt) = rx.recv().await {
+                    // pkt is already a raw packet, so just send it
+                    let res = UdpAssociation::relay_l2r(
+                        context,
+                        &src_addr,
+                        &dst_addr,
+                        &mut sender,
+                        &pkt[..],
+                        timeout,
+                        svr_cfg,
+                    )
+                    .await;
 
-                    // FIXME: Ignore? Or how to deal with it?
+                    if let Err(err) = res {
+                        error!("failed to send packet {} -> {}, error: {}", src_addr, dst_addr, err);
+
+                        // FIXME: Ignore? Or how to deal with it?
+                    }
                 }
-            }
 
-            debug!("UDP REDIR {} -> {} finished", src_addr, dst_addr);
-        });
+                debug!("UDP REDIR {} -> {} finished", src_addr, dst_addr);
+            });
+        }
 
         // local <- remote
         tokio::spawn(async move {
-            let svr_cfg = svr_cfg.server_config();
+            let svr_cfg = server.server_config();
+            let context = server.context();
 
             let transfer_fut = async move {
                 loop {
                     // Read and send back to source
                     let res =
-                        UdpAssociation::relay_r2l(&*context, &src_addr, &mut receiver, &mut local_udp, svr_cfg).await;
+                        UdpAssociation::relay_r2l(context, &src_addr, &mut receiver, &mut local_udp, svr_cfg).await;
 
                     if let Err(err) = res {
                         error!("failed to receive packet, {} <- {}, error: {}", src_addr, dst_addr, err);
@@ -249,35 +249,6 @@ impl UdpAssociation {
     }
 }
 
-struct ServerScore {
-    svr_cfg: ServerConfig,
-    score: AtomicU64,
-}
-
-impl ServerScore {
-    fn new(config: &ServerConfig) -> Arc<ServerScore> {
-        let s = ServerScore {
-            svr_cfg: config.clone(),
-            score: AtomicU64::new(0),
-        };
-        Arc::new(s)
-    }
-}
-
-impl PingServer for ServerScore {
-    fn server_config(&self) -> &ServerConfig {
-        &self.svr_cfg
-    }
-
-    fn score(&self) -> u64 {
-        self.score.load(Ordering::Acquire)
-    }
-
-    fn set_score(&self, score: u64) {
-        self.score.store(score, Ordering::Release);
-    }
-}
-
 type AssocMap = LruCache<String, UdpAssociation>;
 type SharedAssocMap = Arc<Mutex<AssocMap>>;
 
@@ -294,8 +265,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let mut l = TProxyUdpSocket::bind(&bind_addr)?;
     let local_addr = l.local_addr().expect("Could not determine port bound to");
 
-    let servers = context.config().server.iter().map(ServerScore::new).collect();
-    let mut balancer = PingBalancer::new(context.clone(), servers, PingServerType::Udp).await;
+    let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
 
     info!("ShadowSocks UDP Redir listening on {}", local_addr);
 
@@ -350,10 +320,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 Entry::Occupied(oc) => oc.into_mut(),
                 Entry::Vacant(vc) => {
                     // Pick a server
-                    let svr_cfg = balancer.pick_server();
+                    let server = balancer.pick_server();
 
                     vc.insert(
-                        UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, dst, assoc_map.clone())
+                        UdpAssociation::associate(server, src, dst, assoc_map.clone())
                             .await
                             .expect("Failed to create udp association"),
                     )

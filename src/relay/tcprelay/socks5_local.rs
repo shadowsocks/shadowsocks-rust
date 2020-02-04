@@ -1,13 +1,8 @@
 //! Local server that accepts SOCKS 5 protocol
 
 use std::{
-    io,
-    io::ErrorKind,
+    io::{self, ErrorKind},
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
 };
 
 use futures::future::{self, Either};
@@ -18,10 +13,9 @@ use tokio::{
 };
 
 use crate::{
-    config::ServerConfig,
-    context::{Context, SharedContext},
+    context::SharedContext,
     relay::{
-        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
+        loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::{self, Address, HandshakeRequest, HandshakeResponse, TcpRequestHeader, TcpResponseHeader},
     },
 };
@@ -35,12 +29,14 @@ struct UdpConfig {
 }
 
 async fn handle_socks5_connect<'a>(
-    context: &Context,
+    server: &SharedPlainServerStatistic,
     stream: &mut TcpStream,
     client_addr: SocketAddr,
     addr: &Address,
-    svr_cfg: &ServerConfig,
 ) -> io::Result<()> {
+    let context = server.context();
+    let svr_cfg = server.server_config();
+
     let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
@@ -57,6 +53,9 @@ async fn handle_socks5_connect<'a>(
             use crate::relay::socks5::Reply;
 
             error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
+
+            // Report to global statistic
+            server.report_failure().await;
 
             let reply = match err.kind() {
                 ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
@@ -148,14 +147,13 @@ async fn handle_socks5_connect<'a>(
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_socks5_client(
-    context: &Context,
+    server: &SharedPlainServerStatistic,
     mut s: TcpStream,
-    server_conf: Arc<ServerScore>,
     udp_conf: UdpConfig,
 ) -> io::Result<()> {
-    let conf = server_conf.server_config();
+    let svr_cfg = server.server_config();
 
-    if let Err(err) = s.set_keepalive(conf.timeout()) {
+    if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
 
@@ -208,11 +206,11 @@ async fn handle_socks5_client(
     let addr = header.address;
     match header.command {
         socks5::Command::TcpConnect => {
-            let enable_tcp = context.config().mode.enable_tcp();
+            let enable_tcp = server.config().mode.enable_tcp();
             if enable_tcp {
                 debug!("CONNECT {}", addr);
 
-                match handle_socks5_connect(context, &mut s, client_addr, &addr, conf).await {
+                match handle_socks5_connect(server, &mut s, client_addr, &addr).await {
                     Ok(..) => Ok(()),
                     Err(err) => Err(io::Error::new(
                         err.kind(),
@@ -255,35 +253,6 @@ async fn handle_socks5_client(
     }
 }
 
-struct ServerScore {
-    svr_cfg: ServerConfig,
-    score: AtomicU64,
-}
-
-impl ServerScore {
-    fn new(config: &ServerConfig) -> Arc<ServerScore> {
-        let s = ServerScore {
-            svr_cfg: config.clone(),
-            score: AtomicU64::new(0),
-        };
-        Arc::new(s)
-    }
-}
-
-impl PingServer for ServerScore {
-    fn server_config(&self) -> &ServerConfig {
-        &self.svr_cfg
-    }
-
-    fn score(&self) -> u64 {
-        self.score.load(Ordering::Acquire)
-    }
-
-    fn set_score(&self, score: u64) {
-        self.score.store(score, Ordering::Release);
-    }
-}
-
 /// Starts a TCP local server with Socks5 proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
@@ -300,22 +269,20 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         client_addr: actual_local_addr,
     };
 
-    let servers = context.config().server.iter().map(ServerScore::new).collect();
-    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
+    let servers = PlainPingBalancer::new(context, ServerType::Tcp).await;
 
     info!("ShadowSocks TCP Listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
-        let server_cfg = servers.pick_server();
+        let server = servers.pick_server();
 
         trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server_cfg.server_config());
+        trace!("Picked proxy server: {:?}", server.server_config());
 
-        let context = context.clone();
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_socks5_client(&*context, socket, server_cfg, udp_conf).await {
+            if let Err(err) = handle_socks5_client(&server, socket, udp_conf).await {
                 error!("TCP Socks5 client, error: {:?}", err);
             }
         });

@@ -7,10 +7,6 @@ use std::{
     io::ErrorKind,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
     task::{self, Poll},
 };
 
@@ -43,7 +39,13 @@ use crate::{
     config::ServerConfig,
     context::SharedContext,
     relay::{
-        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
+        loadbalancing::server::{
+            PingBalancer,
+            ServerData,
+            ServerType,
+            SharedServerStatistic,
+            SharedServerStatisticData,
+        },
         socks5::Address,
     },
 };
@@ -51,12 +53,13 @@ use crate::{
 #[derive(Clone)]
 struct ShadowSocksConnector {
     context: SharedContext,
-    svr_cfg: Arc<ServerConfig>,
+    svr_idx: usize,
+    stat: SharedServerStatisticData,
 }
 
 impl ShadowSocksConnector {
-    fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> ShadowSocksConnector {
-        ShadowSocksConnector { context, svr_cfg }
+    fn new(context: SharedContext, svr_idx: usize, stat: SharedServerStatisticData) -> ShadowSocksConnector {
+        ShadowSocksConnector { context, svr_idx, stat }
     }
 }
 
@@ -70,13 +73,23 @@ impl tower::Service<Address> for ShadowSocksConnector {
     }
 
     fn call(&mut self, addr: Address) -> Self::Future {
-        let svr_cfg = self.svr_cfg.clone();
         let context = self.context.clone();
+        let svr_idx = self.svr_idx;
+        let stat = self.stat.clone();
 
         ShadowSocksConnecting {
             fut: async move {
-                let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                super::proxy_server_handshake(&*context, stream, &*svr_cfg, &addr).await
+                let svr_cfg = context.server_config(svr_idx);
+
+                let stream = match super::connect_proxy_server(&*context, svr_cfg).await {
+                    Ok(s) => s,
+                    Err(err) => {
+                        // Report failure to global statistic
+                        stat.report_failure().await;
+                        return Err(err);
+                    }
+                };
+                super::proxy_server_handshake(&*context, stream, svr_cfg, &addr).await
             }
             .boxed(),
         }
@@ -93,11 +106,14 @@ impl tower::Service<Uri> for ShadowSocksConnector {
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
-        let svr_cfg = self.svr_cfg.clone();
         let context = self.context.clone();
+        let svr_idx = self.svr_idx;
+        let stat = self.stat.clone();
 
         ShadowSocksConnecting {
             fut: async move {
+                let svr_cfg = context.server_config(svr_idx);
+
                 match host_addr(&dst) {
                     None => {
                         use std::io::Error;
@@ -108,8 +124,15 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                         Err(err)
                     }
                     Some(addr) => {
-                        let stream = super::connect_proxy_server(&*context, &*svr_cfg).await?;
-                        super::proxy_server_handshake(&*context, stream, &*svr_cfg, &addr).await
+                        let stream = match super::connect_proxy_server(&*context, svr_cfg).await {
+                            Ok(s) => s,
+                            Err(err) => {
+                                // Report failure to global statistic
+                                stat.report_failure().await;
+                                return Err(err);
+                            }
+                        };
+                        super::proxy_server_handshake(&*context, stream, svr_cfg, &addr).await
                     }
                 }
             }
@@ -266,15 +289,13 @@ async fn establish_connect_tunnel(
     debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 }
 
-type ShadowSocksClient = Client<ShadowSocksConnector>;
-
 async fn server_dispatch(
-    context: SharedContext,
     req: Request<Body>,
-    svr_score: Arc<ServerScore>,
+    svr_score: SharedServerStatistic<ServerScore>,
     client_addr: SocketAddr,
-    client: ShadowSocksClient,
 ) -> Result<Response<Body>, io::Error> {
+    let context = svr_score.context();
+
     // Parse URI
     //
     // Proxy request URI must contains a host
@@ -302,8 +323,15 @@ async fn server_dispatch(
         let stream = {
             let svr_cfg = svr_score.server_config();
 
-            let stream = super::connect_proxy_server(&*context, svr_cfg).await?;
-            super::proxy_server_handshake(&*context, stream, svr_cfg, &host).await?
+            let stream = match super::connect_proxy_server(context, svr_cfg).await {
+                Ok(s) => s,
+                Err(err) => {
+                    // Report failure to global statistic
+                    svr_score.report_failure().await;
+                    return Err(err);
+                }
+            };
+            super::proxy_server_handshake(context, stream, svr_cfg, &host).await?
         };
 
         debug!(
@@ -357,6 +385,10 @@ async fn server_dispatch(
 
         let svr_cfg = svr_score.server_config();
 
+        // Keep connections for clients in ServerScore::client
+        //
+        // client instance is kept for Keep-Alive connections
+        let client = &svr_score.server().client;
         let res = match client.request(req).await {
             Ok(res) => res,
             Err(err) => {
@@ -391,35 +423,22 @@ async fn server_dispatch(
 type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
 
 struct ServerScore {
-    svr_cfg: Arc<ServerConfig>,
-    score: AtomicU64,
     client: ShadowSocksHttpClient,
 }
 
 impl ServerScore {
-    fn new(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> Arc<ServerScore> {
-        let s = ServerScore {
-            svr_cfg: svr_cfg.clone(),
-            score: AtomicU64::new(0),
+    fn new(context: SharedContext, server_idx: usize, data: SharedServerStatisticData) -> ServerScore {
+        ServerScore {
             // Create HTTP clients for each remote servers
             // It may reuse keep-alive connections
-            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context, svr_cfg)),
-        };
-        Arc::new(s)
+            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context, server_idx, data)),
+        }
     }
 }
 
-impl PingServer for ServerScore {
-    fn server_config(&self) -> &ServerConfig {
-        &*self.svr_cfg
-    }
-
-    fn score(&self) -> u64 {
-        self.score.load(Ordering::Acquire)
-    }
-
-    fn set_score(&self, score: u64) {
-        self.score.store(score, Ordering::Release);
+impl ServerData for ServerScore {
+    fn create_server(context: &SharedContext, server_idx: usize, data: &SharedServerStatisticData) -> ServerScore {
+        ServerScore::new(context.clone(), server_idx, data.clone())
     }
 }
 
@@ -428,25 +447,15 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let servers = context
-        .config()
-        .server
-        .iter()
-        .map(|sc| ServerScore::new(context.clone(), Arc::new(sc.clone())))
-        .collect();
-    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
+    let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;
 
     let make_service = make_service_fn(|socket: &AddrStream| {
         let client_addr = socket.remote_addr();
         let svr_score = servers.pick_server();
-        let context = context.clone();
-
-        // Keep connections for clients
-        let client = svr_score.client.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                server_dispatch(context.clone(), req, svr_score.clone(), client_addr, client.clone())
+                server_dispatch(req, svr_score.clone(), client_addr)
             }))
         }
     });

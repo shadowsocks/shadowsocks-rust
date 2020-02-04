@@ -1,13 +1,8 @@
 //! Local server that establish a TCP Transparent Proxy with server
 
 use std::{
-    io,
-    io::ErrorKind,
+    io::{self, ErrorKind},
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
 };
 
 use futures::future::{self, Either};
@@ -15,10 +10,9 @@ use log::{debug, error, info, trace};
 use tokio::net::TcpStream;
 
 use crate::{
-    config::ServerConfig,
-    context::{Context, SharedContext},
+    context::SharedContext,
     relay::{
-        loadbalancing::server::{LoadBalancer, PingBalancer, PingServer, PingServerType},
+        loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::Address,
     },
 };
@@ -29,18 +23,23 @@ use super::sys::{create_redir_listener, get_original_destination_addr};
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
 async fn establish_client_tcp_redir<'a>(
-    context: &Context,
+    server: &SharedPlainServerStatistic,
     mut s: TcpStream,
     client_addr: SocketAddr,
     addr: &Address,
-    svr_cfg: &ServerConfig,
 ) -> io::Result<()> {
-    let svr_s = match super::connect_proxy_server(context, &*svr_cfg).await {
+    let context = server.context();
+    let svr_cfg = server.server_config();
+
+    let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
         Ok(svr_s) => {
             trace!("Proxy server connected, {:?}", svr_cfg);
             svr_s
         }
         Err(err) => {
+            // Report to global statistic
+            server.report_failure().await;
+
             // Just close the connection.
             error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
             return Err(err);
@@ -112,14 +111,14 @@ async fn establish_client_tcp_redir<'a>(
     Ok(())
 }
 
-async fn handle_redir_client(context: &Context, mut s: TcpStream, server_score: Arc<ServerScore>) -> io::Result<()> {
-    let conf = server_score.server_config();
+async fn handle_redir_client(server: &SharedPlainServerStatistic, mut s: TcpStream) -> io::Result<()> {
+    let svr_cfg = server.server_config();
 
-    if let Err(err) = s.set_keepalive(conf.timeout()) {
+    if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    if context.config().no_delay {
+    if server.config().no_delay {
         if let Err(err) = s.set_nodelay(true) {
             error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
         }
@@ -132,36 +131,7 @@ async fn handle_redir_client(context: &Context, mut s: TcpStream, server_score: 
 
     trace!("REDIR target address {}", target_addr);
 
-    establish_client_tcp_redir(context, s, client_addr, &target_addr, conf).await
-}
-
-struct ServerScore {
-    svr_cfg: ServerConfig,
-    score: AtomicU64,
-}
-
-impl ServerScore {
-    fn new(config: &ServerConfig) -> Arc<ServerScore> {
-        let s = ServerScore {
-            svr_cfg: config.clone(),
-            score: AtomicU64::new(0),
-        };
-        Arc::new(s)
-    }
-}
-
-impl PingServer for ServerScore {
-    fn server_config(&self) -> &ServerConfig {
-        &self.svr_cfg
-    }
-
-    fn score(&self) -> u64 {
-        self.score.load(Ordering::Acquire)
-    }
-
-    fn set_score(&self, score: u64) {
-        self.score.store(score, Ordering::Release);
-    }
+    establish_client_tcp_redir(server, s, client_addr, &target_addr).await
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
@@ -178,20 +148,18 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
 
-    let servers = context.config().server.iter().map(ServerScore::new).collect();
-    let mut servers = PingBalancer::new(context.clone(), servers, PingServerType::Tcp).await;
+    let servers = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
     info!("ShadowSocks TCP Redir Listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
-        let server_cfg = servers.pick_server();
+        let server = servers.pick_server();
 
         trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server_cfg.server_config());
+        trace!("Picked proxy server: {:?}", server.server_config());
 
-        let context = context.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_redir_client(&*context, socket, server_cfg).await {
+            if let Err(err) = handle_redir_client(&server, socket).await {
                 error!("TCP Redir client, error: {:?}", err);
             }
         });

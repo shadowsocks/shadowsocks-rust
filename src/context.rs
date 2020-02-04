@@ -15,7 +15,7 @@ use tokio::runtime::Handle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
-use crate::config::{Config, ConfigType};
+use crate::config::{Config, ConfigType, ServerConfig};
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
 
@@ -154,6 +154,7 @@ impl ServerState {
 pub type SharedServerState = Arc<ServerState>;
 
 /// Shared basic configuration for the whole server
+#[derive(Clone)]
 pub struct Context {
     config: Config,
     server_state: SharedServerState,
@@ -188,6 +189,16 @@ impl Context {
     /// NOTE: Only for launching plugins
     pub fn config_mut(&mut self) -> &mut Config {
         &mut self.config
+    }
+
+    /// Get ServerConfig by index
+    pub fn server_config(&self, idx: usize) -> &ServerConfig {
+        &self.config.server[idx]
+    }
+
+    /// Get mutable ServerConfig by index
+    pub fn server_config_mut(&mut self, idx: usize) -> &mut ServerConfig {
+        &mut self.config.server[idx]
     }
 
     #[cfg(feature = "trust-dns")]
