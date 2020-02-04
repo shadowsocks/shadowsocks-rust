@@ -60,7 +60,7 @@ impl ServerStatisticData {
 
     fn score(&self) -> u64 {
         // Normalize rtt
-        let nrtt = self.rtt as f64 / DEFAULT_CHECK_TIMEOUT_SEC as f64;
+        let nrtt = self.rtt as f64 / (DEFAULT_CHECK_TIMEOUT_SEC * 1000) as f64;
 
         // Score = norm_lat + prop_err
         //
