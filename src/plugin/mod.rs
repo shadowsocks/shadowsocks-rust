@@ -65,7 +65,12 @@ impl Plugins {
 
                 let svr_addr = match start_plugin(c, svr.addr(), &local_addr, mode) {
                     Err(err) => {
-                        error!("Failed to start plugin \"{}\", err: {}", c.plugin, err);
+                        error!(
+                            "Failed to start plugin \"{}\" for server {}, err: {}",
+                            c.plugin,
+                            svr.addr(),
+                            err
+                        );
                         return Err(err);
                     }
                     Ok(process) => {
@@ -136,15 +141,28 @@ impl Plugins {
                 };
 
                 v.push(async move {
-                    // Try to connect plugin 10 times (nearly 10 seconds)
+                    // Try to connect plugin 10 times (nearly 2 seconds)
                     for r in 0..10 {
                         if let Ok(..) = TcpStream::connect(&addr).await {
-                            debug!("Plugin \"{}\" is started", addr);
+                            debug!(
+                                "Plugin \"{}\" for {} listening on {} is started",
+                                svr.plugin().as_ref().unwrap().plugin,
+                                svr.addr(),
+                                addr
+                            );
+
                             return Ok(());
                         }
 
-                        trace!("Plugin \"{}\" haven't started yet, tried {} times", addr, r);
-                        time::delay_for(Duration::from_secs(1)).await;
+                        trace!(
+                            "Plugin \"{}\" for {} listening on {} isn't started yet, tried {} times",
+                            svr.plugin().as_ref().unwrap().plugin,
+                            svr.addr(),
+                            addr,
+                            r
+                        );
+
+                        time::delay_for(Duration::from_millis(200)).await;
                     }
 
                     let err = Error::new(ErrorKind::Other, format!("failed to connect plugin \"{}\"", addr));

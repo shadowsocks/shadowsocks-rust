@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-use log::{debug, info};
+use log::{debug, info, trace};
 use tokio::{
     self,
     io::{AsyncReadExt, AsyncWriteExt},
@@ -38,7 +38,7 @@ pub trait ServerData: Send + Sync {
 }
 
 struct ServerStatisticData {
-    /// Median of latency time
+    /// Median of latency time (in millisec)
     ///
     /// Use median instead of average time,
     /// because probing result may have some really bad cases
@@ -62,11 +62,18 @@ impl ServerStatisticData {
         // Normalize rtt
         let nrtt = self.rtt as f64 / (DEFAULT_CHECK_TIMEOUT_SEC * 1000) as f64;
 
-        // Score = norm_lat + prop_err
+        const SCORE_RTT_WEIGHT: f64 = 1.0;
+        const SCORE_FAIL_WEIGHT: f64 = 3.0;
+
+        // Score = (norm_lat * 1.0 + prop_err * 3.0) / 4.0
         //
         // 1. The lower latency, the better
         // 2. The lower errored count, the better
-        ((nrtt + self.fail_rate) * 1000.0) as u64
+        let score =
+            (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT) / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT);
+
+        // Times 1000 converts to u64, for 0.001 precision
+        (score * 1000.0) as u64
     }
 
     fn push_score(&mut self, score: Score) -> u64 {
@@ -261,6 +268,10 @@ impl<S: ServerData> BestServer<S> {
             None
         }
     }
+
+    fn best_server_idx(&self) -> usize {
+        self.best_idx.load(Ordering::Relaxed)
+    }
 }
 
 /// Load balancer based on pinging latencies of all servers
@@ -292,6 +303,13 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                 tokio::spawn(async move {
                     // Check once for initializing data
                     PingBalancer::<S>::check_update_score(&stat, server_type).await;
+
+                    trace!(
+                        "Started latency probing task for server {}, initial score {}",
+                        stat.server_config().addr(),
+                        stat.score().await,
+                    );
+
                     check_barrier.wait().await;
 
                     while context.server_running() {
@@ -315,6 +333,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         if check_required {
             // Wait all tasks start (run at least one round)
             check_barrier.wait().await;
+            trace!("All latency probing tasks are started, creating best server choosing task");
 
             // Reinitialize a Barrier for waiting choosing task
             let check_barrier = Arc::new(Barrier::new(2));
@@ -327,6 +346,12 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                 tokio::spawn(async move {
                     // Check once for initializing data
                     best.recalculate_best_server().await;
+
+                    trace!(
+                        "Started best server choosing task, chosen server index {}",
+                        best.best_server_idx()
+                    );
+
                     check_barrier.wait().await;
 
                     while context.server_running() {

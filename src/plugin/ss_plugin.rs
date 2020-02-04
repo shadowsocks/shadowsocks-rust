@@ -5,7 +5,13 @@ use std::{net::SocketAddr, process::Stdio};
 use tokio::process::Command;
 
 pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, _mode: PluginMode) -> Command {
-    trace!("Start plugin \"{:?}\" remote: {}, local: {}", plugin, remote, local);
+    trace!(
+        "Starting plugin \"{}\", opt: {:?} remote: {}, local: {}",
+        plugin.plugin,
+        plugin.plugin_opt,
+        remote,
+        local
+    );
 
     let mut cmd = Command::new(&plugin.plugin);
     cmd.env("SS_REMOTE_HOST", remote.host())

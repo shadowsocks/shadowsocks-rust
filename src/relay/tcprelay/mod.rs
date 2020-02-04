@@ -332,8 +332,10 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
                 );
                 last_err = Some(err);
 
-                // Retry 100ms later
-                time::delay_for(Duration::from_millis(100)).await;
+                // Yield and let the others' run
+                //
+                // It may take some time for scheduler to resume this coroutine.
+                tokio::task::yield_now().await;
             }
         }
     }
