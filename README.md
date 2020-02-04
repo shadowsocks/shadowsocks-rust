@@ -2,10 +2,12 @@
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/2029e102e1bd46fb9423cb35980636b7)](https://app.codacy.com/app/zonyitoo/shadowsocks-rust?utm_source=github.com&utm_medium=referral&utm_content=shadowsocks/shadowsocks-rust&utm_campaign=Badge_Grade_Dashboard)
 [![Build Status](https://img.shields.io/travis/shadowsocks/shadowsocks-rust.svg)](https://travis-ci.org/shadowsocks/shadowsocks-rust)
+[![Build status](https://ci.appveyor.com/api/projects/status/h3ny0dov7v9xioa5?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust-0grjf)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![dependency status](https://deps.rs/repo/github/shadowsocks/shadowsocks-rust/status.svg)](https://deps.rs/repo/github/shadowsocks/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
+[![CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-rust.svg?style=svg)](https://circleci.com/gh/shadowsocks/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 

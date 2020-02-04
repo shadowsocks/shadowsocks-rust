@@ -1,0 +1,50 @@
+#!/bin/bash
+
+ROOT_DIR=$( cd $( dirname $0 ) && pwd )
+VERSION=$(grep -E '^version' "${ROOT_DIR}/Cargo.toml" | awk '{print $3}' | sed 's/"//g')
+HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
+
+cargo build --release --features "miscreant"
+if [[ "$?" != "0" ]]; then
+    exit $?;
+fi
+
+TARGET_SUFFIX=""
+if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
+    TARGET_SUFFIX=".exe"
+fi
+
+TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "sstunnel${TARGET_SUFFIX}")
+if [[ "${HOST_TRIPLE}" == *"-linux-"* ]]; then
+    TARGETS+=("ssredir${TARGET_SUFFIX}")
+fi
+
+RELEASE_FOLDER="${ROOT_DIR}/build/release"
+RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}-stable.${HOST_TRIPLE}"
+
+mkdir -p "${RELEASE_FOLDER}"
+
+# Into release folder
+cd "target/release"
+
+if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
+    # For Windows, use zip
+
+    RELEASE_PACKAGE_FILE_NAME="${RELEASE_PACKAGE_NAME}.zip"
+    RELEASE_PACKAGE_FILE_PATH="${RELEASE_FOLDER}/${RELEASE_PACKAGE_FILE_NAME}"
+    zip "${RELEASE_PACKAGE_FILE_PATH}" "${TARGETS[@]}"
+
+    # Checksum
+    cd "${RELEASE_FOLDER}"
+    shasum -a 256 "${RELEASE_PACKAGE_FILE_NAME}" > "${RELEASE_PACKAGE_FILE_NAME}.sha256"
+else
+    # For others, Linux, OS X, uses tar.xz
+
+    RELEASE_PACKAGE_FILE_NAME="${RELEASE_PACKAGE_NAME}.tar.xz"
+    RELEASE_PACKAGE_FILE_PATH="${RELEASE_FOLDER}/${RELEASE_PACKAGE_FILE_NAME}"
+    tar -cJf "${RELEASE_PACKAGE_FILE_PATH}" "${TARGETS[@]}"
+
+    # Checksum
+    cd "${RELEASE_FOLDER}"
+    shasum -a 256 "${RELEASE_PACKAGE_FILE_NAME}" > "${RELEASE_PACKAGE_FILE_NAME}.sha256"
+fi

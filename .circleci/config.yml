@@ -1,0 +1,24 @@
+version: 2.1
+jobs:
+    build:
+        docker:
+            - image: circleci/rust:latest
+        steps:
+            - checkout
+            - run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libssl-dev libsodium-dev
+            - restore_cache:
+                  key: cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
+            - run: |
+                  export SODIUM_USE_PKG_CONFIG=1
+                  export OPENSSL_STATIC=1
+                  ./build-host-release
+            - save_cache:
+                  paths:
+                      - /usr/local/cargo/registry
+                      - ./target
+                  key: cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
+            - store_artifacts:
+                  path: ./build/release
+                  destination: releases

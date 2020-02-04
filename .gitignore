@@ -1,7 +1,5 @@
 /target
-/build/*.tar.gz
-/build/*.tar.xz
-/build/*.zip
+/build/release
 /build/target
 /build/install
 /build/*.sha256
