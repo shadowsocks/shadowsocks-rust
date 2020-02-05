@@ -55,7 +55,7 @@ jobs:
         steps:
             - checkout
             - run: |
-                  Start-FileDownload "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe"
+                  Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "Win64OpenSSL-1_1_1d.exe"
                   Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
             - restore_cache:
                   key: cargo-cache-{{ arch }}
