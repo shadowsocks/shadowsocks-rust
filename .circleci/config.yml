@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-    win: circleci/windows@2.4.0
+    windows: circleci/windows@2.4.0
 
 jobs:
     build-linux:
@@ -12,28 +12,30 @@ jobs:
             OPENSSL_STATIC: "1"
             OPENSSL_LIB_DIR: "/usr/lib/x86_64-linux-gnu/"
             OPENSSL_INCLUDE_DIR: "/usr/include/x86_64-linux-gnu/"
-            SODIUM_LIB_DIR: "/usr/lib/x86_64-linux-gnu/"
             RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
 
         steps:
             - checkout
             - run: |
                   sudo apt-get update
-                  sudo apt-get install -y build-essential libssl-dev libsodium-dev
+                  sudo apt-get install -y build-essential libssl-dev
+            - run: |
+                  rustc --version >rust-version
+                  test -e Cargo.lock || cargo generate-lockfile
             - restore_cache:
-                  key: cargo-cache-{{ arch }}
+                  key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run: ./build-host-release
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
                       - ./target
-                  key: cargo-cache-{{ arch }}
+                  key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - store_artifacts:
                   path: ./build/release
                   destination: releases
 
     build-windows:
-        executor: win/default
+        executor: windows/default
 
         environment:
             OPENSSL_STATIC: "1"
@@ -46,14 +48,19 @@ jobs:
                   $ProgressPreference = "SilentlyContinue"
                   Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "C:\Win64OpenSSL-1_1_1d.exe"
                   & C:\Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
+            - run: |
+                  rustc --version | Out-File -FilePath "rust-version"
+                  if (Test-Path "Cargo.lock" -PathType Leaf) {
+                      cargo generate-lockfile
+                  }
             - restore_cache:
-                  key: cargo-cache-{{ arch }}
+                  key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run: ./build-host-release
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
                       - ./target
-                  key: cargo-cache-{{ arch }}
+                  key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - store_artifacts:
                   path: ./build/release
                   destination: releases
