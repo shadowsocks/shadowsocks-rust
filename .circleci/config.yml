@@ -9,51 +9,19 @@ jobs:
             - image: circleci/rust:latest
 
         environment:
-            OPENSSL_VERS: "1.1.1d"
-            OPENSSL_DIR: "/usr/local/musl"
-            OPENSSL_INCLUDE_DIR: "/usr/local/musl/include"
-            OPENSSL_LIB_DIR: "/usr/local/musl/lib"
             OPENSSL_STATIC: "1"
-            SODIUM_VERS: "1.0.18"
-            SODIUM_LIB_DIR: "/usr/local/musl/lib"
+            OPENSSL_LIB_DIR: "/usr/lib/x86_64-linux-gnu/"
+            OPENSSL_INCLUDE_DIR: "/usr/include/x86_64-linux-gnu/"
             RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
-            CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: "x86_64-linux-musl-gcc"
-            CC_x86_64_unknown_linux_musl: "x86_64-linux-musl-gcc"
-            CXX_x86_64_unknown_linux_musl: "x86_64-linux-musl-g++"
 
         steps:
             - checkout
-            - run: rustup toolchain install stable-x86_64-unknown-linux-musl
             - run: |
                   sudo apt-get update
-                  sudo apt-get install -y build-essential ca-certificates curl
-            # - run: |
-            #       pushd $(mktemp -d)
-            #       curl -L "https://github.com/richfelker/musl-cross-make/archive/v0.9.8.tar.gz" | tar --strip-components=1 -xz
-            #       make install -j$(nproc) GCC_VER=6.4.0 MUSL_VER=1.1.22 DL_CMD="curl -C - -L -o" OUTPUT=/usr/local/ TARGET=x86_64-linux-musl
-            #       popd
-            - run: |
-                  pushd $(mktemp -d)
-                  curl -LO https://www.openssl.org/source/openssl-${OPENSSL_VERS}.tar.gz
-                  tar xzf openssl-${OPENSSL_VERS}.tar.gz
-                  cd openssl-${OPENSSL_VERS}
-                  ./Configure --prefix=/usr/local/musl linux-x86_64 -DOPENSSL_NO_SECURE_MEMORY --cross-compile-prefix=x86_64-linux-musl- no-shared no-dso no-ssl3 no-unit-test no-comp no-zlib no-zlib-dynamic
-                  make -j${nprocs} depend
-                  make -j${nprocs} build_libs
-                  make install_dev
-                  popd
-            - run: |
-                  pushd $(mktemp -d)
-                  curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM_VERS.tar.gz
-                  tar xzf libsodium-$SODIUM_VERS.tar.gz
-                  cd libsodium-$SODIUM_VERS
-                  AR=x86_64-linux-musl-ar CC=x86_64-linux-musl-gcc ./configure --prefix=/usr/local/musl --enable-shared=no --host=x86_64-unknown-linux-musl
-                  V=1 make -j${nprocs}
-                  make install
-                  popd
+                  sudo apt-get install -y build-essential libssl-dev
             - restore_cache:
                   key: cargo-cache-{{ arch }}
-            - run: ./build-host-release -t "x86_64-unknown-linux-musl"
+            - run: ./build-host-release
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
