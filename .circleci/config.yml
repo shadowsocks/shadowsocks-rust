@@ -65,9 +65,51 @@ jobs:
                   path: ./build/release
                   destination: releases
 
+    build-docker:
+        machine:
+            image: ubuntu-1604:201903-01
+
+        environment:
+            RUSTUP_HOME: "/usr/local/rustup"
+            CARGO_HOME: "/usr/local/cargo"
+
+        steps:
+            - checkout
+            - run: |
+                  sudo apt-get update
+                  sudo apt-get install curl
+            - run: |
+                  cd build
+                  docker build -t shadowsocks-rust:x86_64-pc-windows-gnu -f Dockerfile.x86_64-pc-windows-gnu .
+                  docker build -t shadowsocks-rust:x86_64-unknown-linux-musl -f Dockerfile.x86_64-unknown-linux-musl .
+            - run: |
+                  curl "https://sh.rustup.rs" -o "rust-init.sh"
+                  chmod +x "rust-init.sh"
+                  ./rust-init.sh -y --default-toolchain stable --no-modify-path --profile minimal
+                  chmod -R a+w $RUSTUP_HOME $CARGO_HOME
+                  rustup --version
+                  cargo --version
+                  rustc --version
+                  export PATH="/usr/local/cargo/bin:$PATH"
+            - restore_cache:
+                  key: cargo-cache-{{ arch }}
+            - run: cargo install cross
+            - run: |
+                  cd build
+                  ./build-release
+            - save_cache:
+                  paths:
+                      - /usr/local/cargo/registry
+                      - ./target
+                  key: cargo-cache-{{ arch }}
+            - store_artifacts:
+                  path: ./build/release
+                  destination: releases
+
 workflows:
     version: 2
     build-releases:
         jobs:
             - build-linux
             - build-windows
+            - build-docker
