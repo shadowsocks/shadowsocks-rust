@@ -27,26 +27,6 @@ jobs:
                   path: ./build/release
                   destination: releases
 
-    build-osx:
-        macos:
-            xcode: 11.3.1
-        environment:
-            SODIUM_USE_PKG_CONFIG: "1"
-        steps:
-            - checkout
-            - run: brew install libsodium
-            - restore_cache:
-                  key: cargo-cache-{{ arch }}
-            - run: ./build-host-release
-            - save_cache:
-                  paths:
-                      - /usr/local/cargo/registry
-                      - ./target
-                  key: cargo-cache-{{ arch }}
-            - store_artifacts:
-                  path: ./build/release
-                  destination: releases
-
     build-windows:
         executor: win/default
 
@@ -75,5 +55,4 @@ workflows:
     build-releases:
         jobs:
             - build-linux
-            - build-osx
             - build-windows
