@@ -145,6 +145,12 @@ impl ServerState {
     ///
     /// If not, set into the current bloom filter
     pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
+        // Plain cipher doesn't have a nonce
+        // Always treated as non-duplicated
+        if nonce.is_empty() {
+            return false;
+        }
+
         let mut ppbloom = self.nonce_ppbloom.lock();
         ppbloom.check_and_set(nonce)
     }
