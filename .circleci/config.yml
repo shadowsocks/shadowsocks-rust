@@ -6,19 +6,20 @@ orbs:
 jobs:
     build-linux:
         docker:
-            - image: circleci/rust:latest
+            - image: circleci/rust:stretch
 
         environment:
             OPENSSL_STATIC: "1"
             OPENSSL_LIB_DIR: "/usr/lib/x86_64-linux-gnu/"
             OPENSSL_INCLUDE_DIR: "/usr/include/x86_64-linux-gnu/"
+            SODIUM_LIB_DIR: "/usr/lib/x86_64-linux-gnu/"
             RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
 
         steps:
             - checkout
             - run: |
                   sudo apt-get update
-                  sudo apt-get install -y build-essential libssl-dev
+                  sudo apt-get install -y build-essential libssl-dev libsodium-dev
             - restore_cache:
                   key: cargo-cache-{{ arch }}
             - run: ./build-host-release
