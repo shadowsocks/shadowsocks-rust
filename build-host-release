@@ -1,10 +1,27 @@
 #!/bin/bash
 
+BUILD_TARGET=""
+while getopts "t:" opt; do
+    case $opt in
+        t)
+            BUILD_TARGET=$OPTARG
+            ;;
+        ?)
+            echo "Usage: $(basename $0) [-t <target-triple>]"
+            ;;
+    esac
+done
+
 ROOT_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' "${ROOT_DIR}/Cargo.toml" | awk '{print $3}' | sed 's/"//g')
 HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
 
-cargo build --release --features "miscreant"
+if [[ "${BUILD_TARGET}" != "" ]]; then
+    cargo build --release --features "miscreant" --target "${BUILD_TARGET}"
+else
+    cargo build --release --features "miscreant"
+fi
+
 if [[ "$?" != "0" ]]; then
     exit $?;
 fi
@@ -25,7 +42,11 @@ RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}-stable.${HOST_TRIPLE}"
 mkdir -p "${RELEASE_FOLDER}"
 
 # Into release folder
-cd "target/release"
+if [[ "${BUILD_TARGET}" != "" ]]; then
+    cd "target/${BUILD_TARGET}/release"
+else
+    cd "target/release"
+fi
 
 if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
     # For Windows, use zip
