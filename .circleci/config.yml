@@ -1,24 +1,78 @@
 version: 2.1
+
+orbs:
+    win: circleci/windows@2.4.0
+
 jobs:
-    build:
+    build-linux:
         docker:
             - image: circleci/rust:latest
+        environment:
+            SODIUM_USE_PKG_CONFIG: "1"
+            OPENSSL_STATIC: "1"
         steps:
             - checkout
             - run: |
                   sudo apt-get update
                   sudo apt-get install -y libssl-dev libsodium-dev
             - restore_cache:
-                  key: cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
-            - run: |
-                  export SODIUM_USE_PKG_CONFIG=1
-                  export OPENSSL_STATIC=1
-                  ./build-host-release
+                  key: cargo-cache-{{ arch }}
+            - run: ./build-host-release
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
                       - ./target
-                  key: cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}
+                  key: cargo-cache-{{ arch }}
             - store_artifacts:
                   path: ./build/release
                   destination: releases
+
+    build-osx:
+        macos:
+            xcode: 11.3.1
+        environment:
+            SODIUM_USE_PKG_CONFIG: "1"
+        steps:
+            - checkout
+            - run: brew install libsodium
+            - restore_cache:
+                  key: cargo-cache-{{ arch }}
+            - run: ./build-host-release
+            - save_cache:
+                  paths:
+                      - /usr/local/cargo/registry
+                      - ./target
+                  key: cargo-cache-{{ arch }}
+            - store_artifacts:
+                  path: ./build/release
+                  destination: releases
+
+    build-windows:
+        executor: win/default
+
+        environment:
+            OPENSSL_STATIC: "1"
+        steps:
+            - checkout
+            - run: |
+                  Start-FileDownload "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe"
+                  Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
+            - restore_cache:
+                  key: cargo-cache-{{ arch }}
+            - run: ./build-host-release
+            - save_cache:
+                  paths:
+                      - /usr/local/cargo/registry
+                      - ./target
+                  key: cargo-cache-{{ arch }}
+            - store_artifacts:
+                  path: ./build/release
+                  destination: releases
+
+workflows:
+    version: 2
+    build-releases:
+        jobs:
+            - build-linux
+            - build-osx
+            - build-windows

@@ -32,8 +32,8 @@ path = "src/bin/redir.rs"
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
 
 [features]
 default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]

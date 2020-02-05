@@ -43,7 +43,7 @@ function build() {
     mkdir -p "${PKG_DIR}"
 
     if [[ "$TARGET" == *"-linux-"* ]]; then
-        PKG_NAME="shadowsocks-v${VERSION}.${TARGET}.tar.xz"
+        PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.tar.xz"
         PKG_PATH="${PKG_DIR}/${PKG_NAME}"
 
         echo "* Packaging XZ in ${PKG_PATH} ..."
@@ -62,7 +62,7 @@ function build() {
         cd "${PKG_DIR}"
         shasum -a 256 "${PKG_NAME}" > "${PKG_NAME}.sha256"
     elif [[ "$TARGET" == *"-windows-"* ]]; then
-        PKG_NAME="shadowsocks-v${VERSION}.${TARGET}.zip"
+        PKG_NAME="shadowsocks-v${VERSION}-stable.${TARGET}.zip"
         PKG_PATH="${PKG_DIR}/${PKG_NAME}"
 
         echo "* Packaging ZIP in ${PKG_PATH} ..."
