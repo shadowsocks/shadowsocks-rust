@@ -35,9 +35,8 @@ jobs:
         steps:
             - checkout
             - run: |
-                  $ProgressPreference = "SilentlyContinue"
-                  Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "Win64OpenSSL-1_1_1d.exe"
-                  Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
+                  Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "C:\Win64OpenSSL-1_1_1d.exe"
+                  & C:\Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
             - restore_cache:
                   key: cargo-cache-{{ arch }}
             - run: ./build-host-release
