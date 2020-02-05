@@ -41,37 +41,62 @@ jobs:
             OPENSSL_STATIC: "1"
             OPENSSL_DIR: "C:\\OpenSSL"
             RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
+            CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
         steps:
             - checkout
             - run: |
                   $ProgressPreference = "SilentlyContinue"
+                  Invoke-WebRequest -Uri "https://win.rustup.rs/" -OutFile "C:\rustup-init.exe"
+                  & C:\rustup-init.exe -y --default-toolchain stable --no-modify-path --profile minimal
+                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+                  rustc --version
+                  cargo --version
+            - run: |
+                  $ProgressPreference = "SilentlyContinue"
                   Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "C:\Win64OpenSSL-1_1_1d.exe"
                   & C:\Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
             - run: |
+                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+
                   rustc --version | Out-File -FilePath "rust-version"
-                  if (Test-Path "Cargo.lock" -PathType Leaf) {
+                  if (!(Test-Path "Cargo.lock" -PathType Leaf)) {
                       cargo generate-lockfile
                   }
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
-            - run: ./build-host-release
+            # - run: ./build-host-release
+            - run: |
+                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+                  cargo build --release --features "miscreant"
+            - run: |
+                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+
+                  $Version = (sslocal -V).split()[-1]
+                  $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
+                  $PackageName = "shadowsocks-v$($Version)-stable.$($TargetTriple).zip"
+                  $PackagePath = "$($pwd)\build\release\$($PackageName)"
+
+                  Pushd target\release
+                  $CompressParam = @{
+                      LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "sstunnel.exe"
+                      DestinationPath = "$($PackagePath)"
+                  }
+                  Compress-Archive @CompressParam
+                  Popd
             - save_cache:
                   paths:
-                      - /usr/local/cargo/registry
-                      - ./target
+                      - C:\Users\circleci\.cargo\registry
+                      - target
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - store_artifacts:
-                  path: ./build/release
+                  path: build\\release
                   destination: releases
 
     build-docker:
         machine:
             image: ubuntu-1604:201903-01
-
-        environment:
-            RUSTUP_HOME: "/usr/local/rustup"
-            CARGO_HOME: "/usr/local/cargo"
+            docker_layer_caching: true
 
         steps:
             - checkout
@@ -86,11 +111,11 @@ jobs:
                   curl "https://sh.rustup.rs" -o "rust-init.sh"
                   chmod +x "rust-init.sh"
                   ./rust-init.sh -y --default-toolchain stable --no-modify-path --profile minimal
-                  chmod -R a+w $RUSTUP_HOME $CARGO_HOME
+                  export PATH="$HOME/.cargo/bin:$PATH"
+                  echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $BASH_ENV
                   rustup --version
                   cargo --version
                   rustc --version
-                  export PATH="/usr/local/cargo/bin:$PATH"
             - restore_cache:
                   key: cargo-cache-{{ arch }}
             - run: cargo install cross
