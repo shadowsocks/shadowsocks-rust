@@ -48,17 +48,19 @@ jobs:
             - run: |
                   $ProgressPreference = "SilentlyContinue"
                   Invoke-WebRequest -Uri "https://win.rustup.rs/" -OutFile "C:\rustup-init.exe"
-                  & C:\rustup-init.exe -y --default-toolchain stable --no-modify-path --profile minimal
+                  & C:\rustup-init.exe -y --default-toolchain "stable-x86_64-pc-windows-msvc" --no-modify-path --profile minimal
 
                   $env:Path += ";C:\Users\circleci\.cargo\bin"
                   rustc -Vv
                   cargo --version
             - run: |
+                  $env:Path += ";C:\Users\circleci\.cargo\bin"
+
                   $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
-                  if ($TargetTriple.StartsWith("i686-")) {
-                      $OpenSSLBits = "32"
-                  } else if ($TargetTriple.StartsWith("x86_64-")) {
+                  if ($TargetTriple.StartsWith("x86_64-")) {
                       $OpenSSLBits = "64"
+                  } else {
+                      $OpenSSLBits = "32"
                   }
                   $OpenSSLVersion = "1_1_1d"
                   $OpenSSLFileName = "Win${OpenSSLBits}OpenSSL-${OpenSSLVersion}.exe"
