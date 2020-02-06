@@ -110,6 +110,10 @@ jobs:
                   }
                   Compress-Archive @CompressParam
                   Popd
+
+                  $PackageChecksumPath = "${PackagePath}.sha256"
+                  $PackageHash = (Get-FileHash -Path "${PackagePath}" -Algorithm SHA256).Hash
+                  "${PackageHash}  ${PackageName}" | Out-File -FilePath "${PackageChecksumPath}"
             - save_cache:
                   paths:
                       - C:\Users\circleci\.cargo\registry
