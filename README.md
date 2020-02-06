@@ -59,6 +59,12 @@ Requirements:
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
+Nightly builds could be downloaded from [CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-rust).
+
+* `build-windows`: Build for `x86_64-pc-windows-msvc`
+* `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch)
+* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`
+
 ### **Build from source**
 
 Use cargo to build.
@@ -108,6 +114,14 @@ Then `sslocal`, `ssserver`, `sstunnel` and `ssurl` will be packaged in
 * `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
+
+### Build OpenSSL from source
+
+Specify feature `openssl-vendored` to let [openssl](https://crates.io/crates/openssl) build from source.
+
+```bash
+cargo build --features "openssl-vendored"
+```
 
 ## Getting Started
 

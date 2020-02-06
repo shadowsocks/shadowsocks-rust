@@ -88,17 +88,25 @@ jobs:
                   $env:Path += ";C:\Users\circleci\.cargo\bin"
                   cargo build --release --features "miscreant"
             - run: |
-                  $env:Path += ";C:\Users\circleci\.cargo\bin"
+                  $ProgressPreference = "SilentlyContinue"
+                  $env:Path += ";C:\Users\circleci\.cargo\bin;."
 
-                  $Version = (sslocal -V).split()[-1]
-                  $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
-                  $PackageName = "shadowsocks-v$($Version)-stable.$($TargetTriple).zip"
-                  $PackagePath = "$($pwd)\build\release\$($PackageName)"
+                  $PackageReleasePath = "${PWD}\build\release"
 
                   Pushd target\release
+                  $Version = (sslocal -V).split()[-1]
+                  $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
+                  $PackageName = "shadowsocks-v${Version}-stable.${TargetTriple}.zip"
+                  $PackagePath = "${PackageReleasePath}\${PackageName}"
+
+                  Write-Host "${Version}"
+                  Write-Host "${TargetTriple}"
+                  Write-Host "${PackagePath}"
+
+                  New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
                   $CompressParam = @{
                       LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "sstunnel.exe"
-                      DestinationPath = "$($PackagePath)"
+                      DestinationPath = "${PackagePath}"
                   }
                   Compress-Archive @CompressParam
                   Popd
