@@ -28,15 +28,17 @@ use tokio::{
     time,
 };
 
-const MAX_LATENCY_QUEUE_SIZE: usize = 37;
+const MAX_LATENCY_QUEUE_SIZE: usize = 99;
 const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
 const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 2 secs, that's too long
+const MAX_SERVER_RTT: u64 = DEFAULT_CHECK_TIMEOUT_SEC * 1000;
 
 /// Identifier of a valid server
 pub trait ServerData: Send + Sync {
     fn create_server(context: &SharedContext, server_idx: usize, data: &SharedServerStatisticData) -> Self;
 }
 
+#[derive(Debug)]
 struct ServerStatisticData {
     /// Median of latency time (in millisec)
     ///
@@ -47,30 +49,50 @@ struct ServerStatisticData {
     fail_rate: f64,
     /// Recently probe data
     latency_queue: VecDeque<Score>,
+    /// Score's standard deviation
+    latency_stdev: f64,
+    /// Score's average
+    latency_mean: f64,
+}
+
+fn max_latency_stdev() -> f64 {
+    let mrtt = MAX_SERVER_RTT as f64;
+    let avg = (0.0 + mrtt) / 2.0;
+    let diff1 = (0.0 - avg) * (0.0 - avg);
+    let diff2 = (mrtt - avg) * (mrtt - avg);
+    // (1.0 / (2.0 - 1.0)) * (diff1 + diff2).sqrt()
+    (diff1 + diff2).sqrt()
 }
 
 impl ServerStatisticData {
     fn new() -> ServerStatisticData {
         ServerStatisticData {
-            rtt: u64::max_value(),
-            fail_rate: 100.0,
+            rtt: MAX_SERVER_RTT,
+            fail_rate: 1.0,
             latency_queue: VecDeque::new(),
+            latency_stdev: 0.0,
+            latency_mean: 0.0,
         }
     }
 
     fn score(&self) -> u64 {
         // Normalize rtt
-        let nrtt = self.rtt as f64 / (DEFAULT_CHECK_TIMEOUT_SEC * 1000) as f64;
+        let nrtt = self.rtt as f64 / MAX_SERVER_RTT as f64;
+
+        // Normalize stdev
+        let nstdev = self.latency_stdev / max_latency_stdev();
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
+        const SCORE_STDEV_WEIGHT: f64 = 1.0;
 
-        // Score = (norm_lat * 1.0 + prop_err * 3.0) / 4.0
+        // Score = (norm_lat * 1.0 + prop_err * 3.0 + stdev * 1.0) / 5.0
         //
         // 1. The lower latency, the better
         // 2. The lower errored count, the better
-        let score =
-            (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT) / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT);
+        // 3. The lower latency's stdev, the better
+        let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
+            / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT);
 
         // Times 1000 converts to u64, for 0.001 precision
         (score * 1000.0) as u64
@@ -88,6 +110,10 @@ impl ServerStatisticData {
     }
 
     fn recalculate_score(&mut self) -> u64 {
+        if self.latency_queue.is_empty() {
+            return self.score();
+        }
+
         let mut vlat = Vec::with_capacity(self.latency_queue.len());
         let mut cerr = 0;
         for s in &self.latency_queue {
@@ -97,21 +123,37 @@ impl ServerStatisticData {
             }
         }
 
-        if !vlat.is_empty() {
-            vlat.sort();
+        vlat.sort();
 
-            // Find median of latency
-            let mid = vlat.len() / 2;
+        // Find median of latency
+        let mid = vlat.len() / 2;
 
-            self.rtt = if vlat.len() % 2 == 0 {
-                (vlat[mid] + vlat[mid - 1]) / 2
-            } else {
-                vlat[mid]
-            };
-        }
+        self.rtt = if vlat.len() % 2 == 0 {
+            (vlat[mid] + vlat[mid - 1]) / 2
+        } else {
+            vlat[mid]
+        };
 
         // Error rate
         self.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
+
+        if vlat.len() > 1 {
+            // STDEV
+            let n = vlat.len() as f64;
+
+            let mut total_lat = 0;
+            for s in &vlat {
+                total_lat += *s;
+            }
+            self.latency_mean = total_lat as f64 / n;
+            let mut acc_diff = 0.0;
+            for s in &vlat {
+                let diff = *s as f64 - self.latency_mean;
+                acc_diff += diff * diff;
+            }
+            // Corrected Sample Standard Deviation
+            self.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
+        }
 
         self.score()
     }
@@ -143,6 +185,10 @@ impl SharedServerStatisticData {
     pub async fn score(&self) -> u64 {
         let data = self.0.lock().await;
         data.score()
+    }
+
+    async fn debug_string(&self) -> String {
+        format!("{:?}", self.0.lock().await)
     }
 }
 
@@ -198,6 +244,10 @@ impl<S: ServerData> ServerStatistic<S> {
 
     pub async fn report_failure(&self) -> u64 {
         self.data.report_failure().await
+    }
+
+    async fn data_debug_string(&self) -> String {
+        self.data.debug_string().await
     }
 }
 
@@ -387,6 +437,13 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             server_type,
             stat.server_config().addr(),
             score
+        );
+
+        trace!(
+            "{} server {} {}",
+            server_type,
+            stat.server_config().addr(),
+            stat.data_debug_string().await
         );
     }
 
