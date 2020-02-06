@@ -49,15 +49,31 @@ jobs:
                   $ProgressPreference = "SilentlyContinue"
                   Invoke-WebRequest -Uri "https://win.rustup.rs/" -OutFile "C:\rustup-init.exe"
                   & C:\rustup-init.exe -y --default-toolchain stable --no-modify-path --profile minimal
-                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
-                  rustc --version
+
+                  $env:Path += ";C:\Users\circleci\.cargo\bin"
+                  rustc -Vv
                   cargo --version
             - run: |
+                  $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
+                  if ($TargetTriple.StartsWith("i686-")) {
+                      $OpenSSLBits = "32"
+                  } else if ($TargetTriple.StartsWith("x86_64-")) {
+                      $OpenSSLBits = "64"
+                  }
+                  $OpenSSLVersion = "1_1_1d"
+                  $OpenSSLFileName = "Win${OpenSSLBits}OpenSSL-${OpenSSLVersion}.exe"
+
                   $ProgressPreference = "SilentlyContinue"
-                  Invoke-WebRequest -Uri "http://slproweb.com/download/Win64OpenSSL-1_1_1d.exe" -OutFile "C:\Win64OpenSSL-1_1_1d.exe"
-                  & C:\Win64OpenSSL-1_1_1d.exe /SILENT /VERYSILENT /SP- /DIR="C:\OpenSSL"
+                  Invoke-WebRequest -Uri "http://slproweb.com/download/${OpenSSLFileName}" -OutFile "${OpenSSLFileName}"
+                  Write-Host "* Done downloading ${OpenSSLFileName}"
+                  dir
+                  Start-Process "${OpenSSLFileName}" -ArgumentList "/SILENT /VERYSILENT /SP- /SUPPRESSMSGBOXES /DIR=C:\OpenSSL" -Wait
+                  Write-Host "* Done installing ${OpenSSLFileName}"
+                  dir C:\
+                  dir ${env:OPENSSL_DIR}
+                  dir "${env:OPENSSL_DIR}\lib"
             - run: |
-                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+                  $env:Path += ";C:\Users\circleci\.cargo\bin"
 
                   rustc --version | Out-File -FilePath "rust-version"
                   if (!(Test-Path "Cargo.lock" -PathType Leaf)) {
@@ -67,10 +83,10 @@ jobs:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             # - run: ./build-host-release
             - run: |
-                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+                  $env:Path += ";C:\Users\circleci\.cargo\bin"
                   cargo build --release --features "miscreant"
             - run: |
-                  $Env:Path += ";C:\Users\circleci\.cargo\bin"
+                  $env:Path += ";C:\Users\circleci\.cargo\bin"
 
                   $Version = (sslocal -V).split()[-1]
                   $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]

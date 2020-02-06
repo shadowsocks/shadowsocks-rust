@@ -45,6 +45,7 @@ camellia-cfb = ["openssl"]
 single-threaded = []
 trust-dns = ["trust-dns-resolver"]
 redir = []
+openssl-vendored = ["openssl/vendored"]
 
 [dependencies]
 log = "0.4"
