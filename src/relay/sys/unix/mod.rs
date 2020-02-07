@@ -4,6 +4,8 @@ use std::{
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 
+use tokio::net::UdpSocket;
+
 /// Convert `sockaddr_storage` to `SocketAddr`
 #[allow(dead_code)]
 pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr> {
@@ -21,4 +23,10 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
             Err(err)
         }
     }
+}
+
+/// Create a `UdpSocket` binded to `addr`
+#[inline(always)]
+pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
+    UdpSocket::bind(addr).await
 }

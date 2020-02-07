@@ -24,13 +24,13 @@ use crate::{
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::Address,
+        sys::create_udp_socket,
         utils::try_timeout,
     },
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    sys::create_socket,
     tproxy_socket::TProxyUdpSocket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
@@ -64,7 +64,7 @@ impl UdpAssociation {
     ) -> io::Result<UdpAssociation> {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = create_socket(&local_addr).await?;
+        let remote_udp = create_udp_socket(&local_addr).await?;
 
         let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
         debug!(

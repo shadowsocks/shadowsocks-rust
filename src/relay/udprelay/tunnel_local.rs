@@ -24,13 +24,13 @@ use crate::{
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::Address,
+        sys::create_udp_socket,
         utils::try_timeout,
     },
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    sys::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -58,7 +58,7 @@ impl UdpAssociation {
     ) -> io::Result<UdpAssociation> {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = create_socket(&local_addr).await?;
+        let remote_udp = create_udp_socket(&local_addr).await?;
 
         let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
         debug!("Created UDP Association for {} from {}", src_addr, local_addr);
@@ -231,7 +231,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("Missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let l = create_socket(&bind_addr).await?;
+    let l = create_udp_socket(&bind_addr).await?;
     let local_addr = l.local_addr().expect("Could not determine port bound to");
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
@@ -311,7 +311,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             //
             // It cannot be solved here, because `WSAGetLastError` is already set.
             //
-            // See `relay::udprelay::utils::create_socket` for more detail.
+            // See `relay::udprelay::utils::create_udp_socket` for more detail.
             continue;
         }
 

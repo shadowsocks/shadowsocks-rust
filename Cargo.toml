@@ -32,6 +32,10 @@ path = "src/bin/redir.rs"
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
+[[bin]]
+name = "ssmanager"
+path = "src/bin/manager.rs"
+
 #[profile.release]
 #lto = true
 
@@ -85,6 +89,7 @@ cfg-if = "0.1"
 bloomfilter = "^1.0.2"
 spin = "0.5"
 mio = "0.6"
+serde_json = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

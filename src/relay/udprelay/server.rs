@@ -21,12 +21,11 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-    relay::{socks5::Address, utils::try_timeout},
+    relay::{flow::SharedServerFlowStatistic, socks5::Address, sys::create_udp_socket, utils::try_timeout},
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    sys::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -48,7 +47,7 @@ impl UdpAssociation {
     /// Create an association with addr
     async fn associate(
         context: SharedContext,
-        svr_cfg: Arc<ServerConfig>,
+        svr_idx: usize,
         src_addr: SocketAddr,
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
     ) -> io::Result<UdpAssociation> {
@@ -63,7 +62,7 @@ impl UdpAssociation {
                 addr.bind_addr(&*context).await?
             }
         };
-        let remote_udp = create_socket(&local_addr).await?;
+        let remote_udp = create_udp_socket(&local_addr).await?;
 
         let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
         debug!("Created UDP Association for {} from {}", src_addr, local_addr);
@@ -83,30 +82,34 @@ impl UdpAssociation {
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
         // local -> remote
-        let c_svr_cfg = svr_cfg.clone();
-        let c_context = context.clone();
-        tokio::spawn(async move {
-            while let Some(pkt) = rx.recv().await {
-                // pkt is already a raw packet, so just send it
-                if let Err(err) =
-                    UdpAssociation::relay_l2r(&*c_context, src_addr, &mut sender, &pkt[..], timeout, &*c_svr_cfg).await
-                {
-                    error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
+        {
+            let context = context.clone();
+            tokio::spawn(async move {
+                let svr_cfg = context.server_config(svr_idx);
 
-                    // FIXME: Ignore? Or how to deal with it?
+                while let Some(pkt) = rx.recv().await {
+                    // pkt is already a raw packet, so just send it
+                    if let Err(err) =
+                        UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
+                    {
+                        error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
+
+                        // FIXME: Ignore? Or how to deal with it?
+                    }
                 }
-            }
 
-            debug!("UDP ASSOCIATE {} -> .. finished", src_addr);
-        });
+                debug!("UDP ASSOCIATE {} -> .. finished", src_addr);
+            });
+        }
 
         // local <- remote
         tokio::spawn(async move {
             let transfer_fut = async move {
+                let svr_cfg = context.server_config(svr_idx);
+
                 loop {
                     // Read and send back to source
-                    match UdpAssociation::relay_r2l(&*context, src_addr, &mut receiver, &mut response_tx, &*svr_cfg)
-                        .await
+                    match UdpAssociation::relay_r2l(&*context, src_addr, &mut receiver, &mut response_tx, svr_cfg).await
                     {
                         Ok(..) => {}
                         Err(err) => {
@@ -258,10 +261,11 @@ impl UdpAssociation {
     }
 }
 
-async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Result<()> {
+async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, svr_idx: usize) -> io::Result<()> {
+    let svr_cfg = context.server_config(svr_idx);
     let listen_addr = svr_cfg.addr().bind_addr(&*context).await?;
 
-    let listener = create_socket(&listen_addr).await?;
+    let listener = create_udp_socket(&listen_addr).await?;
     let local_addr = listener.local_addr().expect("Could not determine port bound to");
     info!("ShadowSocks UDP listening on {}", local_addr);
 
@@ -271,37 +275,44 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
     // So it may exhaust all available file descriptors
     let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
     let assoc_map = Arc::new(Mutex::new(LruCache::with_expiry_duration(timeout)));
-    let assoc_map_cloned = assoc_map.clone();
 
     // FIXME: Channel size 1024?
     let (tx, mut rx) = mpsc::channel::<(SocketAddr, BytesMut)>(1024);
-    tokio::spawn(async move {
-        let assoc_map = assoc_map_cloned;
 
-        while let Some((src, pkt)) = rx.recv().await {
-            let cache_key = src.to_string();
-            {
-                let mut amap = assoc_map.lock().await;
+    {
+        // Tokio task for sending data back to clients
 
-                // Check or update expire time
-                if amap.get(&cache_key).is_none() {
-                    debug!(
-                        "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
-                        src,
-                        pkt.len()
-                    );
-                    continue;
+        let assoc_map = assoc_map.clone();
+        let flow_stat = flow_stat.clone();
+
+        tokio::spawn(async move {
+            while let Some((src, pkt)) = rx.recv().await {
+                let cache_key = src.to_string();
+                {
+                    let mut amap = assoc_map.lock().await;
+
+                    // Check or update expire time
+                    if amap.get(&cache_key).is_none() {
+                        debug!(
+                            "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
+                            src,
+                            pkt.len()
+                        );
+                        continue;
+                    }
                 }
+
+                if let Err(err) = w.send_to(&pkt, &src).await {
+                    error!("UDP packet send failed, err: {:?}", err);
+                    break;
+                }
+
+                flow_stat.udp().incr_tx(pkt.len() as u64);
             }
 
-            if let Err(err) = w.send_to(&pkt, &src).await {
-                error!("UDP packet send failed, err: {:?}", err);
-                break;
-            }
-        }
-
-        // FIXME: How to stop the outer listener Future?
-    });
+            // FIXME: How to stop the outer listener Future?
+        });
+    }
 
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
@@ -321,6 +332,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
         let pkt = &pkt_buf[..recv_len];
 
         trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
+        flow_stat.udp().incr_rx(pkt.len() as u64);
 
         if recv_len == 0 {
             // For windows, it will generate a ICMP Port Unreachable Message
@@ -342,7 +354,7 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
             let assoc = match assoc_map.entry(src.to_string()) {
                 Entry::Occupied(oc) => oc.into_mut(),
                 Entry::Vacant(vc) => vc.insert(
-                    UdpAssociation::associate(context.clone(), svr_cfg.clone(), src, tx.clone())
+                    UdpAssociation::associate(context.clone(), svr_idx, src, tx.clone())
                         .await
                         .expect("Failed to create udp association"),
                 ),
@@ -359,13 +371,14 @@ async fn listen(context: SharedContext, svr_cfg: Arc<ServerConfig>) -> io::Resul
 }
 
 /// Starts a UDP relay server
-pub async fn run(context: SharedContext) -> io::Result<()> {
+pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -> io::Result<()> {
     let vec_fut = FuturesUnordered::new();
 
-    for svr in &context.config().server {
-        let svr_cfg = Arc::new(svr.clone());
+    for svr_idx in 0..context.config().server.len() {
+        let context = context.clone();
+        let flow_stat = flow_stat.clone();
 
-        let svr_fut = listen(context.clone(), svr_cfg);
+        let svr_fut = async move { listen(context, flow_stat, svr_idx).await };
         vec_fut.push(svr_fut);
     }
 

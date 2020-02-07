@@ -10,16 +10,16 @@ use std::{
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use super::server_context::SharedTcpServerContext;
+use crate::relay::flow::SharedServerFlowStatistic;
 
 pub struct TcpMonStream<S> {
     stream: S,
-    context: SharedTcpServerContext,
+    flow_stat: SharedServerFlowStatistic,
 }
 
 impl<S> TcpMonStream<S> {
-    pub fn new(c: SharedTcpServerContext, s: S) -> TcpMonStream<S> {
-        TcpMonStream { stream: s, context: c }
+    pub fn new(flow_stat: SharedServerFlowStatistic, stream: S) -> TcpMonStream<S> {
+        TcpMonStream { stream, flow_stat }
     }
 }
 
@@ -32,7 +32,7 @@ where
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        self.context.incr_rx(n);
+        self.flow_stat.tcp().incr_rx(n as u64);
         Poll::Ready(Ok(n))
     }
 }
@@ -46,7 +46,7 @@ where
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        self.context.incr_tx(n);
+        self.flow_stat.tcp().incr_tx(n as u64);
         Poll::Ready(Ok(n))
     }
 

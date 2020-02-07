@@ -31,7 +31,7 @@ if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
     TARGET_SUFFIX=".exe"
 fi
 
-TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "sstunnel${TARGET_SUFFIX}")
+TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "sstunnel${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}")
 if [[ "${HOST_TRIPLE}" == *"-linux-"* ]]; then
     TARGETS+=("ssredir${TARGET_SUFFIX}")
 fi

@@ -14,12 +14,11 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
     crypto::CipherType,
-    relay::{socks5::Address, utils::try_timeout},
+    relay::{socks5::Address, sys::create_udp_socket, utils::try_timeout},
 };
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
-    sys::create_socket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -37,7 +36,7 @@ impl ServerClient {
     pub async fn new(svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         Ok(ServerClient {
-            socket: create_socket(&local_addr).await?,
+            socket: create_udp_socket(&local_addr).await?,
             method: svr_cfg.method(),
             key: svr_cfg.clone_key(),
             server_addr: svr_cfg.addr().clone(),

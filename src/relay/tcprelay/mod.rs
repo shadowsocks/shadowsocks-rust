@@ -37,7 +37,6 @@ pub mod local;
 mod monitor;
 mod redir_local;
 pub mod server;
-mod server_context;
 mod socks5_local;
 mod stream;
 mod sys;

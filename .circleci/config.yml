@@ -105,7 +105,7 @@ jobs:
 
                   New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
                   $CompressParam = @{
-                      LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "sstunnel.exe"
+                      LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "sstunnel.exe", "ssmanager.exe"
                       DestinationPath = "${PackagePath}"
                   }
                   Compress-Archive @CompressParam

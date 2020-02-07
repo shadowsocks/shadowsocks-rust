@@ -12,43 +12,39 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::{context::SharedContext, relay::socks5::Address};
-
-use super::{
-    monitor::TcpMonStream,
-    server_context::{SharedTcpServerContext, TcpServerContext},
-    utils::connect_tcp_stream,
-    CryptoStream,
-    STcpStream,
+use crate::{
+    config::ServerConfig,
+    context::{Context, SharedContext},
+    relay::{flow::SharedServerFlowStatistic, socks5::Address},
 };
+
+use super::{monitor::TcpMonStream, utils::connect_tcp_stream, CryptoStream, STcpStream};
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_client(
-    svr_context: SharedTcpServerContext,
+    context: &Context,
+    flow_stat: SharedServerFlowStatistic,
+    svr_cfg: &ServerConfig,
     socket: TcpStream,
     peer_addr: SocketAddr,
 ) -> io::Result<()> {
-    if let Err(err) = socket.set_keepalive(svr_context.svr_cfg().timeout()) {
+    let timeout = svr_cfg.timeout();
+
+    if let Err(err) = socket.set_keepalive(timeout) {
         error!("Failed to set keep alive: {:?}", err);
     }
 
-    let context = svr_context.context();
+    trace!("Got connection addr: {} with proxy server: {:?}", peer_addr, svr_cfg);
 
-    trace!(
-        "Got connection addr: {} with proxy server: {:?}",
-        peer_addr,
-        svr_context.svr_cfg()
-    );
-
-    let mut stream = STcpStream::new(socket, svr_context.svr_cfg().timeout());
+    let mut stream = STcpStream::new(socket, timeout);
     stream.set_nodelay(context.config().no_delay)?;
 
     // Wrap with a data transfer monitor
-    let stream = TcpMonStream::new(svr_context.clone(), stream);
+    let stream = TcpMonStream::new(flow_stat, stream);
 
     // Do server-client handshake
     // Perform encryption IV exchange
-    let mut stream = CryptoStream::new(context, stream, svr_context.svr_cfg());
+    let mut stream = CryptoStream::new(context, stream, svr_cfg);
 
     // Read remote Address
     let remote_addr = match Address::read_from(&mut stream).await {
@@ -63,8 +59,6 @@ async fn handle_client(
     };
 
     debug!("Relay {} <-> {} establishing", peer_addr, remote_addr);
-
-    let context = svr_context.context();
 
     let bind_addr = match context.config().local {
         None => None,
@@ -161,10 +155,10 @@ async fn handle_client(
 }
 
 /// Runs the server
-pub async fn run(context: SharedContext) -> io::Result<()> {
+pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -> io::Result<()> {
     let vec_fut = FuturesUnordered::new();
 
-    for svr_cfg in &context.config().server {
+    for (idx, svr_cfg) in context.config().server.iter().enumerate() {
         let mut listener = {
             let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
             let addr = addr.bind_addr(&*context).await?;
@@ -179,16 +173,25 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             listener
         };
 
-        // Creates a shared context for spawning new clients
-        let svr_context = TcpServerContext::new(context.clone(), svr_cfg);
+        // Clone and move into the server future
+        let context = context.clone();
+        let flow_stat = flow_stat.clone();
 
         vec_fut.push(async move {
             loop {
                 match listener.accept().await {
                     Ok((socket, peer_addr)) => {
-                        let svr_context = svr_context.clone();
+                        let flow_stat = flow_stat.clone();
+                        let context = context.clone();
+
                         tokio::spawn(async move {
-                            let _ = handle_client(svr_context, socket, peer_addr).await;
+                            // Retrieve server config reference from context again
+                            //
+                            // Because the svr_cfg outside doesn't live long enough. WHAT??
+                            let svr_cfg = context.server_config(idx);
+
+                            // Error is ignored because it is already logged
+                            let _ = handle_client(&*context, flow_stat, svr_cfg, socket, peer_addr).await;
                         });
                     }
                     Err(err) => {
