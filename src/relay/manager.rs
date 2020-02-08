@@ -247,6 +247,9 @@ impl ManagerService {
 
         let mut config = Config::new(ConfigType::Server);
         config.server.push(svr_cfg);
+
+        config.local = self.context.config().local.clone();
+
         if let Some(mode) = p.mode {
             config.mode = match mode.parse::<Mode>() {
                 Ok(m) => m,
@@ -256,6 +259,7 @@ impl ManagerService {
                 }
             };
         }
+
         if let Some(b) = p.no_delay {
             config.no_delay = b;
         }
@@ -335,6 +339,7 @@ impl ManagerService {
     }
 }
 
+/// Server manager for supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users) APIs
 pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     assert!(config.config_type.is_manager());
 

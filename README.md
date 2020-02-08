@@ -218,6 +218,17 @@ sstunnel -c /path/to/shadowsocks.json -f "127.0.0.1:8080"
 
 `sstunnel` basically works the same as `sslocal`, only it doesn't have any client negociation process, just establishes a tunnel to the `forward` address.
 
+### Transparent Proxy Local client
+
+**NOTE**: This is currently only supports Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
+
+```bash
+# Read local client configuration from file
+ssredir -c /path/to/shadowsocks.json
+```
+
+Redirects connections with `iptables` configurations to the port that `ssredir` is listening on.
+
 ### Server
 
 ```bash
@@ -226,6 +237,47 @@ ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
 ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
+```
+
+### Server Manager
+
+Supported [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users) API:
+
+* `add` - Starts a server instance
+* `remove` - Deletes an existing server instance
+* `list` - Lists all current running servers
+* `ping` - Lists all servers' statistic data
+
+NOTE: `stat` command is not supported. Because servers are running in the same process with the manager itself.
+
+```bash
+# Start it just with --manager-address command line parameter
+ssmanager --manager-address "127.0.0.1:6100"
+
+# You can also provide a configuration file
+#
+# `manager_address` key must be provided in the configuration file
+ssmanager -c /path/to/shadowsocks.json
+```
+
+Example configuration:
+
+```jsonc
+{
+    // Required option
+    // Address that ssmanager is listening on
+    "manager_address": "127.0.0.1:6100",
+
+    "servers": [
+        // These servers will be started automatically when ssmanager is started
+    ],
+
+    // Outbound socket binds to this IP address
+    // For choosing different network interface on the same machine
+    "local_address": "xxx.xxx.xxx.xxx",
+
+    // Other options that may be passed directly to new servers
+}
 ```
 
 ## Supported Ciphers
