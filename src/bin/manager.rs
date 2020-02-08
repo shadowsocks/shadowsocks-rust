@@ -17,7 +17,7 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, Mode, ServerAddr};
 
 mod logging;
 mod monitor;
@@ -42,13 +42,6 @@ fn main() {
                 .help("Specify config file"),
         )
         .arg(
-            Arg::with_name("SERVER_ADDR")
-                .short("s")
-                .long("server-addr")
-                .takes_value(true)
-                .help("Server address"),
-        )
-        .arg(
             Arg::with_name("BIND_ADDR")
                 .short("b")
                 .long("bind-addr")
@@ -56,30 +49,11 @@ fn main() {
                 .help("Bind address, outbound socket will bind this address"),
         )
         .arg(
-            Arg::with_name("PASSWORD")
-                .short("k")
-                .long("password")
-                .takes_value(true)
-                .help("Password"),
-        )
-        .arg(
             Arg::with_name("ENCRYPT_METHOD")
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
                 .help("Encryption method"),
-        )
-        .arg(
-            Arg::with_name("PLUGIN")
-                .long("plugin")
-                .takes_value(true)
-                .help("Enable SIP003 plugin"),
-        )
-        .arg(
-            Arg::with_name("PLUGIN_OPT")
-                .long("plugin-opts")
-                .takes_value(true)
-                .help("Set SIP003 plugin options"),
         )
         .arg(
             Arg::with_name("NO_DELAY")
@@ -116,38 +90,14 @@ fn main() {
         None => Config::new(ConfigType::Manager),
     };
 
-    match (
-        matches.value_of("SERVER_ADDR"),
-        matches.value_of("PASSWORD"),
-        matches.value_of("ENCRYPT_METHOD"),
-    ) {
-        (Some(svr_addr), Some(password), Some(method)) => {
-            let method = match method.parse() {
-                Ok(m) => m,
-                Err(err) => {
-                    panic!("Does not support {:?} method: {:?}", method, err);
-                }
-            };
-
-            let sc = ServerConfig::new(
-                svr_addr
-                    .parse::<ServerAddr>()
-                    .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
-                password.to_owned(),
-                method,
-                None,
-                None,
-            );
-
-            config.server.push(sc);
+    if let Some(method) = matches.value_of("ENCRYPT_METHOD") {
+        match method.parse() {
+            Ok(m) => config.manager_method = Some(m),
+            Err(..) => {
+                panic!("Unrecognized `encrypt-method` \"{}\"", method);
+            }
         }
-        (None, None, None) => {
-            // Does not provide server config
-        }
-        _ => {
-            panic!("`server-addr`, `method` and `password` should be provided together");
-        }
-    };
+    }
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
         let bind_addr = match bind_addr.parse::<IpAddr>() {

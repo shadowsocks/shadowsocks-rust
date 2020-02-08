@@ -16,7 +16,7 @@ use tokio::{self, net::UdpSocket, runtime::Handle, sync::oneshot};
 
 use crate::{
     config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    context::{Context, ServerState, SharedServerState},
+    context::{Context, ServerState, SharedContext, SharedServerState},
     crypto::CipherType,
     plugin::PluginConfig,
     relay::{
@@ -37,7 +37,8 @@ mod protocol {
     pub struct ServerConfig {
         pub server_port: u16,
         pub password: String,
-        pub method: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub method: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub no_delay: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -103,17 +104,17 @@ impl ServerInstance {
 struct ManagerService {
     socket: UdpSocket,
     servers: HashMap<u16, ServerInstance>,
-    server_state: SharedServerState,
+    context: SharedContext,
 }
 
 impl ManagerService {
-    async fn bind(bind_addr: &SocketAddr, server_state: SharedServerState) -> io::Result<ManagerService> {
+    async fn bind(bind_addr: &SocketAddr, context: SharedContext) -> io::Result<ManagerService> {
         let socket = create_udp_socket(bind_addr).await?;
 
         Ok(ManagerService {
             socket,
             servers: HashMap::new(),
-            server_state,
+            context,
         })
     }
 
@@ -124,6 +125,8 @@ impl ManagerService {
             let (recv_len, src_addr) = self.socket.recv_from(&mut buf).await?;
 
             let pkt = &buf[..recv_len];
+
+            trace!("REQUEST: {:?}", ByteStr::new(pkt));
 
             // Payload must be UTF-8 encoded, or JSON decode will fail
             let pkt = match str::from_utf8(pkt) {
@@ -210,12 +213,21 @@ impl ManagerService {
 
         let server_port = p.server_port;
 
-        let method = match p.method.parse::<CipherType>() {
-            Ok(m) => m,
-            Err(..) => {
-                let err = Error::new(ErrorKind::Other, format!("unrecognized method \"{}\"", p.method));
-                return Err(err);
-            }
+        let method = match p.method {
+            None => self
+                .context
+                .config()
+                .manager_method
+                // Default method as shadowsocks-libev's ss-server
+                // Just for compatiblity, some shadowsocks manager relies on this default method
+                .unwrap_or(CipherType::ChaCha20IetfPoly1305),
+            Some(method) => match method.parse::<CipherType>() {
+                Ok(m) => m,
+                Err(..) => {
+                    let err = Error::new(ErrorKind::Other, format!("unrecognized method \"{}\"", method));
+                    return Err(err);
+                }
+            },
         };
 
         let bind_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), p.server_port);
@@ -256,7 +268,7 @@ impl ManagerService {
     }
 
     async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
-        let server = ServerInstance::start_server(config, self.server_state.clone()).await?;
+        let server = ServerInstance::start_server(config, self.context.clone_server_state()).await?;
         self.servers.insert(server_port, server);
 
         Ok(())
@@ -279,7 +291,7 @@ impl ManagerService {
 
             let p = protocol::ServerConfig {
                 server_port: svr_cfg.addr().port(),
-                method: svr_cfg.method().to_string(),
+                method: Some(svr_cfg.method().to_string()),
                 password: svr_cfg.password().to_string(),
                 no_delay: None,
                 plugin: None,
@@ -356,7 +368,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
         }
     };
 
-    let mut service = ManagerService::bind(&bind_addr, state).await?;
+    let mut service = ManagerService::bind(&bind_addr, context.clone()).await?;
 
     // Creates known servers in configuration
     let config = context.config();

@@ -165,6 +165,11 @@ impl Context {
         &self.config
     }
 
+    /// Clone the internal ServerState
+    pub fn clone_server_state(&self) -> SharedServerState {
+        self.server_state.clone()
+    }
+
     /// Mutable Config for TCP server
     ///
     /// NOTE: Only for launching plugins

@@ -616,6 +616,8 @@ pub struct Config {
     pub no_delay: bool,
     /// Address of `ss-manager`. Send servers' statistic data to the manager server
     pub manager_address: Option<ServerAddr>,
+    /// Manager's default method
+    pub manager_method: Option<CipherType>,
     /// Config is for Client or Server
     pub config_type: ConfigType,
     /// Timeout for UDP Associations, default is 5 minutes
@@ -686,6 +688,7 @@ impl Config {
             mode: Mode::TcpOnly,
             no_delay: false,
             manager_address: None,
+            manager_method: None,
             config_type,
             udp_timeout: None,
             nofile: None,
