@@ -13,5 +13,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::HttpLocal => http_local::run(context).await,
         ConfigType::RedirLocal => redir_local::run(context).await,
         ConfigType::Server => unreachable!(),
+        ConfigType::Manager => unreachable!(),
     }
 }

@@ -85,6 +85,10 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    manager_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manager_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     method: Option<String>,
@@ -504,6 +508,9 @@ pub enum ConfigType {
 
     /// Config for server
     Server,
+
+    /// Config for Manager server
+    Manager,
 }
 
 impl ConfigType {
@@ -511,7 +518,7 @@ impl ConfigType {
     pub fn is_local(self) -> bool {
         match self {
             ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => true,
-            ConfigType::Server => false,
+            ConfigType::Server | ConfigType::Manager => false,
         }
     }
 
@@ -519,7 +526,16 @@ impl ConfigType {
     pub fn is_server(self) -> bool {
         match self {
             ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => false,
+            ConfigType::Manager => false,
             ConfigType::Server => true,
+        }
+    }
+
+    /// Check if it is manager server type
+    pub fn is_manager(self) -> bool {
+        match self {
+            ConfigType::Manager => true,
+            _ => false,
         }
     }
 }
@@ -684,6 +700,13 @@ impl Config {
             return Err(err);
         }
 
+        let check_manager = config_type.is_manager();
+
+        if check_manager && config.manager_address.is_none() {
+            let err = Error::new(ErrorKind::Malformed, "`manager_address` is required for manager", None);
+            return Err(err);
+        }
+
         let mut nconfig = Config::new(config_type);
 
         // Standard config
@@ -797,6 +820,22 @@ impl Config {
 
                 nconfig.server.push(nsvr);
             }
+        }
+
+        // Manager Address
+        if let Some(ma) = config.manager_address {
+            // Let system allocate port by default
+            let port = config.manager_port.unwrap_or(0);
+
+            let manager = match ma.parse::<IpAddr>() {
+                Ok(ip) => ServerAddr::from(SocketAddr::new(ip, port)),
+                Err(..) => {
+                    // treated as domain
+                    ServerAddr::from((ma, port))
+                }
+            };
+
+            nconfig.manager_address = Some(manager);
         }
 
         // Forbidden IPs
@@ -972,6 +1011,11 @@ impl fmt::Display for Config {
                     });
                 }
             }
+        }
+
+        if let Some(ref ma) = self.manager_address {
+            jconf.manager_address = Some(ma.host());
+            jconf.manager_port = Some(ma.port());
         }
 
         jconf.mode = Some(self.mode.to_string());

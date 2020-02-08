@@ -14,7 +14,7 @@ use tokio::{
 
 use crate::{
     config::ServerConfig,
-    context::{Context, SharedContext},
+    context::SharedContext,
     relay::{flow::SharedServerFlowStatistic, socks5::Address},
 };
 
@@ -22,7 +22,7 @@ use super::{monitor::TcpMonStream, utils::connect_tcp_stream, CryptoStream, STcp
 
 #[allow(clippy::cognitive_complexity)]
 async fn handle_client(
-    context: &Context,
+    context: SharedContext,
     flow_stat: SharedServerFlowStatistic,
     svr_cfg: &ServerConfig,
     socket: TcpStream,
@@ -44,7 +44,7 @@ async fn handle_client(
 
     // Do server-client handshake
     // Perform encryption IV exchange
-    let mut stream = CryptoStream::new(context, stream, svr_cfg);
+    let mut stream = CryptoStream::new(context.clone(), stream, svr_cfg);
 
     // Read remote Address
     let remote_addr = match Address::read_from(&mut stream).await {
@@ -63,7 +63,7 @@ async fn handle_client(
     let bind_addr = match context.config().local {
         None => None,
         Some(ref addr) => {
-            let ba = addr.bind_addr(context).await?;
+            let ba = addr.bind_addr(&*context).await?;
             Some(ba)
         }
     };
@@ -191,7 +191,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -
                             let svr_cfg = context.server_config(idx);
 
                             // Error is ignored because it is already logged
-                            let _ = handle_client(&*context, flow_stat, svr_cfg, socket, peer_addr).await;
+                            let _ = handle_client(context.clone(), flow_stat, svr_cfg, socket, peer_addr).await;
                         });
                     }
                     Err(err) => {

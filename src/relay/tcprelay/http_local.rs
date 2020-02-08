@@ -89,7 +89,7 @@ impl tower::Service<Address> for ShadowSocksConnector {
                         return Err(err);
                     }
                 };
-                super::proxy_server_handshake(&*context, stream, svr_cfg, &addr).await
+                super::proxy_server_handshake(context.clone(), stream, svr_cfg, &addr).await
             }
             .boxed(),
         }
@@ -132,7 +132,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                                 return Err(err);
                             }
                         };
-                        super::proxy_server_handshake(&*context, stream, svr_cfg, &addr).await
+                        super::proxy_server_handshake(context.clone(), stream, svr_cfg, &addr).await
                     }
                 }
             }
@@ -331,7 +331,7 @@ async fn server_dispatch(
                     return Err(err);
                 }
             };
-            super::proxy_server_handshake(context, stream, svr_cfg, &host).await?
+            super::proxy_server_handshake(svr_score.clone_context(), stream, svr_cfg, &host).await?
         };
 
         debug!(

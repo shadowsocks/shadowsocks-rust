@@ -25,7 +25,7 @@ use tokio::{
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
-    context::Context,
+    context::{Context, SharedContext},
     relay::{socks5::Address, utils::try_timeout},
 };
 
@@ -294,6 +294,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
         ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::HttpLocal | ConfigType::RedirLocal => {
             svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr())
         }
+        ConfigType::Manager => unreachable!("ConfigType::Manager shouldn't need to connect to proxy server"),
     };
 
     // Retry if connect failed
@@ -349,7 +350,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 
 /// Handshake logic for ShadowSocks Client
 pub async fn proxy_server_handshake(
-    context: &Context,
+    context: SharedContext,
     remote_stream: STcpStream,
     svr_cfg: &ServerConfig,
     relay_addr: &Address,

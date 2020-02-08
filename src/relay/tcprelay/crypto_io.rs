@@ -15,7 +15,7 @@ use tokio::prelude::*;
 
 use crate::{
     config::ServerConfig,
-    context::{self, SharedServerState},
+    context::SharedContext,
     crypto::{CipherCategory, CipherType},
 };
 
@@ -39,7 +39,7 @@ enum ReadStatus {
     /// Waiting for initializing vector (or nonce for AEAD ciphers)
     ///
     /// (context, Buffer, already_read_bytes, method, key)
-    WaitIv(SharedServerState, Vec<u8>, usize, CipherType, Bytes),
+    WaitIv(SharedContext, Vec<u8>, usize, CipherType, Bytes),
 
     /// Connection is established, DecryptedReader is initialized
     Established,
@@ -57,7 +57,7 @@ impl<S: Unpin> Unpin for CryptoStream<S> {}
 
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
-    pub fn new(context: &context::Context, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
+    pub fn new(context: SharedContext, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
         let method = svr_cfg.method();
         let prev_len = match method.category() {
             CipherCategory::Stream => method.iv_size(),
@@ -101,13 +101,7 @@ impl<S> CryptoStream<S> {
             stream,
             dec: None,
             enc,
-            read_status: ReadStatus::WaitIv(
-                context.clone_server_state(),
-                vec![0u8; prev_len],
-                0usize,
-                method,
-                svr_cfg.clone_key(),
-            ),
+            read_status: ReadStatus::WaitIv(context, vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
         }
     }
 }

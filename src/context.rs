@@ -108,31 +108,17 @@ impl PingPongBloom {
 pub struct ServerState {
     #[cfg(feature = "trust-dns")]
     dns_resolver: TokioAsyncResolver,
-    server_running: AtomicBool,
-    nonce_ppbloom: Mutex<PingPongBloom>,
 }
 
 impl ServerState {
     #[allow(unused_variables)]
-    pub async fn new(config: &Config, rt: Handle) -> io::Result<SharedServerState> {
+    pub async fn new_shared(config: &Config, rt: Handle) -> io::Result<SharedServerState> {
         let state = ServerState {
             #[cfg(feature = "trust-dns")]
             dns_resolver: create_resolver(config.get_dns_config(), rt).await?,
-            server_running: AtomicBool::new(true),
-            nonce_ppbloom: Mutex::new(PingPongBloom::new(config.config_type)),
         };
 
         Ok(Arc::new(state))
-    }
-
-    /// Check if the server is still in running state
-    pub fn server_running(&self) -> bool {
-        self.server_running.load(Ordering::Acquire)
-    }
-
-    /// Stops the server, kills all detached running tasks
-    pub fn server_stopped(&self) {
-        self.server_running.store(false, Ordering::Release)
     }
 
     /// Get the global shared resolver
@@ -140,30 +126,17 @@ impl ServerState {
     pub fn dns_resolver(&self) -> &TokioAsyncResolver {
         &self.dns_resolver
     }
-
-    /// Check if nonce exist or not
-    ///
-    /// If not, set into the current bloom filter
-    pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
-        // Plain cipher doesn't have a nonce
-        // Always treated as non-duplicated
-        if nonce.is_empty() {
-            return false;
-        }
-
-        let mut ppbloom = self.nonce_ppbloom.lock();
-        ppbloom.check_and_set(nonce)
-    }
 }
 
 /// `ServerState` wrapped in `Arc`
 pub type SharedServerState = Arc<ServerState>;
 
 /// Shared basic configuration for the whole server
-#[derive(Clone)]
 pub struct Context {
     config: Config,
     server_state: SharedServerState,
+    server_running: AtomicBool,
+    nonce_ppbloom: Mutex<PingPongBloom>,
 }
 
 /// Unique context thw whole server
@@ -171,18 +144,20 @@ pub type SharedContext = Arc<Context>;
 
 impl Context {
     /// Create a non-shared Context
-    pub fn new(config: Config, server_state: SharedServerState) -> Context {
-        Context { config, server_state }
+    fn new(config: Config, server_state: SharedServerState) -> Context {
+        let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
+
+        Context {
+            config,
+            server_state,
+            server_running: AtomicBool::new(true),
+            nonce_ppbloom,
+        }
     }
 
     /// Create a shared Context, wrapped in `Arc`
     pub fn new_shared(config: Config, server_state: SharedServerState) -> SharedContext {
         SharedContext::new(Context::new(config, server_state))
-    }
-
-    /// Clone the internal `ServerState`
-    pub fn clone_server_state(&self) -> SharedServerState {
-        self.server_state.clone()
     }
 
     /// Config for TCP server
@@ -215,12 +190,12 @@ impl Context {
 
     /// Check if the server is still in running state
     pub fn server_running(&self) -> bool {
-        self.server_state.server_running()
+        self.server_running.load(Ordering::Acquire)
     }
 
     /// Stops the server, kills all detached running tasks
     pub fn server_stopped(&self) {
-        self.server_state.server_stopped()
+        self.server_running.store(false, Ordering::Release)
     }
 
     /// Check if IP is in forbidden list
@@ -232,6 +207,13 @@ impl Context {
     ///
     /// If not, set into the current bloom filter
     pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
-        self.server_state.check_nonce_and_set(nonce)
+        // Plain cipher doesn't have a nonce
+        // Always treated as non-duplicated
+        if nonce.is_empty() {
+            return false;
+        }
+
+        let mut ppbloom = self.nonce_ppbloom.lock();
+        ppbloom.check_and_set(nonce)
     }
 }

@@ -38,5 +38,7 @@ pub fn set_nofile(nofile: u64) -> io::Result<()> {
 #[cfg(not(unix))]
 pub fn set_nofile(_nofile: u64) -> io::Result<()> {
     // set_rlimit only works on *nix systems
+    //
+    // Windows' limit of opening files is the size of HANDLE (32-bits), so it is unlimited
     Ok(())
 }

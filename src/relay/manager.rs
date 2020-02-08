@@ -11,23 +11,24 @@ use std::{
 
 use byte_string::ByteStr;
 use futures::{future, FutureExt};
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use tokio::{self, net::UdpSocket, runtime::Handle, sync::oneshot};
 
 use crate::{
     config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    context::{Context, ServerState},
+    context::{Context, ServerState, SharedServerState},
     crypto::CipherType,
     plugin::PluginConfig,
     relay::{
         dns_resolver::resolve_bind_addr,
-        flow::SharedServerFlowStatistic,
+        flow::{ServerFlowStatistic, SharedServerFlowStatistic},
         sys::create_udp_socket,
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
+        utils::set_nofile,
     },
 };
 
-use super::server::create_server;
+use super::server;
 
 mod protocol {
     use serde::{Deserialize, Serialize};
@@ -61,16 +62,29 @@ struct ServerInstance {
 }
 
 impl ServerInstance {
-    async fn start_server(config: Config, rt: Handle) -> io::Result<ServerInstance> {
+    async fn start_server(config: Config, server_state: SharedServerState) -> io::Result<ServerInstance> {
         let server_port = config.server[0].addr().port();
 
         let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
-        let (server, flow_stat) = create_server(config.clone(), rt).await?;
 
-        tokio::spawn(async move {
-            let _ = future::select(server.boxed(), watcher_rx.boxed()).await;
-            debug!("Server listening on port {} exited", server_port);
-        });
+        let flow_stat = ServerFlowStatistic::new_shared();
+
+        {
+            // Run server in current process, sharing the same tokio runtime
+            //
+            // NOTE: This may make different users interfere with each other,
+            // which means that this is not a good decision
+
+            let config = config.clone();
+            let flow_stat = flow_stat.clone();
+
+            tokio::spawn(async move {
+                let server = server::run_with(config, flow_stat, server_state);
+
+                let _ = future::select(server.boxed(), watcher_rx.boxed()).await;
+                debug!("Server listening on port {} exited", server_port);
+            });
+        }
 
         trace!("Created server listening on port {}", server_port);
 
@@ -89,17 +103,17 @@ impl ServerInstance {
 struct ManagerService {
     socket: UdpSocket,
     servers: HashMap<u16, ServerInstance>,
-    rt: Handle,
+    server_state: SharedServerState,
 }
 
 impl ManagerService {
-    async fn bind(bind_addr: &SocketAddr, rt: Handle) -> io::Result<ManagerService> {
+    async fn bind(bind_addr: &SocketAddr, server_state: SharedServerState) -> io::Result<ManagerService> {
         let socket = create_udp_socket(bind_addr).await?;
 
         Ok(ManagerService {
             socket,
             servers: HashMap::new(),
-            rt,
+            server_state,
         })
     }
 
@@ -236,11 +250,16 @@ impl ManagerService {
 
         // Close it first
         let _ = self.servers.remove(&server_port);
-
-        let server = ServerInstance::start_server(config, self.rt.clone()).await?;
-        self.servers.insert(server_port, server);
+        self.start_server_with_config(server_port, config).await?;
 
         Ok(b"ok\n".to_vec())
+    }
+
+    async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
+        let server = ServerInstance::start_server(config, self.server_state.clone()).await?;
+        self.servers.insert(server_port, server);
+
+        Ok(())
     }
 
     async fn handle_remove(&mut self, p: &protocol::RemoveRequest) -> io::Result<Vec<u8>> {
@@ -305,9 +324,29 @@ impl ManagerService {
 }
 
 pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
+    assert!(config.config_type.is_manager());
+
+    if let Some(nofile) = config.nofile {
+        debug!("Setting RLIMIT_NOFILE to {}", nofile);
+        if let Err(err) = set_nofile(nofile) {
+            match err.kind() {
+                ErrorKind::PermissionDenied => {
+                    warn!("Insufficient permission to change RLIMIT_NOFILE, try to restart as root user");
+                }
+                ErrorKind::InvalidInput => {
+                    warn!("Invalid `nofile` value {}, decrease it and try again", nofile);
+                }
+                _ => {
+                    error!("Failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
+                }
+            }
+            return Err(err);
+        }
+    }
+
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new(&config, rt.clone()).await?;
-    let context = Context::new_shared(config, state);
+    let state = ServerState::new_shared(&config, rt.clone()).await?;
+    let context = Context::new_shared(config, state.clone());
 
     let bind_addr = match context.config().manager_address {
         Some(ref a) => resolve_bind_addr(&*context, a).await?,
@@ -317,6 +356,26 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
         }
     };
 
-    let mut service = ManagerService::bind(&bind_addr, rt).await?;
+    let mut service = ManagerService::bind(&bind_addr, state).await?;
+
+    // Creates known servers in configuration
+    let config = context.config();
+
+    if !config.server.is_empty() {
+        for svr_cfg in &config.server {
+            let mut clean_config = Config::new(ConfigType::Server);
+            clean_config.local = config.local.clone();
+            clean_config.mode = config.mode;
+            clean_config.no_delay = config.no_delay;
+            clean_config.udp_timeout = config.udp_timeout;
+
+            clean_config.server.push(svr_cfg.clone());
+
+            service
+                .start_server_with_config(svr_cfg.addr().port(), clean_config)
+                .await?;
+        }
+    }
+
     service.serve().await
 }

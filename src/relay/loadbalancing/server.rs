@@ -230,6 +230,10 @@ impl<S: ServerData> ServerStatistic<S> {
         &*self.context
     }
 
+    pub fn clone_context(&self) -> SharedContext {
+        self.context.clone()
+    }
+
     pub fn config(&self) -> &Config {
         self.context.config()
     }
@@ -454,7 +458,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
         let TcpServerClient { mut stream } =
-            TcpServerClient::connect(stat.context(), &addr, stat.server_config()).await?;
+            TcpServerClient::connect(stat.clone_context(), &addr, stat.server_config()).await?;
         stream.write_all(GET_BODY).await?;
         stream.flush().await?;
         let mut buf = [0u8; 1];

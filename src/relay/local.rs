@@ -1,9 +1,6 @@
 //! Local side
 
-use std::{
-    io::{self, ErrorKind},
-    sync::Arc,
-};
+use std::io::{self, ErrorKind};
 
 use futures::{future::select_all, FutureExt};
 use log::{debug, error, trace, warn};
@@ -17,8 +14,8 @@ use crate::{
 };
 
 /// Relay server running under local environment.
-pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
-    trace!("{:?}", config);
+pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
+    trace!("RUN Local {:?}", config);
     assert!(config.config_type.is_local());
 
     if let Some(nofile) = config.nofile {
@@ -43,8 +40,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     let mode = config.mode;
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new(&config, rt).await?;
-    let mut context = Context::new_shared(config, state.clone());
+    let state = ServerState::new_shared(&config, rt).await?;
 
     let mut vf = Vec::new();
 
@@ -61,26 +57,31 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
         _ => false,
     };
 
-    if enable_tcp {
+    let context = if enable_tcp {
         // Run TCP local server if
         //
         //  1. Enabled TCP relay
         //  2. Not in tunnel mode. (Socks5 UDP relay requires TCP port enabled)
 
-        if context.config().has_server_plugins() {
-            let context = Arc::make_mut(&mut context);
-            let plugins = Plugins::launch_plugins(context.config_mut(), PluginMode::Client)?;
+        if config.has_server_plugins() {
+            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
 
             // Wait until all plugins actually start
             // Some plugins require quite a lot bootstrap time
-            Plugins::check_plugins_started(context.config()).await?;
+            Plugins::check_plugins_started(&config).await?;
 
             vf.push(plugins.into_future().boxed());
         }
 
+        let context = Context::new_shared(config, state);
+
         let tcp_fut = run_tcp(context.clone());
         vf.push(tcp_fut.boxed());
-    }
+
+        context
+    } else {
+        Context::new_shared(config, state)
+    };
 
     let enable_udp = match config_type {
         ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::RedirLocal => mode.enable_udp(),
@@ -90,7 +91,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     if enable_udp {
         // Run UDP relay before starting plugins
         // Because plugins doesn't support UDP relay
-        let udp_fut = run_udp(context);
+        let udp_fut = run_udp(context.clone());
         vf.push(udp_fut.boxed());
     }
 
@@ -98,7 +99,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     error!("one of servers exited unexpectly, result: {:?}", res);
 
     // Tells all detached tasks to exit
-    state.server_stopped();
+    context.server_stopped();
 
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }

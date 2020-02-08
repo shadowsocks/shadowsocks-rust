@@ -14,7 +14,7 @@ use futures::{
     future::{self, Either},
     FutureExt,
 };
-use log::{debug, error, info};
+use log::{error, info};
 use tokio::runtime::Builder;
 
 use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, Mode, ServerAddr, ServerConfig};
@@ -103,11 +103,11 @@ fn main() {
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
-    logging::init(debug_level, "ssserver");
+    logging::init(debug_level, "ssmanager");
 
     let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {
-        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Server) {
+        Some(cpath) => match Config::load_from_file(cpath, ConfigType::Manager) {
             Ok(cfg) => {
                 has_provided_config = true;
                 cfg
@@ -117,7 +117,7 @@ fn main() {
                 return;
             }
         },
-        None => Config::new(ConfigType::Server),
+        None => Config::new(ConfigType::Manager),
     };
 
     let has_provided_server_config = match (
@@ -215,7 +215,11 @@ fn main() {
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
-    debug!("Config: {:?}", config);
+    if config.manager_address.is_none() {
+        panic!(
+            "Missing `manager_address`, could be specified by --manager-address in command line option or \"manager_address\" key in configuration"
+        );
+    }
 
     let mut builder = Builder::new();
     if cfg!(feature = "single-threaded") {

@@ -46,7 +46,7 @@ async fn establish_client_tcp_redir<'a>(
         }
     };
 
-    let mut svr_s = super::proxy_server_handshake(context, svr_s, svr_cfg, addr).await?;
+    let mut svr_s = super::proxy_server_handshake(server.clone_context(), svr_s, svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     let (mut r, mut w) = s.split();

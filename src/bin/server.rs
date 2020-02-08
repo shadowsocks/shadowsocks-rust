@@ -14,7 +14,7 @@ use futures::{
     future::{self, Either},
     FutureExt,
 };
-use log::{debug, error, info};
+use log::{error, info};
 use tokio::runtime::Builder;
 
 use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
@@ -86,12 +86,6 @@ fn main() {
                 .long("no-delay")
                 .takes_value(false)
                 .help("Set no-delay option for socket"),
-        )
-        .arg(
-            Arg::with_name("MANAGER_ADDRESS")
-                .long("manager-address")
-                .takes_value(true)
-                .help("ShadowSocks Manager (ssmgr) address"),
         )
         .arg(
             Arg::with_name("NOFILE")
@@ -198,13 +192,6 @@ fn main() {
         }
     };
 
-    if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_address = Some(
-            m.parse::<ServerAddr>()
-                .expect("Expecting \"IP:Port\" or \"Domain:Port\" for `manager_address`"),
-        );
-    }
-
     if let Some(nofile) = matches.value_of("NOFILE") {
         config.nofile = Some(
             nofile
@@ -214,8 +201,6 @@ fn main() {
     }
 
     info!("ShadowSocks {}", shadowsocks::VERSION);
-
-    debug!("Config: {:?}", config);
 
     let mut builder = Builder::new();
     if cfg!(feature = "single-threaded") {
