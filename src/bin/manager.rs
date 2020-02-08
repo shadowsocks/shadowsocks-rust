@@ -105,13 +105,9 @@ fn main() {
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "ssmanager");
 
-    let mut has_provided_config = false;
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => match Config::load_from_file(cpath, ConfigType::Manager) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
-            }
+            Ok(cfg) => cfg,
             Err(err) => {
                 error!("{:?}", err);
                 return;
@@ -120,7 +116,7 @@ fn main() {
         None => Config::new(ConfigType::Manager),
     };
 
-    let has_provided_server_config = match (
+    match (
         matches.value_of("SERVER_ADDR"),
         matches.value_of("PASSWORD"),
         matches.value_of("ENCRYPT_METHOD"),
@@ -144,22 +140,14 @@ fn main() {
             );
 
             config.server.push(sc);
-            true
         }
         (None, None, None) => {
             // Does not provide server config
-            false
         }
         _ => {
             panic!("`server-addr`, `method` and `password` should be provided together");
         }
     };
-
-    if !has_provided_config && !has_provided_server_config {
-        println!("You have to specify a configuration file or pass arguments from argument list");
-        println!("{}", matches.usage());
-        return;
-    }
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
         let bind_addr = match bind_addr.parse::<IpAddr>() {
@@ -216,9 +204,12 @@ fn main() {
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
     if config.manager_address.is_none() {
-        panic!(
+        error!(
             "Missing `manager_address`, could be specified by --manager-address in command line option or \"manager_address\" key in configuration"
         );
+
+        println!("{}", matches.usage());
+        return;
     }
 
     let mut builder = Builder::new();
