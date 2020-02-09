@@ -4,6 +4,7 @@
 
 use std::{
     collections::HashMap,
+    fs,
     io::{self, Error, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str,
@@ -12,15 +13,16 @@ use std::{
 use byte_string::ByteStr;
 use futures::{future, FutureExt};
 use log::{debug, error, trace, warn};
+#[cfg(unix)]
+use tokio::net::UnixDatagram;
 use tokio::{self, net::UdpSocket, runtime::Handle, sync::oneshot};
 
 use crate::{
-    config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
+    config::{Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
     context::{Context, ServerState, SharedContext, SharedServerState},
     crypto::CipherType,
     plugin::PluginConfig,
     relay::{
-        dns_resolver::resolve_bind_addr,
         flow::{ServerFlowStatistic, SharedServerFlowStatistic},
         sys::create_udp_socket,
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
@@ -101,15 +103,42 @@ impl ServerInstance {
     }
 }
 
+enum ManagerDatagram {
+    UdpDatagram(UdpSocket),
+    #[cfg(unix)]
+    UnixDatagram(UnixDatagram),
+}
+
+impl ManagerDatagram {
+    async fn bind(bind_addr: &ManagerAddr, context: &Context) -> io::Result<ManagerDatagram> {
+        match *bind_addr {
+            ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(create_udp_socket(saddr).await?)),
+            ManagerAddr::DomainName(ref dname, port) => {
+                let (_, socket) =
+                    lookup_then!(context, dname, port, false, |saddr| { create_udp_socket(&saddr).await })?;
+
+                Ok(ManagerDatagram::UdpDatagram(socket))
+            }
+            #[cfg(unix)]
+            ManagerAddr::UnixSocketAddr(ref path) => {
+                // Remove it first incase it is already exists
+                let _ = fs::remove_file(path);
+
+                Ok(ManagerDatagram::UnixDatagram(UnixDatagram::bind(path)?))
+            }
+        }
+    }
+}
+
 struct ManagerService {
-    socket: UdpSocket,
+    socket: ManagerDatagram,
     servers: HashMap<u16, ServerInstance>,
     context: SharedContext,
 }
 
 impl ManagerService {
-    async fn bind(bind_addr: &SocketAddr, context: SharedContext) -> io::Result<ManagerService> {
-        let socket = create_udp_socket(bind_addr).await?;
+    async fn bind(bind_addr: &ManagerAddr, context: SharedContext) -> io::Result<ManagerService> {
+        let socket = ManagerDatagram::bind(bind_addr, &*context).await?;
 
         Ok(ManagerService {
             socket,
@@ -121,101 +150,147 @@ impl ManagerService {
     async fn serve(&mut self) -> io::Result<()> {
         let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
-        loop {
-            let (recv_len, src_addr) = self.socket.recv_from(&mut buf).await?;
+        match self.socket {
+            ManagerDatagram::UdpDatagram(ref mut socket) => loop {
+                let (recv_len, src_addr) = socket.recv_from(&mut buf).await?;
+                let pkt = &buf[..recv_len];
 
-            let pkt = &buf[..recv_len];
+                let resp_pkt = ManagerService::handle_packet(pkt, &mut self.servers, &*self.context).await;
+                let n = socket.send_to(&resp_pkt, &src_addr).await?;
 
-            trace!("REQUEST: {:?}", ByteStr::new(pkt));
-
-            // Payload must be UTF-8 encoded, or JSON decode will fail
-            let pkt = match str::from_utf8(pkt) {
-                Ok(p) => p,
-                Err(..) => {
-                    error!("Received non-UTF8 encoded packet: {:?}", ByteStr::new(pkt));
-                    continue;
+                if n != resp_pkt.len() {
+                    error!(
+                        "Response packet truncated, packet: {}, sent: {}, destination: {}",
+                        resp_pkt.len(),
+                        n,
+                        src_addr
+                    );
                 }
-            };
-
-            let (action, param) = match pkt.find(':') {
-                None => (pkt.trim(), ""),
-                Some(idx) => {
-                    let (action, param) = pkt.split_at(idx);
-                    (action.trim(), param[1..].trim())
-                }
-            };
-
-            let res = match action {
-                "add" => {
-                    let p: protocol::ServerConfig = match serde_json::from_str(param) {
-                        Ok(p) => p,
-                        Err(err) => {
-                            error!("Failed to parse parameter for \"add\" command, error: {}", err);
-                            continue;
-                        }
-                    };
-
-                    self.handle_add(p).await
-                }
-                "remove" => {
-                    let p: protocol::RemoveRequest = match serde_json::from_str(param) {
-                        Ok(p) => p,
-                        Err(err) => {
-                            error!("Failed to parse parameter for \"add\" command, error: {}", err);
-                            continue;
-                        }
-                    };
-
-                    self.handle_remove(&p).await
-                }
-                "list" => self.handle_list().await,
-                "ping" => self.handle_ping().await,
-                _ => {
-                    error!("Unrecognized action \"{}\"", action);
-                    continue;
-                }
-            };
-
-            match res {
-                Ok(buf) => {
-                    let mut buf = &buf[..];
-
-                    loop {
-                        match self.socket.send_to(buf, &src_addr).await {
-                            Ok(n) => {
-                                if n == buf.len() {
-                                    break;
-                                } else {
-                                    buf = &buf[n..];
-                                }
-                            }
-                            Err(err) => {
-                                error!("Failed to send response to {}, error: {:?}", src_addr, err);
-                                break;
-                            }
-                        }
+            },
+            #[cfg(unix)]
+            ManagerDatagram::UnixDatagram(ref mut socket) => loop {
+                let (recv_len, src_addr) = socket.recv_from(&mut buf).await?;
+                let dst_addr = match src_addr.as_pathname() {
+                    Some(d) => d,
+                    None => {
+                        error!(
+                            "Received a packet ({} bytes) from an unnamed unix-socket client, \
+                             throwing-away because we are unable to send response back to it",
+                            recv_len
+                        );
+                        continue;
                     }
-                }
-                Err(err) => {
-                    error!("Failed to handle action \"{}\", error: {}", action, err);
+                };
 
-                    let errmsg = err.to_string();
-                    if let Err(err) = self.socket.send_to(errmsg.as_bytes(), &src_addr).await {
-                        error!("Failed to send response to {}, error: {:?}", src_addr, err);
+                let pkt = &buf[..recv_len];
+
+                let resp_pkt = ManagerService::handle_packet(pkt, &mut self.servers, &*self.context).await;
+
+                let n = match socket.send_to(&resp_pkt, &dst_addr).await {
+                    Ok(n) => n,
+                    Err(err) => {
+                        error!(
+                            "Failed to send packet ({} bytes) back to \"{}\", error: {:?}",
+                            resp_pkt.len(),
+                            dst_addr.display(),
+                            err
+                        );
+                        continue;
                     }
+                };
+
+                if n != resp_pkt.len() {
+                    error!(
+                        "Response packet truncated, packet: {}, sent: {}, destination: {}",
+                        resp_pkt.len(),
+                        n,
+                        dst_addr.display(),
+                    );
                 }
+            },
+        }
+    }
+
+    async fn handle_packet(pkt: &[u8], servers: &mut HashMap<u16, ServerInstance>, context: &Context) -> Vec<u8> {
+        trace!("REQUEST: {:?}", ByteStr::new(pkt));
+
+        // Payload must be UTF-8 encoded, or JSON decode will fail
+        let pkt = match str::from_utf8(pkt) {
+            Ok(p) => p,
+            Err(..) => {
+                error!("Received non-UTF8 encoded packet: {:?}", ByteStr::new(pkt));
+
+                return b"invalid encoding".to_vec();
+            }
+        };
+
+        let (action, param) = match pkt.find(':') {
+            None => (pkt.trim(), ""),
+            Some(idx) => {
+                let (action, param) = pkt.split_at(idx);
+                (action.trim(), param[1..].trim())
+            }
+        };
+
+        match ManagerService::dispatch_command(action, param, servers, context).await {
+            Ok(v) => v,
+            Err(err) => {
+                error!("Failed to handle action \"{}\", error: {}", action, err);
+
+                Vec::from(err.to_string())
             }
         }
     }
 
-    async fn handle_add(&mut self, p: protocol::ServerConfig) -> io::Result<Vec<u8>> {
+    async fn dispatch_command(
+        action: &str,
+        param: &str,
+        servers: &mut HashMap<u16, ServerInstance>,
+        context: &Context,
+    ) -> io::Result<Vec<u8>> {
+        match action {
+            "add" => {
+                let p: protocol::ServerConfig = match serde_json::from_str(param) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        let err = Error::new(ErrorKind::InvalidData, err);
+                        return Err(err);
+                    }
+                };
+
+                ManagerService::handle_add(p, servers, context).await
+            }
+            "remove" => {
+                let p: protocol::RemoveRequest = match serde_json::from_str(param) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        let err = Error::new(ErrorKind::InvalidData, err);
+                        return Err(err);
+                    }
+                };
+
+                ManagerService::handle_remove(&p, servers).await
+            }
+            "list" => ManagerService::handle_list(servers).await,
+            "ping" => ManagerService::handle_ping(servers).await,
+            _ => {
+                let err = Error::new(ErrorKind::InvalidData, format!("unrecognized command \"{}\"", action));
+                Err(err)
+            }
+        }
+    }
+
+    async fn handle_add(
+        p: protocol::ServerConfig,
+        servers: &mut HashMap<u16, ServerInstance>,
+        context: &Context,
+    ) -> io::Result<Vec<u8>> {
         trace!("ACTION \"add\" {:?}", p);
 
         let server_port = p.server_port;
 
         let method = match p.method {
-            None => self
-                .context
+            None => context
                 .config()
                 .manager_method
                 // Default method as shadowsocks-libev's ss-server
@@ -248,7 +323,7 @@ impl ManagerService {
         let mut config = Config::new(ConfigType::Server);
         config.server.push(svr_cfg);
 
-        config.local = self.context.config().local.clone();
+        config.local = context.config().local.clone();
 
         if let Some(mode) = p.mode {
             config.mode = match mode.parse::<Mode>() {
@@ -265,31 +340,43 @@ impl ManagerService {
         }
 
         // Close it first
-        let _ = self.servers.remove(&server_port);
-        self.start_server_with_config(server_port, config).await?;
+        let _ = servers.remove(&server_port);
+        ManagerService::create_server_with_config(context, servers, server_port, config).await?;
 
         Ok(b"ok\n".to_vec())
     }
 
-    async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
-        let server = ServerInstance::start_server(config, self.context.clone_server_state()).await?;
-        self.servers.insert(server_port, server);
+    async fn create_server_with_config(
+        context: &Context,
+        servers: &mut HashMap<u16, ServerInstance>,
+        server_port: u16,
+        config: Config,
+    ) -> io::Result<()> {
+        let server = ServerInstance::start_server(config, context.clone_server_state()).await?;
+        servers.insert(server_port, server);
 
         Ok(())
     }
 
-    async fn handle_remove(&mut self, p: &protocol::RemoveRequest) -> io::Result<Vec<u8>> {
+    async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
+        ManagerService::create_server_with_config(&*self.context, &mut self.servers, server_port, config).await
+    }
+
+    async fn handle_remove(
+        p: &protocol::RemoveRequest,
+        servers: &mut HashMap<u16, ServerInstance>,
+    ) -> io::Result<Vec<u8>> {
         trace!("ACTION \"remove\" {:?}", p);
 
-        let _ = self.servers.remove(&p.server_port);
+        let _ = servers.remove(&p.server_port);
         Ok(b"ok\n".to_vec())
     }
 
-    async fn handle_list(&mut self) -> io::Result<Vec<u8>> {
+    async fn handle_list(servers: &HashMap<u16, ServerInstance>) -> io::Result<Vec<u8>> {
         let mut buf = String::new();
         buf += "[";
         let mut is_first = true;
-        for (_, inst) in self.servers.iter() {
+        for (_, inst) in servers.iter() {
             let config = &inst.config;
             let svr_cfg = &config.server[0];
 
@@ -318,11 +405,11 @@ impl ManagerService {
         Ok(buf.into_bytes())
     }
 
-    async fn handle_ping(&mut self) -> io::Result<Vec<u8>> {
+    async fn handle_ping(servers: &HashMap<u16, ServerInstance>) -> io::Result<Vec<u8>> {
         let mut buf = String::new();
         buf += "stat: {";
         let mut is_first = true;
-        for (port, inst) in self.servers.iter() {
+        for (port, inst) in servers.iter() {
             if is_first {
                 is_first = false;
             } else {
@@ -366,14 +453,14 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     let context = Context::new_shared(config, state.clone());
 
     let bind_addr = match context.config().manager_address {
-        Some(ref a) => resolve_bind_addr(&*context, a).await?,
+        Some(ref a) => a,
         None => {
             let err = Error::new(ErrorKind::Other, "missing `manager_address` in configuration");
             return Err(err);
         }
     };
 
-    let mut service = ManagerService::bind(&bind_addr, context.clone()).await?;
+    let mut service = ManagerService::bind(bind_addr, context.clone()).await?;
 
     // Creates known servers in configuration
     let config = context.config();

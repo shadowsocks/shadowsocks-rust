@@ -17,7 +17,7 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, Mode, ServerAddr};
+use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, ManagerAddr, Mode, ServerAddr};
 
 mod logging;
 mod monitor;
@@ -65,7 +65,7 @@ fn main() {
             Arg::with_name("MANAGER_ADDRESS")
                 .long("manager-address")
                 .takes_value(true)
-                .help("ShadowSocks Manager (ssmgr) address"),
+                .help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""),
         )
         .arg(
             Arg::with_name("NOFILE")
@@ -138,8 +138,8 @@ fn main() {
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
         config.manager_address = Some(
-            m.parse::<ServerAddr>()
-                .expect("Expecting \"IP:Port\" or \"Domain:Port\" for `manager_address`"),
+            m.parse::<ManagerAddr>()
+                .expect("Expecting \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
         );
     }
 
@@ -151,16 +151,16 @@ fn main() {
         );
     }
 
-    info!("ShadowSocks {}", shadowsocks::VERSION);
-
     if config.manager_address.is_none() {
-        error!(
-            "Missing `manager_address`, could be specified by --manager-address in command line option or \"manager_address\" key in configuration"
+        eprintln!(
+            "Missing `manager_address`, consider specifying it by --manager-address command line option, \
+             or \"manager_address\" and \"manager_port\" keys in configuration file"
         );
-
         println!("{}", matches.usage());
         return;
     }
+
+    info!("ShadowSocks {}", shadowsocks::VERSION);
 
     let mut builder = Builder::new();
     if cfg!(feature = "single-threaded") {
@@ -175,7 +175,9 @@ fn main() {
         let abort_signal = monitor::create_signal_monitor();
         match future::select(run_manager(config, rt_handle).boxed(), abort_signal.boxed()).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left(_) => panic!("Server exited unexpectly"),
+            Either::Left((Ok(..), ..)) => panic!("Server exited unexpectly"),
+            // Server future resolved with error, which are listener errors in most cases
+            Either::Left((Err(err), ..)) => panic!("Server exited unexpectly with {}", err),
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }

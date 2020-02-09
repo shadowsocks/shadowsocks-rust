@@ -117,14 +117,9 @@ fn main() {
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "sstunnel");
 
-    let mut has_provided_config = false;
-
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => match Config::load_from_file(cpath, ConfigType::TunnelLocal) {
-            Ok(cfg) => {
-                has_provided_config = true;
-                cfg
-            }
+            Ok(cfg) => cfg,
             Err(err) => {
                 error!("{:?}", err);
                 return;
@@ -133,7 +128,7 @@ fn main() {
         None => Config::new(ConfigType::TunnelLocal),
     };
 
-    let mut has_provided_server_config = match (
+    match (
         matches.value_of("SERVER_ADDR"),
         matches.value_of("PASSWORD"),
         matches.value_of("ENCRYPT_METHOD"),
@@ -157,11 +152,9 @@ fn main() {
             );
 
             config.server.push(sc);
-            true
         }
         (None, None, None) => {
             // Does not provide server config
-            false
         }
         _ => {
             panic!("`server-addr`, `method` and `password` should be provided together");
@@ -170,29 +163,16 @@ fn main() {
 
     if let Some(url) = matches.value_of("URL") {
         let svr_addr = url.parse::<ServerConfig>().expect("Failed to parse `url`");
-
-        has_provided_server_config = true;
-
         config.server.push(svr_addr);
     }
 
-    let has_provided_local_config = match matches.value_of("LOCAL_ADDR") {
-        Some(local_addr) => {
-            let local_addr = local_addr
-                .parse::<ServerAddr>()
-                .expect("`local-addr` invalid, \"IP:Port\" or \"Domain:Port\"");
+    if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {
+        let local_addr = local_addr
+            .parse::<ServerAddr>()
+            .expect("`local-addr` invalid, \"IP:Port\" or \"Domain:Port\"");
 
-            config.local = Some(local_addr);
-            true
-        }
-        None => false,
+        config.local = Some(local_addr);
     };
-
-    if !(has_provided_config || (has_provided_server_config && has_provided_local_config)) {
-        println!("You have to specify a configuration file or pass arguments by argument list");
-        println!("{}", matches.usage());
-        return;
-    }
 
     if let Some(url) = matches.value_of("FORWARD_ADDR") {
         let forward_addr = url.parse::<Address>().expect("Failed to parse `url`");
@@ -236,6 +216,26 @@ fn main() {
         );
     }
 
+    if config.local.is_none() {
+        eprintln!(
+            "Missing `local_address`, consider specifying it by --local-addr command line option, \
+             or \"local_address\" and \"local_port\" in configuration file"
+        );
+        println!("{}", matches.usage());
+        return;
+    }
+
+    if config.server.is_empty() {
+        eprintln!(
+            "Missing proxy servers, consider specifying it by \
+             --server-addr, --encrypt-method, --password command line option, \
+                or --server-url command line option, \
+                or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
+        );
+        println!("{}", matches.usage());
+        return;
+    }
+
     info!("ShadowSocks {}", shadowsocks::VERSION);
 
     let mut builder = Builder::new();
@@ -251,7 +251,9 @@ fn main() {
         let abort_signal = monitor::create_signal_monitor();
         match future::select(run_local(config, rt_handle).boxed(), abort_signal.boxed()).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left(_) => panic!("Server exited unexpectly"),
+            Either::Left((Ok(..), ..)) => panic!("Server exited unexpectly"),
+            // Server future resolved with error, which are listener errors in most cases
+            Either::Left((Err(err), ..)) => panic!("Server exited unexpectly with {}", err),
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }

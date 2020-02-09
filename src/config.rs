@@ -57,6 +57,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(unix)]
+use std::path::PathBuf;
+
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
 use json5;
@@ -434,6 +437,90 @@ impl FromStr for ServerConfig {
     }
 }
 
+/// Address for Manager server
+#[derive(Debug, Clone)]
+pub enum ManagerAddr {
+    /// IP address
+    SocketAddr(SocketAddr),
+    /// Domain name address
+    DomainName(String, u16),
+    /// Unix socket path
+    #[cfg(unix)]
+    UnixSocketAddr(PathBuf),
+}
+
+/// Error for parsing `ManagerAddr`
+#[derive(Debug)]
+pub struct ManagerAddrError;
+
+impl FromStr for ManagerAddr {
+    type Err = ManagerAddrError;
+
+    fn from_str(s: &str) -> Result<ManagerAddr, ManagerAddrError> {
+        match s.find(':') {
+            Some(pos) => {
+                // Contains a ':' in address, must be IP:Port or Domain:Port
+                match s.parse::<SocketAddr>() {
+                    Ok(saddr) => Ok(ManagerAddr::SocketAddr(saddr)),
+                    Err(..) => {
+                        // Splits into Domain and Port
+                        let (sdomain, sport) = s.split_at(pos);
+                        let (sdomain, sport) = (sdomain.trim(), sport[1..].trim());
+
+                        match sport.parse::<u16>() {
+                            Ok(port) => Ok(ManagerAddr::DomainName(sdomain.to_owned(), port)),
+                            Err(..) => Err(ManagerAddrError),
+                        }
+                    }
+                }
+            }
+            #[cfg(unix)]
+            None => {
+                // Must be a unix socket path
+                Ok(ManagerAddr::UnixSocketAddr(PathBuf::from(s)))
+            }
+            #[cfg(not(unix))]
+            None => Err(ManagerAddrError),
+        }
+    }
+}
+
+impl Display for ManagerAddr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            ManagerAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
+            ManagerAddr::DomainName(ref dname, port) => write!(f, "{}:{}", dname, port),
+            #[cfg(unix)]
+            ManagerAddr::UnixSocketAddr(ref path) => fmt::Display::fmt(&path.display(), f),
+        }
+    }
+}
+
+impl From<SocketAddr> for ManagerAddr {
+    fn from(addr: SocketAddr) -> ManagerAddr {
+        ManagerAddr::SocketAddr(addr)
+    }
+}
+
+impl<'a> From<(&'a str, u16)> for ManagerAddr {
+    fn from((dname, port): (&'a str, u16)) -> ManagerAddr {
+        ManagerAddr::DomainName(dname.to_owned(), port)
+    }
+}
+
+impl From<(String, u16)> for ManagerAddr {
+    fn from((dname, port): (String, u16)) -> ManagerAddr {
+        ManagerAddr::DomainName(dname, port)
+    }
+}
+
+#[cfg(unix)]
+impl From<PathBuf> for ManagerAddr {
+    fn from(p: PathBuf) -> ManagerAddr {
+        ManagerAddr::UnixSocketAddr(p)
+    }
+}
+
 /// Shadowsocks URL parsing Error
 #[derive(Debug, Clone)]
 pub enum UrlParseError {
@@ -615,7 +702,7 @@ pub struct Config {
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
     /// Address of `ss-manager`. Send servers' statistic data to the manager server
-    pub manager_address: Option<ServerAddr>,
+    pub manager_address: Option<ManagerAddr>,
     /// Manager's default method
     pub manager_method: Option<CipherType>,
     /// Config is for Client or Server
@@ -676,6 +763,15 @@ impl Debug for Error {
     }
 }
 
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self.detail {
+            None => f.write_str(self.desc),
+            Some(ref d) => write!(f, "{}, {}", self.desc, d),
+        }
+    }
+}
+
 impl Config {
     /// Creates an empty configuration
     pub fn new(config_type: ConfigType) -> Config {
@@ -696,20 +792,6 @@ impl Config {
     }
 
     fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
-        let check_local = config_type.is_local();
-
-        if check_local && config.local_address.is_none() {
-            let err = Error::new(ErrorKind::Malformed, "`local_address` is required for client", None);
-            return Err(err);
-        }
-
-        let check_manager = config_type.is_manager();
-
-        if check_manager && config.manager_address.is_none() {
-            let err = Error::new(ErrorKind::Malformed, "`manager_address` is required for manager", None);
-            return Err(err);
-        }
-
         let mut nconfig = Config::new(config_type);
 
         // Standard config
@@ -717,7 +799,10 @@ impl Config {
         if let Some(la) = config.local_address {
             let port = match config.local_port {
                 // Let system allocate port by default
-                None => 0,
+                None => {
+                    let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
+                    return Err(err);
+                }
                 Some(p) => {
                     if config_type.is_server() {
                         // Server can only bind to address, port should always be 0
@@ -827,14 +912,22 @@ impl Config {
 
         // Manager Address
         if let Some(ma) = config.manager_address {
-            // Let system allocate port by default
-            let port = config.manager_port.unwrap_or(0);
-
-            let manager = match ma.parse::<IpAddr>() {
-                Ok(ip) => ServerAddr::from(SocketAddr::new(ip, port)),
-                Err(..) => {
-                    // treated as domain
-                    ServerAddr::from((ma, port))
+            let manager = match config.manager_port {
+                Some(port) => {
+                    match ma.parse::<IpAddr>() {
+                        Ok(ip) => ManagerAddr::from(SocketAddr::new(ip, port)),
+                        Err(..) => {
+                            // treated as domain
+                            ManagerAddr::from((ma, port))
+                        }
+                    }
+                }
+                #[cfg(unix)]
+                None => ManagerAddr::from(PathBuf::from(ma)),
+                #[cfg(not(unix))]
+                None => {
+                    let e = Error::new(ErrorKind::MissingField, "missing `manager_port`", None);
+                    return Err(e);
                 }
             };
 
@@ -951,6 +1044,50 @@ impl Config {
     pub fn check_forbidden_ip(&self, ip: &IpAddr) -> bool {
         self.forbidden_ip.contains(ip)
     }
+
+    /// Check if all required fields are already set
+    pub fn check_integrity(&self) -> Result<(), Error> {
+        if self.config_type.is_local() {
+            if self.local.is_some() {
+                return Ok(());
+            }
+
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing `local_address` and `local_port` for client configuration",
+                None,
+            );
+            return Err(err);
+        }
+
+        if self.config_type.is_server() {
+            if !self.server.is_empty() {
+                return Ok(());
+            }
+
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing any valid servers in configuration",
+                None,
+            );
+            return Err(err);
+        }
+
+        if self.config_type.is_manager() {
+            if self.manager_address.is_some() {
+                return Ok(());
+            }
+
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing `manager_address` and `manager_port` in configuration",
+                None,
+            );
+            return Err(err);
+        }
+
+        Ok(())
+    }
 }
 
 impl fmt::Display for Config {
@@ -1017,8 +1154,19 @@ impl fmt::Display for Config {
         }
 
         if let Some(ref ma) = self.manager_address {
-            jconf.manager_address = Some(ma.host());
-            jconf.manager_port = Some(ma.port());
+            jconf.manager_address = Some(match *ma {
+                ManagerAddr::SocketAddr(ref saddr) => saddr.ip().to_string(),
+                ManagerAddr::DomainName(ref dname, ..) => dname.clone(),
+                #[cfg(unix)]
+                ManagerAddr::UnixSocketAddr(ref path) => path.display().to_string(),
+            });
+
+            jconf.manager_port = match *ma {
+                ManagerAddr::SocketAddr(ref saddr) => Some(saddr.port()),
+                ManagerAddr::DomainName(.., port) => Some(port),
+                #[cfg(unix)]
+                ManagerAddr::UnixSocketAddr(..) => None,
+            };
         }
 
         jconf.mode = Some(self.mode.to_string());
