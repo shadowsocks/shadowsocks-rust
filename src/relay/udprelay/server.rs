@@ -21,7 +21,12 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::{Context, SharedContext},
-    relay::{flow::SharedServerFlowStatistic, socks5::Address, sys::create_udp_socket, utils::try_timeout},
+    relay::{
+        flow::{SharedMultiServerFlowStatistic, SharedServerFlowStatistic},
+        socks5::Address,
+        sys::create_udp_socket,
+        utils::try_timeout,
+    },
 };
 
 use super::{
@@ -371,14 +376,17 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
 }
 
 /// Starts a UDP relay server
-pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -> io::Result<()> {
+pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatistic) -> io::Result<()> {
     let vec_fut = FuturesUnordered::new();
 
-    for svr_idx in 0..context.config().server.len() {
+    for (svr_idx, svr_cfg) in context.config().server.iter().enumerate() {
         let context = context.clone();
-        let flow_stat = flow_stat.clone();
+        let flow_stat = flow_stat
+            .get(svr_cfg.addr().port())
+            .expect("port not existed in multi-server flow statistic")
+            .clone();
 
-        let svr_fut = async move { listen(context, flow_stat, svr_idx).await };
+        let svr_fut = listen(context, flow_stat, svr_idx);
         vec_fut.push(svr_fut);
     }
 

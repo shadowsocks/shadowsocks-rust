@@ -99,7 +99,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     error!("one of servers exited unexpectly, result: {:?}", res);
 
     // Tells all detached tasks to exit
-    context.server_stopped();
+    context.set_server_stopped();
 
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }

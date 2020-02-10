@@ -2,6 +2,8 @@
 //!
 //! Service for managing multiple relay servers
 
+#[cfg(unix)]
+use std::os::unix::net::SocketAddr as UnixSocketAddr;
 use std::{
     collections::HashMap,
     io::{self, Error, ErrorKind},
@@ -22,7 +24,7 @@ use crate::{
     crypto::CipherType,
     plugin::PluginConfig,
     relay::{
-        flow::{ServerFlowStatistic, SharedServerFlowStatistic},
+        flow::{MultiServerFlowStatistic, SharedServerFlowStatistic},
         sys::create_udp_socket,
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
         utils::set_nofile,
@@ -69,7 +71,7 @@ impl ServerInstance {
 
         let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
 
-        let flow_stat = ServerFlowStatistic::new_shared();
+        let flow_stat = MultiServerFlowStatistic::new_shared(&config);
 
         {
             // Run server in current process, sharing the same tokio runtime
@@ -88,6 +90,11 @@ impl ServerInstance {
             });
         }
 
+        let flow_stat = flow_stat
+            .get(server_port)
+            .expect("port not existed in multi-server flow statistic")
+            .clone();
+
         trace!("Created server listening on port {}", server_port);
 
         Ok(ServerInstance {
@@ -98,18 +105,31 @@ impl ServerInstance {
     }
 
     fn total_transmission(&self) -> u64 {
-        self.flow_stat.tcp().tx() + self.flow_stat.tcp().rx() + self.flow_stat.udp().tx() + self.flow_stat.udp().rx()
+        self.flow_stat.tcp().tx()
+            + self.flow_stat.tcp().rx()
+            + self.flow_stat.udp().tx()
+            + self.flow_stat.udp().rx()
+            + self.flow_stat.stat()
+    }
+
+    fn update_transmission(&self, transmission: u64) {
+        // stat command returns a total transmission value
+        self.flow_stat.set_stat(transmission);
     }
 }
 
-enum ManagerDatagram {
+/// Datagram socket for manager
+///
+/// For *nix system, this is a wrapper for both UDP socket and Unix socket
+pub enum ManagerDatagram {
     UdpDatagram(UdpSocket),
     #[cfg(unix)]
     UnixDatagram(UnixDatagram),
 }
 
 impl ManagerDatagram {
-    async fn bind(bind_addr: &ManagerAddr, context: &Context) -> io::Result<ManagerDatagram> {
+    /// Create a `ManagerDatagram` binding to requested `bind_addr`
+    pub async fn bind(bind_addr: &ManagerAddr, context: &Context) -> io::Result<ManagerDatagram> {
         match *bind_addr {
             ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(create_udp_socket(saddr).await?)),
             ManagerAddr::DomainName(ref dname, port) => {
@@ -127,6 +147,109 @@ impl ManagerDatagram {
 
                 Ok(ManagerDatagram::UnixDatagram(UnixDatagram::bind(path)?))
             }
+        }
+    }
+
+    /// Create a `ManagerDatagram` for sending data to manager
+    pub async fn bind_for(bind_addr: &ManagerAddr) -> io::Result<ManagerDatagram> {
+        match *bind_addr {
+            ManagerAddr::SocketAddr(..) | ManagerAddr::DomainName(..) => {
+                // Bind to 0.0.0.0 and let system allocate a port
+                let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+                Ok(ManagerDatagram::UdpDatagram(create_udp_socket(&local_addr).await?))
+            }
+            #[cfg(unix)]
+            // For unix socket, it doesn't need to bind to any valid address
+            // Because manager won't response to you
+            ManagerAddr::UnixSocketAddr(..) => Ok(ManagerDatagram::UnixDatagram(UnixDatagram::unbound()?)),
+        }
+    }
+
+    /// Receives data from the socket.
+    pub async fn recv_from(&mut self, buf: &mut [u8]) -> io::Result<(usize, ManagerSocketAddr)> {
+        match *self {
+            ManagerDatagram::UdpDatagram(ref mut udp) => {
+                let (s, addr) = udp.recv_from(buf).await?;
+                Ok((s, ManagerSocketAddr::SocketAddr(addr)))
+            }
+            #[cfg(unix)]
+            ManagerDatagram::UnixDatagram(ref mut unix) => {
+                let (s, addr) = unix.recv_from(buf).await?;
+                Ok((s, ManagerSocketAddr::UnixSocketAddr(addr)))
+            }
+        }
+    }
+
+    /// Sends data on the socket to the specified address.
+    pub async fn send_to(&mut self, buf: &[u8], target: &ManagerSocketAddr) -> io::Result<usize> {
+        match *self {
+            ManagerDatagram::UdpDatagram(ref mut udp) => match *target {
+                ManagerSocketAddr::SocketAddr(ref saddr) => udp.send_to(buf, saddr).await,
+                #[cfg(unix)]
+                ManagerSocketAddr::UnixSocketAddr(..) => {
+                    let err = Error::new(ErrorKind::InvalidInput, "udp datagram requires IP address target");
+                    Err(err)
+                }
+            },
+            #[cfg(unix)]
+            ManagerDatagram::UnixDatagram(ref mut unix) => match *target {
+                ManagerSocketAddr::UnixSocketAddr(ref saddr) => match saddr.as_pathname() {
+                    Some(paddr) => unix.send_to(buf, paddr).await,
+                    None => {
+                        let err = Error::new(ErrorKind::InvalidInput, "target address must not be unnamed");
+                        Err(err)
+                    }
+                },
+                ManagerSocketAddr::SocketAddr(..) => {
+                    let err = Error::new(ErrorKind::InvalidInput, "unix datagram requires path address target");
+                    Err(err)
+                }
+            },
+        }
+    }
+
+    /// Sends data on the socket to the specified manager address
+    pub async fn send_to_manager(&mut self, buf: &[u8], context: &Context, target: &ManagerAddr) -> io::Result<usize> {
+        match *self {
+            ManagerDatagram::UdpDatagram(ref mut udp) => match *target {
+                ManagerAddr::SocketAddr(ref saddr) => udp.send_to(buf, saddr).await,
+                ManagerAddr::DomainName(ref dname, port) => {
+                    let (_, n) = lookup_then!(context, dname, port, false, |saddr| { udp.send_to(buf, saddr).await })?;
+                    Ok(n)
+                }
+                #[cfg(unix)]
+                ManagerAddr::UnixSocketAddr(..) => {
+                    let err = Error::new(ErrorKind::InvalidInput, "udp datagram requires IP address target");
+                    Err(err)
+                }
+            },
+            #[cfg(unix)]
+            ManagerDatagram::UnixDatagram(ref mut unix) => match *target {
+                ManagerAddr::UnixSocketAddr(ref paddr) => unix.send_to(buf, paddr).await,
+                ManagerAddr::SocketAddr(..) | ManagerAddr::DomainName(..) => {
+                    let err = Error::new(ErrorKind::InvalidInput, "unix datagram requires path address target");
+                    Err(err)
+                }
+            },
+        }
+    }
+}
+
+/// Target address for manager for representing client connections
+#[derive(Debug)]
+pub enum ManagerSocketAddr {
+    SocketAddr(SocketAddr),
+    #[cfg(unix)]
+    UnixSocketAddr(UnixSocketAddr),
+}
+
+impl ManagerSocketAddr {
+    /// Check if it is unnamed (not binded to any valid address), only valid for `UnixSocketAddr`
+    pub fn is_unnamed(&self) -> bool {
+        match *self {
+            ManagerSocketAddr::SocketAddr(..) => false,
+            #[cfg(unix)]
+            ManagerSocketAddr::UnixSocketAddr(ref s) => s.is_unnamed(),
         }
     }
 }
@@ -151,68 +274,44 @@ impl ManagerService {
     async fn serve(&mut self) -> io::Result<()> {
         let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
-        match self.socket {
-            ManagerDatagram::UdpDatagram(ref mut socket) => loop {
-                let (recv_len, src_addr) = socket.recv_from(&mut buf).await?;
-                let pkt = &buf[..recv_len];
+        loop {
+            let (recv_len, src_addr) = self.socket.recv_from(&mut buf).await?;
+            let pkt = &buf[..recv_len];
 
-                let resp_pkt = ManagerService::handle_packet(pkt, &mut self.servers, &*self.context).await;
-                let n = socket.send_to(&resp_pkt, &src_addr).await?;
+            let resp_pkt = match self.handle_packet(pkt).await {
+                Some(p) => p,
+                None => continue,
+            };
 
-                if n != resp_pkt.len() {
-                    error!(
-                        "Response packet truncated, packet: {}, sent: {}, destination: {}",
-                        resp_pkt.len(),
-                        n,
-                        src_addr
-                    );
+            if src_addr.is_unnamed() {
+                error!(
+                    "Received a packet ({} bytes) from an unnamed unix-socket client, \
+                     unsound because we are unable to send response back to it",
+                    recv_len
+                );
+                continue;
+            }
+
+            let n = match self.socket.send_to(&resp_pkt, &src_addr).await {
+                Ok(n) => n,
+                Err(err) => {
+                    error!("Response send_to failed, destination: {:?}, error: {}", src_addr, err);
+                    continue;
                 }
-            },
-            #[cfg(unix)]
-            ManagerDatagram::UnixDatagram(ref mut socket) => loop {
-                let (recv_len, src_addr) = socket.recv_from(&mut buf).await?;
-                let dst_addr = match src_addr.as_pathname() {
-                    Some(d) => d,
-                    None => {
-                        error!(
-                            "Received a packet ({} bytes) from an unnamed unix-socket client, \
-                             throwing-away because we are unable to send response back to it",
-                            recv_len
-                        );
-                        continue;
-                    }
-                };
+            };
 
-                let pkt = &buf[..recv_len];
-
-                let resp_pkt = ManagerService::handle_packet(pkt, &mut self.servers, &*self.context).await;
-
-                let n = match socket.send_to(&resp_pkt, &dst_addr).await {
-                    Ok(n) => n,
-                    Err(err) => {
-                        error!(
-                            "Failed to send packet ({} bytes) back to \"{}\", error: {:?}",
-                            resp_pkt.len(),
-                            dst_addr.display(),
-                            err
-                        );
-                        continue;
-                    }
-                };
-
-                if n != resp_pkt.len() {
-                    error!(
-                        "Response packet truncated, packet: {}, sent: {}, destination: {}",
-                        resp_pkt.len(),
-                        n,
-                        dst_addr.display(),
-                    );
-                }
-            },
+            if n != resp_pkt.len() {
+                error!(
+                    "Response packet truncated, packet: {}, sent: {}, destination: {:?}",
+                    resp_pkt.len(),
+                    n,
+                    src_addr
+                );
+            }
         }
     }
 
-    async fn handle_packet(pkt: &[u8], servers: &mut HashMap<u16, ServerInstance>, context: &Context) -> Vec<u8> {
+    async fn handle_packet(&mut self, pkt: &[u8]) -> Option<Vec<u8>> {
         trace!("REQUEST: {:?}", ByteStr::new(pkt));
 
         // Payload must be UTF-8 encoded, or JSON decode will fail
@@ -221,7 +320,7 @@ impl ManagerService {
             Err(..) => {
                 error!("Received non-UTF8 encoded packet: {:?}", ByteStr::new(pkt));
 
-                return b"invalid encoding".to_vec();
+                return Some(b"invalid encoding".to_vec());
             }
         };
 
@@ -233,22 +332,17 @@ impl ManagerService {
             }
         };
 
-        match ManagerService::dispatch_command(action, param, servers, context).await {
+        match self.dispatch_command(action, param).await {
             Ok(v) => v,
             Err(err) => {
                 error!("Failed to handle action \"{}\", error: {}", action, err);
 
-                Vec::from(err.to_string())
+                Some(Vec::from(err.to_string()))
             }
         }
     }
 
-    async fn dispatch_command(
-        action: &str,
-        param: &str,
-        servers: &mut HashMap<u16, ServerInstance>,
-        context: &Context,
-    ) -> io::Result<Vec<u8>> {
+    async fn dispatch_command(&mut self, action: &str, param: &str) -> io::Result<Option<Vec<u8>>> {
         match action {
             "add" => {
                 let p: protocol::ServerConfig = match serde_json::from_str(param) {
@@ -259,7 +353,7 @@ impl ManagerService {
                     }
                 };
 
-                ManagerService::handle_add(p, servers, context).await
+                self.handle_add(p).await
             }
             "remove" => {
                 let p: protocol::RemoveRequest = match serde_json::from_str(param) {
@@ -270,10 +364,21 @@ impl ManagerService {
                     }
                 };
 
-                ManagerService::handle_remove(&p, servers).await
+                self.handle_remove(&p).await
             }
-            "list" => ManagerService::handle_list(servers).await,
-            "ping" => ManagerService::handle_ping(servers).await,
+            "list" => self.handle_list().await,
+            "ping" => self.handle_ping().await,
+            "stat" => {
+                let pmap: HashMap<String, u64> = match serde_json::from_str(param) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        let err = Error::new(ErrorKind::InvalidData, err);
+                        return Err(err);
+                    }
+                };
+
+                self.handle_stat(&pmap).await
+            }
             _ => {
                 let err = Error::new(ErrorKind::InvalidData, format!("unrecognized command \"{}\"", action));
                 Err(err)
@@ -281,17 +386,13 @@ impl ManagerService {
         }
     }
 
-    async fn handle_add(
-        p: protocol::ServerConfig,
-        servers: &mut HashMap<u16, ServerInstance>,
-        context: &Context,
-    ) -> io::Result<Vec<u8>> {
+    async fn handle_add(&mut self, p: protocol::ServerConfig) -> io::Result<Option<Vec<u8>>> {
         trace!("ACTION \"add\" {:?}", p);
 
         let server_port = p.server_port;
 
         let method = match p.method {
-            None => context
+            None => self.context
                 .config()
                 .manager_method
                 // Default method as shadowsocks-libev's ss-server
@@ -324,7 +425,7 @@ impl ManagerService {
         let mut config = Config::new(ConfigType::Server);
         config.server.push(svr_cfg);
 
-        config.local = context.config().local.clone();
+        config.local = self.context.config().local.clone();
 
         if let Some(mode) = p.mode {
             config.mode = match mode.parse::<Mode>() {
@@ -341,43 +442,31 @@ impl ManagerService {
         }
 
         // Close it first
-        let _ = servers.remove(&server_port);
-        ManagerService::create_server_with_config(context, servers, server_port, config).await?;
+        let _ = self.servers.remove(&server_port);
+        self.start_server_with_config(server_port, config).await?;
 
-        Ok(b"ok\n".to_vec())
+        Ok(Some(b"ok\n".to_vec()))
     }
 
-    async fn create_server_with_config(
-        context: &Context,
-        servers: &mut HashMap<u16, ServerInstance>,
-        server_port: u16,
-        config: Config,
-    ) -> io::Result<()> {
-        let server = ServerInstance::start_server(config, context.clone_server_state()).await?;
-        servers.insert(server_port, server);
+    async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
+        let server = ServerInstance::start_server(config, self.context.clone_server_state()).await?;
+        self.servers.insert(server_port, server);
 
         Ok(())
     }
 
-    async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
-        ManagerService::create_server_with_config(&*self.context, &mut self.servers, server_port, config).await
-    }
-
-    async fn handle_remove(
-        p: &protocol::RemoveRequest,
-        servers: &mut HashMap<u16, ServerInstance>,
-    ) -> io::Result<Vec<u8>> {
+    async fn handle_remove(&mut self, p: &protocol::RemoveRequest) -> io::Result<Option<Vec<u8>>> {
         trace!("ACTION \"remove\" {:?}", p);
 
-        let _ = servers.remove(&p.server_port);
-        Ok(b"ok\n".to_vec())
+        let _ = self.servers.remove(&p.server_port);
+        Ok(Some(b"ok\n".to_vec()))
     }
 
-    async fn handle_list(servers: &HashMap<u16, ServerInstance>) -> io::Result<Vec<u8>> {
+    async fn handle_list(&mut self) -> io::Result<Option<Vec<u8>>> {
         let mut buf = String::new();
         buf += "[";
         let mut is_first = true;
-        for (_, inst) in servers.iter() {
+        for (_, inst) in self.servers.iter() {
             let config = &inst.config;
             let svr_cfg = &config.server[0];
 
@@ -403,14 +492,14 @@ impl ManagerService {
 
         trace!("ACTION \"list\" returns {:?}", ByteStr::new(buf.as_bytes()));
 
-        Ok(buf.into_bytes())
+        Ok(Some(buf.into_bytes()))
     }
 
-    async fn handle_ping(servers: &HashMap<u16, ServerInstance>) -> io::Result<Vec<u8>> {
+    async fn handle_ping(&mut self) -> io::Result<Option<Vec<u8>>> {
         let mut buf = String::new();
         buf += "stat: {";
         let mut is_first = true;
-        for (port, inst) in servers.iter() {
+        for (port, inst) in self.servers.iter() {
             if is_first {
                 is_first = false;
             } else {
@@ -423,7 +512,33 @@ impl ManagerService {
 
         trace!("ACTION \"ping\" returns {:?}", ByteStr::new(buf.as_bytes()));
 
-        Ok(buf.into_bytes())
+        Ok(Some(buf.into_bytes()))
+    }
+
+    async fn handle_stat(&mut self, pmap: &HashMap<String, u64>) -> io::Result<Option<Vec<u8>>> {
+        trace!("ACTION \"stat\" {:?}", pmap);
+
+        for (sport, trans) in pmap.iter() {
+            match sport.parse::<u16>() {
+                Err(..) => {
+                    error!(
+                        "Invalid data in \"stat\" command, expecting a port number, but found \"{}\"",
+                        sport
+                    );
+
+                    // Just skip, unsound
+                    continue;
+                }
+
+                Ok(port) => {
+                    if let Some(inst) = self.servers.get(&port) {
+                        inst.update_transmission(*trans)
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 }
 

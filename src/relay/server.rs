@@ -1,17 +1,21 @@
 //! Server side
 
-use std::io::{self, ErrorKind};
+use std::{
+    io::{self, ErrorKind},
+    time::Duration,
+};
 
 use futures::future::{select_all, FutureExt};
 use log::{debug, error, trace, warn};
-use tokio::runtime::Handle;
+use tokio::{runtime::Handle, time};
 
 use crate::{
     config::Config,
     context::{Context, ServerState, SharedServerState},
     plugin::{PluginMode, Plugins},
     relay::{
-        flow::{ServerFlowStatistic, SharedServerFlowStatistic},
+        flow::{MultiServerFlowStatistic, SharedMultiServerFlowStatistic},
+        manager::ManagerDatagram,
         tcprelay::server::run as run_tcp,
         udprelay::server::run as run_udp,
         utils::set_nofile,
@@ -24,15 +28,17 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     // Create a context containing a DNS resolver and server running state flag.
     let server_state = ServerState::new_shared(&config, rt).await?;
 
-    // Create a server flow statistic, which is not very useful in standalone server
-    let flow_stat = ServerFlowStatistic::new_shared();
+    // Create statistics for multiple servers
+    //
+    // This is for statistic purpose for [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users) APIs
+    let flow_stat = MultiServerFlowStatistic::new_shared(&config);
 
     run_with(config, flow_stat, server_state).await
 }
 
 pub(crate) async fn run_with(
     mut config: Config,
-    flow_stat: SharedServerFlowStatistic,
+    flow_stat: SharedMultiServerFlowStatistic,
     server_stat: SharedServerState,
 ) -> io::Result<()> {
     trace!("RUN Server {:?}", config);
@@ -83,11 +89,57 @@ pub(crate) async fn run_with(
         vf.push(udp_fut.boxed());
     }
 
+    // If specified manager-address, reports transmission statistic to it
+    if context.config().manager_address.is_some() {
+        let context = context.clone();
+
+        let report_fut = async move {
+            let manager_addr = context.config().manager_address.as_ref().unwrap();
+            let mut socket = ManagerDatagram::bind_for(manager_addr).await?;
+
+            while context.server_running() {
+                // For each servers, send "stat" command to manager
+                for svr_cfg in &context.config().server {
+                    let port = svr_cfg.addr().port();
+                    if let Some(ref fstat) = flow_stat.get(port) {
+                        let trans = fstat.tcp().tx() + fstat.tcp().rx() + fstat.udp().tx() + fstat.udp().rx();
+                        let stat = format!("stat: {{\"{}\":{}}}", port, trans);
+                        match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
+                            Ok(..) => {
+                                trace!(
+                                    "Sent {} for server \"{}\" to manger \"{}\"",
+                                    stat,
+                                    svr_cfg.addr(),
+                                    manager_addr
+                                );
+                            }
+                            Err(err) => {
+                                error!(
+                                    "Failed to send {} for server \"{}\" to manager \"{}\", error: {}",
+                                    stat,
+                                    svr_cfg.addr(),
+                                    manager_addr,
+                                    err
+                                );
+                            }
+                        }
+                    }
+
+                    // Report every 10 seconds
+                    time::delay_for(Duration::from_secs(10)).await;
+                }
+            }
+
+            Ok(())
+        };
+        vf.push(report_fut.boxed());
+    }
+
     let (res, ..) = select_all(vf.into_iter()).await;
     error!("one of servers exited unexpectly, result: {:?}", res);
 
     // Tells all detached tasks to exit
-    context.server_stopped();
+    context.set_server_stopped();
 
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }

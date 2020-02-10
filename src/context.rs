@@ -199,7 +199,7 @@ impl Context {
     }
 
     /// Stops the server, kills all detached running tasks
-    pub fn server_stopped(&self) {
+    pub fn set_server_stopped(&self) {
         self.server_running.store(false, Ordering::Release)
     }
 

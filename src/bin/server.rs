@@ -17,7 +17,7 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig};
 
 mod logging;
 mod monitor;
@@ -80,6 +80,12 @@ fn main() {
                 .long("plugin-opts")
                 .takes_value(true)
                 .help("Set SIP003 plugin options"),
+        )
+        .arg(
+            Arg::with_name("MANAGER_ADDRESS")
+                .long("manager-address")
+                .takes_value(true)
+                .help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""),
         )
         .arg(
             Arg::with_name("NO_DELAY")
@@ -179,6 +185,13 @@ fn main() {
             svr.set_plugin(plugin.clone());
         }
     };
+
+    if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
+        config.manager_address = Some(
+            m.parse::<ManagerAddr>()
+                .expect("Expecting \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
+        );
+    }
 
     if let Some(nofile) = matches.value_of("NOFILE") {
         config.nofile = Some(

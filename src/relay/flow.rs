@@ -1,9 +1,14 @@
 //! Server network flow statistic
 
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
+
+use crate::config::Config;
 
 /// Flow statistic for one server
 pub struct FlowStatistic {
@@ -27,7 +32,7 @@ impl FlowStatistic {
 
     /// Add bytes transferred
     pub fn incr_tx(&self, tx: u64) {
-        self.tx.fetch_add(tx, Ordering::Release);
+        self.tx.fetch_add(tx, Ordering::AcqRel);
     }
 
     /// Total bytes received
@@ -37,7 +42,7 @@ impl FlowStatistic {
 
     /// Add bytes received
     pub fn incr_rx(&self, rx: u64) {
-        self.rx.fetch_add(rx, Ordering::Release);
+        self.rx.fetch_add(rx, Ordering::AcqRel);
     }
 }
 
@@ -51,6 +56,7 @@ impl Default for FlowStatistic {
 pub struct ServerFlowStatistic {
     tcp: FlowStatistic,
     udp: FlowStatistic,
+    stat: AtomicU64,
 }
 
 /// Shared reference for ServerFlowStatistic
@@ -62,6 +68,7 @@ impl ServerFlowStatistic {
         ServerFlowStatistic {
             tcp: FlowStatistic::new(),
             udp: FlowStatistic::new(),
+            stat: AtomicU64::new(0),
         }
     }
 
@@ -79,10 +86,51 @@ impl ServerFlowStatistic {
     pub fn udp(&self) -> &FlowStatistic {
         &self.udp
     }
+
+    /// Increase global `stat` command statistic
+    pub fn set_stat(&self, trans: u64) {
+        // NOTE: this is a replace operation
+        self.stat.store(trans, Ordering::Release);
+    }
+
+    /// Global `stat` command statistic
+    pub fn stat(&self) -> u64 {
+        self.stat.load(Ordering::Acquire)
+    }
 }
 
 impl Default for ServerFlowStatistic {
     fn default() -> ServerFlowStatistic {
         ServerFlowStatistic::new()
+    }
+}
+
+/// FlowStatic for multiple servers
+pub struct MultiServerFlowStatistic {
+    servers: HashMap<u16, SharedServerFlowStatistic>,
+}
+
+/// Shared reference for `MultiServerFlowStatistic`
+pub type SharedMultiServerFlowStatistic = Arc<MultiServerFlowStatistic>;
+
+impl MultiServerFlowStatistic {
+    /// Create statistics for every servers in config
+    pub fn new(config: &Config) -> MultiServerFlowStatistic {
+        let mut servers = HashMap::new();
+        for svr_cfg in &config.server {
+            servers.insert(svr_cfg.addr().port(), ServerFlowStatistic::new_shared());
+        }
+
+        MultiServerFlowStatistic { servers }
+    }
+
+    /// Create a new shared reference for MultiServerFlowStatistic
+    pub fn new_shared(config: &Config) -> SharedMultiServerFlowStatistic {
+        Arc::new(MultiServerFlowStatistic::new(config))
+    }
+
+    /// Get ServerFlowStatistic by port
+    pub fn get(&self, port: u16) -> Option<&SharedServerFlowStatistic> {
+        self.servers.get(&port)
     }
 }

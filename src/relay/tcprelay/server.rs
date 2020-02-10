@@ -15,7 +15,10 @@ use tokio::{
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    relay::{flow::SharedServerFlowStatistic, socks5::Address},
+    relay::{
+        flow::{SharedMultiServerFlowStatistic, SharedServerFlowStatistic},
+        socks5::Address,
+    },
 };
 
 use super::{monitor::TcpMonStream, utils::connect_tcp_stream, CryptoStream, STcpStream};
@@ -155,7 +158,7 @@ async fn handle_client(
 }
 
 /// Runs the server
-pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -> io::Result<()> {
+pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatistic) -> io::Result<()> {
     let vec_fut = FuturesUnordered::new();
 
     for (idx, svr_cfg) in context.config().server.iter().enumerate() {
@@ -175,7 +178,10 @@ pub async fn run(context: SharedContext, flow_stat: SharedServerFlowStatistic) -
 
         // Clone and move into the server future
         let context = context.clone();
-        let flow_stat = flow_stat.clone();
+        let flow_stat = flow_stat
+            .get(svr_cfg.addr().port())
+            .expect("port not existed in multi-server flow statistic")
+            .clone();
 
         vec_fut.push(async move {
             loop {
