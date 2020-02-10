@@ -4,7 +4,6 @@
 
 use std::{
     collections::HashMap,
-    fs,
     io::{self, Error, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str,
@@ -121,6 +120,8 @@ impl ManagerDatagram {
             }
             #[cfg(unix)]
             ManagerAddr::UnixSocketAddr(ref path) => {
+                use std::fs;
+
                 // Remove it first incase it is already exists
                 let _ = fs::remove_file(path);
 
