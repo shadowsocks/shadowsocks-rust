@@ -711,6 +711,8 @@ pub struct Config {
     pub udp_timeout: Option<Duration>,
     /// `RLIMIT_NOFILE` option for *nix systems
     pub nofile: Option<u64>,
+    /// Timeout for TCP connections, could be replaced by server*.timeout
+    pub timeout: Option<Duration>,
 }
 
 /// Configuration parsing error kind
@@ -788,6 +790,7 @@ impl Config {
             config_type,
             udp_timeout: None,
             nofile: None,
+            timeout: None,
         }
     }
 
@@ -903,7 +906,7 @@ impl Config {
                     }),
                 };
 
-                let timeout = svr.timeout.map(Duration::from_secs);
+                let timeout = svr.timeout.or(config.timeout).map(Duration::from_secs);
                 let nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
 
                 nconfig.server.push(nsvr);
@@ -976,6 +979,10 @@ impl Config {
 
         // RLIMIT_NOFILE
         nconfig.nofile = config.nofile;
+
+        // TCP timeout
+        // This is mostly used for manager for creating new servers
+        nconfig.timeout = config.timeout.map(Duration::from_secs);
 
         Ok(nconfig)
     }
@@ -1128,7 +1135,7 @@ impl fmt::Display for Config {
                 jconf.password = Some(svr.password().to_string());
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
-                jconf.timeout = svr.timeout().map(|t| t.as_secs());
+                jconf.timeout = svr.timeout().or(self.timeout).map(|t| t.as_secs());
             }
             _ => {
                 let mut vsvr = Vec::new();
@@ -1150,6 +1157,9 @@ impl fmt::Display for Config {
                         timeout: svr.timeout().map(|t| t.as_secs()),
                     });
                 }
+
+                jconf.servers = Some(vsvr);
+                jconf.timeout = self.timeout.map(|t| t.as_secs());
             }
         }
 

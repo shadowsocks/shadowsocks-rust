@@ -437,9 +437,16 @@ impl ManagerService {
             };
         }
 
+        // TCP_NODELAY
         if let Some(b) = p.no_delay {
             config.no_delay = b;
+        } else {
+            config.no_delay = self.context.config().no_delay;
         }
+
+        // timeouts
+        config.udp_timeout = self.context.config().udp_timeout;
+        config.timeout = self.context.config().timeout;
 
         // Close it first
         let _ = self.servers.remove(&server_port);
