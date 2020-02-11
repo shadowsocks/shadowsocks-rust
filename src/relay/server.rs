@@ -90,6 +90,8 @@ pub(crate) async fn run_with(
     }
 
     // If specified manager-address, reports transmission statistic to it
+    //
+    // Dont do that if server is created by manager
     if context.config().manager_address.is_some() {
         let context = context.clone();
 
@@ -99,11 +101,17 @@ pub(crate) async fn run_with(
 
             while context.server_running() {
                 // For each servers, send "stat" command to manager
+                //
+                // This is for compatible with managers that replies on "stat" command
+                // Ref: https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users
+                //
+                // If you are using manager in this project, this is not required.
                 for svr_cfg in &context.config().server {
                     let port = svr_cfg.addr().port();
+
                     if let Some(ref fstat) = flow_stat.get(port) {
-                        let trans = fstat.tcp().tx() + fstat.tcp().rx() + fstat.udp().tx() + fstat.udp().rx();
-                        let stat = format!("stat: {{\"{}\":{}}}", port, trans);
+                        let stat = format!("stat: {{\"{}\":{}}}", port, fstat.trans_stat());
+
                         match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
                             Ok(..) => {
                                 trace!(

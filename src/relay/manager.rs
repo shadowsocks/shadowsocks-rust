@@ -104,17 +104,8 @@ impl ServerInstance {
         })
     }
 
-    fn total_transmission(&self) -> u64 {
-        self.flow_stat.tcp().tx()
-            + self.flow_stat.tcp().rx()
-            + self.flow_stat.udp().tx()
-            + self.flow_stat.udp().rx()
-            + self.flow_stat.stat()
-    }
-
-    fn update_transmission(&self, transmission: u64) {
-        // stat command returns a total transmission value
-        self.flow_stat.set_stat(transmission);
+    fn flow_trans_stat(&self) -> u64 {
+        self.flow_stat.trans_stat()
     }
 }
 
@@ -513,7 +504,7 @@ impl ManagerService {
                 buf += ",";
             }
 
-            buf += &format!("\"{}\":{}", port, inst.total_transmission());
+            buf += &format!("\"{}\":{}", port, inst.flow_trans_stat());
         }
         buf += "}\n";
 
@@ -525,25 +516,8 @@ impl ManagerService {
     async fn handle_stat(&mut self, pmap: &HashMap<String, u64>) -> io::Result<Option<Vec<u8>>> {
         trace!("ACTION \"stat\" {:?}", pmap);
 
-        for (sport, trans) in pmap.iter() {
-            match sport.parse::<u16>() {
-                Err(..) => {
-                    error!(
-                        "Invalid data in \"stat\" command, expecting a port number, but found \"{}\"",
-                        sport
-                    );
-
-                    // Just skip, unsound
-                    continue;
-                }
-
-                Ok(port) => {
-                    if let Some(inst) = self.servers.get(&port) {
-                        inst.update_transmission(*trans)
-                    }
-                }
-            }
-        }
+        // NOTE: "stat" is not supported in this implementation
+        //       because servers are spawned in the same process with the manager
 
         Ok(None)
     }

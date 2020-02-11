@@ -1,7 +1,7 @@
 //! Server network flow statistic
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -56,7 +56,6 @@ impl Default for FlowStatistic {
 pub struct ServerFlowStatistic {
     tcp: FlowStatistic,
     udp: FlowStatistic,
-    stat: AtomicU64,
 }
 
 /// Shared reference for ServerFlowStatistic
@@ -68,7 +67,6 @@ impl ServerFlowStatistic {
         ServerFlowStatistic {
             tcp: FlowStatistic::new(),
             udp: FlowStatistic::new(),
-            stat: AtomicU64::new(0),
         }
     }
 
@@ -87,15 +85,9 @@ impl ServerFlowStatistic {
         &self.udp
     }
 
-    /// Increase global `stat` command statistic
-    pub fn set_stat(&self, trans: u64) {
-        // NOTE: this is a replace operation
-        self.stat.store(trans, Ordering::Release);
-    }
-
-    /// Global `stat` command statistic
-    pub fn stat(&self) -> u64 {
-        self.stat.load(Ordering::Acquire)
+    /// Transmission statistic for manager
+    pub fn trans_stat(&self) -> u64 {
+        self.tcp().tx() + self.tcp().rx() + self.udp().tx() + self.udp.rx()
     }
 }
 
@@ -107,7 +99,7 @@ impl Default for ServerFlowStatistic {
 
 /// FlowStatic for multiple servers
 pub struct MultiServerFlowStatistic {
-    servers: HashMap<u16, SharedServerFlowStatistic>,
+    servers: BTreeMap<u16, SharedServerFlowStatistic>,
 }
 
 /// Shared reference for `MultiServerFlowStatistic`
@@ -116,7 +108,7 @@ pub type SharedMultiServerFlowStatistic = Arc<MultiServerFlowStatistic>;
 impl MultiServerFlowStatistic {
     /// Create statistics for every servers in config
     pub fn new(config: &Config) -> MultiServerFlowStatistic {
-        let mut servers = HashMap::new();
+        let mut servers = BTreeMap::new();
         for svr_cfg in &config.server {
             servers.insert(svr_cfg.addr().port(), ServerFlowStatistic::new_shared());
         }
