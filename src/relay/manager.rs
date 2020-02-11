@@ -284,7 +284,7 @@ impl ManagerService {
             };
 
             if src_addr.is_unnamed() {
-                error!(
+                trace!(
                     "Received a packet ({} bytes) from an unnamed unix-socket client, \
                      unsound because we are unable to send response back to it",
                     recv_len
