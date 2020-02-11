@@ -36,8 +36,10 @@ path = "src/bin/ssurl.rs"
 name = "ssmanager"
 path = "src/bin/manager.rs"
 
-#[profile.release]
-#lto = true
+[profile.release]
+lto = true
+codegen-units = 1
+incremental = false
 
 [features]
 default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]
