@@ -24,7 +24,9 @@ jobs:
                   test -e Cargo.lock || cargo generate-lockfile
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
-            - run: ./build-host-release
+            - run:
+                  command: ./build-host-release
+                  no_output_timeout: 1h
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
@@ -84,9 +86,11 @@ jobs:
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             # - run: ./build-host-release
-            - run: |
-                  $env:Path += ";C:\Users\circleci\.cargo\bin"
-                  cargo build --release --features "miscreant"
+            - run:
+                  command: |
+                      $env:Path += ";C:\Users\circleci\.cargo\bin"
+                      cargo build --release --features "miscreant"
+                  no_output_timeout: 1h
             - run: |
                   $ProgressPreference = "SilentlyContinue"
                   $env:Path += ";C:\Users\circleci\.cargo\bin;."
@@ -149,9 +153,11 @@ jobs:
             - restore_cache:
                   key: cargo-cache-{{ arch }}
             - run: cargo install cross
-            - run: |
-                  cd build
-                  ./build-release
+            - run:
+                  command: |
+                      cd build
+                      ./build-release
+                  no_output_timeout: 1h
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
