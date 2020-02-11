@@ -124,10 +124,10 @@ pub(crate) async fn run_with(
                             }
                         }
                     }
-
-                    // Report every 10 seconds
-                    time::delay_for(Duration::from_secs(10)).await;
                 }
+
+                // Report every 10 seconds
+                time::delay_for(Duration::from_secs(10)).await;
             }
 
             Ok(())
