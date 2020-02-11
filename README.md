@@ -254,11 +254,22 @@ NOTE: `stat` command is not supported. Because servers are running in the same p
 # Start it just with --manager-address command line parameter
 ssmanager --manager-address "127.0.0.1:6100"
 
+# For *nix system, manager can bind to unix socket address
+ssmanager --manager-address "/tmp/shadowsocks-manager.sock"
+
 # You can also provide a configuration file
 #
 # `manager_address` key must be provided in the configuration file
 ssmanager -c /path/to/shadowsocks.json
+
+# Create one server by UDP
+echo '{"add":{"server_port":8388,"password":"hello-kitty"}}' | nc -u '127.0.0.1' '6100'
+
+# Close one server by unix socket
+echo '{"remove":{"server_port":8388}}' | nc -Uu '/tmp/shadowsocks-manager.sock'
 ```
+
+For manager UI, check more details in the [shadowsocks-manager](https://github.com/shadowsocks/shadowsocks-manager) project.
 
 Example configuration:
 
