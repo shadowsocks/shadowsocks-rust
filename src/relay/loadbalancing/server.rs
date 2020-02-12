@@ -123,36 +123,38 @@ impl ServerStatisticData {
             }
         }
 
-        vlat.sort();
-
-        // Find median of latency
-        let mid = vlat.len() / 2;
-
-        self.rtt = if vlat.len() % 2 == 0 {
-            (vlat[mid] + vlat[mid - 1]) / 2
-        } else {
-            vlat[mid]
-        };
-
         // Error rate
         self.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
 
-        if vlat.len() > 1 {
-            // STDEV
-            let n = vlat.len() as f64;
+        if !vlat.is_empty() {
+            vlat.sort();
 
-            let mut total_lat = 0;
-            for s in &vlat {
-                total_lat += *s;
+            // Find median of latency
+            let mid = vlat.len() / 2;
+
+            self.rtt = if vlat.len() % 2 == 0 {
+                (vlat[mid] + vlat[mid - 1]) / 2
+            } else {
+                vlat[mid]
+            };
+
+            if vlat.len() > 1 {
+                // STDEV
+                let n = vlat.len() as f64;
+
+                let mut total_lat = 0;
+                for s in &vlat {
+                    total_lat += *s;
+                }
+                self.latency_mean = total_lat as f64 / n;
+                let mut acc_diff = 0.0;
+                for s in &vlat {
+                    let diff = *s as f64 - self.latency_mean;
+                    acc_diff += diff * diff;
+                }
+                // Corrected Sample Standard Deviation
+                self.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
             }
-            self.latency_mean = total_lat as f64 / n;
-            let mut acc_diff = 0.0;
-            for s in &vlat {
-                let diff = *s as f64 - self.latency_mean;
-                acc_diff += diff * diff;
-            }
-            // Corrected Sample Standard Deviation
-            self.latency_stdev = ((1.0 / (n - 1.0)) * acc_diff).sqrt();
         }
 
         self.score()

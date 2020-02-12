@@ -7,14 +7,17 @@ use cfg_if::cfg_if;
 
 use crate::{config::ServerAddr, context::Context};
 
+mod tokio_dns_resolver;
+
 cfg_if! {
     if #[cfg(feature = "trust-dns")] {
         mod trust_dns_resolver;
 
+        /// Use trust-dns DNS resolver (with DNS cache)
         pub use self::trust_dns_resolver::{create_resolver, resolve};
     } else {
-        mod tokio_dns_resolver;
 
+        /// Use tokio's builtin DNS resolver
         pub use self::tokio_dns_resolver::resolve;
     }
 }
@@ -48,8 +51,8 @@ pub async fn resolve_bind_addr(context: &Context, addr: &ServerAddr) -> io::Resu
     match addr {
         ServerAddr::SocketAddr(ref a) => Ok(*a),
         ServerAddr::DomainName(ref dname, port) => {
-            let mut addrs = self::resolve(context, dname, *port, false).await?;
-            Ok(addrs.next().expect("resolved empty addresses"))
+            let addrs = self::resolve(context, dname, *port, false).await?;
+            Ok(addrs[0])
         }
     }
 }

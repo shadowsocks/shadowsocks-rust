@@ -546,7 +546,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     }
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new_shared(&config, rt.clone()).await?;
+    let state = ServerState::new_shared(&config, rt.clone()).await;
     let context = Context::new_shared(config, state.clone());
 
     let bind_addr = match context.config().manager_address {

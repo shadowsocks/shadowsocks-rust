@@ -1,7 +1,6 @@
 //! Shadowsocks Server Context
 
 use std::{
-    io,
     net::IpAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -107,24 +106,31 @@ impl PingPongBloom {
 /// Shared between UDP and TCP servers
 pub struct ServerState {
     #[cfg(feature = "trust-dns")]
-    dns_resolver: TokioAsyncResolver,
+    dns_resolver: Option<TokioAsyncResolver>,
 }
 
 impl ServerState {
-    #[allow(unused_variables)]
-    pub async fn new_shared(config: &Config, rt: Handle) -> io::Result<SharedServerState> {
+    #[cfg(feature = "trust-dns")]
+    pub async fn new_shared(config: &Config, rt: Handle) -> SharedServerState {
         let state = ServerState {
-            #[cfg(feature = "trust-dns")]
-            dns_resolver: create_resolver(config.get_dns_config(), rt).await?,
+            dns_resolver: match create_resolver(config.get_dns_config(), rt).await {
+                Ok(resolver) => Some(resolver),
+                Err(..) => None,
+            },
         };
 
-        Ok(Arc::new(state))
+        Arc::new(state)
+    }
+
+    #[cfg(not(feature = "trust-dns"))]
+    pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
+        Arc::new(ServerState { dns_resolver: None })
     }
 
     /// Get the global shared resolver
     #[cfg(feature = "trust-dns")]
-    pub fn dns_resolver(&self) -> &TokioAsyncResolver {
-        &self.dns_resolver
+    pub fn dns_resolver(&self) -> Option<&TokioAsyncResolver> {
+        self.dns_resolver.as_ref()
     }
 }
 
@@ -189,7 +195,7 @@ impl Context {
 
     #[cfg(feature = "trust-dns")]
     /// Get the global shared resolver
-    pub fn dns_resolver(&self) -> &TokioAsyncResolver {
+    pub fn dns_resolver(&self) -> Option<&TokioAsyncResolver> {
         self.server_state.dns_resolver()
     }
 

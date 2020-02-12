@@ -40,7 +40,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     let mode = config.mode;
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new_shared(&config, rt).await?;
+    let state = ServerState::new_shared(&config, rt).await;
 
     let mut vf = Vec::new();
 

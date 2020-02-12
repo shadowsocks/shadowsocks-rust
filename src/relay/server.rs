@@ -26,7 +26,7 @@ use crate::{
 #[inline]
 pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     // Create a context containing a DNS resolver and server running state flag.
-    let server_state = ServerState::new_shared(&config, rt).await?;
+    let server_state = ServerState::new_shared(&config, rt).await;
 
     // Create statistics for multiple servers
     //

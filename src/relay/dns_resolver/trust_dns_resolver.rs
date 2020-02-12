@@ -9,6 +9,7 @@ use log::{debug, error, trace};
 use tokio::{self, runtime::Handle};
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
+use super::tokio_dns_resolver::resolve as tokio_resolve;
 use crate::context::Context;
 
 /// Create a `trust-dns` asynchronous DNS resolver
@@ -28,7 +29,14 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
             } else {
                 use trust_dns_resolver::system_conf::read_system_conf;
                 // use the system resolver configuration
-                let (config, opts) = read_system_conf().expect("Failed to read global dns sysconf");
+                let (config, opts) = match read_system_conf() {
+                    Ok(o) => o,
+                    Err(err) => {
+                        error!("Failed to initialize DNS resolver with system-config, error: {}", err);
+                        return Err(err);
+                    }
+                };
+
                 trace!(
                     "Initializing DNS resolver with system-config {:?} opts {:?}",
                     config,
@@ -71,38 +79,37 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
 }
 
 /// Perform a DNS resolution
-pub async fn resolve(
-    context: &Context,
-    addr: &str,
-    port: u16,
-    check_forbidden: bool,
-) -> io::Result<impl Iterator<Item = SocketAddr>> {
-    match context.dns_resolver().lookup_ip(addr).await {
-        Err(err) => {
-            let err = Error::new(ErrorKind::Other, format!("dns resolve {}:{}, {}", addr, port, err));
-            Err(err)
-        }
-        Ok(lookup_result) => {
-            let mut vaddr = Vec::new();
-            for ip in lookup_result.iter() {
-                if check_forbidden && context.check_forbidden_ip(&ip) {
-                    debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
-                    continue;
+pub async fn resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
+    match context.dns_resolver() {
+        Some(resolver) => match resolver.lookup_ip(addr).await {
+            Ok(lookup_result) => {
+                let mut vaddr = Vec::new();
+                for ip in lookup_result.iter() {
+                    if check_forbidden && context.check_forbidden_ip(&ip) {
+                        debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
+                        continue;
+                    }
+
+                    vaddr.push(SocketAddr::new(ip, port));
                 }
 
-                vaddr.push(SocketAddr::new(ip, port));
+                if vaddr.is_empty() {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("resolved {}:{}, but all IPs are filtered", addr, port),
+                    );
+                    Err(err)
+                } else {
+                    debug!("Resolved {}:{} => {:?}", addr, port, vaddr);
+                    Ok(vaddr)
+                }
             }
-
-            if vaddr.is_empty() {
-                let err = Error::new(
-                    ErrorKind::Other,
-                    format!("resolved {}:{}, but all IPs are filtered", addr, port),
-                );
+            Err(err) => {
+                let err = Error::new(ErrorKind::Other, format!("dns resolve {}:{}, {}", addr, port, err));
                 Err(err)
-            } else {
-                debug!("Resolved {}:{} => {:?}", addr, port, vaddr);
-                Ok(vaddr.into_iter())
             }
-        }
+        },
+        // Fallback to tokio's DNS resolver
+        None => tokio_resolve(context, addr, port, check_forbidden).await,
     }
 }
