@@ -5,8 +5,9 @@ use std::{
     future::Future,
     io,
     io::ErrorKind,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
+    str::FromStr,
     task::{self, Poll},
 };
 
@@ -15,19 +16,23 @@ use futures::{
     future::{BoxFuture, Either},
     FutureExt,
 };
+use http::uri::{Authority, Scheme};
 use hyper::{
     client::connect::{Connected, Connection},
+    header::HeaderValue,
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
     upgrade::Upgraded,
     Body,
     Client,
+    HeaderMap,
     Method,
     Request,
     Response,
     Server,
     StatusCode,
     Uri,
+    Version,
 };
 use log::{debug, error, info, trace};
 use pin_project::pin_project;
@@ -155,63 +160,176 @@ impl Future for ShadowSocksConnecting {
     }
 }
 
+fn authority_addr(scheme_str: Option<&str>, authority: &Authority) -> Option<Address> {
+    // RFC7230 indicates that we should ignore userinfo
+    // https://tools.ietf.org/html/rfc7230#section-5.3.3
+
+    // Check if URI has port
+    let port = match authority.port_u16() {
+        Some(port) => port,
+        None => {
+            match scheme_str {
+                None => 80, // Assume it is http
+                Some("http") => 80,
+                Some("https") => 443,
+                _ => return None, // Not supported
+            }
+        }
+    };
+
+    let host_str = authority.host();
+
+    // RFC3986 indicates that IPv6 address should be wrapped in [ and ]
+    // https://tools.ietf.org/html/rfc3986#section-3.2.2
+    //
+    // Example: [::1] without port
+    if host_str.starts_with('[') && host_str.ends_with(']') {
+        // Must be a IPv6 address
+        let addr = &host_str[1..host_str.len() - 1];
+        match addr.parse::<Ipv6Addr>() {
+            Ok(a) => Some(Address::from(SocketAddr::new(IpAddr::V6(a), port))),
+            // Ignore invalid IPv6 address
+            Err(..) => None,
+        }
+    } else {
+        // It must be a IPv4 address
+        match host_str.parse::<Ipv4Addr>() {
+            Ok(a) => Some(Address::from(SocketAddr::new(IpAddr::V4(a), port))),
+            // Should be a domain name, or a invalid IP address.
+            // Let DNS deal with it.
+            Err(..) => Some(Address::DomainNameAddress(host_str.to_owned(), port)),
+        }
+    }
+}
+
 fn host_addr(uri: &Uri) -> Option<Address> {
     match uri.authority() {
         None => None,
-        Some(authority) => {
-            // NOTE: Authority may include authentication info (user:password)
-            // Although it is already deprecated, but some very old application may still depending on it
-            //
-            // But ... We won't be compatible with it. :)
+        Some(authority) => authority_addr(uri.scheme_str(), authority),
+    }
+}
 
-            // Check if URI has port
-            match authority.port_u16() {
-                Some(port) => {
-                    // Well, it has port!
-                    // 1. Maybe authority is a SocketAddr (127.0.0.1:1234, [::1]:1234)
-                    // 2. Otherwise, it must be a domain name (google.com:443)
+fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_proxy: bool) -> bool {
+    let mut conn_keep_alive = match version {
+        Version::HTTP_10 => false,
+        Version::HTTP_11 => true,
+        _ => unimplemented!("HTTP Proxy only supports 1.0 and 1.1"),
+    };
 
-                    match authority.as_str().parse::<SocketAddr>() {
-                        Ok(saddr) => Some(Address::from(saddr)),
-                        Err(..) => Some(Address::DomainNameAddress(authority.host().to_owned(), port)),
-                    }
-                }
-                None => {
-                    // Ok, we don't have port
-                    // 1. IPv4 Address 127.0.0.1
-                    // 2. IPv6 Address: https://tools.ietf.org/html/rfc2732 , [::1]
-                    // 3. Domain name
-
-                    // Uses default port
-                    let port = match uri.scheme_str() {
-                        None => 80, // Assume it is http
-                        Some("http") => 80,
-                        Some("https") => 443,
-                        _ => return None, // Not supported
-                    };
-
-                    // RFC2732 indicates that IPv6 address should be wrapped in [ and ]
-                    let authority_str = authority.as_str();
-                    if authority_str.starts_with('[') && authority_str.ends_with(']') {
-                        // Must be a IPv6 address
-                        let addr = authority_str.trim_start_matches('[').trim_end_matches(']');
-                        match addr.parse::<IpAddr>() {
-                            Ok(a) => Some(Address::from(SocketAddr::new(a, port))),
-                            // Ignore invalid IPv6 address
-                            Err(..) => None,
-                        }
-                    } else {
-                        // Maybe it is a IPv4 address, or a non-standard IPv6
-                        match authority_str.parse::<IpAddr>() {
-                            Ok(a) => Some(Address::from(SocketAddr::new(a, port))),
-                            // Should be a domain name, or a invalid IP address.
-                            // Let DNS deal with it.
-                            Err(..) => Some(Address::DomainNameAddress(authority_str.to_owned(), port)),
+    if check_proxy {
+        // Modern browers will send Proxy-Connection instead of Connection
+        // for HTTP/1.0 proxies which blindly forward Connection to remote
+        //
+        // https://tools.ietf.org/html/rfc7230#appendix-A.1.2
+        for value in headers.get_all("Proxy-Connection") {
+            if let Ok(value) = value.to_str() {
+                if value.eq_ignore_ascii_case("close") {
+                    conn_keep_alive = false;
+                } else {
+                    for part in value.split(',') {
+                        let part = part.trim();
+                        if part.eq_ignore_ascii_case("keep-alive") {
+                            conn_keep_alive = true;
+                            break;
                         }
                     }
                 }
             }
         }
+    }
+
+    // Connection will replace Proxy-Connection
+    //
+    // But why client sent both Connection and Proxy-Connection? That's not standard!
+    for value in headers.get_all("Connection") {
+        if let Ok(value) = value.to_str() {
+            if value.eq_ignore_ascii_case("close") {
+                conn_keep_alive = false;
+            } else {
+                for part in value.split(',') {
+                    let part = part.trim();
+
+                    if part.eq_ignore_ascii_case("keep-alive") {
+                        conn_keep_alive = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    conn_keep_alive
+}
+
+fn clear_hop_headers(headers: &mut HeaderMap<HeaderValue>) {
+    // Clear headers indicated by Connection and Proxy-Connection
+    let mut extra_headers = Vec::new();
+
+    for connection in headers.get_all("Connection") {
+        if let Ok(conn) = connection.to_str() {
+            if !conn.eq_ignore_ascii_case("close") {
+                for header in conn.split(',') {
+                    let header = header.trim();
+
+                    if !header.eq_ignore_ascii_case("keep-alive") {
+                        extra_headers.push(header.to_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    for connection in headers.get_all("Proxy-Connection") {
+        if let Ok(conn) = connection.to_str() {
+            if !conn.eq_ignore_ascii_case("close") {
+                for header in conn.split(',') {
+                    let header = header.trim();
+
+                    if !header.eq_ignore_ascii_case("keep-alive") {
+                        extra_headers.push(header.to_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    for header in extra_headers {
+        while let Some(..) = headers.remove(&header) {}
+    }
+
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection
+    const HOP_BY_HOP_HEADERS: [&str; 9] = [
+        "Keep-Alive",
+        "Transfer-Encoding",
+        "TE",
+        "Connection",
+        "Trailer",
+        "Upgrade",
+        "Proxy-Authorization",
+        "Proxy-Authenticate",
+        "Proxy-Connection", // Not standard, but many implementations do send this header
+    ];
+
+    for header in &HOP_BY_HOP_HEADERS {
+        while let Some(..) = headers.remove(*header) {}
+    }
+}
+
+fn set_conn_keep_alive(version: Version, headers: &mut HeaderMap<HeaderValue>, keep_alive: bool) {
+    match version {
+        Version::HTTP_10 => {
+            // HTTP/1.0 close connection by default
+            if keep_alive {
+                headers.insert("Connection", HeaderValue::from_static("keep-alive"));
+            }
+        }
+        Version::HTTP_11 => {
+            // HTTP/1.1 keep-alive connection by default
+            if !keep_alive {
+                headers.insert("Connection", HeaderValue::from_static("close"));
+            }
+        }
+        _ => unimplemented!("HTTP Proxy only supports 1.0 and 1.1"),
     }
 }
 
@@ -289,11 +407,17 @@ async fn establish_connect_tunnel(
     debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
 }
 
+fn make_bad_request() -> io::Result<Response<Body>> {
+    let mut resp = Response::new(Body::empty());
+    *resp.status_mut() = StatusCode::BAD_REQUEST;
+    Ok(resp)
+}
+
 async fn server_dispatch(
-    req: Request<Body>,
+    mut req: Request<Body>,
     svr_score: SharedServerStatistic<ServerScore>,
     client_addr: SocketAddr,
-) -> Result<Response<Body>, io::Error> {
+) -> io::Result<Response<Body>> {
     let context = svr_score.context();
 
     // Parse URI
@@ -301,12 +425,82 @@ async fn server_dispatch(
     // Proxy request URI must contains a host
     let host = match host_addr(req.uri()) {
         None => {
-            error!("HTTP {} URI is not a valid address. URI: {}", req.method(), req.uri());
+            if req.uri().authority().is_some() {
+                // URI has authority but invalid
+                error!("HTTP {} URI {} doesn't have a valid host", req.method(), req.uri());
+                return make_bad_request();
+            } else {
+                trace!("HTTP {} URI {} doesn't have a valid host", req.method(), req.uri());
+            }
 
-            let mut resp = Response::new(Body::from("URI must be a valid Address"));
-            *resp.status_mut() = StatusCode::BAD_REQUEST;
+            // Try to be compatible as a transparent HTTP proxy
+            match req.headers().get("Host") {
+                Some(hhost) => match hhost.to_str() {
+                    Ok(shost) => {
+                        match Authority::from_str(shost) {
+                            Ok(authority) => match authority_addr(req.uri().scheme_str(), &authority) {
+                                Some(host) => {
+                                    trace!("HTTP {} URI {} got host from header: {}", req.method(), req.uri(), host);
 
-            return Ok(resp);
+                                    // Reassemble URI
+                                    let mut parts = req.uri().clone().into_parts();
+                                    if parts.scheme.is_none() {
+                                        // Use http as default.
+                                        parts.scheme = Some(Scheme::HTTP);
+                                    }
+                                    parts.authority = Some(authority);
+
+                                    // Replaces URI
+                                    *req.uri_mut() = Uri::from_parts(parts).expect("Reassemble URI failed");
+
+                                    debug!("Reassembled URI from \"Host\", {}", req.uri());
+
+                                    host
+                                }
+                                None => {
+                                    error!(
+                                        "HTTP {} URI {} \"Host\" header invalid, value: {}",
+                                        req.method(),
+                                        req.uri(),
+                                        shost
+                                    );
+
+                                    return make_bad_request();
+                                }
+                            },
+                            Err(..) => {
+                                error!(
+                                    "HTTP {} URI {} \"Host\" header is not an Authority, value: {:?}",
+                                    req.method(),
+                                    req.uri(),
+                                    hhost
+                                );
+
+                                return make_bad_request();
+                            }
+                        }
+                    }
+                    Err(..) => {
+                        error!(
+                            "HTTP {} URI {} \"Host\" header invalid encoding, value: {:?}",
+                            req.method(),
+                            req.uri(),
+                            hhost
+                        );
+
+                        return make_bad_request();
+                    }
+                },
+                None => {
+                    error!(
+                        "HTTP {} URI doesn't have valid host and missing the \"Host\" header, URI: {}",
+                        req.method(),
+                        req.uri()
+                    );
+
+                    return make_bad_request();
+                }
+            }
         }
         Some(h) => h,
     };
@@ -372,10 +566,8 @@ async fn server_dispatch(
             }
         });
 
-        let resp = Response::builder()
-            .header("Proxy-Agent", format!("ShadowSocks/{}", crate::VERSION))
-            .body(Body::empty())
-            .unwrap();
+        // Connection established
+        let resp = Response::builder().body(Body::empty()).unwrap();
 
         Ok(resp)
     } else {
@@ -383,13 +575,22 @@ async fn server_dispatch(
 
         debug!("HTTP {} {}", method, host);
 
+        // Check if client wants us to keep long connection
+        let conn_keep_alive = check_keep_alive(req.version(), req.headers(), true);
+
+        // Remove non-forwardable headers
+        clear_hop_headers(req.headers_mut());
+
+        // Set keep-alive for connection with remote
+        set_conn_keep_alive(req.version(), req.headers_mut(), conn_keep_alive);
+
         let svr_cfg = svr_score.server_config();
 
         // Keep connections for clients in ServerScore::client
         //
         // client instance is kept for Keep-Alive connections
         let client = &svr_score.server().client;
-        let res = match client.request(req).await {
+        let mut res = match client.request(req).await {
             Ok(res) => res,
             Err(err) => {
                 error!(
@@ -407,6 +608,14 @@ async fn server_dispatch(
                 return Ok(resp);
             }
         };
+
+        let res_keep_alive = conn_keep_alive && check_keep_alive(res.version(), res.headers(), false);
+
+        // Clear unforwardable headers
+        clear_hop_headers(res.headers_mut());
+
+        // Set Connection header
+        set_conn_keep_alive(res.version(), res.headers_mut(), res_keep_alive);
 
         debug!(
             "HTTP {} relay {} <-> {} ({}) finished",
@@ -460,7 +669,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         }
     });
 
-    let server = Server::bind(&bind_addr).serve(make_service);
+    let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
     info!("ShadowSocks HTTP Listening on {}", server.local_addr());
 
     if let Err(err) = server.await {
