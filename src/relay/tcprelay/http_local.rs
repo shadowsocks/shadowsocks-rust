@@ -36,8 +36,6 @@ use hyper::{
 };
 use log::{debug, error, info, trace};
 use pin_project::pin_project;
-use tokio;
-use tower;
 
 use super::{CryptoStream, STcpStream};
 use crate::{
@@ -413,6 +411,77 @@ fn make_bad_request() -> io::Result<Response<Body>> {
     Ok(resp)
 }
 
+fn get_addr_from_header(req: &mut Request<Body>) -> Result<Address, ()> {
+    // Try to be compatible as a transparent HTTP proxy
+    match req.headers().get("Host") {
+        Some(hhost) => match hhost.to_str() {
+            Ok(shost) => {
+                match Authority::from_str(shost) {
+                    Ok(authority) => match authority_addr(req.uri().scheme_str(), &authority) {
+                        Some(host) => {
+                            trace!("HTTP {} URI {} got host from header: {}", req.method(), req.uri(), host);
+
+                            // Reassemble URI
+                            let mut parts = req.uri().clone().into_parts();
+                            if parts.scheme.is_none() {
+                                // Use http as default.
+                                parts.scheme = Some(Scheme::HTTP);
+                            }
+                            parts.authority = Some(authority);
+
+                            // Replaces URI
+                            *req.uri_mut() = Uri::from_parts(parts).expect("Reassemble URI failed");
+
+                            debug!("Reassembled URI from \"Host\", {}", req.uri());
+
+                            Ok(host)
+                        }
+                        None => {
+                            error!(
+                                "HTTP {} URI {} \"Host\" header invalid, value: {}",
+                                req.method(),
+                                req.uri(),
+                                shost
+                            );
+
+                            Err(())
+                        }
+                    },
+                    Err(..) => {
+                        error!(
+                            "HTTP {} URI {} \"Host\" header is not an Authority, value: {:?}",
+                            req.method(),
+                            req.uri(),
+                            hhost
+                        );
+
+                        Err(())
+                    }
+                }
+            }
+            Err(..) => {
+                error!(
+                    "HTTP {} URI {} \"Host\" header invalid encoding, value: {:?}",
+                    req.method(),
+                    req.uri(),
+                    hhost
+                );
+
+                Err(())
+            }
+        },
+        None => {
+            error!(
+                "HTTP {} URI doesn't have valid host and missing the \"Host\" header, URI: {}",
+                req.method(),
+                req.uri()
+            );
+
+            Err(())
+        }
+    }
+}
+
 async fn server_dispatch(
     mut req: Request<Body>,
     svr_score: SharedServerStatistic<ServerScore>,
@@ -433,73 +502,9 @@ async fn server_dispatch(
                 trace!("HTTP {} URI {} doesn't have a valid host", req.method(), req.uri());
             }
 
-            // Try to be compatible as a transparent HTTP proxy
-            match req.headers().get("Host") {
-                Some(hhost) => match hhost.to_str() {
-                    Ok(shost) => {
-                        match Authority::from_str(shost) {
-                            Ok(authority) => match authority_addr(req.uri().scheme_str(), &authority) {
-                                Some(host) => {
-                                    trace!("HTTP {} URI {} got host from header: {}", req.method(), req.uri(), host);
-
-                                    // Reassemble URI
-                                    let mut parts = req.uri().clone().into_parts();
-                                    if parts.scheme.is_none() {
-                                        // Use http as default.
-                                        parts.scheme = Some(Scheme::HTTP);
-                                    }
-                                    parts.authority = Some(authority);
-
-                                    // Replaces URI
-                                    *req.uri_mut() = Uri::from_parts(parts).expect("Reassemble URI failed");
-
-                                    debug!("Reassembled URI from \"Host\", {}", req.uri());
-
-                                    host
-                                }
-                                None => {
-                                    error!(
-                                        "HTTP {} URI {} \"Host\" header invalid, value: {}",
-                                        req.method(),
-                                        req.uri(),
-                                        shost
-                                    );
-
-                                    return make_bad_request();
-                                }
-                            },
-                            Err(..) => {
-                                error!(
-                                    "HTTP {} URI {} \"Host\" header is not an Authority, value: {:?}",
-                                    req.method(),
-                                    req.uri(),
-                                    hhost
-                                );
-
-                                return make_bad_request();
-                            }
-                        }
-                    }
-                    Err(..) => {
-                        error!(
-                            "HTTP {} URI {} \"Host\" header invalid encoding, value: {:?}",
-                            req.method(),
-                            req.uri(),
-                            hhost
-                        );
-
-                        return make_bad_request();
-                    }
-                },
-                None => {
-                    error!(
-                        "HTTP {} URI doesn't have valid host and missing the \"Host\" header, URI: {}",
-                        req.method(),
-                        req.uri()
-                    );
-
-                    return make_bad_request();
-                }
+            match get_addr_from_header(&mut req) {
+                Ok(h) => h,
+                Err(()) => return make_bad_request(),
             }
         }
         Some(h) => h,

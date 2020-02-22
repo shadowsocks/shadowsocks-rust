@@ -33,7 +33,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
                     Ok(o) => o,
                     Err(err) => {
                         error!("Failed to initialize DNS resolver with system-config, error: {}", err);
-                        return Err(From::from(err));
+                        return Err(err);
                     }
                 };
 
