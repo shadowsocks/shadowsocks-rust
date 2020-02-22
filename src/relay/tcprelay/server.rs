@@ -73,14 +73,7 @@ async fn handle_client(
 
     let mut remote_stream = match remote_addr {
         Address::SocketAddress(ref saddr) => {
-            if context.check_forbidden_ip(&saddr.ip()) {
-                error!("{} is forbidden, failed to connect {}", saddr.ip(), saddr);
-                let err = io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("{} is forbidden, failed to connect {}", saddr.ip(), saddr),
-                );
-                return Err(err);
-            }
+            // TODO: ACL
 
             match connect_tcp_stream(saddr, &bind_addr).await {
                 Ok(s) => {
@@ -94,7 +87,7 @@ async fn handle_client(
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            let result = lookup_then!(&*context, dname.as_str(), port, true, |addr| {
+            let result = lookup_then!(&*context, dname.as_str(), port, |addr| {
                 match connect_tcp_stream(&addr, &bind_addr).await {
                     Ok(s) => Ok(s),
                     Err(err) => {

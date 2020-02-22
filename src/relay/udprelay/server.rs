@@ -184,7 +184,7 @@ impl UdpAssociation {
                 );
                 try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
             }
-            Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, true, |remote_addr| {
+            Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, |remote_addr| {
                 match try_timeout(remote_udp.send_to(body, &remote_addr), Some(timeout)).await {
                     Ok(l) => {
                         debug!(

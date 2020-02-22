@@ -12,7 +12,16 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr, ServerConfig};
+use shadowsocks::{
+    acl::AccessControl,
+    plugin::PluginConfig,
+    run_local,
+    Config,
+    ConfigType,
+    Mode,
+    ServerAddr,
+    ServerConfig,
+};
 
 mod logging;
 mod monitor;
@@ -100,6 +109,12 @@ fn main() {
                 .long("nofile")
                 .takes_value(true)
                 .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
+        )
+        .arg(
+            Arg::with_name("ACL")
+                .long("acl")
+                .takes_value(true)
+                .help("Path to ACL (Access Control List)"),
         )
         .get_matches();
 
@@ -204,6 +219,11 @@ fn main() {
                 .parse::<u64>()
                 .expect("Expecting an unsigned integer for `nofile`"),
         );
+    }
+
+    if let Some(acl_file) = matches.value_of("ACL") {
+        let acl = AccessControl::load_from_file(acl_file).expect("Load ACL file");
+        config.acl = Some(acl);
     }
 
     if config.local.is_none() {

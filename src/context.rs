@@ -1,7 +1,8 @@
 //! Shadowsocks Server Context
 
 use std::{
-    net::IpAddr,
+    io,
+    net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -14,9 +15,12 @@ use tokio::runtime::Handle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
-use crate::config::{Config, ConfigType, ServerConfig};
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
+use crate::{
+    config::{Config, ConfigType, ServerConfig},
+    relay::dns_resolver::resolve,
+};
 
 // Entries for server's bloom filter
 //
@@ -199,6 +203,11 @@ impl Context {
         self.server_state.dns_resolver()
     }
 
+    /// Perform a DNS resolution
+    pub async fn dns_resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+        resolve(self, host, port).await
+    }
+
     /// Check if the server is still in running state
     pub fn server_running(&self) -> bool {
         self.server_running.load(Ordering::Acquire)
@@ -207,11 +216,6 @@ impl Context {
     /// Stops the server, kills all detached running tasks
     pub fn set_server_stopped(&self) {
         self.server_running.store(false, Ordering::Release)
-    }
-
-    /// Check if IP is in forbidden list
-    pub fn check_forbidden_ip(&self, ip: &IpAddr) -> bool {
-        self.config.check_forbidden_ip(ip)
     }
 
     /// Check if nonce exist or not

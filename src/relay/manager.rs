@@ -124,8 +124,7 @@ impl ManagerDatagram {
         match *bind_addr {
             ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(create_udp_socket(saddr).await?)),
             ManagerAddr::DomainName(ref dname, port) => {
-                let (_, socket) =
-                    lookup_then!(context, dname, port, false, |saddr| { create_udp_socket(&saddr).await })?;
+                let (_, socket) = lookup_then!(context, dname, port, |saddr| { create_udp_socket(&saddr).await })?;
 
                 Ok(ManagerDatagram::UdpDatagram(socket))
             }
@@ -205,7 +204,7 @@ impl ManagerDatagram {
             ManagerDatagram::UdpDatagram(ref mut udp) => match *target {
                 ManagerAddr::SocketAddr(ref saddr) => udp.send_to(buf, saddr).await,
                 ManagerAddr::DomainName(ref dname, port) => {
-                    let (_, n) = lookup_then!(context, dname, port, false, |saddr| { udp.send_to(buf, saddr).await })?;
+                    let (_, n) = lookup_then!(context, dname, port, |saddr| { udp.send_to(buf, saddr).await })?;
                     Ok(n)
                 }
                 #[cfg(unix)]

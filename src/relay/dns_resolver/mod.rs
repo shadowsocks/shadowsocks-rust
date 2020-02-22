@@ -25,12 +25,10 @@ cfg_if! {
 /// Helper macro for resolving host and then process each addresses
 #[macro_export]
 macro_rules! lookup_then {
-    ($context:expr, $addr:expr, $port:expr, $check_forbidden:expr, |$resolved_addr:ident| $body:block) => {{
-        use crate::relay::dns_resolver::resolve;
-
+    ($context:expr, $addr:expr, $port:expr, |$resolved_addr:ident| $body:block) => {{
         let mut result = None;
 
-        for $resolved_addr in resolve($context, $addr, $port, $check_forbidden).await? {
+        for $resolved_addr in $context.dns_resolve($addr, $port).await? {
             match $body {
                 Ok(r) => {
                     result = Some(Ok(($resolved_addr, r)));
@@ -51,7 +49,7 @@ pub async fn resolve_bind_addr(context: &Context, addr: &ServerAddr) -> io::Resu
     match addr {
         ServerAddr::SocketAddr(ref a) => Ok(*a),
         ServerAddr::DomainName(ref dname, port) => {
-            let addrs = self::resolve(context, dname, *port, false).await?;
+            let addrs = self::resolve(context, dname, *port).await?;
             Ok(addrs[0])
         }
     }

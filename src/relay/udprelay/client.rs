@@ -65,7 +65,7 @@ impl ServerClient {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, port, false, |addr| {
+            ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, port, |addr| {
                 try_timeout(self.socket.send_to(&encrypt_buf[..], addr), Some(timeout)).await
             })
             .map(|(_, l)| l)?,

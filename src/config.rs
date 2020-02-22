@@ -42,7 +42,6 @@
 //! These defined server will be used with a load balancing algorithm.
 
 use std::{
-    collections::HashSet,
     convert::From,
     default::Default,
     error,
@@ -103,8 +102,6 @@ struct SSConfig {
     udp_timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    forbidden_ip: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -681,10 +678,6 @@ pub struct Config {
     pub local: Option<ClientConfig>,
     /// Destination address for tunnel
     pub forward: Option<Address>,
-    /// Ignored IPs
-    ///
-    /// Suggested list: `["127.0.0.1", "::1"]`
-    pub forbidden_ip: HashSet<IpAddr>,
     /// DNS configuration, uses system-wide DNS configuration by default
     ///
     /// Value could be a `IpAddr`, uses UDP DNS protocol with port `53`. For example: `8.8.8.8`
@@ -779,7 +772,6 @@ impl Config {
             server: Vec::new(),
             local: None,
             forward: None,
-            forbidden_ip: HashSet::new(),
             dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
@@ -935,20 +927,6 @@ impl Config {
             nconfig.manager_address = Some(manager);
         }
 
-        // Forbidden IPs
-        if let Some(forbidden_ip) = config.forbidden_ip {
-            for fi in forbidden_ip {
-                match fi.parse::<IpAddr>() {
-                    Ok(i) => {
-                        nconfig.forbidden_ip.insert(i);
-                    }
-                    Err(err) => {
-                        error!("Invalid forbidden_ip \"{}\", err: {}", fi, err);
-                    }
-                }
-            }
-        }
-
         // DNS
         nconfig.dns = config.dns;
 
@@ -1043,11 +1021,6 @@ impl Config {
             }
         }
         false
-    }
-
-    /// Check if IP is forbidden
-    pub fn check_forbidden_ip(&self, ip: &IpAddr) -> bool {
-        self.forbidden_ip.contains(ip)
     }
 
     /// Check if all required fields are already set
@@ -1181,14 +1154,6 @@ impl fmt::Display for Config {
 
         if self.no_delay {
             jconf.no_delay = Some(self.no_delay);
-        }
-
-        if !self.forbidden_ip.is_empty() {
-            let mut vfi = Vec::new();
-            for fi in &self.forbidden_ip {
-                vfi.push(fi.to_string());
-            }
-            jconf.forbidden_ip = Some(vfi);
         }
 
         if let Some(ref dns) = self.dns {

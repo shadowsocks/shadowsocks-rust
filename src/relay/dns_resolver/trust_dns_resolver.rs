@@ -5,7 +5,7 @@ use std::{
     net::SocketAddr,
 };
 
-use log::{debug, error, trace};
+use log::{error, trace};
 use tokio::{self, runtime::Handle};
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
@@ -79,37 +79,19 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
 }
 
 /// Perform a DNS resolution
-pub async fn resolve(context: &Context, addr: &str, port: u16, check_forbidden: bool) -> io::Result<Vec<SocketAddr>> {
+pub async fn resolve(context: &Context, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
     match context.dns_resolver() {
         Some(resolver) => match resolver.lookup_ip(addr).await {
-            Ok(lookup_result) => {
-                let mut vaddr = Vec::new();
-                for ip in lookup_result.iter() {
-                    if check_forbidden && context.check_forbidden_ip(&ip) {
-                        debug!("Resolved {} => {}, which is skipped by forbidden_ip", addr, ip);
-                        continue;
-                    }
-
-                    vaddr.push(SocketAddr::new(ip, port));
-                }
-
-                if vaddr.is_empty() {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("resolved {}:{}, but all IPs are filtered", addr, port),
-                    );
-                    Err(err)
-                } else {
-                    debug!("Resolved {}:{} => {:?}", addr, port, vaddr);
-                    Ok(vaddr)
-                }
-            }
+            Ok(lookup_result) => Ok(lookup_result.iter().map(|ip| SocketAddr::new(ip, port)).collect()),
             Err(err) => {
-                let err = Error::new(ErrorKind::Other, format!("dns resolve {}:{}, {}", addr, port, err));
+                let err = Error::new(
+                    ErrorKind::Other,
+                    format!("dns resolve \"{}:{}\" error: {}", addr, port, err),
+                );
                 Err(err)
             }
         },
         // Fallback to tokio's DNS resolver
-        None => tokio_resolve(context, addr, port, check_forbidden).await,
+        None => tokio_resolve(context, addr, port).await,
     }
 }

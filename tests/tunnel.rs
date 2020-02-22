@@ -1,4 +1,3 @@
-use env_logger;
 use tokio::{
     self,
     net::{TcpStream, UdpSocket},
