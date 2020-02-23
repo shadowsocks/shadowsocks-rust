@@ -3,6 +3,7 @@
 //! This is for advance controlling server behaviors in both local and proxy servers.
 
 use std::{
+    cmp::Ordering,
     fmt,
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
@@ -38,7 +39,11 @@ impl fmt::Debug for Rules {
 
 impl Rules {
     /// Create a new rule
-    fn new(ip: Vec<IpNetwork>, rule: RegexSet) -> Rules {
+    fn new(mut ip: Vec<IpNetwork>, rule: RegexSet) -> Rules {
+        // Sort networks for binary search
+        // TODO: Merge duplicated subnets
+        ip.sort_unstable();
+
         Rules { ip, rule }
     }
 
@@ -53,15 +58,17 @@ impl Rules {
     /// Check if the specified client matches these rules
     fn check_socket_addr_matched(&self, addr: &SocketAddr) -> bool {
         let ip = addr.ip();
+        let ip_network = IpNetwork::from(ip); // Create a network which only contains itself
 
-        // FIXME: This is very inefficient.
-        // Could be replaced by something like binary search or segment tree
-        for network in &self.ip {
-            if network.contains(ip) {
-                return true;
-            }
-        }
-        false
+        self.ip
+            .binary_search_by(|network| {
+                if network.contains(ip) {
+                    Ordering::Equal
+                } else {
+                    network.cmp(&ip_network)
+                }
+            })
+            .is_ok()
     }
 }
 

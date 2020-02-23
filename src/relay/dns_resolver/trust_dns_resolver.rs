@@ -33,7 +33,10 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
                     Ok(o) => o,
                     Err(err) => {
                         error!("failed to initialize DNS resolver with system-config, error: {}", err);
-                        return Err(err);
+
+                        // From::from is required because on error type is different on Windows
+                        #[allow(clippy::identity_conversion)]
+                        return Err(From::from(err));
                     }
                 };
 
