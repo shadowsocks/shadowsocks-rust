@@ -128,7 +128,7 @@ impl ServerState {
 
     #[cfg(not(feature = "trust-dns"))]
     pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
-        Arc::new(ServerState { dns_resolver: None })
+        Arc::new(ServerState { })
     }
 
     /// Get the global shared resolver
