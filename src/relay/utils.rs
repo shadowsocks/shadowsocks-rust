@@ -18,7 +18,7 @@ where
     .map_err(From::from)
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os="android")))]
 pub fn set_nofile(nofile: u64) -> io::Result<()> {
     unsafe {
         // set both soft and hard limit
@@ -35,7 +35,7 @@ pub fn set_nofile(nofile: u64) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os="android"))]
 pub fn set_nofile(_nofile: u64) -> io::Result<()> {
     // set_rlimit only works on *nix systems
     //
