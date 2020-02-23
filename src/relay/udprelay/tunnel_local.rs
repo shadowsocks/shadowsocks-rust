@@ -58,10 +58,11 @@ impl UdpAssociation {
     ) -> io::Result<UdpAssociation> {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = create_udp_socket(&local_addr).await?;
 
-        let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
-        debug!("created UDP Association for {} from {}", src_addr, local_addr);
+        let remote_udp = create_udp_socket(&local_addr).await?;
+        let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
+
+        debug!("created UDP association for {} from {}", src_addr, remote_bind_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -73,7 +74,7 @@ impl UdpAssociation {
         let close_flag = Arc::new(UdpAssociationWatcher(watcher_tx));
 
         // Splits socket into sender and receiver
-        let (mut receiver, mut sender) = remote_udp.split();
+        let (mut remote_receiver, mut remote_sender) = remote_udp.split();
 
         let timeout = server.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
@@ -84,46 +85,57 @@ impl UdpAssociation {
             tokio::spawn(async move {
                 let svr_cfg = server.server_config();
                 let context = server.context();
+                let dst_addr = server.config().forward.as_ref().expect("forward address");
 
                 while let Some(pkt) = rx.recv().await {
                     // pkt is already a raw packet, so just send it
-                    if let Err(err) =
-                        UdpAssociation::relay_l2r(context, &src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
-                    {
-                        error!("failed to send packet {} -> ..., error: {}", src_addr, err);
+                    debug!(
+                        "UDP TUNNEL {} -> {}, payload length {} bytes",
+                        src_addr,
+                        dst_addr,
+                        pkt.len()
+                    );
+
+                    let res =
+                        Self::relay_l2r_proxied(context, &mut remote_sender, dst_addr, &pkt, timeout, svr_cfg).await;
+
+                    if let Err(err) = res {
+                        error!("failed to send packet {} -> {}, error: {}", src_addr, dst_addr, err);
 
                         // FIXME: Ignore? Or how to deal with it?
                     }
                 }
 
-                debug!("UDP TUNNEL {} -> .. finished", src_addr);
+                debug!("UDP TUNNEL {} -> {} finished", src_addr, dst_addr);
             });
         }
 
         // local <- remote
         tokio::spawn(async move {
-            let svr_cfg = server.server_config();
-            let context = server.context();
+            let dst_addr = server.config().forward.as_ref().expect("forward address");
 
-            let transfer_fut = async move {
+            let transfer_fut = async {
+                let svr_cfg = server.server_config();
+                let context = server.context();
+
                 loop {
                     // Read and send back to source
-                    match UdpAssociation::relay_r2l(context, src_addr, &mut receiver, &mut response_tx, svr_cfg).await {
-                        Ok(..) => {}
-                        Err(err) => {
-                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
+                    let res =
+                        Self::relay_r2l_proxied(context, &src_addr, &mut remote_receiver, &mut response_tx, svr_cfg)
+                            .await;
 
-                            // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
-                            // break;
-                        }
+                    if let Err(err) = res {
+                        error!("failed to receive packet, {} <- {}, error: {}", src_addr, dst_addr, err);
+
+                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
+                        // break;
                     }
                 }
             };
 
             // Resolved only if watcher_rx resolved
             let _ = future::select(transfer_fut.boxed(), watcher_rx.boxed()).await;
-
-            debug!("UDP TUNNEL {} <- .. finished", src_addr);
+            debug!("UDP TUNNEL {} <- {} finished", src_addr, dst_addr);
         });
 
         Ok(UdpAssociation {
@@ -133,22 +145,18 @@ impl UdpAssociation {
     }
 
     /// Relay packets from local to remote
-    async fn relay_l2r(
+    async fn relay_l2r_proxied(
         context: &Context,
-        src: &SocketAddr,
         remote_udp: &mut SendHalf,
+        addr: &Address,
         payload: &[u8],
         timeout: Duration,
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
-        let addr = context.config().forward.as_ref().unwrap();
-
-        debug!("UDP TUNNEL {} -> {}, payload length {} bytes", src, addr, payload.len());
-
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
         let mut send_buf = Vec::new();
         addr.write_to_buf(&mut send_buf);
-        send_buf.extend_from_slice(payload);
+        send_buf.extend_from_slice(&payload);
 
         let mut encrypt_buf = BytesMut::new();
         encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
@@ -157,10 +165,12 @@ impl UdpAssociation {
             ServerAddr::SocketAddr(ref remote_addr) => {
                 try_timeout(remote_udp.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
             }
-            ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, *port, |addr| {
-                try_timeout(remote_udp.send_to(&encrypt_buf[..], &addr), Some(timeout)).await
-            })
-            .map(|(_, l)| l)?,
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context, dname, *port, |addr| {
+                    try_timeout(remote_udp.send_to(&encrypt_buf[..], &addr), Some(timeout)).await
+                })?
+                .1
+            }
         };
 
         assert_eq!(encrypt_buf.len(), send_len);
@@ -168,10 +178,10 @@ impl UdpAssociation {
         Ok(())
     }
 
-    /// Relay packets from remote to local
-    async fn relay_r2l(
+    /// Relay packets from remote to local (proxied)
+    async fn relay_r2l_proxied(
         context: &Context,
-        src_addr: SocketAddr,
+        src_addr: &SocketAddr,
         remote_udp: &mut RecvHalf,
         response_tx: &mut mpsc::Sender<(SocketAddr, Vec<u8>)>,
         svr_cfg: &ServerConfig,
@@ -206,7 +216,7 @@ impl UdpAssociation {
         );
 
         // Send back to src_addr
-        if let Err(err) = response_tx.send((src_addr, payload)).await {
+        if let Err(err) = response_tx.send((*src_addr, payload)).await {
             error!("failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
@@ -221,7 +231,7 @@ impl UdpAssociation {
     async fn send(&mut self, pkt: Vec<u8>) {
         if let Err(..) = self.tx.send(pkt).await {
             // SHOULDn't HAPPEN
-            unreachable!("UDP Association local -> remote Queue closed unexpectly");
+            unreachable!("UDP association local -> remote Queue closed unexpectly");
         }
     }
 }

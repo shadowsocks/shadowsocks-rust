@@ -30,7 +30,8 @@ async fn establish_client_tcp_tunnel<'a>(
 ) -> io::Result<()> {
     let svr_cfg = server.server_config();
 
-    let svr_s = ProxyStream::connect(server.clone_context(), svr_cfg, addr).await?;
+    // NOTE: TUNNEL doesn't need to check ACL, just forward everything to proxy server
+    let svr_s = ProxyStream::connect_proxied(server.clone_context(), svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     let (mut r, mut w) = s.split();
@@ -103,10 +104,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let actual_local_addr = listener.local_addr().expect("determine port bound to");
 
     let servers = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
+
+    let forward_addr = context.config().forward.as_ref().expect("`forward` address in config");
     info!(
         "shadowsocks TCP tunnel listening on {}, forward to {}",
-        actual_local_addr,
-        context.config().forward.as_ref().expect("`forward` address in config")
+        actual_local_addr, forward_addr
     );
 
     loop {
