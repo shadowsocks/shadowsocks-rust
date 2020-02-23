@@ -60,7 +60,7 @@ where
     pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
         // Set `TCP_NODELAY` for quick handshaking
         if let Err(err) = stream.set_nodelay(true) {
-            error!("Failed to set TCP_NODELAY on socket, error: {:?}", err);
+            error!("failed to set TCP_NODELAY on socket, error: {:?}", err);
         }
 
         Connection {
@@ -177,7 +177,7 @@ where
                     if !self.nodelay {
                         // Reset `TCP_NODELAY`
                         if let Err(err) = self.stream.get_ref().set_nodelay(false) {
-                            error!("Failed to reset TCP_NODELAY on socket, error: {:?}", err);
+                            error!("failed to reset TCP_NODELAY on socket, error: {:?}", err);
                         }
                     }
                 }

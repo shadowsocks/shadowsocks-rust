@@ -361,7 +361,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                     PingBalancer::<S>::check_update_score(&stat, server_type).await;
 
                     trace!(
-                        "Started latency probing task for server {}, initial score {}",
+                        "started latency probing task for server {}, initial score {}",
                         stat.server_config().addr(),
                         stat.score().await,
                     );
@@ -374,7 +374,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                     }
 
                     debug!(
-                        "Probing task for remote {} server {} exited",
+                        "probing task for remote {} server {} exited",
                         server_type,
                         stat.server_config().addr()
                     );
@@ -389,7 +389,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         if check_required {
             // Wait all tasks start (run at least one round)
             check_barrier.wait().await;
-            trace!("All latency probing tasks are started, creating best server choosing task");
+            trace!("all latency probing tasks are started, creating best server choosing task");
 
             // Reinitialize a Barrier for waiting choosing task
             let check_barrier = Arc::new(Barrier::new(2));
@@ -404,7 +404,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                     best.recalculate_best_server().await;
 
                     trace!(
-                        "Started best server choosing task, chosen server index {}",
+                        "started best server choosing task, chosen server index {}",
                         best.best_server_idx()
                     );
 
@@ -413,7 +413,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
                     while context.server_running() {
                         if let Some((old_idx, new_idx)) = best.recalculate_best_server().await {
                             info!(
-                                "Switched {} server from {} to {}",
+                                "switched {} server from {} to {}",
                                 server_type,
                                 context.server_config(old_idx).addr(),
                                 context.server_config(new_idx).addr()
@@ -439,7 +439,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         };
 
         debug!(
-            "Updated remote {} server {} (score: {})",
+            "updated remote {} server {} (score: {})",
             server_type,
             stat.server_config().addr(),
             score
@@ -501,7 +501,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             Ok(Ok(..)) => {
                 // Got the result ... record its time
                 debug!(
-                    "Checked remote {} server {} latency with {} ms",
+                    "checked remote {} server {} latency with {} ms",
                     server_type,
                     stat.server_config().addr(),
                     elapsed
@@ -510,7 +510,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             }
             Ok(Err(err)) => {
                 debug!(
-                    "Failed to check {} server {}, error: {}",
+                    "failed to check {} server {}, error: {}",
                     server_type,
                     stat.server_config().addr(),
                     err
@@ -522,7 +522,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             Err(..) => {
                 // Timeout
                 debug!(
-                    "Checked remote {} server {} latency timeout, elapsed {} ms",
+                    "checked remote {} server {} latency timeout, elapsed {} ms",
                     server_type,
                     stat.server_config().addr(),
                     elapsed

@@ -60,8 +60,8 @@ impl UdpAssociation {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         let remote_udp = create_udp_socket(&local_addr).await?;
 
-        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
-        debug!("Created UDP Association for {} from {}", src_addr, local_addr);
+        let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
+        debug!("created UDP Association for {} from {}", src_addr, local_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -228,24 +228,20 @@ impl UdpAssociation {
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let l = create_udp_socket(&bind_addr).await?;
-    let local_addr = l.local_addr().expect("Could not determine port bound to");
+    let local_addr = l.local_addr().expect("could not determine port bound to");
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
 
     let (mut r, mut w) = l.split();
 
     info!(
-        "ShadowSocks UDP Tunnel listening on {}, forward to {}",
+        "shadowsocks UDP tunnel listening on {}, forward to {}",
         local_addr,
-        context
-            .config()
-            .forward
-            .as_ref()
-            .expect("Missing `forward` address in config")
+        context.config().forward.as_ref().expect("`forward` address in config")
     );
 
     // NOTE: Associations are only eliminated by expire time
@@ -330,7 +326,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     vc.insert(
                         UdpAssociation::associate(server, src, tx.clone())
                             .await
-                            .expect("Failed to create udp association"),
+                            .expect("create udp association"),
                     )
                 }
             };

@@ -41,21 +41,22 @@ pub(crate) async fn run_with(
     flow_stat: SharedMultiServerFlowStatistic,
     server_stat: SharedServerState,
 ) -> io::Result<()> {
-    trace!("RUN Server {:?}", config);
+    trace!("initializing server with {:?}", config);
+
     assert!(config.config_type.is_server());
 
     if let Some(nofile) = config.nofile {
-        debug!("Setting RLIMIT_NOFILE to {}", nofile);
+        debug!("setting RLIMIT_NOFILE to {}", nofile);
         if let Err(err) = set_nofile(nofile) {
             match err.kind() {
                 ErrorKind::PermissionDenied => {
-                    warn!("Insufficient permission to change `nofile`, try to restart as root user");
+                    warn!("insufficient permission to change `nofile`, try to restart as root user");
                 }
                 ErrorKind::InvalidInput => {
-                    warn!("Invalid `nofile` value {}, decrease it and try again", nofile);
+                    warn!("invalid `nofile` value {}, decrease it and try again", nofile);
                 }
                 _ => {
-                    error!("Failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
+                    error!("failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
                 }
             }
             return Err(err);
@@ -115,7 +116,7 @@ pub(crate) async fn run_with(
                         match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
                             Ok(..) => {
                                 trace!(
-                                    "Sent {} for server \"{}\" to manger \"{}\"",
+                                    "sent {} for server \"{}\" to manger \"{}\"",
                                     stat,
                                     svr_cfg.addr(),
                                     manager_addr
@@ -123,7 +124,7 @@ pub(crate) async fn run_with(
                             }
                             Err(err) => {
                                 error!(
-                                    "Failed to send {} for server \"{}\" to manager \"{}\", error: {}",
+                                    "failed to send {} for server \"{}\" to manager \"{}\", error: {}",
                                     stat,
                                     svr_cfg.addr(),
                                     manager_addr,

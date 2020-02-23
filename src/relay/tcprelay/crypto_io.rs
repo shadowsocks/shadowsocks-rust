@@ -74,7 +74,7 @@ impl<S> CryptoStream<S> {
                     }
                     break iv;
                 };
-                trace!("Generated Stream cipher IV {:?}", local_iv);
+                trace!("generated Stream cipher IV {:?}", local_iv);
                 local_iv
             }
             CipherCategory::Aead => {
@@ -86,7 +86,7 @@ impl<S> CryptoStream<S> {
                     }
                     break salt;
                 };
-                trace!("Generated AEAD cipher salt {:?}", local_salt);
+                trace!("generated AEAD cipher salt {:?}", local_salt);
                 local_salt
             }
         };
@@ -125,7 +125,7 @@ where
             if ctx.check_nonce_and_set(buf) {
                 use std::io::{Error, ErrorKind};
 
-                debug!("Detected repeated iv/salt {:?}", ByteStr::new(buf));
+                debug!("detected repeated iv/salt {:?}", ByteStr::new(buf));
 
                 let err = Error::new(ErrorKind::Other, "detected repeated iv/salt");
                 return Poll::Ready(Err(err));
@@ -133,11 +133,11 @@ where
 
             let dec = match method.category() {
                 CipherCategory::Stream => {
-                    trace!("Got Stream cipher IV {:?}", ByteStr::new(&buf));
+                    trace!("got Stream cipher IV {:?}", ByteStr::new(&buf));
                     DecryptedReader::Stream(StreamDecryptedReader::new(method, key, &buf))
                 }
                 CipherCategory::Aead => {
-                    trace!("Got AEAD cipher salt {:?}", ByteStr::new(&buf));
+                    trace!("got AEAD cipher salt {:?}", ByteStr::new(&buf));
                     DecryptedReader::Aead(AeadDecryptedReader::new(method, key, &buf))
                 }
             };

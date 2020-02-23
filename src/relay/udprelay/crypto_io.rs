@@ -129,7 +129,7 @@ fn decrypt_payload_stream(context: &Context, t: CipherType, key: &[u8], payload:
     if context.check_nonce_and_set(iv) {
         use std::io::{Error, ErrorKind};
 
-        debug!("Detected repeated iv {:?}", ByteStr::new(iv));
+        debug!("detected repeated iv {:?}", ByteStr::new(iv));
 
         let err = Error::new(ErrorKind::Other, "detected repeated iv");
         return Err(err);
@@ -160,7 +160,7 @@ fn decrypt_payload_aead(context: &Context, t: CipherType, key: &[u8], payload: &
     if context.check_nonce_and_set(salt) {
         use std::io::{Error, ErrorKind};
 
-        debug!("Detected repeated salt {:?}", ByteStr::new(salt));
+        debug!("detected repeated salt {:?}", ByteStr::new(salt));
 
         let err = Error::new(ErrorKind::Other, "detected repeated salt");
         return Err(err);

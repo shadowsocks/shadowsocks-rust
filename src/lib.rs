@@ -95,6 +95,7 @@ pub use self::{
     },
 };
 
+pub mod acl;
 pub mod config;
 mod context;
 pub mod crypto;

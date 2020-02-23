@@ -21,7 +21,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
             if let Some(conf) = dns {
                 use trust_dns_resolver::config::ResolverOpts;
                 trace!(
-                    "Initializing DNS resolver with config {:?} opts {:?}",
+                    "initializing DNS resolver with config {:?} opts {:?}",
                     conf,
                     ResolverOpts::default()
                 );
@@ -32,13 +32,13 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
                 let (config, opts) = match read_system_conf() {
                     Ok(o) => o,
                     Err(err) => {
-                        error!("Failed to initialize DNS resolver with system-config, error: {}", err);
+                        error!("failed to initialize DNS resolver with system-config, error: {}", err);
                         return Err(err);
                     }
                 };
 
                 trace!(
-                    "Initializing DNS resolver with system-config {:?} opts {:?}",
+                    "initializing DNS resolver with system-config {:?} opts {:?}",
                     config,
                     opts
                 );
@@ -55,7 +55,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
 
             if let Some(conf) = dns {
                 trace!(
-                    "Initializing DNS resolver with config {:?} opts {:?}",
+                    "initializing DNS resolver with config {:?} opts {:?}",
                     conf,
                     ResolverOpts::default()
                 );
@@ -63,7 +63,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
             } else {
                 // Get a new resolver with the google nameservers as the upstream recursive resolvers
                 trace!(
-                    "Initializing DNS resolver with google-config {:?} opts {:?}",
+                    "initializing DNS resolver with google-config {:?} opts {:?}",
                     ResolverConfig::google(),
                     ResolverOpts::default()
                 );
@@ -73,8 +73,10 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
     }
     .await
     .map_err(|err| {
-        error!("Failed to create trust-dns DNS Resolver, {}", err);
-        Error::new(ErrorKind::Other, "failed to create trust-dns DNS resolver")
+        Error::new(
+            ErrorKind::Other,
+            format!("failed to create trust-dns DNS resolver, error: {}", err),
+        )
     })
 }
 
@@ -86,7 +88,7 @@ pub async fn resolve(context: &Context, addr: &str, port: u16) -> io::Result<Vec
             Err(err) => {
                 let err = Error::new(
                     ErrorKind::Other,
-                    format!("dns resolve \"{}:{}\" error: {}", addr, port, err),
+                    format!("dns resolve {}:{} error: {}", addr, port, err),
                 );
                 Err(err)
             }

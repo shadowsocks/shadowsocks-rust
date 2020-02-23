@@ -19,7 +19,7 @@ use trust_dns_resolver::TokioAsyncResolver;
 use crate::relay::dns_resolver::create_resolver;
 use crate::{
     config::{Config, ConfigType, ServerConfig},
-    relay::dns_resolver::resolve,
+    relay::{dns_resolver::resolve, socks5::Address},
 };
 
 // Entries for server's bloom filter
@@ -230,5 +230,29 @@ impl Context {
 
         let mut ppbloom = self.nonce_ppbloom.lock();
         ppbloom.check_and_set(nonce)
+    }
+
+    /// Check client ACL
+    pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
+        match self.config.acl {
+            None => false,
+            Some(ref a) => a.check_client_blocked(addr),
+        }
+    }
+
+    /// Check outbound address ACL
+    pub fn check_outbound_blocked(&self, addr: &Address) -> bool {
+        match self.config.acl {
+            None => false,
+            Some(ref a) => a.check_outbound_blocked(addr),
+        }
+    }
+
+    /// Check resolved outbound address ACL
+    pub fn check_resolved_outbound_blocked(&self, addr: &SocketAddr) -> bool {
+        match self.config.acl {
+            None => false,
+            Some(ref a) => a.check_resolved_outbound_blocked(addr),
+        }
     }
 }

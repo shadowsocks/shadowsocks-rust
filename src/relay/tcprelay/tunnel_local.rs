@@ -31,12 +31,12 @@ async fn establish_client_tcp_tunnel<'a>(
 
     let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
         Ok(svr_s) => {
-            trace!("Proxy server connected, {:?}", svr_cfg);
+            trace!("proxy server connected, {:?}", svr_cfg);
             svr_s
         }
         Err(err) => {
             // Just close the connection.
-            error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
+            error!("failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
             return Err(err);
         }
     };
@@ -110,12 +110,12 @@ async fn handle_tunnel_client(server: &SharedPlainServerStatistic, s: TcpStream)
     let svr_cfg = server.server_config();
 
     if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
-        error!("Failed to set keep alive: {:?}", err);
+        error!("failed to set keep alive: {:?}", err);
     }
 
     if server.config().no_delay {
         if let Err(err) = s.set_nodelay(true) {
-            error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
+            error!("failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
         }
     }
 
@@ -130,35 +130,31 @@ async fn handle_tunnel_client(server: &SharedPlainServerStatistic, s: TcpStream)
 pub async fn run(context: SharedContext) -> io::Result<()> {
     assert!(
         context.config().mode.enable_tcp(),
-        "You must enable TCP relay for tunneling"
+        "TCP relay must be enabled for TUNNEL"
     );
 
-    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let mut listener = TcpListener::bind(&bind_addr)
         .await
-        .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
+        .unwrap_or_else(|err| panic!("failed to listen on {}, {}", local_addr, err));
 
-    let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
+    let actual_local_addr = listener.local_addr().expect("determine port bound to");
 
     let servers = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
     info!(
-        "ShadowSocks TCP Tunnel Listening on {}, forward to {}",
+        "shadowsocks TCP tunnel listening on {}, forward to {}",
         actual_local_addr,
-        context
-            .config()
-            .forward
-            .as_ref()
-            .expect("Missing `forward` address in config")
+        context.config().forward.as_ref().expect("`forward` address in config")
     );
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
         let server = servers.pick_server();
 
-        trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server.server_config());
+        trace!("got connection, addr: {}", peer_addr);
+        trace!("picked proxy server: {:?}", server.server_config());
 
         tokio::spawn(async move {
             if let Err(err) = handle_tunnel_client(&server, socket).await {

@@ -86,7 +86,7 @@ impl ServerInstance {
                 let server = server::run_with(config, flow_stat, server_state);
 
                 let _ = future::select(server.boxed(), watcher_rx.boxed()).await;
-                debug!("Server listening on port {} exited", server_port);
+                debug!("server listening on port {} exited", server_port);
             });
         }
 
@@ -95,7 +95,7 @@ impl ServerInstance {
             .expect("port not existed in multi-server flow statistic")
             .clone();
 
-        trace!("Created server listening on port {}", server_port);
+        trace!("created server listening on port {}", server_port);
 
         Ok(ServerInstance {
             config,
@@ -275,7 +275,7 @@ impl ManagerService {
 
             if src_addr.is_unnamed() {
                 trace!(
-                    "Received a packet ({} bytes) from an unnamed unix-socket client, \
+                    "received a packet ({} bytes) from an unnamed unix-socket client, \
                      unsound because we are unable to send response back to it",
                     recv_len
                 );
@@ -285,14 +285,14 @@ impl ManagerService {
             let n = match self.socket.send_to(&resp_pkt, &src_addr).await {
                 Ok(n) => n,
                 Err(err) => {
-                    error!("Response send_to failed, destination: {:?}, error: {}", src_addr, err);
+                    error!("response send_to failed, destination: {:?}, error: {}", src_addr, err);
                     continue;
                 }
             };
 
             if n != resp_pkt.len() {
                 error!(
-                    "Response packet truncated, packet: {}, sent: {}, destination: {:?}",
+                    "response packet truncated, packet: {}, sent: {}, destination: {:?}",
                     resp_pkt.len(),
                     n,
                     src_addr
@@ -308,7 +308,7 @@ impl ManagerService {
         let pkt = match str::from_utf8(pkt) {
             Ok(p) => p,
             Err(..) => {
-                error!("Received non-UTF8 encoded packet: {:?}", ByteStr::new(pkt));
+                error!("received non-UTF8 encoded packet: {:?}", ByteStr::new(pkt));
 
                 return Some(b"invalid encoding".to_vec());
             }
@@ -325,7 +325,7 @@ impl ManagerService {
         match self.dispatch_command(action, param).await {
             Ok(v) => v,
             Err(err) => {
-                error!("Failed to handle action \"{}\", error: {}", action, err);
+                error!("failed to handle action \"{}\", error: {}", action, err);
 
                 Some(Vec::from(err.to_string()))
             }
@@ -483,7 +483,7 @@ impl ManagerService {
                 buf += ",";
             }
 
-            buf += &serde_json::to_string(&p).expect("Failed to convert server config into JSON");
+            buf += &serde_json::to_string(&p).expect("convert server config into JSON");
         }
         buf += "]\n";
 
@@ -527,17 +527,17 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     assert!(config.config_type.is_manager());
 
     if let Some(nofile) = config.nofile {
-        debug!("Setting RLIMIT_NOFILE to {}", nofile);
+        debug!("setting RLIMIT_NOFILE to {}", nofile);
         if let Err(err) = set_nofile(nofile) {
             match err.kind() {
                 ErrorKind::PermissionDenied => {
-                    warn!("Insufficient permission to change RLIMIT_NOFILE, try to restart as root user");
+                    warn!("insufficient permission to change RLIMIT_NOFILE, try to restart as root user");
                 }
                 ErrorKind::InvalidInput => {
-                    warn!("Invalid `nofile` value {}, decrease it and try again", nofile);
+                    warn!("invalid `nofile` value {}, decrease it and try again", nofile);
                 }
                 _ => {
-                    error!("Failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
+                    error!("failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
                 }
             }
             return Err(err);

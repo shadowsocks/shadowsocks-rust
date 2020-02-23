@@ -68,6 +68,7 @@ use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
 
 use crate::{
+    acl::AccessControl,
     context::Context,
     crypto::cipher::CipherType,
     plugin::PluginConfig,
@@ -704,6 +705,8 @@ pub struct Config {
     pub nofile: Option<u64>,
     /// Timeout for TCP connections, could be replaced by server*.timeout
     pub timeout: Option<Duration>,
+    /// ACL configuration
+    pub acl: Option<AccessControl>,
 }
 
 /// Configuration parsing error kind
@@ -781,6 +784,7 @@ impl Config {
             udp_timeout: None,
             nofile: None,
             timeout: None,
+            acl: None,
         }
     }
 

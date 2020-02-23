@@ -66,7 +66,7 @@ impl Plugins {
                 let svr_addr = match start_plugin(c, svr.addr(), &local_addr, mode) {
                     Err(err) => {
                         error!(
-                            "Failed to start plugin \"{}\" for server {}, err: {}",
+                            "failed to start plugin \"{}\" for server {}, err: {}",
                             c.plugin,
                             svr.addr(),
                             err
@@ -83,8 +83,8 @@ impl Plugins {
                 };
 
                 match mode {
-                    PluginMode::Client => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, local_addr, svr.addr()),
-                    PluginMode::Server => info!("Started plugin \"{}\" on {} <-> {}", c.plugin, svr.addr(), local_addr),
+                    PluginMode::Client => info!("started plugin \"{}\" on {} <-> {}", c.plugin, local_addr, svr.addr()),
+                    PluginMode::Server => info!("started plugin \"{}\" on {} <-> {}", c.plugin, svr.addr(), local_addr),
                 }
 
                 svr_addr_opt = Some(svr_addr); // Fuck borrow checker
@@ -96,7 +96,7 @@ impl Plugins {
         }
 
         if plugins.is_empty() {
-            panic!("Didn't find any plugins to start");
+            panic!("didn't find any plugins to start");
         }
 
         Ok(Plugins { plugins })
@@ -112,11 +112,11 @@ impl Plugins {
 
         match self.plugins.into_future().await {
             (Some(Ok(first_plugin_exit_status)), _) => {
-                let msg = format!("Plugin exited unexpectedly with {}", first_plugin_exit_status);
+                let msg = format!("plugin exited unexpectedly with {}", first_plugin_exit_status);
                 Err(Error::new(io::ErrorKind::Other, msg))
             }
             (Some(Err(first_plugin_error)), _) => {
-                error!("Error while waiting for plugin subprocess: {}", first_plugin_error);
+                error!("error while waiting for plugin subprocess: {}", first_plugin_error);
                 Err(first_plugin_error)
             }
             _ => unreachable!(),
@@ -137,7 +137,7 @@ impl Plugins {
             if let Some(ref saddr) = svr.plugin_addr() {
                 let addr = match *saddr {
                     ServerAddr::SocketAddr(a) => a,
-                    ServerAddr::DomainName(..) => unreachable!("Impossible, plugin_addr shouldn't be domain name"),
+                    ServerAddr::DomainName(..) => unreachable!("impossible, plugin_addr shouldn't be domain name"),
                 };
 
                 v.push(async move {
@@ -145,7 +145,7 @@ impl Plugins {
                     for r in 0..10 {
                         if let Ok(..) = TcpStream::connect(&addr).await {
                             debug!(
-                                "Plugin \"{}\" for {} listening on {} is started",
+                                "plugin \"{}\" for {} listening on {} is started",
                                 svr.plugin().as_ref().unwrap().plugin,
                                 svr.addr(),
                                 addr
@@ -155,7 +155,7 @@ impl Plugins {
                         }
 
                         trace!(
-                            "Plugin \"{}\" for {} listening on {} isn't started yet, tried {} times",
+                            "plugin \"{}\" for {} listening on {} isn't started yet, tried {} times",
                             svr.plugin().as_ref().unwrap().plugin,
                             svr.addr(),
                             addr,

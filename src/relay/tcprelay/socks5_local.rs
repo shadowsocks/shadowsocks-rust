@@ -39,20 +39,20 @@ async fn handle_socks5_connect<'a>(
 
     let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
         Ok(svr_s) => {
-            trace!("Proxy server connected, {:?}", svr_cfg);
+            trace!("proxy server connected, {:?}", svr_cfg);
 
             // Tell the client that we are ready
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(svr_s.local_addr()?));
             header.write_to(stream).await?;
 
-            trace!("Sent header: {:?}", header);
+            trace!("sent header: {:?}", header);
 
             svr_s
         }
         Err(err) => {
             use crate::relay::socks5::Reply;
 
-            error!("Failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
+            error!("failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
 
             // Report to global statistic
             server.report_failure().await;
@@ -79,7 +79,7 @@ async fn handle_socks5_connect<'a>(
     // Reset `TCP_NODELAY` after Socks5 handshake
     if !context.config().no_delay {
         if let Err(err) = stream.set_nodelay(false) {
-            error!("Failed to reset TCP_NODELAY on socket, error: {:?}", err);
+            error!("failed to reset TCP_NODELAY on socket, error: {:?}", err);
         }
     }
 
@@ -154,12 +154,12 @@ async fn handle_socks5_client(
     let svr_cfg = server.server_config();
 
     if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
-        error!("Failed to set keep alive: {:?}", err);
+        error!("failed to set keep alive: {:?}", err);
     }
 
     // Enable TCP_NODELAY for quick handshaking
     if let Err(err) = s.set_nodelay(true) {
-        error!("Failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
+        error!("failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
     }
 
     let client_addr = s.peer_addr()?;
@@ -167,28 +167,24 @@ async fn handle_socks5_client(
     let handshake_req = HandshakeRequest::read_from(&mut s).await?;
 
     // Socks5 handshakes
-    trace!("Socks5 {:?}", handshake_req);
+    trace!("socks5 {:?}", handshake_req);
 
-    let (handshake_resp, res) = if !handshake_req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
+    if !handshake_req.methods.contains(&socks5::SOCKS5_AUTH_METHOD_NONE) {
+        use std::io::Error;
+
         let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
-        warn!("Currently shadowsocks-rust does not support authentication");
-        (
-            resp,
-            Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Currently shadowsocks-rust does not support authentication",
-            )),
-        )
+        resp.write_to(&mut s).await?;
+
+        return Err(Error::new(
+            ErrorKind::Other,
+            "currently shadowsocks-rust does not support authentication",
+        ));
     } else {
         // Reply to client
         let resp = HandshakeResponse::new(socks5::SOCKS5_AUTH_METHOD_NONE);
         trace!("Reply handshake {:?}", resp);
-        (resp, Ok(()))
-    };
-
-    handshake_resp.write_to(&mut s).await?;
-
-    res?;
+        resp.write_to(&mut s).await?;
+    }
 
     // Fetch headers
     let header = match TcpRequestHeader::read_from(&mut s).await {
@@ -255,14 +251,14 @@ async fn handle_socks5_client(
 
 /// Starts a TCP local server with Socks5 proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let mut listener = TcpListener::bind(&bind_addr)
         .await
-        .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
+        .unwrap_or_else(|err| panic!("failed to listen on {}, {}", local_addr, err));
 
-    let actual_local_addr = listener.local_addr().expect("Could not determine port bound to");
+    let actual_local_addr = listener.local_addr().expect("determine port bound to");
 
     let udp_conf = UdpConfig {
         enable_udp: context.config().mode.enable_udp(),
@@ -271,14 +267,14 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let servers = PlainPingBalancer::new(context, ServerType::Tcp).await;
 
-    info!("ShadowSocks TCP Listening on {}", actual_local_addr);
+    info!("shadowsocks TCP listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
         let server = servers.pick_server();
 
-        trace!("Got connection, addr: {}", peer_addr);
-        trace!("Picked proxy server: {:?}", server.server_config());
+        trace!("got connection, addr: {}", peer_addr);
+        trace!("picked proxy server: {:?}", server.server_config());
 
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {

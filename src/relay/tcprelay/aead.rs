@@ -255,7 +255,7 @@ impl EncryptedWriter {
     {
         assert!(
             data.len() <= MAX_PACKET_SIZE,
-            "Buffer size too large, AEAD encryption protocol requires buffer to be smaller than 0x3FFF"
+            "buffer size too large, AEAD encryption protocol requires buffer to be smaller than 0x3FFF"
         );
 
         loop {

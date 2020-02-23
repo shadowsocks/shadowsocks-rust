@@ -35,7 +35,7 @@ async fn connect_proxy_server_internal(
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
-            debug!("Connected proxy {} ({})", orig_svr_addr, addr);
+            debug!("connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
@@ -44,7 +44,7 @@ async fn connect_proxy_server_internal(
                     Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         debug!(
-                            "Failed to connect proxy {} ({}:{} ({})) try another (err: {})",
+                            "failed to connect proxy {} ({}:{} ({})) try another (err: {})",
                             orig_svr_addr, domain, port, addr, e
                         );
                         Err(e)
@@ -54,12 +54,12 @@ async fn connect_proxy_server_internal(
 
             match result {
                 Ok((addr, s)) => {
-                    debug!("Connected proxy {} ({}:{} ({}))", orig_svr_addr, domain, port, addr);
+                    debug!("connected proxy {} ({}:{} ({}))", orig_svr_addr, domain, port, addr);
                     Ok(s)
                 }
                 Err(err) => {
                     error!(
-                        "Failed to connect proxy {} ({}:{}), {}",
+                        "failed to connect proxy {} ({}:{}), {}",
                         orig_svr_addr, domain, port, err
                     );
                     Err(err)
@@ -91,7 +91,7 @@ pub(crate) async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConf
 
     let orig_svr_addr = svr_cfg.addr();
     trace!(
-        "Connecting to proxy {} ({}), timeout: {:?}",
+        "connecting to proxy {} ({}), timeout: {:?}",
         orig_svr_addr,
         svr_addr,
         timeout
@@ -103,7 +103,7 @@ pub(crate) async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConf
             Ok(mut s) => {
                 // IMPOSSIBLE, won't fail, but just a guard
                 if let Err(err) = s.set_nodelay(context.config().no_delay) {
-                    error!("Failed to set TCP_NODELAY on remote socket, error: {:?}", err);
+                    error!("failed to set TCP_NODELAY on remote socket, error: {:?}", err);
                 }
 
                 return Ok(s);
@@ -111,7 +111,7 @@ pub(crate) async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConf
             Err(err) => {
                 // Connection failure, retry
                 debug!(
-                    "Failed to connect {}, retried {} times (last err: {})",
+                    "failed to connect {}, retried {} times (last err: {})",
                     svr_addr, retry_time, err
                 );
                 last_err = Some(err);
@@ -126,7 +126,7 @@ pub(crate) async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConf
 
     let last_err = last_err.unwrap();
     error!(
-        "Failed to connect {}, retried {} times, last_err: {}",
+        "failed to connect {}, retried {} times, last_err: {}",
         svr_addr, RETRY_TIMES, last_err
     );
     Err(last_err)
@@ -141,7 +141,7 @@ pub(crate) async fn proxy_server_handshake(
 ) -> io::Result<CryptoStream<STcpStream>> {
     let mut stream = CryptoStream::new(context, remote_stream, svr_cfg);
 
-    trace!("Got encrypt stream and going to send addr: {:?}", relay_addr);
+    trace!("got encrypt stream and going to send addr: {:?}", relay_addr);
 
     // Send relay address to remote
     //

@@ -66,9 +66,9 @@ impl UdpAssociation {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         let remote_udp = create_udp_socket(&local_addr).await?;
 
-        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
+        let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
         debug!(
-            "Created UDP Association for {} from {} -> {}",
+            "created UDP Association for {} from {} -> {}",
             src_addr, local_addr, dst_addr
         );
 
@@ -258,16 +258,16 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         panic!("{}", err);
     }
 
-    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
     // let l = create_socket(&bind_addr).await?;
     let mut l = TProxyUdpSocket::bind(&bind_addr)?;
-    let local_addr = l.local_addr().expect("Could not determine port bound to");
+    let local_addr = l.local_addr().expect("determine port bound to");
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
 
-    info!("ShadowSocks UDP Redir listening on {}", local_addr);
+    info!("shadowsocks UDP redirect listening on {}", local_addr);
 
     // NOTE: Associations are only eliminated by expire time
     // So it may exhaust all available file descriptors
@@ -325,7 +325,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     vc.insert(
                         UdpAssociation::associate(server, src, dst, assoc_map.clone())
                             .await
-                            .expect("Failed to create udp association"),
+                            .expect("create udp association"),
                     )
                 }
             };

@@ -51,7 +51,7 @@ impl Display for Error {
             Error::OpenSSLError(ref err) => write!(f, "{}", err),
             Error::IoError(ref err) => write!(f, "{}", err),
             Error::AeadDecryptFailed => write!(f, "AeadDecryptFailed"),
-            Error::SodiumError => write!(f, "Sodium error"),
+            Error::SodiumError => write!(f, "sodium error"),
         }
     }
 }
@@ -59,12 +59,12 @@ impl Display for Error {
 impl From<Error> for io::Error {
     fn from(e: Error) -> io::Error {
         match e {
-            Error::UnknownCipherType => io::Error::new(io::ErrorKind::Other, "Unknown Cipher type"),
+            Error::UnknownCipherType => io::Error::new(io::ErrorKind::Other, "unknown cipher type"),
             #[cfg(feature = "openssl")]
             Error::OpenSSLError(err) => From::from(err),
             Error::IoError(err) => err,
             Error::AeadDecryptFailed => io::Error::new(io::ErrorKind::Other, "AEAD decrypt error"),
-            Error::SodiumError => io::Error::new(io::ErrorKind::Other, "Sodium error"),
+            Error::SodiumError => io::Error::new(io::ErrorKind::Other, "sodium error"),
         }
     }
 }
@@ -584,7 +584,7 @@ impl CipherType {
             #[cfg(feature = "miscreant")]
             CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => 16,
 
-            _ => panic!("Only support AEAD ciphers, found {:?}", self),
+            _ => panic!("only support AEAD ciphers, found {:?}", self),
         }
     }
 

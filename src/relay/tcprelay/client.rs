@@ -39,25 +39,25 @@ impl Socks5Client {
 
         // 1. Handshake
         let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
-        trace!("Client connected, going to send handshake: {:?}", hs);
+        trace!("client connected, going to send handshake: {:?}", hs);
 
         hs.write_to(&mut s).await?;
         s.flush().await?;
 
         let hsp = HandshakeResponse::read_from(&mut s).await?;
 
-        trace!("Got handshake response: {:?}", hsp);
+        trace!("got handshake response: {:?}", hsp);
         assert_eq!(hsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
 
         // 2. Send request header
         let h = TcpRequestHeader::new(Command::TcpConnect, From::from(addr));
-        trace!("Going to connect, req: {:?}", h);
+        trace!("going to connect, req: {:?}", h);
 
         h.write_to(&mut s).await?;
         s.flush().await?;
         let hp = TcpResponseHeader::read_from(&mut s).await?;
 
-        trace!("Got response: {:?}", hp);
+        trace!("got response: {:?}", hp);
         match hp.reply {
             Reply::Succeeded => (),
             r => {
@@ -78,25 +78,25 @@ impl Socks5Client {
 
         // 1. Handshake
         let hs = HandshakeRequest::new(vec![socks5::SOCKS5_AUTH_METHOD_NONE]);
-        trace!("Client connected, going to send handshake: {:?}", hs);
+        trace!("client connected, going to send handshake: {:?}", hs);
 
         hs.write_to(&mut s).await?;
         s.flush().await?;
 
         let hsp = HandshakeResponse::read_from(&mut s).await?;
 
-        trace!("Got handshake response: {:?}", hsp);
+        trace!("got handshake response: {:?}", hsp);
         assert_eq!(hsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
 
         // 2. Send request header
         let h = TcpRequestHeader::new(Command::UdpAssociate, From::from(addr));
-        trace!("Going to connect, req: {:?}", h);
+        trace!("going to connect, req: {:?}", h);
 
         h.write_to(&mut s).await?;
         s.flush().await?;
         let hp = TcpResponseHeader::read_from(&mut s).await?;
 
-        trace!("Got response: {:?}", hp);
+        trace!("got response: {:?}", hp);
         match hp.reply {
             Reply::Succeeded => (),
             r => {

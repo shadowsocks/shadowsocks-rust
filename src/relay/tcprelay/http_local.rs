@@ -432,7 +432,7 @@ fn get_addr_from_header(req: &mut Request<Body>) -> Result<Address, ()> {
                             // Replaces URI
                             *req.uri_mut() = Uri::from_parts(parts).expect("Reassemble URI failed");
 
-                            debug!("Reassembled URI from \"Host\", {}", req.uri());
+                            debug!("reassembled URI from \"Host\", {}", req.uri());
 
                             Ok(host)
                         }
@@ -561,7 +561,7 @@ async fn server_dispatch(
                 }
                 Err(e) => {
                     error!(
-                        "Failed to upgrade TCP tunnel {} <-> {} ({}), error: {}",
+                        "failed to upgrade TCP tunnel {} <-> {} ({}), error: {}",
                         client_addr,
                         svr_cfg.addr(),
                         host,
@@ -607,7 +607,7 @@ async fn server_dispatch(
                     err
                 );
 
-                let mut resp = Response::new(Body::from(format!("Relay failed to {}", host)));
+                let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
                 *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
 
                 return Ok(resp);
@@ -658,7 +658,7 @@ impl ServerData for ServerScore {
 
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local.as_ref().expect("Missing local config");
+    let local_addr = context.config().local.as_ref().expect("missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
     let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;
@@ -675,12 +675,12 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     });
 
     let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
-    info!("ShadowSocks HTTP Listening on {}", server.local_addr());
+    info!("shadowsocks HTTP listening on {}", server.local_addr());
 
     if let Err(err) = server.await {
         use std::io::Error;
 
-        error!("Hyper Server error: {}", err);
+        error!("hyper server exited with error: {}", err);
         return Err(Error::new(ErrorKind::Other, err));
     }
 

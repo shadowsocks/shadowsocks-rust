@@ -15,21 +15,22 @@ use crate::{
 
 /// Relay server running under local environment.
 pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
-    trace!("RUN Local {:?}", config);
+    trace!("initializing local server with {:?}", config);
+
     assert!(config.config_type.is_local());
 
     if let Some(nofile) = config.nofile {
-        debug!("Setting RLIMIT_NOFILE to {}", nofile);
+        debug!("setting RLIMIT_NOFILE to {}", nofile);
         if let Err(err) = set_nofile(nofile) {
             match err.kind() {
                 ErrorKind::PermissionDenied => {
-                    warn!("Insufficient permission to change RLIMIT_NOFILE, try to restart as root user");
+                    warn!("insufficient permission to change RLIMIT_NOFILE, try to restart as root user");
                 }
                 ErrorKind::InvalidInput => {
-                    warn!("Invalid `nofile` value {}, decrease it and try again", nofile);
+                    warn!("invalid `nofile` value {}, decrease it and try again", nofile);
                 }
                 _ => {
-                    error!("Failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
+                    error!("failed to set RLIMIT_NOFILE with value {}, error: {}", nofile, err);
                 }
             }
             return Err(err);

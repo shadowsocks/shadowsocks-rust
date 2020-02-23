@@ -14,7 +14,7 @@ pub async fn resolve(_: &Context, addr: &str, port: u16) -> io::Result<Vec<Socke
         Err(err) => {
             let err = Error::new(
                 ErrorKind::Other,
-                format!("dns resolve \"{}:{}\" error: {}", addr, port, err),
+                format!("dns resolve {}:{} error: {}", addr, port, err),
             );
             Err(err)
         }

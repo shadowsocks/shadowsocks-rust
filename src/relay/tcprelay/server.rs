@@ -6,7 +6,7 @@ use futures::{
     future::{self, Either},
     stream::{FuturesUnordered, StreamExt},
 };
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},
@@ -34,10 +34,10 @@ async fn handle_client(
     let timeout = svr_cfg.timeout();
 
     if let Err(err) = socket.set_keepalive(timeout) {
-        error!("Failed to set keep alive: {:?}", err);
+        error!("failed to set keep alive: {:?}", err);
     }
 
-    trace!("Got connection addr: {} with proxy server: {:?}", peer_addr, svr_cfg);
+    trace!("got connection addr {} with proxy server {:?}", peer_addr, svr_cfg);
 
     let mut stream = STcpStream::new(socket, timeout);
     stream.set_nodelay(context.config().no_delay)?;
@@ -54,14 +54,20 @@ async fn handle_client(
         Ok(o) => o,
         Err(err) => {
             error!(
-                "Failed to decode Address, may be wrong method or key, peer {}, error: {}",
+                "failed to decode Address, may be wrong method or key, from client {}, error: {}",
                 peer_addr, err
             );
             return Err(From::from(err));
         }
     };
 
-    debug!("Relay {} <-> {} establishing", peer_addr, remote_addr);
+    debug!("RELAY {} <-> {} establishing", peer_addr, remote_addr);
+
+    // Check if remote_addr matches any ACL rules
+    if context.check_outbound_blocked(&remote_addr) {
+        warn!("outbound {} is blocked by ACL rules", remote_addr);
+        return Ok(());
+    }
 
     let bind_addr = match context.config().local {
         None => None,
@@ -73,26 +79,26 @@ async fn handle_client(
 
     let mut remote_stream = match remote_addr {
         Address::SocketAddress(ref saddr) => {
-            // TODO: ACL
+            // NOTE: ACL is already checked above, connect directly
 
             match connect_tcp_stream(saddr, &bind_addr).await {
                 Ok(s) => {
-                    debug!("Connected to remote {}", saddr);
+                    debug!("connected to remote {}", saddr);
                     s
                 }
                 Err(err) => {
-                    error!("Failed to connect remote {}, {}", saddr, err);
+                    error!("failed to connect remote {}, {}", saddr, err);
                     return Err(err);
                 }
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            let result = lookup_then!(&*context, dname.as_str(), port, |addr| {
+            let result = lookup_outbound_then!(&*context, dname.as_str(), port, |addr| {
                 match connect_tcp_stream(&addr, &bind_addr).await {
                     Ok(s) => Ok(s),
                     Err(err) => {
                         debug!(
-                            "Failed to connect remote {}:{} (resolved: {}), {}, try others",
+                            "failed to connect remote {}:{} (resolved: {}), {}, try others",
                             dname, port, addr, err
                         );
                         Err(err)
@@ -102,18 +108,18 @@ async fn handle_client(
 
             match result {
                 Ok((addr, s)) => {
-                    trace!("Connected remote {}:{} (resolved: {})", dname, port, addr);
+                    trace!("connected remote {}:{} (resolved: {})", dname, port, addr);
                     s
                 }
                 Err(err) => {
-                    error!("Failed to connect remote {}:{}, {}", dname, port, err);
+                    error!("failed to connect remote {}:{}, {}", dname, port, err);
                     return Err(err);
                 }
             }
         }
     };
 
-    debug!("Relay {} <-> {} established", peer_addr, remote_addr);
+    debug!("RELAY {} <-> {} established", peer_addr, remote_addr);
 
     let (mut cr, mut cw) = stream.split();
     let (mut sr, mut sw) = remote_stream.split();
@@ -127,25 +133,25 @@ async fn handle_client(
     let whalf = copy(&mut sr, &mut cw);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(_), _)) => trace!("Relay {} -> {} closed", peer_addr, remote_addr),
+        Either::Left((Ok(_), _)) => trace!("RELAY {} -> {} closed", peer_addr, remote_addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!("Relay {} -> {} closed with error {}", peer_addr, remote_addr, err);
+                trace!("RELAY {} -> {} closed with error {}", peer_addr, remote_addr, err);
             } else {
-                error!("Relay {} -> {} closed with error {}", peer_addr, remote_addr, err);
+                error!("RELAY {} -> {} closed with error {}", peer_addr, remote_addr, err);
             }
         }
-        Either::Right((Ok(_), _)) => trace!("Relay {} <- {} closed", peer_addr, remote_addr),
+        Either::Right((Ok(_), _)) => trace!("RELAY {} <- {} closed", peer_addr, remote_addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!("Relay {} <- {} closed with error {}", peer_addr, remote_addr, err);
+                trace!("RELAY {} <- {} closed with error {}", peer_addr, remote_addr, err);
             } else {
-                error!("Relay {} <- {} closed with error {}", peer_addr, remote_addr, err);
+                error!("RELAY {} <- {} closed with error {}", peer_addr, remote_addr, err);
             }
         }
     }
 
-    debug!("Relay {} <-> {} closing", peer_addr, remote_addr);
+    debug!("RELAY {} <-> {} closing", peer_addr, remote_addr);
 
     Ok(())
 }
@@ -161,10 +167,10 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
 
             let listener = TcpListener::bind(&addr)
                 .await
-                .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", addr, err));
+                .unwrap_or_else(|err| panic!("failed to listen on {}, {}", addr, err));
 
-            let local_addr = listener.local_addr().expect("Could not determine port bound to");
-            info!("ShadowSocks TCP Listening on {}", local_addr);
+            let local_addr = listener.local_addr().expect("determine port bound to");
+            info!("shadowsocks TCP listening on {}", local_addr);
 
             listener
         };
@@ -180,6 +186,12 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
             loop {
                 match listener.accept().await {
                     Ok((socket, peer_addr)) => {
+                        // Check ACL rules
+                        if context.check_client_blocked(&peer_addr) {
+                            warn!("client {} is blocked by ACL rules", peer_addr);
+                            continue;
+                        }
+
                         let flow_stat = flow_stat.clone();
                         let context = context.clone();
 
@@ -194,7 +206,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
                         });
                     }
                     Err(err) => {
-                        error!("Server run failed: {}", err);
+                        error!("server run failed: {}", err);
                         break;
                     }
                 }
@@ -204,7 +216,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
 
     match vec_fut.into_future().await.0 {
         Some(()) => {
-            error!("One of TCP servers exited unexpectly");
+            error!("one of TCP servers exited unexpectly");
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }

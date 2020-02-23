@@ -17,7 +17,17 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_server, Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig};
+use shadowsocks::{
+    acl::AccessControl,
+    plugin::PluginConfig,
+    run_server,
+    Config,
+    ConfigType,
+    ManagerAddr,
+    Mode,
+    ServerAddr,
+    ServerConfig,
+};
 
 mod logging;
 mod monitor;
@@ -100,6 +110,12 @@ fn main() {
                 .takes_value(true)
                 .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
         )
+        .arg(
+            Arg::with_name("ACL")
+                .long("acl")
+                .takes_value(true)
+                .help("Path to ACL (Access Control List)"),
+        )
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
@@ -125,7 +141,7 @@ fn main() {
             let method = match method.parse() {
                 Ok(m) => m,
                 Err(err) => {
-                    panic!("Does not support {:?} method: {:?}", method, err);
+                    panic!("does not support {:?} method: {:?}", method, err);
                 }
             };
 
@@ -189,21 +205,22 @@ fn main() {
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
         config.manager_address = Some(
             m.parse::<ManagerAddr>()
-                .expect("Expecting \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
+                .expect("\"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
         );
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {
-        config.nofile = Some(
-            nofile
-                .parse::<u64>()
-                .expect("Expecting an unsigned integer for `nofile`"),
-        );
+        config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
+    }
+
+    if let Some(acl_file) = matches.value_of("ACL") {
+        let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
+        config.acl = Some(acl);
     }
 
     if config.server.is_empty() {
         eprintln!(
-            "Missing proxy servers, consider specifying it by \
+            "missing proxy servers, consider specifying it by \
              --server-addr, --encrypt-method, --password command line option, \
                 or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
         );
@@ -211,7 +228,7 @@ fn main() {
         return;
     }
 
-    info!("ShadowSocks {}", shadowsocks::VERSION);
+    info!("shadowsocks {}", shadowsocks::VERSION);
 
     let mut builder = Builder::new();
     if cfg!(feature = "single-threaded") {
@@ -219,16 +236,16 @@ fn main() {
     } else {
         builder.threaded_scheduler();
     }
-    let mut runtime = builder.enable_all().build().expect("Unable to create Tokio Runtime");
+    let mut runtime = builder.enable_all().build().expect("create tokio Runtime");
     let rt_handle = runtime.handle().clone();
 
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
         match future::select(run_server(config, rt_handle).boxed(), abort_signal.boxed()).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left((Ok(..), ..)) => panic!("Server exited unexpectly"),
+            Either::Left((Ok(..), ..)) => panic!("server exited unexpectly"),
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => panic!("Server exited unexpectly with {}", err),
+            Either::Left((Err(err), ..)) => panic!("server exited unexpectly with {}", err),
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }

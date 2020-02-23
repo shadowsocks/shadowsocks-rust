@@ -15,7 +15,7 @@ pub async fn create_signal_monitor() -> io::Result<()> {
         Either::Right(..) => "CTRL-BREAK",
     };
 
-    info!("Received {}, exiting", signal_name);
+    info!("received {}, exiting", signal_name);
 
     Ok(())
 }

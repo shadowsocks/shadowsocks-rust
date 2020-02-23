@@ -9,7 +9,7 @@ use std::{
 
 use bytes::BytesMut;
 use futures::{self, future, stream::FuturesUnordered, FutureExt, StreamExt};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
@@ -69,8 +69,8 @@ impl UdpAssociation {
         };
         let remote_udp = create_udp_socket(&local_addr).await?;
 
-        let local_addr = remote_udp.local_addr().expect("Could not determine port bound to");
-        debug!("Created UDP Association for {} from {}", src_addr, local_addr);
+        let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
+        debug!("created UDP Association for {} from {}", src_addr, local_addr);
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -97,7 +97,7 @@ impl UdpAssociation {
                     if let Err(err) =
                         UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
                     {
-                        error!("Failed to relay packet, {} -> ..., error: {}", src_addr, err);
+                        error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
                         // FIXME: Ignore? Or how to deal with it?
                     }
@@ -118,7 +118,7 @@ impl UdpAssociation {
                     {
                         Ok(..) => {}
                         Err(err) => {
-                            error!("Failed to receive packet, {} <- .., error: {}", src_addr, err);
+                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
 
                             // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
                             // break;
@@ -152,12 +152,12 @@ impl UdpAssociation {
         let decrypted_pkt = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), pkt) {
             Ok(Some(pkt)) => pkt,
             Ok(None) => {
-                error!("Failed to decrypt pkt in UDP relay, packet too short");
+                error!("failed to decrypt pkt in UDP relay, packet too short");
                 let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
                 return Err(err);
             }
             Err(err) => {
-                error!("Failed to decrypt pkt in UDP relay: {}", err);
+                error!("failed to decrypt pkt in UDP relay: {}", err);
                 let err = io::Error::new(io::ErrorKind::InvalidData, "decrypt failed");
                 return Err(err);
             }
@@ -167,6 +167,13 @@ impl UdpAssociation {
         let mut cur = Cursor::new(decrypted_pkt);
 
         let addr = Address::read_from(&mut cur).await?;
+
+        debug!("UDP ASSOCIATE {} <-> {} establishing", src, addr);
+
+        if context.check_outbound_blocked(&addr) {
+            warn!("outbound {} is blocked by ACL rules", addr);
+            return Ok(());
+        }
 
         // Take out internal buffer for optimizing one byte copy
         let header_len = cur.position() as usize;
@@ -184,7 +191,7 @@ impl UdpAssociation {
                 );
                 try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
             }
-            Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, |remote_addr| {
+            Address::DomainNameAddress(ref dname, port) => lookup_outbound_then!(context, dname, port, |remote_addr| {
                 match try_timeout(remote_udp.send_to(body, &remote_addr), Some(timeout)).await {
                     Ok(l) => {
                         debug!(
@@ -247,7 +254,7 @@ impl UdpAssociation {
 
         // Send back to src_addr
         if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
-            error!("Failed to send packet into response channel, error: {}", err);
+            error!("failed to send packet into response channel, error: {}", err);
 
             // FIXME: What to do? Ignore?
         }
@@ -271,8 +278,8 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     let listen_addr = svr_cfg.addr().bind_addr(&*context).await?;
 
     let listener = create_udp_socket(&listen_addr).await?;
-    let local_addr = listener.local_addr().expect("Could not determine port bound to");
-    info!("ShadowSocks UDP listening on {}", local_addr);
+    let local_addr = listener.local_addr().expect("determine port bound to");
+    info!("shadowsocks UDP listening on {}", local_addr);
 
     let (mut r, mut w) = listener.split();
 
@@ -336,7 +343,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];
 
-        trace!("Received UDP packet from {}, length {} bytes", src, recv_len);
+        trace!("received UDP packet from {}, length {} bytes", src, recv_len);
         flow_stat.udp().incr_rx(pkt.len() as u64);
 
         if recv_len == 0 {
@@ -347,6 +354,12 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
             // It cannot be solved here, because `WSAGetLastError` is already set.
             //
             // See `relay::udprelay::utils::create_socket` for more detail.
+            continue;
+        }
+
+        // Check ACL
+        if context.check_client_blocked(&src) {
+            warn!("client {} is blocked by ACL rules", src);
             continue;
         }
 
@@ -361,7 +374,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
                 Entry::Vacant(vc) => vc.insert(
                     UdpAssociation::associate(context.clone(), svr_idx, src, tx.clone())
                         .await
-                        .expect("Failed to create udp association"),
+                        .expect("create udp association"),
                 ),
             };
 
@@ -392,7 +405,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
 
     match vec_fut.into_future().await.0 {
         Some(res) => {
-            error!("One of UDP servers exited unexpectly, result: {:?}", res);
+            error!("one of UDP servers exited unexpectly, result: {:?}", res);
             let err = io::Error::new(io::ErrorKind::Other, "server exited unexpectly");
             Err(err)
         }
