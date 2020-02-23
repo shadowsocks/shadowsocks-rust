@@ -16,6 +16,8 @@ use openssl::nid::Nid;
 use openssl::symm;
 use rand::{self, RngCore};
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 /// Cipher result
 pub type CipherResult<T> = Result<T, Error>;
@@ -165,7 +167,7 @@ const CIPHER_CHACHA20_IETF_POLY1305: &str = "chacha20-ietf-poly1305";
 const CIPHER_XCHACHA20_IETF_POLY1305: &str = "xchacha20-ietf-poly1305";
 
 /// ShadowSocks cipher type
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, EnumIter)]
 pub enum CipherType {
     Table,
     Plain,
@@ -597,6 +599,15 @@ impl CipherType {
     /// Get salt for AEAD ciphers
     pub fn gen_salt(self) -> Bytes {
         CipherType::gen_random_bytes(self.salt_size())
+    }
+
+    /// Get all available ciphers in String representation
+    pub fn available_ciphers() -> Vec<String> {
+        let mut v = Vec::new();
+        for e in Self::iter() {
+            v.push(e.to_string());
+        }
+        v
     }
 }
 

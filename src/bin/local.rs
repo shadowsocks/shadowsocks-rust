@@ -14,6 +14,7 @@ use tokio::runtime::Builder;
 
 use shadowsocks::{
     acl::AccessControl,
+    crypto::CipherType,
     plugin::PluginConfig,
     run_local,
     Config,
@@ -71,7 +72,8 @@ fn main() {
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
-                .help("Encryption method"),
+                .help("Encryption method")
+                .long_help(format!("Available ciphers: {}", CipherType::available_ciphers().join(", ")).as_str()),
         )
         .arg(
             Arg::with_name("PLUGIN")

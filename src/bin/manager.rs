@@ -17,7 +17,16 @@ use futures::{
 use log::{error, info};
 use tokio::runtime::Builder;
 
-use shadowsocks::{plugin::PluginConfig, run_manager, Config, ConfigType, ManagerAddr, Mode, ServerAddr};
+use shadowsocks::{
+    crypto::CipherType,
+    plugin::PluginConfig,
+    run_manager,
+    Config,
+    ConfigType,
+    ManagerAddr,
+    Mode,
+    ServerAddr,
+};
 
 mod logging;
 mod monitor;
@@ -53,7 +62,8 @@ fn main() {
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
-                .help("Encryption method"),
+                .help("Encryption method")
+                .long_help(format!("Available ciphers: {}", CipherType::available_ciphers().join(", ")).as_str()),
         )
         .arg(
             Arg::with_name("NO_DELAY")
