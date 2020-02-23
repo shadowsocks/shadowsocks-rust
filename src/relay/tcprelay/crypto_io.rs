@@ -104,6 +104,11 @@ impl<S> CryptoStream<S> {
             read_status: ReadStatus::WaitIv(context, vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
         }
     }
+
+    /// Return a reference to the underlying stream
+    pub fn get_ref(&self) -> &S {
+        &self.stream
+    }
 }
 
 impl<S> CryptoStream<S>

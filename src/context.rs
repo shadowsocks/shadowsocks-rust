@@ -232,7 +232,7 @@ impl Context {
         ppbloom.check_and_set(nonce)
     }
 
-    /// Check client ACL
+    /// Check client ACL (for server)
     pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
         match self.config.acl {
             None => false,
@@ -240,7 +240,7 @@ impl Context {
         }
     }
 
-    /// Check outbound address ACL
+    /// Check outbound address ACL (for server)
     pub fn check_outbound_blocked(&self, addr: &Address) -> bool {
         match self.config.acl {
             None => false,
@@ -248,11 +248,20 @@ impl Context {
         }
     }
 
-    /// Check resolved outbound address ACL
+    /// Check resolved outbound address ACL (for server)
     pub fn check_resolved_outbound_blocked(&self, addr: &SocketAddr) -> bool {
         match self.config.acl {
             None => false,
             Some(ref a) => a.check_resolved_outbound_blocked(addr),
+        }
+    }
+
+    /// Check target address ACL (for client)
+    pub async fn check_target_bypassed(&self, target: &Address) -> bool {
+        match self.config.acl {
+            // Proxy everything by default
+            None => false,
+            Some(ref a) => a.check_target_bypassed(self, target).await,
         }
     }
 }

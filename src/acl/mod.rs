@@ -14,7 +14,7 @@ use std::{
 use ipnetwork::IpNetwork;
 use regex::RegexSet;
 
-use crate::relay::socks5::Address;
+use crate::{context::Context, relay::socks5::Address};
 
 /// Strategy mode that ACL is running
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -50,13 +50,13 @@ impl Rules {
     /// Check if the specified address matches these rules
     fn check_address_matched(&self, addr: &Address) -> bool {
         match *addr {
-            Address::SocketAddress(ref saddr) => self.check_socket_addr_matched(saddr),
-            Address::DomainNameAddress(ref domain, ..) => self.rule.is_match(domain),
+            Address::SocketAddress(ref saddr) => self.check_ip_matched(saddr),
+            Address::DomainNameAddress(ref domain, ..) => self.check_host_matched(domain),
         }
     }
 
-    /// Check if the specified client matches these rules
-    fn check_socket_addr_matched(&self, addr: &SocketAddr) -> bool {
+    /// Check if the specified address matches any rules
+    fn check_ip_matched(&self, addr: &SocketAddr) -> bool {
         let ip = addr.ip();
         let ip_network = IpNetwork::from(ip); // Create a network which only contains itself
 
@@ -69,6 +69,11 @@ impl Rules {
                 }
             })
             .is_ok()
+    }
+
+    /// Check if the specified host matches any rules
+    fn check_host_matched(&self, host: &str) -> bool {
+        self.rule.is_match(host)
     }
 }
 
@@ -105,23 +110,24 @@ impl Rules {
 ///
 /// ## Mode
 ///
-/// - `BlackList`
-///
-/// Only hosts / clients that matches rules in
-///     - `[bypass_list]` - will be connected directly instead of connecting through remote proxies
-///     - `[black_list]` - will be rejected (close connection)
-///
-/// - `WhiteList`
+/// - `WhiteList` (reject / bypass all, except ...)
 ///
 /// Only hosts / clients that matches rules in
 ///     - `[proxy_list]` - will be connected through remote proxies, others will be connected directly
 ///     - `[white_list]` - will be allowed, others will be rejected
+///
+/// - `BlackList` (accept / proxy all, except ...)
+///
+/// Only hosts / clients that matches rules in
+///     - `[bypass_list]` - will be connected directly instead of connecting through remote proxies
+///     - `[black_list]` - will be rejected (close connection)
 ///
 /// ## Rules
 ///
 /// Rules can be either
 ///
 /// - CIDR form network addresses, like `10.9.0.32/16`
+/// - IP addresses, like `127.0.0.1` or `::1`
 /// - Regular Expression for matching hosts, like `(^|\.)gmail\.com$`
 #[derive(Debug, Clone)]
 pub struct AccessControl {
@@ -157,10 +163,10 @@ impl AccessControl {
 
             match line.as_str() {
                 "[reject_all]" | "[bypass_all]" => {
-                    mode = Mode::BlackList;
+                    mode = Mode::WhiteList;
                 }
                 "[accept_all]" | "[proxy_all]" => {
-                    mode = Mode::WhiteList;
+                    mode = Mode::BlackList;
                 }
                 "[outbound_block_list]" => {
                     curr_network = &mut outbound_block_network;
@@ -225,15 +231,45 @@ impl AccessControl {
     }
 
     /// Check if target address should be bypassed (for client)
-    pub fn check_target_bypassed(&self, addr: &Address) -> bool {
+    ///
+    /// FIXME: This function may perform a DNS resolution
+    pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
         match self.mode {
             Mode::BlackList => {
                 // Only hosts in bypass_list will be bypassed
-                self.black_list.check_address_matched(addr)
+                if self.black_list.check_address_matched(addr) {
+                    return true;
+                }
+
+                if let Address::DomainNameAddress(ref host, port) = *addr {
+                    if let Ok(vaddr) = context.dns_resolve(host, port).await {
+                        for addr in vaddr {
+                            if self.black_list.check_ip_matched(&addr) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                false
             }
             Mode::WhiteList => {
                 // Only hosts in proxy_list will be proxied
-                !self.white_list.check_address_matched(addr)
+                if self.white_list.check_address_matched(addr) {
+                    return false;
+                }
+
+                if let Address::DomainNameAddress(ref host, port) = *addr {
+                    if let Ok(vaddr) = context.dns_resolve(host, port).await {
+                        for addr in vaddr {
+                            if self.white_list.check_ip_matched(&addr) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+
+                true
             }
         }
     }
@@ -243,11 +279,11 @@ impl AccessControl {
         match self.mode {
             Mode::BlackList => {
                 // Only clients in black_list will be blocked
-                self.black_list.check_socket_addr_matched(addr)
+                self.black_list.check_ip_matched(addr)
             }
             Mode::WhiteList => {
                 // Only clients in white_list will be proxied
-                !self.white_list.check_socket_addr_matched(addr)
+                !self.white_list.check_ip_matched(addr)
             }
         }
     }
@@ -262,6 +298,6 @@ impl AccessControl {
 
     /// Check resolved outbound address is blocked (for server)
     pub fn check_resolved_outbound_blocked(&self, outbound: &SocketAddr) -> bool {
-        self.outbound_block.check_socket_addr_matched(outbound)
+        self.outbound_block.check_ip_matched(outbound)
     }
 }

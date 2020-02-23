@@ -17,7 +17,10 @@ use crate::{
     },
 };
 
-use super::sys::{create_redir_listener, get_original_destination_addr};
+use super::{
+    sys::{create_redir_listener, get_original_destination_addr},
+    ProxyStream,
+};
 
 /// Established Client Transparent Proxy
 ///
@@ -28,25 +31,9 @@ async fn establish_client_tcp_redir<'a>(
     client_addr: SocketAddr,
     addr: &Address,
 ) -> io::Result<()> {
-    let context = server.context();
     let svr_cfg = server.server_config();
 
-    let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
-        Ok(svr_s) => {
-            trace!("proxy server connected, {:?}", svr_cfg);
-            svr_s
-        }
-        Err(err) => {
-            // Report to global statistic
-            server.report_failure().await;
-
-            // Just close the connection.
-            error!("failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
-            return Err(err);
-        }
-    };
-
-    let mut svr_s = super::proxy_server_handshake(server.clone_context(), svr_s, svr_cfg, addr).await?;
+    let svr_s = ProxyStream::connect(server.clone_context(), svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     let (mut r, mut w) = s.split();
@@ -56,57 +43,28 @@ async fn establish_client_tcp_redir<'a>(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!(
-        "REDIR relay established {} <-> {} ({})",
-        client_addr,
-        svr_cfg.addr(),
-        addr
-    );
+    debug!("REDIR relay established {} <-> {}", client_addr, addr);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("REDIR relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Left((Ok(..), _)) => trace!("REDIR relay {} -> {} closed", client_addr, addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "REDIR relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("REDIR relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "REDIR relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("REDIR relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
-        Either::Right((Ok(..), _)) => trace!("REDIR relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Right((Ok(..), _)) => trace!("REDIR relay {} <- {} closed", client_addr, addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "REDIR relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("REDIR relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "REDIR relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("REDIR relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
 
-    debug!("REDIR relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
+    debug!("REDIR relay {} <-> {} closed", client_addr, addr);
 
     Ok(())
 }

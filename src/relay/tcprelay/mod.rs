@@ -20,6 +20,7 @@ mod crypto_io;
 mod http_local;
 pub mod local;
 mod monitor;
+mod proxy_stream;
 mod redir_local;
 pub mod server;
 mod socks5_local;
@@ -31,6 +32,7 @@ mod utils;
 pub use self::{
     connection::{Connection, TcpConnection},
     crypto_io::CryptoStream,
+    proxy_stream::ProxyStream,
 };
 
 pub(crate) use self::local::{connect_proxy_server, proxy_server_handshake};

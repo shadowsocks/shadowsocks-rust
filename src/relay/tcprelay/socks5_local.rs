@@ -2,7 +2,7 @@
 
 use std::{
     io::{self, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
 use futures::future::{self, Either};
@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-use super::ignore_until_end;
+use super::{ignore_until_end, ProxyStream};
 
 #[derive(Debug, Clone)]
 struct UdpConfig {
@@ -37,10 +37,8 @@ async fn handle_socks5_connect<'a>(
     let context = server.context();
     let svr_cfg = server.server_config();
 
-    let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
+    let svr_s = match ProxyStream::connect(server.clone_context(), svr_cfg, addr).await {
         Ok(svr_s) => {
-            trace!("proxy server connected, {:?}", svr_cfg);
-
             // Tell the client that we are ready
             let header = TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(svr_s.local_addr()?));
             header.write_to(stream).await?;
@@ -49,31 +47,29 @@ async fn handle_socks5_connect<'a>(
 
             svr_s
         }
-        Err(err) => {
+        Err(perr) => {
             use crate::relay::socks5::Reply;
 
-            error!("failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
+            if perr.is_proxied() {
+                // Report to global statistic
+                server.report_failure().await;
+            }
 
-            // Report to global statistic
-            server.report_failure().await;
-
+            let err = perr.into_inner();
             let reply = match err.kind() {
                 ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
                 ErrorKind::ConnectionAborted => Reply::HostUnreachable,
                 _ => Reply::NetworkUnreachable,
             };
 
-            let header = TcpResponseHeader::new(
-                reply,
-                Address::SocketAddress("0.0.0.0:0".parse::<SocketAddr>().unwrap()),
-            );
+            let dummy_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+            let header = TcpResponseHeader::new(reply, Address::SocketAddress(dummy_address));
             header.write_to(stream).await?;
 
             return Err(err);
         }
     };
 
-    let mut svr_s = super::proxy_server_handshake(server.clone_context(), svr_s, svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     // Reset `TCP_NODELAY` after Socks5 handshake
@@ -90,57 +86,28 @@ async fn handle_socks5_connect<'a>(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!(
-        "CONNECT relay established {} <-> {} ({})",
-        client_addr,
-        svr_cfg.addr(),
-        addr
-    );
+    debug!("CONNECT relay established {} <-> {}", client_addr, addr,);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "CONNECT relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "CONNECT relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
-        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "CONNECT relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "CONNECT relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
 
-    debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
+    debug!("CONNECT relay {} <-> {} closed", client_addr, addr);
 
     Ok(())
 }
@@ -279,7 +246,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_socks5_client(&server, socket, udp_conf).await {
-                error!("TCP Socks5 client, error: {:?}", err);
+                error!("TCP socks5 client exited with error: {}", err);
             }
         });
     }

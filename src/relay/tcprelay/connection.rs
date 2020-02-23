@@ -3,7 +3,6 @@
 use std::{
     future::Future,
     io::{self},
-    ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -83,6 +82,11 @@ where
 
         Ok(())
     }
+
+    /// Get a reference to the underlying stream
+    pub fn get_ref(&self) -> &S {
+        self.stream.get_ref()
+    }
 }
 
 impl<S> Connection<S> {
@@ -119,26 +123,6 @@ where
     pub fn split(self) -> (ReadHalf<Connection<S>>, WriteHalf<Connection<S>>) {
         use tokio::io::split;
         split(self)
-    }
-}
-
-impl<S> Deref for Connection<S>
-where
-    S: AsyncRead,
-{
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        self.stream.get_ref()
-    }
-}
-
-impl<S> DerefMut for Connection<S>
-where
-    S: AsyncRead,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.stream.get_mut()
     }
 }
 

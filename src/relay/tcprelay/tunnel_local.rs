@@ -17,6 +17,8 @@ use crate::{
     },
 };
 
+use super::ProxyStream;
+
 /// Established Client Tunnel
 ///
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
@@ -26,22 +28,9 @@ async fn establish_client_tcp_tunnel<'a>(
     client_addr: SocketAddr,
     addr: &Address,
 ) -> io::Result<()> {
-    let context = server.context();
     let svr_cfg = server.server_config();
 
-    let svr_s = match super::connect_proxy_server(context, svr_cfg).await {
-        Ok(svr_s) => {
-            trace!("proxy server connected, {:?}", svr_cfg);
-            svr_s
-        }
-        Err(err) => {
-            // Just close the connection.
-            error!("failed to connect remote server {}, err: {}", svr_cfg.addr(), err);
-            return Err(err);
-        }
-    };
-
-    let mut svr_s = super::proxy_server_handshake(server.clone_context(), svr_s, svr_cfg, addr).await?;
+    let svr_s = ProxyStream::connect(server.clone_context(), svr_cfg, addr).await?;
     let (mut svr_r, mut svr_w) = svr_s.split();
 
     let (mut r, mut w) = s.split();
@@ -51,57 +40,28 @@ async fn establish_client_tcp_tunnel<'a>(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!(
-        "TUNNEL relay established {} <-> {} ({})",
-        client_addr,
-        svr_cfg.addr(),
-        addr
-    );
+    debug!("TUNNEL relay established {} <-> {}", client_addr, addr);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("TUNNEL relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Left((Ok(..), _)) => trace!("TUNNEL relay {} -> {} closed", client_addr, addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "TUNNEL relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("TUNNEL relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "TUNNEL relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("TUNNEL relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
-        Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} closed", client_addr, addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "TUNNEL relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                trace!("TUNNEL relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "TUNNEL relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    svr_cfg.addr(),
-                    addr,
-                    err,
-                );
+                error!("TUNNEL relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
 
-    debug!("TUNNEL relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
+    debug!("TUNNEL relay {} <-> {} closed", client_addr, addr);
 
     Ok(())
 }
@@ -158,7 +118,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_tunnel_client(&server, socket).await {
-                error!("TCP Tunnel client, error: {:?}", err);
+                error!("TCP tunnel client exited with error: {:?}", err);
             }
         });
     }

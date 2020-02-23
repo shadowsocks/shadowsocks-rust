@@ -71,7 +71,7 @@ async fn connect_proxy_server_internal(
 
 /// Connect to proxy server with `ServerConfig`
 pub(crate) async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
-    let timeout = svr_cfg.timeout();
+    let timeout = svr_cfg.timeout().or(context.config().timeout);
 
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),

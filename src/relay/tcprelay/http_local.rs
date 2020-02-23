@@ -37,7 +37,6 @@ use hyper::{
 use log::{debug, error, info, trace};
 use pin_project::pin_project;
 
-use super::{CryptoStream, STcpStream};
 use crate::{
     config::ServerConfig,
     context::SharedContext,
@@ -53,6 +52,8 @@ use crate::{
     },
 };
 
+use super::ProxyStream;
+
 #[derive(Clone)]
 struct ShadowSocksConnector {
     context: SharedContext,
@@ -66,43 +67,10 @@ impl ShadowSocksConnector {
     }
 }
 
-impl tower::Service<Address> for ShadowSocksConnector {
-    type Error = io::Error;
-    type Future = ShadowSocksConnecting;
-    type Response = CryptoStream<STcpStream>;
-
-    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, addr: Address) -> Self::Future {
-        let context = self.context.clone();
-        let svr_idx = self.svr_idx;
-        let stat = self.stat.clone();
-
-        ShadowSocksConnecting {
-            fut: async move {
-                let svr_cfg = context.server_config(svr_idx);
-
-                let stream = match super::connect_proxy_server(&*context, svr_cfg).await {
-                    Ok(s) => s,
-                    Err(err) => {
-                        // Report failure to global statistic
-                        stat.report_failure().await;
-                        return Err(err);
-                    }
-                };
-                super::proxy_server_handshake(context.clone(), stream, svr_cfg, &addr).await
-            }
-            .boxed(),
-        }
-    }
-}
-
 impl tower::Service<Uri> for ShadowSocksConnector {
     type Error = io::Error;
     type Future = ShadowSocksConnecting;
-    type Response = CryptoStream<STcpStream>;
+    type Response = ProxyStream;
 
     fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -127,15 +95,14 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                         Err(err)
                     }
                     Some(addr) => {
-                        let stream = match super::connect_proxy_server(&*context, svr_cfg).await {
-                            Ok(s) => s,
+                        match ProxyStream::connect_proxied(context.clone(), svr_cfg, &addr).await {
+                            Ok(s) => Ok(s),
                             Err(err) => {
                                 // Report failure to global statistic
                                 stat.report_failure().await;
-                                return Err(err);
+                                Err(err)
                             }
-                        };
-                        super::proxy_server_handshake(context.clone(), stream, svr_cfg, &addr).await
+                        }
                     }
                 }
             }
@@ -147,11 +114,67 @@ impl tower::Service<Uri> for ShadowSocksConnector {
 #[pin_project]
 struct ShadowSocksConnecting {
     #[pin]
-    fut: BoxFuture<'static, io::Result<CryptoStream<STcpStream>>>,
+    fut: BoxFuture<'static, io::Result<ProxyStream>>,
 }
 
 impl Future for ShadowSocksConnecting {
-    type Output = io::Result<CryptoStream<STcpStream>>;
+    type Output = io::Result<ProxyStream>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+        self.project().fut.poll(cx)
+    }
+}
+
+#[derive(Clone)]
+struct DirectConnector {
+    context: SharedContext,
+}
+
+impl DirectConnector {
+    fn new(context: SharedContext) -> DirectConnector {
+        DirectConnector { context }
+    }
+}
+
+impl tower::Service<Uri> for DirectConnector {
+    type Error = io::Error;
+    type Future = DirectConnecting;
+    type Response = ProxyStream;
+
+    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, dst: Uri) -> Self::Future {
+        let context = self.context.clone();
+
+        DirectConnecting {
+            fut: async move {
+                match host_addr(&dst) {
+                    None => {
+                        use std::io::Error;
+
+                        error!("HTTP target URI must be a valid address, but found: {}", dst);
+
+                        let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
+                        Err(err)
+                    }
+                    Some(addr) => ProxyStream::connect_direct(&*context, &addr).await,
+                }
+            }
+            .boxed(),
+        }
+    }
+}
+
+#[pin_project]
+struct DirectConnecting {
+    #[pin]
+    fut: BoxFuture<'static, io::Result<ProxyStream>>,
+}
+
+impl Future for DirectConnecting {
+    type Output = io::Result<ProxyStream>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.project().fut.poll(cx)
@@ -331,15 +354,18 @@ fn set_conn_keep_alive(version: Version, headers: &mut HeaderMap<HeaderValue>, k
     }
 }
 
-impl Connection for CryptoStream<STcpStream> {
+impl Connection for ProxyStream {
     fn connected(&self) -> Connected {
         Connected::new()
     }
 }
 
+type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
+type DirectHttpClient = Client<DirectConnector, Body>;
+
 async fn establish_connect_tunnel(
     upgraded: Upgraded,
-    mut stream: CryptoStream<STcpStream>,
+    stream: ProxyStream,
     svr_cfg: &ServerConfig,
     client_addr: SocketAddr,
     addr: Address,
@@ -360,49 +386,49 @@ async fn establish_connect_tunnel(
     );
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, addr, svr_cfg.addr()),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
                 trace!(
                     "CONNECT relay {} -> {} ({}) closed with error {}",
                     client_addr,
-                    svr_cfg.addr(),
                     addr,
+                    svr_cfg.addr(),
                     err,
                 );
             } else {
                 error!(
                     "CONNECT relay {} -> {} ({}) closed with error {}",
                     client_addr,
-                    svr_cfg.addr(),
                     addr,
+                    svr_cfg.addr(),
                     err,
                 );
             }
         }
-        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, svr_cfg.addr(), addr),
+        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, addr, svr_cfg.addr()),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
                 trace!(
                     "CONNECT relay {} <- {} ({}) closed with error {}",
                     client_addr,
-                    svr_cfg.addr(),
                     addr,
+                    svr_cfg.addr(),
                     err,
                 );
             } else {
                 error!(
                     "CONNECT relay {} <- {} ({}) closed with error {}",
                     client_addr,
-                    svr_cfg.addr(),
                     addr,
+                    svr_cfg.addr(),
                     err,
                 );
             }
         }
     }
 
-    debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, svr_cfg.addr(), addr);
+    debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, addr, svr_cfg.addr());
 }
 
 fn make_bad_request() -> io::Result<Response<Body>> {
@@ -486,6 +512,7 @@ async fn server_dispatch(
     mut req: Request<Body>,
     svr_score: SharedServerStatistic<ServerScore>,
     client_addr: SocketAddr,
+    bypass_client: DirectHttpClient,
 ) -> io::Result<Response<Body>> {
     let context = svr_score.context();
 
@@ -510,6 +537,8 @@ async fn server_dispatch(
         Some(h) => h,
     };
 
+    let svr_cfg = svr_score.server_config();
+
     if Method::CONNECT == req.method() {
         // Establish a TCP tunnel
         // https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01
@@ -519,26 +548,18 @@ async fn server_dispatch(
         // Connect to Shadowsocks' remote
         //
         // FIXME: What STATUS should I return for connection error?
-        let stream = {
-            let svr_cfg = svr_score.server_config();
-
-            let stream = match super::connect_proxy_server(context, svr_cfg).await {
-                Ok(s) => s,
-                Err(err) => {
+        let stream = match ProxyStream::connect(svr_score.clone_context(), svr_cfg, &host).await {
+            Ok(s) => s,
+            Err(err) => {
+                if err.is_proxied() {
                     // Report failure to global statistic
                     svr_score.report_failure().await;
-                    return Err(err);
                 }
-            };
-            super::proxy_server_handshake(svr_score.clone_context(), stream, svr_cfg, &host).await?
+                return Err(err.into_inner());
+            }
         };
 
-        debug!(
-            "CONNECT relay connected {} <-> {} ({})",
-            client_addr,
-            svr_score.server_config().addr(),
-            host
-        );
+        debug!("CONNECT relay connected {} <-> {}", client_addr, host);
 
         // Upgrade to a TCP tunnel
         //
@@ -550,22 +571,14 @@ async fn server_dispatch(
 
             match req.into_body().on_upgrade().await {
                 Ok(upgraded) => {
-                    trace!(
-                        "CONNECT tunnel upgrade success, {} <-> {} ({})",
-                        client_addr,
-                        svr_cfg.addr(),
-                        host
-                    );
+                    trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
 
                     establish_connect_tunnel(upgraded, stream, svr_cfg, client_addr, host).await
                 }
                 Err(e) => {
                     error!(
-                        "failed to upgrade TCP tunnel {} <-> {} ({}), error: {}",
-                        client_addr,
-                        svr_cfg.addr(),
-                        host,
-                        e
+                        "failed to upgrade TCP tunnel {} <-> {}, error: {}",
+                        client_addr, host, e
                     );
                 }
             }
@@ -589,28 +602,41 @@ async fn server_dispatch(
         // Set keep-alive for connection with remote
         set_conn_keep_alive(req.version(), req.headers_mut(), conn_keep_alive);
 
-        let svr_cfg = svr_score.server_config();
+        let mut res = if context.check_target_bypassed(&host).await {
+            // Keep connections in a global client instance
+            match bypass_client.request(req).await {
+                Ok(res) => res,
+                Err(err) => {
+                    error!(
+                        "HTTP {} {} <-> {} relay failed, error: {}",
+                        method, client_addr, host, err
+                    );
 
-        // Keep connections for clients in ServerScore::client
-        //
-        // client instance is kept for Keep-Alive connections
-        let client = &svr_score.server().client;
-        let mut res = match client.request(req).await {
-            Ok(res) => res,
-            Err(err) => {
-                error!(
-                    "HTTP {} {} <-> {} ({}) relay failed, error: {}",
-                    method,
-                    client_addr,
-                    svr_cfg.addr(),
-                    host,
-                    err
-                );
+                    let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
+                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
 
-                let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
-                *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    return Ok(resp);
+                }
+            }
+        } else {
+            // Keep connections for clients in ServerScore::client
+            //
+            // client instance is kept for Keep-Alive connections
+            let client = &svr_score.server().proxy_client;
 
-                return Ok(resp);
+            match client.request(req).await {
+                Ok(res) => res,
+                Err(err) => {
+                    error!(
+                        "HTTP {} {} <-> {} relay failed, error: {}",
+                        method, client_addr, host, err
+                    );
+
+                    let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
+                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+
+                    return Ok(resp);
+                }
             }
         };
 
@@ -622,22 +648,14 @@ async fn server_dispatch(
         // Set Connection header
         set_conn_keep_alive(res.version(), res.headers_mut(), res_keep_alive);
 
-        debug!(
-            "HTTP {} relay {} <-> {} ({}) finished",
-            method,
-            client_addr,
-            svr_cfg.addr(),
-            host
-        );
+        debug!("HTTP {} relay {} <-> {} finished", method, client_addr, host,);
 
         Ok(res)
     }
 }
 
-type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
-
 struct ServerScore {
-    client: ShadowSocksHttpClient,
+    proxy_client: ShadowSocksHttpClient,
 }
 
 impl ServerScore {
@@ -645,7 +663,7 @@ impl ServerScore {
         ServerScore {
             // Create HTTP clients for each remote servers
             // It may reuse keep-alive connections
-            client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context, server_idx, data)),
+            proxy_client: Client::builder().build::<_, Body>(ShadowSocksConnector::new(context, server_idx, data)),
         }
     }
 }
@@ -658,18 +676,20 @@ impl ServerData for ServerScore {
 
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local.as_ref().expect("missing local config");
+    let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
+    let bypass_client = Client::builder().build::<_, Body>(DirectConnector::new(context.clone()));
     let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;
 
     let make_service = make_service_fn(|socket: &AddrStream| {
         let client_addr = socket.remote_addr();
         let svr_score = servers.pick_server();
+        let bypass_client = bypass_client.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                server_dispatch(req, svr_score.clone(), client_addr)
+                server_dispatch(req, svr_score.clone(), client_addr, bypass_client.clone())
             }))
         }
     });
