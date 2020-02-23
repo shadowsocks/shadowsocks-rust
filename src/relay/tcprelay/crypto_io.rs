@@ -2,7 +2,7 @@
 
 use std::{
     io,
-    marker::{PhantomData, Unpin},
+    marker::Unpin,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -11,7 +11,10 @@ use byte_string::ByteStr;
 use bytes::Bytes;
 use futures::ready;
 use log::{debug, trace};
-use tokio::prelude::*;
+use tokio::{
+    io::{ReadHalf, WriteHalf},
+    prelude::*,
+};
 
 use crate::{
     config::ServerConfig,
@@ -193,12 +196,9 @@ where
     /// Split connection into reader and writer
     ///
     /// The two halfs share the same `CryptoStream<S>`
-    pub fn split(&mut self) -> (CryptoStreamReadHalf<'_, S>, CryptoStreamWriteHalf<'_, S>) {
-        let p = self as *mut _;
-        (
-            CryptoStreamReadHalf(p, PhantomData),
-            CryptoStreamWriteHalf(p, PhantomData),
-        )
+    pub fn split(self) -> (ReadHalf<CryptoStream<S>>, WriteHalf<CryptoStream<S>>) {
+        use tokio::io::split;
+        split(self)
     }
 }
 
@@ -225,37 +225,5 @@ where
 
     fn poll_shutdown(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.priv_poll_shutdown(ctx)
-    }
-}
-
-pub struct CryptoStreamReadHalf<'a, S: 'a>(*mut CryptoStream<S>, PhantomData<&'a S>);
-
-unsafe impl<'a, S: Send + 'a> Send for CryptoStreamReadHalf<'a, S> {}
-
-impl<'a, S: AsyncRead + Unpin + 'a> AsyncRead for CryptoStreamReadHalf<'a, S> {
-    fn poll_read(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let stream = unsafe { &mut *self.0 };
-        Pin::new(stream).priv_poll_read(ctx, buf)
-    }
-}
-
-pub struct CryptoStreamWriteHalf<'a, S: 'a>(*mut CryptoStream<S>, PhantomData<&'a S>);
-
-unsafe impl<'a, S: Send + 'a> Send for CryptoStreamWriteHalf<'a, S> {}
-
-impl<'a, S: AsyncWrite + Unpin + 'a> AsyncWrite for CryptoStreamWriteHalf<'a, S> {
-    fn poll_write(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let stream = unsafe { &mut *self.0 };
-        Pin::new(stream).priv_poll_write(ctx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let stream = unsafe { &mut *self.0 };
-        Pin::new(stream).priv_poll_flush(ctx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let stream = unsafe { &mut *self.0 };
-        Pin::new(stream).priv_poll_shutdown(ctx)
     }
 }

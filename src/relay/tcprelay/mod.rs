@@ -35,8 +35,6 @@ pub use self::{
     proxy_stream::ProxyStream,
 };
 
-pub(crate) use self::local::{connect_proxy_server, proxy_server_handshake};
-
 const BUFFER_SIZE: usize = 8 * 1024; // 8K buffer
 
 /// Secured TcpStream

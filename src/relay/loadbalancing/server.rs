@@ -500,7 +500,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         match res {
             Ok(Ok(..)) => {
                 // Got the result ... record its time
-                debug!(
+                trace!(
                     "checked remote {} server {} latency with {} ms",
                     server_type,
                     stat.server_config().addr(),
@@ -521,7 +521,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             }
             Err(..) => {
                 // Timeout
-                debug!(
+                trace!(
                     "checked remote {} server {} latency timeout, elapsed {} ms",
                     server_type,
                     stat.server_config().addr(),

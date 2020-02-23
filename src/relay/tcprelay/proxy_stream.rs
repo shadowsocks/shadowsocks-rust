@@ -7,21 +7,23 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     task::{Context as TaskContext, Poll},
+    time::Duration,
 };
 
-use log::trace;
+use bytes::BytesMut;
+use log::{debug, error, trace};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
 };
 
 use crate::{
-    config::ServerConfig,
+    config::{ConfigType, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    relay::socks5::Address,
+    relay::{socks5::Address, utils::try_timeout},
 };
 
-use super::{connection::Connection, CryptoStream};
+use super::{connection::Connection, CryptoStream, STcpStream};
 
 macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
@@ -35,8 +37,8 @@ macro_rules! forward_call {
 /// Stream wrapper for both direct connections and proxied connections
 #[allow(clippy::large_enum_variant)]
 pub enum ProxyStream {
-    Direct(Connection<TcpStream>),
-    Proxied(CryptoStream<Connection<TcpStream>>),
+    Direct(STcpStream),
+    Proxied(CryptoStream<STcpStream>),
 }
 
 #[derive(Debug)]
@@ -91,7 +93,7 @@ impl ProxyStream {
     ///
     /// This is used for hosts that matches ACL bypassed rules
     pub async fn connect_direct(context: &Context, addr: &Address) -> io::Result<ProxyStream> {
-        trace!("connect to {} directly (bypassed)", addr);
+        debug!("connect to {} directly (bypassed)", addr);
 
         // NOTE: Direct connection's timeout is controlled by the global key
         let timeout = context.config().timeout;
@@ -113,7 +115,7 @@ impl ProxyStream {
         }
     }
 
-    /// Connect to remote through proxy server
+    /// Connect to remote via proxy server
     ///
     /// This is used for hosts that matches ACL proxied rules
     pub async fn connect_proxied(
@@ -121,10 +123,15 @@ impl ProxyStream {
         svr_cfg: &ServerConfig,
         addr: &Address,
     ) -> io::Result<ProxyStream> {
-        trace!("connect to {} through {} (proxied)", addr, svr_cfg.addr());
+        debug!(
+            "connect to {} via {} ({}) (proxied)",
+            addr,
+            svr_cfg.addr(),
+            svr_cfg.external_addr()
+        );
 
-        let server_stream = super::local::connect_proxy_server(&*context, svr_cfg).await?;
-        let proxy_stream = super::local::proxy_server_handshake(context, server_stream, svr_cfg, addr).await?;
+        let server_stream = connect_proxy_server(&*context, svr_cfg).await?;
+        let proxy_stream = proxy_server_handshake(context, server_stream, svr_cfg, addr).await?;
 
         Ok(ProxyStream::Proxied(proxy_stream))
     }
@@ -183,4 +190,140 @@ impl AsyncWrite for ProxyStream {
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_shutdown, cx)
     }
+}
+
+async fn connect_proxy_server_internal(
+    context: &Context,
+    orig_svr_addr: &ServerAddr,
+    svr_addr: &ServerAddr,
+    timeout: Option<Duration>,
+) -> io::Result<STcpStream> {
+    match svr_addr {
+        ServerAddr::SocketAddr(ref addr) => {
+            let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
+            trace!("connected proxy {} ({})", orig_svr_addr, addr);
+            Ok(STcpStream::new(stream, timeout))
+        }
+        ServerAddr::DomainName(ref domain, port) => {
+            let result = lookup_then!(context, domain.as_str(), *port, |addr| {
+                match try_timeout(TcpStream::connect(addr), timeout).await {
+                    Ok(s) => Ok(STcpStream::new(s, timeout)),
+                    Err(e) => {
+                        debug!(
+                            "failed to connect proxy {} ({}:{} ({})) try another (err: {})",
+                            orig_svr_addr, domain, port, addr, e
+                        );
+                        Err(e)
+                    }
+                }
+            });
+
+            match result {
+                Ok((addr, s)) => {
+                    trace!("connected proxy {} ({}:{} ({}))", orig_svr_addr, domain, port, addr);
+                    Ok(s)
+                }
+                Err(err) => {
+                    error!(
+                        "failed to connect proxy {} ({}:{}), {}",
+                        orig_svr_addr, domain, port, err
+                    );
+                    Err(err)
+                }
+            }
+        }
+    }
+}
+
+/// Connect to proxy server with `ServerConfig`
+async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
+    let timeout = svr_cfg.timeout().or(context.config().timeout);
+
+    let svr_addr = match context.config().config_type {
+        ConfigType::Server => svr_cfg.addr(),
+        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::HttpLocal | ConfigType::RedirLocal => {
+            svr_cfg.external_addr()
+        }
+        ConfigType::Manager => unreachable!("ConfigType::Manager shouldn't need to connect to proxy server"),
+    };
+
+    // Retry if connect failed
+    //
+    // FIXME: This won't work if server is actually down.
+    //        Probably we should retry with another server.
+    //
+    // Also works if plugin is starting
+    const RETRY_TIMES: i32 = 3;
+
+    let orig_svr_addr = svr_cfg.addr();
+    trace!(
+        "connecting to proxy {} ({}), timeout: {:?}",
+        orig_svr_addr,
+        svr_addr,
+        timeout
+    );
+
+    let mut last_err = None;
+    for retry_time in 0..RETRY_TIMES {
+        match connect_proxy_server_internal(context, orig_svr_addr, svr_addr, timeout).await {
+            Ok(mut s) => {
+                // IMPOSSIBLE, won't fail, but just a guard
+                if let Err(err) = s.set_nodelay(context.config().no_delay) {
+                    error!("failed to set TCP_NODELAY on remote socket, error: {:?}", err);
+                }
+
+                return Ok(s);
+            }
+            Err(err) => {
+                // Connection failure, retry
+                debug!(
+                    "failed to connect {}, retried {} times (last err: {})",
+                    svr_addr, retry_time, err
+                );
+                last_err = Some(err);
+
+                // Yield and let the others' run
+                //
+                // It may take some time for scheduler to resume this coroutine.
+                tokio::task::yield_now().await;
+            }
+        }
+    }
+
+    let last_err = last_err.unwrap();
+    error!(
+        "failed to connect {}, retried {} times, last_err: {}",
+        svr_addr, RETRY_TIMES, last_err
+    );
+    Err(last_err)
+}
+
+/// Handshake logic for ShadowSocks Client
+async fn proxy_server_handshake(
+    context: SharedContext,
+    remote_stream: STcpStream,
+    svr_cfg: &ServerConfig,
+    relay_addr: &Address,
+) -> io::Result<CryptoStream<STcpStream>> {
+    let mut stream = CryptoStream::new(context, remote_stream, svr_cfg);
+
+    trace!("got encrypt stream and going to send addr: {:?}", relay_addr);
+
+    // Send relay address to remote
+    //
+    // NOTE: `Address` handshake packets are very small in most cases,
+    // so it will be sent with the IV/Nonce data (implemented inside `CryptoStream`).
+    //
+    // For lower latency, first packet should be sent back quickly,
+    // so TCP_NODELAY should be kept enabled until the first data packet is received.
+    let mut addr_buf = BytesMut::with_capacity(relay_addr.serialized_len());
+    relay_addr.write_to_buf(&mut addr_buf);
+    stream.write_all(&addr_buf).await?;
+
+    // Here we should keep the TCP_NODELAY set until the first packet is received.
+    // https://github.com/shadowsocks/shadowsocks-libev/pull/746
+    //
+    // Reset TCP_NODELAY after the first packet is received and sent back.
+
+    Ok(stream)
 }

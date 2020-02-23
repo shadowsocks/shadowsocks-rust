@@ -313,8 +313,13 @@ impl ServerConfig {
     }
 
     /// Get plugin address
-    pub fn plugin_addr(&self) -> &Option<ServerAddr> {
-        &self.plugin_addr
+    pub fn plugin_addr(&self) -> Option<&ServerAddr> {
+        self.plugin_addr.as_ref()
+    }
+
+    /// Get server's external address
+    pub fn external_addr(&self) -> &ServerAddr {
+        self.plugin_addr.as_ref().unwrap_or(&self.addr)
     }
 
     /// Get URL for QRCode

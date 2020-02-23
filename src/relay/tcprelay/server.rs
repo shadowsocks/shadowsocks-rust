@@ -162,7 +162,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
 
     for (idx, svr_cfg) in context.config().server.iter().enumerate() {
         let mut listener = {
-            let addr = svr_cfg.plugin_addr().as_ref().unwrap_or_else(|| svr_cfg.addr());
+            let addr = svr_cfg.external_addr();
             let addr = addr.bind_addr(&*context).await?;
 
             let listener = TcpListener::bind(&addr)

@@ -21,7 +21,7 @@ use crate::relay::socks5::{
     TcpResponseHeader,
 };
 
-use super::{CryptoStream, STcpStream};
+use super::ProxyStream;
 use crate::{config::ServerConfig, context::SharedContext};
 
 /// Socks5 proxy client
@@ -130,7 +130,7 @@ impl AsyncWrite for Socks5Client {
 }
 
 pub(crate) struct ServerClient {
-    pub stream: CryptoStream<STcpStream>,
+    pub stream: ProxyStream,
 }
 
 impl ServerClient {
@@ -139,9 +139,7 @@ impl ServerClient {
         addr: &Address,
         svr_cfg: &ServerConfig,
     ) -> io::Result<ServerClient> {
-        let stream = super::connect_proxy_server(&*context, svr_cfg).await?;
-        Ok(ServerClient {
-            stream: super::proxy_server_handshake(context, stream, svr_cfg, addr).await?,
-        })
+        let stream = ProxyStream::connect_proxied(context, svr_cfg, addr).await?;
+        Ok(ServerClient { stream })
     }
 }
