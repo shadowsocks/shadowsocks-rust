@@ -316,7 +316,7 @@ Example configuration:
 
 ## ACL
 
-`sslocal`, `ssserver`, `ssredir` and `ssmanager` supports ACL file with syntax like [shadowsocks-libev](https://github.com/shadowsocks/shadowsocks-libev). Some examples could be found in [here](https://github.com/shadowsocks/shadowsocks-libev/tree/master/acl).
+`sslocal`, `ssserver`, `ssredir` and `ssmanager` support ACL file with syntax like [shadowsocks-libev](https://github.com/shadowsocks/shadowsocks-libev). Some examples could be found in [here](https://github.com/shadowsocks/shadowsocks-libev/tree/master/acl).
 
 ### Available sections
 
@@ -338,6 +338,34 @@ Example configuration:
 * `BlackList` (accept / proxy all, except ...), Only hosts / clients that matches rules in
   * `[bypass_list]` - will be connected directly instead of connecting through remote proxies
   * `[black_list]` - will be rejected (close connection)
+
+### Example
+
+```ini
+# SERVERS
+# For ssserver, accepts requests from all clients by default
+[accept_all]
+
+# Blocks these clients
+[black_list]
+1.2.3.4
+127.0.0.1/8
+
+# Disallow these outbound addresses
+[outbound_block_list]
+127.0.0.1/8
+::1
+(^|\.)baidu.com
+
+# CLIENTS
+# For sslocal, ..., bypasses all targets by default
+[bypass_all]
+
+# Proxy these addresses
+[proxy_list]
+(^|\.)google.com
+8.8.8.8
+```
 
 ## Useful Tools
 

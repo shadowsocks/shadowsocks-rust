@@ -161,6 +161,11 @@ impl AccessControl {
                 continue;
             }
 
+            // Comments
+            if line.starts_with('#') {
+                continue;
+            }
+
             match line.as_str() {
                 "[reject_all]" | "[bypass_all]" => {
                     mode = Mode::WhiteList;
