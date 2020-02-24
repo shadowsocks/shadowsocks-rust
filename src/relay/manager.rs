@@ -438,6 +438,10 @@ impl ManagerService {
         config.udp_timeout = self.context.config().udp_timeout;
         config.timeout = self.context.config().timeout;
 
+        // ACL
+        // FIXME: AccessControl structure may be quite expensive to copy
+        config.acl = self.context.config().acl.clone();
+
         // Close it first
         let _ = self.servers.remove(&server_port);
         self.start_server_with_config(server_port, config).await?;

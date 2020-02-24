@@ -98,7 +98,7 @@ impl Rules {
 ///
 /// Available sections are
 ///
-/// - For local servers (`sslocal`, `sstunnel`, ...)
+/// - For local servers (`sslocal`, `ssredir`, ...)
 ///     * `[bypass_all]` - ACL runs in `BlackList` mode.
 ///         - `[bypass_list]` - Rules for connecting directly
 ///     * `[proxy_all]` - ACL runs in `WhiteList` mode.

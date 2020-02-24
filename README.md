@@ -314,13 +314,38 @@ Example configuration:
 * `chacha20-ietf-poly1305`, `xchacha20-ietf-poly1305`
 * `aes-128-pmac-siv`, `aes-256-pmac-siv` (experimental)
 
+## ACL
+
+`sslocal`, `ssserver`, `ssredir` and `ssmanager` supports ACL file with syntax like [shadowsocks-libev](https://github.com/shadowsocks/shadowsocks-libev). Some examples could be found in [here](https://github.com/shadowsocks/shadowsocks-libev/tree/master/acl).
+
+### Available sections
+
+* For local servers (`sslocal`, `ssredir`, ...)
+  * `[bypass_all]` - ACL runs in `BlackList` mode.
+    * `[bypass_list]` - Rules for connecting directly
+  * `[proxy_all]` - ACL runs in `WhiteList` mode.
+    * `[proxy_list]` - Rules for connecting through proxies
+* For remote servers (`ssserver`)
+  * `[reject_all]` - ACL runs in `BlackList` mode.
+  * `[accept_all]` - ACL runs in `WhiteList` mode.
+  * `[outbound_block_list]` - Rules for blocking outbound addresses.
+
+### Mode
+
+* `WhiteList` (reject / bypass all, except ...), Only hosts / clients that matches rules in
+  * `[proxy_list]` - will be connected through remote proxies, others will be connected directly
+  * `[white_list]` - will be allowed, others will be rejected
+* `BlackList` (accept / proxy all, except ...), Only hosts / clients that matches rules in
+  * `[bypass_list]` - will be connected directly instead of connecting through remote proxies
+  * `[black_list]` - will be rejected (close connection)
+
 ## Useful Tools
 
 1. `ssurl` is for encoding and decoding ShadowSocks URLs (SIP002). Example:
 
-    ```plain
-    ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
-    ```
+  ```plain
+  ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
+  ```
 
 ## Notes
 
@@ -336,6 +361,7 @@ It supports the following features:
 * [x] HTTP Proxy Supports ([RFC 7230](http://tools.ietf.org/html/rfc7230) and [CONNECT](https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01))
 * [x] Defend against replay attacks, [shadowsocks/shadowsocks-org#44](https://github.com/shadowsocks/shadowsocks-org/issues/44)
 * [x] Manager APIs, supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
+* [x] ACL (Access Control List)
 
 ## TODO
 

@@ -13,7 +13,6 @@ use log::{error, info};
 use tokio::runtime::Builder;
 
 use shadowsocks::{
-    acl::AccessControl,
     crypto::CipherType,
     plugin::PluginConfig,
     relay::socks5::Address,
@@ -115,12 +114,6 @@ fn main() {
                 .takes_value(true)
                 .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
         )
-        .arg(
-            Arg::with_name("ACL")
-                .long("acl")
-                .takes_value(true)
-                .help("Path to ACL (Access Control List)"),
-        )
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
@@ -219,11 +212,6 @@ fn main() {
 
     if let Some(nofile) = matches.value_of("NOFILE") {
         config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
-    }
-
-    if let Some(acl_file) = matches.value_of("ACL") {
-        let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
-        config.acl = Some(acl);
     }
 
     if config.local.is_none() {
