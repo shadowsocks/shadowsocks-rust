@@ -50,7 +50,6 @@ aes-ctr = ["openssl"]
 camellia-cfb = ["openssl"]
 single-threaded = []
 trust-dns = ["trust-dns-resolver"]
-redir = []
 openssl-vendored = ["openssl/vendored"]
 
 [dependencies]

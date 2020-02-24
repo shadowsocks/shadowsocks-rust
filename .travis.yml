@@ -39,4 +39,7 @@ install:
     fi
 
 script:
+  - cargo test --no-fail-fast
   - cargo test --no-fail-fast --features miscreant
+  - cargo test --no-fail-fast --no-default-features
+  - cargo test --no-fail-fast --features single-threaded
