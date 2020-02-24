@@ -804,6 +804,7 @@ impl Display for CipherType {
 mod test_cipher {
     use crate::crypto::{new_stream, CipherType, CryptoMode};
 
+    #[cfg(feature = "aes-cfb")]
     #[test]
     fn test_get_cipher() {
         let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
