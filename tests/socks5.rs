@@ -70,7 +70,7 @@ fn socks5_relay_stream() {
     const LOCAL_ADDR: &str = "127.0.0.1:8200";
 
     const PASSWORD: &str = "test-password";
-    const METHOD: CipherType = CipherType::Aes256Cfb;
+    const METHOD: CipherType = CipherType::Aes128Gcm;
 
     let mut rt = Builder::new().basic_scheduler().enable_all().build().unwrap();
     let rt_handle = rt.handle().clone();

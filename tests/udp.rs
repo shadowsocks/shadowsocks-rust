@@ -31,7 +31,7 @@ const UDP_ECHO_SERVER_ADDR: &str = "127.0.0.1:50403";
 const UDP_LOCAL_ADDR: &str = "127.0.0.1:9011";
 
 const PASSWORD: &str = "test-password";
-const METHOD: CipherType = CipherType::Aes128Cfb;
+const METHOD: CipherType = CipherType::Aes128Gcm;
 
 fn get_svr_config() -> Config {
     let mut cfg = Config::new(ConfigType::Server);

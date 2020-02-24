@@ -804,13 +804,12 @@ impl Display for CipherType {
 mod test_cipher {
     use crate::crypto::{new_stream, CipherType, CryptoMode};
 
-    #[cfg(feature = "aes-cfb")]
     #[test]
     fn test_get_cipher() {
-        let key = CipherType::Aes128Cfb.bytes_to_key(b"PassWORD");
-        let iv = CipherType::Aes128Cfb.gen_init_vec();
-        let mut encryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Encrypt);
-        let mut decryptor = new_stream(CipherType::Aes128Cfb, &key[0..], &iv[0..], CryptoMode::Decrypt);
+        let key = CipherType::Table.bytes_to_key(b"PassWORD");
+        let iv = CipherType::Table.gen_init_vec();
+        let mut encryptor = new_stream(CipherType::Table, &key[0..], &iv[0..], CryptoMode::Encrypt);
+        let mut decryptor = new_stream(CipherType::Table, &key[0..], &iv[0..], CryptoMode::Decrypt);
         let message = "HELLO WORLD";
 
         let mut encrypted_msg = Vec::new();
