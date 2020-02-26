@@ -99,9 +99,12 @@ impl ProxyStream {
         let timeout = context.config().timeout;
 
         let stream = match *addr {
-            Address::SocketAddress(ref saddr) => TcpStream::connect(saddr).await?,
+            Address::SocketAddress(ref saddr) => try_timeout(TcpStream::connect(saddr), timeout).await?,
             Address::DomainNameAddress(ref domain, port) => {
-                lookup_then!(context, domain, port, |saddr| { TcpStream::connect(saddr).await })?.1
+                lookup_then!(context, domain, port, |saddr| {
+                    try_timeout(TcpStream::connect(saddr), timeout).await
+                })?
+                .1
             }
         };
 

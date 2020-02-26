@@ -117,7 +117,7 @@ impl ServerState {
     #[cfg(feature = "trust-dns")]
     pub async fn new_shared(config: &Config, rt: Handle) -> SharedServerState {
         let state = ServerState {
-            dns_resolver: match create_resolver(config.get_dns_config(), rt).await {
+            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, rt).await {
                 Ok(resolver) => Some(resolver),
                 Err(..) => None,
             },
@@ -128,7 +128,7 @@ impl ServerState {
 
     #[cfg(not(feature = "trust-dns"))]
     pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
-        Arc::new(ServerState { })
+        Arc::new(ServerState {})
     }
 
     /// Get the global shared resolver

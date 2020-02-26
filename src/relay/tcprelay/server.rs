@@ -18,6 +18,7 @@ use crate::{
     relay::{
         flow::{SharedMultiServerFlowStatistic, SharedServerFlowStatistic},
         socks5::Address,
+        utils::try_timeout,
     },
 };
 
@@ -31,7 +32,7 @@ async fn handle_client(
     socket: TcpStream,
     peer_addr: SocketAddr,
 ) -> io::Result<()> {
-    let timeout = svr_cfg.timeout();
+    let timeout = svr_cfg.timeout().or(context.config().timeout);
 
     if let Err(err) = socket.set_keepalive(timeout) {
         error!("failed to set keep alive: {:?}", err);
@@ -81,7 +82,7 @@ async fn handle_client(
         Address::SocketAddress(ref saddr) => {
             // NOTE: ACL is already checked above, connect directly
 
-            match connect_tcp_stream(saddr, &bind_addr).await {
+            match try_timeout(connect_tcp_stream(saddr, &bind_addr), timeout).await {
                 Ok(s) => {
                     debug!("connected to remote {}", saddr);
                     s
@@ -94,7 +95,7 @@ async fn handle_client(
         }
         Address::DomainNameAddress(ref dname, port) => {
             let result = lookup_outbound_then!(&*context, dname.as_str(), port, |addr| {
-                match connect_tcp_stream(&addr, &bind_addr).await {
+                match try_timeout(connect_tcp_stream(&addr, &bind_addr), timeout).await {
                     Ok(s) => Ok(s),
                     Err(err) => {
                         debug!(

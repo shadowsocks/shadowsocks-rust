@@ -3,29 +3,41 @@
 use std::{
     io::{self, Error, ErrorKind},
     net::SocketAddr,
+    time::Duration,
 };
 
 use log::{error, trace};
 use tokio::{self, runtime::Handle};
-use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
+use trust_dns_resolver::{
+    config::{ResolverConfig, ResolverOpts},
+    TokioAsyncResolver,
+};
 
 use super::tokio_dns_resolver::resolve as tokio_resolve;
 use crate::context::Context;
 
 /// Create a `trust-dns` asynchronous DNS resolver
-pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Result<TokioAsyncResolver> {
+pub async fn create_resolver(
+    dns: Option<ResolverConfig>,
+    timeout: Option<Duration>,
+    rt: Handle,
+) -> io::Result<TokioAsyncResolver> {
+    let mut resolver_opts = ResolverOpts::default();
+    if let Some(d) = timeout {
+        resolver_opts.timeout = d;
+    }
+
     {
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
         #[cfg(any(unix, windows))]
         {
             if let Some(conf) = dns {
-                use trust_dns_resolver::config::ResolverOpts;
                 trace!(
                     "initializing DNS resolver with config {:?} opts {:?}",
                     conf,
-                    ResolverOpts::default()
+                    resolver_opts
                 );
-                TokioAsyncResolver::new(conf, ResolverOpts::default(), rt)
+                TokioAsyncResolver::new(conf, resolver_opts, rt)
             } else {
                 use trust_dns_resolver::system_conf::read_system_conf;
                 // use the system resolver configuration
@@ -40,6 +52,8 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
                     }
                 };
 
+                // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
+
                 trace!(
                     "initializing DNS resolver with system-config {:?} opts {:?}",
                     config,
@@ -53,24 +67,21 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, rt: Handle) -> io::Res
         // For other operating systems, we can use one of the preconfigured definitions
         #[cfg(not(any(unix, windows)))]
         {
-            // Directly reference the config types
-            use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-
             if let Some(conf) = dns {
                 trace!(
                     "initializing DNS resolver with config {:?} opts {:?}",
                     conf,
-                    ResolverOpts::default()
+                    resolver_opts
                 );
-                TokioAsyncResolver::new(conf, ResolverOpts::default(), rt)
+                TokioAsyncResolver::new(conf, resolver_opts, rt)
             } else {
                 // Get a new resolver with the google nameservers as the upstream recursive resolvers
                 trace!(
                     "initializing DNS resolver with google-config {:?} opts {:?}",
                     ResolverConfig::google(),
-                    ResolverOpts::default()
+                    resolver_opts
                 );
-                TokioAsyncResolver::new(ResolverConfig::google(), ResolverOpts::default(), rt)
+                TokioAsyncResolver::new(ResolverConfig::google(), resolver_opts, rt)
             }
         }
     }
