@@ -38,7 +38,6 @@ use log::{debug, error, info, trace};
 use pin_project::pin_project;
 
 use crate::{
-    config::ServerConfig,
     context::SharedContext,
     relay::{
         loadbalancing::server::{
@@ -363,13 +362,7 @@ impl Connection for ProxyStream {
 type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
 type DirectHttpClient = Client<DirectConnector, Body>;
 
-async fn establish_connect_tunnel(
-    upgraded: Upgraded,
-    stream: ProxyStream,
-    svr_cfg: &ServerConfig,
-    client_addr: SocketAddr,
-    addr: Address,
-) {
+async fn establish_connect_tunnel(upgraded: Upgraded, stream: ProxyStream, client_addr: SocketAddr, addr: Address) {
     use tokio::io::{copy, split};
 
     let (mut r, mut w) = split(upgraded);
@@ -378,57 +371,28 @@ async fn establish_connect_tunnel(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!(
-        "CONNECT relay established {} <-> {} ({})",
-        client_addr,
-        svr_cfg.addr(),
-        addr
-    );
+    debug!("CONNECT relay established {} <-> {}", client_addr, addr);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} ({}) closed", client_addr, addr, svr_cfg.addr()),
+        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "CONNECT relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    addr,
-                    svr_cfg.addr(),
-                    err,
-                );
+                trace!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "CONNECT relay {} -> {} ({}) closed with error {}",
-                    client_addr,
-                    addr,
-                    svr_cfg.addr(),
-                    err,
-                );
+                error!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
-        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} ({}) closed", client_addr, addr, svr_cfg.addr()),
+        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!(
-                    "CONNECT relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    addr,
-                    svr_cfg.addr(),
-                    err,
-                );
+                trace!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!(
-                    "CONNECT relay {} <- {} ({}) closed with error {}",
-                    client_addr,
-                    addr,
-                    svr_cfg.addr(),
-                    err,
-                );
+                error!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
 
-    debug!("CONNECT relay {} <-> {} ({}) closed", client_addr, addr, svr_cfg.addr());
+    debug!("CONNECT relay {} <-> {} closed", client_addr, addr);
 }
 
 fn make_bad_request() -> io::Result<Response<Body>> {
@@ -567,13 +531,11 @@ async fn server_dispatch(
         // connection be upgraded, so we can't return a response inside
         // `on_upgrade` future.
         tokio::spawn(async move {
-            let svr_cfg = svr_score.server_config();
-
             match req.into_body().on_upgrade().await {
                 Ok(upgraded) => {
                     trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
 
-                    establish_connect_tunnel(upgraded, stream, svr_cfg, client_addr, host).await
+                    establish_connect_tunnel(upgraded, stream, client_addr, host).await
                 }
                 Err(e) => {
                     error!(
