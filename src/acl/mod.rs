@@ -3,15 +3,15 @@
 //! This is for advance controlling server behaviors in both local and proxy servers.
 
 use std::{
-    cmp::Ordering,
     fmt,
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::Path,
 };
 
-use ipnetwork::IpNetwork;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use iprange::IpRange;
 use regex::RegexSet;
 
 use crate::{context::Context, relay::socks5::Address};
@@ -25,26 +25,32 @@ pub enum Mode {
     WhiteList,
 }
 
-#[derive(Clone)]
 struct Rules {
-    ip: Vec<IpNetwork>,
+    ipv4: IpRange<Ipv4Net>,
+    ipv6: IpRange<Ipv6Net>,
     rule: RegexSet,
 }
 
 impl fmt::Debug for Rules {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Rules {{ ip: {}, rule: {} }}", self.ip.len(), self.rule.len())
+        write!(
+            f,
+            "Rules {{ ipv4: {:?}, ipv6: {:?}, rule: {} }}",
+            self.ipv4,
+            self.ipv6,
+            self.rule.len()
+        )
     }
 }
 
 impl Rules {
     /// Create a new rule
-    fn new(mut ip: Vec<IpNetwork>, rule: RegexSet) -> Rules {
-        // Sort networks for binary search
-        // TODO: Merge duplicated subnets
-        ip.sort_unstable();
+    fn new(mut ipv4: IpRange<Ipv4Net>, mut ipv6: IpRange<Ipv6Net>, rule: RegexSet) -> Rules {
+        // Optimization, merging networks
+        ipv4.simplify();
+        ipv6.simplify();
 
-        Rules { ip, rule }
+        Rules { ipv4, ipv6, rule }
     }
 
     /// Check if the specified address matches these rules
@@ -57,18 +63,10 @@ impl Rules {
 
     /// Check if the specified address matches any rules
     fn check_ip_matched(&self, addr: &SocketAddr) -> bool {
-        let ip = addr.ip();
-        let ip_network = IpNetwork::from(ip); // Create a network which only contains itself
-
-        self.ip
-            .binary_search_by(|network| {
-                if network.contains(ip) {
-                    Ordering::Equal
-                } else {
-                    network.cmp(&ip_network)
-                }
-            })
-            .is_ok()
+        match addr.ip() {
+            IpAddr::V4(v4) => self.ipv4.contains(&v4),
+            IpAddr::V6(v6) => self.ipv6.contains(&v6),
+        }
     }
 
     /// Check if the specified host matches any rules
@@ -129,7 +127,7 @@ impl Rules {
 /// - CIDR form network addresses, like `10.9.0.32/16`
 /// - IP addresses, like `127.0.0.1` or `::1`
 /// - Regular Expression for matching hosts, like `(^|\.)gmail\.com$`
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AccessControl {
     outbound_block: Rules,
     black_list: Rules,
@@ -145,14 +143,18 @@ impl AccessControl {
 
         let mut mode = Mode::BlackList;
 
-        let mut outbound_block_network = Vec::new();
+        let mut outbound_block_ipv4 = IpRange::new();
+        let mut outbound_block_ipv6 = IpRange::new();
         let mut outbound_block_rules = Vec::new();
-        let mut bypass_network = Vec::new();
+        let mut bypass_ipv4 = IpRange::new();
+        let mut bypass_ipv6 = IpRange::new();
         let mut bypass_rules = Vec::new();
-        let mut proxy_network = Vec::new();
+        let mut proxy_ipv4 = IpRange::new();
+        let mut proxy_ipv6 = IpRange::new();
         let mut proxy_rules = Vec::new();
 
-        let mut curr_network = &mut bypass_network;
+        let mut curr_ipv4 = &mut bypass_ipv4;
+        let mut curr_ipv6 = &mut bypass_ipv6;
         let mut curr_rules = &mut proxy_rules;
 
         for line in r.lines() {
@@ -174,23 +176,42 @@ impl AccessControl {
                     mode = Mode::BlackList;
                 }
                 "[outbound_block_list]" => {
-                    curr_network = &mut outbound_block_network;
+                    curr_ipv4 = &mut outbound_block_ipv4;
+                    curr_ipv6 = &mut outbound_block_ipv6;
                     curr_rules = &mut outbound_block_rules;
                 }
                 "[black_list]" | "[bypass_list]" => {
-                    curr_network = &mut bypass_network;
+                    curr_ipv4 = &mut bypass_ipv4;
+                    curr_ipv6 = &mut bypass_ipv6;
                     curr_rules = &mut bypass_rules;
                 }
                 "[white_list]" | "[proxy_list]" => {
-                    curr_network = &mut proxy_network;
+                    curr_ipv4 = &mut proxy_ipv4;
+                    curr_ipv6 = &mut proxy_ipv6;
                     curr_rules = &mut proxy_rules;
                 }
                 _ => {
-                    match line.parse::<IpNetwork>() {
-                        Ok(network) => curr_network.push(network),
+                    match line.parse::<IpNet>() {
+                        Ok(IpNet::V4(v4)) => {
+                            curr_ipv4.add(v4);
+                        }
+                        Ok(IpNet::V6(v6)) => {
+                            curr_ipv6.add(v6);
+                        }
                         Err(..) => {
-                            // FIXME: If this line is not a valid regex, how can we know without actually compile it?
-                            curr_rules.push(line);
+                            // Maybe it is a pure IpAddr
+                            match line.parse::<IpAddr>() {
+                                Ok(IpAddr::V4(v4)) => {
+                                    curr_ipv4.add(Ipv4Net::from(v4));
+                                }
+                                Ok(IpAddr::V6(v6)) => {
+                                    curr_ipv6.add(Ipv6Net::from(v6));
+                                }
+                                Err(..) => {
+                                    // FIXME: If this line is not a valid regex, how can we know without actually compile it?
+                                    curr_rules.push(line);
+                                }
+                            }
                         }
                     }
                 }
@@ -228,9 +249,9 @@ impl AccessControl {
         };
 
         Ok(AccessControl {
-            outbound_block: Rules::new(outbound_block_network, outbound_block_regex),
-            black_list: Rules::new(bypass_network, bypass_regex),
-            white_list: Rules::new(proxy_network, proxy_regex),
+            outbound_block: Rules::new(outbound_block_ipv4, outbound_block_ipv6, outbound_block_regex),
+            black_list: Rules::new(bypass_ipv4, bypass_ipv6, bypass_regex),
+            white_list: Rules::new(proxy_ipv4, proxy_ipv6, proxy_regex),
             mode,
         })
     }

@@ -53,6 +53,7 @@ use std::{
     path::Path,
     str::FromStr,
     string::ToString,
+    sync::Arc,
     time::Duration,
 };
 
@@ -711,7 +712,7 @@ pub struct Config {
     /// Timeout for TCP connections, could be replaced by server*.timeout
     pub timeout: Option<Duration>,
     /// ACL configuration
-    pub acl: Option<AccessControl>,
+    pub acl: Option<Arc<AccessControl>>,
 }
 
 /// Configuration parsing error kind

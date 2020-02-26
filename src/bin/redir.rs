@@ -4,6 +4,8 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
+use std::sync::Arc;
+
 use clap::{App, Arg};
 use futures::{
     future::{self, Either},
@@ -215,7 +217,7 @@ fn main() {
 
     if let Some(acl_file) = matches.value_of("ACL") {
         let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
-        config.acl = Some(acl);
+        config.acl = Some(Arc::new(acl));
     }
 
     if config.local.is_none() {

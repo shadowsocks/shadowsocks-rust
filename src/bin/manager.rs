@@ -7,7 +7,10 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use clap::{App, Arg};
 use futures::{
@@ -166,7 +169,7 @@ fn main() {
 
     if let Some(acl_file) = matches.value_of("ACL") {
         let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
-        config.acl = Some(acl);
+        config.acl = Some(Arc::new(acl));
     }
 
     if config.manager_address.is_none() {

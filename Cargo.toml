@@ -92,10 +92,11 @@ bloomfilter = "^1.0.2"
 spin = "0.5"
 mio = "0.6"
 serde_json = "1.0"
-ipnetwork = "0.16"
 regex = "1"
 strum = "0.17"
 strum_macros = "0.17"
+iprange = "0.6"
+ipnet = "2.2"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
