@@ -20,7 +20,7 @@ use tokio::{
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    relay::{socks5::Address, utils::try_timeout, utils::new_tcp_stream},
+    relay::{socks5::Address, utils::try_timeout, sys::new_tcp_stream},
 };
 
 use super::{connection::Connection, CryptoStream, STcpStream};
