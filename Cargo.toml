@@ -50,6 +50,7 @@ aes-ctr = ["openssl"]
 camellia-cfb = ["openssl"]
 single-threaded = []
 trust-dns = ["trust-dns-resolver"]
+android = ['sendfd']
 openssl-vendored = ["openssl/vendored"]
 
 [dependencies]
@@ -75,6 +76,8 @@ serde_urlencoded = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 url = "2.1"
 byte_string = "1.0"
+net2 = "0.2"
+sendfd = { version = "0.3", optional = true }
 libsodium-sys = { version = "0.2", optional = true }
 miscreant = { version = "0.5", optional = true }
 trust-dns-resolver = { version = "0.19", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }

@@ -37,6 +37,18 @@ fn main() {
                 .multiple(true)
                 .help("Set the level of debug"),
         )
+        .arg(
+            Arg::with_name("STAT_PATH")
+                .long("stat-path")
+                .takes_value(true)
+                .help("Specify stat path (only for Android)"),
+        )
+        .arg(
+            Arg::with_name("PROTECT_PATH")
+                .long("protect-path")
+                .takes_value(true)
+                .help("Specify protect-path (only for Android)"),
+        )
         .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
         .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
         .arg(
@@ -173,6 +185,14 @@ fn main() {
             panic!("`server-addr`, `method` and `password` should be provided together");
         }
     };
+
+    if let Some(stat_path) = matches.value_of("STAT_PATH") {
+        config.stat_path = Some(stat_path.to_string());
+    }
+
+    if let Some(protect_path) = matches.value_of("PROTECT_PATH") {
+        config.protect_path = Some(protect_path.to_string());
+    }
 
     if let Some(url) = matches.value_of("URL") {
         let svr_addr = url.parse::<ServerConfig>().expect("parse `url`");
