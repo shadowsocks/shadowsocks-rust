@@ -24,6 +24,7 @@ use crate::{
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::{Address, UdpAssociateHeader},
+        sys::create_protected_udp_socket,
         sys::create_udp_socket,
         utils::try_timeout,
     },
@@ -79,10 +80,10 @@ impl UdpAssociation {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 
-        let remote_udp = create_udp_socket(&local_addr).await?;
+        let remote_udp = create_protected_udp_socket(&server.context().config().protect_path, &local_addr).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
-        let bypass_udp = create_udp_socket(&local_addr).await?;
+        let bypass_udp = create_protected_udp_socket(&server.context().config().protect_path, &local_addr).await?;
         let bypass_bind_addr = bypass_udp.local_addr().expect("determine port bound to");
 
         debug!(
