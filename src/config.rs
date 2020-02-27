@@ -712,6 +712,11 @@ pub struct Config {
     pub timeout: Option<Duration>,
     /// ACL configuration
     pub acl: Option<AccessControl>,
+    /// Path to stat callback unix address, only for Android
+    pub stat_path: Option<String>,
+    /// Path to protect callback unix address, only for Android
+    pub protect_path: Option<String>,
+
 }
 
 /// Configuration parsing error kind
@@ -790,6 +795,8 @@ impl Config {
             nofile: None,
             timeout: None,
             acl: None,
+            stat_path: None,
+            protect_path: None,
         }
     }
 

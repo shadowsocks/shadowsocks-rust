@@ -20,7 +20,7 @@ use tokio::{
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    relay::{socks5::Address, utils::try_timeout},
+    relay::{socks5::Address, utils::try_timeout, utils::new_tcp_stream},
 };
 
 use super::{connection::Connection, CryptoStream, STcpStream};
@@ -99,12 +99,15 @@ impl ProxyStream {
         let timeout = context.config().timeout;
 
         let stream = match *addr {
-            Address::SocketAddress(ref saddr) => try_timeout(TcpStream::connect(saddr), timeout).await?,
+            Address::SocketAddress(ref saddr) => {
+                let stream = new_tcp_stream(&context.config().protect_path, &saddr)?;
+                try_timeout(TcpStream::connect_std(stream, &saddr), timeout).await?
+            },
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
-                    try_timeout(TcpStream::connect(saddr), timeout).await
-                })?
-                .1
+                    let stream = new_tcp_stream(&context.config().protect_path, &saddr)?;
+                    try_timeout(TcpStream::connect_std(stream, &saddr), timeout).await
+                })?.1
             }
         };
 
@@ -203,14 +206,18 @@ async fn connect_proxy_server_internal(
 ) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
-            let stream = try_timeout(TcpStream::connect(addr), timeout).await?;
+            let stream = new_tcp_stream(&context.config().protect_path, &addr)?;
+            let stream = try_timeout(TcpStream::connect_std(stream, &addr), timeout).await?;
             trace!("connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
-                match try_timeout(TcpStream::connect(addr), timeout).await {
-                    Ok(s) => Ok(STcpStream::new(s, timeout)),
+                let stream = new_tcp_stream(&context.config().protect_path, &addr)?;
+                match try_timeout(TcpStream::connect_std(stream, &addr), timeout).await {
+                    Ok(s) => {
+                        Ok(STcpStream::new(s, timeout))
+                    },
                     Err(e) => {
                         debug!(
                             "failed to connect proxy {} ({}:{} ({})) try another (err: {})",
