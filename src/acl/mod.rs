@@ -25,6 +25,7 @@ pub enum Mode {
     WhiteList,
 }
 
+#[derive(Clone)]
 struct Rules {
     ipv4: IpRange<Ipv4Net>,
     ipv6: IpRange<Ipv6Net>,
@@ -33,13 +34,23 @@ struct Rules {
 
 impl fmt::Debug for Rules {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Rules {{ ipv4: {:?}, ipv6: {:?}, rule: {} }}",
-            self.ipv4,
-            self.ipv6,
-            self.rule.len()
-        )
+        write!(f, "Rules {{ ipv4: {:?}, ipv6: {:?}, rule: [", self.ipv4, self.ipv6)?;
+
+        let max_len = 2;
+        let has_more = self.rule.len() > max_len;
+
+        for (idx, r) in self.rule.patterns().iter().take(max_len).enumerate() {
+            if idx > 0 {
+                f.write_str(", ")?;
+            }
+            f.write_str(r)?;
+        }
+
+        if has_more {
+            f.write_str(", ...")?;
+        }
+
+        f.write_str("] }")
     }
 }
 
@@ -127,7 +138,7 @@ impl Rules {
 /// - CIDR form network addresses, like `10.9.0.32/16`
 /// - IP addresses, like `127.0.0.1` or `::1`
 /// - Regular Expression for matching hosts, like `(^|\.)gmail\.com$`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AccessControl {
     outbound_block: Rules,
     black_list: Rules,
