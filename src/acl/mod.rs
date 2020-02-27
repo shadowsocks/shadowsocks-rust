@@ -273,6 +273,17 @@ impl AccessControl {
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
         match self.mode {
             Mode::BlackList => {
+                // always redirect TCP DNS query (for android)
+                if cfg!(target_os="android") {
+                    let port = match *addr {
+                        Address::SocketAddress(ref saddr) => saddr.port(),
+                        _ => 0,
+                    };
+                    if port == 53 {
+                        return true;
+                    }
+                }
+
                 // Only hosts in bypass_list will be bypassed
                 if self.black_list.check_address_matched(addr) {
                     return true;
@@ -291,6 +302,16 @@ impl AccessControl {
                 false
             }
             Mode::WhiteList => {
+                // always redirect TCP DNS query (for android)
+                if cfg!(target_os="android") {
+                    let port = match *addr {
+                        Address::SocketAddress(ref saddr) => saddr.port(),
+                        _ => 0,
+                    };
+                    if port == 53 {
+                        return false;
+                    }
+                }
                 // Only hosts in proxy_list will be proxied
                 if self.white_list.check_address_matched(addr) {
                     return false;
