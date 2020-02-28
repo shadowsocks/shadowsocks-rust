@@ -100,13 +100,13 @@ impl ProxyStream {
 
         let stream = match *addr {
             Address::SocketAddress(ref saddr) => {
-                let stream = new_tcp_stream(&context.config().protect_path, &saddr)?;
-                try_timeout(TcpStream::connect_std(stream, &saddr), timeout).await?
+                let stream = new_tcp_stream(&saddr, &context)?;
+                TcpStream::connect_std(stream, &saddr).await?
             },
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
-                    let stream = new_tcp_stream(&context.config().protect_path, &saddr)?;
-                    try_timeout(TcpStream::connect_std(stream, &saddr), timeout).await
+                    let stream = new_tcp_stream(&saddr, &context)?;
+                    TcpStream::connect_std(stream, &saddr).await
                 })?.1
             }
         };
@@ -206,14 +206,14 @@ async fn connect_proxy_server_internal(
 ) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
-            let stream = new_tcp_stream(&context.config().protect_path, &addr)?;
+            let stream = new_tcp_stream(&addr, &context)?;
             let stream = try_timeout(TcpStream::connect_std(stream, &addr), timeout).await?;
             trace!("connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
-                let stream = new_tcp_stream(&context.config().protect_path, &addr)?;
+                let stream = new_tcp_stream(&addr, &context)?;
                 match try_timeout(TcpStream::connect_std(stream, &addr), timeout).await {
                     Ok(s) => {
                         Ok(STcpStream::new(s, timeout))
