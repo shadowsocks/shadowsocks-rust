@@ -1,7 +1,7 @@
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream},
     io::prelude::*,
     time::Duration,
     os::unix::io::{AsRawFd, RawFd},
@@ -11,6 +11,10 @@ use std::{
 use net2::*;
 use sendfd::*;
 use tokio::net::UdpSocket;
+
+use crate::{
+    context::{Context},
+};
 
 /// Convert `sockaddr_storage` to `SocketAddr`
 #[allow(dead_code)]
@@ -32,7 +36,7 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
 }
 
 #[cfg(target_os="android")]
-pub fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
+fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
     // ignore if protect_path is not specified
     let path = match protect_path {
         Some(path) => path,
@@ -61,33 +65,48 @@ pub fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
 }
 
 #[cfg(not(target_os="android"))]
-pub fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
+fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-// create a new TCP stream
-pub fn new_tcp_stream(protect_path: &Option<String>, saddr: &SocketAddr) -> io::Result<TcpStream> {
+/// create a new TCP stream
+#[inline(always)]
+pub fn new_tcp_stream(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
     let builder = match saddr {
         SocketAddr::V4(_) => TcpBuilder::new_v4()?,
         SocketAddr::V6(_) => TcpBuilder::new_v6()?,
     };
 
-    protect(protect_path, builder.as_raw_fd())?;
+    // Any traffic to localhost should be protected
+    // This is a workaround for VPNService
+    if cfg!(target_os="android") {
+        if saddr.ip() != IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)) {
+            protect(&context.config().protect_path, builder.as_raw_fd())?;
+        }
+    }
 
     builder.to_tcp_stream()
 }
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
-    UdpSocket::bind(addr).await
+pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context) -> io::Result<UdpSocket> {
+    let socket = UdpSocket::bind(addr).await?;
+
+    // Any traffic to localhost should be protected
+    // This is a workaround for VPNService
+    if cfg!(target_os="android") {
+        if addr.ip() != IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)) {
+            protect(&context.config().protect_path, socket.as_raw_fd())?;
+        }
+    }
+
+    Ok(socket)
 }
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_protected_udp_socket(protect_path: &Option<String>, addr: &SocketAddr) -> io::Result<UdpSocket> {
+pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
     let socket = UdpSocket::bind(addr).await?;
-    protect(protect_path, socket.as_raw_fd())?;
     Ok(socket)
 }
-

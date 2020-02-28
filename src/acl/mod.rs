@@ -271,62 +271,45 @@ impl AccessControl {
     ///
     /// FIXME: This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
-        match self.mode {
-            Mode::BlackList => {
-                // always redirect TCP DNS query (for android)
-                if cfg!(target_os="android") {
-                    let port = match *addr {
-                        Address::SocketAddress(ref saddr) => saddr.port(),
-                        _ => 0,
-                    };
-                    if port == 53 {
-                        return true;
-                    }
-                }
-
-                // Only hosts in bypass_list will be bypassed
-                if self.black_list.check_address_matched(addr) {
-                    return true;
-                }
-
-                if let Address::DomainNameAddress(ref host, port) = *addr {
-                    if let Ok(vaddr) = context.dns_resolve(host, port).await {
-                        for addr in vaddr {
-                            if self.black_list.check_ip_matched(&addr) {
-                                return true;
-                            }
+        // Always redirect TCP DNS query (for android)
+        if cfg!(target_os="android") {
+            let port = match *addr {
+                Address::SocketAddress(ref saddr) => saddr.port(),
+                Address::DomainNameAddress(ref _host, port) => port,
+            };
+            if port == 53 {
+                return false;
+            }
+        }
+        // Addresses in bypass_list will be bypassed
+        if self.black_list.check_address_matched(addr) {
+            return true;
+        }
+        // Addresses in proxy_list will be proxied
+        if self.white_list.check_address_matched(addr) {
+            return false;
+        }
+        // Resolve hostname and check the list
+        if cfg!(not(target_os="android")) {
+            if let Address::DomainNameAddress(ref host, port) = *addr {
+                if let Ok(vaddr) = context.dns_resolve(host, port).await {
+                    for addr in vaddr {
+                        if self.black_list.check_ip_matched(&addr) {
+                            return true;
+                        }
+                        if self.white_list.check_ip_matched(&addr) {
+                            return false;
                         }
                     }
                 }
-
+            }
+        }
+        // default rule
+        match self.mode {
+            Mode::BlackList => {
                 false
             }
             Mode::WhiteList => {
-                // always redirect TCP DNS query (for android)
-                if cfg!(target_os="android") {
-                    let port = match *addr {
-                        Address::SocketAddress(ref saddr) => saddr.port(),
-                        _ => 0,
-                    };
-                    if port == 53 {
-                        return false;
-                    }
-                }
-                // Only hosts in proxy_list will be proxied
-                if self.white_list.check_address_matched(addr) {
-                    return false;
-                }
-
-                if let Address::DomainNameAddress(ref host, port) = *addr {
-                    if let Ok(vaddr) = context.dns_resolve(host, port).await {
-                        for addr in vaddr {
-                            if self.white_list.check_ip_matched(&addr) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-
                 true
             }
         }

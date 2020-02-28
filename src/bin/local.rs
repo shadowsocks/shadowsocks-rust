@@ -186,12 +186,14 @@ fn main() {
         }
     };
 
-    if let Some(stat_path) = matches.value_of("STAT_PATH") {
-        config.stat_path = Some(stat_path.to_string());
-    }
+    if cfg!(target_os="android") {
+        if let Some(stat_path) = matches.value_of("STAT_PATH") {
+            config.stat_path = Some(stat_path.to_string());
+        }
 
-    if let Some(protect_path) = matches.value_of("PROTECT_PATH") {
-        config.protect_path = Some(protect_path.to_string());
+        if let Some(protect_path) = matches.value_of("PROTECT_PATH") {
+            config.protect_path = Some(protect_path.to_string());
+        }
     }
 
     if let Some(url) = matches.value_of("URL") {
