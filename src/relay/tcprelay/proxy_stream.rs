@@ -20,7 +20,7 @@ use tokio::{
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    relay::{socks5::Address, utils::try_timeout, sys::new_tcp_stream},
+    relay::{socks5::Address, sys::new_tcp_stream, utils::try_timeout},
 };
 
 use super::{connection::Connection, CryptoStream, STcpStream};
@@ -102,12 +102,13 @@ impl ProxyStream {
             Address::SocketAddress(ref saddr) => {
                 let stream = new_tcp_stream(&saddr, &context)?;
                 TcpStream::connect_std(stream, &saddr).await?
-            },
+            }
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
                     let stream = new_tcp_stream(&saddr, &context)?;
                     TcpStream::connect_std(stream, &saddr).await
-                })?.1
+                })?
+                .1
             }
         };
 
@@ -215,9 +216,7 @@ async fn connect_proxy_server_internal(
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
                 let stream = new_tcp_stream(&addr, &context)?;
                 match try_timeout(TcpStream::connect_std(stream, &addr), timeout).await {
-                    Ok(s) => {
-                        Ok(STcpStream::new(s, timeout))
-                    },
+                    Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         debug!(
                             "failed to connect proxy {} ({}:{} ({})) try another (err: {})",
