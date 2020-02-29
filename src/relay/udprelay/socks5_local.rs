@@ -24,8 +24,7 @@ use crate::{
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
         socks5::{Address, UdpAssociateHeader},
-        sys::create_udp_socket_with_context,
-        sys::create_udp_socket,
+        sys::{create_udp_socket, create_udp_socket_with_context},
         utils::try_timeout,
     },
 };

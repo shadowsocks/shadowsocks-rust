@@ -716,7 +716,6 @@ pub struct Config {
     pub stat_path: Option<String>,
     /// Path to protect callback unix address, only for Android
     pub protect_path: Option<String>,
-
 }
 
 /// Configuration parsing error kind

@@ -186,7 +186,7 @@ fn main() {
         }
     };
 
-    if cfg!(target_os="android") {
+    if cfg!(target_os = "android") {
         if let Some(stat_path) = matches.value_of("STAT_PATH") {
             config.stat_path = Some(stat_path.to_string());
         }
