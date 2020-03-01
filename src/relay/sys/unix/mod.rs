@@ -1,18 +1,12 @@
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
     os::unix::io::{AsRawFd, RawFd},
 };
 
-use socket2::{Domain, Protocol, Socket, Type};
-
+use cfg_if::cfg_if;
 use tokio::net::{TcpStream, UdpSocket};
-
-#[cfg(all(feature = "sendfd", target_os = "android"))]
-use sendfd::*;
-#[cfg(all(feature = "sendfd", target_os = "android"))]
-use std::{io::prelude::*, os::unix::net::UnixStream, time::Duration};
 
 use crate::context::Context;
 
@@ -35,64 +29,66 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
     }
 }
 
-#[cfg(target_os = "android")]
-fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
-    // ignore if protect_path is not specified
-    let path = match protect_path {
-        Some(path) => path,
-        None => return Ok(()),
-    };
+cfg_if! {
+    if #[cfg(target_os = "android")] {
+        /// This is a RPC for Android to `protect()` socket for connecting to remote servers
+        ///
+        /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
+        ///
+        /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
+        fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
+            use std::{
+                io::{Read, Write},
+                os::unix::net::UnixStream,
+                time::Duration,
+            };
+            use sendfd::{RecvWithFd, SendWithFd};
 
-    // it's safe to use blocking socket here
-    let mut stream = UnixStream::connect(path)?;
-    stream
-        .set_read_timeout(Some(Duration::new(1, 0)))
-        .expect("couldn't set read timeout");
-    stream
-        .set_write_timeout(Some(Duration::new(1, 0)))
-        .expect("couldn't set write timeout");
-
-    // send fds
-    let dummy: [u8; 1] = [1];
-    let fds: [RawFd; 1] = [fd];
-    stream.send_with_fd(&dummy, &fds)?;
-
-    // receive the return value
-    let mut response = [0; 1];
-    stream.read(&mut response)?;
-
-    if response[0] == 0xFF {
-        return Err(Error::new(ErrorKind::Other, "protect() failed"));
+            // ignore if protect_path is not specified
+            let path = match protect_path {
+                Some(path) => path,
+                None => return Ok(()),
+            };
+            // it's safe to use blocking socket here
+            let mut stream = UnixStream::connect(path)?;
+            stream
+                .set_read_timeout(Some(Duration::new(1, 0)))
+                .expect("couldn't set read timeout");
+            stream
+                .set_write_timeout(Some(Duration::new(1, 0)))
+                .expect("couldn't set write timeout");
+            // send fds
+            let dummy: [u8; 1] = [1];
+            let fds: [RawFd; 1] = [fd];
+            stream.send_with_fd(&dummy, &fds)?;
+            // receive the return value
+            let mut response = [0; 1];
+            stream.read(&mut response)?;
+            if response[0] == 0xFF {
+                return Err(Error::new(ErrorKind::Other, "protect() failed"));
+            }
+            Ok(())
+        }
+    } else {
+        #[inline(always)]
+        fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
+            Ok(())
+        }
     }
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
-    Ok(())
 }
 
 /// create a new TCP stream
 #[inline(always)]
 pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
-    let domain = match *saddr {
-        SocketAddr::V4(..) => Domain::ipv4(),
-        SocketAddr::V6(..) => Domain::ipv6(),
-    };
-
-    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let stream = TcpStream::connect(saddr).await?;
 
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
-    if cfg!(target_os = "android") {
-        if saddr.ip() != IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)) {
-            protect(&context.config().protect_path, socket.as_raw_fd())?;
-        }
+    if cfg!(target_os = "android") && !saddr.ip().is_loopback() {
+        protect(&context.config().protect_path, stream.as_raw_fd())?;
     }
 
-    let stream = socket.into_tcp_stream();
-    TcpStream::connect_std(stream, &saddr).await
+    Ok(stream)
 }
 
 /// Create a `UdpSocket` binded to `addr`
@@ -102,10 +98,8 @@ pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context
 
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
-    if cfg!(target_os = "android") {
-        if addr.ip() != IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)) {
-            protect(&context.config().protect_path, socket.as_raw_fd())?;
-        }
+    if cfg!(target_os = "android") && !addr.ip().is_loopback() {
+        protect(&context.config().protect_path, socket.as_raw_fd())?;
     }
 
     Ok(socket)
