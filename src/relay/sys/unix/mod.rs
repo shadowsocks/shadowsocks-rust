@@ -37,11 +37,8 @@ cfg_if! {
         ///
         /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
         fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
-            use std::{
-                io::{Read, Write},
-                os::unix::net::UnixStream,
-                time::Duration,
-            };
+            use std::{io::Read, os::unix::net::UnixStream, time::Duration};
+
             use sendfd::{RecvWithFd, SendWithFd};
 
             // ignore if protect_path is not specified
@@ -49,6 +46,7 @@ cfg_if! {
                 Some(path) => path,
                 None => return Ok(()),
             };
+
             // it's safe to use blocking socket here
             let mut stream = UnixStream::connect(path)?;
             stream
@@ -57,16 +55,19 @@ cfg_if! {
             stream
                 .set_write_timeout(Some(Duration::new(1, 0)))
                 .expect("couldn't set write timeout");
+
             // send fds
             let dummy: [u8; 1] = [1];
             let fds: [RawFd; 1] = [fd];
             stream.send_with_fd(&dummy, &fds)?;
+
             // receive the return value
             let mut response = [0; 1];
             stream.read(&mut response)?;
             if response[0] == 0xFF {
                 return Err(Error::new(ErrorKind::Other, "protect() failed"));
             }
+
             Ok(())
         }
     } else {
