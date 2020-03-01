@@ -11,7 +11,7 @@ use tokio::{runtime::Handle, time};
 
 use crate::{
     config::Config,
-    context::{Context, ServerState, SharedServerState},
+    context::{Context, ServerState, SharedContext, SharedServerState},
     plugin::{PluginMode, Plugins},
     relay::{
         flow::{MultiServerFlowStatistic, SharedMultiServerFlowStatistic},
@@ -94,53 +94,7 @@ pub(crate) async fn run_with(
     //
     // Dont do that if server is created by manager
     if context.config().manager_address.is_some() {
-        let context = context.clone();
-
-        let report_fut = async move {
-            let manager_addr = context.config().manager_address.as_ref().unwrap();
-            let mut socket = ManagerDatagram::bind_for(manager_addr).await?;
-
-            while context.server_running() {
-                // For each servers, send "stat" command to manager
-                //
-                // This is for compatible with managers that replies on "stat" command
-                // Ref: https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users
-                //
-                // If you are using manager in this project, this is not required.
-                for svr_cfg in &context.config().server {
-                    let port = svr_cfg.addr().port();
-
-                    if let Some(ref fstat) = flow_stat.get(port) {
-                        let stat = format!("stat: {{\"{}\":{}}}", port, fstat.trans_stat());
-
-                        match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
-                            Ok(..) => {
-                                trace!(
-                                    "sent {} for server \"{}\" to manger \"{}\"",
-                                    stat,
-                                    svr_cfg.addr(),
-                                    manager_addr
-                                );
-                            }
-                            Err(err) => {
-                                error!(
-                                    "failed to send {} for server \"{}\" to manager \"{}\", error: {}",
-                                    stat,
-                                    svr_cfg.addr(),
-                                    manager_addr,
-                                    err
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // Report every 10 seconds
-                time::delay_for(Duration::from_secs(10)).await;
-            }
-
-            Ok(())
-        };
+        let report_fut = manager_report_task(context.clone(), flow_stat);
         vf.push(report_fut.boxed());
     }
 
@@ -151,4 +105,50 @@ pub(crate) async fn run_with(
     context.set_server_stopped();
 
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
+}
+
+async fn manager_report_task(context: SharedContext, flow_stat: SharedMultiServerFlowStatistic) -> io::Result<()> {
+    let manager_addr = context.config().manager_address.as_ref().unwrap();
+    let mut socket = ManagerDatagram::bind_for(manager_addr).await?;
+
+    while context.server_running() {
+        // For each servers, send "stat" command to manager
+        //
+        // This is for compatible with managers that replies on "stat" command
+        // Ref: https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users
+        //
+        // If you are using manager in this project, this is not required.
+        for svr_cfg in &context.config().server {
+            let port = svr_cfg.addr().port();
+
+            if let Some(ref fstat) = flow_stat.get(port) {
+                let stat = format!("stat: {{\"{}\":{}}}", port, fstat.trans_stat());
+
+                match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
+                    Ok(..) => {
+                        trace!(
+                            "sent {} for server \"{}\" to manger \"{}\"",
+                            stat,
+                            svr_cfg.addr(),
+                            manager_addr
+                        );
+                    }
+                    Err(err) => {
+                        error!(
+                            "failed to send {} for server \"{}\" to manager \"{}\", error: {}",
+                            stat,
+                            svr_cfg.addr(),
+                            manager_addr,
+                            err
+                        );
+                    }
+                }
+            }
+        }
+
+        // Report every 10 seconds
+        time::delay_for(Duration::from_secs(10)).await;
+    }
+
+    Ok(())
 }

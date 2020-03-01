@@ -8,7 +8,7 @@ use tokio::runtime::Handle;
 
 use crate::{
     config::{Config, ConfigType},
-    context::{Context, ServerState},
+    context::{Context, ServerState, SharedContext},
     plugin::{PluginMode, Plugins},
     relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp, utils::set_nofile},
 };
@@ -96,6 +96,13 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         vf.push(udp_fut.boxed());
     }
 
+    if cfg!(target_os = "android") && context.config().stat_path.is_some() {
+        // For Android's flow statistic
+
+        let report_fut = flow_report_task(context.clone());
+        vf.push(report_fut.boxed());
+    }
+
     let (res, ..) = select_all(vf.into_iter()).await;
     error!("one of servers exited unexpectly, result: {:?}", res);
 
@@ -103,4 +110,54 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     context.set_server_stopped();
 
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
+}
+
+#[cfg(target_os = "android")]
+async fn flow_report_task(context: SharedContext) -> io::Result<()> {
+    use std::{slice, time::Duration};
+
+    use tokio::{io::AsyncWriteExt, net::UnixStream, time};
+
+    // Android's flow statistic report RPC
+    let path = context.config().stat_path.as_ref().expect("stat_path must be provided");
+    let timeout = Duration::from_secs(1);
+
+    while context.server_running() {
+        // keep it as libev's default, 0.5 seconds
+        time::delay_for(Duration::from_millis(500)).await;
+        let mut stream = match time::timeout(timeout, UnixStream::connect(path)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(err)) => {
+                error!("send client flow statistic error: {}", err);
+                continue;
+            }
+            Err(..) => {
+                error!("send client flow statistic error: timeout");
+                continue;
+            }
+        };
+
+        let flow_stat = context.local_flow_statistic();
+        let tx = flow_stat.tcp().tx() + flow_stat.udp().tx();
+        let rx = flow_stat.tcp().rx() + flow_stat.udp().rx();
+
+        let buf: [u64; 2] = [tx, rx];
+        let buf = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 16) };
+
+        match time::timeout(timeout, stream.write_all(buf)).await {
+            Ok(Ok(..)) => {}
+            Ok(Err(err)) => {
+                error!("send client flow statistic error: {}", err);
+            }
+            Err(..) => {
+                error!("send client flow statistic error: timeout");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+async fn flow_report_task(_context: SharedContext) -> io::Result<()> {
+    unimplemented!("only for android")
 }

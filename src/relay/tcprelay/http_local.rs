@@ -158,7 +158,7 @@ impl tower::Service<Uri> for DirectConnector {
                         let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
                         Err(err)
                     }
-                    Some(addr) => ProxyStream::connect_direct(&*context, &addr).await,
+                    Some(addr) => ProxyStream::connect_direct(context, &addr).await,
                 }
             }
             .boxed(),

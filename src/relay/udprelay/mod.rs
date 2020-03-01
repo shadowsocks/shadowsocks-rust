@@ -49,7 +49,9 @@
 
 use std::time::Duration;
 
+mod association;
 pub mod client;
+mod crypto_io;
 pub mod local;
 mod redir_local;
 pub mod server;
@@ -58,8 +60,6 @@ mod sys;
 mod tproxy_socket;
 mod tunnel_local;
 mod utils;
-
-mod crypto_io;
 
 /// The maximum UDP payload size (defined in the original shadowsocks Python)
 ///

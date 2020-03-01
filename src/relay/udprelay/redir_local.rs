@@ -1,333 +1,73 @@
 //! UDP relay local server
 
-use std::{
-    io::{self, Cursor, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc};
 
-use bytes::BytesMut;
-use futures::{future, FutureExt};
-use log::{debug, error, info, trace};
+use async_trait::async_trait;
+use log::{error, info, trace};
 use lru_time_cache::{Entry, LruCache};
-use tokio::{
-    self,
-    net::udp::{RecvHalf, SendHalf},
-    sync::{mpsc, oneshot, Mutex},
-    time,
-};
+use tokio::{self, sync::Mutex, time};
 
 use crate::{
-    config::{ServerAddr, ServerConfig},
-    context::{Context, SharedContext},
+    context::SharedContext,
     relay::{
-        loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
+        loadbalancing::server::{PlainPingBalancer, ServerType},
         socks5::Address,
-        sys::create_udp_socket,
-        utils::try_timeout,
     },
 };
 
 use super::{
-    crypto_io::{decrypt_payload, encrypt_payload},
+    association::{ProxyAssociation, ProxySend},
     tproxy_socket::TProxyUdpSocket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-fn cache_key(src: &SocketAddr, dst: &SocketAddr) -> String {
-    format!("{}-{}", src, dst)
+type AssocMap = LruCache<String, ProxyAssociation>;
+type SharedAssocMap = Arc<Mutex<AssocMap>>;
+
+struct ProxyHandler {
+    src_addr: SocketAddr,
+    local_udp: TProxyUdpSocket,
+    cache_key: String,
+    assoc_map: SharedAssocMap,
 }
 
-// Drop the oneshot::Sender<()> will trigger local <- remote task to finish
-struct UdpAssociationWatcher(oneshot::Sender<()>);
-
-// Represent a UDP association
-#[derive(Clone)]
-struct UdpAssociation {
-    // local -> remote Queue
-    // Drops tx, will close local -> remote task
-    tx: mpsc::Sender<Vec<u8>>,
-
-    // local <- remote task life watcher
-    watcher: Arc<UdpAssociationWatcher>,
-}
-
-impl UdpAssociation {
-    /// Create an association with addr
-    async fn associate(
-        server: SharedPlainServerStatistic,
+impl ProxyHandler {
+    pub fn new(
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
+        cache_key: String,
         assoc_map: SharedAssocMap,
-    ) -> io::Result<UdpAssociation> {
-        // Create a socket for receiving packets
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+    ) -> io::Result<ProxyHandler> {
+        // Create a socket binds to destination addr
+        // This only works for systems that supports binding to non-local addresses
+        let local_udp = TProxyUdpSocket::bind(&dst_addr)?;
 
-        let remote_udp = create_udp_socket(&local_addr).await?;
-        let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
-
-        debug!("created UDP association for {} from {}", src_addr, remote_bind_addr);
-
-        // Create a channel for sending packets to remote
-        // FIXME: Channel size 1024?
-        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
-
-        // Create a watcher for local <- remote task
-        let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
-
-        let close_flag = Arc::new(UdpAssociationWatcher(watcher_tx));
-
-        // Splits socket into sender and receiver
-        let (mut remote_receiver, mut remote_sender) = remote_udp.split();
-
-        // Create a socket for sending packets back
-        let mut local_udp = TProxyUdpSocket::bind(&dst_addr)?;
-
-        let timeout = server.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-
-        let dst_saddr = Address::from(dst_addr);
-        let is_bypassed = server.context().check_target_bypassed(&dst_saddr).await;
-
-        {
-            // local -> remote
-
-            let server = server.clone();
-            tokio::spawn(async move {
-                let svr_cfg = server.server_config();
-                let context = server.context();
-
-                while let Some(pkt) = rx.recv().await {
-                    // pkt is already a raw packet, so just send it
-                    debug!(
-                        "UDP REDIR {} -> {}, payload length {} bytes",
-                        src_addr,
-                        dst_addr,
-                        pkt.len()
-                    );
-
-                    let res = if is_bypassed {
-                        Self::relay_l2r_bypassed(context, &mut remote_sender, &dst_saddr, &pkt, timeout).await
-                    } else {
-                        UdpAssociation::relay_l2r_proxied(
-                            context,
-                            &mut remote_sender,
-                            &dst_saddr,
-                            &pkt,
-                            timeout,
-                            svr_cfg,
-                        )
-                        .await
-                    };
-
-                    if let Err(err) = res {
-                        error!("failed to send packet {} -> {}, error: {}", src_addr, dst_addr, err);
-
-                        // FIXME: Ignore? Or how to deal with it?
-                    }
-                }
-
-                debug!("UDP REDIR {} -> {} finished", src_addr, dst_addr);
-            });
-        }
-
-        // local <- remote
-        tokio::spawn(async move {
-            let transfer_fut = async move {
-                let svr_cfg = server.server_config();
-                let context = server.context();
-
-                loop {
-                    // Read and send back to source
-                    let res = if is_bypassed {
-                        UdpAssociation::relay_r2l_bypassed(&src_addr, &mut remote_receiver, &mut local_udp).await
-                    } else {
-                        UdpAssociation::relay_r2l_proxied(
-                            context,
-                            &src_addr,
-                            &mut remote_receiver,
-                            &mut local_udp,
-                            svr_cfg,
-                        )
-                        .await
-                    };
-
-                    if let Err(err) = res {
-                        error!("failed to receive packet, {} <- {}, error: {}", src_addr, dst_addr, err);
-
-                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
-                        // break;
-                    }
-
-                    let cache_key = cache_key(&src_addr, &dst_addr);
-                    {
-                        let mut amap = assoc_map.lock().await;
-
-                        // Check or update expire time
-                        let _ = amap.get(&cache_key);
-                    }
-                }
-            };
-
-            // Resolved only if watcher_rx resolved
-            let _ = future::select(transfer_fut.boxed(), watcher_rx.boxed()).await;
-            debug!("UDP REDIR {} <- {} finished", src_addr, dst_addr);
-        });
-
-        Ok(UdpAssociation {
-            tx,
-            watcher: close_flag,
+        Ok(ProxyHandler {
+            src_addr,
+            local_udp,
+            cache_key,
+            assoc_map,
         })
-    }
-
-    /// Relay packets from local to remote
-    async fn relay_l2r_proxied(
-        context: &Context,
-        remote_udp: &mut SendHalf,
-        addr: &Address,
-        payload: &[u8],
-        timeout: Duration,
-        svr_cfg: &ServerConfig,
-    ) -> io::Result<()> {
-        // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::new();
-        addr.write_to_buf(&mut send_buf);
-        send_buf.extend_from_slice(&payload);
-
-        let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
-
-        let send_len = match svr_cfg.addr() {
-            ServerAddr::SocketAddr(ref remote_addr) => {
-                try_timeout(remote_udp.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
-            }
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| {
-                    try_timeout(remote_udp.send_to(&encrypt_buf[..], &addr), Some(timeout)).await
-                })?
-                .1
-            }
-        };
-
-        assert_eq!(encrypt_buf.len(), send_len);
-
-        Ok(())
-    }
-
-    async fn relay_l2r_bypassed(
-        context: &Context,
-        bypass_udp: &mut SendHalf,
-        addr: &Address,
-        payload: &[u8],
-        timeout: Duration,
-    ) -> io::Result<()> {
-        let send_len = match *addr {
-            Address::SocketAddress(ref saddr) => try_timeout(bypass_udp.send_to(payload, saddr), Some(timeout)).await?,
-            Address::DomainNameAddress(ref host, port) => {
-                lookup_then!(context, host, port, |saddr| {
-                    try_timeout(bypass_udp.send_to(payload, &saddr), Some(timeout)).await
-                })?
-                .1
-            }
-        };
-
-        assert_eq!(payload.len(), send_len);
-
-        Ok(())
-    }
-
-    /// Relay packets from remote to local (proxied)
-    async fn relay_r2l_proxied(
-        context: &Context,
-        src_addr: &SocketAddr,
-        remote_udp: &mut RecvHalf,
-        local_udp: &mut TProxyUdpSocket,
-        svr_cfg: &ServerConfig,
-    ) -> io::Result<()> {
-        // Waiting for response from server SERVER -> CLIENT
-        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-
-        let (recv_n, remote_addr) = remote_udp.recv_from(&mut recv_buf).await?;
-
-        let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
-            None => {
-                error!("UDP packet too short, received length {}", recv_n);
-                let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
-                return Err(err);
-            }
-            Some(b) => b,
-        };
-        // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
-        let mut cur = Cursor::new(decrypt_buf);
-        // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
-        let _ = Address::read_from(&mut cur).await?;
-
-        let mut payload = Vec::new();
-        cur.read_to_end(&mut payload)?;
-
-        debug!(
-            "UDP REDIR {} <- {}, payload length {} bytes",
-            src_addr,
-            remote_addr,
-            payload.len()
-        );
-
-        // Send back to src_addr
-        if let Err(err) = local_udp.send_to(&payload, src_addr).await {
-            error!("failed to send packet back to {}, error: {}", src_addr, err);
-
-            // FIXME: What to do? Ignore?
-        }
-
-        Ok(())
-    }
-
-    /// Relay packets from remote to local (bypassed)
-    async fn relay_r2l_bypassed(
-        src_addr: &SocketAddr,
-        bypass_udp: &mut RecvHalf,
-        local_udp: &mut TProxyUdpSocket,
-    ) -> io::Result<()> {
-        // Waiting for response from server SERVER -> CLIENT
-        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-
-        let (recv_n, remote_addr) = bypass_udp.recv_from(&mut recv_buf).await?;
-
-        let payload = recv_buf[..recv_n].to_vec();
-
-        debug!(
-            "UDP REDIR {} <- {}, payload length {} bytes",
-            src_addr,
-            remote_addr,
-            payload.len()
-        );
-
-        // Send back to src_addr
-        if let Err(err) = local_udp.send_to(&payload, src_addr).await {
-            error!("failed to send packet back to {}, error: {}", src_addr, err);
-
-            // FIXME: What to do? Ignore?
-        }
-
-        Ok(())
-    }
-
-    // Send packet to remote
-    //
-    // Return `Err` if receiver have been closed
-    async fn send(&mut self, pkt: Vec<u8>) {
-        if let Err(..) = self.tx.send(pkt).await {
-            // SHOULDn't HAPPEN
-            unreachable!("UDP association local -> remote Queue closed unexpectly");
-        }
     }
 }
 
-type AssocMap = LruCache<String, UdpAssociation>;
-type SharedAssocMap = Arc<Mutex<AssocMap>>;
+#[async_trait]
+impl ProxySend for ProxyHandler {
+    async fn send_packet(&mut self, data: Vec<u8>) -> io::Result<()> {
+        self.local_udp.send_to(&data, &self.src_addr).await?;
+
+        // Update LRU
+        {
+            let mut amap = self.assoc_map.lock().await;
+
+            // Check or update expire time
+            let _ = amap.get(&self.cache_key);
+        }
+
+        Ok(())
+    }
+}
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
@@ -387,32 +127,46 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             continue;
         }
 
+        // Check destination should be proxied or not
+        let target = Address::SocketAddress(dst);
+        let is_bypassed = context.check_target_bypassed(&target).await;
+
         // Check or (re)create an association
-        let mut assoc = {
+        {
             // Locks the whole association map
             let mut ref_assoc_map = assoc_map.lock().await;
 
+            let cache_key = format!("{}-{}", src, dst);
+
             // Get or create an association
-            let assoc = match ref_assoc_map.entry(cache_key(&src, &dst)) {
+            let assoc = match ref_assoc_map.entry(cache_key.clone()) {
                 Entry::Occupied(oc) => oc.into_mut(),
                 Entry::Vacant(vc) => {
                     // Pick a server
                     let server = balancer.pick_server();
 
-                    vc.insert(
-                        UdpAssociation::associate(server, src, dst, assoc_map.clone())
-                            .await
-                            .expect("create udp association"),
-                    )
+                    let sender = match ProxyHandler::new(src, dst, cache_key, assoc_map.clone()) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error!("create UDP association for {} <-> {}, error: {}", src, dst, err);
+                            continue;
+                        }
+                    };
+
+                    let assoc = if is_bypassed {
+                        ProxyAssociation::associate_bypassed(src, server, sender).await
+                    } else {
+                        ProxyAssociation::associate_proxied(src, server, sender).await
+                    }
+                    .expect("create UDP association");
+
+                    vc.insert(assoc)
                 }
             };
 
-            // Clone the handle and release the lock.
-            // Make sure we keep the critical section small
-            assoc.clone()
-        };
-
-        // Send to local -> remote task
-        assoc.send(pkt.to_vec()).await;
+            // FIXME: Lock is still kept for a mutable reference
+            // Send to local -> remote task
+            assoc.send(target, pkt.to_vec()).await;
+        }
     }
 }

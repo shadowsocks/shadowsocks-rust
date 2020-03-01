@@ -19,7 +19,7 @@ use trust_dns_resolver::TokioAsyncResolver;
 use crate::relay::dns_resolver::create_resolver;
 use crate::{
     config::{Config, ConfigType, ServerConfig},
-    relay::{dns_resolver::resolve, socks5::Address},
+    relay::{dns_resolver::resolve, flow::ServerFlowStatistic, socks5::Address},
 };
 
 // Entries for server's bloom filter
@@ -144,9 +144,20 @@ pub type SharedServerState = Arc<ServerState>;
 /// Shared basic configuration for the whole server
 pub struct Context {
     config: Config,
+
+    // Shared variables for all servers
     server_state: SharedServerState,
+
+    // Server's running indicator
+    // For killing all background jobs
     server_running: AtomicBool,
+
+    // Check for duplicated IV/Nonce, for prevent replay attack
+    // https://github.com/shadowsocks/shadowsocks-org/issues/44
     nonce_ppbloom: Mutex<PingPongBloom>,
+
+    // For Android's flow stat report
+    local_flow_statistic: ServerFlowStatistic,
 }
 
 /// Unique context thw whole server
@@ -162,6 +173,7 @@ impl Context {
             server_state,
             server_running: AtomicBool::new(true),
             nonce_ppbloom,
+            local_flow_statistic: ServerFlowStatistic::new(),
         }
     }
 
@@ -263,5 +275,10 @@ impl Context {
             None => false,
             Some(ref a) => a.check_target_bypassed(self, target).await,
         }
+    }
+
+    /// Get client flow statistics
+    pub fn local_flow_statistic(&self) -> &ServerFlowStatistic {
+        &self.local_flow_statistic
     }
 }

@@ -22,20 +22,17 @@ use crate::{
 
 use super::{connection::Connection, CryptoStream, STcpStream};
 
-macro_rules! forward_call {
-    ($self:expr, $method:ident $(, $param:expr)*) => {
-        match *$self {
-            ProxyStream::Direct(ref mut s) => Pin::new(s).$method($($param),*),
-            ProxyStream::Proxied(ref mut s) => Pin::new(s).$method($($param),*),
-        }
-    };
-}
-
 /// Stream wrapper for both direct connections and proxied connections
 #[allow(clippy::large_enum_variant)]
 pub enum ProxyStream {
-    Direct(STcpStream),
-    Proxied(CryptoStream<STcpStream>),
+    Direct {
+        stream: STcpStream,
+        context: SharedContext,
+    },
+    Proxied {
+        stream: CryptoStream<STcpStream>,
+        context: SharedContext,
+    },
 }
 
 #[derive(Debug)]
@@ -80,7 +77,7 @@ impl ProxyStream {
         addr: &Address,
     ) -> Result<ProxyStream, ProxyStreamError> {
         if context.check_target_bypassed(addr).await {
-            ProxyStream::connect_direct_wrapped(&*context, addr).await
+            ProxyStream::connect_direct_wrapped(context, addr).await
         } else {
             ProxyStream::connect_proxied_wrapped(context, svr_cfg, addr).await
         }
@@ -89,7 +86,7 @@ impl ProxyStream {
     /// Connect to remote directly (without proxy)
     ///
     /// This is used for hosts that matches ACL bypassed rules
-    pub async fn connect_direct(context: &Context, addr: &Address) -> io::Result<ProxyStream> {
+    pub async fn connect_direct(context: SharedContext, addr: &Address) -> io::Result<ProxyStream> {
         debug!("connect to {} directly (bypassed)", addr);
 
         // NOTE: Direct connection's timeout is controlled by the global key
@@ -105,10 +102,13 @@ impl ProxyStream {
             }
         };
 
-        Ok(ProxyStream::Direct(Connection::new(stream, timeout)))
+        Ok(ProxyStream::Direct {
+            stream: Connection::new(stream, timeout),
+            context,
+        })
     }
 
-    async fn connect_direct_wrapped(context: &Context, addr: &Address) -> Result<ProxyStream, ProxyStreamError> {
+    async fn connect_direct_wrapped(context: SharedContext, addr: &Address) -> Result<ProxyStream, ProxyStreamError> {
         match ProxyStream::connect_direct(context, addr).await {
             Ok(s) => Ok(s),
             Err(err) => Err(ProxyStreamError::new(err, true)),
@@ -130,10 +130,13 @@ impl ProxyStream {
             svr_cfg.external_addr()
         );
 
-        let server_stream = connect_proxy_server(&*context, svr_cfg).await?;
-        let proxy_stream = proxy_server_handshake(context, server_stream, svr_cfg, addr).await?;
+        let server_stream = connect_proxy_server(&context, svr_cfg).await?;
+        let proxy_stream = proxy_server_handshake(context.clone(), server_stream, svr_cfg, addr).await?;
 
-        Ok(ProxyStream::Proxied(proxy_stream))
+        Ok(ProxyStream::Proxied {
+            stream: proxy_stream,
+            context,
+        })
     }
 
     async fn connect_proxied_wrapped(
@@ -156,31 +159,66 @@ impl ProxyStream {
     /// Returns the local socket address of this stream socket
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         match *self {
-            ProxyStream::Direct(ref s) => s.get_ref().local_addr(),
-            ProxyStream::Proxied(ref s) => s.get_ref().get_ref().local_addr(),
+            ProxyStream::Direct { ref stream, .. } => stream.get_ref().local_addr(),
+            ProxyStream::Proxied { ref stream, .. } => stream.get_ref().get_ref().local_addr(),
         }
     }
 
     /// Check if the underlying connection is proxied
     pub fn is_proxied(&self) -> bool {
         match *self {
-            ProxyStream::Proxied(..) => true,
+            ProxyStream::Proxied { .. } => true,
             _ => false,
+        }
+    }
+
+    /// Get reference to context
+    pub fn context(&self) -> &Context {
+        match *self {
+            ProxyStream::Direct { ref context, .. } => &context,
+            ProxyStream::Proxied { ref context, .. } => &context,
         }
     }
 }
 
 impl Unpin for ProxyStream {}
 
+macro_rules! forward_call {
+    ($self:expr, $method:ident $(, $param:expr)*) => {
+        match *$self {
+            ProxyStream::Direct { ref mut stream, .. } => Pin::new(stream).$method($($param),*),
+            ProxyStream::Proxied { ref mut stream, .. } => Pin::new(stream).$method($($param),*),
+        }
+    };
+}
+
 impl AsyncRead for ProxyStream {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        forward_call!(self, poll_read, cx, buf)
+        let p = forward_call!(self, poll_read, cx, buf);
+
+        // Flow statistic for Android client
+        if cfg!(target_os = "android") && self.is_proxied() {
+            if let Poll::Ready(Ok(n)) = p {
+                self.context().local_flow_statistic().tcp().incr_tx(n as u64);
+            }
+        }
+
+        p
     }
 }
 
 impl AsyncWrite for ProxyStream {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        forward_call!(self, poll_write, cx, buf)
+        let p = forward_call!(self, poll_write, cx, buf);
+
+        // Flow statistic for Android client
+        if cfg!(target_os = "android") && self.is_proxied() {
+            if let Poll::Ready(Ok(n)) = p {
+                self.context().local_flow_statistic().tcp().incr_rx(n as u64);
+            }
+        }
+
+        p
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {

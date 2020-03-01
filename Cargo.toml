@@ -97,6 +97,7 @@ strum = "0.17"
 strum_macros = "0.17"
 iprange = "0.6"
 ipnet = "2.2"
+async-trait = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
