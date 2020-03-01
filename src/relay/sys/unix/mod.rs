@@ -110,6 +110,5 @@ pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
 pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
-    let socket = UdpSocket::bind(addr).await?;
-    Ok(socket)
+    UdpSocket::bind(addr).await
 }
