@@ -1,10 +1,4 @@
-use std::{
-    io,
-    mem,
-    net::{SocketAddr},
-    os::windows::io::AsRawSocket,
-    ptr,
-};
+use std::{io, mem, net::SocketAddr, os::windows::io::AsRawSocket, ptr};
 
 use tokio::net::{TcpStream, UdpSocket};
 use winapi::{
