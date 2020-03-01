@@ -1,13 +1,12 @@
 use std::{
     io,
     mem,
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddr},
     os::windows::io::AsRawSocket,
     ptr,
 };
 
-use net2::*;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpStream, UdpSocket};
 use winapi::{
     shared::minwindef::{BOOL, DWORD, FALSE, LPDWORD, LPVOID},
     um::{
@@ -68,13 +67,8 @@ pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
 
 /// create a new TCP stream
 #[inline(always)]
-pub fn new_tcp_stream(saddr: &SocketAddr, _context: &Context) -> io::Result<TcpStream> {
-    let builder = match saddr {
-        SocketAddr::V4(_) => TcpBuilder::new_v4()?,
-        SocketAddr::V6(_) => TcpBuilder::new_v6()?,
-    };
-
-    builder.to_tcp_stream()
+pub async fn tcp_stream_connect(saddr: &SocketAddr, _context: &Context) -> io::Result<TcpStream> {
+    TcpStream::connect(saddr).await
 }
 
 /// Create a `UdpSocket` binded to `addr`
