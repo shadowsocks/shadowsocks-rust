@@ -12,9 +12,7 @@ use std::{
 
 use bytes::BytesMut;
 use log::{debug, error, trace};
-use tokio::{
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
-};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},

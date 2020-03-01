@@ -5,10 +5,9 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
 };
 
-use tokio::net::TcpStream;
+use socket2::{Domain, Protocol, Socket, Type};
 
-use net2::*;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpStream, UdpSocket};
 
 #[cfg(all(feature = "sendfd", target_os = "android"))]
 use sendfd::*;
@@ -77,20 +76,22 @@ fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
 /// create a new TCP stream
 #[inline(always)]
 pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
-    let builder = match saddr {
-        SocketAddr::V4(_) => TcpBuilder::new_v4()?,
-        SocketAddr::V6(_) => TcpBuilder::new_v6()?,
+    let domain = match *saddr {
+        SocketAddr::V4(..) => Domain::ipv4(),
+        SocketAddr::V6(..) => Domain::ipv6(),
     };
+
+    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
 
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
     if cfg!(target_os = "android") {
         if saddr.ip() != IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)) {
-            protect(&context.config().protect_path, builder.as_raw_fd())?;
+            protect(&context.config().protect_path, socket.as_raw_fd())?;
         }
     }
 
-    let stream = builder.to_tcp_stream()?;
+    let stream = socket.into_tcp_stream();
     TcpStream::connect_std(stream, &saddr).await
 }
 
