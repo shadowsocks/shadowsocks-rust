@@ -14,13 +14,12 @@ use bytes::BytesMut;
 use log::{debug, error, trace};
 use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
-    net::TcpStream,
 };
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    relay::{socks5::Address, sys::new_tcp_stream, utils::try_timeout},
+    relay::{socks5::Address, sys::tcp_stream_connect, utils::try_timeout},
 };
 
 use super::{connection::Connection, CryptoStream, STcpStream};
@@ -99,14 +98,10 @@ impl ProxyStream {
         let timeout = context.config().timeout;
 
         let stream = match *addr {
-            Address::SocketAddress(ref saddr) => {
-                let stream = new_tcp_stream(&saddr, &context)?;
-                TcpStream::connect_std(stream, &saddr).await?
-            }
+            Address::SocketAddress(ref saddr) => try_timeout(tcp_stream_connect(&saddr, &context), timeout).await?,
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
-                    let stream = new_tcp_stream(&saddr, &context)?;
-                    TcpStream::connect_std(stream, &saddr).await
+                    try_timeout(tcp_stream_connect(&saddr, &context), timeout).await
                 })?
                 .1
             }
@@ -207,15 +202,13 @@ async fn connect_proxy_server_internal(
 ) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
-            let stream = new_tcp_stream(&addr, &context)?;
-            let stream = try_timeout(TcpStream::connect_std(stream, &addr), timeout).await?;
+            let stream = try_timeout(tcp_stream_connect(&addr, &context), timeout).await?;
             trace!("connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
-                let stream = new_tcp_stream(&addr, &context)?;
-                match try_timeout(TcpStream::connect_std(stream, &addr), timeout).await {
+                match try_timeout(tcp_stream_connect(&addr, &context), timeout).await {
                     Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         debug!(

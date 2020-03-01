@@ -1,9 +1,11 @@
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     os::unix::io::{AsRawFd, RawFd},
 };
+
+use tokio::net::TcpStream;
 
 use net2::*;
 use tokio::net::UdpSocket;
@@ -74,7 +76,7 @@ fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
 
 /// create a new TCP stream
 #[inline(always)]
-pub fn new_tcp_stream(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
+pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
     let builder = match saddr {
         SocketAddr::V4(_) => TcpBuilder::new_v4()?,
         SocketAddr::V6(_) => TcpBuilder::new_v6()?,
@@ -88,7 +90,8 @@ pub fn new_tcp_stream(saddr: &SocketAddr, context: &Context) -> io::Result<TcpSt
         }
     }
 
-    builder.to_tcp_stream()
+    let stream = builder.to_tcp_stream()?;
+    TcpStream::connect_std(stream, &saddr).await
 }
 
 /// Create a `UdpSocket` binded to `addr`
