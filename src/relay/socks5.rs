@@ -214,6 +214,7 @@ pub enum Address {
 }
 
 impl Address {
+    /// Parse from a `AsyncRead`
     pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
     where
         R: AsyncRead + Unpin,
@@ -303,9 +304,18 @@ impl Address {
         write_address(self, buf)
     }
 
+    /// Get required buffer size for serializing
     #[inline]
     pub fn serialized_len(&self) -> usize {
         get_addr_len(self)
+    }
+
+    /// Get associated port number
+    pub fn port(&self) -> u16 {
+        match *self {
+            Address::SocketAddress(addr) => addr.port(),
+            Address::DomainNameAddress(.., port) => port,
+        }
     }
 }
 

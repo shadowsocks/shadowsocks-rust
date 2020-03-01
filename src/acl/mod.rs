@@ -272,23 +272,20 @@ impl AccessControl {
     /// FIXME: This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
         // Always redirect TCP DNS query (for android)
-        if cfg!(target_os = "android") {
-            let port = match *addr {
-                Address::SocketAddress(ref saddr) => saddr.port(),
-                Address::DomainNameAddress(ref _host, port) => port,
-            };
-            if port == 53 {
-                return false;
-            }
+        if cfg!(target_os = "android") && addr.port() == 53 {
+            return false;
         }
+
         // Addresses in bypass_list will be bypassed
         if self.black_list.check_address_matched(addr) {
             return true;
         }
+
         // Addresses in proxy_list will be proxied
         if self.white_list.check_address_matched(addr) {
             return false;
         }
+
         // Resolve hostname and check the list
         if cfg!(not(target_os = "android")) {
             if let Address::DomainNameAddress(ref host, port) = *addr {
@@ -297,6 +294,7 @@ impl AccessControl {
                         if self.black_list.check_ip_matched(&addr) {
                             return true;
                         }
+
                         if self.white_list.check_ip_matched(&addr) {
                             return false;
                         }
@@ -304,6 +302,7 @@ impl AccessControl {
                 }
             }
         }
+
         // default rule
         match self.mode {
             Mode::BlackList => false,
