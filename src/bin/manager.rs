@@ -15,7 +15,7 @@ use futures::{
     FutureExt,
 };
 use log::{error, info};
-use tokio::runtime::Builder;
+use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
     acl::AccessControl,
@@ -191,7 +191,12 @@ fn main() {
 
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
-        match future::select(run_manager(config, rt_handle).boxed(), abort_signal.boxed()).await {
+        let server = run_manager(config, rt_handle);
+
+        tokio::pin!(abort_signal);
+        tokio::pin!(server);
+
+        match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => panic!("server exited unexpectly"),
             // Server future resolved with error, which are listener errors in most cases

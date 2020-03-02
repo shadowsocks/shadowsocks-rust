@@ -12,7 +12,7 @@ use std::{
 };
 
 use byte_string::ByteStr;
-use futures::{future, FutureExt};
+use futures::future;
 use log::{debug, error, trace, warn};
 #[cfg(unix)]
 use tokio::net::UnixDatagram;
@@ -85,7 +85,10 @@ impl ServerInstance {
             tokio::spawn(async move {
                 let server = server::run_with(config, flow_stat, server_state);
 
-                let _ = future::select(server.boxed(), watcher_rx.boxed()).await;
+                tokio::pin!(server);
+                tokio::pin!(watcher_rx);
+
+                let _ = future::select(server, watcher_rx).await;
                 debug!("server listening on port {} exited", server_port);
             });
         }

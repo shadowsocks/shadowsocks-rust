@@ -8,7 +8,7 @@ use std::{
 };
 
 use bytes::BytesMut;
-use futures::{self, future, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{self, future, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
@@ -128,7 +128,10 @@ impl UdpAssociation {
             };
 
             // Resolved only if watcher_rx resolved
-            let _ = future::select(transfer_fut.boxed(), watcher_rx.boxed()).await;
+            tokio::pin!(transfer_fut);
+            tokio::pin!(watcher_rx);
+
+            let _ = future::select(transfer_fut, watcher_rx).await;
 
             debug!("UDP ASSOCIATE {} <- .. finished", src_addr);
         });
