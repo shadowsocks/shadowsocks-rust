@@ -109,27 +109,22 @@ impl Rules {
 ///
 /// - For local servers (`sslocal`, `ssredir`, ...)
 ///     * `[bypass_all]` - ACL runs in `BlackList` mode.
-///         - `[bypass_list]` - Rules for connecting directly
 ///     * `[proxy_all]` - ACL runs in `WhiteList` mode.
-///         - `[proxy_list]` - Rules for connecting through proxies
+///     * `[bypass_list]` - Rules for connecting directly
+///     * `[proxy_list]` - Rules for connecting through proxies
 /// - For remote servers (`ssserver`)
 ///     * `[reject_all]` - ACL runs in `BlackList` mode.
 ///     * `[accept_all]` - ACL runs in `WhiteList` mode.
+///     * `[black_list]` - Rules for rejecting
+///     * `[white_list]` - Rules for allowing
 ///     * `[outbound_block_list]` - Rules for blocking outbound addresses.
 ///
 /// ## Mode
 ///
-/// - `WhiteList` (reject / bypass all, except ...)
+/// Mode is the default ACL strategy for those addresses that are not in configuration file.
 ///
-/// Only hosts / clients that matches rules in
-///     - `[proxy_list]` - will be connected through remote proxies, others will be connected directly
-///     - `[white_list]` - will be allowed, others will be rejected
-///
-/// - `BlackList` (accept / proxy all, except ...)
-///
-/// Only hosts / clients that matches rules in
-///     - `[bypass_list]` - will be connected directly instead of connecting through remote proxies
-///     - `[black_list]` - will be rejected (close connection)
+/// - `BlackList` - Bypasses / Rejects all addresses except those in `[proxy_list]` or `[white_list]`
+/// - `WhiltList` - Proxies / Accepts all addresses except those in `[bypass_list]` or `[black_list]`
 ///
 /// ## Rules
 ///

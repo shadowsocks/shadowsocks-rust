@@ -5,10 +5,7 @@
 //! in mod `config`.
 
 use clap::{App, Arg};
-use futures::{
-    future::{self, Either},
-    FutureExt,
-};
+use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
 
