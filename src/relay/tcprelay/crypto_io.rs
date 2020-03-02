@@ -157,13 +157,13 @@ where
         Poll::Ready(Ok(()))
     }
 
-    fn priv_poll_read(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        ready!(self.poll_read_handshake(ctx))?;
+    fn priv_poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        ready!(this.poll_read_handshake(ctx))?;
 
-        let stream = unsafe { &mut *(&mut self.stream as *mut _) };
-        match *self.dec.as_mut().unwrap() {
-            DecryptedReader::Aead(ref mut r) => r.poll_read_decrypted(ctx, stream, buf),
-            DecryptedReader::Stream(ref mut r) => r.poll_read_decrypted(ctx, stream, buf),
+        match *this.dec.as_mut().unwrap() {
+            DecryptedReader::Aead(ref mut r) => r.poll_read_decrypted(ctx, &mut this.stream, buf),
+            DecryptedReader::Stream(ref mut r) => r.poll_read_decrypted(ctx, &mut this.stream, buf),
         }
     }
 }
@@ -172,11 +172,11 @@ impl<S> CryptoStream<S>
 where
     S: AsyncWrite + Unpin,
 {
-    fn priv_poll_write(mut self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let stream = unsafe { &mut *(&mut self.stream as *mut _) };
-        match self.enc {
-            EncryptedWriter::Aead(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
-            EncryptedWriter::Stream(ref mut w) => w.poll_write_encrypted(ctx, stream, buf),
+    fn priv_poll_write(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        match this.enc {
+            EncryptedWriter::Aead(ref mut w) => w.poll_write_encrypted(ctx, &mut this.stream, buf),
+            EncryptedWriter::Stream(ref mut w) => w.poll_write_encrypted(ctx, &mut this.stream, buf),
         }
     }
 
