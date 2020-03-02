@@ -459,10 +459,9 @@ impl<S: ServerData + 'static> PingBalancer<S> {
 
         let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
 
-        let TcpServerClient { mut stream } =
-            TcpServerClient::connect(stat.clone_context(), &addr, stat.server_config()).await?;
+        let mut stream = TcpServerClient::connect(stat.clone_context(), &addr, stat.server_config()).await?;
         stream.write_all(GET_BODY).await?;
-        stream.flush().await?;
+
         let mut buf = [0u8; 1];
         stream.read_exact(&mut buf).await?;
 

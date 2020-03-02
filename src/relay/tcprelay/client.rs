@@ -127,17 +127,35 @@ impl AsyncWrite for Socks5Client {
     }
 }
 
-pub(crate) struct ServerClient {
-    pub stream: ProxyStream,
+/// Shadowsocks' TCP client
+pub struct ServerClient {
+    stream: ProxyStream,
 }
 
 impl ServerClient {
-    pub(crate) async fn connect(
-        context: SharedContext,
-        addr: &Address,
-        svr_cfg: &ServerConfig,
-    ) -> io::Result<ServerClient> {
+    /// Connect to target address via shadowsocks' server
+    pub async fn connect(context: SharedContext, addr: &Address, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let stream = ProxyStream::connect_proxied(context, svr_cfg, addr).await?;
         Ok(ServerClient { stream })
+    }
+}
+
+impl AsyncRead for ServerClient {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.stream).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for ServerClient {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.stream).poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.stream).poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        Pin::new(&mut self.stream).poll_shutdown(cx)
     }
 }
