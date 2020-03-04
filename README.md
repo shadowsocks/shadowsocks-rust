@@ -263,10 +263,10 @@ ssmanager --manager-address "/tmp/shadowsocks-manager.sock"
 ssmanager -c /path/to/shadowsocks.json
 
 # Create one server by UDP
-echo '{"add":{"server_port":8388,"password":"hello-kitty"}}' | nc -u '127.0.0.1' '6100'
+echo 'add: {"server_port":8388,"password":"hello-kitty"}' | nc -u '127.0.0.1' '6100'
 
 # Close one server by unix socket
-echo '{"remove":{"server_port":8388}}' | nc -Uu '/tmp/shadowsocks-manager.sock'
+echo 'remove: {"server_port":8388}' | nc -Uu '/tmp/shadowsocks-manager.sock'
 ```
 
 For manager UI, check more details in the [shadowsocks-manager](https://github.com/shadowsocks/shadowsocks-manager) project.
@@ -321,23 +321,20 @@ Example configuration:
 ### Available sections
 
 * For local servers (`sslocal`, `ssredir`, ...)
-  * `[bypass_all]` - ACL runs in `BlackList` mode.
+  * Modes:
+    * `[bypass_all]` - ACL runs in `BlackList` mode. Bypasses all addresses that didn't match any rules.
+    * `[proxy_all]` - ACL runs in `WhiteList` mode. Proxies all addresses that didn't match any rules.
+  * Rules:
     * `[bypass_list]` - Rules for connecting directly
-  * `[proxy_all]` - ACL runs in `WhiteList` mode.
     * `[proxy_list]` - Rules for connecting through proxies
 * For remote servers (`ssserver`)
-  * `[reject_all]` - ACL runs in `BlackList` mode.
-  * `[accept_all]` - ACL runs in `WhiteList` mode.
-  * `[outbound_block_list]` - Rules for blocking outbound addresses.
-
-### Mode
-
-* `WhiteList` (reject / bypass all, except ...), Only hosts / clients that matches rules in
-  * `[proxy_list]` - will be connected through remote proxies, others will be connected directly
-  * `[white_list]` - will be allowed, others will be rejected
-* `BlackList` (accept / proxy all, except ...), Only hosts / clients that matches rules in
-  * `[bypass_list]` - will be connected directly instead of connecting through remote proxies
-  * `[black_list]` - will be rejected (close connection)
+  * Modes:
+    * `[reject_all]` - ACL runs in `BlackList` mode. Rejects all clients that didn't match any rules.
+    * `[accept_all]` - ACL runs in `WhiteList` mode. Accepts all clients that didn't match any rules.
+  * Rules:
+    * `[white_list]` - Rules for accepted clients
+    * `[black_list]` - Rules for rejected clients
+    * `[outbound_block_list]` - Rules for blocking outbound addresses.
 
 ### Example
 
