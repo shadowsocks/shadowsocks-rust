@@ -240,7 +240,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let (socket, peer_addr) = listener.accept().await?;
         let server = servers.pick_server();
 
-        trace!("got connection, addr: {}", peer_addr);
+        trace!("got connection {}", peer_addr);
         trace!("picked proxy server: {:?}", server.server_config());
 
         let udp_conf = udp_conf.clone();

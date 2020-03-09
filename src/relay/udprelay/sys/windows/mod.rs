@@ -1,25 +1,33 @@
-use std::{
-    io::{self, Error, ErrorKind},
-    net::SocketAddr,
-};
+use std::{io, net::SocketAddr};
 
-use mio::net::UdpSocket as MioUdpSocket;
-use socket2::Socket;
+use async_trait::async_trait;
 
-pub fn check_support_tproxy() -> io::Result<()> {
-    // Windows seems to support transparent proxy, but I haven't found any useful document about it
+use crate::{config::RedirType, relay::redir::UdpSocketRedirExt};
 
-    let err = Error::new(ErrorKind::Other, "Windows doesn't support UDP transparent proxy");
-    Err(err)
+pub struct UdpRedirSocket;
+
+impl UdpRedirSocket {
+    /// Create a new UDP socket binded to `addr`
+    ///
+    /// This will allow binding to `addr` that is not in local host
+    pub fn bind(_ty: RedirType, _addr: &SocketAddr) -> io::Result<UdpRedirSocket> {
+        unimplemented!("UDP transparent proxy is not supported on Windows")
+    }
+
+    /// Send data to the socket to the given target address
+    pub async fn send_to(&mut self, _buf: &[u8], _target: &SocketAddr) -> io::Result<usize> {
+        unimplemented!("UDP transparent proxy is not supported on Windows")
+    }
+
+    /// Returns the local address that this socket is bound to.
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        unimplemented!("UDP transparent proxy is not supported on Windows")
+    }
 }
 
-pub fn set_socket_before_bind(_addr: &SocketAddr, _socket: &Socket) -> io::Result<()> {
-    unimplemented!("Windows doesn't support UDP transparent proxy");
-}
-
-pub fn recv_from_with_destination(
-    _socket: &MioUdpSocket,
-    _buf: &mut [u8],
-) -> io::Result<(usize, SocketAddr, SocketAddr)> {
-    unimplemented!("Windows doesn't support UDP transparent proxy");
+#[async_trait]
+impl UdpSocketRedirExt for UdpRedirSocket {
+    async fn recv_from_redir(&mut self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+        unimplemented!("UDP transparent proxy is not supported on Windows")
+    }
 }

@@ -1,22 +1,27 @@
-use std::{
-    io::{self, Error, ErrorKind},
-    net::SocketAddr,
-};
+use std::{io, net::SocketAddr};
 
-use tokio::net::{TcpListener, TcpStream};
+use async_trait::async_trait;
+use tokio::net::TcpStream;
 
-pub fn check_support_tproxy() -> io::Result<()> {
-    // Windows seems can support transparent proxy by Windows Filtering Platform
-    // https://docs.microsoft.com/en-us/windows/win32/fwp/windows-filtering-platform-start-page
+use crate::{config::RedirType, relay::redir::TcpListenerRedirExt};
 
-    let err = Error::new(ErrorKind::Other, "Windows doesn't support TCP transparent proxy");
-    Err(err)
+pub struct TcpRedirListener;
+
+impl TcpRedirListener {
+    /// Create a TCP listener binding to `addr` and enable transparent proxy feature
+    pub async fn bind(_ty: RedirType, _addr: &SocketAddr) -> io::Result<TcpRedirListener> {
+        unimplemented!("TCP transparent proxy is not supported on Windows")
+    }
+
+    /// Get local bind addr for TcpListener
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        unimplemented!("TCP transparent proxy is not supported on Windows")
+    }
 }
 
-pub fn get_original_destination_addr(_: &mut TcpStream) -> io::Result<SocketAddr> {
-    unimplemented!("TCP Transparent Proxy (redir) is not supported on this platform");
-}
-
-pub async fn create_redir_listener(_: &SocketAddr) -> io::Result<TcpListener> {
-    unimplemented!("TCP Transparent Proxy (redir) is not supported on this platform");
+#[async_trait]
+impl TcpListenerRedirExt for TcpRedirListener {
+    async fn accept_redir(&mut self) -> io::Result<(TcpStream, SocketAddr, Option<SocketAddr>)> {
+        unimplemented!("TCP transparent proxy is not supported on Windows")
+    }
 }

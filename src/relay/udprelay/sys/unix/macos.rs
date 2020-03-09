@@ -1,25 +1,33 @@
-use std::{
-    io::{self, Error, ErrorKind},
-    net::SocketAddr,
-};
+use std::{io, net::SocketAddr};
 
-use mio::net::UdpSocket;
-use socket2::Socket;
+use async_trait::async_trait;
 
-pub fn check_support_tproxy() -> io::Result<()> {
-    // FIXME: I can't find any reference about how to set *_BINDANY option on Mac OS X
-    //
-    // It may result in `bind()` returns `EADDRNOTAVAIL`
-    // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/bind.2.html#//apple_ref/doc/man/2/bind
+use crate::{config::RedirType, relay::redir::UdpSocketRedirExt};
 
-    let err = Error::new(ErrorKind::Other, "Mac OS X doesn't support UDP transparent proxy");
-    Err(err)
+pub struct UdpRedirSocket;
+
+impl UdpRedirSocket {
+    /// Create a new UDP socket binded to `addr`
+    ///
+    /// This will allow binding to `addr` that is not in local host
+    pub fn bind(_ty: RedirType, _addr: &SocketAddr) -> io::Result<UdpRedirSocket> {
+        unimplemented!("UDP transparent proxy is not supported on macOS, iOS, ...")
+    }
+
+    /// Send data to the socket to the given target address
+    pub async fn send_to(&mut self, _buf: &[u8], _target: &SocketAddr) -> io::Result<usize> {
+        unimplemented!("UDP transparent proxy is not supported on macOS, iOS, ...")
+    }
+
+    /// Returns the local address that this socket is bound to.
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        unimplemented!("UDP transparent proxy is not supported on macOS, iOS, ...")
+    }
 }
 
-pub fn set_socket_before_bind(_addr: &SocketAddr, _socket: &Socket) -> io::Result<()> {
-    unimplemented!("Mac OS X doesn't support UDP transparent proxy");
-}
-
-pub fn recv_from_with_destination(_socket: &UdpSocket, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
-    unimplemented!("Mac OS X doesn't support UDP transparent proxy");
+#[async_trait]
+impl UdpSocketRedirExt for UdpRedirSocket {
+    async fn recv_from_redir(&mut self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+        unimplemented!("UDP transparent proxy is not supported on macOS, iOS, ...")
+    }
 }

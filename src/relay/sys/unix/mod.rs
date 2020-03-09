@@ -10,6 +10,16 @@ use tokio::net::{TcpStream, UdpSocket};
 
 use crate::context::Context;
 
+cfg_if! {
+    if #[cfg(any(target_os = "macos",
+                 target_os = "ios",
+                 target_os = "freebsd",
+                 target_os = "netbsd",
+                 target_os = "openbsd"))] {
+        pub mod bsd_pf;
+    }
+}
+
 /// Convert `sockaddr_storage` to `SocketAddr`
 #[allow(dead_code)]
 pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr> {

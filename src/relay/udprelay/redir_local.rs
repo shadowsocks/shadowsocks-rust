@@ -8,16 +8,18 @@ use lru_time_cache::{Entry, LruCache};
 use tokio::{self, sync::Mutex, time};
 
 use crate::{
+    config::RedirType,
     context::SharedContext,
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType},
+        redir::UdpSocketRedirExt,
         socks5::Address,
     },
 };
 
 use super::{
     association::{ProxyAssociation, ProxySend},
-    tproxy_socket::TProxyUdpSocket,
+    sys::UdpRedirSocket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -27,13 +29,14 @@ type SharedAssocMap = Arc<Mutex<AssocMap>>;
 
 struct ProxyHandler {
     src_addr: SocketAddr,
-    local_udp: TProxyUdpSocket,
+    local_udp: UdpRedirSocket,
     cache_key: String,
     assoc_map: SharedAssocMap,
 }
 
 impl ProxyHandler {
     pub fn new(
+        ty: RedirType,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         cache_key: String,
@@ -41,7 +44,7 @@ impl ProxyHandler {
     ) -> io::Result<ProxyHandler> {
         // Create a socket binds to destination addr
         // This only works for systems that supports binding to non-local addresses
-        let local_udp = TProxyUdpSocket::bind(&dst_addr)?;
+        let local_udp = UdpRedirSocket::bind(ty, &dst_addr)?;
 
         Ok(ProxyHandler {
             src_addr,
@@ -71,15 +74,13 @@ impl ProxySend for ProxyHandler {
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    if let Err(err) = super::sys::check_support_tproxy() {
-        panic!("{}", err);
-    }
-
     let local_addr = context.config().local.as_ref().expect("missing local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
+    let ty = context.config().udp_redir;
+
     // let l = create_socket(&bind_addr).await?;
-    let mut l = TProxyUdpSocket::bind(&bind_addr)?;
+    let mut l = UdpRedirSocket::bind(ty, &bind_addr)?;
     let local_addr = l.local_addr().expect("determine port bound to");
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
@@ -94,7 +95,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
-        let (recv_len, src, dst) = match time::timeout(timeout, l.recv_from(&mut pkt_buf)).await {
+        let (recv_len, src, dst) = match time::timeout(timeout, l.recv_from_redir(&mut pkt_buf)).await {
             Ok(r) => r?,
             Err(..) => {
                 // Cleanup expired association
@@ -145,7 +146,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     // Pick a server
                     let server = balancer.pick_server();
 
-                    let sender = match ProxyHandler::new(src, dst, cache_key, assoc_map.clone()) {
+                    let sender = match ProxyHandler::new(ty, src, dst, cache_key, assoc_map.clone()) {
                         Ok(s) => s,
                         Err(err) => {
                             error!("create UDP association for {} <-> {}, error: {}", src, dst, err);

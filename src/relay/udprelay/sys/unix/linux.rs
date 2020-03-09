@@ -5,18 +5,100 @@ use std::{
     net::SocketAddr,
     os::unix::io::AsRawFd,
     ptr,
+    task::{Context, Poll},
 };
 
+use async_trait::async_trait;
+use futures::{future::poll_fn, ready};
 use mio::net::UdpSocket;
-use socket2::Socket;
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use tokio::io::PollEvented;
 
-use crate::relay::sys::sockaddr_to_std;
+use crate::{
+    config::RedirType,
+    relay::{redir::UdpSocketRedirExt, sys::sockaddr_to_std},
+};
 
-pub fn check_support_tproxy() -> io::Result<()> {
-    Ok(())
+pub struct UdpRedirSocket {
+    io: PollEvented<mio::net::UdpSocket>,
 }
 
-pub fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
+impl UdpRedirSocket {
+    /// Create a new UDP socket binded to `addr`
+    ///
+    /// This will allow binding to `addr` that is not in local host
+    pub fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<UdpRedirSocket> {
+        if ty != RedirType::TProxy {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "not supported udp transparent proxy type",
+            ));
+        }
+
+        let domain = match *addr {
+            SocketAddr::V4(..) => Domain::ipv4(),
+            SocketAddr::V6(..) => Domain::ipv6(),
+        };
+        let socket = Socket::new(domain, Type::dgram(), Some(Protocol::udp()))?;
+        set_socket_before_bind(addr, &socket)?;
+
+        socket.set_nonblocking(true)?;
+        socket.set_reuse_address(true)?;
+
+        socket.bind(&SockAddr::from(*addr))?;
+
+        let msock = mio::net::UdpSocket::from_socket(socket.into_udp_socket())?;
+        let io = PollEvented::new(msock)?;
+        Ok(UdpRedirSocket { io })
+    }
+
+    /// Send data to the socket to the given target address
+    pub async fn send_to(&mut self, buf: &[u8], target: &SocketAddr) -> io::Result<usize> {
+        poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
+    }
+
+    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: &SocketAddr) -> Poll<io::Result<usize>> {
+        ready!(self.io.poll_write_ready(cx))?;
+
+        match self.io.get_ref().send_to(buf, target) {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                self.io.clear_write_ready(cx)?;
+                Poll::Pending
+            }
+            x => Poll::Ready(x),
+        }
+    }
+
+    /// Returns the local address that this socket is bound to.
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.io.get_ref().local_addr()
+    }
+
+    fn poll_recv_from(
+        &self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<(usize, SocketAddr, SocketAddr)>> {
+        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
+
+        match recv_from_with_destination(self.io.get_ref(), buf) {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                Poll::Pending
+            }
+            x => Poll::Ready(x),
+        }
+    }
+}
+
+#[async_trait]
+impl UdpSocketRedirExt for UdpRedirSocket {
+    async fn recv_from_redir(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+        poll_fn(|cx| self.poll_recv_from(cx, buf)).await
+    }
+}
+
+fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
     let fd = socket.as_raw_fd();
 
     let enable: libc::c_int = 1;

@@ -5,6 +5,7 @@ pub(crate) mod flow;
 pub(crate) mod loadbalancing;
 pub mod local;
 pub mod manager;
+pub(crate) mod redir;
 pub mod server;
 pub mod socks5;
 pub(crate) mod sys;

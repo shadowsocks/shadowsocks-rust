@@ -61,6 +61,7 @@ use std::path::PathBuf;
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
+use cfg_if::cfg_if;
 use log::error;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "trust-dns")]
@@ -675,6 +676,163 @@ impl FromStr for Mode {
     }
 }
 
+/// Transparent Proxy type
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RedirType {
+    /// For not supported platforms
+    NotSupported,
+
+    /// For Linux-like systems' Netfilter. Only for TCP connections.
+    ///
+    /// This is supported from Linux 2.4 Kernel. Document: https://www.netfilter.org/documentation/index.html#documentation-howto
+    ///
+    /// NOTE: Filter rule `REDIRECT` can only be applied to TCP connections.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    Netfilter,
+
+    /// For Linux-like systems' Netfilter TPROXY rule.
+    ///
+    /// NOTE: Filter rule `TPROXY` can be applied to TCP and UDP connections.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    TProxy,
+
+    /// Packet Filter (pf)
+    ///
+    /// Supported by OpenBSD 3.0+, FreeBSD 5.3+, NetBSD 3.0+, Solaris 11.3+, macOS 10.7+, iOS, QNX
+    ///
+    /// Document: https://www.freebsd.org/doc/handbook/firewalls-pf.html
+    #[cfg(any(
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "solaris",
+        target_os = "macos",
+        target_os = "ios"
+    ))]
+    PacketFilter,
+
+    /// IPFW
+    ///
+    /// Supported by FreeBSD, macOS 10.6- (Have been removed completely on macOS 10.10)
+    ///
+    /// Document: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
+    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+    IpFirewall,
+}
+
+impl RedirType {
+    cfg_if! {
+        if #[cfg(any(target_os = "linux", target_os = "android"))] {
+            /// Default TCP transparent proxy solution on this platform
+            pub fn tcp_default() -> RedirType {
+                RedirType::Netfilter
+            }
+
+            /// Default UDP transparent proxy solution on this platform
+            pub fn udp_default() -> RedirType {
+                RedirType::TProxy
+            }
+        } else if #[cfg(any(
+            target_os = "openbsd",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "solaris",
+            target_os = "macos",
+            target_os = "ios"
+        ))] {
+            /// Default TCP transparent proxy solution on this platform
+            pub fn tcp_default() -> RedirType {
+                RedirType::PacketFilter
+            }
+
+            /// Default UDP transparent proxy solution on this platform
+            pub fn udp_default() -> RedirType {
+                RedirType::PacketFilter
+            }
+        } else {
+            /// Default TCP transparent proxy solution on this platform
+            pub fn tcp_default() -> RedirType {
+                RedirType::NotSupported
+            }
+
+            /// Default UDP transparent proxy solution on this platform
+            pub fn udp_default() -> RedirType {
+                RedirType::NotSupported
+            }
+        }
+    }
+
+    /// Check if transparent proxy is supported on this platform
+    pub fn is_supported(self) -> bool {
+        self != RedirType::NotSupported
+    }
+}
+
+impl Display for RedirType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match *self {
+            // Dummy, shouldn't be used in any useful situations
+            RedirType::NotSupported => f.write_str("not_supported"),
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            RedirType::Netfilter => f.write_str("netfilter"),
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            RedirType::TProxy => f.write_str("tproxy"),
+
+            #[cfg(any(
+                target_os = "openbsd",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "macos",
+                target_os = "ios"
+            ))]
+            RedirType::PacketFilter => f.write_str("pf"),
+
+            #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+            RedirType::IpFirewall => f.write_str("ipfw"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidRedirType;
+
+impl FromStr for RedirType {
+    type Err = InvalidRedirType;
+
+    fn from_str(s: &str) -> Result<RedirType, InvalidRedirType> {
+        match s {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            "netfilter" => Ok(RedirType::Netfilter),
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            "tproxy" => Ok(RedirType::TProxy),
+
+            #[cfg(any(
+                target_os = "openbsd",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "macos",
+                target_os = "ios",
+            ))]
+            "pf" => Ok(RedirType::PacketFilter),
+
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "dragonfly"
+            ))]
+            "ipfw" => Ok(RedirType::IpFirewall),
+
+            _ => Err(InvalidRedirType),
+        }
+    }
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -716,6 +874,10 @@ pub struct Config {
     pub stat_path: Option<String>,
     /// Path to protect callback unix address, only for Android
     pub protect_path: Option<String>,
+    /// TCP Transparent Proxy type
+    pub tcp_redir: RedirType,
+    /// UDP Transparent Proxy type
+    pub udp_redir: RedirType,
 }
 
 /// Configuration parsing error kind
@@ -796,6 +958,8 @@ impl Config {
             acl: None,
             stat_path: None,
             protect_path: None,
+            tcp_redir: RedirType::tcp_default(),
+            udp_redir: RedirType::udp_default(),
         }
     }
 

@@ -11,6 +11,7 @@ use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
     acl::AccessControl,
+    config::RedirType,
     crypto::CipherType,
     plugin::PluginConfig,
     relay::socks5::Address,
@@ -109,6 +110,18 @@ fn main() {
                 .long("acl")
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
+        )
+        .arg(
+            Arg::with_name("TCP_REDIR")
+                .long("tcp-redir")
+                .takes_value(true)
+                .help("TCP redir (transparent proxy) type"),
+        )
+        .arg(
+            Arg::with_name("UDP_REDIR")
+                .long("udp-redir")
+                .takes_value(true)
+                .help("UDP redir (transparent proxy) type"),
         )
         .get_matches();
 
@@ -213,6 +226,14 @@ fn main() {
     if let Some(acl_file) = matches.value_of("ACL") {
         let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
         config.acl = Some(acl);
+    }
+
+    if let Some(tcp_redir) = matches.value_of("TCP_REDIR") {
+        config.tcp_redir = tcp_redir.parse::<RedirType>().expect("TCP redir type");
+    }
+
+    if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
+        config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
     }
 
     if config.local.is_none() {

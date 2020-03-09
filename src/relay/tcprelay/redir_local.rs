@@ -13,14 +13,12 @@ use crate::{
     context::SharedContext,
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
+        redir::TcpListenerRedirExt,
         socks5::Address,
     },
 };
 
-use super::{
-    sys::{create_redir_listener, get_original_destination_addr},
-    ProxyStream,
-};
+use super::{sys::TcpRedirListener, ProxyStream};
 
 /// Established Client Transparent Proxy
 ///
@@ -69,7 +67,7 @@ async fn establish_client_tcp_redir<'a>(
     Ok(())
 }
 
-async fn handle_redir_client(server: &SharedPlainServerStatistic, mut s: TcpStream) -> io::Result<()> {
+async fn handle_redir_client(server: &SharedPlainServerStatistic, s: TcpStream, daddr: SocketAddr) -> io::Result<()> {
     let svr_cfg = server.server_config();
 
     if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
@@ -85,22 +83,15 @@ async fn handle_redir_client(server: &SharedPlainServerStatistic, mut s: TcpStre
     let client_addr = s.peer_addr()?;
 
     // Get forward address from socket
-    let target_addr = Address::from(get_original_destination_addr(&mut s)?);
-
-    trace!("REDIR target address {}", target_addr);
-
+    let target_addr = Address::from(daddr);
     establish_client_tcp_redir(server, s, client_addr, &target_addr).await
 }
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    if let Err(err) = super::sys::check_support_tproxy() {
-        panic!("{}", err);
-    }
-
     let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let mut listener = create_redir_listener(&bind_addr)
+    let mut listener = TcpRedirListener::bind(context.config().tcp_redir, &bind_addr)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 
@@ -110,14 +101,23 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     info!("shadowsocks TCP redirect listening on {}", actual_local_addr);
 
     loop {
-        let (socket, peer_addr) = listener.accept().await?;
+        let (socket, peer_addr, dst_addr) = listener.accept_redir().await?;
+
+        let dst_addr = match dst_addr {
+            Some(d) => d,
+            None => {
+                error!("got connection {} without destination address", peer_addr);
+                continue;
+            }
+        };
+
         let server = servers.pick_server();
 
-        trace!("got connection, addr: {}", peer_addr);
+        trace!("got connection {}, destination: {}", peer_addr, dst_addr);
         trace!("picked proxy server: {:?}", server.server_config());
 
         tokio::spawn(async move {
-            if let Err(err) = handle_redir_client(&server, socket).await {
+            if let Err(err) = handle_redir_client(&server, socket, dst_addr).await {
                 error!("TCP redirect client, error: {:?}", err);
             }
         });

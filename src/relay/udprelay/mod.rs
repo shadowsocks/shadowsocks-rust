@@ -57,7 +57,6 @@ mod redir_local;
 pub mod server;
 mod socks5_local;
 mod sys;
-mod tproxy_socket;
 mod tunnel_local;
 mod utils;
 

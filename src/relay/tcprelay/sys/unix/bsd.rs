@@ -3,44 +3,99 @@ use std::{
     net::SocketAddr,
 };
 
+use async_trait::async_trait;
+use socket2::Protocol;
 use tokio::net::{TcpListener, TcpStream};
 
-pub fn check_support_tproxy() -> io::Result<()> {
-    let err = Error::new(
-        ErrorKind::Other,
-        "BSD-like system's TCP transparent proxy is not supported yet",
-    );
-    Err(err)
+use crate::{config::RedirType, relay::redir::TcpListenerRedirExt};
+
+pub struct TcpRedirListener {
+    l: TcpListener,
+    ty: RedirType,
 }
 
-pub fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<SocketAddr> {
-    // ## IPFW
-    //
-    // For IPFW, uses getsockname() to retrieve destination address
-    //
-    // FreeBSD: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
-    //
-    // ## Packet Filter
-    //
-    // For modern BSD-like system, uses Packet Filter (pf)
-    //
-    // https://www.freebsd.org/cgi/man.cgi?query=pf.conf
-    // https://www.freebsd.org/doc/handbook/firewalls-pf.html
-    //
-    // Get original destination from `/dev/pf` with `ioctl(pffd, DIOCNATLOOK, &pnl)`
-    //
-    // ## Others
-    // IP Filter and NPF
-    //
-    // FIXME: This is far too complicated, and I don't have any machines installed *BSD.
-    // macos 10.10+ supposes to have `<net/pfvar.h>` header, but on my laptop with 10.15.2, it doesn't.
-    //
-    // Ref: (in Chinese) https://github.com/Koriste/koriste.github.io/issues/2
+impl TcpRedirListener {
+    /// Create a TCP listener binding to `addr` and enable transparent proxy feature
+    pub async fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpRedirListener> {
+        match ty {
+            #[cfg(any(
+                target_os = "openbsd",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "macos",
+                target_os = "ios",
+            ))]
+            RedirType::PacketFilter => {}
 
-    // This is the oldest IPFW's way
-    s.local_addr()
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "dragonfly"
+            ))]
+            RedirType::IpFirewall => {}
+
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "not supported tcp transparent proxy",
+                ));
+            }
+        }
+
+        let l = TcpListener::bind(addr).await?;
+        Ok(TcpRedirListener { l, ty })
+    }
+
+    /// Get local bind addr for TcpListener
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.l.local_addr()
+    }
 }
 
-pub async fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
-    TcpListener::bind(addr).await
+#[async_trait]
+impl TcpListenerRedirExt for TcpRedirListener {
+    async fn accept_redir(&mut self) -> io::Result<(TcpStream, SocketAddr, Option<SocketAddr>)> {
+        let (socket, src_addr) = self.l.accept().await?;
+
+        let dst_addr = match self.ty {
+            #[cfg(any(
+                target_os = "openbsd",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "solaris",
+                target_os = "macos",
+                target_os = "ios",
+            ))]
+            RedirType::PacketFilter => {
+                use crate::relay::sys::bsd_pf::PF;
+
+                let bind_addr = socket.local_addr()?;
+                PF.natlook(&bind_addr, &src_addr, Protocol::tcp())?
+            }
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "dragonfly"
+            ))]
+            RedirType::IpFirewall => {
+                // ## IPFW
+                //
+                // For IPFW, uses getsockname() to retrieve destination address
+                //
+                // FreeBSD: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
+                Some(socket.local_addr()?)
+            }
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "not supported tcp transparent proxy type",
+                ));
+            }
+        };
+
+        Ok((socket, src_addr, dst_addr))
+    }
 }
