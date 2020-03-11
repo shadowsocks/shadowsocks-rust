@@ -9,6 +9,12 @@ use std::{
     },
 };
 
+#[cfg(feature = "dns-relay")]
+use std::net::IpAddr;
+
+#[cfg(feature = "dns-relay")]
+use lru_time_cache::LruCache;
+
 use bloomfilter::Bloom;
 use spin::Mutex;
 use tokio::runtime::Handle;
@@ -158,6 +164,10 @@ pub struct Context {
 
     // For Android's flow stat report
     local_flow_statistic: ServerFlowStatistic,
+
+    // For DNS relay's ACL domain name reverse lookup
+    #[cfg(feature = "dns-relay")]
+    reverse_lookup_cache: Mutex<LruCache<IpAddr, String>>,
 }
 
 /// Unique context thw whole server
@@ -167,6 +177,8 @@ impl Context {
     /// Create a non-shared Context
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
+        #[cfg(feature = "dns-relay")]
+        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, String>::with_capacity(8192));
 
         Context {
             config,
@@ -174,6 +186,8 @@ impl Context {
             server_running: AtomicBool::new(true),
             nonce_ppbloom,
             local_flow_statistic: ServerFlowStatistic::new(),
+            #[cfg(feature = "dns-relay")]
+            reverse_lookup_cache,
         }
     }
 
@@ -268,12 +282,38 @@ impl Context {
         }
     }
 
+    /// Add a record to the reverse lookup cache
+    #[cfg(feature = "dns-relay")]
+    pub fn add_to_reverse_lookup_cache(&self, addr: IpAddr, qname: String) {
+        let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+        reverse_lookup_cache.insert(addr, qname);
+    }
+
     /// Check target address ACL (for client)
     pub async fn check_target_bypassed(&self, target: &Address) -> bool {
         match self.config.acl {
             // Proxy everything by default
             None => false,
-            Some(ref a) => a.check_target_bypassed(self, target).await,
+            Some(ref a) => {
+                #[cfg(feature = "dns-relay")]
+                {
+                    match *target {
+                        Address::SocketAddress(ref saddr) => {
+                            // do the reverse lookup in our local cache
+                            let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                            if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
+                                // if a qanme is found
+                                let reverse_addr = Address::DomainNameAddress(qname.to_string(), 0);
+                                if a.check_target_bypassed(self, &reverse_addr).await {
+                                    return true;
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                a.check_target_bypassed(self, target).await
+            }
         }
     }
 
