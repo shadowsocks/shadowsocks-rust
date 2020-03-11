@@ -871,13 +871,24 @@ pub struct Config {
     /// ACL configuration
     pub acl: Option<AccessControl>,
     /// Path to stat callback unix address, only for Android
-    pub stat_path: Option<String>,
-    /// Path to protect callback unix address, only for Android
-    pub protect_path: Option<String>,
     /// TCP Transparent Proxy type
     pub tcp_redir: RedirType,
     /// UDP Transparent Proxy type
     pub udp_redir: RedirType,
+    pub stat_path: Option<String>,
+    /// Path to protect callback unix address, only for Android
+    pub protect_path: Option<String>,
+    /// Path for local DNS resolver, only for Android
+    pub local_dns_path: Option<String>,
+    /// Interanl DNS's bind address
+    #[cfg(feature = "dns-relay")]
+    pub dns_relay_addr: Option<SocketAddr>,
+    /// Local DNS's address
+    #[cfg(feature = "dns-relay")]
+    pub local_dns_addr: Option<SocketAddr>,
+    /// Remote DNS's address
+    #[cfg(feature = "dns-relay")]
+    pub remote_dns_addr: Option<SocketAddr>,
 }
 
 /// Configuration parsing error kind
@@ -956,10 +967,17 @@ impl Config {
             nofile: None,
             timeout: None,
             acl: None,
-            stat_path: None,
-            protect_path: None,
             tcp_redir: RedirType::tcp_default(),
             udp_redir: RedirType::udp_default(),
+            stat_path: None,
+            protect_path: None,
+            local_dns_path: None,
+            #[cfg(feature = "dns-relay")]
+            dns_relay_addr: None,
+            #[cfg(feature = "dns-relay")]
+            local_dns_addr: None,
+            #[cfg(feature = "dns-relay")]
+            remote_dns_addr: None,
         }
     }
 

@@ -13,6 +13,9 @@ use crate::{
     relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp, utils::set_nofile},
 };
 
+#[cfg(feature = "dns-relay")]
+use crate::relay::dnsrelay::run as run_dns_relay;
+
 /// Relay server running under local environment.
 pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     trace!("initializing local server with {:?}", config);
@@ -94,6 +97,13 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         // Because plugins doesn't support UDP relay
         let udp_fut = run_udp(context.clone());
         vf.push(udp_fut.boxed());
+    }
+
+    #[cfg(feature = "dns-relay")]
+    {
+        // For Android's local resolver
+        let dns_relay = run_dns_relay(context.clone());
+        vf.push(dns_relay.boxed());
     }
 
     if cfg!(target_os = "android") && context.config().stat_path.is_some() {

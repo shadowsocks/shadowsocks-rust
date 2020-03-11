@@ -49,7 +49,7 @@ cfg_if! {
         fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
             use std::{io::Read, os::unix::net::UnixStream, time::Duration};
 
-            use sendfd::{RecvWithFd, SendWithFd};
+            use sendfd::{SendWithFd};
 
             // ignore if protect_path is not specified
             let path = match protect_path {

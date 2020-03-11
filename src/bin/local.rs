@@ -9,6 +9,9 @@ use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
 
+#[cfg(feature = "dns-relay")]
+use std::net::SocketAddr;
+
 use shadowsocks::{
     acl::AccessControl,
     crypto::CipherType,
@@ -35,16 +38,36 @@ fn main() {
                 .help("Set the level of debug"),
         )
         .arg(
+            Arg::with_name("VPN_MODE")
+                .long("vpn")
+                .help("Enable VPN mode (only for Android)"),
+        )
+        .arg(
             Arg::with_name("STAT_PATH")
                 .long("stat-path")
                 .takes_value(true)
-                .help("Specify stat path (only for Android)"),
+                .help("Specify stat_path for traffic stat (only for Android)"),
         )
         .arg(
-            Arg::with_name("PROTECT_PATH")
-                .long("protect-path")
+            Arg::with_name("LOCAL_DNS_ADDR")
+                .long("local-dns")
                 .takes_value(true)
-                .help("Specify protect-path (only for Android)"),
+                .default_value("127.0.0.1:5353")
+                .help("Specify the address of local DNS server (only for Android)"),
+        )
+        .arg(
+            Arg::with_name("REMOTE_DNS_ADDR")
+                .long("remote-dns")
+                .takes_value(true)
+                .default_value("8.8.8.8:53")
+                .help("Specify the address of remote DNS server (only for Android)"),
+        )
+        .arg(
+            Arg::with_name("DNS_RELAY_ADDR")
+                .long("dns-realy")
+                .takes_value(true)
+                .default_value("127.0.0.1:5450")
+                .help("Specify the address of DNS relay (only for Android)"),
         )
         .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
         .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
@@ -183,13 +206,33 @@ fn main() {
         }
     };
 
+    #[cfg(feature = "dns-relay")]
+    {
+        if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
+            let addr: SocketAddr = local_dns_addr.parse().expect("local dns address");
+            config.local_dns_addr = Some(addr);
+        }
+
+        if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
+            let addr: SocketAddr = remote_dns_addr.parse().expect("remote dns address");
+            config.remote_dns_addr = Some(addr);
+        }
+
+        if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {
+            let addr: SocketAddr = dns_relay_addr.parse().expect("dns relay address");
+            config.dns_relay_addr = Some(addr);
+        }
+    }
+
     if cfg!(target_os = "android") {
+        config.local_dns_path = Some("local_dns_path".to_string());
+
         if let Some(stat_path) = matches.value_of("STAT_PATH") {
             config.stat_path = Some(stat_path.to_string());
         }
 
-        if let Some(protect_path) = matches.value_of("PROTECT_PATH") {
-            config.protect_path = Some(protect_path.to_string());
+        if matches.is_present("VPN_MODE") {
+            config.protect_path = Some("protect_path".to_string());
         }
     }
 
