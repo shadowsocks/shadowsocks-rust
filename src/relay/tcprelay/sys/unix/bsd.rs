@@ -7,16 +7,14 @@ use async_trait::async_trait;
 use socket2::Protocol;
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::{config::RedirType, relay::redir::TcpListenerRedirExt};
+use crate::{
+    config::RedirType,
+    relay::redir::{TcpListenerRedirExt, TcpStreamRedirExt},
+};
 
-pub struct TcpRedirListener {
-    l: TcpListener,
-    ty: RedirType,
-}
-
-impl TcpRedirListener {
-    /// Create a TCP listener binding to `addr` and enable transparent proxy feature
-    pub async fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpRedirListener> {
+#[async_trait]
+impl TcpListenerRedirExt for TcpListener {
+    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener> {
         match ty {
             #[cfg(any(
                 target_os = "openbsd",
@@ -39,27 +37,19 @@ impl TcpRedirListener {
             _ => {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
-                    "not supported tcp transparent proxy",
+                    "not supported tcp transparent proxy type",
                 ));
             }
         }
 
-        let l = TcpListener::bind(addr).await?;
-        Ok(TcpRedirListener { l, ty })
-    }
-
-    /// Get local bind addr for TcpListener
-    pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.l.local_addr()
+        // BSD platform doesn't have any special logic
+        TcpListener::bind(addr).await
     }
 }
 
-#[async_trait]
-impl TcpListenerRedirExt for TcpRedirListener {
-    async fn accept_redir(&mut self) -> io::Result<(TcpStream, SocketAddr, Option<SocketAddr>)> {
-        let (socket, src_addr) = self.l.accept().await?;
-
-        let dst_addr = match self.ty {
+impl TcpStreamRedirExt for TcpStream {
+    fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr> {
+        match ty {
             #[cfg(any(
                 target_os = "openbsd",
                 target_os = "freebsd",
@@ -71,8 +61,10 @@ impl TcpListenerRedirExt for TcpRedirListener {
             RedirType::PacketFilter => {
                 use crate::relay::sys::bsd_pf::PF;
 
-                let bind_addr = socket.local_addr()?;
-                PF.natlook(&bind_addr, &src_addr, Protocol::tcp())?
+                let peer_addr = self.peer_addr()?;
+                let bind_addr = self.local_addr()?;
+
+                PF.natlook(&bind_addr, &peer_addr, Protocol::tcp())
             }
             #[cfg(any(
                 target_os = "freebsd",
@@ -86,16 +78,9 @@ impl TcpListenerRedirExt for TcpRedirListener {
                 // For IPFW, uses getsockname() to retrieve destination address
                 //
                 // FreeBSD: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
-                Some(socket.local_addr()?)
+                self.local_addr()
             }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "not supported tcp transparent proxy type",
-                ));
-            }
-        };
-
-        Ok((socket, src_addr, dst_addr))
+            _ => unreachable!("not supported tcp transparent proxy type"),
+        }
     }
 }

@@ -11,18 +11,16 @@ use tokio::net::{TcpListener, TcpStream};
 
 use crate::{
     config::RedirType,
-    relay::{redir::TcpListenerRedirExt, sys::sockaddr_to_std},
+    relay::{
+        redir::{TcpListenerRedirExt, TcpStreamRedirExt},
+        sys::sockaddr_to_std,
+    },
 };
 
-pub struct TcpRedirListener {
-    l: TcpListener,
-    ty: RedirType,
-}
-
-impl TcpRedirListener {
-    /// Create a TCP listener binding to `addr` and enable transparent proxy feature
-    pub async fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpRedirListener> {
-        let l = match ty {
+#[async_trait]
+impl TcpListenerRedirExt for TcpListener {
+    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener> {
+        match ty {
             RedirType::Netfilter => {
                 // REDIRECT rule doesn't need to set IP_TRANSPARENT
                 TcpListener::bind(addr).await?
@@ -31,101 +29,66 @@ impl TcpRedirListener {
                 // TPROXY rule requires IP_TRANSPARENT
                 create_redir_listener(addr)?
             }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "not supported tcp transparent proxy type",
-                ));
-            }
-        };
-
-        Ok(TcpRedirListener { l, ty })
-    }
-
-    /// Get local bind addr for TcpListener
-    pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.l.local_addr()
+            _ => Err(Error::new(
+                ErrorKind::InvalidInput,
+                "not supported tcp transparent proxy type",
+            )),
+        }
     }
 }
 
-#[async_trait]
-impl TcpListenerRedirExt for TcpRedirListener {
-    async fn accept_redir(&mut self) -> io::Result<(TcpStream, SocketAddr, Option<SocketAddr>)> {
-        let (mut socket, src_addr) = self.l.accept().await?;
-
-        let dst_addr = match self.ty {
-            RedirType::Netfilter => get_original_destination_addr(&mut socket)?,
+impl TcpStreamRedirExt for TcpStream {
+    fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr> {
+        match ty {
+            RedirType::Netfilter => get_original_destination_addr(self),
             RedirType::TProxy => {
                 // For TPROXY, uses getsockname() to retrieve original destination address
-                Some(socket.local_addr()?)
+                socket.local_addr()?
             }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "not supported tcp transparent proxy type",
-                ));
-            }
-        };
-
-        Ok((socket, src_addr, dst_addr))
+            _ => unreachable!("not supported tcp transparent proxy type"),
+        }
     }
 }
 
-fn get_original_destination_addr(s: &mut TcpStream) -> io::Result<Option<SocketAddr>> {
+fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     let fd = s.as_raw_fd();
 
     unsafe {
         let mut target_addr: libc::sockaddr_storage = mem::zeroed();
         let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
 
-        // Check if it is IPv6 address
-        let ret = libc::getsockopt(
-            fd,
-            libc::SOL_IPV6,
-            libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
-            &mut target_addr as *mut _ as *mut _,
-            &mut target_addr_len,
-        );
-
-        if ret != 0 {
-            let err = Error::last_os_error();
-            match err.raw_os_error() {
-                Some(libc::ENOPROTOOPT) | Some(libc::EOPNOTSUPP) => {
-                    // The option is unknown at the level indicated.
-                    //
-                    // - The current system doesn't support IPv6 netfilter
-                    // - This is not an IPv6 connection
-                    //
-                    // Continue with IPv4
-                }
-                _ => {
+        match s.local_addr()? {
+            SocketAddr::V4(..) => {
+                let ret = libc::getsockopt(
+                    fd,
+                    libc::SOL_IP,
+                    libc::SO_ORIGINAL_DST,
+                    &mut target_addr as *mut _ as *mut _,
+                    &mut target_addr_len,
+                );
+                if ret != 0 {
+                    let err = Error::last_os_error();
                     return Err(err);
                 }
             }
+            SocketAddr::V6(..) => {
+                let ret = libc::getsockopt(
+                    fd,
+                    libc::SOL_IPV6,
+                    libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
+                    &mut target_addr as *mut _ as *mut _,
+                    &mut target_addr_len,
+                );
 
-            let ret = libc::getsockopt(
-                fd,
-                libc::SOL_IP,
-                libc::SO_ORIGINAL_DST,
-                &mut target_addr as *mut _ as *mut _,
-                &mut target_addr_len,
-            );
-
-            if ret != 0 {
-                let err = Error::last_os_error();
-                match err.raw_os_error() {
-                    Some(libc::EOPNOTSUPP) => {
-                        return Ok(None);
-                    }
-                    _ => {
-                        return Err(err);
-                    }
+                if ret != 0 {
+                    let err = Error::last_os_error();
+                    return Err(err);
                 }
             }
         }
 
         // Convert sockaddr_storage to SocketAddr
-        sockaddr_to_std(&target_addr).map(Some)
+        sockaddr_to_std(&target_addr)
     }
 }
 

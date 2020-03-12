@@ -3,18 +3,23 @@
 use std::{io, net::SocketAddr};
 
 use async_trait::async_trait;
-use tokio::net::TcpStream;
+use tokio::net::TcpListener;
+
+use crate::config::RedirType;
 
 #[async_trait]
 pub trait TcpListenerRedirExt {
-    /// Accept clients with its original destination addresss
-    ///
-    /// Works very similar to `TcpListen::accept`, but returns
-    ///
-    /// 1. A `TcpStream`, the accepted socket
-    /// 2. Peer address
-    /// 3. Original destination address
-    async fn accept_redir(&mut self) -> io::Result<(TcpStream, SocketAddr, Option<SocketAddr>)>;
+    // Create a TcpListener for transparent proxy
+    //
+    // Implementation is platform dependent
+    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener>;
+}
+
+pub trait TcpStreamRedirExt {
+    // Read destination address for TcpStream
+    //
+    // Implementation is platform dependent
+    fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr>;
 }
 
 #[async_trait]

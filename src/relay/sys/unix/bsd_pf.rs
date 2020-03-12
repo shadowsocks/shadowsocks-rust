@@ -10,7 +10,6 @@ use std::{
 
 use lazy_static::lazy_static;
 use log::trace;
-use nix::errno::Errno;
 use socket2::Protocol;
 
 use crate::relay::sys::sockaddr_to_std;
@@ -134,11 +133,7 @@ impl PacketFilter {
 
             // According to FreeBSD's doc
             // https://www.freebsd.org/cgi/man.cgi?query=pf&sektion=4&apropos=0&manpath=FreeBSD+12.1-RELEASE+and+Ports
-            //
-            // /dev/pf should be opened in RDWR mode
-            //
-            // I tried on macOS: it must be in RDWR mode, otherwise ioctl will return EPERM
-            let fd = libc::open(dev_path.as_ptr(), libc::O_RDWR);
+            let fd = libc::open(dev_path.as_ptr(), libc::O_RDONLY);
             if fd < 0 {
                 let err = Error::last_os_error();
                 return Err(err);
@@ -156,12 +151,7 @@ impl PacketFilter {
         }
     }
 
-    pub fn natlook(
-        &self,
-        bind_addr: &SocketAddr,
-        peer_addr: &SocketAddr,
-        proto: Protocol,
-    ) -> io::Result<Option<SocketAddr>> {
+    pub fn natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
         trace!("PF natlook peer: {}, bind: {}", peer_addr, bind_addr);
 
         unsafe {
@@ -226,7 +216,6 @@ impl PacketFilter {
 
             if let Err(err) = ffi::ioc_natlook(self.fd, &mut pnl as *mut _) {
                 let nerr = match err.as_errno() {
-                    Some(Errno::ENOENT) => return Ok(None),
                     Some(errno) => Error::from_raw_os_error(errno as i32),
                     None => Error::new(ErrorKind::Other, format!("ioctl DIOCNATLOOK")),
                 };
@@ -257,7 +246,7 @@ impl PacketFilter {
                 unreachable!("sockaddr should be either ipv4 or ipv6");
             }
 
-            sockaddr_to_std(&dst_addr).map(Some)
+            sockaddr_to_std(&dst_addr)
         }
     }
 }

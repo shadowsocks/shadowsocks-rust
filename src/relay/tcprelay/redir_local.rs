@@ -7,18 +7,18 @@ use std::{
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
-use tokio::net::TcpStream;
+use tokio::net::{TcpListener, TcpStream};
 
 use crate::{
     context::SharedContext,
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType, SharedPlainServerStatistic},
-        redir::TcpListenerRedirExt,
+        redir::{TcpListenerRedirExt, TcpStreamRedirExt},
         socks5::Address,
     },
 };
 
-use super::{sys::TcpRedirListener, ProxyStream};
+use super::ProxyStream;
 
 /// Established Client Transparent Proxy
 ///
@@ -91,7 +91,9 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let mut listener = TcpRedirListener::bind(context.config().tcp_redir, &bind_addr)
+    let redir_ty = context.config().tcp_redir;
+
+    let mut listener = TcpListener::bind_redir(redir_ty, &bind_addr)
         .await
         .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
 
@@ -101,22 +103,24 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     info!("shadowsocks TCP redirect listening on {}", actual_local_addr);
 
     loop {
-        let (socket, peer_addr, dst_addr) = listener.accept_redir().await?;
-
-        let dst_addr = match dst_addr {
-            Some(d) => d,
-            None => {
-                error!("got connection {} without destination address", peer_addr);
-                continue;
-            }
-        };
-
+        let (socket, peer_addr) = listener.accept().await?;
         let server = servers.pick_server();
 
-        trace!("got connection {}, destination: {}", peer_addr, dst_addr);
+        trace!("got connection {}", peer_addr);
         trace!("picked proxy server: {:?}", server.server_config());
 
         tokio::spawn(async move {
+            let dst_addr = match socket.destination_addr(redir_ty) {
+                Ok(d) => d,
+                Err(err) => {
+                    error!(
+                        "TCP redirect couldn't get destination, peer: {}, error: {}",
+                        peer_addr, err
+                    );
+                    return;
+                }
+            };
+
             if let Err(err) = handle_redir_client(&server, socket, dst_addr).await {
                 error!("TCP redirect client, error: {:?}", err);
             }
