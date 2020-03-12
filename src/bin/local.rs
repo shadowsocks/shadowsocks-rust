@@ -4,13 +4,10 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
-
-#[cfg(feature = "dns-relay")]
-use std::net::SocketAddr;
 
 use shadowsocks::{
     acl::AccessControl,
@@ -28,7 +25,9 @@ mod logging;
 mod monitor;
 
 fn main() {
-    let matches = App::new("shadowsocks")
+    let available_ciphers = format!("Available ciphers: {}", CipherType::available_ciphers().join(", "));
+
+    let mut app = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
         .arg(
@@ -36,38 +35,6 @@ fn main() {
                 .short("v")
                 .multiple(true)
                 .help("Set the level of debug"),
-        )
-        .arg(
-            Arg::with_name("VPN_MODE")
-                .long("vpn")
-                .help("Enable VPN mode (only for Android)"),
-        )
-        .arg(
-            Arg::with_name("STAT_PATH")
-                .long("stat-path")
-                .takes_value(true)
-                .help("Specify stat_path for traffic stat (only for Android)"),
-        )
-        .arg(
-            Arg::with_name("LOCAL_DNS_ADDR")
-                .long("local-dns")
-                .takes_value(true)
-                .default_value("127.0.0.1:5353")
-                .help("Specify the address of local DNS server (only for Android)"),
-        )
-        .arg(
-            Arg::with_name("REMOTE_DNS_ADDR")
-                .long("remote-dns")
-                .takes_value(true)
-                .default_value("8.8.8.8:53")
-                .help("Specify the address of remote DNS server (only for Android)"),
-        )
-        .arg(
-            Arg::with_name("DNS_RELAY_ADDR")
-                .long("dns-realy")
-                .takes_value(true)
-                .default_value("127.0.0.1:5450")
-                .help("Specify the address of DNS relay (only for Android)"),
         )
         .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
         .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
@@ -79,13 +46,6 @@ fn main() {
                 .help("Specify config file"),
         )
         .arg(
-            Arg::with_name("SERVER_ADDR")
-                .short("s")
-                .long("server-addr")
-                .takes_value(true)
-                .help("Server address"),
-        )
-        .arg(
             Arg::with_name("LOCAL_ADDR")
                 .short("b")
                 .long("local-addr")
@@ -93,11 +53,20 @@ fn main() {
                 .help("Local address, listen only to this address if specified"),
         )
         .arg(
+            Arg::with_name("SERVER_ADDR")
+                .short("s")
+                .long("server-addr")
+                .takes_value(true)
+                .help("Server address")
+                .requires_all(&["PASSWORD", "ENCRYPT_METHOD"]),
+        )
+        .arg(
             Arg::with_name("PASSWORD")
                 .short("k")
                 .long("password")
                 .takes_value(true)
-                .help("Password"),
+                .help("Password")
+                .requires_all(&["SERVER_ADDR", "ENCRYPT_METHOD"]),
         )
         .arg(
             Arg::with_name("ENCRYPT_METHOD")
@@ -105,7 +74,8 @@ fn main() {
                 .long("encrypt-method")
                 .takes_value(true)
                 .help("Encryption method")
-                .long_help(format!("Available ciphers: {}", CipherType::available_ciphers().join(", ")).as_str()),
+                .long_help(available_ciphers.as_str())
+                .requires_all(&["SERVER_ADDR", "PASSWORD"]),
         )
         .arg(
             Arg::with_name("PLUGIN")
@@ -117,13 +87,26 @@ fn main() {
             Arg::with_name("PLUGIN_OPT")
                 .long("plugin-opts")
                 .takes_value(true)
-                .help("Set SIP003 plugin options"),
+                .help("Set SIP003 plugin options")
+                .requires("PLUGIN"),
         )
         .arg(
             Arg::with_name("URL")
                 .long("server-url")
                 .takes_value(true)
                 .help("Server address in SIP002 URL"),
+        )
+        .group(
+            ArgGroup::with_name("SERVER_CONFIG")
+                .args(&["CONFIG", "SERVER_ADDR", "URL"])
+                .multiple(true)
+                .required(true),
+        )
+        .group(
+            ArgGroup::with_name("LOCAL_CONFIG")
+                .args(&["CONFIG", "LOCAL_ADDR"])
+                .multiple(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("NO_DELAY")
@@ -149,8 +132,51 @@ fn main() {
                 .long("acl")
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
-        )
-        .get_matches();
+        );
+
+    if cfg!(target_os = "android") {
+        app = app
+            .arg(
+                Arg::with_name("VPN_MODE")
+                    .long("vpn")
+                    .help("Enable VPN mode (only for Android)"),
+            )
+            .arg(
+                Arg::with_name("STAT_PATH")
+                    .long("stat-path")
+                    .takes_value(true)
+                    .help("Specify stat_path for traffic stat (only for Android)"),
+            );
+    }
+
+    #[cfg(feature = "dns-relay")]
+    {
+        app = app
+            .arg(
+                Arg::with_name("LOCAL_DNS_ADDR")
+                    .long("local-dns")
+                    .takes_value(true)
+                    .default_value("127.0.0.1:5353")
+                    .help("Specify the address of local DNS server (only for Android)"),
+            )
+            .arg(
+                Arg::with_name("REMOTE_DNS_ADDR")
+                    .long("remote-dns")
+                    .takes_value(true)
+                    .default_value("8.8.8.8:53")
+                    .help("Specify the address of remote DNS server (only for Android)"),
+            )
+            .arg(
+                Arg::with_name("DNS_RELAY_ADDR")
+                    .long("dns-realy")
+                    .takes_value(true)
+                    .default_value("127.0.0.1:5450")
+                    .help("Specify the address of DNS relay (only for Android)"),
+            );
+    }
+
+    let matches = app.get_matches();
+    drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "sslocal");
@@ -173,55 +199,28 @@ fn main() {
         None => Config::new(config_type),
     };
 
-    match (
-        matches.value_of("SERVER_ADDR"),
-        matches.value_of("PASSWORD"),
-        matches.value_of("ENCRYPT_METHOD"),
-    ) {
-        (Some(svr_addr), Some(password), Some(method)) => {
-            let method = match method.parse() {
-                Ok(m) => m,
-                Err(err) => {
-                    panic!("does not support {:?} method: {:?}", method, err);
-                }
-            };
+    if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
+        let password = matches.value_of("PASSWORD").expect("password");
+        let method = matches.value_of("ENCRYPT_METHOD").expect("encrypt-method");
 
-            let sc = ServerConfig::new(
-                svr_addr
-                    .parse::<ServerAddr>()
-                    .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
-                password.to_owned(),
-                method,
-                None,
-                None,
-            );
+        let method = match method.parse() {
+            Ok(m) => m,
+            Err(err) => {
+                panic!("does not support {:?} method: {:?}", method, err);
+            }
+        };
 
-            config.server.push(sc);
-        }
-        (None, None, None) => {
-            // Does not provide server config
-        }
-        _ => {
-            panic!("`server-addr`, `method` and `password` should be provided together");
-        }
-    };
+        let sc = ServerConfig::new(
+            svr_addr
+                .parse::<ServerAddr>()
+                .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
+            password.to_owned(),
+            method,
+            None,
+            None,
+        );
 
-    #[cfg(feature = "dns-relay")]
-    {
-        if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-            let addr: SocketAddr = local_dns_addr.parse().expect("local dns address");
-            config.local_dns_addr = Some(addr);
-        }
-
-        if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-            let addr: SocketAddr = remote_dns_addr.parse().expect("remote dns address");
-            config.remote_dns_addr = Some(addr);
-        }
-
-        if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {
-            let addr: SocketAddr = dns_relay_addr.parse().expect("dns relay address");
-            config.dns_relay_addr = Some(addr);
-        }
+        config.server.push(sc);
     }
 
     if cfg!(target_os = "android") {
@@ -233,6 +232,26 @@ fn main() {
 
         if matches.is_present("VPN_MODE") {
             config.protect_path = Some("protect_path".to_string());
+        }
+    }
+
+    #[cfg(feature = "dns-relay")]
+    {
+        use std::net::SocketAddr;
+
+        if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
+            let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
+            config.local_dns_addr = Some(addr);
+        }
+
+        if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
+            let addr = remote_dns_addr.parse::<SocketAddr>().expect("remote dns address");
+            config.remote_dns_addr = Some(addr);
+        }
+
+        if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {
+            let addr = dns_relay_addr.parse::<SocketAddr>().expect("dns relay address");
+            config.dns_relay_addr = Some(addr);
         }
     }
 

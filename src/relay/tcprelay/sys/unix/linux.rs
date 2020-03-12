@@ -23,11 +23,11 @@ impl TcpListenerRedirExt for TcpListener {
         match ty {
             RedirType::Netfilter => {
                 // REDIRECT rule doesn't need to set IP_TRANSPARENT
-                TcpListener::bind(addr).await?
+                TcpListener::bind(addr).await
             }
             RedirType::TProxy => {
                 // TPROXY rule requires IP_TRANSPARENT
-                create_redir_listener(addr)?
+                create_redir_listener(addr)
             }
             _ => Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -43,7 +43,7 @@ impl TcpStreamRedirExt for TcpStream {
             RedirType::Netfilter => get_original_destination_addr(self),
             RedirType::TProxy => {
                 // For TPROXY, uses getsockname() to retrieve original destination address
-                socket.local_addr()?
+                self.local_addr()?
             }
             _ => unreachable!("not supported tcp transparent proxy type"),
         }

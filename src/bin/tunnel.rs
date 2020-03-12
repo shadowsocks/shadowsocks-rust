@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -25,6 +25,8 @@ mod logging;
 mod monitor;
 
 fn main() {
+    let available_ciphers = format!("Available ciphers: {}", CipherType::available_ciphers().join(", "));
+
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
@@ -44,13 +46,6 @@ fn main() {
                 .help("Specify config file"),
         )
         .arg(
-            Arg::with_name("SERVER_ADDR")
-                .short("s")
-                .long("server-addr")
-                .takes_value(true)
-                .help("Server address"),
-        )
-        .arg(
             Arg::with_name("LOCAL_ADDR")
                 .short("b")
                 .long("local-addr")
@@ -66,11 +61,20 @@ fn main() {
                 .help("Forward address, forward to this address"),
         )
         .arg(
+            Arg::with_name("SERVER_ADDR")
+                .short("s")
+                .long("server-addr")
+                .takes_value(true)
+                .help("Server address")
+                .requires_all(&["PASSWORD", "ENCRYPT_METHOD"]),
+        )
+        .arg(
             Arg::with_name("PASSWORD")
                 .short("k")
                 .long("password")
                 .takes_value(true)
-                .help("Password"),
+                .help("Password")
+                .requires_all(&["SERVER_ADDR", "ENCRYPT_METHOD"]),
         )
         .arg(
             Arg::with_name("ENCRYPT_METHOD")
@@ -78,7 +82,8 @@ fn main() {
                 .long("encrypt-method")
                 .takes_value(true)
                 .help("Encryption method")
-                .long_help(format!("Available ciphers: {}", CipherType::available_ciphers().join(", ")).as_str()),
+                .long_help(available_ciphers.as_str())
+                .requires_all(&["SERVER_ADDR", "PASSWORD"]),
         )
         .arg(
             Arg::with_name("PLUGIN")
@@ -90,13 +95,26 @@ fn main() {
             Arg::with_name("PLUGIN_OPT")
                 .long("plugin-opts")
                 .takes_value(true)
-                .help("Set SIP003 plugin options"),
+                .help("Set SIP003 plugin options")
+                .requires("PLUGIN"),
         )
         .arg(
             Arg::with_name("URL")
                 .long("server-url")
                 .takes_value(true)
                 .help("Server address in SIP002 URL"),
+        )
+        .group(
+            ArgGroup::with_name("SERVER_CONFIG")
+                .args(&["CONFIG", "SERVER_ADDR", "URL"])
+                .multiple(true)
+                .required(true),
+        )
+        .group(
+            ArgGroup::with_name("LOCAL_CONFIG")
+                .args(&["CONFIG", "LOCAL_ADDR"])
+                .multiple(true)
+                .required(true),
         )
         .arg(
             Arg::with_name("NO_DELAY")
@@ -113,6 +131,8 @@ fn main() {
         )
         .get_matches();
 
+    drop(available_ciphers);
+
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "sstunnel");
 
@@ -127,38 +147,29 @@ fn main() {
         None => Config::new(ConfigType::TunnelLocal),
     };
 
-    match (
-        matches.value_of("SERVER_ADDR"),
-        matches.value_of("PASSWORD"),
-        matches.value_of("ENCRYPT_METHOD"),
-    ) {
-        (Some(svr_addr), Some(password), Some(method)) => {
-            let method = match method.parse() {
-                Ok(m) => m,
-                Err(err) => {
-                    panic!("does not support {:?} method: {:?}", method, err);
-                }
-            };
+    if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
+        let password = matches.value_of("PASSWORD").expect("password");
+        let method = matches.value_of("ENCRYPT_METHOD").expect("encrypt-method");
 
-            let sc = ServerConfig::new(
-                svr_addr
-                    .parse::<ServerAddr>()
-                    .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
-                password.to_owned(),
-                method,
-                None,
-                None,
-            );
+        let method = match method.parse() {
+            Ok(m) => m,
+            Err(err) => {
+                panic!("does not support {:?} method: {:?}", method, err);
+            }
+        };
 
-            config.server.push(sc);
-        }
-        (None, None, None) => {
-            // Does not provide server config
-        }
-        _ => {
-            panic!("`server-addr`, `method` and `password` should be provided together");
-        }
-    };
+        let sc = ServerConfig::new(
+            svr_addr
+                .parse::<ServerAddr>()
+                .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
+            password.to_owned(),
+            method,
+            None,
+            None,
+        );
+
+        config.server.push(sc);
+    }
 
     if let Some(url) = matches.value_of("URL") {
         let svr_addr = url.parse::<ServerConfig>().expect("parse `url`");

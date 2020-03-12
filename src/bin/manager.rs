@@ -9,7 +9,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -17,7 +17,6 @@ use tokio::{self, runtime::Builder};
 use shadowsocks::{
     acl::AccessControl,
     crypto::CipherType,
-    plugin::PluginConfig,
     run_manager,
     Config,
     ConfigType,
@@ -74,6 +73,12 @@ fn main() {
                 .long("manager-address")
                 .takes_value(true)
                 .help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""),
+        )
+        .group(
+            ArgGroup::with_name("MANAGER_CONFIG")
+                .args(&["CONFIG", "MANAGER_ADDRESS"])
+                .multiple(true)
+                .required(true)
         )
         .arg(
             Arg::with_name("NOFILE")
@@ -137,18 +142,6 @@ fn main() {
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
     }
-
-    if let Some(p) = matches.value_of("PLUGIN") {
-        let plugin = PluginConfig {
-            plugin: p.to_owned(),
-            plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
-        };
-
-        // Overrides config in file
-        for svr in config.server.iter_mut() {
-            svr.set_plugin(plugin.clone());
-        }
-    };
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
         config.manager_address = Some(
