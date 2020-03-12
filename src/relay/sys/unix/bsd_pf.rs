@@ -217,7 +217,7 @@ impl PacketFilter {
             if let Err(err) = ffi::ioc_natlook(self.fd, &mut pnl as *mut _) {
                 let nerr = match err.as_errno() {
                     Some(errno) => Error::from_raw_os_error(errno as i32),
-                    None => Error::new(ErrorKind::Other, format!("ioctl DIOCNATLOOK")),
+                    None => Error::new(ErrorKind::Other, "ioctl DIOCNATLOOK"),
                 };
                 return Err(nerr);
             }
@@ -225,7 +225,7 @@ impl PacketFilter {
             let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
 
             if pnl.af == libc::AF_INET as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in = mem::transmute(&mut dst_addr);
+                let dst_addr: &mut libc::sockaddr_in = &mut *(&mut dst_addr as *mut _ as *mut _);
                 dst_addr.sin_family = pnl.af;
                 dst_addr.sin_port = pnl.rdport();
                 ptr::copy_nonoverlapping(
@@ -234,7 +234,7 @@ impl PacketFilter {
                     mem::size_of_val(&pnl.rdaddr.pfa.v4),
                 );
             } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in6 = mem::transmute(&mut dst_addr);
+                let dst_addr: &mut libc::sockaddr_in6 = &mut *(&mut dst_addr as *mut _ as *mut _);
                 dst_addr.sin6_family = pnl.af;
                 dst_addr.sin6_port = pnl.rdport();
                 ptr::copy_nonoverlapping(
