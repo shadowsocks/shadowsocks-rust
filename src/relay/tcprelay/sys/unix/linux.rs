@@ -43,7 +43,7 @@ impl TcpStreamRedirExt for TcpStream {
             RedirType::Netfilter => get_original_destination_addr(self),
             RedirType::TProxy => {
                 // For TPROXY, uses getsockname() to retrieve original destination address
-                self.local_addr()?
+                self.local_addr()
             }
             _ => unreachable!("not supported tcp transparent proxy type"),
         }

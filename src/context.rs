@@ -9,10 +9,10 @@ use std::{
     },
 };
 
-#[cfg(feature = "dns-relay")]
+#[cfg(target_os = "android")]
 use std::net::IpAddr;
 
-#[cfg(feature = "dns-relay")]
+#[cfg(target_os = "android")]
 use lru_time_cache::LruCache;
 
 use bloomfilter::Bloom;
@@ -166,7 +166,7 @@ pub struct Context {
     local_flow_statistic: ServerFlowStatistic,
 
     // For DNS relay's ACL domain name reverse lookup
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     reverse_lookup_cache: Mutex<LruCache<IpAddr, String>>,
 }
 
@@ -177,7 +177,7 @@ impl Context {
     /// Create a non-shared Context
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
-        #[cfg(feature = "dns-relay")]
+        #[cfg(target_os = "android")]
         let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, String>::with_capacity(8192));
 
         Context {
@@ -186,7 +186,7 @@ impl Context {
             server_running: AtomicBool::new(true),
             nonce_ppbloom,
             local_flow_statistic: ServerFlowStatistic::new(),
-            #[cfg(feature = "dns-relay")]
+            #[cfg(target_os = "android")]
             reverse_lookup_cache,
         }
     }
@@ -283,7 +283,7 @@ impl Context {
     }
 
     /// Add a record to the reverse lookup cache
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     pub fn add_to_reverse_lookup_cache(&self, addr: IpAddr, qname: String) {
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         reverse_lookup_cache.insert(addr, qname);
@@ -295,7 +295,7 @@ impl Context {
             // Proxy everything by default
             None => false,
             Some(ref a) => {
-                #[cfg(feature = "dns-relay")]
+                #[cfg(target_os = "android")]
                 {
                     match *target {
                         Address::SocketAddress(ref saddr) => {

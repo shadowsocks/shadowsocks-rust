@@ -11,3 +11,4 @@ Cargo.lock
 /*.json
 /restart.sh
 /udp_echo_server.py
+/.idea

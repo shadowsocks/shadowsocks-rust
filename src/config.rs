@@ -881,13 +881,13 @@ pub struct Config {
     /// Path for local DNS resolver, only for Android
     pub local_dns_path: Option<String>,
     /// Interanl DNS's bind address
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     pub dns_relay_addr: Option<SocketAddr>,
     /// Local DNS's address
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     pub local_dns_addr: Option<SocketAddr>,
     /// Remote DNS's address
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     pub remote_dns_addr: Option<SocketAddr>,
 }
 
@@ -972,11 +972,11 @@ impl Config {
             stat_path: None,
             protect_path: None,
             local_dns_path: None,
-            #[cfg(feature = "dns-relay")]
+            #[cfg(target_os = "android")]
             dns_relay_addr: None,
-            #[cfg(feature = "dns-relay")]
+            #[cfg(target_os = "android")]
             local_dns_addr: None,
-            #[cfg(feature = "dns-relay")]
+            #[cfg(target_os = "android")]
             remote_dns_addr: None,
         }
     }
