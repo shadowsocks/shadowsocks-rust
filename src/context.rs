@@ -301,11 +301,12 @@ impl Context {
                         Address::SocketAddress(ref saddr) => {
                             // do the reverse lookup in our local cache
                             let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                            // if a qanme is found
                             if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
-                                // if a qanme is found
-                                let reverse_addr = Address::DomainNameAddress(qname.to_string(), 0);
-                                if a.check_target_bypassed(self, &reverse_addr).await {
-                                    return true;
+                                // FIXME: remove the last dot from fqdn name
+                                let reverse_addr = Address::DomainNameAddress(qname[0..qname.len()-1].to_string(), 0);
+                                if !a.check_target_bypassed(self, &reverse_addr).await {
+                                    return false;
                                 }
                             }
                         }

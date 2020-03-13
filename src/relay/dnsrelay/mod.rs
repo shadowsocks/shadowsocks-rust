@@ -2,6 +2,7 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     time::Duration,
+    sync::Arc,
 };
 
 use tokio::{
@@ -98,16 +99,17 @@ async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: SocketAddr, ns: 
 
     let req_buffer = message.to_vec()?;
     let size = req_buffer.len();
-    let mut send_buffer = vec![];
+    let mut send_buffer = vec![0; size + 2];
 
     BigEndian::write_u16(&mut send_buffer[0..2], size as u16);
     send_buffer[2..size + 2].copy_from_slice(&req_buffer[0..size]);
     stream.write_all(&send_buffer[0..size + 2]).await?;
 
-    let mut res_buffer = vec![];
+    let mut res_buffer = vec![0; 2];
     stream.read_exact(&mut res_buffer[0..2]).await?;
 
     let size = BigEndian::read_u16(&res_buffer[0..2]) as usize;
+    let mut res_buffer = vec![0; size];
     stream.read_exact(&mut res_buffer[0..size]).await?;
 
     Ok(Message::from_vec(&mut res_buffer)?)
@@ -127,11 +129,13 @@ async fn acl_lookup(
         qtype, qname, local, remote
     );
 
-    let timeout = Some(Duration::new(5, 0));
-
+    // FIXME: spawn here to lookup in parallel
+    let timeout = Some(Duration::new(1, 0));
     let local_response = try_timeout(udp_lookup(qname, qtype.clone(), local), timeout)
         .await
         .unwrap_or(Message::new());
+
+    let timeout = Some(Duration::new(2, 0));
     let remote_response = try_timeout(socks5_lookup(qname, qtype.clone(), socks5, remote), timeout)
         .await
         .unwrap_or(Message::new());
@@ -165,31 +169,31 @@ async fn acl_lookup(
         return Ok(local_response.clone());
     }
 
-    if qname_bypassed {
-        debug!("Pick local response");
-        Ok(local_response.clone())
-    } else if ip_bypassed {
-        debug!("Pick local response");
-        Ok(local_response.clone())
-    } else {
-        debug!("Pick remote response");
+    if !qname_bypassed {
+        debug!("Pick remote response: {:?}", remote_response);
         Ok(remote_response.clone())
+    } else if !ip_bypassed {
+        debug!("Pick remote response: {:?}", remote_response);
+        Ok(remote_response.clone())
+    } else {
+        debug!("Pick local response: {:?}", local_response);
+        Ok(local_response.clone())
     }
 }
 
 /// Start a DNS relay local server
-pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local_dns_addr.expect("local dns");
+pub async fn run(shared_context: SharedContext) -> io::Result<()> {
+    let local_addr = shared_context.config().local_dns_addr.expect("local dns");
     debug!("Local DNS server: {}", local_addr);
 
-    let remote_addr = context.config().remote_dns_addr.expect("remote dns");
+    let remote_addr = shared_context.config().remote_dns_addr.expect("remote dns");
     debug!("Remote DNS server: {}", remote_addr);
 
-    let socks5_config = context.config().local.as_ref().expect("socks5");
-    let socks5_addr = socks5_config.bind_addr(&*context).await?;
+    let socks5_config = shared_context.config().local.as_ref().expect("socks5");
+    let socks5_addr = socks5_config.bind_addr(&*shared_context).await?;
     debug!("SOCKS5 server: {}", socks5_addr);
 
-    let listen_addr = context.config().dns_relay_addr.expect("dns relay");
+    let listen_addr = shared_context.config().dns_relay_addr.expect("dns relay");
     debug!("Listen on {}", listen_addr);
 
     let mut socket = UdpSocket::bind(listen_addr).await?;
@@ -212,60 +216,64 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             }
         };
 
-        let mut message = Message::new();
-        message.set_id(request.id());
-        message.set_recursion_desired(true);
-        message.set_recursion_available(true);
-        message.set_message_type(MessageType::Response);
+        debug!("Received query: {:?}", request);
 
-        if request.queries().is_empty() {
-            message.set_response_code(ResponseCode::FormErr);
-        } else {
-            let question = &request.queries()[0];
-            debug!("Received query: {:?}", question);
+        let context = Arc::clone(&shared_context);
 
-            if let Ok(result) = acl_lookup(
-                &context,
-                local_addr,
-                remote_addr,
-                socks5_addr,
-                question.name(),
-                question.query_type(),
-            )
-            .await
-            {
-                message.add_query(question.clone());
-                message.set_response_code(result.response_code());
+        tokio::spawn(async move {
 
-                for rec in result.answers() {
-                    debug!("Answer: {:?}", rec);
-                    match rec.rdata() {
-                        RData::A(ref ip) => {
-                            context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
-                        }
-                        RData::AAAA(ref ip) => {
-                            context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
-                        }
-                        _ => (),
-                    };
-                    message.add_answer(rec.clone());
-                }
-                for rec in result.additionals() {
-                    debug!("Additionals: {:?}", rec);
-                    message.add_additional(rec.clone());
-                }
+            let mut message = Message::new();
+            message.set_id(request.id());
+            message.set_recursion_desired(true);
+            message.set_recursion_available(true);
+            message.set_message_type(MessageType::Response);
+
+            if request.queries().is_empty() {
+                message.set_response_code(ResponseCode::FormErr);
             } else {
-                message.set_response_code(ResponseCode::ServFail);
-            }
-        }
+                let question = &request.queries()[0];
 
-        let res_buffer = message.to_vec()?;
-        match socket.send_to(&res_buffer, src).await {
-            Ok(_) => {}
-            Err(e) => {
-                debug!("Failed to send response: {:?}", e);
-                continue;
+                if let Ok(result) = acl_lookup(
+                    &context,
+                    local_addr,
+                    remote_addr,
+                    socks5_addr,
+                    question.name(),
+                    question.query_type(),
+                )
+                .await
+                {
+                    for rec in result.answers() {
+                        debug!("Answer: {:?}", rec);
+                        match rec.rdata() {
+                            RData::A(ref ip) => {
+                                context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
+                            }
+                            RData::AAAA(ref ip) => {
+                                context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
+                            }
+                            _ => (),
+                        };
+                    }
+
+                    message = result.clone();
+                    message.set_id(request.id());
+                } else {
+                    message.set_response_code(ResponseCode::ServFail);
+                }
             }
-        };
+
+            debug!("Final response: {:?}", message);
+
+            let res_buffer = message.to_vec().expect("parse message");
+            let mut socket = UdpSocket::bind(("0.0.0.0", 0)).await.expect("bind socket");
+
+            match socket.send_to(&res_buffer, src).await {
+                Ok(_) => {}
+                Err(e) => {
+                    debug!("Failed to send response: {:?}", e);
+                }
+            }
+        });
     }
 }
