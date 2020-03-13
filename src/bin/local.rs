@@ -237,7 +237,7 @@ fn main() {
 
     #[cfg(target_os = "android")]
     {
-        use std::net::SocketAddr;
+        use std::net::{SocketAddr, ToSocketAddrs};
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
@@ -245,8 +245,8 @@ fn main() {
         }
 
         if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-            let addr = remote_dns_addr.parse::<SocketAddr>().expect("remote dns address");
-            config.remote_dns_addr = Some(addr);
+            let mut addr = remote_dns_addr.to_socket_addrs().expect("remote dns address");
+            config.remote_dns_addr = addr.next();
         }
 
         if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {
