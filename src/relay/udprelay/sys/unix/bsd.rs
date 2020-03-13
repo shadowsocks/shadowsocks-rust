@@ -100,6 +100,7 @@ impl UdpSocketRedirExt for UdpRedirSocket {
     }
 }
 
+#[cfg(target_os = "freebsd")]
 fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let fd = socket.as_raw_fd();
 
@@ -110,6 +111,27 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
         fd,
         level,
         libc::IP_BINDANY,
+        &enable as *const _ as *const _,
+        mem::size_of_val(&enable) as libc::socklen_t,
+    );
+    if ret != 0 {
+        return Err(Error::last_os_error());
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "openbsd")]
+fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let enable: libc::c_int = 1;
+
+    // https://man.openbsd.org/getsockopt.2
+    let ret = libc::setsockopt(
+        fd,
+        level,
+        libc::SO_BINDANY,
         &enable as *const _ as *const _,
         mem::size_of_val(&enable) as libc::socklen_t,
     );
