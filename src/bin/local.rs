@@ -149,7 +149,7 @@ fn main() {
             );
     }
 
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     {
         app = app
             .arg(
@@ -168,7 +168,7 @@ fn main() {
             )
             .arg(
                 Arg::with_name("DNS_RELAY_ADDR")
-                    .long("dns-realy")
+                    .long("dns-relay")
                     .takes_value(true)
                     .default_value("127.0.0.1:5450")
                     .help("Specify the address of DNS relay (only for Android)"),
@@ -235,7 +235,7 @@ fn main() {
         }
     }
 
-    #[cfg(feature = "dns-relay")]
+    #[cfg(target_os = "android")]
     {
         use std::net::SocketAddr;
 
