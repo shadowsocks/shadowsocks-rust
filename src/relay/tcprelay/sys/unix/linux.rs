@@ -21,7 +21,7 @@ use crate::{
 impl TcpListenerRedirExt for TcpListener {
     async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener> {
         match ty {
-            RedirType::Netfilter => {
+            RedirType::Redirect => {
                 // REDIRECT rule doesn't need to set IP_TRANSPARENT
                 TcpListener::bind(addr).await
             }
@@ -40,7 +40,7 @@ impl TcpListenerRedirExt for TcpListener {
 impl TcpStreamRedirExt for TcpStream {
     fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr> {
         match ty {
-            RedirType::Netfilter => get_original_destination_addr(self),
+            RedirType::Redirect => get_original_destination_addr(self),
             RedirType::TProxy => {
                 // For TPROXY, uses getsockname() to retrieve original destination address
                 self.local_addr()

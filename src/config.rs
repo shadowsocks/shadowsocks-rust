@@ -827,7 +827,7 @@ impl FromStr for RedirType {
     fn from_str(s: &str) -> Result<RedirType, InvalidRedirType> {
         match s {
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            "netfilter" => Ok(RedirType::Netfilter),
+            "redirect" => Ok(RedirType::Redirect),
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             "tproxy" => Ok(RedirType::TProxy),

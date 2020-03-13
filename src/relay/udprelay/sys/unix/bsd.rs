@@ -30,7 +30,7 @@ impl UdpRedirSocket {
     ///
     /// This will allow binding to `addr` that is not in local host
     pub fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<UdpRedirSocket> {
-        if ty != RedirType::TProxy {
+        if ty == RedirType::NotSupported {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "not supported udp transparent proxy type",
