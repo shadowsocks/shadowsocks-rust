@@ -9,7 +9,9 @@ use tokio::{
     net::{TcpStream, UdpSocket},
 };
 
+use byteorder::{BigEndian, ByteOrder};
 use log::debug;
+use rand::Rng;
 
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, Query},
@@ -43,7 +45,8 @@ async fn udp_lookup(qname: &Name, qtype: RecordType, server: SocketAddr) -> io::
     query.set_query_type(qtype);
     query.set_name(qname.clone());
 
-    message.set_id(6666);
+    let id = rand::thread_rng().gen();
+    message.set_id(id);
     message.set_recursion_desired(true);
     message.add_query(query);
 
@@ -88,22 +91,23 @@ async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: SocketAddr, ns: 
     query.set_query_type(qtype);
     query.set_name(qname.clone());
 
-    message.set_id(6666);
+    let id = rand::thread_rng().gen();
+    message.set_id(id);
     message.set_recursion_desired(true);
     message.add_query(query);
 
     let req_buffer = message.to_vec()?;
     let size = req_buffer.len();
-    let mut size_buffer: [u8; 2] = [((size >> 8) & 0xFF) as u8, ((size >> 0) & 0xFF) as u8];
-    let mut send_buffer: [u8; 512 + 2] = [0; 512 + 2];
-    send_buffer[..2].copy_from_slice(&size_buffer[..2]);
+    let mut send_buffer = vec![];
+
+    BigEndian::write_u16(&mut send_buffer[0..2], size as u16);
     send_buffer[2..size + 2].copy_from_slice(&req_buffer[0..size]);
     stream.write_all(&send_buffer[0..size + 2]).await?;
 
-    stream.read_exact(&mut size_buffer[0..2]).await?;
+    let mut res_buffer = vec![];
+    stream.read_exact(&mut res_buffer[0..2]).await?;
 
-    let mut res_buffer = vec![0; 512];
-    let size = ((size_buffer[0] as usize) << 8) + (size_buffer[1] as usize);
+    let size = BigEndian::read_u16(&res_buffer[0..2]) as usize;
     stream.read_exact(&mut res_buffer[0..size]).await?;
 
     Ok(Message::from_vec(&mut res_buffer)?)
