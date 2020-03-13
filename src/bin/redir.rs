@@ -20,7 +20,7 @@ mod monitor;
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
 
-    let matches = App::new("shadowsocks")
+    let mut app = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls.")
         .arg(
@@ -129,20 +129,33 @@ fn main() {
                 .long("acl")
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
-        )
-        .arg(
+        );
+
+    let available_types = RedirType::available_types();
+
+    if RedirType::tcp_default() != RedirType::NotSupported {
+        app = app.arg(
             Arg::with_name("TCP_REDIR")
                 .long("tcp-redir")
                 .takes_value(true)
+                .possible_values(&available_types)
+                .default_value(RedirType::tcp_default().name())
                 .help("TCP redir (transparent proxy) type"),
-        )
-        .arg(
+        );
+    }
+
+    if RedirType::udp_default() != RedirType::NotSupported {
+        app = app.arg(
             Arg::with_name("UDP_REDIR")
                 .long("udp-redir")
                 .takes_value(true)
+                .possible_values(&available_types)
+                .default_value(RedirType::udp_default().name())
                 .help("UDP redir (transparent proxy) type"),
-        )
-        .get_matches();
+        );
+    }
+
+    let matches = app.get_matches();
 
     drop(available_ciphers);
 

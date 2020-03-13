@@ -64,6 +64,8 @@ use bytes::Bytes;
 use cfg_if::cfg_if;
 use log::error;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use url::{self, Url};
@@ -677,18 +679,18 @@ impl FromStr for Mode {
 }
 
 /// Transparent Proxy type
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter)]
 pub enum RedirType {
     /// For not supported platforms
     NotSupported,
 
-    /// For Linux-like systems' Netfilter. Only for TCP connections.
+    /// For Linux-like systems' Netfilter `REDIRECT`. Only for TCP connections.
     ///
     /// This is supported from Linux 2.4 Kernel. Document: https://www.netfilter.org/documentation/index.html#documentation-howto
     ///
     /// NOTE: Filter rule `REDIRECT` can only be applied to TCP connections.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    Netfilter,
+    Redirect,
 
     /// For Linux-like systems' Netfilter TPROXY rule.
     ///
@@ -725,21 +727,14 @@ impl RedirType {
         if #[cfg(any(target_os = "linux", target_os = "android"))] {
             /// Default TCP transparent proxy solution on this platform
             pub fn tcp_default() -> RedirType {
-                RedirType::Netfilter
+                RedirType::Redirect
             }
 
             /// Default UDP transparent proxy solution on this platform
             pub fn udp_default() -> RedirType {
                 RedirType::TProxy
             }
-        } else if #[cfg(any(
-            target_os = "openbsd",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "solaris",
-            target_os = "macos",
-            target_os = "ios"
-        ))] {
+        } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
             /// Default TCP transparent proxy solution on this platform
             pub fn tcp_default() -> RedirType {
                 RedirType::PacketFilter
@@ -748,6 +743,16 @@ impl RedirType {
             /// Default UDP transparent proxy solution on this platform
             pub fn udp_default() -> RedirType {
                 RedirType::PacketFilter
+            }
+        } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
+            /// Default TCP transparent proxy solution on this platform
+            pub fn tcp_default() -> RedirType {
+                RedirType::PacketFilter
+            }
+
+            /// Default UDP transparent proxy solution on this platform
+            pub fn udp_default() -> RedirType {
+                RedirType::NotSupported
             }
         } else {
             /// Default TCP transparent proxy solution on this platform
@@ -766,19 +771,18 @@ impl RedirType {
     pub fn is_supported(self) -> bool {
         self != RedirType::NotSupported
     }
-}
 
-impl Display for RedirType {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match *self {
+    /// Name of redirect type (transparent proxy type)
+    pub fn name(self) -> &'static str {
+        match self {
             // Dummy, shouldn't be used in any useful situations
-            RedirType::NotSupported => f.write_str("not_supported"),
+            RedirType::NotSupported => "not_supported",
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            RedirType::Netfilter => f.write_str("netfilter"),
+            RedirType::Redirect => "redirect",
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            RedirType::TProxy => f.write_str("tproxy"),
+            RedirType::TProxy => "tproxy",
 
             #[cfg(any(
                 target_os = "openbsd",
@@ -788,11 +792,29 @@ impl Display for RedirType {
                 target_os = "macos",
                 target_os = "ios"
             ))]
-            RedirType::PacketFilter => f.write_str("pf"),
+            RedirType::PacketFilter => "pf",
 
             #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
-            RedirType::IpFirewall => f.write_str("ipfw"),
+            RedirType::IpFirewall => "ipfw",
         }
+    }
+
+    /// Get all available types
+    pub fn available_types() -> Vec<&'static str> {
+        let mut v = Vec::new();
+        for e in Self::iter() {
+            match e {
+                RedirType::NotSupported => continue,
+                _ => v.push(e.name()),
+            }
+        }
+        v
+    }
+}
+
+impl Display for RedirType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -875,6 +897,7 @@ pub struct Config {
     pub tcp_redir: RedirType,
     /// UDP Transparent Proxy type
     pub udp_redir: RedirType,
+    /// Android flow statistic report Unix socket path
     pub stat_path: Option<String>,
     /// Path to protect callback unix address, only for Android
     pub protect_path: Option<String>,
