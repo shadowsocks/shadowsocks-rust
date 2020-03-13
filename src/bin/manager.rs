@@ -15,14 +15,7 @@ use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
-    acl::AccessControl,
-    crypto::CipherType,
-    run_manager,
-    Config,
-    ConfigType,
-    ManagerAddr,
-    Mode,
-    ServerAddr,
+    acl::AccessControl, crypto::CipherType, run_manager, Config, ConfigType, ManagerAddr, Mode, ServerAddr,
 };
 
 mod logging;
@@ -38,8 +31,18 @@ fn main() {
                 .multiple(true)
                 .help("Set the level of debug"),
         )
-        .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
-        .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
+        .arg(
+            Arg::with_name("UDP_ONLY")
+                .short("u")
+                .help("Server mode UDP_ONLY")
+                .conflicts_with("TCP_AND_UDP"),
+        )
+        .arg(
+            Arg::with_name("TCP_AND_UDP")
+                .short("U")
+                .help("Server mode TCP_AND_UDP")
+                .conflicts_with("UDP_ONLY"),
+        )
         .arg(
             Arg::with_name("CONFIG")
                 .short("c")
@@ -59,8 +62,8 @@ fn main() {
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
-                .help("Encryption method")
-                .long_help(format!("Available ciphers: {}", CipherType::available_ciphers().join(", ")).as_str()),
+                .possible_values(&CipherType::available_ciphers())
+                .help("Encryption method"),
         )
         .arg(
             Arg::with_name("NO_DELAY")

@@ -15,23 +15,15 @@ use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
-    acl::AccessControl,
-    crypto::CipherType,
-    plugin::PluginConfig,
-    run_server,
-    Config,
-    ConfigType,
-    ManagerAddr,
-    Mode,
-    ServerAddr,
-    ServerConfig,
+    acl::AccessControl, crypto::CipherType, plugin::PluginConfig, run_server, Config, ConfigType, ManagerAddr, Mode,
+    ServerAddr, ServerConfig,
 };
 
 mod logging;
 mod monitor;
 
 fn main() {
-    let available_ciphers = format!("Available ciphers: {}", CipherType::available_ciphers().join(", "));
+    let available_ciphers = CipherType::available_ciphers();
 
     let matches = App::new("shadowsocks")
         .version(shadowsocks::VERSION)
@@ -42,8 +34,18 @@ fn main() {
                 .multiple(true)
                 .help("Set the level of debug"),
         )
-        .arg(Arg::with_name("UDP_ONLY").short("u").help("Server mode UDP_ONLY"))
-        .arg(Arg::with_name("TCP_AND_UDP").short("U").help("Server mode TCP_AND_UDP"))
+        .arg(
+            Arg::with_name("UDP_ONLY")
+                .short("u")
+                .help("Server mode UDP_ONLY")
+                .conflicts_with("TCP_AND_UDP"),
+        )
+        .arg(
+            Arg::with_name("TCP_AND_UDP")
+                .short("U")
+                .help("Server mode TCP_AND_UDP")
+                .conflicts_with("UDP_ONLY"),
+        )
         .arg(
             Arg::with_name("CONFIG")
                 .short("c")
@@ -79,8 +81,8 @@ fn main() {
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
+                .possible_values(&available_ciphers)
                 .help("Encryption method")
-                .long_help(available_ciphers.as_str())
                 .requires_all(&["SERVER_ADDR", "PASSWORD"]),
         )
         .arg(
