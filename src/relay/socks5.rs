@@ -362,6 +362,12 @@ impl From<(String, u16)> for Address {
     }
 }
 
+impl From<&Address> for Address {
+    fn from(addr: &Address) -> Address {
+        addr.clone()
+    }
+}
+
 /// Parse `Address` error
 #[derive(Debug)]
 pub struct AddressError;

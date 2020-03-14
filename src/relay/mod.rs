@@ -1,8 +1,8 @@
 //! Relay server in local and server side implementations.
 
+pub(crate) mod dns_resolver;
 #[cfg(target_os = "android")]
 pub mod dnsrelay;
-pub(crate) mod dns_resolver;
 pub(crate) mod flow;
 pub(crate) mod loadbalancing;
 pub mod local;

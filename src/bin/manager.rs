@@ -15,7 +15,14 @@ use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
-    acl::AccessControl, crypto::CipherType, run_manager, Config, ConfigType, ManagerAddr, Mode, ServerAddr,
+    acl::AccessControl,
+    crypto::CipherType,
+    run_manager,
+    Config,
+    ConfigType,
+    ManagerAddr,
+    Mode,
+    ServerAddr,
 };
 
 mod logging;

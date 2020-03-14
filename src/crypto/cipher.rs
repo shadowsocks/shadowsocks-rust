@@ -3,7 +3,8 @@
 use std::{
     convert::From,
     fmt::{self, Debug, Display},
-    io, mem,
+    io,
+    mem,
     str::{self, FromStr},
 };
 
