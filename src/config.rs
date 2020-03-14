@@ -807,6 +807,7 @@ impl RedirType {
         for e in Self::iter() {
             match e {
                 RedirType::NotSupported => continue,
+                #[allow(unreachable_patterns)]
                 _ => v.push(e.name()),
             }
         }
