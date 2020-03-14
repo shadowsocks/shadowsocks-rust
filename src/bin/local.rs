@@ -144,6 +144,11 @@ fn main() {
                 .long("acl")
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
+        )
+        .arg(
+            Arg::with_name("IPV6_FIRST")
+                .short("6")
+                .help("Resovle hostname to IPv6 address first"),
         );
 
     if cfg!(target_os = "android") {
@@ -318,6 +323,12 @@ fn main() {
         let acl = AccessControl::load_from_file(acl_file).expect("Load ACL file");
         config.acl = Some(acl);
     }
+
+    if matches.is_present("IPV6_FIRST") {
+        config.ipv6_first = true;
+    }
+
+    // DONE READING options
 
     if config.local.is_none() {
         eprintln!(

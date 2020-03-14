@@ -123,7 +123,7 @@ impl ServerState {
     #[cfg(feature = "trust-dns")]
     pub async fn new_shared(config: &Config, rt: Handle) -> SharedServerState {
         let state = ServerState {
-            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, rt).await {
+            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, config.ipv6_first, rt).await {
                 Ok(resolver) => Some(resolver),
                 Err(..) => None,
             },

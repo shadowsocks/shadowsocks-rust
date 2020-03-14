@@ -103,6 +103,11 @@ fn main() {
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
         )
+        .arg(
+            Arg::with_name("IPV6_FIRST")
+                .short("6")
+                .help("Resovle hostname to IPv6 address first"),
+        )
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
@@ -168,6 +173,12 @@ fn main() {
         let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
         config.acl = Some(acl);
     }
+
+    if matches.is_present("IPV6_FIRST") {
+        config.ipv6_first = true;
+    }
+
+    // DONE reading options
 
     if config.manager_address.is_none() {
         eprintln!(

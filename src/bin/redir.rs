@@ -138,6 +138,11 @@ fn main() {
                 .long("acl")
                 .takes_value(true)
                 .help("Path to ACL (Access Control List)"),
+        )
+        .arg(
+            Arg::with_name("IPV6_FIRST")
+                .short("6")
+                .help("Resovle hostname to IPv6 address first"),
         );
 
     let available_types = RedirType::available_types();
@@ -269,6 +274,12 @@ fn main() {
     if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
         config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
     }
+
+    if matches.is_present("IPV6_FIRST") {
+        config.ipv6_first = true;
+    }
+
+    // DONE READING options
 
     if config.local.is_none() {
         eprintln!(

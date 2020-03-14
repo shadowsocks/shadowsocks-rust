@@ -9,7 +9,7 @@ use std::{
 use log::{error, trace};
 use tokio::{self, runtime::Handle};
 use trust_dns_resolver::{
-    config::{ResolverConfig, ResolverOpts},
+    config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
 };
 
@@ -20,11 +20,16 @@ use crate::context::Context;
 pub async fn create_resolver(
     dns: Option<ResolverConfig>,
     timeout: Option<Duration>,
+    ipv6_first: bool,
     rt: Handle,
 ) -> io::Result<TokioAsyncResolver> {
     let mut resolver_opts = ResolverOpts::default();
     if let Some(d) = timeout {
         resolver_opts.timeout = d;
+    }
+
+    if ipv6_first {
+        resolver_opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
     }
 
     {

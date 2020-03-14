@@ -139,6 +139,11 @@ fn main() {
                 .takes_value(true)
                 .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
         )
+        .arg(
+            Arg::with_name("IPV6_FIRST")
+                .short("6")
+                .help("Resovle hostname to IPv6 address first"),
+        )
         .get_matches();
 
     drop(available_ciphers);
@@ -231,6 +236,12 @@ fn main() {
     if let Some(nofile) = matches.value_of("NOFILE") {
         config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
     }
+
+    if matches.is_present("IPV6_FIRST") {
+        config.ipv6_first = true;
+    }
+
+    // DONE READING options
 
     if config.local.is_none() {
         eprintln!(

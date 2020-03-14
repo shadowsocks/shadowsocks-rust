@@ -114,6 +114,8 @@ struct SSConfig {
     no_delay: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ipv6_first: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -912,6 +914,9 @@ pub struct Config {
     /// Remote DNS's address
     #[cfg(target_os = "android")]
     pub remote_dns_addr: Option<Address>,
+    /// Uses IPv6 addresses first
+    /// This would affect DNS resolution logic
+    pub ipv6_first: bool,
 }
 
 /// Configuration parsing error kind
@@ -1001,6 +1006,7 @@ impl Config {
             local_dns_addr: None,
             #[cfg(target_os = "android")]
             remote_dns_addr: None,
+            ipv6_first: false,
         }
     }
 
@@ -1179,6 +1185,11 @@ impl Config {
         // TCP timeout
         // This is mostly used for manager for creating new servers
         nconfig.timeout = config.timeout.map(Duration::from_secs);
+
+        // Uses IPv6 first
+        if let Some(f) = config.ipv6_first {
+            nconfig.ipv6_first = f;
+        }
 
         Ok(nconfig)
     }
@@ -1383,6 +1394,10 @@ impl fmt::Display for Config {
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
 
         jconf.nofile = self.nofile;
+
+        if self.ipv6_first {
+            jconf.ipv6_first = Some(self.ipv6_first);
+        }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
     }
