@@ -1,6 +1,5 @@
 # shadowsocks-rust
 
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/2029e102e1bd46fb9423cb35980636b7)](https://app.codacy.com/app/zonyitoo/shadowsocks-rust?utm_source=github.com&utm_medium=referral&utm_content=shadowsocks/shadowsocks-rust&utm_campaign=Badge_Grade_Dashboard)
 [![Build Status](https://img.shields.io/travis/shadowsocks/shadowsocks-rust.svg)](https://travis-ci.org/shadowsocks/shadowsocks-rust)
 [![Build status](https://ci.appveyor.com/api/projects/status/h3ny0dov7v9xioa5?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust-0grjf)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)

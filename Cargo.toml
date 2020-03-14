@@ -64,7 +64,7 @@ libc = "0.2"
 tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream"] }
 futures = "0.3"
 json5 = "0.2"
-base64 = "0.11"
+base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"
 ring = "0.16"
