@@ -262,6 +262,18 @@ impl AccessControl {
         })
     }
 
+    /// Check if domain name is in proxy_list.
+    /// If so, it should be resolved from remote (for Android's DNS relay)
+    #[cfg(target_os = "android")]
+    pub async fn check_qname_in_proxy_list(&self, addr: &Address) -> bool {
+        // Addresses in proxy_list will be proxied
+        if self.white_list.check_address_matched(addr) {
+            return true;
+        }
+
+        false
+    }
+
     /// Check if target address should be bypassed (for client)
     ///
     /// FIXME: This function may perform a DNS resolution

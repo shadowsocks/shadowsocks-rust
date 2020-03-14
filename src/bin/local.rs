@@ -236,20 +236,20 @@ fn main() {
     }
 
     if cfg!(target_os = "android") {
-        config.local_dns_path = Some("local_dns_path".to_string());
+        config.local_dns_path = Some("local_dns_path".to_owned());
 
         if let Some(stat_path) = matches.value_of("STAT_PATH") {
-            config.stat_path = Some(stat_path.to_string());
+            config.stat_path = Some(stat_path.to_owned());
         }
 
         if matches.is_present("VPN_MODE") {
-            config.protect_path = Some("protect_path".to_string());
+            config.protect_path = Some("protect_path".to_owned());
         }
     }
 
     #[cfg(target_os = "android")]
     {
-        use std::net::{SocketAddr, ToSocketAddrs};
+        use std::net::SocketAddr;
 
         use shadowsocks::relay::socks5::Address;
 
@@ -259,8 +259,8 @@ fn main() {
         }
 
         if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-            let mut addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
-            config.remote_dns_addr = addr.next();
+            let addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
+            config.remote_dns_addr = Some(addr);
         }
 
         if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {

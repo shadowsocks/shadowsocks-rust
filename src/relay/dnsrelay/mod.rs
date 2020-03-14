@@ -47,7 +47,7 @@ async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io:
     let mut res_buffer = vec![0; 512];
     socket.recv_from(&mut res_buffer).await?;
 
-    Ok(Message::from_vec(&mut res_buffer)?)
+    Ok(Message::from_vec(&res_buffer)?)
 }
 
 async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: &SocketAddr, ns: &Address) -> io::Result<Message> {
@@ -79,7 +79,7 @@ async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: &SocketAddr, ns:
     let mut res_buffer = vec![0; size];
     stream.read_exact(&mut res_buffer[0..size]).await?;
 
-    Ok(Message::from_vec(&mut res_buffer)?)
+    Ok(Message::from_vec(&res_buffer)?)
 }
 
 async fn acl_lookup(
@@ -93,22 +93,25 @@ async fn acl_lookup(
 
     // Start querying name servers
     debug!(
-        "attempting lookup of {:?} {} with ns {} and {}",
+        "attempting lookup of {:?} {} with ns {} and {:?}",
         qtype, qname, local, remote
     );
 
-    let timeout = Some(Duration::new(1, 0));
-    let local_response_fut = try_timeout(udp_lookup(qname, qtype.clone(), local), timeout);
+    let timeout = Some(Duration::new(3, 0));
+    let local_response_fut = try_timeout(udp_lookup(qname, qtype, local), timeout);
 
-    let timeout = Some(Duration::new(2, 0));
-    let remote_response_fut = try_timeout(socks5_lookup(qname, qtype.clone(), socks5, remote), timeout);
+    let timeout = Some(Duration::new(3, 0));
+    let remote_response_fut = try_timeout(socks5_lookup(qname, qtype, socks5, remote), timeout);
 
     let (local_response, remote_response) = future::join(local_response_fut, remote_response_fut).await;
     let local_response = local_response.unwrap_or_else(|_| Message::new());
     let remote_response = remote_response.unwrap_or_else(|_| Message::new());
 
-    let addr = Address::DomainNameAddress(qname.to_string(), 0);
-    let qname_bypassed = context.check_target_bypassed(&addr).await;
+    // remove the last dot from fqdn name
+    let mut name = qname.to_ascii();
+    name.pop();
+    let addr = Address::DomainNameAddress(name, 0);
+    let qname_in_proxy_list = context.check_qname_in_proxy_list(&addr).await;
 
     let mut ip_bypassed = false;
     for rec in local_response.answers() {
@@ -136,11 +139,11 @@ async fn acl_lookup(
         return Ok(local_response.clone());
     }
 
-    if !qname_bypassed {
-        debug!("pick DNS remote response: {:?}", remote_response);
+    if qname_in_proxy_list {
+        debug!("pick remote response (qname): {:?}", remote_response);
         Ok(remote_response.clone())
     } else if !ip_bypassed {
-        debug!("pick DNS remote response: {:?}", remote_response);
+        debug!("pick remote response (ip): {:?}", remote_response);
         Ok(remote_response.clone())
     } else {
         debug!("pick DNS local response: {:?}", local_response);
@@ -155,9 +158,6 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
 
     let local_addr = shared_context.config().local_dns_addr.expect("local dns addr");
     trace!("local DNS server: {}", local_addr);
-
-    // let remote_addr = shared_context.config().remote_dns_addr.expect("remote dns");
-    // trace!("remote DNS server: {}", remote_addr);
 
     let socks5_config = shared_context.config().local.as_ref().expect("socks5 bind addr");
     let socks5_addr = socks5_config.bind_addr(&shared_context).await?;
@@ -180,7 +180,7 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
             }
         };
 
-        let request = match Message::from_vec(&mut req_buffer) {
+        let request = match Message::from_vec(&req_buffer) {
             Ok(x) => x,
             Err(e) => {
                 error!("failed to parse UDP query message, error: {:?}", e);
@@ -217,13 +217,13 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
                     for rec in result.answers() {
                         debug!("dns answer: {:?}", rec);
 
+                        // Remove the last dot in fqdn name
+                        let mut name = question.name().to_ascii();
+                        name.pop();
+
                         match rec.rdata() {
-                            RData::A(ref ip) => {
-                                context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
-                            }
-                            RData::AAAA(ref ip) => {
-                                context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
-                            }
+                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
+                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
                             _ => (),
                         };
                     }
