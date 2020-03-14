@@ -911,7 +911,7 @@ pub struct Config {
     pub local_dns_addr: Option<SocketAddr>,
     /// Remote DNS's address
     #[cfg(target_os = "android")]
-    pub remote_dns_addr: Option<SocketAddr>,
+    pub remote_dns_addr: Option<Address>,
 }
 
 /// Configuration parsing error kind

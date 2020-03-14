@@ -10,7 +10,14 @@ use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
-    acl::AccessControl, crypto::CipherType, plugin::PluginConfig, run_local, Config, ConfigType, Mode, ServerAddr,
+    acl::AccessControl,
+    crypto::CipherType,
+    plugin::PluginConfig,
+    run_local,
+    Config,
+    ConfigType,
+    Mode,
+    ServerAddr,
     ServerConfig,
 };
 
@@ -244,13 +251,15 @@ fn main() {
     {
         use std::net::{SocketAddr, ToSocketAddrs};
 
+        use shadowsocks::relay::socks5::Address;
+
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
         }
 
         if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-            let mut addr = remote_dns_addr.to_socket_addrs().expect("remote dns address");
+            let mut addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
             config.remote_dns_addr = addr.next();
         }
 

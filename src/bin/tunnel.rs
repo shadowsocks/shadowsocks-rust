@@ -10,7 +10,14 @@ use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
-    crypto::CipherType, plugin::PluginConfig, relay::socks5::Address, run_local, Config, ConfigType, Mode, ServerAddr,
+    crypto::CipherType,
+    plugin::PluginConfig,
+    relay::socks5::Address,
+    run_local,
+    Config,
+    ConfigType,
+    Mode,
+    ServerAddr,
     ServerConfig,
 };
 

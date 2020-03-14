@@ -304,7 +304,9 @@ impl Context {
                             // if a qanme is found
                             if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
                                 // FIXME: remove the last dot from fqdn name
-                                let reverse_addr = Address::DomainNameAddress(qname[0..qname.len()-1].to_string(), 0);
+                                let qname = qname.trim_end_matches('.');
+
+                                let reverse_addr = Address::DomainNameAddress(qname.to_owned(), 0);
                                 if !a.check_target_bypassed(self, &reverse_addr).await {
                                     return false;
                                 }

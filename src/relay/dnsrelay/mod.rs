@@ -1,17 +1,18 @@
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
-    time::Duration,
     sync::Arc,
+    time::Duration,
 };
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpStream, UdpSocket},
+    net::UdpSocket,
 };
 
 use byteorder::{BigEndian, ByteOrder};
-use log::debug;
+use futures::future;
+use log::{debug, error, info, trace};
 use rand::Rng;
 
 use trust_dns_proto::{
@@ -20,23 +21,12 @@ use trust_dns_proto::{
 };
 
 use crate::{
-    context::SharedContext,
-    relay::{
-        socks5::{
-            Address,
-            Command,
-            HandshakeRequest,
-            HandshakeResponse,
-            Reply,
-            TcpRequestHeader,
-            TcpResponseHeader,
-            SOCKS5_AUTH_METHOD_NONE,
-        },
-        utils::try_timeout,
-    },
+    config::ConfigType,
+    context::{Context, SharedContext},
+    relay::{socks5::Address, tcprelay::client::Socks5Client, utils::try_timeout},
 };
 
-async fn udp_lookup(qname: &Name, qtype: RecordType, server: SocketAddr) -> io::Result<Message> {
+async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io::Result<Message> {
     let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0));
     let mut socket = UdpSocket::bind(bind_addr).await?;
 
@@ -60,31 +50,8 @@ async fn udp_lookup(qname: &Name, qtype: RecordType, server: SocketAddr) -> io::
     Ok(Message::from_vec(&mut res_buffer)?)
 }
 
-async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: SocketAddr, ns: SocketAddr) -> io::Result<Message> {
-    let mut stream = TcpStream::connect(socks5).await?;
-
-    // 1. Handshake
-    let hs = HandshakeRequest::new(vec![SOCKS5_AUTH_METHOD_NONE]);
-    hs.write_to(&mut stream).await?;
-    stream.flush().await?;
-
-    let hsp = HandshakeResponse::read_from(&mut stream).await?;
-    assert_eq!(hsp.chosen_method, SOCKS5_AUTH_METHOD_NONE);
-
-    // 2. Send request header
-    let addr = Address::SocketAddress(ns);
-    let h = TcpRequestHeader::new(Command::TcpConnect, addr);
-    h.write_to(&mut stream).await?;
-    stream.flush().await?;
-
-    let hp = TcpResponseHeader::read_from(&mut stream).await?;
-    match hp.reply {
-        Reply::Succeeded => (),
-        r => {
-            let err = io::Error::new(io::ErrorKind::Other, format!("{}", r));
-            return Err(err);
-        }
-    }
+async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: &SocketAddr, ns: &Address) -> io::Result<Message> {
+    let mut stream = Socks5Client::connect(ns, &socks5).await?;
 
     let mut message = Message::new();
     let mut query = Query::new();
@@ -116,29 +83,29 @@ async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: SocketAddr, ns: 
 }
 
 async fn acl_lookup(
-    context: &SharedContext,
-    local: SocketAddr,
-    remote: SocketAddr,
-    socks5: SocketAddr,
+    context: &Context,
+    local: &SocketAddr,
+    socks5: &SocketAddr,
     qname: &Name,
     qtype: RecordType,
 ) -> io::Result<Message> {
+    let remote = context.config().remote_dns_addr.as_ref().expect("remote dns addr");
+
     // Start querying name servers
     debug!(
         "attempting lookup of {:?} {} with ns {} and {}",
         qtype, qname, local, remote
     );
 
-    // FIXME: spawn here to lookup in parallel
     let timeout = Some(Duration::new(1, 0));
-    let local_response = try_timeout(udp_lookup(qname, qtype.clone(), local), timeout)
-        .await
-        .unwrap_or(Message::new());
+    let local_response_fut = try_timeout(udp_lookup(qname, qtype.clone(), local), timeout);
 
     let timeout = Some(Duration::new(2, 0));
-    let remote_response = try_timeout(socks5_lookup(qname, qtype.clone(), socks5, remote), timeout)
-        .await
-        .unwrap_or(Message::new());
+    let remote_response_fut = try_timeout(socks5_lookup(qname, qtype.clone(), socks5, remote), timeout);
+
+    let (local_response, remote_response) = future::join(local_response_fut, remote_response_fut).await;
+    let local_response = local_response.unwrap_or_else(|_| Message::new());
+    let remote_response = remote_response.unwrap_or_else(|_| Message::new());
 
     let addr = Address::DomainNameAddress(qname.to_string(), 0);
     let qname_bypassed = context.check_target_bypassed(&addr).await;
@@ -170,40 +137,45 @@ async fn acl_lookup(
     }
 
     if !qname_bypassed {
-        debug!("Pick remote response: {:?}", remote_response);
+        debug!("pick DNS remote response: {:?}", remote_response);
         Ok(remote_response.clone())
     } else if !ip_bypassed {
-        debug!("Pick remote response: {:?}", remote_response);
+        debug!("pick DNS remote response: {:?}", remote_response);
         Ok(remote_response.clone())
     } else {
-        debug!("Pick local response: {:?}", local_response);
+        debug!("pick DNS local response: {:?}", local_response);
         Ok(local_response.clone())
     }
 }
 
 /// Start a DNS relay local server
 pub async fn run(shared_context: SharedContext) -> io::Result<()> {
-    let local_addr = shared_context.config().local_dns_addr.expect("local dns");
-    debug!("Local DNS server: {}", local_addr);
+    // Local must be socks5 protocol!
+    assert_eq!(shared_context.config().config_type, ConfigType::Socks5Local);
 
-    let remote_addr = shared_context.config().remote_dns_addr.expect("remote dns");
-    debug!("Remote DNS server: {}", remote_addr);
+    let local_addr = shared_context.config().local_dns_addr.expect("local dns addr");
+    trace!("local DNS server: {}", local_addr);
 
-    let socks5_config = shared_context.config().local.as_ref().expect("socks5");
-    let socks5_addr = socks5_config.bind_addr(&*shared_context).await?;
-    debug!("SOCKS5 server: {}", socks5_addr);
+    // let remote_addr = shared_context.config().remote_dns_addr.expect("remote dns");
+    // trace!("remote DNS server: {}", remote_addr);
+
+    let socks5_config = shared_context.config().local.as_ref().expect("socks5 bind addr");
+    let socks5_addr = socks5_config.bind_addr(&shared_context).await?;
+    trace!("socks5 server: {}", socks5_addr);
 
     let listen_addr = shared_context.config().dns_relay_addr.expect("dns relay");
-    debug!("Listen on {}", listen_addr);
 
     let mut socket = UdpSocket::bind(listen_addr).await?;
+
+    let actual_listen_addr = socket.local_addr()?;
+    info!("shadowsocks DNS relay listening on {}", actual_listen_addr);
 
     loop {
         let mut req_buffer: [u8; 512] = [0; 512];
         let (_, src) = match socket.recv_from(&mut req_buffer).await {
             Ok(x) => x,
             Err(e) => {
-                debug!("Failed to read from UDP socket: {:?}", e);
+                error!("DNS relay read from UDP socket error: {}", e);
                 continue;
             }
         };
@@ -211,17 +183,16 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
         let request = match Message::from_vec(&mut req_buffer) {
             Ok(x) => x,
             Err(e) => {
-                debug!("Failed to parse UDP query message: {:?}", e);
+                error!("failed to parse UDP query message, error: {:?}", e);
                 continue;
             }
         };
 
-        debug!("Received query: {:?}", request);
+        debug!("received query: {:?}", request);
 
         let context = Arc::clone(&shared_context);
 
         tokio::spawn(async move {
-
             let mut message = Message::new();
             message.set_id(request.id());
             message.set_recursion_desired(true);
@@ -233,18 +204,19 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
             } else {
                 let question = &request.queries()[0];
 
-                if let Ok(result) = acl_lookup(
+                let r = acl_lookup(
                     &context,
-                    local_addr,
-                    remote_addr,
-                    socks5_addr,
+                    &local_addr,
+                    &socks5_addr,
                     question.name(),
                     question.query_type(),
                 )
-                .await
-                {
+                .await;
+
+                if let Ok(result) = r {
                     for rec in result.answers() {
-                        debug!("Answer: {:?}", rec);
+                        debug!("dns answer: {:?}", rec);
+
                         match rec.rdata() {
                             RData::A(ref ip) => {
                                 context.add_to_reverse_lookup_cache(IpAddr::from(*ip), question.name().to_ascii())
@@ -256,14 +228,14 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
                         };
                     }
 
-                    message = result.clone();
+                    message = result;
                     message.set_id(request.id());
                 } else {
                     message.set_response_code(ResponseCode::ServFail);
                 }
             }
 
-            debug!("Final response: {:?}", message);
+            debug!("dns final response: {:?}", message);
 
             let res_buffer = message.to_vec().expect("parse message");
             let mut socket = UdpSocket::bind(("0.0.0.0", 0)).await.expect("bind socket");
@@ -271,7 +243,7 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
             match socket.send_to(&res_buffer, src).await {
                 Ok(_) => {}
                 Err(e) => {
-                    debug!("Failed to send response: {:?}", e);
+                    error!("failed to send DNS response, error: {:?}", e);
                 }
             }
         });
