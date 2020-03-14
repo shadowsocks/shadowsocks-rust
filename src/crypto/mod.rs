@@ -17,7 +17,7 @@ pub mod openssl;
 #[cfg(feature = "rc4")]
 pub mod rc4_md5;
 pub mod ring;
-#[cfg(feature = "miscreant")]
+#[cfg(feature = "aes-pmac-siv")]
 pub mod siv;
 #[cfg(feature = "sodium")]
 pub mod sodium;

@@ -3,8 +3,7 @@
 use std::{
     convert::From,
     fmt::{self, Debug, Display},
-    io,
-    mem,
+    io, mem,
     str::{self, FromStr},
 };
 
@@ -153,9 +152,9 @@ const CIPHER_XSALSA20: &str = "xsalsa20";
 #[cfg(feature = "sodium")]
 const CIPHER_CHACHA20_IETF: &str = "chacha20-ietf";
 
-#[cfg(feature = "miscreant")]
+#[cfg(feature = "aes-pmac-siv")]
 const CIPHER_AES_128_PMAC_SIV: &str = "aes-128-pmac-siv";
-#[cfg(feature = "miscreant")]
+#[cfg(feature = "aes-pmac-siv")]
 const CIPHER_AES_256_PMAC_SIV: &str = "aes-256-pmac-siv";
 
 const CIPHER_PLAIN: &str = "plain";
@@ -252,9 +251,9 @@ pub enum CipherType {
     #[cfg(feature = "sodium")]
     XChaCha20IetfPoly1305,
 
-    #[cfg(feature = "miscreant")]
+    #[cfg(feature = "aes-pmac-siv")]
     Aes128PmacSiv,
-    #[cfg(feature = "miscreant")]
+    #[cfg(feature = "aes-pmac-siv")]
     Aes256PmacSiv,
 }
 
@@ -362,9 +361,9 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => 32,
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes128PmacSiv => 32,
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes256PmacSiv => 64,
         }
     }
@@ -533,9 +532,9 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => 24,
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes128PmacSiv => 8,
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes256PmacSiv => 8,
         }
     }
@@ -565,7 +564,7 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => CipherCategory::Aead,
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => CipherCategory::Aead,
 
             _ => CipherCategory::Stream,
@@ -583,7 +582,7 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => 16,
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => 16,
 
             _ => panic!("only support AEAD ciphers, found {:?}", self),
@@ -694,9 +693,9 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => CIPHER_XCHACHA20_IETF_POLY1305,
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes128PmacSiv => CIPHER_AES_128_PMAC_SIV,
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CipherType::Aes256PmacSiv => CIPHER_AES_256_PMAC_SIV,
         }
     }
@@ -789,9 +788,9 @@ impl FromStr for CipherType {
             #[cfg(feature = "sodium")]
             CIPHER_XCHACHA20_IETF_POLY1305 => Ok(CipherType::XChaCha20IetfPoly1305),
 
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CIPHER_AES_128_PMAC_SIV => Ok(CipherType::Aes128PmacSiv),
-            #[cfg(feature = "miscreant")]
+            #[cfg(feature = "aes-pmac-siv")]
             CIPHER_AES_256_PMAC_SIV => Ok(CipherType::Aes256PmacSiv),
 
             _ => Err(Error::UnknownCipherType),

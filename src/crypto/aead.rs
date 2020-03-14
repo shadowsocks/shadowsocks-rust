@@ -3,7 +3,7 @@
 use crate::crypto::cipher::{CipherCategory, CipherResult, CipherType};
 
 use crate::crypto::ring::RingAeadCipher;
-#[cfg(feature = "miscreant")]
+#[cfg(feature = "aes-pmac-siv")]
 use crate::crypto::siv::MiscreantCipher;
 #[cfg(feature = "sodium")]
 use crate::crypto::sodium::SodiumAeadCipher;
@@ -52,7 +52,7 @@ pub fn new_aead_encryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadEnc
         #[cfg(feature = "sodium")]
         CipherType::XChaCha20IetfPoly1305 => Box::new(SodiumAeadCipher::new(t, key, nonce)),
 
-        #[cfg(feature = "miscreant")]
+        #[cfg(feature = "aes-pmac-siv")]
         CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => Box::new(MiscreantCipher::new(t, key, nonce)),
 
         _ => unreachable!(),
@@ -71,7 +71,7 @@ pub fn new_aead_decryptor(t: CipherType, key: &[u8], nonce: &[u8]) -> BoxAeadDec
         #[cfg(feature = "sodium")]
         CipherType::XChaCha20IetfPoly1305 => Box::new(SodiumAeadCipher::new(t, key, nonce)),
 
-        #[cfg(feature = "miscreant")]
+        #[cfg(feature = "aes-pmac-siv")]
         CipherType::Aes128PmacSiv | CipherType::Aes256PmacSiv => Box::new(MiscreantCipher::new(t, key, nonce)),
 
         _ => unreachable!(),

@@ -17,9 +17,9 @@ VERSION=$(grep -E '^version' "${ROOT_DIR}/Cargo.toml" | awk '{print $3}' | sed '
 HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
 
 if [[ "${BUILD_TARGET}" != "" ]]; then
-    cargo build --release --features "miscreant" --target "${BUILD_TARGET}"
+    cargo build --release --features "aes-pmac-siv" --target "${BUILD_TARGET}"
 else
-    cargo build --release --features "miscreant"
+    cargo build --release --features "aes-pmac-siv"
 fi
 
 if [[ "$?" != "0" ]]; then
