@@ -22,6 +22,13 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
 
     if let Some(ref opt) = plugin.plugin_opt {
         cmd.env("SS_PLUGIN_OPTIONS", opt);
+        #[cfg(target_os = "android")]
+        {
+            // Add VPN flags to the commandline as well
+            if opt.contains(";V") {
+                cmd.arg("-V");
+            }
+        }
     }
 
     cmd

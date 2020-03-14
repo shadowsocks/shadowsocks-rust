@@ -74,7 +74,7 @@ cfg_if! {
 
             // receive the return value
             let mut response = [0; 1];
-            stream.read(&mut response)?;
+            stream.read_exact(&mut response)?;
             if response[0] == 0xFF {
                 return Err(Error::new(ErrorKind::Other, "protect() failed"));
             }

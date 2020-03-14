@@ -289,6 +289,19 @@ impl Context {
         reverse_lookup_cache.insert(addr, qname);
     }
 
+    /// Check if domain name is in proxy_list.
+    /// If so, it should be resolved from remote (for Android's DNS relay)
+    #[cfg(target_os = "android")]
+    pub async fn check_qname_in_proxy_list(&self, qname: &Address) -> bool {
+        match self.config.acl {
+            // Proxy everything by default
+            None => false,
+            Some(ref a) => {
+                a.check_qname_in_proxy_list(qname).await
+            }
+        }
+    }
+
     /// Check target address ACL (for client)
     pub async fn check_target_bypassed(&self, target: &Address) -> bool {
         match self.config.acl {
@@ -297,22 +310,16 @@ impl Context {
             Some(ref a) => {
                 #[cfg(target_os = "android")]
                 {
-                    match *target {
-                        Address::SocketAddress(ref saddr) => {
-                            // do the reverse lookup in our local cache
-                            let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-                            // if a qanme is found
-                            if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
-                                // FIXME: remove the last dot from fqdn name
-                                let qname = qname.trim_end_matches('.');
-
-                                let reverse_addr = Address::DomainNameAddress(qname.to_owned(), 0);
-                                if !a.check_target_bypassed(self, &reverse_addr).await {
-                                    return false;
-                                }
+                    if let Address::SocketAddress(ref saddr) = target {
+                        // do the reverse lookup in our local cache
+                        let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                        // if a qanme is found
+                        if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
+                            let reverse_addr = Address::DomainNameAddress(qname.clone(), 0);
+                            if a.check_qname_in_proxy_list(&reverse_addr).await {
+                                return false;
                             }
                         }
-                        _ => (),
                     }
                 }
                 a.check_target_bypassed(self, target).await
