@@ -31,6 +31,8 @@ use crate::{
     },
 };
 
+pub mod upstream;
+
 async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io::Result<Message> {
     let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0));
     let mut socket = UdpSocket::bind(bind_addr).await?;
