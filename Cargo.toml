@@ -108,7 +108,6 @@ lazy_static = "1.4"
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-sendfd = "0.3"
 trust-dns-proto = "0.19"
 
 # Just for the ioctl call macro
