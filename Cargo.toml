@@ -37,10 +37,10 @@ name = "ssmanager"
 path = "src/bin/manager.rs"
 
 [profile.release]
-lto = true
+lto = "fat"
 codegen-units = 1
 incremental = false
-panic = 'abort'
+panic = "abort"
 
 [features]
 default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]
