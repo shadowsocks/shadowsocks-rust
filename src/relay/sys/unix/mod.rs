@@ -42,15 +42,16 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
+        mod uds;
+
         /// This is a RPC for Android to `protect()` socket for connecting to remote servers
         ///
         /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
         ///
         /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
-        fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
-            use std::{io::Read, os::unix::net::UnixStream, time::Duration};
-
-            use sendfd::{SendWithFd};
+        async fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
+            use std::{io::Read, time::Duration};
+            use tokio::io::AsyncReadExt;
 
             // ignore if protect_path is not specified
             let path = match protect_path {
@@ -58,23 +59,19 @@ cfg_if! {
                 None => return Ok(()),
             };
 
-            // it's safe to use blocking socket here
-            let mut stream = UnixStream::connect(path)?;
-            stream
-                .set_read_timeout(Some(Duration::new(1, 0)))
-                .expect("couldn't set read timeout");
-            stream
-                .set_write_timeout(Some(Duration::new(1, 0)))
-                .expect("couldn't set write timeout");
+            let timeout = Some(Duration::new(1, 0));
+
+            let mut stream = self::uds::UnixStream::connect(path).await?;
 
             // send fds
             let dummy: [u8; 1] = [1];
             let fds: [RawFd; 1] = [fd];
-            stream.send_with_fd(&dummy, &fds)?;
+            stream.send_with_fd(&dummy, &fds).await?;
 
             // receive the return value
             let mut response = [0; 1];
-            stream.read_exact(&mut response)?;
+            stream.read_exact(&mut response).await?;
+
             if response[0] == 0xFF {
                 return Err(Error::new(ErrorKind::Other, "protect() failed"));
             }
@@ -83,7 +80,7 @@ cfg_if! {
         }
     } else {
         #[inline(always)]
-        fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
+        async fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
             Ok(())
         }
     }
@@ -103,7 +100,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
     // Any traffic to localhost should not be protected
     // This is a workaround for VPNService
     if cfg!(target_os = "android") && !saddr.ip().is_loopback() {
-        protect(&context.config().protect_path, socket.as_raw_fd())?;
+        protect(&context.config().protect_path, socket.as_raw_fd()).await?;
     }
 
     // it's important that the socket is protected before connecting
@@ -119,7 +116,7 @@ pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
     if cfg!(target_os = "android") && !addr.ip().is_loopback() {
-        protect(&context.config().protect_path, socket.as_raw_fd())?;
+        protect(&context.config().protect_path, socket.as_raw_fd()).await?;
     }
 
     Ok(socket)

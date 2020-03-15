@@ -296,9 +296,7 @@ impl Context {
         match self.config.acl {
             // Proxy everything by default
             None => false,
-            Some(ref a) => {
-                a.check_qname_in_proxy_list(qname).await
-            }
+            Some(ref a) => a.check_qname_in_proxy_list(qname).await,
         }
     }
 
