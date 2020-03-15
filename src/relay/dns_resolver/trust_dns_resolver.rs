@@ -46,7 +46,7 @@ pub async fn create_resolver(
             } else {
                 use trust_dns_resolver::system_conf::read_system_conf;
                 // use the system resolver configuration
-                let (config, opts) = match read_system_conf() {
+                let (config, mut opts) = match read_system_conf() {
                     Ok(o) => o,
                     Err(err) => {
                         error!("failed to initialize DNS resolver with system-config, error: {}", err);
@@ -58,6 +58,11 @@ pub async fn create_resolver(
                 };
 
                 // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
+                //
+                // Only ip_strategy should be changed
+                if ipv6_first {
+                    opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
+                }
 
                 trace!(
                     "initializing DNS resolver with system-config {:?} opts {:?}",
