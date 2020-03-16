@@ -914,6 +914,7 @@ pub struct Config {
     /// UDP Transparent Proxy type
     pub udp_redir: RedirType,
     /// Android flow statistic report Unix socket path
+    #[cfg(feature = "local-flow-stat")]
     pub stat_path: Option<String>,
     /// Path to protect callback unix address, only for Android
     pub protect_path: Option<String>,
@@ -1014,6 +1015,7 @@ impl Config {
             acl: None,
             tcp_redir: RedirType::tcp_default(),
             udp_redir: RedirType::udp_default(),
+            #[cfg(feature = "local-flow-stat")]
             stat_path: None,
             protect_path: None,
             local_dns_path: None,
