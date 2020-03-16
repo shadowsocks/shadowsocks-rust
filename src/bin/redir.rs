@@ -221,7 +221,7 @@ fn main() {
             .parse::<ServerAddr>()
             .expect("`local-addr` should be \"IP:Port\" or \"Domain:Port\"");
 
-        config.local = Some(local_addr);
+        config.local_addr = Some(local_addr);
     }
 
     if let Some(url) = matches.value_of("FORWARD_ADDR") {
@@ -281,7 +281,7 @@ fn main() {
 
     // DONE READING options
 
-    if config.local.is_none() {
+    if config.local_addr.is_none() {
         eprintln!(
             "missing `local_address`, consider specifying it by --local-addr command line option, \
              or \"local_address\" and \"local_port\" in configuration file"

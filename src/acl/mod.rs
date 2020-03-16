@@ -264,7 +264,6 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    #[cfg(target_os = "android")]
     pub async fn check_qname_in_proxy_list(&self, addr: &Address) -> bool {
         // Addresses in proxy_list will be proxied
         if self.white_list.check_address_matched(addr) {
@@ -278,11 +277,6 @@ impl AccessControl {
     ///
     /// FIXME: This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
-        // Always redirect TCP DNS query (for android)
-        if cfg!(target_os = "android") && addr.port() == 53 {
-            return false;
-        }
-
         // Addresses in bypass_list will be bypassed
         if self.black_list.check_address_matched(addr) {
             return true;

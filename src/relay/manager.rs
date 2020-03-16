@@ -418,7 +418,7 @@ impl ManagerService {
         let mut config = Config::new(ConfigType::Server);
         config.server.push(svr_cfg);
 
-        config.local = self.context.config().local.clone();
+        config.local_addr = self.context.config().local_addr.clone();
 
         if let Some(mode) = p.mode {
             config.mode = match mode.parse::<Mode>() {
@@ -558,10 +558,10 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     let state = ServerState::new_shared(&config, rt.clone()).await;
     let context = Context::new_shared(config, state.clone());
 
-    let bind_addr = match context.config().manager_address {
+    let bind_addr = match context.config().manager_addr {
         Some(ref a) => a,
         None => {
-            let err = Error::new(ErrorKind::Other, "missing `manager_address` in configuration");
+            let err = Error::new(ErrorKind::Other, "missing `manager_addr` in configuration");
             return Err(err);
         }
     };
@@ -574,7 +574,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     if !config.server.is_empty() {
         for svr_cfg in &config.server {
             let mut clean_config = Config::new(ConfigType::Server);
-            clean_config.local = config.local.clone();
+            clean_config.local_addr = config.local_addr.clone();
             clean_config.mode = config.mode;
             clean_config.no_delay = config.no_delay;
             clean_config.udp_timeout = config.udp_timeout;

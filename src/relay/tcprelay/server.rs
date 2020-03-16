@@ -70,7 +70,7 @@ async fn handle_client(
         return Ok(());
     }
 
-    let bind_addr = match context.config().local {
+    let bind_addr = match context.config().local_addr {
         None => None,
         Some(ref addr) => {
             let ba = addr.bind_addr(&*context).await?;

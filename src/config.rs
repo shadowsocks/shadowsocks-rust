@@ -599,6 +599,11 @@ pub enum ConfigType {
     /// Requires `local` configuration
     RedirLocal,
 
+    /// Config for dns relay local
+    ///
+    /// Requires `local` configuration
+    DnsLocal,
+
     /// Config for server
     Server,
 
@@ -610,7 +615,11 @@ impl ConfigType {
     /// Check if it is local server type
     pub fn is_local(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => true,
+            ConfigType::Socks5Local
+            | ConfigType::HttpLocal
+            | ConfigType::TunnelLocal
+            | ConfigType::RedirLocal
+            | ConfigType::DnsLocal => true,
             ConfigType::Server | ConfigType::Manager => false,
         }
     }
@@ -618,7 +627,11 @@ impl ConfigType {
     /// Check if it is remote server type
     pub fn is_server(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::HttpLocal | ConfigType::TunnelLocal | ConfigType::RedirLocal => false,
+            ConfigType::Socks5Local
+            | ConfigType::HttpLocal
+            | ConfigType::TunnelLocal
+            | ConfigType::RedirLocal
+            | ConfigType::DnsLocal => false,
             ConfigType::Manager => false,
             ConfigType::Server => true,
         }
@@ -864,7 +877,7 @@ pub struct Config {
     /// Remote ShadowSocks server configurations
     pub server: Vec<ServerConfig>,
     /// Local server's bind address, or ShadowSocks server's outbound address
-    pub local: Option<ClientConfig>,
+    pub local_addr: Option<ClientConfig>,
     /// Destination address for tunnel
     pub forward: Option<Address>,
     /// DNS configuration, uses system-wide DNS configuration by default
@@ -882,7 +895,7 @@ pub struct Config {
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
     /// Address of `ss-manager`. Send servers' statistic data to the manager server
-    pub manager_address: Option<ManagerAddr>,
+    pub manager_addr: Option<ManagerAddr>,
     /// Manager's default method
     pub manager_method: Option<CipherType>,
     /// Config is for Client or Server
@@ -906,17 +919,20 @@ pub struct Config {
     pub protect_path: Option<String>,
     /// Path for local DNS resolver, only for Android
     pub local_dns_path: Option<String>,
-    /// Interanl DNS's bind address
-    #[cfg(target_os = "android")]
-    pub dns_relay_addr: Option<SocketAddr>,
+    /// Internal DNS's bind address
+    #[cfg(feature = "local-dns-relay")]
+    pub dns_local_addr: Option<ClientConfig>,
     /// Local DNS's address
-    #[cfg(target_os = "android")]
+    ///
+    /// Sending DNS query directly to this address
     pub local_dns_addr: Option<SocketAddr>,
     /// Remote DNS's address
-    #[cfg(target_os = "android")]
+    ///
+    /// Sending DNS query through proxy to this address
     pub remote_dns_addr: Option<Address>,
     /// Uses IPv6 addresses first
-    /// This would affect DNS resolution logic
+    ///
+    /// Set to `true` if you want to query IPv6 addresses before IPv4
     pub ipv6_first: bool,
 }
 
@@ -984,12 +1000,12 @@ impl Config {
     pub fn new(config_type: ConfigType) -> Config {
         Config {
             server: Vec::new(),
-            local: None,
+            local_addr: None,
             forward: None,
             dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
-            manager_address: None,
+            manager_addr: None,
             manager_method: None,
             config_type,
             udp_timeout: None,
@@ -1001,11 +1017,9 @@ impl Config {
             stat_path: None,
             protect_path: None,
             local_dns_path: None,
-            #[cfg(target_os = "android")]
-            dns_relay_addr: None,
-            #[cfg(target_os = "android")]
+            #[cfg(feature = "local-dns-relay")]
+            dns_local_addr: None,
             local_dns_addr: None,
-            #[cfg(target_os = "android")]
             remote_dns_addr: None,
             ipv6_first: false,
         }
@@ -1041,7 +1055,7 @@ impl Config {
                 }
             };
 
-            nconfig.local = Some(local);
+            nconfig.local_addr = Some(local);
         }
 
         // Standard config
@@ -1151,7 +1165,7 @@ impl Config {
                 }
             };
 
-            nconfig.manager_address = Some(manager);
+            nconfig.manager_addr = Some(manager);
         }
 
         // DNS
@@ -1258,7 +1272,7 @@ impl Config {
     /// Check if all required fields are already set
     pub fn check_integrity(&self) -> Result<(), Error> {
         if self.config_type.is_local() {
-            if self.local.is_some() {
+            if self.local_addr.is_some() {
                 return Ok(());
             }
 
@@ -1284,13 +1298,13 @@ impl Config {
         }
 
         if self.config_type.is_manager() {
-            if self.manager_address.is_some() {
+            if self.manager_addr.is_some() {
                 return Ok(());
             }
 
             let err = Error::new(
                 ErrorKind::MissingField,
-                "missing `manager_address` and `manager_port` in configuration",
+                "missing `manager_addr` and `manager_port` in configuration",
                 None,
             );
             return Err(err);
@@ -1306,7 +1320,7 @@ impl fmt::Display for Config {
 
         let mut jconf = SSConfig::default();
 
-        if let Some(ref client) = self.local {
+        if let Some(ref client) = self.local_addr {
             match *client {
                 ServerAddr::SocketAddr(ref sa) => {
                     jconf.local_address = Some(sa.ip().to_string());
@@ -1366,7 +1380,7 @@ impl fmt::Display for Config {
             }
         }
 
-        if let Some(ref ma) = self.manager_address {
+        if let Some(ref ma) = self.manager_addr {
             jconf.manager_address = Some(match *ma {
                 ManagerAddr::SocketAddr(ref saddr) => saddr.ip().to_string(),
                 ManagerAddr::DomainName(ref dname, ..) => dname.clone(),
