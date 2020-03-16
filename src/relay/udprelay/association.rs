@@ -318,7 +318,8 @@ impl ProxyAssociation {
             );
         }
 
-        if cfg!(target_os = "android") {
+        #[cfg(feature = "local-flow-stat")]
+        {
             context.local_flow_statistic().udp().incr_tx(send_len as u64);
         }
 
@@ -420,7 +421,8 @@ impl ProxyAssociation {
         let mut payload = Vec::new();
         cur.read_to_end(&mut payload)?;
 
-        if cfg!(target_os = "android") {
+        #[cfg(feature = "local-flow-stat")]
+        {
             context.local_flow_statistic().udp().incr_rx(recv_n as u64);
         }
 

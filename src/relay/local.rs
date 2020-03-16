@@ -6,9 +6,11 @@ use futures::{future::select_all, FutureExt};
 use log::{debug, error, trace, warn};
 use tokio::runtime::Handle;
 
+#[cfg(feature = "local-flow-stat")]
+use crate::context::SharedContext;
 use crate::{
     config::{Config, ConfigType},
-    context::{Context, ServerState, SharedContext},
+    context::{Context, ServerState},
     plugin::{PluginMode, Plugins},
     relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp, utils::set_nofile},
 };
@@ -107,11 +109,14 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         }
     }
 
-    if cfg!(target_os = "android") && context.config().stat_path.is_some() {
-        // For Android's flow statistic
+    #[cfg(feature = "local-flow-stat")]
+    {
+        if context.config().stat_path.is_some() {
+            // For Android's flow statistic
 
-        let report_fut = flow_report_task(context.clone());
-        vf.push(report_fut.boxed());
+            let report_fut = flow_report_task(context.clone());
+            vf.push(report_fut.boxed());
+        }
     }
 
     let (res, ..) = select_all(vf.into_iter()).await;
@@ -123,7 +128,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     Err(io::Error::new(io::ErrorKind::Other, "server exited unexpectly"))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(feature = "local-flow-stat")]
 async fn flow_report_task(context: SharedContext) -> io::Result<()> {
     use std::{slice, time::Duration};
 
@@ -167,9 +172,4 @@ async fn flow_report_task(context: SharedContext) -> io::Result<()> {
         }
     }
     Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-async fn flow_report_task(_context: SharedContext) -> io::Result<()> {
-    unimplemented!("only for android")
 }

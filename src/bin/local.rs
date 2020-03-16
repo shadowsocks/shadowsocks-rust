@@ -152,18 +152,21 @@ fn main() {
         );
 
     if cfg!(target_os = "android") {
-        app = app
-            .arg(
-                Arg::with_name("VPN_MODE")
-                    .long("vpn")
-                    .help("Enable VPN mode (only for Android)"),
-            )
-            .arg(
-                Arg::with_name("STAT_PATH")
-                    .long("stat-path")
-                    .takes_value(true)
-                    .help("Specify stat_path for traffic stat (only for Android)"),
-            );
+        app = app.arg(
+            Arg::with_name("VPN_MODE")
+                .long("vpn")
+                .help("Enable VPN mode (only for Android)"),
+        );
+    }
+
+    #[cfg(feature = "local-flow-stat")]
+    {
+        app = app.arg(
+            Arg::with_name("STAT_PATH")
+                .long("stat-path")
+                .takes_value(true)
+                .help("Specify stat_path for traffic stat (only for Android)"),
+        );
     }
 
     #[cfg(feature = "local-dns-relay")]
@@ -243,12 +246,15 @@ fn main() {
     if cfg!(target_os = "android") {
         config.local_dns_path = Some("local_dns_path".to_owned());
 
-        if let Some(stat_path) = matches.value_of("STAT_PATH") {
-            config.stat_path = Some(stat_path.to_owned());
-        }
-
         if matches.is_present("VPN_MODE") {
             config.protect_path = Some("protect_path".to_owned());
+        }
+    }
+
+    #[cfg(feature = "local-flow-stat")]
+    {
+        if let Some(stat_path) = matches.value_of("STAT_PATH") {
+            config.stat_path = Some(stat_path.to_owned());
         }
     }
 

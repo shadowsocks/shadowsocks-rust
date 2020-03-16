@@ -22,9 +22,11 @@ use trust_dns_resolver::TokioAsyncResolver;
 
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
+#[cfg(feature = "local-flow-stat")]
+use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     config::{Config, ConfigType, ServerConfig},
-    relay::{dns_resolver::resolve, flow::ServerFlowStatistic, socks5::Address},
+    relay::{dns_resolver::resolve, socks5::Address},
 };
 
 // Entries for server's bloom filter
@@ -165,6 +167,7 @@ pub struct Context {
     nonce_ppbloom: Mutex<PingPongBloom>,
 
     // For Android's flow stat report
+    #[cfg(feature = "local-flow-stat")]
     local_flow_statistic: ServerFlowStatistic,
 
     // For DNS relay's ACL domain name reverse lookup
@@ -187,6 +190,7 @@ impl Context {
             server_state,
             server_running: AtomicBool::new(true),
             nonce_ppbloom,
+            #[cfg(feature = "local-flow-stat")]
             local_flow_statistic: ServerFlowStatistic::new(),
             #[cfg(feature = "local-dns-relay")]
             reverse_lookup_cache,
@@ -327,6 +331,7 @@ impl Context {
     }
 
     /// Get client flow statistics
+    #[cfg(feature = "local-flow-stat")]
     pub fn local_flow_statistic(&self) -> &ServerFlowStatistic {
         &self.local_flow_statistic
     }

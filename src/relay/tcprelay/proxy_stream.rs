@@ -197,9 +197,12 @@ impl AsyncRead for ProxyStream {
         let p = forward_call!(self, poll_read, cx, buf);
 
         // Flow statistic for Android client
-        if cfg!(target_os = "android") && self.is_proxied() {
-            if let Poll::Ready(Ok(n)) = p {
-                self.context().local_flow_statistic().tcp().incr_tx(n as u64);
+        #[cfg(feature = "local-flow-stat")]
+        {
+            if self.is_proxied() {
+                if let Poll::Ready(Ok(n)) = p {
+                    self.context().local_flow_statistic().tcp().incr_tx(n as u64);
+                }
             }
         }
 
@@ -212,9 +215,12 @@ impl AsyncWrite for ProxyStream {
         let p = forward_call!(self, poll_write, cx, buf);
 
         // Flow statistic for Android client
-        if cfg!(target_os = "android") && self.is_proxied() {
-            if let Poll::Ready(Ok(n)) = p {
-                self.context().local_flow_statistic().tcp().incr_rx(n as u64);
+        #[cfg(feature = "local-flow-stat")]
+        {
+            if self.is_proxied() {
+                if let Poll::Ready(Ok(n)) = p {
+                    self.context().local_flow_statistic().tcp().incr_rx(n as u64);
+                }
             }
         }
 
