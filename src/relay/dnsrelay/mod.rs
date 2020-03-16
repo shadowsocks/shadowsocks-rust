@@ -1,18 +1,18 @@
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
-    sync::Arc,
     time::Duration,
 };
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::UdpSocket,
+    sync::mpsc,
 };
 
 use byteorder::{BigEndian, ByteOrder};
 use futures::future;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use rand::Rng;
 
 use trust_dns_proto::{
@@ -21,9 +21,14 @@ use trust_dns_proto::{
 };
 
 use crate::{
-    config::ConfigType,
-    context::{Context, SharedContext},
-    relay::{socks5::Address, tcprelay::client::Socks5Client, utils::try_timeout},
+    config::{ConfigType, ServerConfig},
+    context::SharedContext,
+    relay::{
+        loadbalancing::server::{PlainPingBalancer, ServerType},
+        socks5::Address,
+        tcprelay::ProxyStream,
+        utils::try_timeout,
+    },
 };
 
 async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io::Result<Message> {
@@ -50,8 +55,14 @@ async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io:
     Ok(Message::from_vec(&res_buffer)?)
 }
 
-async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: &SocketAddr, ns: &Address) -> io::Result<Message> {
-    let mut stream = Socks5Client::connect(ns, &socks5).await?;
+async fn proxy_lookup(
+    context: SharedContext,
+    svr_cfg: &ServerConfig,
+    ns: &Address,
+    qname: &Name,
+    qtype: RecordType,
+) -> io::Result<Message> {
+    let mut stream = ProxyStream::connect_proxied(context, svr_cfg, ns).await?;
 
     let mut message = Message::new();
     let mut query = Query::new();
@@ -83,14 +94,13 @@ async fn socks5_lookup(qname: &Name, qtype: RecordType, socks5: &SocketAddr, ns:
 }
 
 async fn acl_lookup(
-    context: &Context,
+    context: SharedContext,
+    svr_cfg: &ServerConfig,
     local: &SocketAddr,
-    socks5: &SocketAddr,
+    remote: &Address,
     qname: &Name,
     qtype: RecordType,
 ) -> io::Result<Message> {
-    let remote = context.config().remote_dns_addr.as_ref().expect("remote dns addr");
-
     // Start querying name servers
     debug!(
         "attempting lookup of {:?} {} with ns {} and {:?}",
@@ -101,7 +111,7 @@ async fn acl_lookup(
     let local_response_fut = try_timeout(udp_lookup(qname, qtype, local), timeout);
 
     let timeout = Some(Duration::new(3, 0));
-    let remote_response_fut = try_timeout(socks5_lookup(qname, qtype, socks5, remote), timeout);
+    let remote_response_fut = try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout);
 
     let (local_response, remote_response) = future::join(local_response_fut, remote_response_fut).await;
     let local_response = local_response.unwrap_or_else(|_| Message::new());
@@ -152,27 +162,46 @@ async fn acl_lookup(
 }
 
 /// Start a DNS relay local server
-pub async fn run(shared_context: SharedContext) -> io::Result<()> {
-    // Local must be socks5 protocol!
-    assert_eq!(shared_context.config().config_type, ConfigType::Socks5Local);
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    let local_addr = match context.config().config_type {
+        ConfigType::DnsLocal => {
+            // Standalone server
+            context.config().local_addr.as_ref().expect("local config")
+        }
+        #[cfg(feature = "local-dns-relay")]
+        c if c.is_local() => {
+            // Integrated mode
+            context.config().dns_local_addr.as_ref().expect("dns relay addr")
+        }
+        _ => {
+            panic!("ConfigType must be DnsLocal");
+        }
+    };
 
-    let local_addr = shared_context.config().local_dns_addr.expect("local dns addr");
-    trace!("local DNS server: {}", local_addr);
+    let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let socks5_config = shared_context.config().local.as_ref().expect("socks5 bind addr");
-    let socks5_addr = socks5_config.bind_addr(&shared_context).await?;
-    trace!("socks5 server: {}", socks5_addr);
+    let socket = UdpSocket::bind(&bind_addr).await?;
 
-    let listen_addr = shared_context.config().dns_relay_addr.expect("dns relay");
+    let actual_local_addr = socket.local_addr()?;
+    info!("shadowsocks DNS relay listening on {}", actual_local_addr);
 
-    let mut socket = UdpSocket::bind(listen_addr).await?;
+    let (mut rx, mut tx) = socket.split();
+    let (qtx, mut qrx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
 
-    let actual_listen_addr = socket.local_addr()?;
-    info!("shadowsocks DNS relay listening on {}", actual_listen_addr);
+    tokio::spawn(async move {
+        while let Some((src, pkt)) = qrx.recv().await {
+            if let Err(err) = tx.send_to(&pkt, &src).await {
+                error!("failed to send packet {} bytes to {}, error: {}", pkt.len(), src, err);
+            }
+        }
+    });
+
+    // FIXME: We use TCP to send remote queries by default, which should be configuable.
+    let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
 
     loop {
         let mut req_buffer: [u8; 512] = [0; 512];
-        let (_, src) = match socket.recv_from(&mut req_buffer).await {
+        let (_, src) = match rx.recv_from(&mut req_buffer).await {
             Ok(x) => x,
             Err(e) => {
                 error!("DNS relay read from UDP socket error: {}", e);
@@ -188,9 +217,11 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
             }
         };
 
-        debug!("received query: {:?}", request);
+        debug!("received src: {}, query: {:?}", src, request);
 
-        let context = Arc::clone(&shared_context);
+        let context = context.clone();
+        let mut qtx = qtx.clone();
+        let server = balancer.pick_server();
 
         tokio::spawn(async move {
             let mut message = Message::new();
@@ -202,18 +233,20 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
             if request.queries().is_empty() {
                 message.set_response_code(ResponseCode::FormErr);
             } else {
+                let config = context.config();
+                let local_addr = config.local_dns_addr.as_ref().expect("local query DNS address");
+                let remote_addr = config.remote_dns_addr.as_ref().expect("remote query DNS address");
+
                 let question = &request.queries()[0];
 
-                let r = acl_lookup(
-                    &context,
-                    &local_addr,
-                    &socks5_addr,
-                    question.name(),
-                    question.query_type(),
-                )
-                .await;
+                let qname = question.name();
+                let qtype = question.query_type();
+                let svr_cfg = server.server_config();
+
+                let r = acl_lookup(context.clone(), svr_cfg, &local_addr, &remote_addr, qname, qtype).await;
 
                 if let Ok(result) = r {
+                    #[cfg(feature = "local-dns-relay")]
                     for rec in result.answers() {
                         debug!("dns answer: {:?}", rec);
 
@@ -225,7 +258,7 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
                             RData::A(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
                             RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
                             _ => (),
-                        };
+                        }
                     }
 
                     message = result;
@@ -235,15 +268,16 @@ pub async fn run(shared_context: SharedContext) -> io::Result<()> {
                 }
             }
 
-            debug!("dns final response: {:?}", message);
+            debug!("DNS src: {}, final response: {:?}", src, message);
 
-            let res_buffer = message.to_vec().expect("parse message");
-            let mut socket = UdpSocket::bind(("0.0.0.0", 0)).await.expect("bind socket");
-
-            match socket.send_to(&res_buffer, src).await {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("failed to send DNS response, error: {:?}", e);
+            match message.to_vec() {
+                Err(err) => {
+                    error!("failed to serialize message, error: {}", err);
+                }
+                Ok(res_buffer) => {
+                    if let Err(..) = qtx.send((src, res_buffer)).await {
+                        error!("DNS send back queue is closed unexpectly");
+                    }
                 }
             }
         });

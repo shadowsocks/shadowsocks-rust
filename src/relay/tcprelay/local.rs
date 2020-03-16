@@ -13,6 +13,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::Socks5Local => socks5_local::run(context).await,
         ConfigType::HttpLocal => http_local::run(context).await,
         ConfigType::RedirLocal => redir_local::run(context).await,
+        ConfigType::DnsLocal => unreachable!(),
         ConfigType::Server => unreachable!(),
         ConfigType::Manager => unreachable!(),
     }

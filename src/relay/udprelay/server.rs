@@ -57,7 +57,7 @@ impl UdpAssociation {
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
     ) -> io::Result<UdpAssociation> {
         // Create a socket for receiving packets
-        let local_addr = match context.config().local {
+        let local_addr = match context.config().local_addr {
             None => {
                 // Let system allocate an address for us
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)

@@ -139,7 +139,7 @@ fn main() {
             Err(..) => ServerAddr::from((bind_addr, 0)),
         };
 
-        config.local = Some(bind_addr);
+        config.local_addr = Some(bind_addr);
     }
 
     if matches.is_present("UDP_ONLY") {
@@ -159,7 +159,7 @@ fn main() {
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_address = Some(
+        config.manager_addr = Some(
             m.parse::<ManagerAddr>()
                 .expect("\"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
         );
@@ -180,7 +180,7 @@ fn main() {
 
     // DONE reading options
 
-    if config.manager_address.is_none() {
+    if config.manager_addr.is_none() {
         eprintln!(
             "missing `manager_address`, consider specifying it by --manager-address command line option, \
              or \"manager_address\" and \"manager_port\" keys in configuration file"

@@ -39,7 +39,7 @@ impl Socks5TestServer {
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Socks5Local);
-                cfg.local = Some(ServerAddr::from(local_addr));
+                cfg.local_addr = Some(ServerAddr::from(local_addr));
                 cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg

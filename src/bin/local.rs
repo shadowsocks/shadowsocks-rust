@@ -166,7 +166,7 @@ fn main() {
             );
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(feature = "local-dns-relay")]
     {
         app = app
             .arg(
@@ -184,7 +184,7 @@ fn main() {
                     .help("Specify the address of remote DNS server (only for Android)"),
             )
             .arg(
-                Arg::with_name("DNS_RELAY_ADDR")
+                Arg::with_name("DNS_LOCAL_ADDR")
                     .long("dns-relay")
                     .takes_value(true)
                     .default_value("127.0.0.1:5450")
@@ -252,7 +252,7 @@ fn main() {
         }
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(feature = "local-dns-relay")]
     {
         use std::net::SocketAddr;
 
@@ -268,9 +268,9 @@ fn main() {
             config.remote_dns_addr = Some(addr);
         }
 
-        if let Some(dns_relay_addr) = matches.value_of("DNS_RELAY_ADDR") {
-            let addr = dns_relay_addr.parse::<SocketAddr>().expect("dns relay address");
-            config.dns_relay_addr = Some(addr);
+        if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
+            let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
+            config.dns_local_addr = Some(addr);
         }
     }
 
@@ -284,7 +284,7 @@ fn main() {
             .parse::<ServerAddr>()
             .expect("`local-addr` should be \"IP:Port\" or \"Domain:Port\"");
 
-        config.local = Some(local_addr);
+        config.local_addr = Some(local_addr);
     }
 
     if matches.is_present("UDP_ONLY") {
@@ -330,7 +330,7 @@ fn main() {
 
     // DONE READING options
 
-    if config.local.is_none() {
+    if config.local_addr.is_none() {
         eprintln!(
             "missing `local_address`, consider specifying it by --local-addr command line option, \
              or \"local_address\" and \"local_port\" in configuration file"

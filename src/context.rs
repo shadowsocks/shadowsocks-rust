@@ -9,13 +9,12 @@ use std::{
     },
 };
 
-#[cfg(target_os = "android")]
+#[cfg(feature = "local-dns-relay")]
 use std::net::IpAddr;
 
-#[cfg(target_os = "android")]
-use lru_time_cache::LruCache;
-
 use bloomfilter::Bloom;
+#[cfg(feature = "local-dns-relay")]
+use lru_time_cache::LruCache;
 use spin::Mutex;
 use tokio::runtime::Handle;
 #[cfg(feature = "trust-dns")]
@@ -119,8 +118,9 @@ pub struct ServerState {
     dns_resolver: Option<TokioAsyncResolver>,
 }
 
+#[cfg(feature = "trust-dns")]
 impl ServerState {
-    #[cfg(feature = "trust-dns")]
+    /// Create a global shared server state
     pub async fn new_shared(config: &Config, rt: Handle) -> SharedServerState {
         let state = ServerState {
             dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, config.ipv6_first, rt).await {
@@ -132,15 +132,17 @@ impl ServerState {
         Arc::new(state)
     }
 
-    #[cfg(not(feature = "trust-dns"))]
-    pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
-        Arc::new(ServerState {})
-    }
-
     /// Get the global shared resolver
-    #[cfg(feature = "trust-dns")]
     pub fn dns_resolver(&self) -> Option<&TokioAsyncResolver> {
         self.dns_resolver.as_ref()
+    }
+}
+
+#[cfg(not(feature = "trust-dns"))]
+impl ServerState {
+    /// Create a global shared server state
+    pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
+        Arc::new(ServerState {})
     }
 }
 
@@ -166,7 +168,7 @@ pub struct Context {
     local_flow_statistic: ServerFlowStatistic,
 
     // For DNS relay's ACL domain name reverse lookup
-    #[cfg(target_os = "android")]
+    #[cfg(feature = "local-dns-relay")]
     reverse_lookup_cache: Mutex<LruCache<IpAddr, String>>,
 }
 
@@ -177,7 +179,7 @@ impl Context {
     /// Create a non-shared Context
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
-        #[cfg(target_os = "android")]
+        #[cfg(feature = "local-dns-relay")]
         let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, String>::with_capacity(8192));
 
         Context {
@@ -186,7 +188,7 @@ impl Context {
             server_running: AtomicBool::new(true),
             nonce_ppbloom,
             local_flow_statistic: ServerFlowStatistic::new(),
-            #[cfg(target_os = "android")]
+            #[cfg(feature = "local-dns-relay")]
             reverse_lookup_cache,
         }
     }
@@ -283,7 +285,7 @@ impl Context {
     }
 
     /// Add a record to the reverse lookup cache
-    #[cfg(target_os = "android")]
+    #[cfg(feature = "local-dns-relay")]
     pub fn add_to_reverse_lookup_cache(&self, addr: IpAddr, qname: String) {
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         reverse_lookup_cache.insert(addr, qname);
@@ -291,7 +293,6 @@ impl Context {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    #[cfg(target_os = "android")]
     pub async fn check_qname_in_proxy_list(&self, qname: &Address) -> bool {
         match self.config.acl {
             // Proxy everything by default
@@ -306,7 +307,7 @@ impl Context {
             // Proxy everything by default
             None => false,
             Some(ref a) => {
-                #[cfg(target_os = "android")]
+                #[cfg(feature = "local-dns-relay")]
                 {
                     if let Address::SocketAddress(ref saddr) = target {
                         // do the reverse lookup in our local cache

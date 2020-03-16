@@ -53,6 +53,7 @@ camellia-cfb = ["openssl"]
 single-threaded = []
 trust-dns = ["trust-dns-resolver"]
 openssl-vendored = ["openssl/vendored"]
+local-dns-relay = []
 
 [dependencies]
 log = "0.4"
@@ -80,6 +81,7 @@ byte_string = "1.0"
 libsodium-sys = { version = "0.2", optional = true }
 miscreant = { version = "0.5", optional = true }
 trust-dns-resolver = { version = "0.19", features = ["dns-over-rustls", "dns-over-https-rustls"], optional = true }
+trust-dns-proto = "0.19"
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8"
@@ -108,7 +110,6 @@ lazy_static = "1.4"
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-trust-dns-proto = "0.19"
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
