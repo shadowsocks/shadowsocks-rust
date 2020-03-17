@@ -159,6 +159,7 @@ fn send_with_fd(socket: RawFd, bs: &[u8], fds: &[RawFd]) -> io::Result<usize> {
         });
 
         let cmsg_data = libc::CMSG_DATA(cmsg_header);
+        #[allow(clippy::cast_ptr_alignment)] // false positive
         let cmsg_data_slice = slice::from_raw_parts_mut(cmsg_data as *mut RawFd, fds.len());
         cmsg_data_slice.copy_from_slice(fds);
 

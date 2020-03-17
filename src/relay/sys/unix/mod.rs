@@ -50,7 +50,6 @@ cfg_if! {
         ///
         /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
         async fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
-            use std::{io::Read, time::Duration};
             use tokio::io::AsyncReadExt;
 
             // ignore if protect_path is not specified
@@ -58,8 +57,6 @@ cfg_if! {
                 Some(path) => path,
                 None => return Ok(()),
             };
-
-            let timeout = Some(Duration::new(1, 0));
 
             let mut stream = self::uds::UnixStream::connect(path).await?;
 
