@@ -276,7 +276,11 @@ Example configuration:
 {
     // Required option
     // Address that ssmanager is listening on
-    "manager_address": "127.0.0.1:6100",
+    "manager_address": "127.0.0.1",
+    "manager_port": 6100,
+
+    // Or bind to a Unix Domain Socket
+    "manager_address": "/tmp/shadowsocks-manager.sock",
 
     "servers": [
         // These servers will be started automatically when ssmanager is started
