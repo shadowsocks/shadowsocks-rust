@@ -50,14 +50,11 @@ use std::{
     io::{self, Read},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     option::Option,
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
     time::Duration,
 };
-
-#[cfg(unix)]
-use std::path::PathBuf;
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
 use bytes::Bytes;
@@ -1234,14 +1231,19 @@ impl Config {
                 "google" => Some(ResolverConfig::google()),
 
                 "cloudflare" => Some(ResolverConfig::cloudflare()),
+                #[cfg(feature = "dns-over-tls")]
                 "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
+                #[cfg(feature = "dns-over-https")]
                 "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
 
                 "quad9" => Some(ResolverConfig::quad9()),
+                #[cfg(feature = "dns-over-tls")]
                 "quad9_tls" => Some(ResolverConfig::quad9_tls()),
 
                 _ => {
                     // Set ips directly
+                    //
+                    // TODO: Support customizable DNS over TLS or HTTPS
                     match ds.parse::<IpAddr>() {
                         Ok(ip) => Some(ResolverConfig::from_parts(
                             None,
