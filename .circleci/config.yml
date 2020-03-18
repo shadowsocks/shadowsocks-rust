@@ -64,7 +64,7 @@ jobs:
                   } else {
                       $OpenSSLBits = "32"
                   }
-                  $OpenSSLVersion = "1_1_1d"
+                  $OpenSSLVersion = "1_1_0L"
                   $OpenSSLFileName = "Win${OpenSSLBits}OpenSSL-${OpenSSLVersion}.exe"
 
                   $ProgressPreference = "SilentlyContinue"
