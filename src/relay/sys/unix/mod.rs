@@ -3,6 +3,7 @@ use std::{
     mem,
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
     os::unix::io::{AsRawFd, RawFd},
+    path::Path,
 };
 
 use cfg_if::cfg_if;
@@ -49,16 +50,10 @@ cfg_if! {
         /// https://developer.android.com/reference/android/net/VpnService#protect(java.net.Socket)
         ///
         /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
-        async fn protect(protect_path: &Option<String>, fd: RawFd) -> io::Result<()> {
+        async fn protect<P: AsRef<Path>>(protect_path: P, fd: RawFd) -> io::Result<()> {
             use tokio::io::AsyncReadExt;
 
-            // ignore if protect_path is not specified
-            let path = match protect_path {
-                Some(path) => path,
-                None => return Ok(()),
-            };
-
-            let mut stream = self::uds::UnixStream::connect(path).await?;
+            let mut stream = self::uds::UnixStream::connect(protect_path).await?;
 
             // send fds
             let dummy: [u8; 1] = [1];
@@ -77,7 +72,7 @@ cfg_if! {
         }
     } else {
         #[inline(always)]
-        async fn protect(_protect_path: &Option<String>, _fd: RawFd) -> io::Result<()> {
+        async fn protect<P: AsRef<Path>>(_protect_path: P, _fd: RawFd) -> io::Result<()> {
             Ok(())
         }
     }
@@ -97,7 +92,9 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
     // Any traffic to localhost should not be protected
     // This is a workaround for VPNService
     if cfg!(target_os = "android") && !saddr.ip().is_loopback() {
-        protect(&context.config().protect_path, socket.as_raw_fd()).await?;
+        if let Some(ref path) = context.config().protect_path {
+            protect(path, socket.as_raw_fd()).await?;
+        }
     }
 
     // it's important that the socket is protected before connecting
@@ -113,7 +110,9 @@ pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
     if cfg!(target_os = "android") && !addr.ip().is_loopback() {
-        protect(&context.config().protect_path, socket.as_raw_fd()).await?;
+        if let Some(ref path) = context.config().protect_path {
+            protect(path, socket.as_raw_fd()).await?;
+        }
     }
 
     Ok(socket)

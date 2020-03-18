@@ -915,11 +915,11 @@ pub struct Config {
     pub udp_redir: RedirType,
     /// Android flow statistic report Unix socket path
     #[cfg(feature = "local-flow-stat")]
-    pub stat_path: Option<String>,
+    pub stat_path: Option<PathBuf>,
     /// Path to protect callback unix address, only for Android
-    pub protect_path: Option<String>,
+    pub protect_path: Option<PathBuf>,
     /// Path for local DNS resolver, only for Android
-    pub local_dns_path: Option<String>,
+    pub local_dns_path: Option<PathBuf>,
     /// Internal DNS's bind address
     #[cfg(feature = "local-dns-relay")]
     pub dns_local_addr: Option<ClientConfig>,

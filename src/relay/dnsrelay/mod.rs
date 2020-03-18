@@ -14,7 +14,6 @@ use byteorder::{BigEndian, ByteOrder};
 use futures::future;
 use log::{debug, error, info};
 use rand::Rng;
-
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, Query},
     rr::{Name, RData, RecordType},
@@ -26,6 +25,7 @@ use crate::{
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType},
         socks5::Address,
+        sys::create_udp_socket,
         tcprelay::ProxyStream,
         utils::try_timeout,
     },
@@ -180,7 +180,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let bind_addr = local_addr.bind_addr(&*context).await?;
 
-    let socket = UdpSocket::bind(&bind_addr).await?;
+    let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
     info!("shadowsocks DNS relay listening on {}", actual_local_addr);

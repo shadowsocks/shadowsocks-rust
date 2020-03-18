@@ -244,17 +244,19 @@ fn main() {
     }
 
     if cfg!(target_os = "android") {
-        config.local_dns_path = Some("local_dns_path".to_owned());
+        config.local_dns_path = Some(From::from("local_dns_path"));
 
         if matches.is_present("VPN_MODE") {
-            config.protect_path = Some("protect_path".to_owned());
+            // A socket `protect_path` in CWD
+            // Same as shadowsocks-libev's android.c
+            config.protect_path = Some(From::from("protect_path"));
         }
     }
 
     #[cfg(feature = "local-flow-stat")]
     {
         if let Some(stat_path) = matches.value_of("STAT_PATH") {
-            config.stat_path = Some(stat_path.to_owned());
+            config.stat_path = Some(From::from(stat_path));
         }
     }
 
