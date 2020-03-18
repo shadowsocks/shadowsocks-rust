@@ -75,7 +75,7 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
                 let ret = libc::getsockopt(
                     fd,
                     libc::SOL_IPV6,
-                    libc::SO_ORIGINAL_DST, // FIXME: Should use IP6T_SO_ORIGINAL_DST
+                    libc::IP6T_SO_ORIGINAL_DST,
                     &mut target_addr as *mut _ as *mut _,
                     &mut target_addr_len,
                 );

@@ -65,7 +65,7 @@ time = "0.2"
 clap = "2.33"
 env_logger = "0.7"
 openssl = { version = "0.10", optional = true }
-libc = "0.2"
+libc = "^0.2.68"
 tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream"] }
 futures = "0.3"
 json5 = "0.2"
