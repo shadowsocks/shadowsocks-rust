@@ -219,7 +219,10 @@ sstunnel -c /path/to/shadowsocks.json -f "127.0.0.1:8080"
 
 ### Transparent Proxy Local client
 
-**NOTE**: This is currently only supports Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
+**NOTE**: This is currently only supports
+
+* Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
+* BSDs (with `pf`), such as OS X 10.10+, FreeBSD, ...
 
 ```bash
 # Read local client configuration from file
