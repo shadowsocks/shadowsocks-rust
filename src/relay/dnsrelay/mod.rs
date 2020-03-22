@@ -1,12 +1,13 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{IpAddr, SocketAddr},
     time::Duration,
+    path::PathBuf,
 };
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::UdpSocket,
+    net::UnixStream,
     sync::mpsc,
 };
 
@@ -31,41 +32,10 @@ use crate::{
     },
 };
 
-pub mod upstream;
-
-async fn udp_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io::Result<Message> {
-    let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0));
-    let mut socket = UdpSocket::bind(bind_addr).await?;
-
-    let mut message = Message::new();
-    let mut query = Query::new();
-
-    query.set_query_type(qtype);
-    query.set_name(qname.clone());
-
-    let id = rand::thread_rng().gen();
-    message.set_id(id);
-    message.set_recursion_desired(true);
-    message.add_query(query);
-
-    let req_buffer = message.to_vec()?;
-    socket.send_to(&req_buffer, server).await?;
-
-    let mut res_buffer = vec![0; 512];
-    socket.recv_from(&mut res_buffer).await?;
-
-    Ok(Message::from_vec(&res_buffer)?)
-}
-
-async fn proxy_lookup(
-    context: SharedContext,
-    svr_cfg: &ServerConfig,
-    ns: &Address,
-    qname: &Name,
-    qtype: RecordType,
-) -> io::Result<Message> {
-    let mut stream = ProxyStream::connect_proxied(context, svr_cfg, ns).await?;
-
+async fn stream_lookup<T>(qname: &Name, qtype: RecordType, stream: &mut T) -> io::Result<Message>
+where
+    T: AsyncReadExt + AsyncWriteExt + Unpin,
+{
     let mut message = Message::new();
     let mut query = Query::new();
 
@@ -95,22 +65,38 @@ async fn proxy_lookup(
     Ok(Message::from_vec(&res_buffer)?)
 }
 
+async fn local_lookup(qname: &Name, qtype: RecordType, path: &PathBuf) -> io::Result<Message> {
+    let mut stream = UnixStream::connect(path).await?;
+    stream_lookup(qname, qtype, &mut stream).await
+}
+
+async fn proxy_lookup(
+    context: SharedContext,
+    svr_cfg: &ServerConfig,
+    ns: &Address,
+    qname: &Name,
+    qtype: RecordType,
+) -> io::Result<Message> {
+    let mut stream = ProxyStream::connect_proxied(context, svr_cfg, ns).await?;
+    stream_lookup(qname, qtype, &mut stream).await
+}
+
 async fn acl_lookup(
     context: SharedContext,
     svr_cfg: &ServerConfig,
-    local: &SocketAddr,
+    local: &PathBuf,
     remote: &Address,
     qname: &Name,
     qtype: RecordType,
 ) -> io::Result<Message> {
     // Start querying name servers
     debug!(
-        "attempting lookup of {:?} {} with ns {} and {:?}",
+        "attempting lookup of {:?} {} with ns {:?} and {:?}",
         qtype, qname, local, remote
     );
 
     let timeout = Some(Duration::new(3, 0));
-    let local_response_fut = try_timeout(udp_lookup(qname, qtype, local), timeout);
+    let local_response_fut = try_timeout(local_lookup(qname, qtype, local), timeout);
 
     let timeout = Some(Duration::new(3, 0));
     let remote_response_fut = try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout);
@@ -236,7 +222,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 message.set_response_code(ResponseCode::FormErr);
             } else {
                 let config = context.config();
-                let local_addr = config.local_dns_addr.as_ref().expect("local query DNS address");
+                let local_path = config.local_dns_path.as_ref().expect("local query DNS address");
                 let remote_addr = config.remote_dns_addr.as_ref().expect("remote query DNS address");
 
                 let question = &request.queries()[0];
@@ -245,7 +231,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 let qtype = question.query_type();
                 let svr_cfg = server.server_config();
 
-                let r = acl_lookup(context.clone(), svr_cfg, &local_addr, &remote_addr, qname, qtype).await;
+                let r = acl_lookup(context.clone(), svr_cfg, &local_path, &remote_addr, qname, qtype).await;
 
                 if let Ok(result) = r {
                     #[cfg(feature = "local-dns-relay")]
