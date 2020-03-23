@@ -10,6 +10,7 @@ use std::{
 
 use futures::ready;
 use log::error;
+use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, BufReader, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -30,8 +31,10 @@ impl TcpConnection for TcpStream {
 /// Shadowsocks' Connection
 ///
 /// The only feature: Supports timeout
+#[pin_project]
 pub struct Connection<S> {
     // Actual connection socket
+    #[pin]
     stream: BufReader<S>,
     // Timer instance
     // Read and Write operations shares the same timer
@@ -89,18 +92,19 @@ where
     }
 }
 
-impl<S> Connection<S> {
-    fn make_timeout_error() -> io::Error {
-        use std::io::ErrorKind;
-        ErrorKind::TimedOut.into()
-    }
+#[inline]
+fn make_timeout_error() -> io::Error {
+    use std::io::ErrorKind;
+    ErrorKind::TimedOut.into()
+}
 
+impl<S> Connection<S> {
     fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             if let Some(ref mut timer) = self.timer {
                 ready!(Pin::new(timer).poll(cx));
                 // FIXME: Clear self.timer or not?
-                return Poll::Ready(Err(Connection::<S>::make_timeout_error()));
+                return Poll::Ready(Err(make_timeout_error()));
             } else {
                 match self.timeout {
                     Some(timeout) => self.timer = Some(time::delay_for(timeout)),
@@ -126,14 +130,12 @@ where
     }
 }
 
-impl<S: Unpin> Unpin for Connection<S> {}
-
 impl<S> AsyncRead for Connection<S>
 where
     S: AsyncRead + Unpin,
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        match Pin::new(&mut self.stream).poll_read(cx, buf) {
+        match self.as_mut().project().stream.poll_read(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
                 Poll::Ready(r)
@@ -151,7 +153,7 @@ where
     S: AsyncRead + AsyncWrite + TcpConnection + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        match Pin::new(&mut self.stream).poll_write(cx, buf) {
+        match self.as_mut().project().stream.poll_write(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
 
@@ -176,7 +178,7 @@ where
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        match Pin::new(&mut self.stream).poll_flush(cx) {
+        match self.as_mut().project().stream.poll_flush(cx) {
             Poll::Ready(r) => {
                 self.cancel_timeout();
                 Poll::Ready(r)
@@ -188,7 +190,7 @@ where
         }
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stream).poll_shutdown(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }

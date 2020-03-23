@@ -8,11 +8,14 @@ use std::{
     task::{Context, Poll},
 };
 
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::relay::flow::SharedServerFlowStatistic;
 
+#[pin_project]
 pub struct TcpMonStream<S> {
+    #[pin]
     stream: S,
     flow_stat: SharedServerFlowStatistic,
 }
@@ -27,12 +30,14 @@ impl<S> AsyncRead for TcpMonStream<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let n = match Pin::new(&mut self.stream).poll_read(cx, buf)? {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+
+        let n = match this.stream.poll_read(cx, buf)? {
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        self.flow_stat.tcp().incr_rx(n as u64);
+        this.flow_stat.tcp().incr_rx(n as u64);
         Poll::Ready(Ok(n))
     }
 }
@@ -41,21 +46,23 @@ impl<S> AsyncWrite for TcpMonStream<S>
 where
     S: AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let n = match Pin::new(&mut self.stream).poll_write(cx, buf)? {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = self.project();
+
+        let n = match this.stream.poll_write(cx, buf)? {
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        self.flow_stat.tcp().incr_tx(n as u64);
+        this.flow_stat.tcp().incr_tx(n as u64);
         Poll::Ready(Ok(n))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stream).poll_shutdown(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }
 

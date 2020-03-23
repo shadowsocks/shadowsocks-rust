@@ -11,6 +11,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::TunnelLocal => tunnel_local::run(context).await,
         ConfigType::Socks5Local => socks5_local::run(context).await,
         ConfigType::RedirLocal => redir_local::run(context).await,
+        #[cfg(feature = "local-protocol-http")]
         ConfigType::HttpLocal => unreachable!(),
         ConfigType::DnsLocal => unreachable!(),
         ConfigType::Server => unreachable!(),

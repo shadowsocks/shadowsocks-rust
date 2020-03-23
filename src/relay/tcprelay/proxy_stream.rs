@@ -3,7 +3,6 @@
 use std::{
     fmt::{self, Display, Formatter},
     io::{self, Error},
-    marker::Unpin,
     net::SocketAddr,
     pin::Pin,
     task::{Context as TaskContext, Poll},
@@ -12,6 +11,7 @@ use std::{
 
 use bytes::BytesMut;
 use log::{debug, error, trace};
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 
 use crate::{
@@ -24,12 +24,15 @@ use super::{connection::Connection, CryptoStream, STcpStream};
 
 /// Stream wrapper for both direct connections and proxied connections
 #[allow(clippy::large_enum_variant)]
+#[pin_project]
 pub enum ProxyStream {
     Direct {
+        #[pin]
         stream: STcpStream,
         context: SharedContext,
     },
     Proxied {
+        #[pin]
         stream: CryptoStream<STcpStream>,
         context: SharedContext,
     },
@@ -181,19 +184,17 @@ impl ProxyStream {
     }
 }
 
-impl Unpin for ProxyStream {}
-
 macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
-        match *$self {
-            ProxyStream::Direct { ref mut stream, .. } => Pin::new(stream).$method($($param),*),
-            ProxyStream::Proxied { ref mut stream, .. } => Pin::new(stream).$method($($param),*),
+        match $self.project() {
+            __ProxyStreamProjection::Direct { stream, .. } => stream.$method($($param),*),
+            __ProxyStreamProjection::Proxied { stream, .. } => stream.$method($($param),*),
         }
     };
 }
 
 impl AsyncRead for ProxyStream {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let p = forward_call!(self, poll_read, cx, buf);
 
         // Flow statistic for Android client
@@ -211,7 +212,7 @@ impl AsyncRead for ProxyStream {
 }
 
 impl AsyncWrite for ProxyStream {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let p = forward_call!(self, poll_write, cx, buf);
 
         // Flow statistic for Android client
@@ -227,11 +228,11 @@ impl AsyncWrite for ProxyStream {
         p
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_flush, cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_shutdown, cx)
     }
 }
@@ -285,11 +286,11 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
 
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),
-        ConfigType::Socks5Local
-        | ConfigType::TunnelLocal
-        | ConfigType::HttpLocal
-        | ConfigType::RedirLocal
-        | ConfigType::DnsLocal => svr_cfg.external_addr(),
+        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::RedirLocal | ConfigType::DnsLocal => {
+            svr_cfg.external_addr()
+        }
+        #[cfg(feature = "local-protocol-http")]
+        ConfigType::HttpLocal => svr_cfg.external_addr(),
         ConfigType::Manager => unreachable!("ConfigType::Manager shouldn't need to connect to proxy server"),
     };
 

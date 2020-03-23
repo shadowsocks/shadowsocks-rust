@@ -43,7 +43,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-protocol-http"]
 sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
@@ -57,6 +57,7 @@ dns-over-https = ["trust-dns-resolver/dns-over-https-rustls"]
 openssl-vendored = ["openssl/vendored"]
 local-dns-relay = []
 local-flow-stat = []
+local-protocol-http = ["hyper", "http", "tower"]
 
 [dependencies]
 log = "0.4"
@@ -66,7 +67,7 @@ clap = "2.33"
 env_logger = "0.7"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
-tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream"] }
+tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
 futures = "0.3"
 json5 = "0.2"
 base64 = "0.12"
@@ -88,10 +89,10 @@ trust-dns-proto = "0.19"
 hkdf = "0.8"
 hmac = "0.7"
 sha-1 = "0.8"
-lru_time_cache = "0.9"
-hyper = "0.13"
-http = "0.2"
-tower = "0.3"
+lru_time_cache = "0.10"
+hyper = { version = "0.13", optional = true }
+http = { version = "0.2", optional = true }
+tower = { version = "0.3", optional = true }
 pin-project = "0.4"
 socket2 = "0.3"
 cfg-if = "0.1"

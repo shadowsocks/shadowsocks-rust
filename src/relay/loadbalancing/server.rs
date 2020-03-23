@@ -224,6 +224,7 @@ impl<S: ServerData> ServerStatistic<S> {
         self.context.server_config(self.server_idx)
     }
 
+    #[allow(dead_code)]
     pub fn server(&self) -> &S {
         &self.server
     }

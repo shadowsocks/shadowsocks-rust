@@ -3,11 +3,11 @@
 use std::{
     convert::Infallible,
     future::Future,
-    io,
-    io::ErrorKind,
+    io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
     str::FromStr,
+    sync::Arc,
     task::{self, Poll},
 };
 
@@ -643,19 +643,22 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let bypass_client = Client::builder().build::<_, Body>(DirectConnector::new(context.clone()));
     let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;
+    let servers = Arc::new(servers);
 
     let make_service = make_service_fn(|socket: &AddrStream| {
         let client_addr = socket.remote_addr();
-        let svr_score = servers.pick_server();
+        let servers = servers.clone();
         let bypass_client = bypass_client.clone();
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                server_dispatch(req, svr_score.clone(), client_addr, bypass_client.clone())
+                let svr_score = servers.pick_server();
+                server_dispatch(req, svr_score, client_addr, bypass_client.clone())
             }))
         }
     });
 
+    // HTTP Proxy protocol only defined in HTTP 1.x
     let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
     info!("shadowsocks HTTP listening on {}", server.local_addr());
 

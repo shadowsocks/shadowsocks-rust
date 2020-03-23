@@ -129,7 +129,11 @@ fn main() {
                 .long("protocol")
                 .takes_value(true)
                 .default_value("socks5")
-                .possible_values(&["socks5", "http"])
+                .possible_values(&[
+                    "socks5",
+                    #[cfg(feature = "local-protocol-http")]
+                    "http",
+                ])
                 .help("Protocol that uses to communicates with clients"),
         )
         .arg(
@@ -203,8 +207,9 @@ fn main() {
 
     let config_type = match matches.value_of("PROTOCOL") {
         Some("socks5") => ConfigType::Socks5Local,
+        #[cfg(feature = "local-protocol-http")]
         Some("http") => ConfigType::HttpLocal,
-        Some(..) => panic!("`protocol` only supports `socks5` or `http`"),
+        Some(p) => panic!("not supported `protocol` \"{}\"", p),
         None => ConfigType::Socks5Local,
     };
 

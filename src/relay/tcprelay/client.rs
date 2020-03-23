@@ -8,24 +8,32 @@ use std::{
 };
 
 use log::trace;
-use tokio::{net::TcpStream, prelude::*};
-
-use crate::relay::socks5::{
-    self,
-    Address,
-    Command,
-    HandshakeRequest,
-    HandshakeResponse,
-    Reply,
-    TcpRequestHeader,
-    TcpResponseHeader,
+use pin_project::pin_project;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
 };
 
 use super::ProxyStream;
-use crate::{config::ServerConfig, context::SharedContext};
+use crate::{
+    config::ServerConfig,
+    context::SharedContext,
+    relay::socks5::{
+        self,
+        Address,
+        Command,
+        HandshakeRequest,
+        HandshakeResponse,
+        Reply,
+        TcpRequestHeader,
+        TcpResponseHeader,
+    },
+};
 
 /// Socks5 proxy client
+#[pin_project]
 pub struct Socks5Client {
+    #[pin]
     stream: TcpStream,
 }
 
@@ -79,7 +87,6 @@ impl Socks5Client {
         trace!("client connected, going to send handshake: {:?}", hs);
 
         hs.write_to(&mut s).await?;
-        s.flush().await?;
 
         let hsp = HandshakeResponse::read_from(&mut s).await?;
 
@@ -91,7 +98,6 @@ impl Socks5Client {
         trace!("going to connect, req: {:?}", h);
 
         h.write_to(&mut s).await?;
-        s.flush().await?;
         let hp = TcpResponseHeader::read_from(&mut s).await?;
 
         trace!("got response: {:?}", hp);
@@ -108,27 +114,29 @@ impl Socks5Client {
 }
 
 impl AsyncRead for Socks5Client {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.stream).poll_read(cx, buf)
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().stream.poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for Socks5Client {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.stream).poll_write(cx, buf)
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().stream.poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.stream).poll_shutdown(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }
 
 /// Shadowsocks' TCP client
+#[pin_project]
 pub struct ServerClient {
+    #[pin]
     stream: ProxyStream,
 }
 
@@ -141,21 +149,21 @@ impl ServerClient {
 }
 
 impl AsyncRead for ServerClient {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.stream).poll_read(cx, buf)
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().stream.poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for ServerClient {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        Pin::new(&mut self.stream).poll_write(cx, buf)
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().stream.poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.stream).poll_flush(cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.stream).poll_shutdown(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }
