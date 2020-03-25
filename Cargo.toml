@@ -62,9 +62,9 @@ local-protocol-http = ["hyper", "http", "tower"]
 [dependencies]
 log = "0.4"
 rand = "0.7"
-time = "0.2"
 clap = "2.33"
-env_logger = "0.7"
+env_logger = { version = "0.7", default-features = false, features = ["termcolor", "atty", "regex"] }
+chrono = "0.4"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
 tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
