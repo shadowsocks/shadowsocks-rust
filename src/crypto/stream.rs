@@ -46,6 +46,9 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
         }
 
         #[cfg(feature = "rc4")]
+        CipherType::Rc4 => Box::new(openssl::OpenSSLCipher::new(t, key, iv, mode)),
+
+        #[cfg(feature = "rc4")]
         CipherType::Rc4Md5 => Box::new(rc4_md5::Rc4Md5Cipher::new(key, iv, mode)),
 
         #[cfg(feature = "aes-cfb")]
