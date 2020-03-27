@@ -9,7 +9,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use clap::{Arg, clap_app};
+use clap::{App, Arg, ArgGroup};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -33,28 +33,57 @@ mod monitor;
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
 
-    let app = clap_app!(shadowsocks =>
-        (version: shadowsocks::VERSION)
-        (about: "A fast tunnel proxy that helps you bypass firewalls.")
-        (@arg VERBOSE: -v ... "Set the level of debug")
-        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
-        (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
-        (@arg CONFIG: -c --config +takes_value "Specify config file")
-        (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
-        (@arg SERVER_ADDR: -s --("server-addr") +takes_value requires[PASSWORD ENCRYPT_METHOD] "Server address")
-        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg PLUGIN: --plugin +takes_value "Enable SIP003 plugin")
-        (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
-        (@group SERVER_CONFIG =>
-            (@attributes +required ... arg[CONFIG SERVER_ADDR URL])
+    let matches = App::new("shadowsocks")
+        .version(shadowsocks::VERSION)
+        .about("A fast tunnel proxy that helps you bypass firewalls.")
+        .arg(
+            Arg::with_name("VERBOSE")
+                .short("v")
+                .multiple(true)
+                .help("Set the level of debug"),
         )
-        (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
-        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
-        (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
-        (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
-    );
-
-    let matches = app
+        .arg(
+            Arg::with_name("UDP_ONLY")
+                .short("u")
+                .help("Server mode UDP_ONLY")
+                .conflicts_with("TCP_AND_UDP"),
+        )
+        .arg(
+            Arg::with_name("TCP_AND_UDP")
+                .short("U")
+                .help("Server mode TCP_AND_UDP")
+                .conflicts_with("UDP_ONLY"),
+        )
+        .arg(
+            Arg::with_name("CONFIG")
+                .short("c")
+                .long("config")
+                .takes_value(true)
+                .help("Specify config file"),
+        )
+        .arg(
+            Arg::with_name("BIND_ADDR")
+                .short("b")
+                .long("bind-addr")
+                .takes_value(true)
+                .help("Bind address, outbound socket will bind this address"),
+        )
+        .arg(
+            Arg::with_name("SERVER_ADDR")
+                .short("s")
+                .long("server-addr")
+                .takes_value(true)
+                .help("Server address")
+                .requires_all(&["PASSWORD", "ENCRYPT_METHOD"]),
+        )
+        .arg(
+            Arg::with_name("PASSWORD")
+                .short("k")
+                .long("password")
+                .takes_value(true)
+                .help("Password")
+                .requires_all(&["SERVER_ADDR", "ENCRYPT_METHOD"]),
+        )
         .arg(
             Arg::with_name("ENCRYPT_METHOD")
                 .short("m")
@@ -63,6 +92,50 @@ fn main() {
                 .possible_values(&available_ciphers)
                 .help("Encryption method")
                 .requires_all(&["SERVER_ADDR", "PASSWORD"]),
+        )
+        .arg(
+            Arg::with_name("PLUGIN")
+                .long("plugin")
+                .takes_value(true)
+                .help("Enable SIP003 plugin"),
+        )
+        .arg(
+            Arg::with_name("PLUGIN_OPT")
+                .long("plugin-opts")
+                .takes_value(true)
+                .help("Set SIP003 plugin options")
+                .requires("PLUGIN"),
+        )
+        .group(
+            ArgGroup::with_name("SERVER_CONFIG")
+                .args(&["CONFIG", "SERVER_ADDR"])
+                .multiple(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("MANAGER_ADDRESS")
+                .long("manager-address")
+                .takes_value(true)
+                .help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""),
+        )
+        .arg(
+            Arg::with_name("NO_DELAY")
+                .long("no-delay")
+                .takes_value(false)
+                .help("Set no-delay option for socket"),
+        )
+        .arg(
+            Arg::with_name("NOFILE")
+                .short("n")
+                .long("nofile")
+                .takes_value(true)
+                .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
+        )
+        .arg(
+            Arg::with_name("ACL")
+                .long("acl")
+                .takes_value(true)
+                .help("Path to ACL (Access Control List)"),
         )
         .arg(
             Arg::with_name("IPV6_FIRST")

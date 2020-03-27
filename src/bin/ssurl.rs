@@ -3,11 +3,12 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-use clap::clap_app;
+use clap::{App, Arg};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks::{
-    config::{Config, ConfigType, ServerConfig}
+    config::{Config, ConfigType, ServerConfig},
+    VERSION,
 };
 
 const BLACK: &str = "\x1b[40m  \x1b[0m";
@@ -69,14 +70,30 @@ fn decode(encoded: &str, need_qrcode: bool) {
 }
 
 fn main() {
-    let app = clap_app!(ssurl =>
-        (version: shadowsocks::VERSION)
-        (about: "Encode and decode ShadowSocks URL")
-        (@arg ENCODE: -e --encode +takes_value "Encode the server configuration in the provided JSON file")
-        (@arg DECODE: -d --decode +takes_value "Decode the server configuration from the provide ShadowSocks URL")
-        (@arg QRCODE: -c --qrcode !takes_value "Generate the QRCode with the provided configuration")
-    );
-
+    let app = App::new("ssurl")
+        .about("Encode and decode ShadowSocks URL")
+        .version(VERSION)
+        .arg(
+            Arg::with_name("ENCODE")
+                .short("e")
+                .long("encode")
+                .takes_value(true)
+                .help("Encode the server configuration in the provided JSON file"),
+        )
+        .arg(
+            Arg::with_name("DECODE")
+                .short("d")
+                .long("decode")
+                .takes_value(true)
+                .help("Decode the server configuration from the provide ShadowSocks URL"),
+        )
+        .arg(
+            Arg::with_name("QRCODE")
+                .short("c")
+                .long("qrcode")
+                .takes_value(false)
+                .help("Generate the QRCode with the provided configuration"),
+        );
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");
