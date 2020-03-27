@@ -9,7 +9,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use clap::{Arg, clap_app};
+use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -31,8 +31,6 @@ mod logging;
 mod monitor;
 
 fn main() {
-    let available_ciphers = CipherType::available_ciphers();
-
     let app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
@@ -46,7 +44,7 @@ fn main() {
         (@arg PLUGIN: --plugin +takes_value "Enable SIP003 plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
         (@group SERVER_CONFIG =>
-            (@attributes +required ... arg[CONFIG SERVER_ADDR URL])
+            (@attributes +required ... arg[CONFIG SERVER_ADDR])
         )
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
@@ -60,7 +58,7 @@ fn main() {
                 .short("m")
                 .long("encrypt-method")
                 .takes_value(true)
-                .possible_values(&available_ciphers)
+                .possible_values(&CipherType::available_ciphers())
                 .help("Encryption method")
                 .requires_all(&["SERVER_ADDR", "PASSWORD"]),
         )
@@ -70,8 +68,6 @@ fn main() {
                 .help("Resovle hostname to IPv6 address first"),
         )
         .get_matches();
-
-    drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "ssserver");
