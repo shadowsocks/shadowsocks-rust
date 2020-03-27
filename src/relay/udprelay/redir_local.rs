@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     association::{ProxyAssociation, ProxySend},
-    sys::UdpRedirSocket,
+    redir::sys::UdpRedirSocket,
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
@@ -92,7 +92,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
     let assoc_map: SharedAssocMap = Arc::new(Mutex::new(LruCache::with_expiry_duration(timeout)));
 
-    let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+    let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
         let (recv_len, src, dst) = match time::timeout(timeout, l.recv_from_redir(&mut pkt_buf)).await {

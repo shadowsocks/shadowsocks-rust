@@ -265,7 +265,7 @@ impl ManagerService {
     }
 
     async fn serve(&mut self) -> io::Result<()> {
-        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
         loop {
             let (recv_len, src_addr) = self.socket.recv_from(&mut buf).await?;

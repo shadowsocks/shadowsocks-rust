@@ -236,7 +236,7 @@ impl UdpAssociation {
     ) -> io::Result<()> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut remote_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut remote_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (remote_recv_len, remote_addr) = remote_udp.recv_from(&mut remote_buf).await?;
 
         debug!(
@@ -329,7 +329,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
         });
     }
 
-    let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+    let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
         let (recv_len, src) = match time::timeout(timeout, r.recv_from(&mut pkt_buf)).await {

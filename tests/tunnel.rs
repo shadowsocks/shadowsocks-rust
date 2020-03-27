@@ -112,6 +112,8 @@ fn udp_tunnel() {
             let mut buf = vec![0u8; 65536];
             let (n, src) = socket.recv_from(&mut buf).await.unwrap();
 
+            println!("UDP Echo server received packet, size: {}, src: {}", n, src);
+
             socket.send_to(&buf[..n], src).await.unwrap();
         });
 

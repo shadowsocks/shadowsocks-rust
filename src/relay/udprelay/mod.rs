@@ -53,10 +53,12 @@ mod association;
 pub mod client;
 mod crypto_io;
 pub mod local;
+#[cfg(feature = "local-redir")]
+mod redir;
+#[cfg(feature = "local-redir")]
 mod redir_local;
 pub mod server;
 mod socks5_local;
-mod sys;
 mod tunnel_local;
 mod utils;
 

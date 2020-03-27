@@ -101,7 +101,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let assoc_map = Arc::new(Mutex::new(LruCache::with_expiry_duration(timeout)));
     let assoc_map_cloned = assoc_map.clone();
 
-    let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+    let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     // FIXME: Channel size 1024?
     let (tx, mut rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);

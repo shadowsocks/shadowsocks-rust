@@ -59,7 +59,7 @@ impl TcpStreamRedirExt for TcpStream {
                 target_os = "ios",
             ))]
             RedirType::PacketFilter => {
-                use crate::relay::sys::bsd_pf::PF;
+                use crate::relay::redir::sys::bsd_pf::PF;
 
                 let peer_addr = self.peer_addr()?;
                 let bind_addr = self.local_addr()?;

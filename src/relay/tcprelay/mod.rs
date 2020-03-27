@@ -22,11 +22,13 @@ mod http_local;
 pub mod local;
 mod monitor;
 mod proxy_stream;
+#[cfg(feature = "local-redir")]
+mod redir;
+#[cfg(feature = "local-redir")]
 mod redir_local;
 pub mod server;
 mod socks5_local;
 mod stream;
-mod sys;
 mod tunnel_local;
 mod utils;
 

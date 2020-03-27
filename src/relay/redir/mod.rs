@@ -7,6 +7,8 @@ use tokio::net::TcpListener;
 
 use crate::config::RedirType;
 
+pub mod sys;
+
 #[async_trait]
 pub trait TcpListenerRedirExt {
     // Create a TcpListener for transparent proxy

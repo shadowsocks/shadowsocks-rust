@@ -11,6 +11,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::Socks5Local => super::socks5_local::run(context).await,
         #[cfg(feature = "local-protocol-http")]
         ConfigType::HttpLocal => super::http_local::run(context).await,
+        #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => super::redir_local::run(context).await,
         ConfigType::DnsLocal => unreachable!(),
         ConfigType::Server => unreachable!(),

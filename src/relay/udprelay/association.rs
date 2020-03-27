@@ -11,12 +11,12 @@ use std::{
 
 use async_trait::async_trait;
 use bytes::BytesMut;
-use futures::future;
+use futures::future::{self, AbortHandle};
 use log::{debug, error, warn};
 use tokio::{
     self,
     net::udp::{RecvHalf, SendHalf},
-    sync::{mpsc, oneshot},
+    sync::mpsc,
 };
 
 use crate::{
@@ -41,7 +41,15 @@ pub trait ProxySend {
 
 pub struct ProxyAssociation {
     tx: mpsc::Sender<(Address, Vec<u8>)>,
-    watchers: Vec<oneshot::Sender<()>>,
+    watchers: Vec<AbortHandle>,
+}
+
+impl Drop for ProxyAssociation {
+    fn drop(&mut self) {
+        for watcher in &self.watchers {
+            watcher.abort();
+        }
+    }
 }
 
 impl ProxyAssociation {
@@ -74,16 +82,8 @@ impl ProxyAssociation {
         tokio::spawn(Self::l2r_packet_proxied(src_addr, server.clone(), rx, remote_sender));
 
         // REMOTE <- LOCAL task
-        let (remote_watcher_tx, remote_watcher_rx) = oneshot::channel::<()>();
-        tokio::spawn(Self::r2l_packet(
-            src_addr,
-            server,
-            sender,
-            remote_receiver,
-            remote_watcher_rx,
-        ));
-
-        let watchers = vec![remote_watcher_tx];
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let watchers = vec![remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
     }
@@ -117,16 +117,8 @@ impl ProxyAssociation {
         tokio::spawn(Self::l2r_packet_bypassed(src_addr, server.clone(), rx, remote_sender));
 
         // REMOTE <- LOCAL task
-        let (remote_watcher_tx, remote_watcher_rx) = oneshot::channel::<()>();
-        tokio::spawn(Self::r2l_packet(
-            src_addr,
-            server,
-            sender,
-            remote_receiver,
-            remote_watcher_rx,
-        ));
-
-        let watchers = vec![remote_watcher_tx];
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let watchers = vec![remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
     }
@@ -174,26 +166,11 @@ impl ProxyAssociation {
             remote_sender,
         ));
 
-        let (bypass_watcher_tx, bypass_watcher_rx) = oneshot::channel::<()>();
-        tokio::spawn(Self::r2l_packet(
-            src_addr,
-            server.clone(),
-            sender.clone(),
-            bypass_receiver,
-            bypass_watcher_rx,
-        ));
+        // LOCAL <- REMOTE task
 
-        // REMOTE <- LOCAL task
-        let (remote_watcher_tx, remote_watcher_rx) = oneshot::channel::<()>();
-        tokio::spawn(Self::r2l_packet(
-            src_addr,
-            server,
-            sender,
-            remote_receiver,
-            remote_watcher_rx,
-        ));
-
-        let watchers = vec![bypass_watcher_tx, remote_watcher_tx];
+        let bypass_watcher = Self::r2l_packet_abortable(src_addr, server.clone(), sender.clone(), bypass_receiver);
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let watchers = vec![bypass_watcher, remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
     }
@@ -253,11 +230,14 @@ impl ProxyAssociation {
             let res = Self::send_packet_proxied(src_addr, context, svr_cfg, &addr, &payload, &mut remote_sender).await;
 
             if let Err(err) = res {
-                error!("UDP association send packet {} -> {}, error: {}", src_addr, addr, err);
+                error!(
+                    "UDP association (proxied) send packet {} -> {}, error: {}",
+                    src_addr, addr, err
+                );
             }
         }
 
-        debug!("UDP association {} -> .. task is closing", src_addr);
+        debug!("UDP association (proxied) {} -> .. task is closing", src_addr);
     }
 
     async fn l2r_packet_bypassed<S>(
@@ -274,11 +254,14 @@ impl ProxyAssociation {
             let res = Self::send_packet_bypassed(src_addr, context, &addr, &payload, &mut remote_sender).await;
 
             if let Err(err) = res {
-                error!("UDP association send packet {} -> {}, error: {}", src_addr, addr, err);
+                error!(
+                    "UDP association (bypassed) send packet {} -> {}, error: {}",
+                    src_addr, addr, err
+                );
             }
         }
 
-        debug!("UDP association {} -> .. task is closing", src_addr);
+        debug!("UDP association (bypassed) {} -> .. task is closing", src_addr);
     }
 
     async fn send_packet_proxied(
@@ -355,43 +338,52 @@ impl ProxyAssociation {
         Ok(())
     }
 
+    fn r2l_packet_abortable<S, H>(
+        src_addr: SocketAddr,
+        server: SharedServerStatistic<S>,
+        sender: H,
+        socket: RecvHalf,
+    ) -> AbortHandle
+    where
+        S: ServerData + Send + 'static,
+        H: ProxySend + Send + 'static,
+    {
+        let relay_fut = Self::r2l_packet(src_addr, server, sender, socket);
+        let (relay_task, relay_watcher) = future::abortable(relay_fut);
+
+        tokio::spawn(async move {
+            let _ = relay_task.await;
+
+            debug!("UDP association {} <- .. task is closing", src_addr);
+        });
+
+        relay_watcher
+    }
+
     async fn r2l_packet<S, H>(
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut sender: H,
         mut socket: RecvHalf,
-        watcher_rx: oneshot::Receiver<()>,
-    ) -> io::Result<()>
-    where
+    ) where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
     {
-        let recv_fut = async move {
-            let context = server.context();
-            let svr_cfg = server.server_config();
+        let context = server.context();
+        let svr_cfg = server.server_config();
 
-            loop {
-                match Self::recv_packet_proxied(context, svr_cfg, &mut socket).await {
-                    Ok(data) => {
-                        if let Err(err) = sender.send_packet(data).await {
-                            error!("UDP association send {} <- .., error: {}", src_addr, err);
-                        }
-                    }
-                    Err(err) => {
-                        error!("UDP association recv {} <- .., error: {}", src_addr, err);
+        loop {
+            match Self::recv_packet_proxied(context, svr_cfg, &mut socket).await {
+                Ok(data) => {
+                    if let Err(err) = sender.send_packet(data).await {
+                        error!("UDP association send {} <- .., error: {}", src_addr, err);
                     }
                 }
+                Err(err) => {
+                    error!("UDP association recv {} <- .., error: {}", src_addr, err);
+                }
             }
-        };
-
-        tokio::pin!(recv_fut);
-
-        // Resolve if watcher_rx resolves
-        let _ = future::select(recv_fut, watcher_rx).await;
-
-        debug!("UDP association {} <- .. task is closing", src_addr);
-
-        Ok(())
+        }
     }
 
     async fn recv_packet_proxied(
@@ -401,7 +393,7 @@ impl ProxyAssociation {
     ) -> io::Result<Vec<u8>> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
         let (recv_n, _) = socket.recv_from(&mut recv_buf).await?;
 

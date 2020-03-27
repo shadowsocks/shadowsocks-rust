@@ -82,7 +82,7 @@ impl ServerClient {
 
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (recv_n, ..) = try_timeout(self.socket.recv_from(&mut recv_buf), Some(timeout)).await?;
 
         let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {

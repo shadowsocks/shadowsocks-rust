@@ -27,6 +27,7 @@ path = "src/bin/tunnel.rs"
 [[bin]]
 name = "ssredir"
 path = "src/bin/redir.rs"
+required-features = ["local-redir"]
 
 [[bin]]
 name = "ssurl"
@@ -58,6 +59,7 @@ openssl-vendored = ["openssl/vendored"]
 local-dns-relay = []
 local-flow-stat = []
 local-protocol-http = ["hyper", "http", "tower"]
+local-redir = []
 
 [dependencies]
 log = "0.4"

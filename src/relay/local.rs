@@ -56,6 +56,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         #[cfg(feature = "local-protocol-http")]
         ConfigType::HttpLocal => true,
         // Redir mode controlled by this flag
+        #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => mode.enable_tcp(),
 
         _ => false,
@@ -88,7 +89,9 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     };
 
     let enable_udp = match config_type {
-        ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::RedirLocal => mode.enable_udp(),
+        ConfigType::Socks5Local | ConfigType::TunnelLocal => mode.enable_udp(),
+        #[cfg(feature = "local-redir")]
+        ConfigType::RedirLocal => mode.enable_udp(),
         _ => false,
     };
 
