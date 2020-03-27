@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use clap::{App, Arg, ArgGroup};
+use clap::{Arg, clap_app};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -29,57 +29,31 @@ mod monitor;
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
 
-    let mut app = App::new("shadowsocks")
-        .version(shadowsocks::VERSION)
-        .about("A fast tunnel proxy that helps you bypass firewalls.")
-        .arg(
-            Arg::with_name("VERBOSE")
-                .short("v")
-                .multiple(true)
-                .help("Set the level of debug"),
+    let mut app = clap_app!(shadowsocks =>
+        (version: shadowsocks::VERSION)
+        (about: "A fast tunnel proxy that helps you bypass firewalls.")
+        (@arg VERBOSE: -v ... "Set the level of debug")
+        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
+        (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
+        (@arg CONFIG: -c --config +takes_value "Specify config file")
+        (@arg LOCAL_ADDR: -b --("local-addr") +takes_value "Local address, listen only to this address if specified")
+        (@arg SERVER_ADDR: -s --("server-addr") +takes_value requires[PASSWORD ENCRYPT_METHOD] "Server address")
+        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
+        (@arg PLUGIN: --plugin +takes_value "Enable SIP003 plugin")
+        (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
+        (@arg URL: --("server-url") +takes_value "Server address in SIP002 URL")
+        (@group SERVER_CONFIG =>
+            (@attributes +required ... arg[CONFIG SERVER_ADDR URL])
         )
-        .arg(
-            Arg::with_name("UDP_ONLY")
-                .short("u")
-                .help("Server mode UDP_ONLY")
-                .conflicts_with("TCP_AND_UDP"),
+        (@group LOCAL_CONFIG =>
+            (@attributes +required ... arg[CONFIG LOCAL_ADDR])
         )
-        .arg(
-            Arg::with_name("TCP_AND_UDP")
-                .short("U")
-                .help("Server mode TCP_AND_UDP")
-                .conflicts_with("UDP_ONLY"),
-        )
-        .arg(
-            Arg::with_name("CONFIG")
-                .short("c")
-                .long("config")
-                .takes_value(true)
-                .help("Specify config file"),
-        )
-        .arg(
-            Arg::with_name("LOCAL_ADDR")
-                .short("b")
-                .long("local-addr")
-                .takes_value(true)
-                .help("Local address, listen only to this address if specified"),
-        )
-        .arg(
-            Arg::with_name("SERVER_ADDR")
-                .short("s")
-                .long("server-addr")
-                .takes_value(true)
-                .help("Server address")
-                .requires_all(&["PASSWORD", "ENCRYPT_METHOD"]),
-        )
-        .arg(
-            Arg::with_name("PASSWORD")
-                .short("k")
-                .long("password")
-                .takes_value(true)
-                .help("Password")
-                .requires_all(&["SERVER_ADDR", "ENCRYPT_METHOD"]),
-        )
+        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+        (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
+        (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+    );
+
+    app = app
         .arg(
             Arg::with_name("ENCRYPT_METHOD")
                 .short("m")
@@ -88,56 +62,6 @@ fn main() {
                 .possible_values(&available_ciphers)
                 .help("Encryption method")
                 .requires_all(&["SERVER_ADDR", "PASSWORD"]),
-        )
-        .arg(
-            Arg::with_name("PLUGIN")
-                .long("plugin")
-                .takes_value(true)
-                .help("Enable SIP003 plugin"),
-        )
-        .arg(
-            Arg::with_name("PLUGIN_OPT")
-                .long("plugin-opts")
-                .takes_value(true)
-                .help("Set SIP003 plugin options")
-                .requires("PLUGIN"),
-        )
-        .arg(
-            Arg::with_name("URL")
-                .long("server-url")
-                .takes_value(true)
-                .help("Server address in SIP002 URL"),
-        )
-        .group(
-            ArgGroup::with_name("SERVER_CONFIG")
-                .args(&["CONFIG", "SERVER_ADDR", "URL"])
-                .multiple(true)
-                .required(true),
-        )
-        .group(
-            ArgGroup::with_name("LOCAL_CONFIG")
-                .args(&["CONFIG", "LOCAL_ADDR"])
-                .multiple(true)
-                .required(true),
-        )
-        .arg(
-            Arg::with_name("NO_DELAY")
-                .long("no-delay")
-                .takes_value(false)
-                .help("Set no-delay option for socket"),
-        )
-        .arg(
-            Arg::with_name("NOFILE")
-                .short("n")
-                .long("nofile")
-                .takes_value(true)
-                .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
-        )
-        .arg(
-            Arg::with_name("ACL")
-                .long("acl")
-                .takes_value(true)
-                .help("Path to ACL (Access Control List)"),
         )
         .arg(
             Arg::with_name("IPV6_FIRST")

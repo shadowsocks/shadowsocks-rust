@@ -9,7 +9,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use clap::{App, Arg, ArgGroup};
+use clap::{Arg, clap_app};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -29,41 +29,24 @@ mod logging;
 mod monitor;
 
 fn main() {
-    let matches = App::new("shadowsocks")
-        .version(shadowsocks::VERSION)
-        .about("A fast tunnel proxy that helps you bypass firewalls.")
-        .arg(
-            Arg::with_name("VERBOSE")
-                .short("v")
-                .multiple(true)
-                .help("Set the level of debug"),
+    let app = clap_app!(shadowsocks =>
+        (version: shadowsocks::VERSION)
+        (about: "A fast tunnel proxy that helps you bypass firewalls.")
+        (@arg VERBOSE: -v ... "Set the level of debug")
+        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
+        (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
+        (@arg CONFIG: -c --config +takes_value "Specify config file")
+        (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
+        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+        (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
+        (@group MANAGER_CONFIG =>
+            (@attributes +required ... arg[CONFIG MANAGER_ADDRESS])
         )
-        .arg(
-            Arg::with_name("UDP_ONLY")
-                .short("u")
-                .help("Server mode UDP_ONLY")
-                .conflicts_with("TCP_AND_UDP"),
-        )
-        .arg(
-            Arg::with_name("TCP_AND_UDP")
-                .short("U")
-                .help("Server mode TCP_AND_UDP")
-                .conflicts_with("UDP_ONLY"),
-        )
-        .arg(
-            Arg::with_name("CONFIG")
-                .short("c")
-                .long("config")
-                .takes_value(true)
-                .help("Specify config file"),
-        )
-        .arg(
-            Arg::with_name("BIND_ADDR")
-                .short("b")
-                .long("bind-addr")
-                .takes_value(true)
-                .help("Bind address, outbound socket will bind this address"),
-        )
+        (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
+        (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+    );
+
+    let matches = app
         .arg(
             Arg::with_name("ENCRYPT_METHOD")
                 .short("m")
@@ -71,37 +54,6 @@ fn main() {
                 .takes_value(true)
                 .possible_values(&CipherType::available_ciphers())
                 .help("Encryption method"),
-        )
-        .arg(
-            Arg::with_name("NO_DELAY")
-                .long("no-delay")
-                .takes_value(false)
-                .help("Set no-delay option for socket"),
-        )
-        .arg(
-            Arg::with_name("MANAGER_ADDRESS")
-                .long("manager-address")
-                .takes_value(true)
-                .help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""),
-        )
-        .group(
-            ArgGroup::with_name("MANAGER_CONFIG")
-                .args(&["CONFIG", "MANAGER_ADDRESS"])
-                .multiple(true)
-                .required(true)
-        )
-        .arg(
-            Arg::with_name("NOFILE")
-                .short("n")
-                .long("nofile")
-                .takes_value(true)
-                .help("Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)"),
-        )
-        .arg(
-            Arg::with_name("ACL")
-                .long("acl")
-                .takes_value(true)
-                .help("Path to ACL (Access Control List)"),
         )
         .arg(
             Arg::with_name("IPV6_FIRST")
