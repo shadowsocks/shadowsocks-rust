@@ -42,18 +42,18 @@ addons:
 
 install:
   # Install OpenSSL on Windows
-  # - if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
-  #   curl -Lo "openssl-1.0.2c-win64-mingw.zip" "https://dl.bintray.com/vszakats/generic/openssl-1.0.2c-win64-mingw.zip";
-  #   unzip "openssl-1.0.2c-win64-mingw.zip" -d "/c/OpenSSL";
-  #   export OPENSSL_LIB_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
-  #   export OPENSSL_INCLUDE_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw/include;
-  #   export OPENSSL_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
-  #   fi
   - if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
-    choco install openssl;
-    export OPENSSL_DIR='/c/Program Files/OpenSSL-Win64/';
-    export OPENSSL_STATIC=1;
+    curl -Lo "openssl-1.0.2c-win64-mingw.zip" "https://dl.bintray.com/vszakats/generic/openssl-1.0.2c-win64-mingw.zip";
+    unzip "openssl-1.0.2c-win64-mingw.zip" -d "/c/OpenSSL";
+    export OPENSSL_LIB_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
+    export OPENSSL_INCLUDE_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw/include;
+    export OPENSSL_DIR=/c/OpenSSL/openssl-1.0.2c-win64-mingw;
     fi
+  # - if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
+  #   choco install openssl;
+  #   export OPENSSL_DIR='/c/Program Files/OpenSSL-Win64/';
+  #   export OPENSSL_STATIC=1;
+  #   fi
 
 script:
   - cargo test --no-fail-fast
