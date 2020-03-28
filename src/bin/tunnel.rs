@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use clap::{Arg, clap_app};
+use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
@@ -50,7 +50,6 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
     );
-
 
     let matches = app
         .arg(

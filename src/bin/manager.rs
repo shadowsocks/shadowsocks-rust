@@ -9,7 +9,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-use clap::{Arg, clap_app};
+use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};

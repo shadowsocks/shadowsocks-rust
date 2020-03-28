@@ -6,9 +6,7 @@
 use clap::clap_app;
 use qrcode::{types::Color, QrCode};
 
-use shadowsocks::{
-    config::{Config, ConfigType, ServerConfig}
-};
+use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
 const BLACK: &str = "\x1b[40m  \x1b[0m";
 const WHITE: &str = "\x1b[47m  \x1b[0m";
