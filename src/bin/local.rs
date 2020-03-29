@@ -49,6 +49,7 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+        (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
     );
 
     app = app
@@ -127,7 +128,7 @@ fn main() {
     drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
-    logging::init(debug_level, "sslocal");
+    logging::init(debug_level, "sslocal", matches.is_present("LOG_WITHOUT_TIME"));
 
     let config_type = match matches.value_of("PROTOCOL") {
         Some("socks5") => ConfigType::Socks5Local,

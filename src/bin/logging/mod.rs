@@ -4,18 +4,17 @@ use chrono::{offset::Local, SecondsFormat};
 use env_logger::Builder;
 use log::LevelFilter;
 
-pub fn init(debug_level: u64, bin_name: &str) {
+pub fn init(debug_level: u64, bin_name: &str, without_time: bool) {
     let mut log_builder = Builder::from_default_env();
     log_builder.filter(Some(bin_name), LevelFilter::Info);
     log_builder.filter(Some("shadowsocks"), LevelFilter::Info);
 
     log_builder.format(move |buf, record| {
-        write!(
-            buf,
-            "{} {:<5}",
-            Local::now().to_rfc3339_opts(SecondsFormat::Millis, false),
-            buf.default_styled_level(record.level())
-        )?;
+        if !without_time {
+            write!(buf, "{} ", Local::now().to_rfc3339_opts(SecondsFormat::Millis, false))?;
+        }
+
+        write!(buf, "{:<5}", buf.default_styled_level(record.level()))?;
 
         if debug_level > 0 {
             if let Some(mp) = record.module_path() {

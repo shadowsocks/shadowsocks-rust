@@ -44,6 +44,7 @@ fn main() {
         )
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+        (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
     );
 
     let matches = app
@@ -63,7 +64,7 @@ fn main() {
         .get_matches();
 
     let debug_level = matches.occurrences_of("VERBOSE");
-    logging::init(debug_level, "ssmanager");
+    logging::init(debug_level, "ssmanager", matches.is_present("LOG_WITHOUT_TIME"));
 
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => match Config::load_from_file(cpath, ConfigType::Manager) {

@@ -49,6 +49,7 @@ fn main() {
         )
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
+        (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
     );
 
     let matches = app
@@ -71,7 +72,7 @@ fn main() {
     drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
-    logging::init(debug_level, "sstunnel");
+    logging::init(debug_level, "sstunnel", matches.is_present("LOG_WITHOUT_TIME"));
 
     let mut config = match matches.value_of("CONFIG") {
         Some(cpath) => match Config::load_from_file(cpath, ConfigType::TunnelLocal) {
