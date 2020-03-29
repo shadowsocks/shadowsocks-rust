@@ -77,7 +77,7 @@ fn main() {
     #[cfg(feature = "local-flow-stat")]
     {
         app = clap_app!(@app (app)
-            (arg STAT_PATH: --("stat-path") +takes_value "Specify stat_path for traffic stat (only for Android)")
+            (@arg STAT_PATH: --("stat-path") +takes_value "Specify stat_path for traffic stat (only for Android)")
         );
     }
 

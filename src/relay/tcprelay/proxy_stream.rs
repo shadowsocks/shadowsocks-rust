@@ -186,7 +186,7 @@ impl ProxyStream {
 
 macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
-        match $self.project() {
+        match $self.as_mut().project() {
             __ProxyStreamProjection::Direct { stream, .. } => stream.$method($($param),*),
             __ProxyStreamProjection::Proxied { stream, .. } => stream.$method($($param),*),
         }
@@ -194,7 +194,7 @@ macro_rules! forward_call {
 }
 
 impl AsyncRead for ProxyStream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let p = forward_call!(self, poll_read, cx, buf);
 
         // Flow statistic for Android client
@@ -212,7 +212,7 @@ impl AsyncRead for ProxyStream {
 }
 
 impl AsyncWrite for ProxyStream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let p = forward_call!(self, poll_write, cx, buf);
 
         // Flow statistic for Android client
@@ -228,11 +228,11 @@ impl AsyncWrite for ProxyStream {
         p
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_flush, cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_shutdown, cx)
     }
 }
