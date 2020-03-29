@@ -161,7 +161,7 @@ impl AccessControl {
 
         let mut curr_ipv4 = &mut bypass_ipv4;
         let mut curr_ipv6 = &mut bypass_ipv6;
-        let mut curr_rules = &mut proxy_rules;
+        let mut curr_rules = &mut bypass_rules;
 
         for line in r.lines() {
             let line = line?;
