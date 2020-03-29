@@ -29,8 +29,11 @@ use shadowsocks::{
 
 mod logging;
 mod monitor;
+mod validator;
 
 fn main() {
+    let available_ciphers = CipherType::available_ciphers();
+
     let app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
@@ -39,9 +42,10 @@ fn main() {
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
         (@arg CONFIG: -c --config +takes_value "Specify config file")
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
-        (@arg SERVER_ADDR: -s --("server-addr") +takes_value requires[PASSWORD ENCRYPT_METHOD] "Server address")
+        (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg PLUGIN: --plugin +takes_value "Enable SIP003 plugin")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] "Encryption method")
+        (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
         (@group SERVER_CONFIG =>
             (@attributes +required ... arg[CONFIG SERVER_ADDR])
@@ -55,20 +59,13 @@ fn main() {
 
     let matches = app
         .arg(
-            Arg::with_name("ENCRYPT_METHOD")
-                .short("m")
-                .long("encrypt-method")
-                .takes_value(true)
-                .possible_values(&CipherType::available_ciphers())
-                .help("Encryption method")
-                .requires_all(&["SERVER_ADDR", "PASSWORD"]),
-        )
-        .arg(
             Arg::with_name("IPV6_FIRST")
                 .short("6")
                 .help("Resovle hostname to IPv6 address first"),
         )
         .get_matches();
+
+    drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "ssserver", matches.is_present("LOG_WITHOUT_TIME"));
@@ -86,24 +83,23 @@ fn main() {
 
     if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
         let password = matches.value_of("PASSWORD").expect("password");
-        let method = matches.value_of("ENCRYPT_METHOD").expect("encrypt-method");
+        let method = matches
+            .value_of("ENCRYPT_METHOD")
+            .expect("encrypt-method")
+            .parse::<CipherType>()
+            .expect("encryption method");
+        let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
-        let method = match method.parse() {
-            Ok(m) => m,
-            Err(err) => {
-                panic!("does not support {:?} method: {:?}", method, err);
-            }
-        };
+        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, None, None);
 
-        let sc = ServerConfig::new(
-            svr_addr
-                .parse::<ServerAddr>()
-                .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
-            password.to_owned(),
-            method,
-            None,
-            None,
-        );
+        if let Some(p) = matches.value_of("PLUGIN") {
+            let plugin = PluginConfig {
+                plugin: p.to_owned(),
+                plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+            };
+
+            sc.set_plugin(plugin);
+        }
 
         config.server.push(sc);
     }
@@ -133,23 +129,8 @@ fn main() {
         config.no_delay = true;
     }
 
-    if let Some(p) = matches.value_of("PLUGIN") {
-        let plugin = PluginConfig {
-            plugin: p.to_owned(),
-            plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
-        };
-
-        // Overrides config in file
-        for svr in config.server.iter_mut() {
-            svr.set_plugin(plugin.clone());
-        }
-    };
-
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_addr = Some(
-            m.parse::<ManagerAddr>()
-                .expect("\"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
-        );
+        config.manager_addr = Some(m.parse::<ManagerAddr>().expect("manager address"));
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {

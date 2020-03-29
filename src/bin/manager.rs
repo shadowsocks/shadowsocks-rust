@@ -27,6 +27,7 @@ use shadowsocks::{
 
 mod logging;
 mod monitor;
+mod validator;
 
 fn main() {
     let app = clap_app!(shadowsocks =>
@@ -38,7 +39,8 @@ fn main() {
         (@arg CONFIG: -c --config +takes_value "Specify config file")
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
-        (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
+        (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&CipherType::available_ciphers()) requires[SERVER_ADDR PASSWORD] "Encryption method")
         (@group MANAGER_CONFIG =>
             (@attributes +required ... arg[CONFIG MANAGER_ADDRESS])
         )
@@ -48,14 +50,6 @@ fn main() {
     );
 
     let matches = app
-        .arg(
-            Arg::with_name("ENCRYPT_METHOD")
-                .short("m")
-                .long("encrypt-method")
-                .takes_value(true)
-                .possible_values(&CipherType::available_ciphers())
-                .help("Encryption method"),
-        )
         .arg(
             Arg::with_name("IPV6_FIRST")
                 .short("6")
@@ -78,12 +72,7 @@ fn main() {
     };
 
     if let Some(method) = matches.value_of("ENCRYPT_METHOD") {
-        match method.parse() {
-            Ok(m) => config.manager_method = Some(m),
-            Err(..) => {
-                panic!("unrecognized `encrypt-method` \"{}\"", method);
-            }
-        }
+        config.manager_method = Some(method.parse().expect("encryption method"));
     }
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
@@ -112,10 +101,7 @@ fn main() {
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_addr = Some(
-            m.parse::<ManagerAddr>()
-                .expect("\"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\" for `manager_address`"),
-        );
+        config.manager_addr = Some(m.parse::<ManagerAddr>().expect("manager bind address"));
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {

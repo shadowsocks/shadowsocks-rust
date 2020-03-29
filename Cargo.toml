@@ -64,7 +64,7 @@ local-redir = []
 [dependencies]
 log = "0.4"
 rand = "0.7"
-clap = "2.33"
+clap = { version = "2.33", features = ["suggestions", "wrap_help"] }
 env_logger = { version = "0.7", default-features = false, features = ["termcolor", "atty", "regex"] }
 chrono = "0.4"
 openssl = { version = "0.10", optional = true }

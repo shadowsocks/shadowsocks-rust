@@ -25,9 +25,11 @@ use shadowsocks::{
 
 mod logging;
 mod monitor;
+mod validator;
 
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
+    let available_redir_types = RedirType::available_types();
 
     let mut app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
@@ -36,12 +38,13 @@ fn main() {
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
         (@arg CONFIG: -c --config +takes_value "Specify config file")
-        (@arg LOCAL_ADDR: -b --("local-addr") +takes_value "Local address, listen only to this address if specified")
-        (@arg SERVER_ADDR: -s --("server-addr") +takes_value requires[PASSWORD ENCRYPT_METHOD] "Server address")
+        (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
+        (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg PLUGIN: --plugin +takes_value "Enable SIP003 plugin")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] "Encryption method")
+        (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
-        (@arg URL: --("server-url") +takes_value "Server address in SIP002 URL")
+        (@arg URL: --("server-url") +takes_value {validator::validate_server_url} "Server address in SIP002 (https://shadowsocks.org/en/spec/SIP002-URI-Scheme.html) URL")
         (@group SERVER_CONFIG =>
             (@attributes +required ... arg[CONFIG SERVER_ADDR URL])
         )
@@ -54,49 +57,30 @@ fn main() {
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
     );
 
-    app = app
-        .arg(
-            Arg::with_name("ENCRYPT_METHOD")
-                .short("m")
-                .long("encrypt-method")
-                .takes_value(true)
-                .possible_values(&available_ciphers)
-                .help("Encryption method")
-                .requires_all(&["SERVER_ADDR", "PASSWORD"]),
-        )
-        .arg(
-            Arg::with_name("IPV6_FIRST")
-                .short("6")
-                .help("Resovle hostname to IPv6 address first"),
-        );
+    app = app.arg(
+        Arg::with_name("IPV6_FIRST")
+            .short("6")
+            .help("Resovle hostname to IPv6 address first"),
+    );
 
     let available_types = RedirType::available_types();
 
     if RedirType::tcp_default() != RedirType::NotSupported {
-        app = app.arg(
-            Arg::with_name("TCP_REDIR")
-                .long("tcp-redir")
-                .takes_value(true)
-                .possible_values(&available_types)
-                .default_value(RedirType::tcp_default().name())
-                .help("TCP redir (transparent proxy) type"),
+        app = clap_app!(@app (app)
+            (@arg TCP_REDIR: --("tcp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::tcp_default().name()) "TCP redir (transparent proxy) type")
         );
     }
 
     if RedirType::udp_default() != RedirType::NotSupported {
-        app = app.arg(
-            Arg::with_name("UDP_REDIR")
-                .long("udp-redir")
-                .takes_value(true)
-                .possible_values(&available_types)
-                .default_value(RedirType::udp_default().name())
-                .help("UDP redir (transparent proxy) type"),
+        app = clap_app!(@app (app)
+            (@arg UDP_REDIR: --("udp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::udp_default().name()) "UDP redir (transparent proxy) type")
         );
     }
 
     let matches = app.get_matches();
 
     drop(available_ciphers);
+    drop(available_redir_types);
 
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "ssredir", matches.is_present("LOG_WITHOUT_TIME"));
@@ -114,45 +98,35 @@ fn main() {
 
     if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
         let password = matches.value_of("PASSWORD").expect("password");
-        let method = matches.value_of("ENCRYPT_METHOD").expect("encrypt-method");
+        let method = matches
+            .value_of("ENCRYPT_METHOD")
+            .expect("encrypt-method")
+            .parse::<CipherType>()
+            .expect("encryption method");
+        let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
-        let method = match method.parse() {
-            Ok(m) => m,
-            Err(err) => {
-                panic!("does not support {:?} method: {:?}", method, err);
-            }
-        };
+        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, None, None);
 
-        let sc = ServerConfig::new(
-            svr_addr
-                .parse::<ServerAddr>()
-                .expect("`server-addr` invalid, \"IP:Port\" or \"Domain:Port\""),
-            password.to_owned(),
-            method,
-            None,
-            None,
-        );
+        if let Some(p) = matches.value_of("PLUGIN") {
+            let plugin = PluginConfig {
+                plugin: p.to_owned(),
+                plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+            };
+
+            sc.set_plugin(plugin);
+        }
 
         config.server.push(sc);
     }
 
     if let Some(url) = matches.value_of("URL") {
-        let svr_addr = url.parse::<ServerConfig>().expect("parse `url`");
+        let svr_addr = url.parse::<ServerConfig>().expect("server SIP002 url");
         config.server.push(svr_addr);
     }
 
     if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {
-        let local_addr = local_addr
-            .parse::<ServerAddr>()
-            .expect("`local-addr` should be \"IP:Port\" or \"Domain:Port\"");
-
+        let local_addr = local_addr.parse::<ServerAddr>().expect("local bind addr");
         config.local_addr = Some(local_addr);
-    }
-
-    if let Some(url) = matches.value_of("FORWARD_ADDR") {
-        let forward_addr = url.parse::<Address>().expect("parse `url`");
-
-        config.forward = Some(forward_addr);
     }
 
     if matches.is_present("UDP_ONLY") {
@@ -170,18 +144,6 @@ fn main() {
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
     }
-
-    if let Some(p) = matches.value_of("PLUGIN") {
-        let plugin = PluginConfig {
-            plugin: p.to_owned(),
-            plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
-        };
-
-        // Overrides config in file
-        for svr in config.server.iter_mut() {
-            svr.set_plugin(plugin.clone());
-        }
-    };
 
     if let Some(nofile) = matches.value_of("NOFILE") {
         config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
