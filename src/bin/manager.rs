@@ -30,6 +30,8 @@ mod monitor;
 mod validator;
 
 fn main() {
+    let available_ciphers = CipherType::available_ciphers();
+
     let app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
@@ -40,7 +42,7 @@ fn main() {
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&CipherType::available_ciphers()) requires[SERVER_ADDR PASSWORD] "Encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) "Encryption method")
         (@group MANAGER_CONFIG =>
             (@attributes +required ... arg[CONFIG MANAGER_ADDRESS])
         )
@@ -56,6 +58,8 @@ fn main() {
                 .help("Resovle hostname to IPv6 address first"),
         )
         .get_matches();
+
+    drop(available_ciphers);
 
     let debug_level = matches.occurrences_of("VERBOSE");
     logging::init(debug_level, "ssmanager", matches.is_present("LOG_WITHOUT_TIME"));
