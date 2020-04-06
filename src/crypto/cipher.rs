@@ -815,7 +815,7 @@ mod test_cipher {
 
     #[test]
     fn classic_bytes_to_key() {
-        let ty = CipherType::Aes128Cfb;
+        let ty = CipherType::Aes256Gcm;
         let vkey = ty.classic_bytes_to_key(b"abc");
         assert_eq!(
             &b"\x90\x01P\x98<\xd2O\xb0\xd6\x96?}(\xe1\x7fr\xea\x0b1\xe1\x08z\"\xbcS\x94\xa6cnn\xd3K"[..],

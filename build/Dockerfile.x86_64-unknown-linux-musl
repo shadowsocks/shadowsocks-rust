@@ -4,7 +4,7 @@ ARG HTTPS_PROXY
 FROM rustembedded/cross:x86_64-unknown-linux-musl
 
 ARG SODIUM_VERS="1.0.18"
-ARG OPENSSL_VERS="1.1.1d"
+ARG OPENSSL_VERS="1.1.1f"
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y curl
