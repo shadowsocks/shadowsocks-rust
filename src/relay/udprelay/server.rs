@@ -8,13 +8,13 @@ use std::{
 };
 
 use bytes::BytesMut;
-use futures::{self, future, stream::FuturesUnordered, StreamExt};
+use futures::{future, future::AbortHandle, stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
     net::udp::{RecvHalf, SendHalf},
-    sync::{mpsc, oneshot, Mutex},
+    sync::{mpsc, Mutex},
     time,
 };
 
@@ -35,17 +35,20 @@ use super::{
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
-struct UdpAssociationWatcher(oneshot::Sender<()>);
-
 // Represent a UDP association
-#[derive(Clone)]
 struct UdpAssociation {
     // local -> remote Queue
     // Drops tx, will close local -> remote task
     tx: mpsc::Sender<Vec<u8>>,
 
     // local <- remote task life watcher
-    watcher: Arc<UdpAssociationWatcher>,
+    watcher: AbortHandle,
+}
+
+impl Drop for UdpAssociation {
+    fn drop(&mut self) {
+        self.watcher.abort();
+    }
 }
 
 impl UdpAssociation {
@@ -76,11 +79,6 @@ impl UdpAssociation {
         // FIXME: Channel size 1024?
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
-        // Create a watcher for local <- remote task
-        let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
-
-        let close_flag = Arc::new(UdpAssociationWatcher(watcher_tx));
-
         // Splits socket into sender and receiver
         let (mut receiver, mut sender) = remote_udp.split();
 
@@ -95,7 +93,7 @@ impl UdpAssociation {
                 while let Some(pkt) = rx.recv().await {
                     // pkt is already a raw packet, so just send it
                     if let Err(err) =
-                        UdpAssociation::relay_l2r(&*context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
+                        UdpAssociation::relay_l2r(&context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
                     {
                         error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
@@ -107,31 +105,26 @@ impl UdpAssociation {
             });
         }
 
-        // local <- remote
-        tokio::spawn(async move {
-            let transfer_fut = async move {
-                let svr_cfg = context.server_config(svr_idx);
+        let (r2l_task, close_flag) = future::abortable(async move {
+            let svr_cfg = context.server_config(svr_idx);
 
-                loop {
-                    // Read and send back to source
-                    match UdpAssociation::relay_r2l(&*context, src_addr, &mut receiver, &mut response_tx, svr_cfg).await
-                    {
-                        Ok(..) => {}
-                        Err(err) => {
-                            error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
+            loop {
+                // Read and send back to source
+                match UdpAssociation::relay_r2l(&context, src_addr, &mut receiver, &mut response_tx, svr_cfg).await {
+                    Ok(..) => {}
+                    Err(err) => {
+                        error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
 
-                            // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
-                            // break;
-                        }
+                        // FIXME: Don't break, or if you can find a way to drop the UdpAssociation
+                        // break;
                     }
                 }
-            };
+            }
+        });
 
-            // Resolved only if watcher_rx resolved
-            tokio::pin!(transfer_fut);
-            tokio::pin!(watcher_rx);
-
-            let _ = future::select(transfer_fut, watcher_rx).await;
+        // local <- remote
+        tokio::spawn(async move {
+            let _ = r2l_task.await;
 
             debug!("UDP ASSOCIATE {} <- .. finished", src_addr);
         });
@@ -367,7 +360,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
         }
 
         // Check or (re)create an association
-        let mut assoc = {
+        {
             // Locks the whole association map
             let mut assoc_map = assoc_map.lock().await;
 
@@ -381,13 +374,10 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
                 ),
             };
 
-            // Clone the handle and release the lock.
-            // Make sure we keep the critical section small
-            assoc.clone()
-        };
-
-        // Send to local -> remote task
-        assoc.send(pkt.to_vec()).await;
+            // FIXME: Lock is still kept for a mutable reference
+            // Send to local -> remote task
+            assoc.send(pkt.to_vec()).await;
+        }
     }
 }
 
