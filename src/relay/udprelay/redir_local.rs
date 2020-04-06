@@ -75,7 +75,7 @@ impl ProxySend for ProxyHandler {
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local_addr.as_ref().expect("missing local config");
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let ty = context.config().udp_redir;
 

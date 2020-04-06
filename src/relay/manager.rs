@@ -255,7 +255,7 @@ struct ManagerService {
 
 impl ManagerService {
     async fn bind(bind_addr: &ManagerAddr, context: SharedContext) -> io::Result<ManagerService> {
-        let socket = ManagerDatagram::bind(bind_addr, &*context).await?;
+        let socket = ManagerDatagram::bind(bind_addr, &context).await?;
 
         Ok(ManagerService {
             socket,

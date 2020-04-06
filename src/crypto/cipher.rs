@@ -4,12 +4,12 @@ use std::{
     convert::From,
     fmt::{self, Debug, Display},
     io,
-    mem,
     str::{self, FromStr},
 };
 
-use crate::crypto::digest::{self, Digest, DigestType};
 use bytes::{BufMut, Bytes, BytesMut};
+use digest::Digest;
+use md5::Md5;
 #[cfg(feature = "camellia-cfb")]
 use openssl::nid::Nid;
 #[cfg(feature = "openssl")]
@@ -370,30 +370,24 @@ impl CipherType {
     }
 
     fn classic_bytes_to_key(self, key: &[u8]) -> Bytes {
-        let iv_len = self.iv_size();
+        // key derivation by MD5 hash
+
         let key_len = self.key_size();
+        let digest_len = Md5::output_size();
 
-        if iv_len + key_len == 0 {
-            return Bytes::new();
-        }
+        let mut result = BytesMut::with_capacity((key_len + digest_len - 1) / digest_len);
+        let mut m = None;
 
-        let mut digest = digest::with_type(DigestType::Md5);
+        let mut d = Md5::new();
+        while result.len() < key_len {
+            if let Some(ref rm) = m {
+                d.input(rm);
+            }
+            d.input(key);
+            let digest = d.result_reset();
+            result.put(&*digest);
 
-        let total_loop = (key_len + iv_len + digest.digest_len() - 1) / digest.digest_len();
-        let m_length = digest.digest_len() + key.len();
-
-        let mut result = BytesMut::with_capacity(total_loop * digest.digest_len());
-        let mut m = BytesMut::with_capacity(key.len());
-
-        for _ in 0..total_loop {
-            let mut vkey = mem::replace(&mut m, BytesMut::with_capacity(m_length));
-            vkey.put(key);
-
-            digest.update(&vkey);
-            digest.digest(&mut m);
-            digest.reset();
-
-            result.put_slice(&m);
+            m = Some(digest);
         }
 
         result.truncate(key_len);
@@ -796,7 +790,7 @@ mod test_cipher {
     use crate::crypto::{new_stream, CipherType, CryptoMode};
 
     #[test]
-    fn test_get_cipher() {
+    fn get_cipher() {
         let key = CipherType::Table.bytes_to_key(b"PassWORD");
         let iv = CipherType::Table.gen_init_vec();
         let mut encryptor = new_stream(CipherType::Table, &key[0..], &iv[0..], CryptoMode::Encrypt);
@@ -813,9 +807,19 @@ mod test_cipher {
 
     #[cfg(feature = "rc4")]
     #[test]
-    fn test_rc4_md5_key_iv() {
+    fn rc4_md5_key_iv() {
         let ty = CipherType::Rc4Md5;
         assert_eq!(ty.key_size(), 16);
         assert_eq!(ty.iv_size(), 16);
+    }
+
+    #[test]
+    fn classic_bytes_to_key() {
+        let ty = CipherType::Aes128Cfb;
+        let vkey = ty.classic_bytes_to_key(b"abc");
+        assert_eq!(
+            &b"\x90\x01P\x98<\xd2O\xb0\xd6\x96?}(\xe1\x7fr\xea\x0b1\xe1\x08z\"\xbcS\x94\xa6cnn\xd3K"[..],
+            &vkey
+        );
     }
 }

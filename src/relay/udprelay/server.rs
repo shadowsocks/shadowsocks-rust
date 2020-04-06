@@ -67,7 +67,7 @@ impl UdpAssociation {
             }
             Some(ref addr) => {
                 // Uses configured local address
-                addr.bind_addr(&*context).await?
+                addr.bind_addr(&context).await?
             }
         };
         let remote_udp = create_udp_socket(&local_addr).await?;
@@ -271,7 +271,7 @@ impl UdpAssociation {
 
 async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, svr_idx: usize) -> io::Result<()> {
     let svr_cfg = context.server_config(svr_idx);
-    let listen_addr = svr_cfg.addr().bind_addr(&*context).await?;
+    let listen_addr = svr_cfg.addr().bind_addr(&context).await?;
 
     let listener = create_udp_socket(&listen_addr).await?;
     let local_addr = listener.local_addr().expect("determine port bound to");

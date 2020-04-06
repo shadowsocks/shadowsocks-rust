@@ -178,7 +178,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         }
     };
 
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let socket = create_udp_socket(&bind_addr).await?;
 

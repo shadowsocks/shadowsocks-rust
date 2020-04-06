@@ -2,15 +2,12 @@
 
 use std::io::Cursor;
 
-use crate::crypto::{
-    digest::{self, Digest, DigestType},
-    CipherResult,
-    CryptoMode,
-    StreamCipher,
-};
+use crate::crypto::{CipherResult, CryptoMode, StreamCipher};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use bytes::{BufMut, BytesMut};
+use digest::Digest;
+use md5::Md5;
 
 const TABLE_SIZE: usize = 256usize;
 
@@ -21,12 +18,9 @@ pub struct TableCipher {
 
 impl TableCipher {
     pub fn new(key: &[u8], mode: CryptoMode) -> TableCipher {
-        let mut md5_digest = digest::with_type(DigestType::Md5);
-        md5_digest.update(key);
-        let mut key_digest = BytesMut::with_capacity(md5_digest.digest_len());
-        md5_digest.digest(&mut key_digest);
+        let key_digest = Md5::digest(key);
 
-        let mut bufr = Cursor::new(&key_digest[..]);
+        let mut bufr = Cursor::new(&key_digest);
         let a = bufr.read_u64::<LittleEndian>().unwrap();
 
         let mut table = [0u64; TABLE_SIZE];

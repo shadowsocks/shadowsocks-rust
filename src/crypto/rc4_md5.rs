@@ -1,15 +1,10 @@
 //! Rc4Md5 cipher definition
 
-use crate::crypto::{
-    digest::{self, Digest, DigestType},
-    openssl::OpenSSLCrypto,
-    CipherResult,
-    CipherType,
-    CryptoMode,
-    StreamCipher,
-};
+use crate::crypto::{openssl::OpenSSLCrypto, CipherResult, CipherType, CryptoMode, StreamCipher};
 
-use bytes::{BufMut, BytesMut};
+use bytes::BufMut;
+use digest::Digest;
+use md5::Md5;
 
 /// Rc4Md5 Cipher
 pub struct Rc4Md5Cipher {
@@ -18,11 +13,11 @@ pub struct Rc4Md5Cipher {
 
 impl Rc4Md5Cipher {
     pub fn new(key: &[u8], iv: &[u8], mode: CryptoMode) -> Rc4Md5Cipher {
-        let mut md5_digest = digest::with_type(DigestType::Md5);
-        md5_digest.update(key);
-        md5_digest.update(iv);
-        let mut key = BytesMut::with_capacity(md5_digest.digest_len());
-        md5_digest.digest(&mut key);
+        let mut md5_digest = Md5::new();
+        md5_digest.input(key);
+        md5_digest.input(iv);
+
+        let key = md5_digest.result();
 
         Rc4Md5Cipher {
             crypto: OpenSSLCrypto::new(CipherType::Rc4, &key, b"", mode),

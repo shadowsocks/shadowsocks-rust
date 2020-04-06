@@ -73,7 +73,7 @@ async fn handle_client(
     let bind_addr = match context.config().local_addr {
         None => None,
         Some(ref addr) => {
-            let ba = addr.bind_addr(&*context).await?;
+            let ba = addr.bind_addr(&context).await?;
             Some(ba)
         }
     };
@@ -94,7 +94,7 @@ async fn handle_client(
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            let result = lookup_outbound_then!(&*context, dname.as_str(), port, |addr| {
+            let result = lookup_outbound_then!(&context, dname.as_str(), port, |addr| {
                 match try_timeout(connect_tcp_stream(&addr, &bind_addr), timeout).await {
                     Ok(s) => Ok(s),
                     Err(err) => {
@@ -164,7 +164,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
     for (idx, svr_cfg) in context.config().server.iter().enumerate() {
         let mut listener = {
             let addr = svr_cfg.external_addr();
-            let addr = addr.bind_addr(&*context).await?;
+            let addr = addr.bind_addr(&context).await?;
 
             let listener = TcpListener::bind(&addr)
                 .await

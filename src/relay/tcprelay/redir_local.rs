@@ -89,7 +89,7 @@ async fn handle_redir_client(server: &SharedPlainServerStatistic, s: TcpStream, 
 
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local_addr.as_ref().expect("local config");
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let redir_ty = context.config().tcp_redir;
 

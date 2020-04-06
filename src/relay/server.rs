@@ -124,7 +124,7 @@ async fn manager_report_task(context: SharedContext, flow_stat: SharedMultiServe
             if let Some(ref fstat) = flow_stat.get(port) {
                 let stat = format!("stat: {{\"{}\":{}}}", port, fstat.trans_stat());
 
-                match socket.send_to_manager(stat.as_bytes(), &*context, &manager_addr).await {
+                match socket.send_to_manager(stat.as_bytes(), &context, &manager_addr).await {
                     Ok(..) => {
                         trace!(
                             "sent {} for server \"{}\" to manger \"{}\"",

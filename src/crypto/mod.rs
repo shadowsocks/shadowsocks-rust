@@ -10,7 +10,6 @@ use ::openssl::symm;
 
 pub mod aead;
 pub mod cipher;
-pub mod digest;
 pub mod dummy;
 #[cfg(feature = "openssl")]
 pub mod openssl;

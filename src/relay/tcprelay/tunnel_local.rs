@@ -95,7 +95,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     );
 
     let local_addr = context.config().local_addr.as_ref().expect("local config");
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let mut listener = TcpListener::bind(&bind_addr)
         .await

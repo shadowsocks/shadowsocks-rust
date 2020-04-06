@@ -230,7 +230,7 @@ impl<S: ServerData> ServerStatistic<S> {
     }
 
     pub fn context(&self) -> &Context {
-        &*self.context
+        &self.context
     }
 
     pub fn clone_context(&self) -> SharedContext {

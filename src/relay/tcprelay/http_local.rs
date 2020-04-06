@@ -639,7 +639,7 @@ impl ServerData for ServerScore {
 /// Starts a TCP local server with HTTP proxy protocol
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local_addr.as_ref().expect("local config");
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let bypass_client = Client::builder().build::<_, Body>(DirectConnector::new(context.clone()));
     let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;

@@ -44,7 +44,7 @@ impl ProxySend for ProxyHandler {
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local_addr.as_ref().expect("local config");
-    let bind_addr = local_addr.bind_addr(&*context).await?;
+    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let l = create_udp_socket(&bind_addr).await?;
     let local_addr = l.local_addr().expect("could not determine port bound to");
