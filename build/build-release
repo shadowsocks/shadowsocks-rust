@@ -32,7 +32,7 @@ function build() {
     RELEASE_DIR="target/${TARGET}/release"
 
     cross build --target "${TARGET}" \
-                --features "aes-pmac-siv" \
+                --features "aes-pmac-siv openssl-vendored" \
                 --release
 
     if [[ $? != "0" ]]; then

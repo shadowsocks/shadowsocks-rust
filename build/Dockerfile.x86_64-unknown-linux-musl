@@ -1,34 +1,3 @@
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-
 FROM rustembedded/cross:x86_64-unknown-linux-musl
 
-ARG SODIUM_VERS="1.0.18"
-ARG OPENSSL_VERS="1.1.1f"
-
-RUN apt-get update && \
-    apt-get install --no-install-recommends -y curl
-
-# Build a static copy of openssl
-RUN curl -LO https://www.openssl.org/source/openssl-${OPENSSL_VERS}.tar.gz && \
-    tar xzf openssl-${OPENSSL_VERS}.tar.gz && cd openssl-${OPENSSL_VERS} && \
-    ./Configure --prefix=/usr/local/musl linux-x86_64 -DOPENSSL_NO_SECURE_MEMORY --cross-compile-prefix=x86_64-linux-musl- no-shared no-dso no-ssl3 no-unit-test no-comp no-zlib no-zlib-dynamic && \
-    make -j${nprocs} depend && make -j${nprocs} build_libs && make install_dev && \
-    cd .. && rm -rf openssl-${OPENSSL_VERS}.tar.gz openssl-${OPENSSL_VERS}
-
-# Build a static copy of libsodium.
-RUN curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM_VERS.tar.gz && \
-    tar xzf libsodium-$SODIUM_VERS.tar.gz && cd libsodium-$SODIUM_VERS && \
-    AR=x86_64-linux-musl-ar CC=x86_64-linux-musl-gcc ./configure --prefix=/usr/local/musl --enable-shared=no --host=x86_64-unknown-linux-musl && \
-    V=1 make -j${nprocs} && make install && \
-    cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
-
-ENV OPENSSL_DIR=/usr/local/musl \
-    OPENSSL_INCLUDE_DIR=/usr/local/musl/include \
-    OPENSSL_LIB_DIR=/usr/local/musl/lib \
-    OPENSSL_STATIC=1 \
-    SODIUM_LIB_DIR=/usr/local/musl/lib \
-    PKG_CONFIG_ALLOW_CROSS=true \
-    PKG_CONFIG_ALL_STATIC=true \
-    PKG_CONFIG_PATH=/usr/local/musl/lib/pkgconfig \
-    RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"
+ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"

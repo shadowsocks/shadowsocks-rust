@@ -18,14 +18,14 @@ jobs:
             - checkout
             - run: |
                   sudo apt-get update
-                  sudo apt-get install -y build-essential libssl-dev
+                  sudo apt-get install -y build-essential
             - run: |
                   rustc --version >rust-version
                   test -e Cargo.lock || cargo generate-lockfile
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run:
-                  command: ./build-host-release
+                  command: BUILD_EXTRA_FEATURES="openssl-vendored" ./build-host-release
                   no_output_timeout: 1h
             - save_cache:
                   paths:
@@ -73,9 +73,6 @@ jobs:
                   dir
                   Start-Process "${OpenSSLFileName}" -ArgumentList "/SILENT /VERYSILENT /SP- /SUPPRESSMSGBOXES /DIR=C:\OpenSSL" -Wait
                   Write-Host "* Done installing ${OpenSSLFileName}"
-                  dir C:\
-                  dir ${env:OPENSSL_DIR}
-                  dir "${env:OPENSSL_DIR}\lib"
             - run: |
                   $env:Path += ";C:\Users\circleci\.cargo\bin"
 
