@@ -61,8 +61,8 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 Nightly builds could be downloaded from [CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-rust).
 
 * `build-windows`: Build for `x86_64-pc-windows-msvc`
-* `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch)
-* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`
+* `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
+* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu` (statically linked)
 
 ### **Build from source**
 
