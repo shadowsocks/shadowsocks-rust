@@ -47,7 +47,7 @@ fn main() {
         (@arg UDP_ONLY: -u  [TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
 
-        (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configurtion file (https://shadowsocks.org/en/config/quick-guide.html)")
+        (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
 

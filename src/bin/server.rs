@@ -41,7 +41,7 @@ fn main() {
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
 
-        (@arg CONFIG: -c --config +takes_value required_unless("SERVER_ADDR") "Shadowsocks configurtion file (https://shadowsocks.org/en/config/quick-guide.html)")
+        (@arg CONFIG: -c --config +takes_value required_unless("SERVER_ADDR") "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
 

@@ -38,14 +38,19 @@ fn main() {
         (@arg VERBOSE: -v ... "Set the level of debug")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
-        (@arg CONFIG: -c --config +takes_value "Specify config file")
+
+        (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDRESS") +next_line_help
+            "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html), \
+                the only required fields are \"manager_address\" and \"manager_port\". \
+                Servers defined will be created when process is started.")
+
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
+
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) "Encryption method")
-        (@group MANAGER_CONFIG =>
-            (@attributes +required ... arg[CONFIG MANAGER_ADDRESS])
-        )
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) +next_line_help "Default encryption method")
+
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
