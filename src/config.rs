@@ -584,7 +584,7 @@ pub enum ConfigType {
     /// Config for HTTP local
     ///
     /// Requires `local` configuration
-    #[cfg(feature = "local-protocol-http")]
+    #[cfg(feature = "local-http")]
     HttpLocal,
 
     /// Config for tunnel local
@@ -615,7 +615,7 @@ impl ConfigType {
     pub fn is_local(self) -> bool {
         match self {
             ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::DnsLocal => true,
-            #[cfg(feature = "local-protocol-http")]
+            #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => true,
             #[cfg(feature = "local-redir")]
             ConfigType::RedirLocal => true,
@@ -627,7 +627,7 @@ impl ConfigType {
     pub fn is_server(self) -> bool {
         match self {
             ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::DnsLocal => false,
-            #[cfg(feature = "local-protocol-http")]
+            #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => false,
             #[cfg(feature = "local-redir")]
             ConfigType::RedirLocal => false,

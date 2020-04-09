@@ -53,7 +53,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
         // Tunnel mode controlled by this flag
         ConfigType::TunnelLocal => mode.enable_tcp(),
         // HTTP must be TCP
-        #[cfg(feature = "local-protocol-http")]
+        #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => true,
         // Redir mode controlled by this flag
         #[cfg(feature = "local-redir")]

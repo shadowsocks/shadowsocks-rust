@@ -9,10 +9,13 @@ use futures::future::{self, Either};
 use log::{error, info};
 use tokio::{self, runtime::Builder};
 
+#[cfg(feature = "local-redir")]
+use shadowsocks::config::RedirType;
 use shadowsocks::{
     acl::AccessControl,
     crypto::CipherType,
     plugin::PluginConfig,
+    relay::socks5::Address,
     run_local,
     Config,
     ConfigType,
@@ -27,8 +30,11 @@ mod validator;
 
 const AVAILABLE_PROTOCOLS: &[&str] = &[
     "socks5",
-    #[cfg(feature = "local-protocol-http")]
+    #[cfg(feature = "local-http")]
     "http",
+    "tunnel",
+    #[cfg(feature = "local-redir")]
+    "redir",
 ];
 
 fn main() {
@@ -38,23 +44,29 @@ fn main() {
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
         (@arg VERBOSE: -v ... "Set the level of debug")
-        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
+        (@arg UDP_ONLY: -u  [TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
-        (@arg CONFIG: -c --config +takes_value "Specify config file")
+
+        (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configurtion file (https://shadowsocks.org/en/config/quick-guide.html)")
+
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
+
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] "Encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] +next_line_help "Encryption method")
+
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
+
         (@arg URL: --("server-url") +takes_value {validator::validate_server_url} "Server address in SIP002 (https://shadowsocks.org/en/spec/SIP002-URI-Scheme.html) URL")
+
         (@group SERVER_CONFIG =>
-            (@attributes +required ... arg[CONFIG SERVER_ADDR URL])
-        )
-        (@group LOCAL_CONFIG =>
-            (@attributes +required ... arg[CONFIG LOCAL_ADDR])
-        )
-        (@arg PROTOCOL: --protocol +takes_value default_value("socks5") possible_values(AVAILABLE_PROTOCOLS) "Protocol that for communicating with clients")
+            (@attributes +multiple arg[SERVER_ADDR URL]))
+
+        (@arg FORWARD_ADDR: -f --("forward-addr") +takes_value {validator::validate_address} required_if("PROTOCOL", "tunnel") "Forwarding data directly to this address (for tunnel)")
+
+        (@arg PROTOCOL: --protocol +takes_value default_value("socks5") possible_values(AVAILABLE_PROTOCOLS) +next_line_help "Protocol that for communicating with clients")
+
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
@@ -67,6 +79,23 @@ fn main() {
             .short("6")
             .help("Resovle hostname to IPv6 address first"),
     );
+
+    #[cfg(feature = "local-redir")]
+    {
+        let available_redir_types = RedirType::available_types();
+
+        if RedirType::tcp_default() != RedirType::NotSupported {
+            app = clap_app!(@app (app)
+                (@arg TCP_REDIR: --("tcp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::tcp_default().name()) "TCP redir (transparent proxy) type")
+            );
+        }
+
+        if RedirType::udp_default() != RedirType::NotSupported {
+            app = clap_app!(@app (app)
+                (@arg UDP_REDIR: --("udp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::udp_default().name()) "UDP redir (transparent proxy) type")
+            );
+        }
+    }
 
     if cfg!(target_os = "android") {
         app = clap_app!(@app (app)
@@ -98,8 +127,11 @@ fn main() {
 
     let config_type = match matches.value_of("PROTOCOL") {
         Some("socks5") => ConfigType::Socks5Local,
-        #[cfg(feature = "local-protocol-http")]
+        #[cfg(feature = "local-http")]
         Some("http") => ConfigType::HttpLocal,
+        Some("tunnel") => ConfigType::TunnelLocal,
+        #[cfg(feature = "local-redir")]
+        Some("redir") => ConfigType::RedirLocal,
         Some(p) => panic!("not supported `protocol` \"{}\"", p),
         None => ConfigType::Socks5Local,
     };
@@ -214,6 +246,22 @@ fn main() {
 
     if matches.is_present("IPV6_FIRST") {
         config.ipv6_first = true;
+    }
+
+    if let Some(faddr) = matches.value_of("FORWARD_ADDR") {
+        let addr = faddr.parse::<Address>().expect("forward-addr");
+        config.forward = Some(addr);
+    }
+
+    #[cfg(feature = "local-redir")]
+    {
+        if let Some(tcp_redir) = matches.value_of("TCP_REDIR") {
+            config.tcp_redir = tcp_redir.parse::<RedirType>().expect("TCP redir type");
+        }
+
+        if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
+            config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
+        }
     }
 
     // DONE READING options

@@ -21,15 +21,6 @@ name = "ssserver"
 path = "src/bin/server.rs"
 
 [[bin]]
-name = "sstunnel"
-path = "src/bin/tunnel.rs"
-
-[[bin]]
-name = "ssredir"
-path = "src/bin/redir.rs"
-required-features = ["local-redir"]
-
-[[bin]]
 name = "ssurl"
 path = "src/bin/ssurl.rs"
 
@@ -44,7 +35,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-protocol-http"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http"]
 sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
@@ -58,7 +49,7 @@ dns-over-https = ["trust-dns-resolver/dns-over-https-rustls"]
 openssl-vendored = ["openssl/vendored"]
 local-dns-relay = []
 local-flow-stat = []
-local-protocol-http = ["hyper", "http", "tower"]
+local-http = ["hyper", "http", "tower"]
 local-redir = []
 
 [dependencies]

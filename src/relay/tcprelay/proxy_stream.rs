@@ -287,7 +287,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),
         ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::DnsLocal => svr_cfg.external_addr(),
-        #[cfg(feature = "local-protocol-http")]
+        #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => svr_cfg.external_addr(),
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => svr_cfg.external_addr(),

@@ -31,10 +31,7 @@ if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
     TARGET_SUFFIX=".exe"
 fi
 
-TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "sstunnel${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}")
-if [[ "${HOST_TRIPLE}" == *"-linux-"* ]]; then
-    TARGETS+=("ssredir${TARGET_SUFFIX}")
-fi
+TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}")
 
 RELEASE_FOLDER="${ROOT_DIR}/build/release"
 RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}-stable.${HOST_TRIPLE}"

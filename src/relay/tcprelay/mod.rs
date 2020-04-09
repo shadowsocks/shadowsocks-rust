@@ -17,7 +17,7 @@ mod aead;
 pub mod client;
 mod connection;
 mod crypto_io;
-#[cfg(feature = "local-protocol-http")]
+#[cfg(feature = "local-http")]
 mod http_local;
 pub mod local;
 mod monitor;
