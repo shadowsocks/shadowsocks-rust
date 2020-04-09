@@ -6,7 +6,7 @@
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
-use log::{error, info};
+use log::info;
 use tokio::{self, runtime::Builder};
 
 #[cfg(feature = "local-redir")]
@@ -140,8 +140,7 @@ fn main() {
         Some(cpath) => match Config::load_from_file(cpath, config_type) {
             Ok(cfg) => cfg,
             Err(err) => {
-                error!("{:?}", err);
-                return;
+                panic!("loading config \"{}\", {}", cpath, err);
             }
         },
         None => Config::new(config_type),
@@ -240,7 +239,12 @@ fn main() {
     }
 
     if let Some(acl_file) = matches.value_of("ACL") {
-        let acl = AccessControl::load_from_file(acl_file).expect("load ACL file");
+        let acl = match AccessControl::load_from_file(acl_file) {
+            Ok(acl) => acl,
+            Err(err) => {
+                panic!("loading ACL \"{}\", {}", acl_file, err);
+            }
+        };
         config.acl = Some(acl);
     }
 
