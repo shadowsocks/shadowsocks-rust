@@ -287,28 +287,28 @@ fn clear_hop_headers(headers: &mut HeaderMap<HeaderValue>) {
 
     for connection in headers.get_all("Connection") {
         if let Ok(conn) = connection.to_str() {
-            if !conn.eq_ignore_ascii_case("close") {
-                for header in conn.split(',') {
-                    let header = header.trim();
+            // close is a command instead of a header
+            if conn.eq_ignore_ascii_case("close") {
+                continue;
+            }
 
-                    if !header.eq_ignore_ascii_case("keep-alive") {
-                        extra_headers.push(header.to_owned());
-                    }
-                }
+            for header in conn.split(',') {
+                let header = header.trim();
+                extra_headers.push(header.to_owned());
             }
         }
     }
 
     for connection in headers.get_all("Proxy-Connection") {
         if let Ok(conn) = connection.to_str() {
-            if !conn.eq_ignore_ascii_case("close") {
-                for header in conn.split(',') {
-                    let header = header.trim();
+            // close is a command instead of a header
+            if conn.eq_ignore_ascii_case("close") {
+                continue;
+            }
 
-                    if !header.eq_ignore_ascii_case("keep-alive") {
-                        extra_headers.push(header.to_owned());
-                    }
-                }
+            for header in conn.split(',') {
+                let header = header.trim();
+                extra_headers.push(header.to_owned());
             }
         }
     }
@@ -478,6 +478,8 @@ async fn server_dispatch(
     client_addr: SocketAddr,
     bypass_client: DirectHttpClient,
 ) -> io::Result<Response<Body>> {
+    trace!("Request {} {:?}", client_addr, req);
+
     let context = svr_score.context();
 
     // Parse URI
@@ -565,6 +567,8 @@ async fn server_dispatch(
         set_conn_keep_alive(req.version(), req.headers_mut(), conn_keep_alive);
 
         let mut res = if context.check_target_bypassed(&host).await {
+            trace!("Bypassed {} -> {} {:?}", client_addr, host, req);
+
             // Keep connections in a global client instance
             match bypass_client.request(req).await {
                 Ok(res) => res,
@@ -581,6 +585,8 @@ async fn server_dispatch(
                 }
             }
         } else {
+            trace!("Proxied {} -> {} {:?}", client_addr, host, req);
+
             // Keep connections for clients in ServerScore::client
             //
             // client instance is kept for Keep-Alive connections
@@ -602,6 +608,8 @@ async fn server_dispatch(
             }
         };
 
+        trace!("Received {} <- {} {:?}", client_addr, host, res);
+
         let res_keep_alive = conn_keep_alive && check_keep_alive(res.version(), res.headers(), false);
 
         // Clear unforwardable headers
@@ -610,7 +618,9 @@ async fn server_dispatch(
         // Set Connection header
         set_conn_keep_alive(res.version(), res.headers_mut(), res_keep_alive);
 
-        debug!("HTTP {} relay {} <-> {} finished", method, client_addr, host,);
+        trace!("Response {} <- {} {:?}", client_addr, host, res);
+
+        debug!("HTTP {} relay {} <-> {} finished", method, client_addr, host);
 
         Ok(res)
     }
