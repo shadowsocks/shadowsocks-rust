@@ -212,10 +212,8 @@ All parameters are the same as Socks5 client, except `--protocol http`.
 ```bash
 # Read local client configuration from file
 # Set 127.0.0.1:8080 as the target for forwarding to
-sstunnel -c /path/to/shadowsocks.json -f "127.0.0.1:8080"
+sslocal -c /path/to/shadowsocks.json -f "127.0.0.1:8080" --protocol tunnel
 ```
-
-`sstunnel` basically works the same as `sslocal`, only it doesn't have any client negociation process, just establishes a tunnel to the `forward` address.
 
 ### Transparent Proxy Local client
 
@@ -226,10 +224,10 @@ sstunnel -c /path/to/shadowsocks.json -f "127.0.0.1:8080"
 
 ```bash
 # Read local client configuration from file
-ssredir -c /path/to/shadowsocks.json
+sslocal -c /path/to/shadowsocks.json --protocol redir
 ```
 
-Redirects connections with `iptables` configurations to the port that `ssredir` is listening on.
+Redirects connections with `iptables` configurations to the port that `sslocal` is listening on.
 
 ### Server
 
@@ -322,7 +320,7 @@ Example configuration:
 
 ## ACL
 
-`sslocal`, `ssserver`, `ssredir` and `ssmanager` support ACL file with syntax like [shadowsocks-libev](https://github.com/shadowsocks/shadowsocks-libev). Some examples could be found in [here](https://github.com/shadowsocks/shadowsocks-libev/tree/master/acl).
+`sslocal`, `ssserver`, and `ssmanager` support ACL file with syntax like [shadowsocks-libev](https://github.com/shadowsocks/shadowsocks-libev). Some examples could be found in [here](https://github.com/shadowsocks/shadowsocks-libev/tree/master/acl).
 
 ### Available sections
 
