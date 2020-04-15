@@ -31,11 +31,15 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `camellia-cfb` - Enabled `camellia-*-cfb` encryption algorithm.
 
+* `aes-pmac-siv` - Enabled `aes-*-pmac-siv` encryption algorithm. (Experimental)
+
 * `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using Tokio's `basic_scheduler`).
 
 * `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
 
-Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns"]`.
+* `local-http` - Allow using HTTP protocol for `sslocal`
+
+Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http"]`.
 
 NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`.
 
