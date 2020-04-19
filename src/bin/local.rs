@@ -195,8 +195,6 @@ fn main() {
     {
         use std::net::SocketAddr;
 
-        use shadowsocks::relay::socks5::Address;
-
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
