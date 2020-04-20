@@ -15,9 +15,9 @@ use std::path::PathBuf;
 use tokio::net::UnixStream;
 
 #[cfg(not(target_os = "android"))]
-use tokio::net::UdpSocket;
-#[cfg(not(target_os = "android"))]
 use std::net::{Ipv4Addr, SocketAddrV4};
+#[cfg(not(target_os = "android"))]
+use tokio::net::UdpSocket;
 
 use byteorder::{BigEndian, ByteOrder};
 use futures::future;
@@ -118,10 +118,8 @@ async fn proxy_lookup(
 async fn acl_lookup(
     context: SharedContext,
     svr_cfg: &ServerConfig,
-    #[cfg(target_os = "android")]
-    local: &PathBuf,
-    #[cfg(not(target_os = "android"))]
-    local: &SocketAddr,
+    #[cfg(target_os = "android")] local: &PathBuf,
+    #[cfg(not(target_os = "android"))] local: &SocketAddr,
     remote: &Address,
     qname: &Name,
     qtype: RecordType,

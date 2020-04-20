@@ -53,10 +53,8 @@ impl ProxyHandler {
 #[async_trait]
 impl ProxySend for ProxyHandler {
     async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()> {
-
         // Redirect only if the target is a SocketAddress
         if let Address::SocketAddress(ref dst_addr) = addr {
-
             // Create a socket binds to destination addr
             // This only works for systems that supports binding to non-local addresses
             let mut local_udp = UdpRedirSocket::bind(self.ty, dst_addr)?;
@@ -74,7 +72,10 @@ impl ProxySend for ProxyHandler {
             return Ok(());
         }
 
-        Err(io::Error::new(io::ErrorKind::Other, "Address from remote is not a socket addr"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Address from remote is not a socket addr",
+        ))
     }
 }
 
