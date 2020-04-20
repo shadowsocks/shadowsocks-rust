@@ -113,9 +113,9 @@ fn main() {
     #[cfg(feature = "local-dns-relay")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns") +takes_value {validator::validate_socket_addr} default_value("127.0.0.1:5353") "Specify the address of local DNS server (only for Android)")
-            (@arg REMOTE_DNS_ADDR: --("remote-dns") +takes_value {validator::validate_address} default_value("8.8.8.8:53") "Specify the address of remote DNS server (only for Android)")
-            (@arg DNS_LOCAL_ADDR: --("dns-relay") +takes_value {validator::validate_server_addr} default_value("127.0.0.1:5450") "Specify the address of DNS relay (only for Android)")
+            (@arg LOCAL_DNS_ADDR: --("local-dns") +takes_value {validator::validate_socket_addr} "Specify the address of local DNS server (only for Android)")
+            (@arg REMOTE_DNS_ADDR: --("remote-dns") +takes_value {validator::validate_address} "Specify the address of remote DNS server (only for Android)")
+            (@arg DNS_LOCAL_ADDR: --("dns-relay") +takes_value {validator::validate_server_addr} "Specify the address of DNS relay (only for Android)")
         );
     }
 
