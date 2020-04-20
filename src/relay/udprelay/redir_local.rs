@@ -28,8 +28,8 @@ type AssocMap = LruCache<String, ProxyAssociation>;
 type SharedAssocMap = Arc<Mutex<AssocMap>>;
 
 struct ProxyHandler {
+    ty: RedirType,
     src_addr: SocketAddr,
-    local_udp: UdpRedirSocket,
     cache_key: String,
     assoc_map: SharedAssocMap,
 }
@@ -38,17 +38,12 @@ impl ProxyHandler {
     pub fn new(
         ty: RedirType,
         src_addr: SocketAddr,
-        dst_addr: SocketAddr,
         cache_key: String,
         assoc_map: SharedAssocMap,
     ) -> io::Result<ProxyHandler> {
-        // Create a socket binds to destination addr
-        // This only works for systems that supports binding to non-local addresses
-        let local_udp = UdpRedirSocket::bind(ty, &dst_addr)?;
-
         Ok(ProxyHandler {
+            ty,
             src_addr,
-            local_udp,
             cache_key,
             assoc_map,
         })
@@ -57,18 +52,29 @@ impl ProxyHandler {
 
 #[async_trait]
 impl ProxySend for ProxyHandler {
-    async fn send_packet(&mut self, data: Vec<u8>) -> io::Result<()> {
-        self.local_udp.send_to(&data, &self.src_addr).await?;
+    async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()> {
 
-        // Update LRU
-        {
-            let mut amap = self.assoc_map.lock().await;
+        // Redirect only if the target is a SocketAddress
+        if let Address::SocketAddress(ref dst_addr) = addr {
 
-            // Check or update expire time
-            let _ = amap.get(&self.cache_key);
+            // Create a socket binds to destination addr
+            // This only works for systems that supports binding to non-local addresses
+            let mut local_udp = UdpRedirSocket::bind(self.ty, dst_addr)?;
+
+            local_udp.send_to(&data, &self.src_addr).await?;
+
+            // Update LRU
+            {
+                let mut amap = self.assoc_map.lock().await;
+
+                // Check or update expire time
+                let _ = amap.get(&self.cache_key);
+            }
+
+            return Ok(());
         }
 
-        Ok(())
+        Err(io::Error::new(io::ErrorKind::Other, "Address from remote is not a socket addr"))
     }
 }
 
@@ -146,7 +152,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     // Pick a server
                     let server = balancer.pick_server();
 
-                    let sender = match ProxyHandler::new(ty, src, dst, cache_key, assoc_map.clone()) {
+                    let sender = match ProxyHandler::new(ty, src, cache_key, assoc_map.clone()) {
                         Ok(s) => s,
                         Err(err) => {
                             error!("create UDP association for {} <-> {}, error: {}", src, dst, err);
