@@ -36,7 +36,7 @@ use super::{
 
 #[async_trait]
 pub trait ProxySend {
-    async fn send_packet(&mut self, data: Vec<u8>) -> io::Result<()>;
+    async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()>;
 }
 
 pub struct ProxyAssociation {
@@ -374,8 +374,8 @@ impl ProxyAssociation {
 
         loop {
             match Self::recv_packet_proxied(context, svr_cfg, &mut socket).await {
-                Ok(data) => {
-                    if let Err(err) = sender.send_packet(data).await {
+                Ok((addr, data)) => {
+                    if let Err(err) = sender.send_packet(addr, data).await {
                         error!("UDP association send {} <- .., error: {}", src_addr, err);
                     }
                 }
@@ -390,7 +390,7 @@ impl ProxyAssociation {
         context: &Context,
         svr_cfg: &ServerConfig,
         socket: &mut RecvHalf,
-    ) -> io::Result<Vec<u8>> {
+    ) -> io::Result<(Address, Vec<u8>)> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
@@ -408,7 +408,7 @@ impl ProxyAssociation {
         // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
         let mut cur = Cursor::new(decrypt_buf);
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
-        let _ = Address::read_from(&mut cur).await?;
+        let addr = Address::read_from(&mut cur).await?;
 
         let mut payload = Vec::new();
         cur.read_to_end(&mut payload)?;
@@ -418,6 +418,6 @@ impl ProxyAssociation {
             context.local_flow_statistic().udp().incr_rx(recv_n as u64);
         }
 
-        Ok(payload)
+        Ok((addr, payload))
     }
 }

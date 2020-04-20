@@ -15,6 +15,7 @@ use crate::{
     context::SharedContext,
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType},
+        socks5::Address,
         sys::create_udp_socket,
     },
 };
@@ -28,13 +29,13 @@ use super::{
 #[derive(Clone)]
 struct ProxyHandler {
     src_addr: SocketAddr,
-    response_tx: mpsc::Sender<(SocketAddr, Vec<u8>)>,
+    response_tx: mpsc::Sender<(SocketAddr, Address, Vec<u8>)>,
 }
 
 #[async_trait]
 impl ProxySend for ProxyHandler {
-    async fn send_packet(&mut self, data: Vec<u8>) -> io::Result<()> {
-        if let Err(err) = self.response_tx.send((self.src_addr, data)).await {
+    async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()> {
+        if let Err(err) = self.response_tx.send((self.src_addr, addr, data)).await {
             error!("UDP associate response channel error: {}", err);
         }
         Ok(())
@@ -69,11 +70,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     // FIXME: Channel size 1024?
-    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
+    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Address, Vec<u8>)>(1024);
     tokio::spawn(async move {
         let assoc_map = assoc_map_cloned;
 
-        while let Some((src, pkt)) = rx.recv().await {
+        while let Some((src, _, pkt)) = rx.recv().await {
             let cache_key = src.to_string();
             {
                 let mut amap = assoc_map.lock().await;
