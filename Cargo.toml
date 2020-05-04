@@ -35,7 +35,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls"]
 sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
@@ -46,10 +46,12 @@ single-threaded = []
 trust-dns = ["trust-dns-resolver"]
 dns-over-tls = ["trust-dns-resolver/dns-over-rustls"]
 dns-over-https = ["trust-dns-resolver/dns-over-https-rustls"]
-openssl-vendored = ["openssl/vendored"]
+openssl-vendored = ["openssl/vendored", "native-tls/vendored"]
 local-dns-relay = []
 local-flow-stat = []
 local-http = ["hyper", "http", "tower"]
+local-http-native-tls = ["tokio-tls", "native-tls"]
+local-http-rustls = ["tokio-rustls", "webpki-roots"]
 local-redir = []
 
 [dependencies]
@@ -61,6 +63,10 @@ chrono = "0.4"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
 tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
+tokio-tls = { version = "0.3", optional = true }
+native-tls = { version = "0.2", optional = true }
+tokio-rustls = { version = "0.13", optional = true }
+webpki-roots = { version = "0.19", optional = true }
 futures = "0.3"
 json5 = "0.2"
 base64 = "0.12"

@@ -36,6 +36,7 @@ use hyper::{
 };
 use log::{debug, error, info, trace};
 use pin_project::pin_project;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     context::SharedContext,
@@ -53,6 +54,108 @@ use crate::{
 
 use super::ProxyStream;
 
+#[pin_project]
+enum ProxyHttpStream {
+    Http(#[pin] ProxyStream),
+    #[cfg(feature = "local-http-native-tls")]
+    Https(#[pin] tokio_tls::TlsStream<ProxyStream>),
+    #[cfg(feature = "local-http-rustls")]
+    Https(#[pin] tokio_rustls::client::TlsStream<ProxyStream>),
+}
+
+impl ProxyHttpStream {
+    fn connect_http(stream: ProxyStream) -> ProxyHttpStream {
+        ProxyHttpStream::Http(stream)
+    }
+
+    #[cfg(feature = "local-http-native-tls")]
+    async fn connect_https(stream: ProxyStream, domain: &str) -> io::Result<ProxyHttpStream> {
+        use native_tls::TlsConnector;
+
+        let cx = match TlsConnector::builder().build() {
+            Ok(c) => c,
+            Err(err) => {
+                return Err(io::Error::new(ErrorKind::Other, format!("tls build: {}", err)));
+            }
+        };
+        let cx = tokio_tls::TlsConnector::from(cx);
+
+        cx.connect(domain, stream)
+            .await
+            .map(ProxyHttpStream::Https)
+            .map_err(|err| io::Error::new(ErrorKind::Other, format!("tls connect: {}", err)))
+    }
+
+    #[cfg(feature = "local-http-rustls")]
+    async fn connect_https(stream: ProxyStream, domain: &str) -> io::Result<ProxyHttpStream> {
+        use lazy_static::lazy_static;
+        use tokio_rustls::{rustls::ClientConfig, webpki::DNSNameRef, TlsConnector};
+
+        lazy_static! {
+            static ref TLS_CONFIG: Arc<ClientConfig> = {
+                let mut config = ClientConfig::new();
+                config
+                    .root_store
+                    .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                Arc::new(config)
+            };
+        }
+
+        let connector = TlsConnector::from(TLS_CONFIG.clone());
+
+        let host = match DNSNameRef::try_from_ascii_str(domain) {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(io::Error::new(ErrorKind::InvalidInput, "invalid dnsname"));
+            }
+        };
+
+        connector.connect(host, stream).await.map(ProxyHttpStream::Https)
+    }
+
+    #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
+    async fn connect_https(stream: ProxyStream, domain: &str) -> io::Result<ProxyHttpStream> {
+        let err = io::Error::new(
+            ErrorKind::Other,
+            "https is not supported, consider enable it by feature \"local-http-native-tls\" or \"local-http-rustls\"",
+        );
+        Err(err)
+    }
+}
+
+macro_rules! forward_call {
+    ($self:expr, $method:ident $(, $param:expr)*) => {
+        // #[project]
+        match $self.as_mut().project() {
+            // ProxyHttpStream::Http(stream) => stream.$method($($param),*),
+            __ProxyHttpStreamProjection::Http(stream) => stream.$method($($param),*),
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+            // ProxyHttpStream::Https(stream) => stream.$method($($param),*),
+            __ProxyHttpStreamProjection::Https(stream) => stream.$method($($param),*),
+        }
+    };
+}
+
+impl AsyncRead for ProxyHttpStream {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        forward_call!(self, poll_read, cx, buf)
+    }
+}
+
+impl AsyncWrite for ProxyHttpStream {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        forward_call!(self, poll_write, cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        forward_call!(self, poll_flush, cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
+        forward_call!(self, poll_shutdown, cx)
+    }
+}
+
 #[derive(Clone)]
 struct ShadowSocksConnector {
     context: SharedContext,
@@ -69,7 +172,7 @@ impl ShadowSocksConnector {
 impl tower::Service<Uri> for ShadowSocksConnector {
     type Error = io::Error;
     type Future = ShadowSocksConnecting;
-    type Response = ProxyStream;
+    type Response = ProxyHttpStream;
 
     fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -83,6 +186,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
         ShadowSocksConnecting {
             fut: async move {
                 let svr_cfg = context.server_config(svr_idx);
+                let is_https = dst.scheme_str() == Some("https");
 
                 match host_addr(&dst) {
                     None => {
@@ -95,7 +199,14 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                     }
                     Some(addr) => {
                         match ProxyStream::connect_proxied(context.clone(), svr_cfg, &addr).await {
-                            Ok(s) => Ok(s),
+                            Ok(s) => {
+                                if is_https {
+                                    let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
+                                    ProxyHttpStream::connect_https(s, host).await
+                                } else {
+                                    Ok(ProxyHttpStream::connect_http(s))
+                                }
+                            }
                             Err(err) => {
                                 // Report failure to global statistic
                                 stat.report_failure().await;
@@ -113,11 +224,11 @@ impl tower::Service<Uri> for ShadowSocksConnector {
 #[pin_project]
 struct ShadowSocksConnecting {
     #[pin]
-    fut: BoxFuture<'static, io::Result<ProxyStream>>,
+    fut: BoxFuture<'static, io::Result<ProxyHttpStream>>,
 }
 
 impl Future for ShadowSocksConnecting {
-    type Output = io::Result<ProxyStream>;
+    type Output = io::Result<ProxyHttpStream>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.project().fut.poll(cx)
@@ -138,7 +249,7 @@ impl DirectConnector {
 impl tower::Service<Uri> for DirectConnector {
     type Error = io::Error;
     type Future = DirectConnecting;
-    type Response = ProxyStream;
+    type Response = ProxyHttpStream;
 
     fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -149,6 +260,8 @@ impl tower::Service<Uri> for DirectConnector {
 
         DirectConnecting {
             fut: async move {
+                let is_https = dst.scheme_str() == Some("https");
+
                 match host_addr(&dst) {
                     None => {
                         use std::io::Error;
@@ -158,7 +271,16 @@ impl tower::Service<Uri> for DirectConnector {
                         let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
                         Err(err)
                     }
-                    Some(addr) => ProxyStream::connect_direct(context, &addr).await,
+                    Some(addr) => {
+                        let s = ProxyStream::connect_direct(context, &addr).await?;
+
+                        if is_https {
+                            let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
+                            ProxyHttpStream::connect_https(s, host).await
+                        } else {
+                            Ok(ProxyHttpStream::connect_http(s))
+                        }
+                    }
                 }
             }
             .boxed(),
@@ -169,11 +291,11 @@ impl tower::Service<Uri> for DirectConnector {
 #[pin_project]
 struct DirectConnecting {
     #[pin]
-    fut: BoxFuture<'static, io::Result<ProxyStream>>,
+    fut: BoxFuture<'static, io::Result<ProxyHttpStream>>,
 }
 
 impl Future for DirectConnecting {
-    type Output = io::Result<ProxyStream>;
+    type Output = io::Result<ProxyHttpStream>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         self.project().fut.poll(cx)
@@ -354,6 +476,12 @@ fn set_conn_keep_alive(version: Version, headers: &mut HeaderMap<HeaderValue>, k
 }
 
 impl Connection for ProxyStream {
+    fn connected(&self) -> Connected {
+        Connected::new()
+    }
+}
+
+impl Connection for ProxyHttpStream {
     fn connected(&self) -> Connected {
         Connected::new()
     }

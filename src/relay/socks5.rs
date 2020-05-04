@@ -317,6 +317,14 @@ impl Address {
             Address::DomainNameAddress(.., port) => port,
         }
     }
+
+    /// Get host address string
+    pub fn host(&self) -> String {
+        match *self {
+            Address::SocketAddress(ref addr) => addr.ip().to_string(),
+            Address::DomainNameAddress(ref domain, ..) => domain.to_owned(),
+        }
+    }
 }
 
 impl Debug for Address {
