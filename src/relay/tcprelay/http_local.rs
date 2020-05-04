@@ -58,9 +58,9 @@ use super::ProxyStream;
 enum ProxyHttpStream {
     Http(#[pin] ProxyStream),
     #[cfg(feature = "local-http-native-tls")]
-    Https(#[pin] tokio_tls::TlsStream<ProxyStream>),
+    Https(#[pin] tokio_tls::TlsStream<ProxyStream>, bool),
     #[cfg(feature = "local-http-rustls")]
-    Https(#[pin] tokio_rustls::client::TlsStream<ProxyStream>),
+    Https(#[pin] tokio_rustls::client::TlsStream<ProxyStream>, bool),
 }
 
 impl ProxyHttpStream {
@@ -80,16 +80,26 @@ impl ProxyHttpStream {
         };
         let cx = tokio_tls::TlsConnector::from(cx);
 
-        cx.connect(domain, stream)
-            .await
-            .map(ProxyHttpStream::Https)
-            .map_err(|err| io::Error::new(ErrorKind::Other, format!("tls connect: {}", err)))
+        match cx.connect(domain, stream).await {
+            Ok(s) => {
+                // FIXME: There is no API to set ALPN for negociating H2
+                Ok(ProxyHttpStream::Https(s, false))
+            }
+            Err(err) => {
+                let ierr = io::Error::new(ErrorKind::Other, format!("tls connect: {}", err));
+                Err(ierr)
+            }
+        }
     }
 
     #[cfg(feature = "local-http-rustls")]
     async fn connect_https(stream: ProxyStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use lazy_static::lazy_static;
-        use tokio_rustls::{rustls::ClientConfig, webpki::DNSNameRef, TlsConnector};
+        use tokio_rustls::{
+            rustls::{ClientConfig, Session},
+            webpki::DNSNameRef,
+            TlsConnector,
+        };
 
         lazy_static! {
             static ref TLS_CONFIG: Arc<ClientConfig> = {
@@ -97,6 +107,8 @@ impl ProxyHttpStream {
                 config
                     .root_store
                     .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                // Try to negociate HTTP/2
+                config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
                 Arc::new(config)
             };
         }
@@ -110,7 +122,12 @@ impl ProxyHttpStream {
             }
         };
 
-        connector.connect(host, stream).await.map(ProxyHttpStream::Https)
+        let tls_stream = connector.connect(host, stream).await?;
+
+        let (_, session) = tls_stream.get_ref();
+        let negociated_http2 = matches!(session.get_alpn_protocol(), Some(b"h2"));
+
+        Ok(ProxyHttpStream::Https(tls_stream, negociated_http2))
     }
 
     #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
@@ -121,6 +138,14 @@ impl ProxyHttpStream {
         );
         Err(err)
     }
+
+    fn negociated_http2(&self) -> bool {
+        match *self {
+            ProxyHttpStream::Http(..) => false,
+            #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+            ProxyHttpStream::Https(.., n) => n,
+        }
+    }
 }
 
 macro_rules! forward_call {
@@ -130,8 +155,8 @@ macro_rules! forward_call {
             // ProxyHttpStream::Http(stream) => stream.$method($($param),*),
             __ProxyHttpStreamProjection::Http(stream) => stream.$method($($param),*),
             #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
-            // ProxyHttpStream::Https(stream) => stream.$method($($param),*),
-            __ProxyHttpStreamProjection::Https(stream) => stream.$method($($param),*),
+            // ProxyHttpStream::Https(stream, ..) => stream.$method($($param),*),
+            __ProxyHttpStreamProjection::Https(stream, ..) => stream.$method($($param),*),
         }
     };
 }
@@ -353,9 +378,9 @@ fn host_addr(uri: &Uri) -> Option<Address> {
 
 fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_proxy: bool) -> bool {
     let mut conn_keep_alive = match version {
-        Version::HTTP_10 => false,
-        Version::HTTP_11 => true,
-        _ => unimplemented!("HTTP Proxy only supports 1.0 and 1.1"),
+        Version::HTTP_09 | Version::HTTP_10 => false,
+        // HTTP/1.1, HTTP/2, HTTP/3 keeps alive by default
+        _ => true,
     };
 
     if check_proxy {
@@ -459,31 +484,29 @@ fn clear_hop_headers(headers: &mut HeaderMap<HeaderValue>) {
 
 fn set_conn_keep_alive(version: Version, headers: &mut HeaderMap<HeaderValue>, keep_alive: bool) {
     match version {
-        Version::HTTP_10 => {
+        Version::HTTP_09 | Version::HTTP_10 => {
             // HTTP/1.0 close connection by default
             if keep_alive {
                 headers.insert("Connection", HeaderValue::from_static("keep-alive"));
             }
         }
-        Version::HTTP_11 => {
-            // HTTP/1.1 keep-alive connection by default
+        _ => {
+            // HTTP/1.1, HTTP/2, HTTP/3 keep-alive connection by default
             if !keep_alive {
                 headers.insert("Connection", HeaderValue::from_static("close"));
             }
         }
-        _ => unimplemented!("HTTP Proxy only supports 1.0 and 1.1"),
-    }
-}
-
-impl Connection for ProxyStream {
-    fn connected(&self) -> Connected {
-        Connected::new()
     }
 }
 
 impl Connection for ProxyHttpStream {
     fn connected(&self) -> Connected {
-        Connected::new()
+        let conn = Connected::new();
+        if self.negociated_http2() {
+            conn.negotiated_h2()
+        } else {
+            conn
+        }
     }
 }
 
@@ -606,7 +629,7 @@ async fn server_dispatch(
     client_addr: SocketAddr,
     bypass_client: DirectHttpClient,
 ) -> io::Result<Response<Body>> {
-    trace!("Request {} {:?}", client_addr, req);
+    trace!("request {} {:?}", client_addr, req);
 
     let context = svr_score.context();
 
@@ -682,20 +705,21 @@ async fn server_dispatch(
         Ok(resp)
     } else {
         let method = req.method().clone();
+        let version = req.version();
 
-        debug!("HTTP {} {}", method, host);
+        debug!("HTTP {} {} {:?}", method, host, version);
 
         // Check if client wants us to keep long connection
-        let conn_keep_alive = check_keep_alive(req.version(), req.headers(), true);
+        let conn_keep_alive = check_keep_alive(version, req.headers(), true);
 
         // Remove non-forwardable headers
         clear_hop_headers(req.headers_mut());
 
         // Set keep-alive for connection with remote
-        set_conn_keep_alive(req.version(), req.headers_mut(), conn_keep_alive);
+        set_conn_keep_alive(version, req.headers_mut(), conn_keep_alive);
 
         let mut res = if context.check_target_bypassed(&host).await {
-            trace!("Bypassed {} -> {} {:?}", client_addr, host, req);
+            trace!("bypassed {} -> {} {:?}", client_addr, host, req);
 
             // Keep connections in a global client instance
             match bypass_client.request(req).await {
@@ -713,7 +737,7 @@ async fn server_dispatch(
                 }
             }
         } else {
-            trace!("Proxied {} -> {} {:?}", client_addr, host, req);
+            trace!("proxied {} -> {} {:?}", client_addr, host, req);
 
             // Keep connections for clients in ServerScore::client
             //
@@ -736,17 +760,23 @@ async fn server_dispatch(
             }
         };
 
-        trace!("Received {} <- {} {:?}", client_addr, host, res);
+        trace!("received {} <- {} {:?}", client_addr, host, res);
 
         let res_keep_alive = conn_keep_alive && check_keep_alive(res.version(), res.headers(), false);
 
         // Clear unforwardable headers
         clear_hop_headers(res.headers_mut());
 
+        if res.version() != version {
+            // Reset version to matches req's version
+            trace!("response version {:?} => {:?}", res.version(), version);
+            *res.version_mut() = version;
+        }
+
         // Set Connection header
         set_conn_keep_alive(res.version(), res.headers_mut(), res_keep_alive);
 
-        trace!("Response {} <- {} {:?}", client_addr, host, res);
+        trace!("response {} <- {} {:?}", client_addr, host, res);
 
         debug!("HTTP {} relay {} <-> {} finished", method, client_addr, host);
 
