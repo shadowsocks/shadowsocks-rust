@@ -20,7 +20,6 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::net::UdpSocket;
 
 use byteorder::{BigEndian, ByteOrder};
-use futures::future;
 use log::{debug, error, info};
 use rand::Rng;
 use trust_dns_proto::{
@@ -123,65 +122,70 @@ async fn acl_lookup(
     remote: &Address,
     qname: &Name,
     qtype: RecordType,
-) -> io::Result<Message> {
+) -> io::Result<(Message, bool)> {
     // Start querying name servers
     debug!(
         "attempting lookup of {:?} {} with ns {:?} and {:?}",
         qtype, qname, local, remote
     );
 
-    let timeout = Some(Duration::new(3, 0));
-    let local_response_fut = try_timeout(local_lookup(qname, qtype, local), timeout);
-
-    let timeout = Some(Duration::new(3, 0));
-    let remote_response_fut = try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout);
-
-    let (local_response, remote_response) = future::join(local_response_fut, remote_response_fut).await;
-    let local_response = local_response.unwrap_or_else(|_| Message::new());
-    let remote_response = remote_response.unwrap_or_else(|_| Message::new());
-
     // remove the last dot from fqdn name
     let mut name = qname.to_ascii();
     name.pop();
     let addr = Address::DomainNameAddress(name, 0);
-    let qname_in_proxy_list = context.check_qname_in_proxy_list(&addr).await;
+    let qname_in_proxy_list = context.check_qname_in_proxy_list(&addr);
 
-    let mut ip_bypassed = false;
-    for rec in local_response.answers() {
-        let bypassed = match rec.rdata() {
-            RData::A(ref ip) => {
-                let addr = Address::SocketAddress(SocketAddr::new(IpAddr::from(*ip), 0));
-                context.check_target_bypassed(&addr).await
+    let remote_response_fut = async {
+        match qname_in_proxy_list {
+            Some(false) => None,
+            _ => {
+                let timeout = Some(Duration::new(3, 0));
+                try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout).await.ok()
             }
-            RData::AAAA(ref ip) => {
-                let addr = Address::SocketAddress(SocketAddr::new(IpAddr::from(*ip), 0));
-                context.check_target_bypassed(&addr).await
-            }
-            _ => false,
-        };
-        if bypassed {
-            ip_bypassed = true;
         }
+    };
+
+    let local_response = match qname_in_proxy_list {
+        Some(true) => None,
+        _ => {
+            let timeout = Some(Duration::new(3, 0));
+            try_timeout(local_lookup(qname, qtype, local), timeout).await.ok()
+        }
+    }.unwrap_or_else(|| Message::new());
+
+    match qname_in_proxy_list {
+        Some(true) => {
+            let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
+            debug!("pick remote response (qname): {:?}", remote_response);
+            return Ok((remote_response.clone(), true));
+        }
+        Some(false) => {
+            debug!("pick local response (qname): {:?}", local_response);
+            return Ok((local_response.clone(), false));
+        }
+        None => (),
     }
 
     if local_response.answer_count() == 0 {
-        return Ok(remote_response.clone());
+        let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
+        return Ok((remote_response.clone(), true));
     }
 
-    if remote_response.answer_count() == 0 {
-        return Ok(local_response.clone());
+    for rec in local_response.answers() {
+        let forward = match rec.rdata() {
+            RData::A(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
+            RData::AAAA(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
+            _ => true,
+        };
+        if !forward {
+            debug!("pick local response (ip): {:?}", local_response);
+            return Ok((local_response.clone(), false))
+        }
     }
 
-    if qname_in_proxy_list {
-        debug!("pick remote response (qname): {:?}", remote_response);
-        Ok(remote_response.clone())
-    } else if !ip_bypassed {
-        debug!("pick remote response (ip): {:?}", remote_response);
-        Ok(remote_response.clone())
-    } else {
-        debug!("pick DNS local response: {:?}", local_response);
-        Ok(local_response.clone())
-    }
+    let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
+    debug!("pick remote response (ip): {:?}", remote_response);
+    Ok((remote_response.clone(), true))
 }
 
 /// Start a DNS relay local server
@@ -191,7 +195,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             // Standalone server
             context.config().local_addr.as_ref().expect("local config")
         }
-        #[cfg(feature = "local-dns-relay")]
         c if c.is_local() => {
             // Integrated mode
             context.config().dns_local_addr.as_ref().expect("dns relay addr")
@@ -273,18 +276,13 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
                 let r = acl_lookup(context.clone(), svr_cfg, &local_addr, &remote_addr, qname, qtype).await;
 
-                if let Ok(result) = r {
-                    #[cfg(feature = "local-dns-relay")]
+                if let Ok((result, forward)) = r {
                     for rec in result.answers() {
                         debug!("dns answer: {:?}", rec);
 
-                        // Remove the last dot in fqdn name
-                        let mut name = question.name().to_ascii();
-                        name.pop();
-
                         match rec.rdata() {
-                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
-                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(IpAddr::from(*ip), name),
+                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::from(*ip), forward),
+                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::from(*ip), forward),
                             _ => (),
                         }
                     }

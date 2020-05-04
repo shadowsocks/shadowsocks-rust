@@ -170,9 +170,9 @@ pub struct Context {
     #[cfg(feature = "local-flow-stat")]
     local_flow_statistic: ServerFlowStatistic,
 
-    // For DNS relay's ACL domain name reverse lookup
+    // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
     #[cfg(feature = "local-dns-relay")]
-    reverse_lookup_cache: Mutex<LruCache<IpAddr, String>>,
+    reverse_lookup_cache: Mutex<LruCache<IpAddr, bool>>,
 }
 
 /// Unique context thw whole server
@@ -183,7 +183,7 @@ impl Context {
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns-relay")]
-        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, String>::with_capacity(8192));
+        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_capacity(8192));
 
         Context {
             config,
@@ -290,18 +290,39 @@ impl Context {
 
     /// Add a record to the reverse lookup cache
     #[cfg(feature = "local-dns-relay")]
-    pub fn add_to_reverse_lookup_cache(&self, addr: IpAddr, qname: String) {
+    pub fn add_to_reverse_lookup_cache(&self, addr: &IpAddr, forward: bool) {
+        if self.check_ip_in_proxy_list(addr) == forward {
+            return;
+        }
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-        reverse_lookup_cache.insert(addr, qname);
+        reverse_lookup_cache.insert(addr.clone(), forward);
     }
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub async fn check_qname_in_proxy_list(&self, qname: &Address) -> bool {
+    pub fn check_qname_in_proxy_list(&self, qname: &Address) -> Option<bool> {
         match self.config.acl {
             // Proxy everything by default
-            None => false,
-            Some(ref a) => a.check_qname_in_proxy_list(qname).await,
+            None => None,
+            Some(ref a) => a.check_qname_in_proxy_list(qname),
+        }
+    }
+
+    #[cfg(feature = "local-dns-relay")]
+    pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
+        match self.config.acl {
+            // Proxy everything by default
+            None => true,
+            Some(ref a) => {
+                // do the reverse lookup in our local cache
+                let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                // if a qname is found
+                if let Some(forward) = reverse_lookup_cache.get(ip) {
+                    !*forward
+                } else {
+                    a.check_ip_in_proxy_list(ip)
+                }
+            }
         }
     }
 
@@ -316,12 +337,9 @@ impl Context {
                     if let Address::SocketAddress(ref saddr) = target {
                         // do the reverse lookup in our local cache
                         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-                        // if a qanme is found
-                        if let Some(qname) = reverse_lookup_cache.get(&saddr.ip()) {
-                            let reverse_addr = Address::DomainNameAddress(qname.clone(), 0);
-                            if a.check_qname_in_proxy_list(&reverse_addr).await {
-                                return false;
-                            }
+                        // if a qname is found
+                        if let Some(forward) = reverse_lookup_cache.get(&saddr.ip()) {
+                            return !*forward
                         }
                     }
                 }
