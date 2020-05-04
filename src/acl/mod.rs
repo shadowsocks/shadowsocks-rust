@@ -67,16 +67,16 @@ impl Rules {
     /// Check if the specified address matches these rules
     fn check_address_matched(&self, addr: &Address) -> bool {
         match *addr {
-            Address::SocketAddress(ref saddr) => self.check_ip_matched(saddr),
+            Address::SocketAddress(ref saddr) => self.check_ip_matched(&saddr.ip()),
             Address::DomainNameAddress(ref domain, ..) => self.check_host_matched(domain),
         }
     }
 
     /// Check if the specified address matches any rules
-    fn check_ip_matched(&self, addr: &SocketAddr) -> bool {
-        match addr.ip() {
-            IpAddr::V4(v4) => self.ipv4.contains(&v4),
-            IpAddr::V6(v6) => self.ipv6.contains(&v6),
+    fn check_ip_matched(&self, addr: &IpAddr) -> bool {
+        match addr {
+            IpAddr::V4(v4) => self.ipv4.contains(v4),
+            IpAddr::V6(v6) => self.ipv6.contains(v6),
         }
     }
 
@@ -269,13 +269,22 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub async fn check_qname_in_proxy_list(&self, addr: &Address) -> bool {
+    pub fn check_qname_in_proxy_list(&self, addr: &Address) -> Option<bool> {
         // Addresses in proxy_list will be proxied
         if self.white_list.check_address_matched(addr) {
-            return true;
+            return Some(true);
         }
+        if self.black_list.check_address_matched(addr) {
+            return Some(false);
+        }
+        None
+    }
 
-        false
+    pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
+        match self.mode {
+            Mode::BlackList => self.black_list.check_ip_matched(ip),
+            Mode::WhiteList => !self.white_list.check_ip_matched(ip),
+        }
     }
 
     /// Check if target address should be bypassed (for client)
@@ -297,11 +306,11 @@ impl AccessControl {
             if let Address::DomainNameAddress(ref host, port) = *addr {
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
-                        if self.black_list.check_ip_matched(&addr) {
+                        if self.black_list.check_ip_matched(&addr.ip()) {
                             return true;
                         }
 
-                        if self.white_list.check_ip_matched(&addr) {
+                        if self.white_list.check_ip_matched(&addr.ip()) {
                             return false;
                         }
                     }
@@ -321,11 +330,11 @@ impl AccessControl {
         match self.mode {
             Mode::BlackList => {
                 // Only clients in black_list will be blocked
-                self.black_list.check_ip_matched(addr)
+                self.black_list.check_ip_matched(&addr.ip())
             }
             Mode::WhiteList => {
                 // Only clients in white_list will be proxied
-                !self.white_list.check_ip_matched(addr)
+                !self.white_list.check_ip_matched(&addr.ip())
             }
         }
     }
@@ -340,6 +349,6 @@ impl AccessControl {
 
     /// Check resolved outbound address is blocked (for server)
     pub fn check_resolved_outbound_blocked(&self, outbound: &SocketAddr) -> bool {
-        self.outbound_block.check_ip_matched(outbound)
+        self.outbound_block.check_ip_matched(&outbound.ip())
     }
 }

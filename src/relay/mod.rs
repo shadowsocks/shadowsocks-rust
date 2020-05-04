@@ -1,7 +1,7 @@
 //! Relay server in local and server side implementations.
 
-pub mod dns;
 pub(crate) mod dns_resolver;
+#[cfg(feature = "local-dns-relay")]
 pub mod dnsrelay;
 pub(crate) mod flow;
 pub(crate) mod loadbalancing;
