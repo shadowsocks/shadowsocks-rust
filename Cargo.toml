@@ -35,7 +35,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls"]
 sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]

@@ -83,6 +83,7 @@ impl ProxyHttpStream {
         match cx.connect(domain, stream).await {
             Ok(s) => {
                 // FIXME: There is no API to set ALPN for negociating H2
+                // https://github.com/sfackler/rust-native-tls/issues/49
                 Ok(ProxyHttpStream::Https(s, false))
             }
             Err(err) => {
@@ -118,7 +119,10 @@ impl ProxyHttpStream {
         let host = match DNSNameRef::try_from_ascii_str(domain) {
             Ok(n) => n,
             Err(_) => {
-                return Err(io::Error::new(ErrorKind::InvalidInput, "invalid dnsname"));
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("invalid dnsname \"{}\"", domain),
+                ));
             }
         };
 
@@ -143,7 +147,7 @@ impl ProxyHttpStream {
         match *self {
             ProxyHttpStream::Http(..) => false,
             #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
-            ProxyHttpStream::Https(.., n) => n,
+            ProxyHttpStream::Https(_, n) => n,
         }
     }
 }
