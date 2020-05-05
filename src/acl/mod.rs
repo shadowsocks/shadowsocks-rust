@@ -12,7 +12,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use regex::RegexSet;
+use regex::{RegexSet, RegexSetBuilder};
 
 use crate::{context::Context, relay::socks5::Address};
 
@@ -224,7 +224,12 @@ impl AccessControl {
             }
         }
 
-        let outbound_block_regex = match RegexSet::new(outbound_block_rules) {
+        const REGEX_SIZE_LIMIT: usize = usize::max_value();
+
+        let outbound_block_regex = match RegexSetBuilder::new(outbound_block_rules)
+            .size_limit(REGEX_SIZE_LIMIT)
+            .build()
+        {
             Ok(r) => r,
             Err(err) => {
                 let err = Error::new(ErrorKind::Other, format!("[outbound_block_list] regex error: {}", err));
@@ -232,7 +237,7 @@ impl AccessControl {
             }
         };
 
-        let bypass_regex = match RegexSet::new(bypass_rules) {
+        let bypass_regex = match RegexSetBuilder::new(bypass_rules).size_limit(REGEX_SIZE_LIMIT).build() {
             Ok(r) => r,
             Err(err) => {
                 let err = Error::new(
@@ -243,7 +248,7 @@ impl AccessControl {
             }
         };
 
-        let proxy_regex = match RegexSet::new(proxy_rules) {
+        let proxy_regex = match RegexSetBuilder::new(proxy_rules).size_limit(REGEX_SIZE_LIMIT).build() {
             Ok(r) => r,
             Err(err) => {
                 let err = Error::new(
