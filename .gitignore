@@ -7,7 +7,6 @@
 /*.log
 /debian/*.log
 /.vscode
-Cargo.lock
 /*.json
 /restart.sh
 /udp_echo_server.py
