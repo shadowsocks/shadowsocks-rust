@@ -50,10 +50,37 @@ pub struct Plugins {
 }
 
 impl Drop for Plugins {
+    #[cfg(not(unix))]
     fn drop(&mut self) {
         for plugin in &mut self.plugins {
             debug!("killing plugin process {}", plugin.id());
             let _ = plugin.kill();
+        }
+    }
+
+    #[cfg(unix)]
+    fn drop(&mut self) {
+        // Step.1 Send SIGTERM to let them exit gracefully
+        for plugin in &mut self.plugins {
+            debug!("terminating plugin process {}", plugin.id());
+
+            unsafe {
+                let ret = libc::kill(plugin.id() as libc::pid_t, libc::SIGTERM);
+                if ret != 0 {
+                    let err = io::Error::last_os_error();
+                    error!("terminating plugin process {}, error: {}", plugin.id(), err);
+                }
+            }
+        }
+
+        // Step.2 Sit and tight. Let plugins to exit gracefully
+        std::thread::sleep(Duration::from_millis(500));
+
+        // Step.3 SIGKILL. Kill all of them forcibly
+        for plugin in &mut self.plugins {
+            if let Ok(..) = plugin.kill() {
+                debug!("killed plugin process {}", plugin.id());
+            }
         }
     }
 }
