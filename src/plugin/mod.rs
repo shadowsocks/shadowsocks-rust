@@ -13,15 +13,15 @@
 //! ```
 
 use std::{
+    future::Future,
     io::{self, Error, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    pin::Pin,
+    task::{Context, Poll},
     time::Duration,
 };
 
-use futures::{
-    future,
-    stream::{FuturesUnordered, StreamExt},
-};
+use futures::future;
 use log::{debug, error, info, trace};
 use tokio::{net::TcpStream, process::Child, time};
 
@@ -46,7 +46,16 @@ pub enum PluginMode {
 
 /// Started plugins' subprocesses carrier
 pub struct Plugins {
-    plugins: FuturesUnordered<Child>,
+    plugins: Vec<Child>,
+}
+
+impl Drop for Plugins {
+    fn drop(&mut self) {
+        for plugin in &mut self.plugins {
+            debug!("killing plugin process {}", plugin.id());
+            let _ = plugin.kill();
+        }
+    }
 }
 
 impl Plugins {
@@ -54,7 +63,7 @@ impl Plugins {
     ///
     /// Will modify servers' listen addresses to plugins' listen addresses.
     pub fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<Plugins> {
-        let plugins = FuturesUnordered::new();
+        let mut plugins = Vec::new();
 
         for svr in &mut config.server {
             let mut svr_addr_opt = None;
@@ -100,27 +109,6 @@ impl Plugins {
         }
 
         Ok(Plugins { plugins })
-    }
-
-    /// Returns a future that completes when any plugin terminates or there were an error in watching the subprocess.
-    pub async fn into_future(self) -> io::Result<()> {
-        // Turn the vector of `Child` futures into a single future that
-        // completes with an error if any of them exits or waiting for it
-        // fails. When this future completes, the remaining `Child`ren will be
-        // dropped and as a result the rest of the plugins will be killed
-        // automatically.
-
-        match self.plugins.into_future().await {
-            (Some(Ok(first_plugin_exit_status)), _) => {
-                let msg = format!("plugin exited unexpectedly with {}", first_plugin_exit_status);
-                Err(Error::new(io::ErrorKind::Other, msg))
-            }
-            (Some(Err(first_plugin_error)), _) => {
-                error!("error while waiting for plugin subprocess: {}", first_plugin_error);
-                Err(first_plugin_error)
-            }
-            _ => unreachable!(),
-        }
     }
 
     /// Check plugin started
@@ -172,6 +160,27 @@ impl Plugins {
         }
 
         future::try_join_all(v).await.map(|_| ())
+    }
+}
+
+impl Future for Plugins {
+    type Output = io::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        for p in &mut self.plugins {
+            match Pin::new(p).poll(cx) {
+                Poll::Ready(Ok(exit_status)) => {
+                    let msg = format!("plugin exited unexpectedly with {}", exit_status);
+                    return Poll::Ready(Err(Error::new(io::ErrorKind::Other, msg)));
+                }
+                Poll::Ready(Err(err)) => {
+                    error!("error while waiting for plugin subprocess: {}", err);
+                    return Poll::Ready(Err(err));
+                }
+                Poll::Pending => {}
+            }
+        }
+        Poll::Pending
     }
 }
 

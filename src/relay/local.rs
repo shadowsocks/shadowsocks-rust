@@ -79,7 +79,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
             // Some plugins require quite a lot bootstrap time
             Plugins::check_plugins_started(&config).await?;
 
-            vf.push(plugins.into_future().boxed());
+            vf.push(plugins.boxed());
         }
 
         let context = Context::new_shared(config, state);
