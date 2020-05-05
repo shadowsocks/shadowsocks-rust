@@ -175,7 +175,6 @@ fn main() {
     }
     let mut runtime = builder.enable_all().build().expect("create tokio Runtime");
     let rt_handle = runtime.handle().clone();
-
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
         let server = run_server(config, rt_handle);
@@ -187,9 +186,9 @@ fn main() {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => panic!("server exited unexpectly"),
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => panic!("server exited unexpectly with {}", err),
+            Either::Left((Err(err), ..)) => panic!("aborted with {}", err),
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }
-    })
+    });
 }

@@ -306,9 +306,9 @@ fn main() {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => panic!("server exited unexpectly"),
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => panic!("server exited unexpectly with {}", err),
+            Either::Left((Err(err), ..)) => panic!("aborted with {}", err),
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }
-    })
+    });
 }
