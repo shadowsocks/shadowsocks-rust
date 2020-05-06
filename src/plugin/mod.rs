@@ -60,8 +60,12 @@ impl Drop for Plugins {
 
     #[cfg(unix)]
     fn drop(&mut self) {
+        use std::{collections::BTreeSet, time::Instant};
+
+        let mut exited = BTreeSet::new();
+
         // Step.1 Send SIGTERM to let them exit gracefully
-        for plugin in &mut self.plugins {
+        for plugin in &self.plugins {
             debug!("terminating plugin process {}", plugin.id());
 
             unsafe {
@@ -73,11 +77,48 @@ impl Drop for Plugins {
             }
         }
 
-        // Step.2 Sit and tight. Let plugins to exit gracefully
-        std::thread::sleep(Duration::from_millis(500));
+        // Step.2 Waits for gracefully exit
+        for plugin in &self.plugins {
+            const MAX_WAIT_DURATION: Duration = Duration::from_millis(10);
+
+            let start = Instant::now();
+
+            loop {
+                unsafe {
+                    let mut status: libc::c_int = 0;
+                    let ret = libc::waitpid(plugin.id() as libc::pid_t, &mut status, libc::WNOHANG);
+                    if ret < 0 {
+                        let err = io::Error::last_os_error();
+                        error!("waitpid({}) error: {}", plugin.id(), err);
+                        break;
+                    } else if ret > 0 {
+                        // subprocess is finished
+                        debug!("plugin process {} is terminated gracefully", plugin.id());
+                        exited.insert(plugin.id());
+                        break;
+                    }
+                }
+
+                let elapsed = Instant::now() - start;
+                if elapsed > MAX_WAIT_DURATION {
+                    debug!(
+                        "plugin process {} isn't terminated in {:?}",
+                        plugin.id(),
+                        MAX_WAIT_DURATION
+                    );
+                    break;
+                }
+
+                std::thread::yield_now();
+            }
+        }
 
         // Step.3 SIGKILL. Kill all of them forcibly
         for plugin in &mut self.plugins {
+            if exited.contains(&plugin.id()) {
+                continue;
+            }
+
             if let Ok(..) = plugin.kill() {
                 debug!("killed plugin process {}", plugin.id());
             }
