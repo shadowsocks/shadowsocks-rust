@@ -140,7 +140,7 @@ impl Plugins {
                 let loop_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
                 let local_addr = SocketAddr::new(loop_ip, get_local_port()?);
 
-                let svr_addr = match start_plugin(c, svr.addr(), &local_addr, mode) {
+                match start_plugin(c, svr.addr(), &local_addr, mode) {
                     Err(err) => {
                         error!(
                             "failed to start plugin \"{}\" for server {}, err: {}",
@@ -152,19 +152,34 @@ impl Plugins {
                     }
                     Ok(process) => {
                         let svr_addr = ServerAddr::SocketAddr(local_addr);
+
+                        match mode {
+                            PluginMode::Client => {
+                                info!(
+                                    "started plugin \"{}\" on {} <-> {} ({})",
+                                    c.plugin,
+                                    local_addr,
+                                    svr.addr(),
+                                    process.id()
+                                );
+                            }
+                            PluginMode::Server => {
+                                info!(
+                                    "started plugin \"{}\" on {} <-> {} ({})",
+                                    c.plugin,
+                                    svr.addr(),
+                                    local_addr,
+                                    process.id()
+                                );
+                            }
+                        }
+
                         plugins.push(process);
 
-                        // Replace addr with plugin
-                        svr_addr
+                        // Replace addr with plugin, svr is borrowed immutable.
+                        svr_addr_opt = Some(svr_addr);
                     }
-                };
-
-                match mode {
-                    PluginMode::Client => info!("started plugin \"{}\" on {} <-> {}", c.plugin, local_addr, svr.addr()),
-                    PluginMode::Server => info!("started plugin \"{}\" on {} <-> {}", c.plugin, svr.addr(), local_addr),
                 }
-
-                svr_addr_opt = Some(svr_addr); // Fuck borrow checker
             }
 
             if let Some(svr_addr) = svr_addr_opt {
