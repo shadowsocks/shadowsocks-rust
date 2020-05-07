@@ -311,15 +311,21 @@ impl Context {
             // Proxy everything by default
             None => true,
             Some(ref a) => {
-                // do the reverse lookup in our local cache
-                let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-                // if a qname is found
-                if let Some(forward) = reverse_lookup_cache.get(ip) {
-                    // if qname is resolved by remote,
-                    // we should proxy it as well
-                    *forward
+                // first check the IP list
+                if a.check_ip_in_proxy_list(ip) {
+                    true
                 } else {
-                    a.check_ip_in_proxy_list(ip)
+                    // do the reverse lookup in our local cache
+                    let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                    // if a qname is found
+                    if let Some(forward) = reverse_lookup_cache.get(ip) {
+                        // if qname is resolved by remote,
+                        // we should proxy it as well
+                        *forward
+                    } else {
+                        // by default not proxied
+                        false
+                    }
                 }
             }
         }
