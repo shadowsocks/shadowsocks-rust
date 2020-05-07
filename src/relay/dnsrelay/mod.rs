@@ -151,24 +151,24 @@ async fn acl_lookup(
             let timeout = Some(Duration::new(3, 0));
             try_timeout(local_lookup(qname, qtype, local), timeout).await.ok()
         }
-    }.unwrap_or_else(|| Message::new());
+    }.unwrap_or_else(Message::new);
 
     match qname_in_proxy_list {
         Some(true) => {
-            let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
+            let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
             debug!("pick remote response (qname): {:?}", remote_response);
-            return Ok((remote_response.clone(), true));
+            return Ok((remote_response, true));
         }
         Some(false) => {
             debug!("pick local response (qname): {:?}", local_response);
-            return Ok((local_response.clone(), false));
+            return Ok((local_response, false));
         }
         None => (),
     }
 
     if local_response.answer_count() == 0 {
-        let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
-        return Ok((remote_response.clone(), true));
+        let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
+        return Ok((remote_response, true));
     }
 
     for rec in local_response.answers() {
@@ -179,13 +179,13 @@ async fn acl_lookup(
         };
         if !forward {
             debug!("pick local response (ip): {:?}", local_response);
-            return Ok((local_response.clone(), false))
+            return Ok((local_response, false))
         }
     }
 
-    let remote_response = remote_response_fut.await.unwrap_or_else(|| Message::new());
+    let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
     debug!("pick remote response (ip): {:?}", remote_response);
-    Ok((remote_response.clone(), true))
+    Ok((remote_response, true))
 }
 
 /// Start a DNS relay local server
