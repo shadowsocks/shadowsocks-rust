@@ -318,7 +318,7 @@ impl Context {
                 let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
                 // if a qname is found
                 if let Some(forward) = reverse_lookup_cache.get(ip) {
-                    !*forward
+                    *forward
                 } else {
                     a.check_ip_in_proxy_list(ip)
                 }

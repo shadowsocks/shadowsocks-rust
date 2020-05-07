@@ -282,8 +282,8 @@ impl AccessControl {
 
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
         match self.mode {
-            Mode::BlackList => self.black_list.check_ip_matched(ip),
-            Mode::WhiteList => !self.white_list.check_ip_matched(ip),
+            Mode::BlackList => !self.black_list.check_ip_matched(ip),
+            Mode::WhiteList => self.white_list.check_ip_matched(ip),
         }
     }
 
