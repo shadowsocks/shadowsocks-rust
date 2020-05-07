@@ -159,6 +159,7 @@ const CIPHER_AES_128_PMAC_SIV: &str = "aes-128-pmac-siv";
 const CIPHER_AES_256_PMAC_SIV: &str = "aes-256-pmac-siv";
 
 const CIPHER_PLAIN: &str = "plain";
+const CIPHER_NONE: &str = "none";
 
 const CIPHER_AES_128_GCM: &str = "aes-128-gcm";
 const CIPHER_AES_256_GCM: &str = "aes-256-gcm";
@@ -171,6 +172,7 @@ const CIPHER_XCHACHA20_IETF_POLY1305: &str = "xchacha20-ietf-poly1305";
 pub enum CipherType {
     Table,
     Plain,
+    None,
 
     #[cfg(feature = "aes-cfb")]
     Aes128Cfb,
@@ -271,7 +273,7 @@ impl CipherType {
     /// Symmetric crypto key size
     pub fn key_size(self) -> usize {
         match self {
-            CipherType::Table | CipherType::Plain => 0,
+            CipherType::Table | CipherType::Plain | CipherType::None => 0,
 
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().key_len(),
@@ -402,7 +404,7 @@ impl CipherType {
     /// Symmetric crypto initialize vector size
     pub fn iv_size(self) -> usize {
         match self {
-            CipherType::Table | CipherType::Plain => 0,
+            CipherType::Table | CipherType::Plain | CipherType::None => 0,
 
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1().iv_len().unwrap_or(0),
@@ -595,6 +597,7 @@ impl CipherType {
         match self {
             CipherType::Table => CIPHER_TABLE,
             CipherType::Plain => CIPHER_PLAIN,
+            CipherType::None => CIPHER_NONE,
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb => CIPHER_AES_128_CFB,
             #[cfg(feature = "aes-cfb")]
@@ -689,6 +692,8 @@ impl FromStr for CipherType {
         match s {
             CIPHER_TABLE | "" => Ok(CipherType::Table),
             CIPHER_PLAIN => Ok(CipherType::Plain),
+            CIPHER_NONE => Ok(CipherType::None),
+
             #[cfg(feature = "aes-cfb")]
             CIPHER_AES_128_CFB => Ok(CipherType::Aes128Cfb),
             #[cfg(feature = "aes-cfb")]

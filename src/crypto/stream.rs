@@ -38,7 +38,7 @@ pub fn new_stream(t: CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> Box
 
     match t {
         CipherType::Table => Box::new(table::TableCipher::new(key, mode)),
-        CipherType::Plain => Box::new(dummy::DummyCipher),
+        CipherType::Plain | CipherType::None => Box::new(dummy::DummyCipher),
 
         #[cfg(feature = "sodium")]
         CipherType::ChaCha20 | CipherType::Salsa20 | CipherType::XSalsa20 | CipherType::ChaCha20Ietf => {
