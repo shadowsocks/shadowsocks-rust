@@ -10,7 +10,10 @@ use std::{
 };
 
 #[cfg(feature = "local-dns-relay")]
-use std::net::IpAddr;
+use std::{
+    net::IpAddr,
+    time::Duration,
+};
 
 use bloomfilter::Bloom;
 #[cfg(feature = "local-dns-relay")]
@@ -183,7 +186,8 @@ impl Context {
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns-relay")]
-        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_capacity(8192));
+        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_expiry_duration(
+            Duration::from_secs(3 * 24 * 60 * 60)));
 
         Context {
             config,
@@ -291,11 +295,19 @@ impl Context {
     /// Add a record to the reverse lookup cache
     #[cfg(feature = "local-dns-relay")]
     pub fn add_to_reverse_lookup_cache(&self, addr: &IpAddr, forward: bool) {
-        if self.check_ip_in_proxy_list(addr) == forward {
-            return;
-        }
+        let is_exception = self.check_ip_in_proxy_list(addr) != forward;
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-        reverse_lookup_cache.insert(addr.clone(), forward);
+        match reverse_lookup_cache.get_mut(addr) {
+            Some(value) => if is_exception {
+                *value = forward;
+            } else {
+                // we do not need to remember the entry if it is already matched correctly
+                reverse_lookup_cache.remove(addr);
+            }
+            None => if is_exception {
+                reverse_lookup_cache.insert(addr.clone(), forward);
+            }
+        }
     }
 
     /// Check if domain name is in proxy_list.
