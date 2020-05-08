@@ -14,16 +14,16 @@
 
 use std::{
     future::Future,
-    io::{self, Error, ErrorKind},
+    io::{self, Error},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures::future;
-use log::{debug, error, info, trace};
-use tokio::{net::TcpStream, process::Child, time};
+use log::{debug, error, info, warn};
+use tokio::{net::TcpStream, process::Child, task};
 
 use crate::config::{Config, ServerAddr};
 
@@ -60,7 +60,7 @@ impl Drop for Plugins {
 
     #[cfg(unix)]
     fn drop(&mut self) {
-        use std::{collections::BTreeSet, time::Instant};
+        use std::collections::BTreeSet;
 
         let mut exited = BTreeSet::new();
 
@@ -197,9 +197,9 @@ impl Plugins {
     /// Check plugin started
     ///
     /// This future won't resolve until all plugins are started
-    pub async fn check_plugins_started(config: &Config) -> io::Result<()> {
+    pub async fn check_plugins_started(config: &Config) {
         if !config.has_server_plugins() {
-            return Ok(());
+            return;
         }
 
         let mut v = Vec::new();
@@ -212,37 +212,58 @@ impl Plugins {
                 };
 
                 v.push(async move {
-                    // Try to connect plugin 10 times (nearly 2 seconds)
-                    for r in 0..10 {
+                    // Try to connect plugin 10 seconds
+                    const MAX_CHECK_DURATION: Duration = Duration::from_secs(10);
+
+                    let start = Instant::now();
+                    let mut elapsed;
+                    loop {
                         if let Ok(..) = TcpStream::connect(&addr).await {
+                            elapsed = Instant::now() - start;
+
                             debug!(
-                                "plugin \"{}\" for {} listening on {} is started",
+                                "plugin \"{}\" for {} listening on {} is started, elapsed {}.{}s",
                                 svr.plugin().as_ref().unwrap().plugin,
                                 svr.addr(),
-                                addr
+                                addr,
+                                elapsed.as_secs(),
+                                elapsed.subsec_millis(),
                             );
 
-                            return Ok(());
+                            return;
                         }
 
-                        trace!(
-                            "plugin \"{}\" for {} listening on {} isn't started yet, tried {} times",
-                            svr.plugin().as_ref().unwrap().plugin,
-                            svr.addr(),
-                            addr,
-                            r
-                        );
+                        elapsed = Instant::now() - start;
+                        if elapsed >= MAX_CHECK_DURATION {
+                            break;
+                        }
 
-                        time::delay_for(Duration::from_millis(200)).await;
+                        task::yield_now().await;
                     }
 
-                    let err = Error::new(ErrorKind::Other, format!("failed to connect plugin \"{}\"", addr));
-                    Err(err)
+                    warn!(
+                        "plugin \"{}\" for {} listening on {} isn't started yet, elapsed {}.{}s",
+                        svr.plugin().as_ref().unwrap().plugin,
+                        svr.addr(),
+                        addr,
+                        elapsed.as_secs(),
+                        elapsed.subsec_millis(),
+                    );
                 });
             }
         }
 
-        future::try_join_all(v).await.map(|_| ())
+        future::join_all(v).await;
+    }
+
+    /// Total count of plugins
+    pub fn len(&self) -> usize {
+        self.plugins.len()
+    }
+
+    /// Check if there is no plugin
+    pub fn is_empty(&self) -> bool {
+        self.plugins.is_empty()
     }
 }
 

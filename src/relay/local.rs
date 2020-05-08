@@ -77,7 +77,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
 
             // Wait until all plugins actually start
             // Some plugins require quite a lot bootstrap time
-            Plugins::check_plugins_started(&config).await?;
+            Plugins::check_plugins_started(&config).await;
 
             vf.push(plugins.boxed());
         }
