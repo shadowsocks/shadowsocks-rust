@@ -17,6 +17,7 @@ use bloomfilter::Bloom;
 use lru_time_cache::LruCache;
 use spin::Mutex;
 use tokio::runtime::Handle;
+use trust_dns_proto::op::Query;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
@@ -314,11 +315,11 @@ impl Context {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_qname_in_proxy_list(&self, qname: &Address) -> Option<bool> {
+    pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
         match self.config.acl {
             // Proxy everything by default
             None => Some(true),
-            Some(ref a) => a.check_qname_in_proxy_list(qname),
+            Some(ref a) => a.check_query_in_proxy_list(query),
         }
     }
 

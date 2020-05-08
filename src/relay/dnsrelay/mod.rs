@@ -47,11 +47,7 @@ async fn acl_lookup<Local, Remote>(
         query.query_type(), query.name(), local, remote
     );
 
-    // remove the last dot from fqdn name
-    let mut name = query.name().to_ascii();
-    name.pop();
-    let addr = Address::DomainNameAddress(name, 0);
-    let qname_in_proxy_list = context.check_qname_in_proxy_list(&addr);
+    let qname_in_proxy_list = context.check_query_in_proxy_list(query);
 
     let remote_response_fut = async {
         match qname_in_proxy_list {

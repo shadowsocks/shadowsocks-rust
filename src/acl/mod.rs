@@ -13,6 +13,10 @@ use std::{
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
+use trust_dns_proto::{
+    op::Query,
+    rr::RecordType,
+};
 
 use crate::{context::Context, relay::socks5::Address};
 
@@ -85,9 +89,13 @@ impl Rules {
         self.rule.is_match(host)
     }
 
-    /// Check if there are no IP rules
-    fn is_ip_rule_empty(&self) -> bool {
-        self.ipv4.iter().peekable().peek().is_none() && self.ipv6.iter().peekable().peek().is_none()
+    /// Check if there are no rules for the corresponding DNS query type
+    fn is_rule_empty_for_qtype(&self, qtype: RecordType) -> bool {
+        match qtype {
+            RecordType::A => self.ipv4.iter().peekable().peek().is_none(),
+            RecordType::AAAA => self.ipv6.iter().peekable().peek().is_none(),
+            _ => true
+        }
     }
 }
 
@@ -274,19 +282,23 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_qname_in_proxy_list(&self, addr: &Address) -> Option<bool> {
+    pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
+        // remove the last dot from fqdn name
+        let mut name = query.name().to_ascii();
+        name.pop();
+        let addr = Address::DomainNameAddress(name, 0);
         // Addresses in proxy_list will be proxied
-        if self.white_list.check_address_matched(addr) {
+        if self.white_list.check_address_matched(&addr) {
             return Some(true);
         }
-        if self.black_list.check_address_matched(addr) {
+        if self.black_list.check_address_matched(&addr) {
             return Some(false);
         }
         match self.mode {
-            Mode::BlackList => if self.black_list.is_ip_rule_empty() {
+            Mode::BlackList => if self.black_list.is_rule_empty_for_qtype(query.query_type()) {
                 return Some(true);
             },
-            Mode::WhiteList => if self.white_list.is_ip_rule_empty() {
+            Mode::WhiteList => if self.white_list.is_rule_empty_for_qtype(query.query_type()) {
                 return Some(false);
             },
         }
