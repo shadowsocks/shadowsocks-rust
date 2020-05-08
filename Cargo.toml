@@ -51,7 +51,7 @@ local-dns-relay = []
 local-flow-stat = []
 local-http = ["hyper", "http", "tower"]
 local-http-native-tls = ["tokio-tls", "native-tls"]
-local-http-rustls = ["tokio-rustls", "webpki-roots"]
+local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
 local-redir = []
 
 [dependencies]
@@ -67,6 +67,7 @@ tokio-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.13", optional = true }
 webpki-roots = { version = "0.19", optional = true }
+rustls-native-certs = { version = "0.3", optional = true }
 futures = "0.3"
 json5 = "0.2"
 base64 = "0.12"

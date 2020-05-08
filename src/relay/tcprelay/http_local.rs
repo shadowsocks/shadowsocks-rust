@@ -96,6 +96,7 @@ impl ProxyHttpStream {
     #[cfg(feature = "local-http-rustls")]
     async fn connect_https(stream: ProxyStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use lazy_static::lazy_static;
+        use log::warn;
         use tokio_rustls::{
             rustls::{ClientConfig, Session},
             webpki::DNSNameRef,
@@ -105,9 +106,20 @@ impl ProxyHttpStream {
         lazy_static! {
             static ref TLS_CONFIG: Arc<ClientConfig> = {
                 let mut config = ClientConfig::new();
-                config
-                    .root_store
-                    .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+
+                match rustls_native_certs::load_native_certs() {
+                    Ok(store) => {
+                        config.root_store = store;
+                    },
+                    Err((_, err)) => {
+                        warn!("failed to load native certs, {}", err);
+
+                        config
+                            .root_store
+                            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+                    }
+                }
+
                 // Try to negociate HTTP/2
                 config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
                 Arc::new(config)
