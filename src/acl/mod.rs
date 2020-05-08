@@ -15,7 +15,7 @@ use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
 use trust_dns_proto::{
     op::Query,
-    rr::RecordType,
+    rr::{DNSClass, RecordType},
 };
 
 use crate::{context::Context, relay::socks5::Address};
@@ -283,6 +283,10 @@ impl AccessControl {
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
     pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
+        if query.query_class() != DNSClass::IN {
+            // unconditionally forward all non-IN queries to remote
+            return Some(true);
+        }
         // remove the last dot from fqdn name
         let mut name = query.name().to_ascii();
         name.pop();
