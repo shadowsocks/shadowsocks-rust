@@ -140,7 +140,9 @@ async fn acl_lookup(
             Some(false) => None,
             _ => {
                 let timeout = Some(Duration::new(3, 0));
-                try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout).await.ok()
+                try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout)
+                    .await
+                    .ok()
             }
         }
     };
@@ -151,7 +153,8 @@ async fn acl_lookup(
             let timeout = Some(Duration::new(3, 0));
             try_timeout(local_lookup(qname, qtype, local), timeout).await.ok()
         }
-    }.unwrap_or_else(Message::new);
+    }
+    .unwrap_or_else(Message::new);
 
     match qname_in_proxy_list {
         Some(true) => {
@@ -179,7 +182,7 @@ async fn acl_lookup(
         };
         if !forward {
             debug!("pick local response (ip): {:?}", local_response);
-            return Ok((local_response, false))
+            return Ok((local_response, false));
         }
     }
 

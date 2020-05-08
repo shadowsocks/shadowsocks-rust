@@ -10,10 +10,7 @@ use std::{
 };
 
 #[cfg(feature = "local-dns-relay")]
-use std::{
-    net::IpAddr,
-    time::Duration,
-};
+use std::{net::IpAddr, time::Duration};
 
 use bloomfilter::Bloom;
 #[cfg(feature = "local-dns-relay")]
@@ -186,8 +183,9 @@ impl Context {
     fn new(config: Config, server_state: SharedServerState) -> Context {
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns-relay")]
-        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_expiry_duration(
-            Duration::from_secs(3 * 24 * 60 * 60)));
+        let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_expiry_duration(Duration::from_secs(
+            3 * 24 * 60 * 60,
+        )));
 
         Context {
             config,
@@ -298,14 +296,18 @@ impl Context {
         let is_exception = self.check_ip_in_proxy_list(addr) != forward;
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         match reverse_lookup_cache.get_mut(addr) {
-            Some(value) => if is_exception {
-                *value = forward;
-            } else {
-                // we do not need to remember the entry if it is already matched correctly
-                reverse_lookup_cache.remove(addr);
+            Some(value) => {
+                if is_exception {
+                    *value = forward;
+                } else {
+                    // we do not need to remember the entry if it is already matched correctly
+                    reverse_lookup_cache.remove(addr);
+                }
             }
-            None => if is_exception {
-                reverse_lookup_cache.insert(addr.clone(), forward);
+            None => {
+                if is_exception {
+                    reverse_lookup_cache.insert(addr.clone(), forward);
+                }
             }
         }
     }
@@ -351,7 +353,7 @@ impl Context {
                         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
                         // if a qname is found
                         if let Some(forward) = reverse_lookup_cache.get(&saddr.ip()) {
-                            return !*forward
+                            return !*forward;
                         }
                     }
                 }
