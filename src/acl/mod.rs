@@ -92,8 +92,8 @@ impl Rules {
     /// Check if there are no rules for the corresponding DNS query type
     fn is_rule_empty_for_qtype(&self, qtype: RecordType) -> bool {
         match qtype {
-            RecordType::A => self.ipv4.iter().peekable().peek().is_none(),
-            RecordType::AAAA => self.ipv6.iter().peekable().peek().is_none(),
+            RecordType::A => self.ipv4.iter().next().is_none(),
+            RecordType::AAAA => self.ipv6.iter().next().is_none(),
             _ => true
         }
     }
