@@ -24,7 +24,7 @@ use log::{debug, error, info};
 use rand::Rng;
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, Query},
-    rr::{Name, RData, RecordType},
+    rr::RData,
 };
 
 use crate::{
@@ -39,20 +39,16 @@ use crate::{
     },
 };
 
-async fn stream_lookup<T>(qname: &Name, qtype: RecordType, stream: &mut T) -> io::Result<Message>
+async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
 where
     T: AsyncReadExt + AsyncWriteExt + Unpin,
 {
     let mut message = Message::new();
-    let mut query = Query::new();
-
-    query.set_query_type(qtype);
-    query.set_name(qname.clone());
 
     let id = rand::thread_rng().gen();
     message.set_id(id);
     message.set_recursion_desired(true);
-    message.add_query(query);
+    message.add_query(query.clone());
 
     let req_buffer = message.to_vec()?;
     let size = req_buffer.len();
@@ -73,26 +69,22 @@ where
 }
 
 #[cfg(target_os = "android")]
-async fn local_lookup(qname: &Name, qtype: RecordType, path: &PathBuf) -> io::Result<Message> {
+async fn local_lookup(query: &Query, path: &PathBuf) -> io::Result<Message> {
     let mut stream = UnixStream::connect(path).await?;
-    stream_lookup(qname, qtype, &mut stream).await
+    stream_lookup(query, &mut stream).await
 }
 
 #[cfg(not(target_os = "android"))]
-async fn local_lookup(qname: &Name, qtype: RecordType, server: &SocketAddr) -> io::Result<Message> {
+async fn local_lookup(query: &Query, server: &SocketAddr) -> io::Result<Message> {
     let bind_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0));
     let mut socket = UdpSocket::bind(bind_addr).await?;
 
     let mut message = Message::new();
-    let mut query = Query::new();
-
-    query.set_query_type(qtype);
-    query.set_name(qname.clone());
 
     let id = rand::thread_rng().gen();
     message.set_id(id);
     message.set_recursion_desired(true);
-    message.add_query(query);
+    message.add_query(query.clone());
 
     let req_buffer = message.to_vec()?;
     socket.send_to(&req_buffer, server).await?;
@@ -107,11 +99,10 @@ async fn proxy_lookup(
     context: SharedContext,
     svr_cfg: &ServerConfig,
     ns: &Address,
-    qname: &Name,
-    qtype: RecordType,
+    query: &Query,
 ) -> io::Result<Message> {
     let mut stream = ProxyStream::connect_proxied(context, svr_cfg, ns).await?;
-    stream_lookup(qname, qtype, &mut stream).await
+    stream_lookup(query, &mut stream).await
 }
 
 async fn acl_lookup(
@@ -120,17 +111,16 @@ async fn acl_lookup(
     #[cfg(target_os = "android")] local: &PathBuf,
     #[cfg(not(target_os = "android"))] local: &SocketAddr,
     remote: &Address,
-    qname: &Name,
-    qtype: RecordType,
+    query: &Query,
 ) -> io::Result<(Message, bool)> {
     // Start querying name servers
     debug!(
         "attempting lookup of {:?} {} with ns {:?} and {:?}",
-        qtype, qname, local, remote
+        query.query_type(), query.name(), local, remote
     );
 
     // remove the last dot from fqdn name
-    let mut name = qname.to_ascii();
+    let mut name = query.name().to_ascii();
     name.pop();
     let addr = Address::DomainNameAddress(name, 0);
     let qname_in_proxy_list = context.check_qname_in_proxy_list(&addr);
@@ -140,7 +130,7 @@ async fn acl_lookup(
             Some(false) => None,
             _ => {
                 let timeout = Some(Duration::new(3, 0));
-                try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, qname, qtype), timeout)
+                try_timeout(proxy_lookup(context.clone(), svr_cfg, remote, query), timeout)
                     .await
                     .ok()
             }
@@ -151,7 +141,7 @@ async fn acl_lookup(
         Some(true) => None,
         _ => {
             let timeout = Some(Duration::new(3, 0));
-            try_timeout(local_lookup(qname, qtype, local), timeout).await.ok()
+            try_timeout(local_lookup(query, local), timeout).await.ok()
         }
     }
     .unwrap_or_else(Message::new);
@@ -273,11 +263,9 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
                 let question = &request.queries()[0];
 
-                let qname = question.name();
-                let qtype = question.query_type();
                 let svr_cfg = server.server_config();
 
-                let r = acl_lookup(context.clone(), svr_cfg, &local_addr, &remote_addr, qname, qtype).await;
+                let r = acl_lookup(context.clone(), svr_cfg, &local_addr, &remote_addr, question).await;
 
                 if let Ok((result, forward)) = r {
                     for rec in result.answers() {
