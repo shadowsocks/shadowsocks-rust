@@ -47,46 +47,24 @@ async fn acl_lookup<Local, Remote>(
     );
 
     let qname_in_proxy_list = context.check_query_in_proxy_list(query);
-
-    let remote_response_fut = async {
-        match qname_in_proxy_list {
-            Some(false) => None,
-            _ => {
-                let timeout = Some(Duration::new(3, 0));
-                try_timeout(remote.lookup(query), timeout)
-                    .await
-                    .ok()
-            }
-        }
-    };
-
-    let local_response = match qname_in_proxy_list {
-        Some(true) => None,
-        _ => {
-            let timeout = Some(Duration::new(3, 0));
-            try_timeout(local.lookup(query), timeout).await.ok()
-        }
-    }
-    .unwrap_or_else(Message::new);
+    let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
+    let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
 
     match qname_in_proxy_list {
         Some(true) => {
-            let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
+            let remote_response = remote_response_fut.await.unwrap_or_else(|_| Message::new());
             debug!("pick remote response (qname): {:?}", remote_response);
             return Ok((remote_response, true));
         }
         Some(false) => {
+            let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
             debug!("pick local response (qname): {:?}", local_response);
             return Ok((local_response, false));
         }
         None => (),
     }
 
-    if local_response.answer_count() == 0 {
-        let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
-        return Ok((remote_response, true));
-    }
-
+    let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
     for rec in local_response.answers() {
         if rec.record_type() != query.query_type() {
             warn!("local DNS response has inconsistent answer type {} for query {}", rec.record_type(), query);
@@ -104,7 +82,7 @@ async fn acl_lookup<Local, Remote>(
         }
     }
 
-    let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
+    let remote_response = remote_response_fut.await.unwrap_or_else(|_| Message::new());
     debug!("pick remote response (response): {:?}", remote_response);
     Ok((remote_response, true))
 }
