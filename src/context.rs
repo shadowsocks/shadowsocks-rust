@@ -317,7 +317,7 @@ impl Context {
     pub fn check_qname_in_proxy_list(&self, qname: &Address) -> Option<bool> {
         match self.config.acl {
             // Proxy everything by default
-            None => None,
+            None => Some(true),
             Some(ref a) => a.check_qname_in_proxy_list(qname),
         }
     }

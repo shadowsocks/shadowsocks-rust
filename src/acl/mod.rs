@@ -84,6 +84,11 @@ impl Rules {
     fn check_host_matched(&self, host: &str) -> bool {
         self.rule.is_match(host)
     }
+
+    /// Check if there are no IP rules
+    fn is_ip_rule_empty(&self) -> bool {
+        self.ipv4.iter().peekable().peek().is_none() && self.ipv6.iter().peekable().peek().is_none()
+    }
 }
 
 /// ACL rules
@@ -276,6 +281,14 @@ impl AccessControl {
         }
         if self.black_list.check_address_matched(addr) {
             return Some(false);
+        }
+        match self.mode {
+            Mode::BlackList => if self.black_list.is_ip_rule_empty() {
+                return Some(true);
+            },
+            Mode::WhiteList => if self.white_list.is_ip_rule_empty() {
+                return Some(false);
+            },
         }
         None
     }

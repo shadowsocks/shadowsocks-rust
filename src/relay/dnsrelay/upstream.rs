@@ -82,6 +82,7 @@ impl Upstream for UdpUpstream {
     }
 }
 
+// #[derive(Debug)]
 // pub struct TcpUpstream {
 //     pub server: SocketAddr,
 // }
