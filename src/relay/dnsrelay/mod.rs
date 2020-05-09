@@ -35,7 +35,7 @@ async fn acl_lookup<Local, Remote>(
     local: Arc<Local>,
     remote: Arc<Remote>,
     query: &Query
-) -> io::Result<(Message, bool)>
+) -> (io::Result<Message>, bool)
     where
         Local: upstream::Upstream,
         Remote: upstream::Upstream,
@@ -52,20 +52,21 @@ async fn acl_lookup<Local, Remote>(
 
     match qname_in_proxy_list {
         Some(true) => {
-            let remote_response = remote_response_fut.await.unwrap_or_else(|_| Message::new());
+            let remote_response = remote_response_fut.await;
             debug!("pick remote response (qname): {:?}", remote_response);
-            return Ok((remote_response, true));
+            return (remote_response, true);
         }
         Some(false) => {
-            let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
+            let local_response = local_response_fut.await;
             debug!("pick local response (qname): {:?}", local_response);
-            return Ok((local_response, false));
+            return (local_response, false);
         }
         None => (),
     }
 
-    let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
-    for rec in local_response.answers() {
+    // FIXME: spawn(remote_response_fut)
+    let local_response = local_response_fut.await;
+    for rec in local_response.unwrap_or_else(|_| Message::new()).answers() {
         if rec.record_type() != query.query_type() {
             warn!("local DNS response has inconsistent answer type {} for query {}", rec.record_type(), query);
             break
@@ -78,13 +79,13 @@ async fn acl_lookup<Local, Remote>(
         };
         if !forward {
             debug!("pick local response (response): {:?}", local_response);
-            return Ok((local_response, false));
+            return (local_response, false);
         }
     }
 
-    let remote_response = remote_response_fut.await.unwrap_or_else(|_| Message::new());
+    let remote_response = remote_response_fut.await;
     debug!("pick remote response (response): {:?}", remote_response);
-    Ok((remote_response, true))
+    (remote_response, true)
 }
 
 /// Start a DNS relay local server
@@ -174,9 +175,9 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 message.set_response_code(ResponseCode::FormErr);
             } else {
                 let question = &request.queries()[0];
-                let r = acl_lookup(context.clone(), local_upstream, remote_upstream, question).await;
+                let (r, forward) = acl_lookup(context.clone(), local_upstream, remote_upstream, question).await;
 
-                if let Ok((result, forward)) = r {
+                if let Ok(result) = r {
                     for rec in result.answers() {
                         debug!("dns answer: {:?}", rec);
 
