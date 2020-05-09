@@ -23,7 +23,6 @@ use crate::{
     context::SharedContext,
     relay::{
         loadbalancing::server::{PlainPingBalancer, ServerType},
-        socks5::Address,
         sys::create_udp_socket,
         utils::try_timeout,
     },
@@ -92,6 +91,7 @@ async fn acl_lookup<Local, Remote>(
         let forward = match rec.rdata() {
             RData::A(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
             RData::AAAA(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
+            RData::PTR(_) => panic!("PTR records should not reach here"),
             _ => true,
         };
         if !forward {

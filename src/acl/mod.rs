@@ -6,7 +6,7 @@ use std::{
     fmt,
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::Path,
 };
 
@@ -15,7 +15,7 @@ use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
 use trust_dns_proto::{
     op::Query,
-    rr::{DNSClass, RecordType},
+    rr::{DNSClass, Name, RecordType},
 };
 
 use crate::{context::Context, relay::socks5::Address};
@@ -94,6 +94,7 @@ impl Rules {
         match qtype {
             RecordType::A => self.ipv4.iter().next().is_none(),
             RecordType::AAAA => self.ipv6.iter().next().is_none(),
+            RecordType::PTR => panic!("PTR records should not reach here"),
             _ => true
         }
     }
@@ -283,9 +284,12 @@ impl AccessControl {
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
     pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
-        if query.query_class() != DNSClass::IN {
-            // unconditionally use default for all non-IN queries
+        if query.query_class() != DNSClass::IN || !query.name().is_fqdn() {
+            // unconditionally use default for all non-IN queries and PQDNs
             return Some(self.is_default_in_proxy_list());
+        }
+        if query.query_type() == RecordType::PTR {
+            return Some(self.check_ptr_qname_in_proxy_list(query.name()));
         }
         // remove the last dot from fqdn name
         let mut name = query.name().to_ascii();
@@ -307,6 +311,40 @@ impl AccessControl {
             },
         }
         None
+    }
+
+    fn check_ptr_qname_in_proxy_list(&self, name: &Name) -> bool {
+        let mut iter = name.iter().rev();
+        let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[])).unwrap_or("0");
+        if !"arpa".eq_ignore_ascii_case(next()) {
+            return self.is_default_in_proxy_list();
+        }
+        match &next().to_ascii_lowercase()[..] {
+            "in-addr" => {
+                let mut octets: [u8; 4] = [0; 4];
+                for octet in octets.iter_mut() {
+                    match next().parse() {
+                        Ok(result) => *octet = result,
+                        Err(_) => return self.is_default_in_proxy_list(),
+                    }
+                }
+                self.check_ip_in_proxy_list(&IpAddr::V4(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3])))
+            }
+            "ip6" => {
+                let mut segments: [u16; 8] = [0; 8];
+                for segment in segments.iter_mut() {
+                    match u16::from_str_radix(&[next(), next(), next(), next()].concat(), 16) {
+                        Ok(result) => *segment = result,
+                        Err(_) => return self.is_default_in_proxy_list(),
+                    }
+                }
+                self.check_ip_in_proxy_list(&IpAddr::V6(Ipv6Addr::new(
+                    segments[0], segments[1], segments[2], segments[3],
+                    segments[4], segments[5], segments[6], segments[7]
+                )))
+            }
+            _ => self.is_default_in_proxy_list(),
+        }
     }
 
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
