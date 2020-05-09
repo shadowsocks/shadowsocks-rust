@@ -24,6 +24,8 @@ use trust_dns_resolver::TokioAsyncResolver;
 use crate::relay::dns_resolver::create_resolver;
 #[cfg(feature = "local-flow-stat")]
 use crate::relay::flow::ServerFlowStatistic;
+#[cfg(feature = "local-dns-relay")]
+use crate::relay::dnsrelay::upstream::LocalUpstream;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
@@ -174,6 +176,10 @@ pub struct Context {
     // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
     #[cfg(feature = "local-dns-relay")]
     reverse_lookup_cache: Mutex<LruCache<IpAddr, bool>>,
+
+    // For local DNS upstream
+    #[cfg(feature = "local-dns-relay")]
+    local_dns: LocalUpstream,
 }
 
 /// Unique context thw whole server
@@ -187,6 +193,8 @@ impl Context {
         let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_expiry_duration(Duration::from_secs(
             3 * 24 * 60 * 60,
         )));
+        #[cfg(feature = "local-dns-relay")]
+        let local_dns = LocalUpstream::new(&config);
 
         Context {
             config,
@@ -197,6 +205,8 @@ impl Context {
             local_flow_statistic: ServerFlowStatistic::new(),
             #[cfg(feature = "local-dns-relay")]
             reverse_lookup_cache,
+            #[cfg(feature = "local-dns-relay")]
+            local_dns,
         }
     }
 
@@ -319,6 +329,10 @@ impl Context {
 
     pub fn acl(&self) -> &Option<AccessControl> {
         &self.config.acl
+    }
+
+    pub fn local_dns(&self) -> &LocalUpstream {
+        &self.local_dns
     }
 
     /// Check target address ACL (for client)

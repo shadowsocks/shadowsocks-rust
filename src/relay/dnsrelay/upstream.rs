@@ -20,13 +20,43 @@ use std::path::PathBuf;
 use tokio::net::UnixStream;
 
 use crate::{
-    config::ServerConfig,
+    config::{Config, ServerConfig},
     context::SharedContext,
     relay::{
         socks5::Address,
         tcprelay::ProxyStream,
     },
 };
+
+#[derive(Debug)]
+pub enum LocalUpstream {
+    Udp(UdpUpstream),
+    // Tcp(TcpUpstream),
+    #[cfg(unix)]
+    UnixSocket(UnixSocketUpstream),
+}
+
+impl LocalUpstream {
+    pub fn new(config: &Config) -> LocalUpstream {
+        #[cfg(target_os = "android")]
+        return LocalUpstream::UnixSocket(UnixSocketUpstream {
+            path: config.local_dns_path.clone().expect("local query DNS path"),
+        });
+        #[cfg(not(target_os = "android"))]
+        LocalUpstream::Udp(UdpUpstream {
+            server: config.local_dns_addr.clone().expect("local query DNS address"),
+        })
+    }
+
+    pub async fn lookup(&self, query: &Query) -> io::Result<Message> {
+        match self {
+            LocalUpstream::Udp(upstream) => upstream.lookup(query).await,
+            // LocalUpstream::Tcp(upstream) => upstream.lookup(query),
+            #[cfg(unix)]
+            LocalUpstream::UnixSocket(upstream) => upstream.lookup(query).await,
+        }
+    }
+}
 
 #[async_trait]
 pub trait Upstream: Debug {

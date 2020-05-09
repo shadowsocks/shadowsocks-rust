@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-mod upstream;
+pub mod upstream;
 
 fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
     let mut iter = name.iter().rev();
@@ -129,14 +129,13 @@ fn should_forward_by_response(
     }
 }
 
-async fn acl_lookup<Local, Remote>(
+async fn acl_lookup<Remote>(
     acl: &Option<AccessControl>,
-    local: Arc<Local>,
+    local: &upstream::LocalUpstream,
     remote: Arc<Remote>,
     query: &Query
 ) -> (io::Result<Message>, bool)
     where
-        Local: upstream::Upstream,
         Remote: upstream::Upstream,
 {
     // Start querying name servers
@@ -233,14 +232,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     });
 
     let config = context.config();
-    #[cfg(target_os = "android")]
-        let local_upstream = Arc::new(upstream::UnixSocketUpstream {
-        path: config.local_dns_path.clone().expect("local query DNS path"),
-    });
-    #[cfg(not(target_os = "android"))]
-        let local_upstream = Arc::new(upstream::UdpUpstream {
-        server: config.local_dns_addr.clone().expect("local query DNS address"),
-    });
     // FIXME: We use TCP to send remote queries by default, which should be configuable.
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
     let remote_upstream = Arc::new(upstream::ProxyTcpUpstream {
@@ -270,8 +261,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         debug!("received src: {}, query: {:?}", src, request);
 
         let context = context.clone();
-        let local_upstream = Arc::clone(&local_upstream);
-        let remote_upstream = Arc::clone(&remote_upstream);
+        let remote_upstream = remote_upstream.clone();
         let mut qtx = qtx.clone();
 
         tokio::spawn(async move {
@@ -286,7 +276,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 message.set_response_code(ResponseCode::NotImp);
             } else if request.query_count() > 0 {
                 let question = &request.queries()[0];
-                let (r, forward) = acl_lookup(context.acl(), local_upstream, remote_upstream, question).await;
+                let (r, forward) = acl_lookup(context.acl(), context.local_dns(), remote_upstream, question).await;
 
                 if let Ok(result) = r {
                     for rec in result.answers() {
