@@ -105,9 +105,9 @@ fn should_forward_by_response(
                     return true;
                 }
                 let forward = match $rec.rdata() {
-                    RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::from(*ip)),
-                    RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::from(*ip)),
-                    RData::PTR(_) => panic!("PTR records should not reach here"),
+                    RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V4(*ip)),
+                    RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V6(*ip)),
+                    RData::PTR(_) => unreachable!(),
                     _ => acl.is_default_in_proxy_list(),
                 };
                 if !forward {
@@ -170,8 +170,7 @@ async fn acl_lookup<Local, Remote>(
             Some(local_response)
         }
     };
-    tokio::pin!(remote_response_fut);
-    tokio::pin!(decider);
+    tokio::pin!(remote_response_fut, decider);
     let mut use_remote = false;
     let mut remote_response = None;
     loop {
@@ -294,8 +293,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                         debug!("dns answer: {:?}", rec);
 
                         match rec.rdata() {
-                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::from(*ip), forward),
-                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::from(*ip), forward),
+                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::V4(*ip), forward),
+                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::V6(*ip), forward),
                             _ => (),
                         }
                     }
