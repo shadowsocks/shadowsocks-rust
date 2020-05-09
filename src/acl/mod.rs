@@ -284,8 +284,8 @@ impl AccessControl {
     /// If so, it should be resolved from remote (for Android's DNS relay)
     pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
         if query.query_class() != DNSClass::IN {
-            // unconditionally forward all non-IN queries to remote
-            return Some(true);
+            // unconditionally use default for all non-IN queries
+            return Some(self.is_default_in_proxy_list());
         }
         // remove the last dot from fqdn name
         let mut name = query.name().to_ascii();
@@ -313,6 +313,13 @@ impl AccessControl {
         match self.mode {
             Mode::BlackList => !self.black_list.check_ip_matched(ip),
             Mode::WhiteList => self.white_list.check_ip_matched(ip),
+        }
+    }
+
+    fn is_default_in_proxy_list(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => true,
+            Mode::WhiteList => false,
         }
     }
 
@@ -347,11 +354,7 @@ impl AccessControl {
             }
         }
 
-        // default rule
-        match self.mode {
-            Mode::BlackList => false,
-            Mode::WhiteList => true,
-        }
+        !self.is_default_in_proxy_list()
     }
 
     /// Check if client address should be blocked (for server)
