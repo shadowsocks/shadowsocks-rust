@@ -64,8 +64,8 @@ async fn acl_lookup<Local, Remote>(
     }
 
     // FIXME: spawn(remote_response_fut)
-    let local_response = local_response_fut.await;
-    for rec in local_response.unwrap_or_else(|_| Message::new()).answers() {
+    let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
+    for rec in local_response.answers() {
         if rec.record_type() != query.query_type() {
             warn!("local DNS response has inconsistent answer type {} for query {}", rec.record_type(), query);
             break
@@ -78,7 +78,7 @@ async fn acl_lookup<Local, Remote>(
         };
         if !forward {
             debug!("pick local response (response): {:?}", local_response);
-            return (local_response, false);
+            return (Ok(local_response), false);
         }
     }
 
