@@ -17,7 +17,6 @@ use bloomfilter::Bloom;
 use lru_time_cache::LruCache;
 use spin::Mutex;
 use tokio::runtime::Handle;
-use trust_dns_proto::op::Query;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
@@ -26,6 +25,7 @@ use crate::relay::dns_resolver::create_resolver;
 #[cfg(feature = "local-flow-stat")]
 use crate::relay::flow::ServerFlowStatistic;
 use crate::{
+    acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
     relay::{dns_resolver::resolve, socks5::Address},
 };
@@ -269,7 +269,7 @@ impl Context {
 
     /// Check client ACL (for server)
     pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
-        match self.config.acl {
+        match self.acl() {
             None => false,
             Some(ref a) => a.check_client_blocked(addr),
         }
@@ -277,7 +277,7 @@ impl Context {
 
     /// Check outbound address ACL (for server)
     pub fn check_outbound_blocked(&self, addr: &Address) -> bool {
-        match self.config.acl {
+        match self.acl() {
             None => false,
             Some(ref a) => a.check_outbound_blocked(addr),
         }
@@ -285,7 +285,7 @@ impl Context {
 
     /// Check resolved outbound address ACL (for server)
     pub fn check_resolved_outbound_blocked(&self, addr: &SocketAddr) -> bool {
-        match self.config.acl {
+        match self.acl() {
             None => false,
             Some(ref a) => a.check_resolved_outbound_blocked(addr),
         }
@@ -294,7 +294,11 @@ impl Context {
     /// Add a record to the reverse lookup cache
     #[cfg(feature = "local-dns-relay")]
     pub fn add_to_reverse_lookup_cache(&self, addr: &IpAddr, forward: bool) {
-        let is_exception = self.check_ip_in_proxy_list(addr) != forward;
+        let is_exception = forward != match self.acl() {
+            // Proxy everything by default
+            None => true,
+            Some(ref a) => a.check_ip_in_proxy_list(addr)
+        };
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         match reverse_lookup_cache.get_mut(addr) {
             Some(value) => {
@@ -313,45 +317,13 @@ impl Context {
         }
     }
 
-    /// Check if domain name is in proxy_list.
-    /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
-        match self.config.acl {
-            // Proxy everything by default
-            None => Some(true),
-            Some(ref a) => a.check_query_in_proxy_list(query),
-        }
-    }
-
-    #[cfg(feature = "local-dns-relay")]
-    pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
-        match self.config.acl {
-            // Proxy everything by default
-            None => true,
-            Some(ref a) => {
-                // do the reverse lookup in our local cache
-                let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-                // if a qname is found
-                if let Some(forward) = reverse_lookup_cache.get(ip) {
-                    *forward
-                } else {
-                    a.check_ip_in_proxy_list(ip)
-                }
-            }
-        }
-    }
-
-    pub fn is_default_in_proxy_list(&self) -> bool {
-        match self.config.acl {
-            // Proxy everything by default
-            None => true,
-            Some(ref a) => a.is_default_in_proxy_list(),
-        }
+    pub fn acl(&self) -> &Option<AccessControl> {
+        &self.config.acl
     }
 
     /// Check target address ACL (for client)
     pub async fn check_target_bypassed(&self, target: &Address) -> bool {
-        match self.config.acl {
+        match self.acl() {
             // Proxy everything by default
             None => false,
             Some(ref a) => {

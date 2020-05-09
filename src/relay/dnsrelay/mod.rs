@@ -1,24 +1,20 @@
 use std::{
     io,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
 
 use tokio::sync::mpsc;
 
-#[cfg(not(target_os = "android"))]
-use std::net::{Ipv4Addr, SocketAddrV4};
-#[cfg(not(target_os = "android"))]
-use tokio::net::UdpSocket;
-
 use log::{debug, error, info, warn};
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, Query},
-    rr::RData,
+    rr::{DNSClass, Name, RData, RecordType},
 };
 
 use crate::{
+    acl::AccessControl,
     config::ConfigType,
     context::SharedContext,
     relay::{
@@ -30,8 +26,111 @@ use crate::{
 
 mod upstream;
 
+fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
+    let mut iter = name.iter().rev();
+    let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[48])).unwrap_or("*");
+    if !"arpa".eq_ignore_ascii_case(next()) {
+        return acl.is_default_in_proxy_list();
+    }
+    match &next().to_ascii_lowercase()[..] {
+        "in-addr" => {
+            let mut octets: [u8; 4] = [0; 4];
+            for octet in octets.iter_mut() {
+                match next().parse() {
+                    Ok(result) => *octet = result,
+                    Err(_) => return acl.is_default_in_proxy_list(),
+                }
+            }
+            acl.check_ip_in_proxy_list(&IpAddr::V4(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3])))
+        }
+        "ip6" => {
+            let mut segments: [u16; 8] = [0; 8];
+            for segment in segments.iter_mut() {
+                match u16::from_str_radix(&[next(), next(), next(), next()].concat(), 16) {
+                    Ok(result) => *segment = result,
+                    Err(_) => return acl.is_default_in_proxy_list(),
+                }
+            }
+            acl.check_ip_in_proxy_list(&IpAddr::V6(Ipv6Addr::new(
+                segments[0], segments[1], segments[2], segments[3], segments[4], segments[5], segments[6], segments[7]
+            )))
+        }
+        _ => acl.is_default_in_proxy_list(),
+    }
+}
+
+/// given the query, determine whether remote/local query should be used, or inconclusive
+fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option<bool> {
+    if let Some(acl) = acl {
+        if query.query_class() != DNSClass::IN {
+            // unconditionally use default for all non-IN queries
+            Some(acl.is_default_in_proxy_list())
+        } else if query.query_type() == RecordType::PTR {
+            Some(should_forward_by_ptr_name(acl, query.name()))
+        } else {
+            let result = acl.check_name_in_proxy_list(query.name());
+            if result == None && match query.query_type() {
+                RecordType::A => acl.is_ipv4_empty(),
+                RecordType::AAAA => acl.is_ipv6_empty(),
+                RecordType::ANY => acl.is_ipv4_empty() && acl.is_ipv6_empty(),
+                RecordType::PTR => panic!("PTR records should not reach here"),
+                _ => true,
+            } {
+                Some(acl.is_default_in_proxy_list())
+            } else {
+                result
+            }
+        }
+    } else {
+        Some(true)
+    }
+}
+
+/// given the local response, determine whether remote response should be used instead
+fn should_forward_by_response(
+    acl: &Option<AccessControl>,
+    local_response: &io::Result<Message>,
+    query: &Query,
+) -> bool {
+    if let Some(acl) = acl {
+        macro_rules! examine_record {
+            ($rec:ident, $is_answer:expr) => {
+                if let RData::CNAME(ref name) = $rec.rdata() {
+                    match acl.check_name_in_proxy_list(name) {
+                        Some(value) => return value,
+                        None => continue,
+                    }
+                } else if $is_answer && !query.query_type().is_any() && $rec.record_type() != query.query_type() {
+                    warn!("local DNS response has inconsistent answer type {} for query {}", $rec.record_type(), query);
+                    return true;
+                }
+                let forward = match $rec.rdata() {
+                    RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::from(*ip)),
+                    RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::from(*ip)),
+                    RData::PTR(_) => panic!("PTR records should not reach here"),
+                    _ => acl.is_default_in_proxy_list(),
+                };
+                if !forward {
+                    return false;
+                }
+            };
+        }
+        if let Ok(ref local_response) = local_response {
+            for rec in local_response.answers() {
+                examine_record!(rec, true);
+            }
+            for rec in local_response.additionals() {
+                examine_record!(rec, false);
+            }
+        }
+        true
+    } else {
+        panic!("should not reach here")
+    }
+}
+
 async fn acl_lookup<Local, Remote>(
-    context: SharedContext,
+    acl: &Option<AccessControl>,
     local: Arc<Local>,
     remote: Arc<Remote>,
     query: &Query
@@ -49,42 +148,31 @@ async fn acl_lookup<Local, Remote>(
     let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
     let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
 
-    match context.check_query_in_proxy_list(query) {
+    match should_forward_by_query(acl, query) {
         Some(true) => {
             let remote_response = remote_response_fut.await;
-            debug!("pick remote response (qname): {:?}", remote_response);
+            debug!("pick remote response (query): {:?}", remote_response);
             return (remote_response, true);
         }
         Some(false) => {
             let local_response = local_response_fut.await;
-            debug!("pick local response (qname): {:?}", local_response);
+            debug!("pick local response (query): {:?}", local_response);
             return (local_response, false);
         }
         None => (),
     }
 
     // FIXME: spawn(remote_response_fut)
-    let local_response = local_response_fut.await.unwrap_or_else(|_| Message::new());
-    for rec in local_response.answers() {
-        if rec.record_type() != query.query_type() {
-            warn!("local DNS response has inconsistent answer type {} for query {}", rec.record_type(), query);
-            break
-        }
-        let forward = match rec.rdata() {
-            RData::A(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
-            RData::AAAA(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
-            RData::PTR(_) => panic!("PTR records should not reach here"),
-            _ => context.is_default_in_proxy_list(),
-        };
-        if !forward {
-            debug!("pick local response (response): {:?}", local_response);
-            return (Ok(local_response), false);
-        }
-    }
+    let local_response = local_response_fut.await;
 
-    let remote_response = remote_response_fut.await;
-    debug!("pick remote response (response): {:?}", remote_response);
-    (remote_response, true)
+    if should_forward_by_response(acl, &local_response, query) {
+        let remote_response = remote_response_fut.await;
+        debug!("pick remote response (response): {:?}", remote_response);
+        (remote_response, true)
+    } else {
+        debug!("pick local response (response): {:?}", local_response);
+        (local_response, false)
+    }
 }
 
 /// Start a DNS relay local server
@@ -123,11 +211,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let config = context.config();
     #[cfg(target_os = "android")]
-    let local_upstream = Arc::new(upstream::UnixSocketUpstream {
+        let local_upstream = Arc::new(upstream::UnixSocketUpstream {
         path: config.local_dns_path.clone().expect("local query DNS path"),
     });
     #[cfg(not(target_os = "android"))]
-    let local_upstream = Arc::new(upstream::UdpUpstream {
+        let local_upstream = Arc::new(upstream::UdpUpstream {
         server: config.local_dns_addr.clone().expect("local query DNS address"),
     });
     // FIXME: We use TCP to send remote queries by default, which should be configuable.
@@ -174,7 +262,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 message.set_response_code(ResponseCode::FormErr);
             } else {
                 let question = &request.queries()[0];
-                let (r, forward) = acl_lookup(context.clone(), local_upstream, remote_upstream, question).await;
+                let (r, forward) = acl_lookup(context.acl(), local_upstream, remote_upstream, question).await;
 
                 if let Ok(result) = r {
                     for rec in result.answers() {

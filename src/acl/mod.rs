@@ -6,17 +6,14 @@ use std::{
     fmt,
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     path::Path,
 };
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
-use trust_dns_proto::{
-    op::Query,
-    rr::{DNSClass, Name, RecordType},
-};
+use trust_dns_proto::rr::Name;
 
 use crate::{context::Context, relay::socks5::Address};
 
@@ -89,14 +86,14 @@ impl Rules {
         self.rule.is_match(host)
     }
 
-    /// Check if there are no rules for the corresponding DNS query type
-    fn is_rule_empty_for_qtype(&self, qtype: RecordType) -> bool {
-        match qtype {
-            RecordType::A => self.ipv4.iter().next().is_none(),
-            RecordType::AAAA => self.ipv6.iter().next().is_none(),
-            RecordType::PTR => panic!("PTR records should not reach here"),
-            _ => true
-        }
+    /// Check if there are no rules for IPv4 addresses
+    fn is_ipv4_empty(&self) -> bool {
+        self.ipv4.iter().next().is_none()
+    }
+
+    /// Check if there are no rules for IPv6 addresses
+    fn is_ipv6_empty(&self) -> bool {
+        self.ipv6.iter().next().is_none()
     }
 }
 
@@ -283,16 +280,13 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_query_in_proxy_list(&self, query: &Query) -> Option<bool> {
-        if query.query_class() != DNSClass::IN || !query.name().is_fqdn() {
-            // unconditionally use default for all non-IN queries and PQDNs
+    pub fn check_name_in_proxy_list(&self, name: &Name) -> Option<bool> {
+        if !name.is_fqdn() {
+            // unconditionally use default for PQDNs
             return Some(self.is_default_in_proxy_list());
         }
-        if query.query_type() == RecordType::PTR {
-            return Some(self.check_ptr_qname_in_proxy_list(query.name()));
-        }
         // remove the last dot from fqdn name
-        let mut name = query.name().to_ascii();
+        let mut name = name.to_ascii();
         name.pop();
         let addr = Address::DomainNameAddress(name, 0);
         // Addresses in proxy_list will be proxied
@@ -302,48 +296,22 @@ impl AccessControl {
         if self.black_list.check_address_matched(&addr) {
             return Some(false);
         }
-        match self.mode {
-            Mode::BlackList => if self.black_list.is_rule_empty_for_qtype(query.query_type()) {
-                return Some(true);
-            },
-            Mode::WhiteList => if self.white_list.is_rule_empty_for_qtype(query.query_type()) {
-                return Some(false);
-            },
-        }
         None
     }
 
-    fn check_ptr_qname_in_proxy_list(&self, name: &Name) -> bool {
-        let mut iter = name.iter().rev();
-        let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[48])).unwrap_or("*");
-        if !"arpa".eq_ignore_ascii_case(next()) {
-            return self.is_default_in_proxy_list();
+    /// If there are no IPv4 rules
+    pub fn is_ipv4_empty(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => self.black_list.is_ipv4_empty(),
+            Mode::WhiteList => self.white_list.is_ipv4_empty(),
         }
-        match &next().to_ascii_lowercase()[..] {
-            "in-addr" => {
-                let mut octets: [u8; 4] = [0; 4];
-                for octet in octets.iter_mut() {
-                    match next().parse() {
-                        Ok(result) => *octet = result,
-                        Err(_) => return self.is_default_in_proxy_list(),
-                    }
-                }
-                self.check_ip_in_proxy_list(&IpAddr::V4(Ipv4Addr::new(octets[0], octets[1], octets[2], octets[3])))
-            }
-            "ip6" => {
-                let mut segments: [u16; 8] = [0; 8];
-                for segment in segments.iter_mut() {
-                    match u16::from_str_radix(&[next(), next(), next(), next()].concat(), 16) {
-                        Ok(result) => *segment = result,
-                        Err(_) => return self.is_default_in_proxy_list(),
-                    }
-                }
-                self.check_ip_in_proxy_list(&IpAddr::V6(Ipv6Addr::new(
-                    segments[0], segments[1], segments[2], segments[3],
-                    segments[4], segments[5], segments[6], segments[7]
-                )))
-            }
-            _ => self.is_default_in_proxy_list(),
+    }
+
+    /// If there are no IPv4 rules
+    pub fn is_ipv6_empty(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => self.black_list.is_ipv6_empty(),
+            Mode::WhiteList => self.white_list.is_ipv6_empty(),
         }
     }
 
