@@ -258,9 +258,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             message.set_recursion_available(true);
             message.set_message_type(MessageType::Response);
 
-            if request.queries().is_empty() {
-                message.set_response_code(ResponseCode::FormErr);
-            } else {
+            if !request.recursion_desired() {
+                message.set_recursion_desired(false);
+                message.set_response_code(ResponseCode::NotImp);
+            } else if request.query_count() > 0 {
                 let question = &request.queries()[0];
                 let (r, forward) = acl_lookup(context.acl(), local_upstream, remote_upstream, question).await;
 
