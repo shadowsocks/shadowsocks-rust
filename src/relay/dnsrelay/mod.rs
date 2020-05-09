@@ -46,11 +46,10 @@ async fn acl_lookup<Local, Remote>(
         query.query_type(), query.name(), local, remote
     );
 
-    let qname_in_proxy_list = context.check_query_in_proxy_list(query);
     let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
     let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
 
-    match qname_in_proxy_list {
+    match context.check_query_in_proxy_list(query) {
         Some(true) => {
             let remote_response = remote_response_fut.await;
             debug!("pick remote response (qname): {:?}", remote_response);
