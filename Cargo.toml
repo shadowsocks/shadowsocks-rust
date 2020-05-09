@@ -36,22 +36,38 @@ panic = "abort"
 
 [features]
 default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls"]
+# Enables ciphers that depending on libsodium
+# chacha20, xchacha20, chacha20-ietf
+# salsa20, xsalsa20
+# xchacha20-ietf-poly1305
 sodium = ["libsodium-sys"]
 rc4 = ["openssl"]
 aes-cfb = ["openssl"]
 aes-ctr = ["openssl"]
 aes-pmac-siv = ["miscreant"]
 camellia-cfb = ["openssl"]
+# Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
+# Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver"]
-dns-over-tls = ["trust-dns-resolver/dns-over-rustls"]
-dns-over-https = ["trust-dns-resolver/dns-over-https-rustls"]
-openssl-vendored = ["openssl/vendored", "native-tls/vendored"]
+dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-rustls"]
+dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https-rustls"]
+# Enable vendored OpenSSL
+# rust-openssl tries to find OpenSSL system-wide by default,
+# by enabling this feature will try to build or use prebuilt OpenSSL libraries
+openssl-vendored = ["native-tls/vendored", "openssl/vendored"]
+# Enable DNS-relay
+# Currently is only used in Android
 local-dns-relay = []
+# Enable client flow statistic report
+# Currently is only used in Android
 local-flow-stat = []
+# Enable HTTP protocol for sslocal
 local-http = ["hyper", "http", "tower"]
 local-http-native-tls = ["tokio-tls", "native-tls"]
 local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
+# Enable REDIR protocol for sslocal
+# (transparent proxy)
 local-redir = []
 
 [dependencies]

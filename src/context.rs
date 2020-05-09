@@ -13,6 +13,7 @@ use std::{
 use std::{net::IpAddr, time::Duration};
 
 use bloomfilter::Bloom;
+use log::warn;
 #[cfg(feature = "local-dns-relay")]
 use lru_time_cache::LruCache;
 use spin::Mutex;
@@ -26,6 +27,7 @@ use crate::relay::dns_resolver::create_resolver;
 use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     config::{Config, ConfigType, ServerConfig},
+    crypto::CipherType,
     relay::{dns_resolver::resolve, socks5::Address},
 };
 
@@ -181,6 +183,30 @@ pub type SharedContext = Arc<Context>;
 impl Context {
     /// Create a non-shared Context
     fn new(config: Config, server_state: SharedServerState) -> Context {
+        for server in &config.server {
+            let t = server.method();
+
+            // Warning for deprecated ciphers
+            // The following stream ciphers have inherent weaknesses (see discussion at https://github.com/shadowsocks/shadowsocks-org/issues/36).
+            // DO NOT USE. Implementors are advised to remove them as soon as possible.
+            let deprecated = match t {
+                #[cfg(feature = "sodium")]
+                CipherType::ChaCha20 | CipherType::Salsa20 => true,
+                #[cfg(feature = "rc4")]
+                CipherType::Rc4Md5 => true,
+                _ => false,
+            };
+            if deprecated {
+                warn!(
+                    "stream cipher {} (for server {}) have inherent weaknesses \
+                       (see discussion at https://github.com/shadowsocks/shadowsocks-org/issues/36). \
+                       DO NOT USE. It will be removed in the future.",
+                    t,
+                    server.addr(),
+                );
+            }
+        }
+
         let nonce_ppbloom = Mutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns-relay")]
         let reverse_lookup_cache = Mutex::new(LruCache::<IpAddr, bool>::with_expiry_duration(Duration::from_secs(
