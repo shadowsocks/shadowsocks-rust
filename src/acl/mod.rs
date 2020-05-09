@@ -315,7 +315,7 @@ impl AccessControl {
 
     fn check_ptr_qname_in_proxy_list(&self, name: &Name) -> bool {
         let mut iter = name.iter().rev();
-        let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[])).unwrap_or("0");
+        let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[48])).unwrap_or("*");
         if !"arpa".eq_ignore_ascii_case(next()) {
             return self.is_default_in_proxy_list();
         }
