@@ -12,7 +12,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 #[cfg(not(target_os = "android"))]
 use tokio::net::UdpSocket;
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, Query},
     rr::RData,
@@ -88,20 +88,24 @@ async fn acl_lookup<Local, Remote>(
     }
 
     for rec in local_response.answers() {
+        if rec.record_type() != query.query_type() {
+            warn!("local DNS response has inconsistent answer type {} for query {}", rec.record_type(), query);
+            break
+        }
         let forward = match rec.rdata() {
             RData::A(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
             RData::AAAA(ref ip) => context.check_ip_in_proxy_list(&IpAddr::from(*ip)),
             RData::PTR(_) => panic!("PTR records should not reach here"),
-            _ => true,
+            _ => context.is_default_in_proxy_list(),
         };
         if !forward {
-            debug!("pick local response (ip): {:?}", local_response);
+            debug!("pick local response (response): {:?}", local_response);
             return Ok((local_response, false));
         }
     }
 
     let remote_response = remote_response_fut.await.unwrap_or_else(Message::new);
-    debug!("pick remote response (ip): {:?}", remote_response);
+    debug!("pick remote response (response): {:?}", remote_response);
     Ok((remote_response, true))
 }
 

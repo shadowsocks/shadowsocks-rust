@@ -354,7 +354,7 @@ impl AccessControl {
         }
     }
 
-    fn is_default_in_proxy_list(&self) -> bool {
+    pub fn is_default_in_proxy_list(&self) -> bool {
         match self.mode {
             Mode::BlackList => true,
             Mode::WhiteList => false,

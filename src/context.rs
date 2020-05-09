@@ -341,6 +341,14 @@ impl Context {
         }
     }
 
+    pub fn is_default_in_proxy_list(&self) -> bool {
+        match self.config.acl {
+            // Proxy everything by default
+            None => true,
+            Some(ref a) => a.is_default_in_proxy_list(),
+        }
+    }
+
     /// Check target address ACL (for client)
     pub async fn check_target_bypassed(&self, target: &Address) -> bool {
         match self.config.acl {
