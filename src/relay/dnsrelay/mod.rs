@@ -73,7 +73,7 @@ fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option
                 RecordType::A => acl.is_ipv4_empty(),
                 RecordType::AAAA => acl.is_ipv6_empty(),
                 RecordType::ANY => acl.is_ipv4_empty() && acl.is_ipv6_empty(),
-                RecordType::PTR => panic!("PTR records should not reach here"),
+                RecordType::PTR => unreachable!(),
                 _ => true,
             } {
                 Some(acl.is_default_in_proxy_list())
@@ -125,7 +125,7 @@ fn should_forward_by_response(
         }
         true
     } else {
-        panic!("should not reach here")
+        unreachable!()
     }
 }
 
@@ -162,16 +162,40 @@ async fn acl_lookup<Local, Remote>(
         None => (),
     }
 
-    // FIXME: spawn(remote_response_fut)
-    let local_response = local_response_fut.await;
-
-    if should_forward_by_response(acl, &local_response, query) {
-        let remote_response = remote_response_fut.await;
-        debug!("pick remote response (response): {:?}", remote_response);
-        (remote_response, true)
-    } else {
-        debug!("pick local response (response): {:?}", local_response);
-        (local_response, false)
+    let decider = async {
+        let local_response = local_response_fut.await;
+        if should_forward_by_response(acl, &local_response, query) {
+            None
+        } else {
+            Some(local_response)
+        }
+    };
+    tokio::pin!(remote_response_fut);
+    tokio::pin!(decider);
+    let mut use_remote = false;
+    let mut remote_response = None;
+    loop {
+        tokio::select! {
+            response = &mut remote_response_fut => {
+                if use_remote {
+                    debug!("pick remote response (response): {:?}", response);
+                    return (response, true);
+                } else {
+                    remote_response = Some(response);
+                }
+            }
+            decision = &mut decider => {
+                if let Some(local_response) = decision {
+                    debug!("pick local response (response): {:?}", local_response);
+                    return (local_response, false);
+                } else if let Some(remote_response) = remote_response {
+                    debug!("pick remote response (response): {:?}", remote_response);
+                    return (remote_response, true);
+                } else {
+                    use_remote = true;
+                }
+            }
+        }
     }
 }
 

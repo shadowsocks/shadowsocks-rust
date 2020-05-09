@@ -62,7 +62,7 @@ env_logger = { version = "0.7", default-features = false, features = ["termcolor
 chrono = "0.4"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
-tokio = { version = "^0.2.7", features = ["net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
+tokio = { version = "^0.2.11", features = ["macros", "net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
 tokio-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.13", optional = true }
