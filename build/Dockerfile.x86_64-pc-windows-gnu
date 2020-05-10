@@ -20,5 +20,4 @@ RUN curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM
     cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
 
 ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" \
-    OPENSSL_LIBS="ssl:crypto" \
     SODIUM_LIB_DIR=/usr/x86_64-w64-mingw32/lib
