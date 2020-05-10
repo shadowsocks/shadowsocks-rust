@@ -149,7 +149,7 @@ impl ServerState {
 #[cfg(not(feature = "trust-dns"))]
 impl ServerState {
     /// Create a global shared server state
-    pub async fn new_shared(_config: &Config, _rt: Handle) -> SharedServerState {
+    pub async fn new_shared(_config: &Config) -> SharedServerState {
         Arc::new(ServerState {})
     }
 }
