@@ -332,6 +332,9 @@ impl AccessControl {
                 if let Some(value) = self.check_host_in_proxy_list(host) {
                     return value;
                 }
+                if self.is_ipv4_empty() && self.is_ipv6_empty() {
+                    return !self.is_default_in_proxy_list();
+                }
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
                         if !self.check_ip_in_proxy_list(&addr.ip()) {
