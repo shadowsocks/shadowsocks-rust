@@ -281,7 +281,7 @@ impl AccessControl {
     /// If so, it should be resolved from remote (for Android's DNS relay)
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         match self.mode {
-            //"[accept_all]" | "[proxy_all]"
+            // "[accept_all]" | "[proxy_all]"
             Mode::BlackList => {
                 //
                 // [proxy_all]
@@ -302,7 +302,7 @@ impl AccessControl {
                     return Some(false);
                 }
             },
-            //"[reject_all]" | "[bypass_all]"
+            // "[reject_all]" | "[bypass_all]"
             Mode::WhiteList => {
                 //
                 // [bypass_all]
@@ -343,20 +343,8 @@ impl AccessControl {
 
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
         match self.mode {
-            //"[accept_all]" | "[proxy_all]" see also #check_host_in_proxy_list()
-            Mode::BlackList => {
-                if self.white_list.check_ip_matched(ip) {
-                    return true;
-                }
-                return !self.black_list.check_ip_matched(ip)
-            },
-            //"[reject_all]" | "[bypass_all]" see also #check_host_in_proxy_list()
-            Mode::WhiteList => {
-                if self.black_list.check_ip_matched(ip) {
-                    return false;
-                }
-                return self.white_list.check_ip_matched(ip)
-            },
+            Mode::BlackList => !self.black_list.check_ip_matched(ip),
+            Mode::WhiteList => self.white_list.check_ip_matched(ip),
         }
     }
 
