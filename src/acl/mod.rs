@@ -84,6 +84,16 @@ impl Rules {
     fn check_host_matched(&self, host: &str) -> bool {
         self.rule.is_match(host)
     }
+
+    /// Check if there are no rules for IPv4 addresses
+    fn is_ipv4_empty(&self) -> bool {
+        self.ipv4.iter().next().is_none()
+    }
+
+    /// Check if there are no rules for IPv6 addresses
+    fn is_ipv6_empty(&self) -> bool {
+        self.ipv6.iter().next().is_none()
+    }
 }
 
 /// ACL rules
@@ -269,15 +279,32 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_qname_in_proxy_list(&self, addr: &Address) -> Option<bool> {
+    pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         // Addresses in proxy_list will be proxied
-        if self.white_list.check_address_matched(addr) {
+        if self.white_list.check_host_matched(host) {
             return Some(true);
         }
-        if self.black_list.check_address_matched(addr) {
+        // Addresses in bypass_list will be bypassed
+        if self.black_list.check_host_matched(host) {
             return Some(false);
         }
         None
+    }
+
+    /// If there are no IPv4 rules
+    pub fn is_ipv4_empty(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => self.black_list.is_ipv4_empty(),
+            Mode::WhiteList => self.white_list.is_ipv4_empty(),
+        }
+    }
+
+    /// If there are no IPv4 rules
+    pub fn is_ipv6_empty(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => self.black_list.is_ipv6_empty(),
+            Mode::WhiteList => self.white_list.is_ipv6_empty(),
+        }
     }
 
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
@@ -287,41 +314,36 @@ impl AccessControl {
         }
     }
 
+    pub fn is_default_in_proxy_list(&self) -> bool {
+        match self.mode {
+            Mode::BlackList => true,
+            Mode::WhiteList => false,
+        }
+    }
+
     /// Check if target address should be bypassed (for client)
     ///
-    /// FIXME: This function may perform a DNS resolution
+    /// This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
-        // Addresses in bypass_list will be bypassed
-        if self.black_list.check_address_matched(addr) {
-            return true;
-        }
-
-        // Addresses in proxy_list will be proxied
-        if self.white_list.check_address_matched(addr) {
-            return false;
-        }
-
-        // Resolve hostname and check the list
-        if cfg!(not(target_os = "android")) {
-            if let Address::DomainNameAddress(ref host, port) = *addr {
+        match *addr {
+            Address::SocketAddress(ref addr) => !self.check_ip_in_proxy_list(&addr.ip()),
+            // Resolve hostname and check the list
+            Address::DomainNameAddress(ref host, port) => {
+                if let Some(value) = self.check_host_in_proxy_list(host) {
+                    return !value;
+                }
+                if self.is_ipv4_empty() && self.is_ipv6_empty() {
+                    return !self.is_default_in_proxy_list();
+                }
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
-                        if self.black_list.check_ip_matched(&addr.ip()) {
+                        if !self.check_ip_in_proxy_list(&addr.ip()) {
                             return true;
-                        }
-
-                        if self.white_list.check_ip_matched(&addr.ip()) {
-                            return false;
                         }
                     }
                 }
-            }
-        }
-
-        // default rule
-        match self.mode {
-            Mode::BlackList => false,
-            Mode::WhiteList => true,
+                false
+            },
         }
     }
 
