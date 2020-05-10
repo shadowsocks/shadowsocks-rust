@@ -59,6 +59,18 @@ fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
     }
 }
 
+fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
+    if name.is_fqdn() {
+        // remove the last dot from FQDN
+        let mut name = name.to_ascii();
+        name.pop();
+        acl.check_host_in_proxy_list(&name)
+    } else {
+        // unconditionally use default for PQDNs
+        Some(acl.is_default_in_proxy_list())
+    }
+}
+
 /// given the query, determine whether remote/local query should be used, or inconclusive
 fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option<bool> {
     if let Some(acl) = acl {
@@ -68,7 +80,7 @@ fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option
         } else if query.query_type() == RecordType::PTR {
             Some(should_forward_by_ptr_name(acl, query.name()))
         } else {
-            let result = acl.check_name_in_proxy_list(query.name());
+            let result = check_name_in_proxy_list(acl, query.name());
             if result == None && match query.query_type() {
                 RecordType::A => acl.is_ipv4_empty(),
                 RecordType::AAAA => acl.is_ipv6_empty(),
@@ -96,7 +108,7 @@ fn should_forward_by_response(
         macro_rules! examine_record {
             ($rec:ident, $is_answer:expr) => {
                 if let RData::CNAME(ref name) = $rec.rdata() {
-                    match acl.check_name_in_proxy_list(name) {
+                    match check_name_in_proxy_list(acl, name) {
                         Some(value) => return value,
                         None => continue,
                     }

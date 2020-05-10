@@ -12,7 +12,10 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::UdpSocket
 };
-use trust_dns_proto::op::{Message, Query};
+use trust_dns_proto::{
+    op::{Message, Query},
+    rr::{DNSClass, RecordType, Name, RData},
+};
 
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -55,6 +58,28 @@ impl LocalUpstream {
             #[cfg(unix)]
             LocalUpstream::UnixSocket(upstream) => upstream.lookup(query).await,
         }
+    }
+
+    pub async fn lookup_ip(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+        let mut name = Name::from_utf8(host)?;
+        name.set_fqdn(true);
+        let mut queryv4 = Query::new();
+        queryv4.set_query_class(DNSClass::IN);
+        queryv4.set_name(name);
+        let mut queryv6 = queryv4.clone();
+        queryv4.set_query_type(RecordType::A);
+        queryv6.set_query_type(RecordType::AAAA);
+        let (responsev4, responsev6) = tokio::try_join!(self.lookup(&queryv4), self.lookup(&queryv6))?;
+        macro_rules! parse {
+            ($response:expr) => {
+                $response.answers().iter().filter_map(|rec| match rec.rdata() {
+                    RData::A(ref ip) => Some(SocketAddr::new(IpAddr::V4(ip.clone()), port)),
+                    RData::AAAA(ref ip) => Some(SocketAddr::new(IpAddr::V6(ip.clone()), port)),
+                    _ => None,
+                })
+            };
+        }
+        Ok(parse!(responsev4).chain(parse!(responsev6)).collect())
     }
 }
 

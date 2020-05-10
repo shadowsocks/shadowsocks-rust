@@ -26,10 +26,12 @@ use crate::relay::dns_resolver::create_resolver;
 use crate::relay::flow::ServerFlowStatistic;
 #[cfg(feature = "local-dns-relay")]
 use crate::relay::dnsrelay::upstream::LocalUpstream;
+#[cfg(not(feature = "local-dns-relay"))]
+use crate::relay::dns_resolver::resolve;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
-    relay::{dns_resolver::resolve, socks5::Address},
+    relay::socks5::Address,
 };
 
 // Entries for server's bloom filter
@@ -250,6 +252,9 @@ impl Context {
 
     /// Perform a DNS resolution
     pub async fn dns_resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+        #[cfg(feature = "local-dns-relay")]
+        return self.local_dns().lookup_ip(host, port).await;
+        #[cfg(not(feature = "local-dns-relay"))]
         resolve(self, host, port).await
     }
 

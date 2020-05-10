@@ -13,7 +13,6 @@ use std::{
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
-use trust_dns_proto::rr::Name;
 
 use crate::{context::Context, relay::socks5::Address};
 
@@ -280,20 +279,13 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
-    pub fn check_name_in_proxy_list(&self, name: &Name) -> Option<bool> {
-        if !name.is_fqdn() {
-            // unconditionally use default for PQDNs
-            return Some(self.is_default_in_proxy_list());
-        }
-        // remove the last dot from fqdn name
-        let mut name = name.to_ascii();
-        name.pop();
-        let addr = Address::DomainNameAddress(name, 0);
+    pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         // Addresses in proxy_list will be proxied
-        if self.white_list.check_address_matched(&addr) {
+        if self.white_list.check_host_matched(host) {
             return Some(true);
         }
-        if self.black_list.check_address_matched(&addr) {
+        // Addresses in bypass_list will be bypassed
+        if self.black_list.check_host_matched(host) {
             return Some(false);
         }
         None
@@ -331,36 +323,25 @@ impl AccessControl {
 
     /// Check if target address should be bypassed (for client)
     ///
-    /// FIXME: This function may perform a DNS resolution
+    /// This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
-        // Addresses in bypass_list will be bypassed
-        if self.black_list.check_address_matched(addr) {
-            return true;
-        }
-
-        // Addresses in proxy_list will be proxied
-        if self.white_list.check_address_matched(addr) {
-            return false;
-        }
-
-        // Resolve hostname and check the list
-        if cfg!(not(target_os = "android")) {
-            if let Address::DomainNameAddress(ref host, port) = *addr {
+        match *addr {
+            Address::SocketAddress(ref addr) => self.check_ip_in_proxy_list(&addr.ip()),
+            // Resolve hostname and check the list
+            Address::DomainNameAddress(ref host, port) => {
+                if let Some(value) = self.check_host_in_proxy_list(host) {
+                    return value;
+                }
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
                     for addr in vaddr {
-                        if self.black_list.check_ip_matched(&addr.ip()) {
+                        if !self.check_ip_in_proxy_list(&addr.ip()) {
                             return true;
-                        }
-
-                        if self.white_list.check_ip_matched(&addr.ip()) {
-                            return false;
                         }
                     }
                 }
-            }
+                false
+            },
         }
-
-        !self.is_default_in_proxy_list()
     }
 
     /// Check if client address should be blocked (for server)
