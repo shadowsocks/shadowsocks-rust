@@ -1,9 +1,9 @@
 [package]
 name = "shadowsocks-rust"
 version = "1.8.11"
-authors = ["Y. T. CHUNG <zonyitoo@gmail.com>"]
+authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
-repository = "https://github.com/zonyitoo/shadowsocks-rust"
+repository = "https://github.com/shadowsocks/shadowsocks-rust"
 documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
