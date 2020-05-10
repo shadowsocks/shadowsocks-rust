@@ -9,7 +9,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::Path,
 };
-use log::info;
+
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
@@ -280,9 +280,9 @@ impl AccessControl {
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
-        info!("host checking: {}", host);
         match self.mode {
-            Mode::BlackList => { //"[accept_all]" | "[proxy_all]"
+            //"[accept_all]" | "[proxy_all]"
+            Mode::BlackList => {
                 //
                 // [proxy_all]
                 // [proxy_list]
@@ -295,16 +295,15 @@ impl AccessControl {
                 //
                 // Addresses in proxy_list will be proxied
                 if self.white_list.check_host_matched(host) {
-                    info!("host: {}, in BL mode, exists in white_list, return: true(in proxy)", host);
                     return Some(true);
                 }
                 // Addresses in bypass_list will be bypassed
                 if self.black_list.check_host_matched(host) {
-                    info!("host: {}, in BL mode, exists in back_list, return: false(no proxy)", host);
                     return Some(false);
                 }
             },
-            Mode::WhiteList => { //"[reject_all]" | "[bypass_all]"
+            //"[reject_all]" | "[bypass_all]"
+            Mode::WhiteList => {
                 //
                 // [bypass_all]
                 // [bypass_list]
@@ -316,11 +315,9 @@ impl AccessControl {
                 // access: (**).example.com   => proxy
                 //
                 if self.black_list.check_host_matched(host) {
-                    info!("host: {}, in WL mode, exists in black_list, return: false(no proxy)", host);
                     return Some(false);
                 }
                 if self.white_list.check_host_matched(host) {
-                    info!("host: {}, in WL mode, exists in white_list, return: true(in proxy)", host);
                     return Some(true);
                 }
             },
@@ -346,13 +343,15 @@ impl AccessControl {
 
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
         match self.mode {
-            Mode::BlackList => { //"[accept_all]" | "[proxy_all]" see also #check_host_in_proxy_list()
+            //"[accept_all]" | "[proxy_all]" see also #check_host_in_proxy_list()
+            Mode::BlackList => {
                 if self.white_list.check_ip_matched(ip) {
                     return true;
                 }
                 return !self.black_list.check_ip_matched(ip)
             },
-            Mode::WhiteList => { //"[reject_all]" | "[bypass_all]" see also #check_host_in_proxy_list()
+            //"[reject_all]" | "[bypass_all]" see also #check_host_in_proxy_list()
+            Mode::WhiteList => {
                 if self.black_list.check_ip_matched(ip) {
                     return false;
                 }
