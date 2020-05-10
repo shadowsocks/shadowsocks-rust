@@ -205,6 +205,7 @@ async fn acl_lookup<Remote>(
                     use_remote = true;
                 }
             }
+            else => unreachable!(),
         }
     }
 }
