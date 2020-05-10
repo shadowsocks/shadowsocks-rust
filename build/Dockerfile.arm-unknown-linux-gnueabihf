@@ -1,0 +1,3 @@
+FROM rustembedded/cross:arm-unknown-linux-gnueabihf
+
+ENV RUSTFLAGS="-Ctarget-feature=+aes"

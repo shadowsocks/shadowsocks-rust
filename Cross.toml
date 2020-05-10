@@ -13,3 +13,6 @@ image = "shadowsocks-rust:x86_64-unknown-linux-gnu"
 
 [target.x86_64-pc-windows-gnu]
 image = "shadowsocks-rust:x86_64-pc-windows-gnu"
+
+[target.arm-unknown-linux-gnueabihf]
+image = "shadowsocks-rust:arm-unknown-linux-gnueabihf"

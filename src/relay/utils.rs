@@ -23,8 +23,8 @@ pub fn set_nofile(nofile: u64) -> io::Result<()> {
     unsafe {
         // set both soft and hard limit
         let lim = libc::rlimit {
-            rlim_cur: nofile,
-            rlim_max: nofile,
+            rlim_cur: nofile as libc::rlim_t,
+            rlim_max: nofile as libc::rlim_t,
         };
 
         if libc::setrlimit(libc::RLIMIT_NOFILE, &lim as *const _) < 0 {

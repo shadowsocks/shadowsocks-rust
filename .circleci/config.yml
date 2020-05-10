@@ -138,6 +138,7 @@ jobs:
                   cd build
                   docker build -t shadowsocks-rust:x86_64-pc-windows-gnu -f Dockerfile.x86_64-pc-windows-gnu .
                   docker build -t shadowsocks-rust:x86_64-unknown-linux-musl -f Dockerfile.x86_64-unknown-linux-musl .
+                  docker build -t shadowsocks-rust:arm-unknown-linux-gnueabihf -f Dockerfile.arm-unknown-linux-gnueabihf .
             - run: |
                   curl "https://sh.rustup.rs" -o "rust-init.sh"
                   chmod +x "rust-init.sh"
