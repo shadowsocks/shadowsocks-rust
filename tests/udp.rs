@@ -9,7 +9,6 @@ use bytes::{BufMut, BytesMut};
 use log::debug;
 use tokio::{
     prelude::*,
-    runtime::{Builder, Handle},
     time::{self, Duration},
 };
 
@@ -60,12 +59,12 @@ fn get_client_addr() -> SocketAddr {
     LOCAL_ADDR.parse().unwrap()
 }
 
-fn start_server(handle: Handle) {
-    tokio::spawn(run_server(get_svr_config(), handle));
+fn start_server() {
+    tokio::spawn(run_server(get_svr_config()));
 }
 
-fn start_local(handle: Handle) {
-    tokio::spawn(run_local(get_cli_config(), handle));
+fn start_local() {
+    tokio::spawn(run_local(get_cli_config()));
 }
 
 fn start_udp_echo_server() {
@@ -102,56 +101,51 @@ fn start_udp_request_holder(addr: Address) {
     });
 }
 
-#[test]
-fn udp_relay() {
+#[tokio::test]
+async fn udp_relay() {
     use tokio::net::UdpSocket;
 
     let _ = env_logger::try_init();
 
     let remote_addr = Address::SocketAddress(UDP_ECHO_SERVER_ADDR.parse().unwrap());
 
-    let mut rt = Builder::new().basic_scheduler().enable_all().build().unwrap();
-    let rt_handle = rt.handle().clone();
+    start_server();
+    start_local();
 
-    rt.block_on(async move {
-        start_server(rt_handle.clone());
-        start_local(rt_handle);
+    start_udp_echo_server();
 
-        start_udp_echo_server();
+    // Wait until all server starts
+    time::delay_for(Duration::from_secs(1)).await;
 
-        // Wait until all server starts
-        time::delay_for(Duration::from_secs(1)).await;
+    start_udp_request_holder(remote_addr.clone());
 
-        start_udp_request_holder(remote_addr.clone());
+    let mut l = UdpSocket::bind(UDP_LOCAL_ADDR).await.unwrap();
 
-        let mut l = UdpSocket::bind(UDP_LOCAL_ADDR).await.unwrap();
+    let header = UdpAssociateHeader::new(0, remote_addr);
+    let mut buf = BytesMut::with_capacity(header.serialized_len());
+    header.write_to_buf(&mut buf);
 
-        let header = UdpAssociateHeader::new(0, remote_addr);
-        let mut buf = BytesMut::with_capacity(header.serialized_len());
-        header.write_to_buf(&mut buf);
+    let payload = b"HEllo WORld";
 
-        let payload = b"HEllo WORld";
+    buf.reserve(payload.len());
+    buf.put_slice(payload);
 
-        buf.reserve(payload.len());
-        buf.put_slice(payload);
+    let local_addr = LOCAL_ADDR.parse::<SocketAddr>().unwrap();
+    l.send_to(&buf[..], &local_addr).await.unwrap();
 
-        let local_addr = LOCAL_ADDR.parse::<SocketAddr>().unwrap();
-        l.send_to(&buf[..], &local_addr).await.unwrap();
+    let mut buf = vec![0u8; 65536];
+    let (amt, _) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    println!("Received buf size={} {:?}", amt, &buf[..amt]);
 
-        let mut buf = vec![0u8; 65536];
-        let (amt, _) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
-            .await
-            .unwrap()
-            .unwrap();
-        println!("Received buf size={} {:?}", amt, &buf[..amt]);
+    let mut cur = Cursor::new(buf[..amt].to_vec());
+    let header = UdpAssociateHeader::read_from(&mut cur).await.unwrap();
+    println!("{:?}", header);
+    let header_len = cur.position() as usize;
+    let buf = cur.into_inner();
+    let buf = &buf[header_len..];
 
-        let mut cur = Cursor::new(buf[..amt].to_vec());
-        let header = UdpAssociateHeader::read_from(&mut cur).await.unwrap();
-        println!("{:?}", header);
-        let header_len = cur.position() as usize;
-        let buf = cur.into_inner();
-        let buf = &buf[header_len..];
-
-        assert_eq!(buf, payload);
-    });
+    assert_eq!(buf, payload);
 }

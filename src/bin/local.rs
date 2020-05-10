@@ -294,10 +294,9 @@ fn main() {
         builder.threaded_scheduler();
     }
     let mut runtime = builder.enable_all().build().expect("create tokio Runtime");
-    let rt_handle = runtime.handle().clone();
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
-        let server = run_local(config, rt_handle);
+        let server = run_local(config);
 
         tokio::pin!(abort_signal);
         tokio::pin!(server);

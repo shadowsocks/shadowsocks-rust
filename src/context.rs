@@ -17,18 +17,17 @@ use log::warn;
 #[cfg(feature = "local-dns-relay")]
 use lru_time_cache::LruCache;
 use spin::Mutex;
-use tokio::runtime::Handle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
-#[cfg(feature = "local-flow-stat")]
-use crate::relay::flow::ServerFlowStatistic;
-#[cfg(feature = "local-dns-relay")]
-use crate::relay::dnsrelay::upstream::LocalUpstream;
 #[cfg(not(feature = "local-dns-relay"))]
 use crate::relay::dns_resolver::resolve;
+#[cfg(feature = "local-dns-relay")]
+use crate::relay::dnsrelay::upstream::LocalUpstream;
+#[cfg(feature = "local-flow-stat")]
+use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
@@ -130,9 +129,9 @@ pub struct ServerState {
 #[cfg(feature = "trust-dns")]
 impl ServerState {
     /// Create a global shared server state
-    pub async fn new_shared(config: &Config, rt: Handle) -> SharedServerState {
+    pub async fn new_shared(config: &Config) -> SharedServerState {
         let state = ServerState {
-            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, config.ipv6_first, rt).await {
+            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, config.ipv6_first).await {
                 Ok(resolver) => Some(resolver),
                 Err(..) => None,
             },
@@ -335,11 +334,12 @@ impl Context {
     /// Add a record to the reverse lookup cache
     #[cfg(feature = "local-dns-relay")]
     pub fn add_to_reverse_lookup_cache(&self, addr: &IpAddr, forward: bool) {
-        let is_exception = forward != match self.acl() {
-            // Proxy everything by default
-            None => true,
-            Some(ref a) => a.check_ip_in_proxy_list(addr)
-        };
+        let is_exception = forward
+            != match self.acl() {
+                // Proxy everything by default
+                None => true,
+                Some(ref a) => a.check_ip_in_proxy_list(addr),
+            };
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         match reverse_lookup_cache.get_mut(addr) {
             Some(value) => {

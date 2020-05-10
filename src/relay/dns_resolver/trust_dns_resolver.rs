@@ -7,7 +7,6 @@ use std::{
 };
 
 use log::{error, trace};
-use tokio::{self, runtime::Handle};
 use trust_dns_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
@@ -21,7 +20,6 @@ pub async fn create_resolver(
     dns: Option<ResolverConfig>,
     timeout: Option<Duration>,
     ipv6_first: bool,
-    rt: Handle,
 ) -> io::Result<TokioAsyncResolver> {
     let mut resolver_opts = ResolverOpts::default();
     if let Some(d) = timeout {
@@ -32,76 +30,63 @@ pub async fn create_resolver(
         resolver_opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
     }
 
-    {
-        // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration:
-        #[cfg(any(unix, windows))]
-        {
-            if let Some(conf) = dns {
-                trace!(
-                    "initializing DNS resolver with config {:?} opts {:?}",
-                    conf,
-                    resolver_opts
-                );
-                TokioAsyncResolver::new(conf, resolver_opts, rt)
-            } else {
-                use trust_dns_resolver::system_conf::read_system_conf;
-                // use the system resolver configuration
-                let (config, mut opts) = match read_system_conf() {
-                    Ok(o) => o,
-                    Err(err) => {
-                        error!("failed to initialize DNS resolver with system-config, error: {}", err);
-
-                        // From::from is required because on error type is different on Windows
-                        #[allow(clippy::identity_conversion)]
-                        return Err(From::from(err));
-                    }
-                };
-
-                // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
-                //
-                // Only ip_strategy should be changed
-                if ipv6_first {
-                    opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
-                }
-
-                trace!(
-                    "initializing DNS resolver with system-config {:?} opts {:?}",
-                    config,
-                    opts
-                );
-
-                TokioAsyncResolver::new(config, opts, rt)
-            }
+    // Customized dns resolution
+    match dns {
+        Some(conf) => {
+            trace!(
+                "initializing DNS resolver with config {:?} opts {:?}",
+                conf,
+                resolver_opts
+            );
+            TokioAsyncResolver::tokio(conf, resolver_opts).await
         }
 
-        // For other operating systems, we can use one of the preconfigured definitions
-        #[cfg(not(any(unix, windows)))]
-        {
-            if let Some(conf) = dns {
-                trace!(
-                    "initializing DNS resolver with config {:?} opts {:?}",
-                    conf,
-                    resolver_opts
-                );
-                TokioAsyncResolver::new(conf, resolver_opts, rt)
-            } else {
-                // Get a new resolver with the google nameservers as the upstream recursive resolvers
-                trace!(
-                    "initializing DNS resolver with google-config {:?} opts {:?}",
-                    ResolverConfig::google(),
-                    resolver_opts
-                );
-                TokioAsyncResolver::new(ResolverConfig::google(), resolver_opts, rt)
+        // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
+        #[cfg(any(unix, windows))]
+        None => {
+            use tokio::runtime::Handle;
+            use trust_dns_resolver::system_conf::read_system_conf;
+
+            // use the system resolver configuration
+            let (config, mut opts) = match read_system_conf() {
+                Ok(o) => o,
+                Err(err) => {
+                    error!("failed to initialize DNS resolver with system-config, error: {}", err);
+
+                    // From::from is required because on error type is different on Windows
+                    #[allow(clippy::identity_conversion)]
+                    return Err(From::from(err));
+                }
+            };
+
+            // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
+            //
+            // Only ip_strategy should be changed
+            if ipv6_first {
+                opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
             }
+
+            trace!(
+                "initializing DNS resolver with system-config {:?} opts {:?}",
+                config,
+                opts
+            );
+
+            TokioAsyncResolver::new(config, opts, Handle::current()).await
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        None => {
+            // Get a new resolver with the google nameservers as the upstream recursive resolvers
+            trace!(
+                "initializing DNS resolver with google-config {:?} opts {:?}",
+                ResolverConfig::google(),
+                resolver_opts
+            );
+            TokioAsyncResolver::tokio(ResolverConfig::google(), resolver_opts).await
         }
     }
-    .await
-    .map_err(|err| {
-        Error::new(
-            ErrorKind::Other,
-            format!("failed to create trust-dns DNS resolver, error: {}", err),
-        )
-    })
+    .map_err(From::from)
 }
 
 /// Perform a DNS resolution

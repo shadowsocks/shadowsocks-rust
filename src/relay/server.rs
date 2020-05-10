@@ -7,7 +7,7 @@ use std::{
 
 use futures::future::{select_all, FutureExt};
 use log::{debug, error, trace, warn};
-use tokio::{runtime::Handle, time};
+use tokio::time;
 
 use crate::{
     config::Config,
@@ -24,9 +24,9 @@ use crate::{
 
 /// Runs Relay server on server side.
 #[inline]
-pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
+pub async fn run(config: Config) -> io::Result<()> {
     // Create a context containing a DNS resolver and server running state flag.
-    let server_state = ServerState::new_shared(&config, rt).await;
+    let server_state = ServerState::new_shared(&config).await;
 
     // Create statistics for multiple servers
     //

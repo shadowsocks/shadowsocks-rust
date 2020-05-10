@@ -4,7 +4,6 @@ use std::io::{self, ErrorKind};
 
 use futures::{future::select_all, FutureExt};
 use log::{debug, error, trace, warn};
-use tokio::runtime::Handle;
 
 #[cfg(feature = "local-flow-stat")]
 use crate::context::SharedContext;
@@ -16,7 +15,7 @@ use crate::{
 };
 
 /// Relay server running under local environment.
-pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
+pub async fn run(mut config: Config) -> io::Result<()> {
     trace!("initializing local server with {:?}", config);
 
     assert!(config.config_type.is_local());
@@ -43,7 +42,7 @@ pub async fn run(mut config: Config, rt: Handle) -> io::Result<()> {
     let mode = config.mode;
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new_shared(&config, rt).await;
+    let state = ServerState::new_shared(&config).await;
 
     let mut vf = Vec::new();
 

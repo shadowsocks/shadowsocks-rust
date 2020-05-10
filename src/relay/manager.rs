@@ -16,7 +16,7 @@ use futures::future;
 use log::{debug, error, trace, warn};
 #[cfg(unix)]
 use tokio::net::UnixDatagram;
-use tokio::{self, net::UdpSocket, runtime::Handle, sync::oneshot};
+use tokio::{self, net::UdpSocket, sync::oneshot};
 
 use crate::{
     config::{Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
@@ -533,7 +533,7 @@ impl ManagerService {
 }
 
 /// Server manager for supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users) APIs
-pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
+pub async fn run(config: Config) -> io::Result<()> {
     assert!(config.config_type.is_manager());
 
     if let Some(nofile) = config.nofile {
@@ -555,7 +555,7 @@ pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
     }
 
     // Create a context containing a DNS resolver and server running state flag.
-    let state = ServerState::new_shared(&config, rt.clone()).await;
+    let state = ServerState::new_shared(&config).await;
     let context = Context::new_shared(config, state.clone());
 
     let bind_addr = match context.config().manager_addr {

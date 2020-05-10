@@ -55,10 +55,9 @@
 //! use shadowsocks::{run_local, Config, ConfigType};
 //!
 //! let mut rt = Runtime::new().expect("Failed to create runtime");
-//! let rt_handle = rt.handle().clone();
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Socks5Local).unwrap();
-//! rt.block_on(run_local(config, rt_handle));
+//! rt.block_on(run_local(config));
 //! ```
 //!
 //! That's all! And let me show you how to run a proxy server
@@ -68,10 +67,9 @@
 //! use shadowsocks::{run_server, Config, ConfigType};
 //!
 //! let mut rt = Runtime::new().expect("Failed to create runtime");
-//! let rt_handle = rt.handle().clone();
 //!
 //! let config = Config::load_from_file("shadowsocks.json", ConfigType::Server).unwrap();
-//! rt.block_on(run_server(config, rt_handle));
+//! rt.block_on(run_server(config));
 //! ```
 
 #![crate_type = "lib"]
@@ -79,8 +77,6 @@
 #![recursion_limit = "128"]
 
 use std::io;
-
-use tokio::runtime::Handle;
 
 /// ShadowSocks version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -105,10 +101,10 @@ pub mod relay;
 /// Start a ShadowSocks' server
 ///
 /// For `config.config_type` in `Socks5Local`, `HttpLocal` and `TunnelLocal`, server will run in Local mode.
-pub async fn run(config: Config, rt: Handle) -> io::Result<()> {
+pub async fn run(config: Config) -> io::Result<()> {
     if config.config_type.is_local() {
-        run_local(config, rt).await
+        run_local(config).await
     } else {
-        run_server(config, rt).await
+        run_server(config).await
     }
 }
