@@ -326,11 +326,11 @@ impl AccessControl {
     /// This function may perform a DNS resolution
     pub async fn check_target_bypassed(&self, context: &Context, addr: &Address) -> bool {
         match *addr {
-            Address::SocketAddress(ref addr) => self.check_ip_in_proxy_list(&addr.ip()),
+            Address::SocketAddress(ref addr) => !self.check_ip_in_proxy_list(&addr.ip()),
             // Resolve hostname and check the list
             Address::DomainNameAddress(ref host, port) => {
                 if let Some(value) = self.check_host_in_proxy_list(host) {
-                    return value;
+                    return !value;
                 }
                 if self.is_ipv4_empty() && self.is_ipv6_empty() {
                     return !self.is_default_in_proxy_list();
