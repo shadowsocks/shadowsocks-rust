@@ -175,7 +175,7 @@ async fn acl_lookup<Local, Remote>(
     let mut remote_response = None;
     loop {
         tokio::select! {
-            response = &mut remote_response_fut => {
+            response = &mut remote_response_fut, if remote_response.is_none() => {
                 if use_remote {
                     debug!("pick remote response (response): {:?}", response);
                     return (response, true);
@@ -183,7 +183,7 @@ async fn acl_lookup<Local, Remote>(
                     remote_response = Some(response);
                 }
             }
-            decision = &mut decider => {
+            decision = &mut decider, if !use_remote => {
                 if let Some(local_response) = decision {
                     debug!("pick local response (response): {:?}", local_response);
                     return (local_response, false);
