@@ -362,6 +362,7 @@ impl Context {
         &self.config.acl
     }
 
+    #[cfg(feature = "local-dns-relay")]
     pub fn local_dns(&self) -> &LocalUpstream {
         &self.local_dns
     }
