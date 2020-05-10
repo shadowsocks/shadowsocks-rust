@@ -28,7 +28,10 @@ pub mod upstream;
 
 fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
     let mut iter = name.iter().rev();
-    let mut next = || std::str::from_utf8(iter.next().unwrap_or(&[48])).unwrap_or("*");
+    let mut next = || match iter.next() {
+        Some(label) => std::str::from_utf8(label).unwrap_or("*"),
+        None => "0",    // zero fill the missing labels
+    };
     if !"arpa".eq_ignore_ascii_case(next()) {
         return acl.is_default_in_proxy_list();
     }
@@ -141,15 +144,12 @@ fn should_forward_by_response(
     }
 }
 
-async fn acl_lookup<Remote>(
+async fn acl_lookup<Remote: upstream::Upstream>(
     acl: &Option<AccessControl>,
     local: &upstream::LocalUpstream,
     remote: Arc<Remote>,
     query: &Query
-) -> (io::Result<Message>, bool)
-    where
-        Remote: upstream::Upstream,
-{
+) -> (io::Result<Message>, bool) {
     // Start querying name servers
     debug!(
         "attempting lookup of {:?} {} with ns {:?} and {:?}",
