@@ -72,12 +72,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         //  2. Not in tunnel mode. (Socks5 UDP relay requires TCP port enabled)
 
         if config.has_server_plugins() {
-            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
-
-            // Wait until all plugins actually start
-            // Some plugins require quite a lot bootstrap time
-            Plugins::check_plugins_started(&config).await;
-
+            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client).await?;
             vf.push(plugins.boxed());
         }
 

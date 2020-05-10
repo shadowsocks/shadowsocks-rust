@@ -69,7 +69,7 @@ pub(crate) async fn run_with(
 
     let context = if mode.enable_tcp() {
         if config.has_server_plugins() {
-            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client)?;
+            let plugins = Plugins::launch_plugins(&mut config, PluginMode::Server).await?;
             vf.push(plugins.boxed());
         }
 

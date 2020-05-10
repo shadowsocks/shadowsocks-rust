@@ -130,7 +130,7 @@ impl Plugins {
     /// Launch plugins in configuration.
     ///
     /// Will modify servers' listen addresses to plugins' listen addresses.
-    pub fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<Plugins> {
+    pub async fn launch_plugins(config: &mut Config, mode: PluginMode) -> io::Result<Plugins> {
         let mut plugins = Vec::new();
 
         for svr in &mut config.server {
@@ -191,6 +191,10 @@ impl Plugins {
             panic!("didn't find any plugins to start");
         }
 
+        if let PluginMode::Client = mode {
+            Plugins::check_plugins_started(config).await;
+        }
+
         Ok(Plugins { plugins })
     }
 
@@ -198,10 +202,6 @@ impl Plugins {
     ///
     /// This future won't resolve until all plugins are started
     pub async fn check_plugins_started(config: &Config) {
-        if !config.has_server_plugins() {
-            return;
-        }
-
         let mut v = Vec::new();
 
         for svr in &config.server {
