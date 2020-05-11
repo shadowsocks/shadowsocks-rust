@@ -1,11 +1,9 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::Arc,
     time::Duration,
 };
-
-use tokio::sync::mpsc;
 
 use log::{debug, error, info, warn};
 use trust_dns_proto::{
@@ -269,16 +267,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let actual_local_addr = socket.local_addr()?;
     info!("shadowsocks DNS relay listening on {}", actual_local_addr);
 
-    let (mut rx, mut tx) = socket.split();
-    let (qtx, mut qrx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
-
-    tokio::spawn(async move {
-        while let Some((src, pkt)) = qrx.recv().await {
-            if let Err(err) = tx.send_to(&pkt, &src).await {
-                error!("failed to send packet {} bytes to {}, error: {}", pkt.len(), src, err);
-            }
-        }
-    });
+    let (mut rx, tx) = socket.split();
+    let tx = Arc::new(tokio::sync::Mutex::new(tx));
 
     let config = context.config();
     // FIXME: We use TCP to send remote queries by default, which should be configuable.
@@ -313,7 +303,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         debug!("received src: {}, query: {:?}", src, request);
 
         let relay = relay.clone();
-        let mut qtx = qtx.clone();
+        let tx = tx.clone();
 
         tokio::spawn(async move {
             let message = relay.resolve(request).await;
@@ -324,7 +314,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     error!("failed to serialize message, error: {}", err);
                 }
                 Ok(res_buffer) => {
-                    if let Err(..) = qtx.send((src, res_buffer)).await {
+                    if let Err(..) = tx.lock().await.send_to(&res_buffer, &src).await {
                         error!("DNS send back queue is closed unexpectly");
                     }
                 }
