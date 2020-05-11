@@ -5,7 +5,9 @@ use std::{
     time::Duration,
 };
 
+use futures::future;
 use log::{debug, error, info, warn};
+use tokio::net::TcpListener;
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
     rr::{DNSClass, Name, RData, RecordType},
@@ -244,6 +246,34 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
     }
 }
 
+async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
+    relay: Arc<DnsRelay<Remote>>,
+    bind_addr: SocketAddr
+) -> io::Result<()> {
+    let mut listener = TcpListener::bind(&bind_addr).await?;
+
+    let actual_local_addr = listener.local_addr()?;
+    info!("shadowsocks DNS relay listening on tcp:{}", actual_local_addr);
+
+    loop {
+        let (mut stream, src) = listener.accept().await?;
+        let relay = relay.clone();
+        tokio::spawn(async move {
+            match upstream::read_message(&mut stream).await {
+                Ok(request) => {
+                    debug!("received src: {}, query: {:?}", src, request);
+                    let message = relay.resolve(request).await;
+                    debug!("DNS src: {}, final response: {:?}", src, message);
+                    if let Err(err) = upstream::write_message(&mut stream, &message).await {
+                        error!("failed to write DNS response, error: {}", err);
+                    }
+                }
+                Err(e) => error!("failed to parse TCP query message from {}, error: {:?}", src, e),
+            }
+        });
+    }
+}
+
 async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
     relay: Arc<DnsRelay<Remote>>,
     bind_addr: SocketAddr
@@ -251,7 +281,7 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
     let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
-    info!("shadowsocks DNS relay listening on {}", actual_local_addr);
+    info!("shadowsocks DNS relay listening on udp:{}", actual_local_addr);
 
     let (mut rx, tx) = socket.split();
     let tx = Arc::new(tokio::sync::Mutex::new(tx));
@@ -288,8 +318,8 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
                     error!("failed to serialize message, error: {}", err);
                 }
                 Ok(res_buffer) => {
-                    if let Err(..) = tx.lock().await.send_to(&res_buffer, &src).await {
-                        error!("DNS send back queue is closed unexpectly");
+                    if let Err(err) = tx.lock().await.send_to(&res_buffer, &src).await {
+                        error!("DNS send back UDP error: {}", err);
                     }
                 }
             }
@@ -326,5 +356,9 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         }
     });
 
-    tokio::spawn(run_udp(relay, bind_addr.clone())).await?
+    future::select(
+        tokio::spawn(run_tcp(relay.clone(), bind_addr)),
+        tokio::spawn(run_udp(relay, bind_addr)),
+    ).await;
+    Ok(())
 }
