@@ -96,18 +96,7 @@ fn generate_query_message(query: &Query) -> Message {
     message
 }
 
-async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
-    where
-        T: AsyncReadExt + AsyncWriteExt + Unpin,
-{
-    let req_buffer = generate_query_message(query).to_vec()?;
-    let size = req_buffer.len();
-    let mut send_buffer = vec![0; size + 2];
-
-    BigEndian::write_u16(&mut send_buffer[0..2], size as u16);
-    send_buffer[2..size + 2].copy_from_slice(&req_buffer[0..size]);
-    stream.write_all(&send_buffer[0..size + 2]).await?;
-
+pub async fn read_message<T: AsyncReadExt + Unpin>(stream: &mut T) -> io::Result<Message> {
     let mut res_buffer = vec![0; 2];
     stream.read_exact(&mut res_buffer[0..2]).await?;
 
@@ -116,6 +105,24 @@ async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
     stream.read_exact(&mut res_buffer[0..size]).await?;
 
     Ok(Message::from_vec(&res_buffer)?)
+}
+
+pub async fn write_message<T: AsyncWriteExt + Unpin>(stream: &mut T, message: &Message) -> io::Result<()> {
+    let req_buffer = message.to_vec()?;
+    let size = req_buffer.len();
+    let mut send_buffer = vec![0; size + 2];
+
+    BigEndian::write_u16(&mut send_buffer[0..2], size as u16);
+    send_buffer[2..size + 2].copy_from_slice(&req_buffer[0..size]);
+    stream.write_all(&send_buffer[0..size + 2]).await
+}
+
+async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
+    where
+        T: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    write_message(stream, &generate_query_message(query)).await?;
+    read_message(stream).await
 }
 
 #[derive(Debug)]
