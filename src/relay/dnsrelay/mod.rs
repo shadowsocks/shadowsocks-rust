@@ -1,6 +1,6 @@
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -244,24 +244,10 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
     }
 }
 
-/// Start a DNS relay local server
-pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = match context.config().config_type {
-        ConfigType::DnsLocal => {
-            // Standalone server
-            context.config().local_addr.as_ref().expect("local config")
-        }
-        c if c.is_local() => {
-            // Integrated mode
-            context.config().dns_local_addr.as_ref().expect("dns relay addr")
-        }
-        _ => {
-            panic!("ConfigType must be DnsLocal");
-        }
-    };
-
-    let bind_addr = local_addr.bind_addr(&context).await?;
-
+async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
+    relay: Arc<DnsRelay<Remote>>,
+    bind_addr: SocketAddr
+) -> io::Result<()> {
     let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
@@ -269,18 +255,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let (mut rx, tx) = socket.split();
     let tx = Arc::new(tokio::sync::Mutex::new(tx));
-
-    let config = context.config();
-    // FIXME: We use TCP to send remote queries by default, which should be configuable.
-    let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
-    let relay = Arc::new(DnsRelay {
-        context: context.clone(),
-        remote_upstream: upstream::ProxyTcpUpstream {
-            context: context.clone(),
-            svr_cfg: move || balancer.pick_server().server_config().clone(),
-            ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
-        }
-    });
 
     loop {
         let mut req_buffer: [u8; 512] = [0; 512];
@@ -321,4 +295,36 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             }
         });
     }
+}
+
+/// Start a DNS relay local server
+pub async fn run(context: SharedContext) -> io::Result<()> {
+    let local_addr = match context.config().config_type {
+        ConfigType::DnsLocal => {
+            // Standalone server
+            context.config().local_addr.as_ref().expect("local config")
+        }
+        c if c.is_local() => {
+            // Integrated mode
+            context.config().dns_local_addr.as_ref().expect("dns relay addr")
+        }
+        _ => {
+            panic!("ConfigType must be DnsLocal");
+        }
+    };
+    let bind_addr = local_addr.bind_addr(&context).await?;
+
+    let config = context.config();
+    // FIXME: We use TCP to send remote queries by default, which should be configuable.
+    let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
+    let relay = Arc::new(DnsRelay {
+        context: context.clone(),
+        remote_upstream: upstream::ProxyTcpUpstream {
+            context: context.clone(),
+            svr_cfg: move || balancer.pick_server().server_config().clone(),
+            ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
+        }
+    });
+
+    tokio::spawn(run_udp(relay, bind_addr.clone())).await?
 }
