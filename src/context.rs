@@ -190,7 +190,15 @@ pub type SharedContext = Arc<Context>;
 
 impl Context {
     /// Create a non-shared Context
-    fn new(config: Config, server_state: SharedServerState) -> Context {
+    async fn new(config: Config) -> Context {
+        let state = ServerState::new_shared(&config).await;
+        Context::new_with_state(config, state)
+    }
+
+    /// Create a non-shared Context with a `ServerState`
+    ///
+    /// This is useful when you are running multiple servers in one process
+    fn new_with_state(config: Config, server_state: SharedServerState) -> Context {
         for server in &config.server {
             let t = server.method();
 
@@ -237,9 +245,16 @@ impl Context {
         }
     }
 
-    /// Create a shared Context, wrapped in `Arc`
-    pub fn new_shared(config: Config, server_state: SharedServerState) -> SharedContext {
-        SharedContext::new(Context::new(config, server_state))
+    /// Create a shared `Context`, wrapped in `Arc`
+    pub async fn new_shared(config: Config) -> SharedContext {
+        SharedContext::new(Context::new(config).await)
+    }
+
+    /// Create a shared `Context`, wrapped in `Arc` with a `ServerState`
+    ///
+    /// This is useful when you are running multiple servers in one process
+    pub fn new_with_state_shared(config: Config, server_state: SharedServerState) -> SharedContext {
+        SharedContext::new(Context::new_with_state(config, server_state))
     }
 
     /// Config for TCP server
@@ -247,9 +262,9 @@ impl Context {
         &self.config
     }
 
-    /// Clone the internal ServerState
-    pub fn clone_server_state(&self) -> SharedServerState {
-        self.server_state.clone()
+    /// ServerState
+    pub fn server_state(&self) -> &SharedServerState {
+        &self.server_state
     }
 
     /// Mutable Config for TCP server

@@ -64,7 +64,7 @@ local-dns-relay = []
 local-flow-stat = []
 # Enable HTTP protocol for sslocal
 local-http = ["hyper", "http", "tower"]
-local-http-native-tls = ["tokio-tls", "native-tls"]
+local-http-native-tls = ["tokio-native-tls", "native-tls"]
 local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
@@ -79,7 +79,7 @@ chrono = "0.4"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
 tokio = { version = "^0.2.11", features = ["macros", "net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
-tokio-tls = { version = "0.3", optional = true }
+tokio-native-tls = { version = "0.1", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.13", optional = true }
 webpki-roots = { version = "0.19", optional = true }

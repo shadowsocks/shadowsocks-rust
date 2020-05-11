@@ -58,7 +58,7 @@ use super::ProxyStream;
 enum ProxyHttpStream {
     Http(#[pin] ProxyStream),
     #[cfg(feature = "local-http-native-tls")]
-    Https(#[pin] tokio_tls::TlsStream<ProxyStream>, bool),
+    Https(#[pin] tokio_native_tls::TlsStream<ProxyStream>, bool),
     #[cfg(feature = "local-http-rustls")]
     Https(#[pin] tokio_rustls::client::TlsStream<ProxyStream>, bool),
 }
@@ -78,7 +78,7 @@ impl ProxyHttpStream {
                 return Err(io::Error::new(ErrorKind::Other, format!("tls build: {}", err)));
             }
         };
-        let cx = tokio_tls::TlsConnector::from(cx);
+        let cx = tokio_native_tls::TlsConnector::from(cx);
 
         match cx.connect(domain, stream).await {
             Ok(s) => {

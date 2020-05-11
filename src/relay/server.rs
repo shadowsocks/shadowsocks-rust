@@ -73,14 +73,14 @@ pub(crate) async fn run_with(
             vf.push(plugins.boxed());
         }
 
-        let context = Context::new_shared(config, server_stat);
+        let context = Context::new_with_state_shared(config, server_stat);
 
         let tcp_fut = run_tcp(context.clone(), flow_stat.clone());
         vf.push(tcp_fut.boxed());
 
         context
     } else {
-        Context::new_shared(config, server_stat)
+        Context::new_with_state_shared(config, server_stat)
     };
 
     if mode.enable_udp() {

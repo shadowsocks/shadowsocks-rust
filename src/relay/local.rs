@@ -76,14 +76,14 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             vf.push(plugins.boxed());
         }
 
-        let context = Context::new_shared(config, state);
+        let context = Context::new_with_state_shared(config, state);
 
         let tcp_fut = run_tcp(context.clone());
         vf.push(tcp_fut.boxed());
 
         context
     } else {
-        Context::new_shared(config, state)
+        Context::new_with_state_shared(config, state)
     };
 
     let enable_udp = match config_type {

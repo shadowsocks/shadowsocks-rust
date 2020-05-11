@@ -456,7 +456,7 @@ impl ManagerService {
     }
 
     async fn start_server_with_config(&mut self, server_port: u16, config: Config) -> io::Result<()> {
-        let server = ServerInstance::start_server(config, self.context.clone_server_state()).await?;
+        let server = ServerInstance::start_server(config, self.context.server_state().clone()).await?;
         self.servers.insert(server_port, server);
 
         Ok(())
@@ -556,7 +556,7 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     // Create a context containing a DNS resolver and server running state flag.
     let state = ServerState::new_shared(&config).await;
-    let context = Context::new_shared(config, state.clone());
+    let context = Context::new_with_state_shared(config, state.clone());
 
     let bind_addr = match context.config().manager_addr {
         Some(ref a) => a,
