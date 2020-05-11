@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 
 use log::{debug, error, info, warn};
 use trust_dns_proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message, Query},
+    op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
     rr::{DNSClass, Name, RData, RecordType},
 };
 
@@ -144,69 +144,105 @@ fn should_forward_by_response(
     }
 }
 
-async fn acl_lookup<Remote: upstream::Upstream>(
-    acl: &Option<AccessControl>,
-    local: &upstream::LocalUpstream,
-    remote: Arc<Remote>,
-    query: &Query
-) -> (io::Result<Message>, bool) {
-    // Start querying name servers
-    debug!(
-        "attempting lookup of {:?} {} with ns {:?} and {:?}",
-        query.query_type(), query.name(), local, remote
-    );
+struct DnsRelay<Remote: upstream::Upstream> {
+    context: SharedContext,
+    remote_upstream: Remote,
+}
 
-    let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
-    let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
+impl<Remote: upstream::Upstream> DnsRelay<Remote> {
+    async fn acl_lookup(&self, query: &Query) -> (io::Result<Message>, bool) {
+        let acl = self.context.acl();
+        let local = self.context.local_dns();
+        let remote = &self.remote_upstream;
+        // Start querying name servers
+        debug!(
+            "attempting lookup of {:?} {} with ns {:?} and {:?}",
+            query.query_type(), query.name(), local, remote
+        );
 
-    match should_forward_by_query(acl, query) {
-        Some(true) => {
-            let remote_response = remote_response_fut.await;
-            debug!("pick remote response (query): {:?}", remote_response);
-            return (remote_response, true);
+        let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
+        let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
+
+        match should_forward_by_query(acl, query) {
+            Some(true) => {
+                let remote_response = remote_response_fut.await;
+                debug!("pick remote response (query): {:?}", remote_response);
+                return (remote_response, true);
+            }
+            Some(false) => {
+                let local_response = local_response_fut.await;
+                debug!("pick local response (query): {:?}", local_response);
+                return (local_response, false);
+            }
+            None => (),
         }
-        Some(false) => {
+
+        let decider = async {
             let local_response = local_response_fut.await;
-            debug!("pick local response (query): {:?}", local_response);
-            return (local_response, false);
+            if should_forward_by_response(acl, &local_response, query) {
+                None
+            } else {
+                Some(local_response)
+            }
+        };
+        tokio::pin!(remote_response_fut, decider);
+        let mut use_remote = false;
+        let mut remote_response = None;
+        loop {
+            tokio::select! {
+                response = &mut remote_response_fut, if remote_response.is_none() => {
+                    if use_remote {
+                        debug!("pick remote response (response): {:?}", response);
+                        return (response, true);
+                    } else {
+                        remote_response = Some(response);
+                    }
+                }
+                decision = &mut decider, if !use_remote => {
+                    if let Some(local_response) = decision {
+                        debug!("pick local response (response): {:?}", local_response);
+                        return (local_response, false);
+                    } else if let Some(remote_response) = remote_response {
+                        debug!("pick remote response (response): {:?}", remote_response);
+                        return (remote_response, true);
+                    } else {
+                        use_remote = true;
+                    }
+                }
+                else => unreachable!(),
+            }
         }
-        None => (),
     }
 
-    let decider = async {
-        let local_response = local_response_fut.await;
-        if should_forward_by_response(acl, &local_response, query) {
-            None
-        } else {
-            Some(local_response)
-        }
-    };
-    tokio::pin!(remote_response_fut, decider);
-    let mut use_remote = false;
-    let mut remote_response = None;
-    loop {
-        tokio::select! {
-            response = &mut remote_response_fut, if remote_response.is_none() => {
-                if use_remote {
-                    debug!("pick remote response (response): {:?}", response);
-                    return (response, true);
-                } else {
-                    remote_response = Some(response);
+    async fn resolve(&self, request: Message) -> Message {
+        let mut message = Message::new();
+        message.set_id(request.id());
+        message.set_recursion_desired(true);
+        message.set_recursion_available(true);
+        message.set_message_type(MessageType::Response);
+        if !request.recursion_desired() {
+            message.set_recursion_desired(false);
+            message.set_response_code(ResponseCode::NotImp);
+        } else if request.op_code() != OpCode::Query || request.message_type() != MessageType::Query {
+            message.set_response_code(ResponseCode::NotImp);
+        } else if request.query_count() > 0 {
+            let (r, forward) = self.acl_lookup(&request.queries()[0]).await;
+            if let Ok(result) = r {
+                for rec in result.answers() {
+                    debug!("dns answer: {:?}", rec);
+                    match rec.rdata() {
+                        RData::A(ref ip) => self.context.add_to_reverse_lookup_cache(&IpAddr::V4(*ip), forward),
+                        RData::AAAA(ref ip) => self.context.add_to_reverse_lookup_cache(&IpAddr::V6(*ip), forward),
+                        _ => (),
+                    }
                 }
+                message = result;
+                message.set_id(request.id());
+            } else {
+                message.set_response_code(ResponseCode::ServFail);
             }
-            decision = &mut decider, if !use_remote => {
-                if let Some(local_response) = decision {
-                    debug!("pick local response (response): {:?}", local_response);
-                    return (local_response, false);
-                } else if let Some(remote_response) = remote_response {
-                    debug!("pick remote response (response): {:?}", remote_response);
-                    return (remote_response, true);
-                } else {
-                    use_remote = true;
-                }
-            }
-            else => unreachable!(),
         }
+        message
     }
 }
 
@@ -247,10 +283,13 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let config = context.config();
     // FIXME: We use TCP to send remote queries by default, which should be configuable.
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
-    let remote_upstream = Arc::new(upstream::ProxyTcpUpstream {
+    let relay = Arc::new(DnsRelay {
         context: context.clone(),
-        svr_cfg: move || balancer.pick_server().server_config().clone(),
-        ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
+        remote_upstream: upstream::ProxyTcpUpstream {
+            context: context.clone(),
+            svr_cfg: move || balancer.pick_server().server_config().clone(),
+            ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
+        }
     });
 
     loop {
@@ -273,42 +312,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         debug!("received src: {}, query: {:?}", src, request);
 
-        let context = context.clone();
-        let remote_upstream = remote_upstream.clone();
+        let relay = relay.clone();
         let mut qtx = qtx.clone();
 
         tokio::spawn(async move {
-            let mut message = Message::new();
-            message.set_id(request.id());
-            message.set_recursion_desired(true);
-            message.set_recursion_available(true);
-            message.set_message_type(MessageType::Response);
-
-            if !request.recursion_desired() {
-                message.set_recursion_desired(false);
-                message.set_response_code(ResponseCode::NotImp);
-            } else if request.query_count() > 0 {
-                let question = &request.queries()[0];
-                let (r, forward) = acl_lookup(context.acl(), context.local_dns(), remote_upstream, question).await;
-
-                if let Ok(result) = r {
-                    for rec in result.answers() {
-                        debug!("dns answer: {:?}", rec);
-
-                        match rec.rdata() {
-                            RData::A(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::V4(*ip), forward),
-                            RData::AAAA(ref ip) => context.add_to_reverse_lookup_cache(&IpAddr::V6(*ip), forward),
-                            _ => (),
-                        }
-                    }
-
-                    message = result;
-                    message.set_id(request.id());
-                } else {
-                    message.set_response_code(ResponseCode::ServFail);
-                }
-            }
-
+            let message = relay.resolve(request).await;
             debug!("DNS src: {}, final response: {:?}", src, message);
 
             match message.to_vec() {
