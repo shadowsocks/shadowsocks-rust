@@ -87,12 +87,12 @@ impl Rules {
 
     /// Check if there are no rules for IPv4 addresses
     fn is_ipv4_empty(&self) -> bool {
-        self.ipv4.iter().next().is_none()
+        self.ipv4.is_empty()
     }
 
     /// Check if there are no rules for IPv6 addresses
     fn is_ipv6_empty(&self) -> bool {
-        self.ipv6.iter().next().is_none()
+        self.ipv6.is_empty()
     }
 }
 
@@ -279,6 +279,11 @@ impl AccessControl {
 
     /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
+    ///
+    /// Return
+    /// - `Some(true)` if `host` is in `white_list` (should be proxied)
+    /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
+    /// - `None` if `host` doesn't match any rules
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         // Addresses in proxy_list will be proxied
         if self.white_list.check_host_matched(host) {
@@ -299,7 +304,7 @@ impl AccessControl {
         }
     }
 
-    /// If there are no IPv4 rules
+    /// If there are no IPv6 rules
     pub fn is_ipv6_empty(&self) -> bool {
         match self.mode {
             Mode::BlackList => self.black_list.is_ipv6_empty(),
@@ -307,6 +312,7 @@ impl AccessControl {
         }
     }
 
+    /// Check if `IpAddr` should be proxied
     pub fn check_ip_in_proxy_list(&self, ip: &IpAddr) -> bool {
         match self.mode {
             Mode::BlackList => !self.black_list.check_ip_matched(ip),
@@ -314,6 +320,11 @@ impl AccessControl {
         }
     }
 
+    /// Default mode
+    ///
+    /// Default behavor for hosts that are not configured
+    /// - `true` - Proxied
+    /// - `false` - Bypassed
     pub fn is_default_in_proxy_list(&self) -> bool {
         match self.mode {
             Mode::BlackList => true,
@@ -343,7 +354,7 @@ impl AccessControl {
                     }
                 }
                 false
-            },
+            }
         }
     }
 
