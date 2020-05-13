@@ -135,7 +135,9 @@ fn should_forward_by_response(
                 examine_record!(rec, true);
             }
             for rec in local_response.additionals() {
-                examine_record!(rec, false);
+                if rec.name() == query.name() {
+                    examine_record!(rec, false);
+                }
             }
         }
         true
