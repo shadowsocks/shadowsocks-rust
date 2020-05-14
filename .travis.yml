@@ -66,3 +66,5 @@ script:
   - if [ "${TRAVIS_OS_NAME}" = "linux" -o "${TRAVIS_OS_NAME}" = "osx" ]; then
     cargo test --no-fail-fast --features local-redir
     fi
+
+cache: cargo
