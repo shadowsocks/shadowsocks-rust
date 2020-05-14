@@ -62,11 +62,11 @@ Requirements:
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
-Nightly builds could be downloaded from [CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-rust).
+Nightly builds could be downloaded from [CircleCI](https://app.circleci.com/pipelines/github/shadowsocks/shadowsocks-rust). [HOW TO](https://github.com/shadowsocks/shadowsocks-rust/issues/251#issuecomment-628692564)
 
 * `build-windows`: Build for `x86_64-pc-windows-msvc`
 * `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
-* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu` (statically linked)
+* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
 
 ### **Build from source**
 
