@@ -94,10 +94,16 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     info!("shadowsocks UDP redirect listening on {}", local_addr);
 
-    // NOTE: Associations are only eliminated by expire time
+    // NOTE: Associations are only eliminated by expire time by default
     // So it may exhaust all available file descriptors
     let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-    let assoc_map: SharedAssocMap = Arc::new(Mutex::new(LruCache::with_expiry_duration(timeout)));
+    let max_conns = context.config().udp_max_conns.unwrap_or(0) as usize;
+
+    let assoc_map: SharedAssocMap = Arc::new(Mutex::new(if max_conns > 0 {
+        LruCache::with_expiry_duration_and_capacity(timeout, max_conns)
+    } else {
+        LruCache::with_expiry_duration(timeout)
+    }));
 
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
