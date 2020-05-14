@@ -54,6 +54,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         ConfigType::Socks5Local => mode.enable_tcp(),
         // Tunnel mode controlled by this flag
+        #[cfg(feature = "local-tunnel")]
         ConfigType::TunnelLocal => mode.enable_tcp(),
         // HTTP must be TCP
         #[cfg(feature = "local-http")]
@@ -87,7 +88,9 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     };
 
     let enable_udp = match config_type {
-        ConfigType::Socks5Local | ConfigType::TunnelLocal => mode.enable_udp(),
+        ConfigType::Socks5Local => mode.enable_udp(),
+        #[cfg(feature = "local-tunnel")]
+        ConfigType::TunnelLocal => mode.enable_udp(),
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => mode.enable_udp(),
         _ => false,

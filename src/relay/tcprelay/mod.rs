@@ -29,6 +29,7 @@ mod redir_local;
 pub mod server;
 mod socks5_local;
 mod stream;
+#[cfg(feature = "local-tunnel")]
 mod tunnel_local;
 mod utils;
 

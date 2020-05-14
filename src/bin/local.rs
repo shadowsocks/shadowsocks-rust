@@ -32,6 +32,7 @@ const AVAILABLE_PROTOCOLS: &[&str] = &[
     "socks5",
     #[cfg(feature = "local-http")]
     "http",
+    #[cfg(feature = "local-tunnel")]
     "tunnel",
     #[cfg(feature = "local-redir")]
     "redir",
@@ -129,6 +130,7 @@ fn main() {
         Some("socks5") => ConfigType::Socks5Local,
         #[cfg(feature = "local-http")]
         Some("http") => ConfigType::HttpLocal,
+        #[cfg(feature = "local-tunnel")]
         Some("tunnel") => ConfigType::TunnelLocal,
         #[cfg(feature = "local-redir")]
         Some("redir") => ConfigType::RedirLocal,

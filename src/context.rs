@@ -20,6 +20,8 @@ use spin::Mutex;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
+#[cfg(any(feature = "sodium", feature = "rc4"))]
+use crate::crypto::CipherType;
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
 #[cfg(not(feature = "local-dns-relay"))]
@@ -31,7 +33,6 @@ use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
-    crypto::CipherType,
     relay::socks5::Address,
 };
 

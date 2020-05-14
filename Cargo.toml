@@ -35,7 +35,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-tunnel", "local-http-native-tls"]
 # Enables ciphers that depending on libsodium
 # chacha20, xchacha20, chacha20-ietf
 # salsa20, xsalsa20
@@ -69,6 +69,8 @@ local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
 local-redir = []
+# Enable tunnel protocol for sslocal
+local-tunnel = []
 
 [dependencies]
 log = "0.4"

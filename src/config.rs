@@ -590,6 +590,7 @@ pub enum ConfigType {
     /// Config for tunnel local
     ///
     /// Requires `local` and `forward` configuration
+    #[cfg(feature = "local-tunnel")]
     TunnelLocal,
 
     /// Config for redir local
@@ -601,6 +602,7 @@ pub enum ConfigType {
     /// Config for dns relay local
     ///
     /// Requires `local` configuration
+    #[cfg(feature = "local-dns-relay")]
     DnsLocal,
 
     /// Config for server
@@ -614,7 +616,11 @@ impl ConfigType {
     /// Check if it is local server type
     pub fn is_local(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::DnsLocal => true,
+            ConfigType::Socks5Local => true,
+            #[cfg(feature = "local-dns-relay")]
+            ConfigType::DnsLocal => true,
+            #[cfg(feature = "local-tunnel")]
+            ConfigType::TunnelLocal => true,
             #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => true,
             #[cfg(feature = "local-redir")]
@@ -626,7 +632,11 @@ impl ConfigType {
     /// Check if it is remote server type
     pub fn is_server(self) -> bool {
         match self {
-            ConfigType::Socks5Local | ConfigType::TunnelLocal | ConfigType::DnsLocal => false,
+            ConfigType::Socks5Local => false,
+            #[cfg(feature = "local-dns-relay")]
+            ConfigType::DnsLocal => false,
+            #[cfg(feature = "local-tunnel")]
+            ConfigType::TunnelLocal => false,
             #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => false,
             #[cfg(feature = "local-redir")]
