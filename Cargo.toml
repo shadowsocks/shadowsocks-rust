@@ -9,6 +9,12 @@ keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2018"
 
+[badges]
+appveyor = { repository = "shadowsocks/shadowsocks-rust", branch = "master", service = "github" }
+circle-ci = { repository = "shadowsocks/shadowsocks-rust", branch = "master" }
+travis-ci = { repository = "shadowsocks/shadowsocks-rust", branch = "master" }
+maintenance = { status = "passively-maintained" }
+
 [lib]
 name = "shadowsocks"
 

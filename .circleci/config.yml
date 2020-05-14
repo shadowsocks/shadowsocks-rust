@@ -25,7 +25,7 @@ jobs:
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run:
-                  command: BUILD_EXTRA_FEATURES="openssl-vendored" ./build-host-release
+                  command: BUILD_EXTRA_FEATURES="openssl-vendored local-redir" ./build-host-release
                   no_output_timeout: 1h
             - save_cache:
                   paths:
