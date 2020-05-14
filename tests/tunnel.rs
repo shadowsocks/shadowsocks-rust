@@ -1,3 +1,5 @@
+#![cfg(feature = "local-tunnel")]
+
 use tokio::{
     self,
     net::{TcpStream, UdpSocket},
