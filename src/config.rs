@@ -102,6 +102,8 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    udp_max_conns: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<String>,
@@ -911,6 +913,8 @@ pub struct Config {
     pub config_type: ConfigType,
     /// Timeout for UDP Associations, default is 5 minutes
     pub udp_timeout: Option<Duration>,
+    /// Maximum number of UDP Associations, default is unconfigured
+    pub udp_max_conns: Option<u64>,
     /// `RLIMIT_NOFILE` option for *nix systems
     pub nofile: Option<u64>,
     /// Timeout for TCP connections, could be replaced by server*.timeout
@@ -1019,6 +1023,7 @@ impl Config {
             manager_method: None,
             config_type,
             udp_timeout: None,
+            udp_max_conns: None,
             nofile: None,
             timeout: None,
             acl: None,
@@ -1204,6 +1209,8 @@ impl Config {
 
         // UDP
         nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
+
+        nconfig.udp_max_conns = config.udp_max_conns;
 
         // RLIMIT_NOFILE
         nconfig.nofile = config.nofile;
@@ -1423,6 +1430,8 @@ impl fmt::Display for Config {
         }
 
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
+
+        jconf.udp_max_conns = self.udp_max_conns;
 
         jconf.nofile = self.nofile;
 
