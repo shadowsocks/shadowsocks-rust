@@ -61,7 +61,6 @@ script:
   - cargo test --no-fail-fast --features aes-pmac-siv
   - cargo test --no-fail-fast --features single-threaded
   - cargo test --no-fail-fast --features openssl-vendored
-  - cargo test --no-fail-fast --features local-dns-relay
   - cargo test --no-fail-fast --no-default-features --features "local-http local-http-rustls"
   - if [ "${TRAVIS_OS_NAME}" = "linux" -o "${TRAVIS_OS_NAME}" = "osx" ]; then
     cargo test --no-fail-fast --features local-redir
