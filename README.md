@@ -138,7 +138,7 @@ Create a ShadowSocks' configuration file. Example
     "local_port": 1080,
     "password": "mypassword",
     "timeout": 300,
-    "method": "aes-256-cfb"
+    "method": "aes-256-gcm"
 }
 ```
 
@@ -153,14 +153,14 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
             "address": "127.0.0.1",
             "port": 1080,
             "password": "hello-world",
-            "method": "bf-cfb",
+            "method": "aes-256-gcm",
             "timeout": 300
         },
         {
             "address": "127.0.0.1",
             "port": 1081,
             "password": "hello-kitty",
-            "method": "aes-128-cfb"
+            "method": "chacha20-ietf-poly1305"
         }
     ],
     "local_port": 8388,
@@ -296,6 +296,82 @@ Example configuration:
     "local_address": "xxx.xxx.xxx.xxx",
 
     // Other options that may be passed directly to new servers
+}
+```
+
+## Configuration
+
+```jsonc
+{
+    // LOCAL: Listen address
+    // SERVER: Bind address for remote sockets, mostly used for choosing interface
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+
+    // Server's configuration
+    "server": "0.0.0.0",
+    "server_port": 8388,
+    "method": "aes-256-gcm",
+    "password": "your-password",
+    "plugin": "v2ray-plugin",
+    "plugin_opts": "mode=quic;host=www.shadowsocks.com",
+    "timeout": 5, // Timeout for TCP relay server (in seconds)
+
+    // Extended multiple server configuration
+    // LOCAL: Choosing the best server to connect dynamically
+    // SERVER: Creating multiple servers in one process
+    "servers": [
+        {
+            // Fields are the same as the single server's configuration
+            "address": "0.0.0.0",
+            "port": 8389,
+            "method": "aes-256-gcm",
+            "password": "your-password",
+            "plugin": "...",
+            "plugin_opts": "...",
+            "timeout": 5,
+        }
+    ],
+
+    // Global configurations for UDP associations
+    "udp_timeout": 5, // Timeout for UDP associations (in seconds), 5 minutes by default
+    "udp_max_associations": 512, // Maximum UDP associations to be kept in one server, unlimited by default
+
+    // Options for Manager
+    "manager_address": "127.0.0.1", // Could be a path to UNIX socket, /tmp/shadowsocks-manager.sock
+    "manager_port": 5300, // Not needed for UNIX socket
+
+    // DNS server's address for resolving domain names
+    // For *NIX and Windows, it uses system's configuration by default
+    //
+    // Value could be IP address of DNS server, for example, "8.8.8.8".
+    // DNS client will automatically request port 53 with both TCP and UDP protocol.
+    //
+    // It also allows some pre-defined will-known public DNS servers:
+    // - google (TCP, UDP)
+    // - cloudflare (TCP, UDP)
+    // - cloudflare_tls (TLS), enable by feature "dns-over-tls"
+    // - cloudflare_https (HTTPS), enable by feature "dns-over-https"
+    // - quad9 (TCP, UDP)
+    // - quad9_tls (TLS), enable by feature "dns-over-tls"
+    //
+    // The field is only effective if feature "trust-dns" is enabled.
+    "dns": "google",
+
+    // Mode, could be one of the
+    // - tcp_only
+    // - tcp_and_udp
+    // - udp_only
+    "mode": "tcp_only",
+
+    // TCP_NODELAY
+    "no_delay": false,
+
+    // Soft and Hard limit of file descriptors on *NIX systems
+    "nofile": 10240,
+
+    // Try to resolve domain name to IPv6 (AAAA) addresses first
+    "ipv6_first": false
 }
 ```
 
