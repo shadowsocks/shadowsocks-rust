@@ -1328,7 +1328,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.8.11"
+version = "1.8.12"
 dependencies = [
  "async-trait 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",

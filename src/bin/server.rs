@@ -64,7 +64,7 @@ fn main() {
         .arg(
             Arg::with_name("IPV6_FIRST")
                 .short("6")
-                .help("Resovle hostname to IPv6 address first"),
+                .help("Resolve hostname to IPv6 address first"),
         )
         .get_matches();
 

@@ -78,7 +78,7 @@ fn main() {
     app = app.arg(
         Arg::with_name("IPV6_FIRST")
             .short("6")
-            .help("Resovle hostname to IPv6 address first"),
+            .help("Resolve hostname to IPv6 address first"),
     );
 
     #[cfg(feature = "local-redir")]
