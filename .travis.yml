@@ -63,7 +63,7 @@ script:
   - cargo test --no-fail-fast --features openssl-vendored
   - cargo test --no-fail-fast --no-default-features --features "local-http local-http-rustls"
   - if [ "${TRAVIS_OS_NAME}" = "linux" -o "${TRAVIS_OS_NAME}" = "osx" ]; then
-    cargo test --no-fail-fast --features local-redir
+    cargo test --no-fail-fast --features local-redir;
     fi
 
 cache: cargo
