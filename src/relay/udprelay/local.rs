@@ -1,11 +1,24 @@
 //! UDP local relay server
 
-use std::io;
+use std::{
+    io::{self, Error, ErrorKind},
+    time::Duration,
+};
 
 use crate::{config::ConfigType, context::SharedContext};
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
+    if let Some(0) = context.config().udp_max_associations {
+        let err = Error::new(ErrorKind::Other, "udp_max_association shouldn't be 0");
+        return Err(err);
+    }
+
+    if context.config().udp_timeout == Some(Duration::from_secs(0)) {
+        let err = Error::new(ErrorKind::Other, "udp_timeout shouldn't be 0");
+        return Err(err);
+    }
+
     match context.config().config_type {
         #[cfg(feature = "local-tunnel")]
         ConfigType::TunnelLocal => super::tunnel_local::run(context).await,

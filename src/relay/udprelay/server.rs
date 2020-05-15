@@ -282,12 +282,12 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     // NOTE: Associations are only eliminated by expire time by default
     // So it may exhaust all available file descriptors
     let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-    let max_conns = context.config().udp_max_conns.unwrap_or(0) as usize;
-    let assoc_map = Arc::new(Mutex::new(if max_conns > 0 {
-        LruCache::with_expiry_duration_and_capacity(timeout, max_conns)
+    let assoc_map = if let Some(max_assoc) = context.config().udp_max_associations {
+        LruCache::with_expiry_duration_and_capacity(timeout, max_assoc)
     } else {
         LruCache::with_expiry_duration(timeout)
-    }));
+    };
+    let assoc_map = Arc::new(Mutex::new(assoc_map));
 
     // FIXME: Channel size 1024?
     let (tx, mut rx) = mpsc::channel::<(SocketAddr, BytesMut)>(1024);
