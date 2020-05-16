@@ -97,7 +97,7 @@ jobs:
                   Pushd target\release
                   $Version = (sslocal -V).split()[-1]
                   $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
-                  $PackageName = "shadowsocks-v${Version}-stable.${TargetTriple}.zip"
+                  $PackageName = "shadowsocks-v${Version}.${TargetTriple}.zip"
                   $PackagePath = "${PackageReleasePath}\${PackageName}"
 
                   Write-Host "${Version}"
