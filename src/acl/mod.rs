@@ -85,14 +85,14 @@ impl Rules {
         self.rule.is_match(host)
     }
 
-    /// Check if there are no rules for IPv4 addresses
-    fn is_ipv4_empty(&self) -> bool {
-        self.ipv4.is_empty()
+    /// Check if there are no rules for IP addresses
+    fn is_ip_empty(&self) -> bool {
+        self.ipv4.is_empty() && self.ipv6.is_empty()
     }
 
-    /// Check if there are no rules for IPv6 addresses
-    fn is_ipv6_empty(&self) -> bool {
-        self.ipv6.is_empty()
+    /// Check if there are no rules for domain names
+    fn is_host_empty(&self) -> bool {
+        self.rule.len() == 0
     }
 }
 
@@ -296,20 +296,17 @@ impl AccessControl {
         None
     }
 
-    /// If there are no IPv4 rules
-    pub fn is_ipv4_empty(&self) -> bool {
+    /// If there are no IP rules
+    pub fn is_ip_empty(&self) -> bool {
         match self.mode {
-            Mode::BlackList => self.black_list.is_ipv4_empty(),
-            Mode::WhiteList => self.white_list.is_ipv4_empty(),
+            Mode::BlackList => self.black_list.is_ip_empty(),
+            Mode::WhiteList => self.white_list.is_ip_empty(),
         }
     }
 
-    /// If there are no IPv6 rules
-    pub fn is_ipv6_empty(&self) -> bool {
-        match self.mode {
-            Mode::BlackList => self.black_list.is_ipv6_empty(),
-            Mode::WhiteList => self.white_list.is_ipv6_empty(),
-        }
+    /// If there are no domain name rules
+    pub fn is_host_empty(&self) -> bool {
+        self.black_list.is_host_empty() && self.white_list.is_host_empty()
     }
 
     /// Check if `IpAddr` should be proxied
@@ -343,7 +340,7 @@ impl AccessControl {
                 if let Some(value) = self.check_host_in_proxy_list(host) {
                     return !value;
                 }
-                if self.is_ipv4_empty() && self.is_ipv6_empty() {
+                if self.is_ip_empty() {
                     return !self.is_default_in_proxy_list();
                 }
                 if let Ok(vaddr) = context.dns_resolve(host, port).await {
