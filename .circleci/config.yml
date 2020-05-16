@@ -21,6 +21,11 @@ jobs:
                   command: |
                       sudo apt-get update
                       sudo apt-get install -y build-essential
+            - run:
+                  name: "Generate Cargo.lock"
+                  command: |
+                      rustc --version >rust-version
+                      test -e Cargo.lock || cargo generate-lockfile
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run:
@@ -36,9 +41,9 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: /tmp/workspace
+                  root: /build
                   paths:
-                      - build/release
+                      - release
 
     build-windows:
         executor: windows/default
@@ -61,6 +66,11 @@ jobs:
                       $env:Path += ";C:\Users\circleci\.cargo\bin"
                       rustc -Vv
                       cargo --version
+
+                      rustc --version | Out-File -FilePath "rust-version"
+                      if (!(Test-Path "Cargo.lock" -PathType Leaf)) {
+                          cargo generate-lockfile
+                      }
             - run:
                   name: "Install OpenSSL"
                   command: |
@@ -128,9 +138,9 @@ jobs:
                   path: build\\release
                   destination: releases
             - persist_to_workspace:
-                  root: /tmp/workspace
+                  root: /build
                   paths:
-                      - build\\release
+                      - release
 
     build-docker:
         machine:
@@ -181,9 +191,9 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: /tmp/workspace
+                  root: /build
                   paths:
-                      - build/release
+                      - release
 
     publish-github-releases:
         docker:
@@ -191,11 +201,11 @@ jobs:
         environment:
         steps:
             - attach_workspace:
-                  at: /tmp/workspace
+                  at: /workspace
             - run:
                   name: "Publish release on GitHub"
                   command: |
-                      ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -replace "${CIRCLE_TAG}" ./build/release
+                      ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -replace "${CIRCLE_TAG}" ./workspace/build/release
 workflows:
     version: 2
     build-releases:
