@@ -84,13 +84,7 @@ fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option
             Some(should_forward_by_ptr_name(acl, query.name()))
         } else {
             let result = check_name_in_proxy_list(acl, query.name());
-            if result == None && match query.query_type() {
-                RecordType::A => acl.is_ipv4_empty(),
-                RecordType::AAAA => acl.is_ipv6_empty(),
-                RecordType::ANY => acl.is_ipv4_empty() && acl.is_ipv6_empty(),
-                RecordType::PTR => unreachable!(),
-                _ => true,
-            } {
+            if result == None && acl.is_ip_empty() && acl.is_host_empty() {
                 Some(acl.is_default_in_proxy_list())
             } else {
                 result
