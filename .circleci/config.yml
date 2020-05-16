@@ -197,14 +197,15 @@ jobs:
 
     publish-github-releases:
         docker:
-            - image: circleci/rust:stretch
+            - image: circleci/golang:1.8
         steps:
             - attach_workspace:
-                  at: /workspace
+                  at: /tmp/workspace
             - run:
                   name: "Publish release on GitHub"
                   command: |
-                      ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -replace "${CIRCLE_TAG}" ./workspace/build/release
+                      go get github.com/tcnksm/ghr
+                      ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -replace "${CIRCLE_TAG}" /tmp/workspace/build/release
 workflows:
     version: 2
     build-releases:
@@ -221,4 +222,4 @@ workflows:
                       branches:
                           only: master
                       tags:
-                          only: /^v\d+\.\d+\.\d+$/
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
