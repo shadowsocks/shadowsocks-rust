@@ -41,7 +41,7 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: /build
+                  root: ./build
                   paths:
                       - release
 
@@ -138,7 +138,7 @@ jobs:
                   path: build\\release
                   destination: releases
             - persist_to_workspace:
-                  root: /build
+                  root: ./build
                   paths:
                       - release
 
@@ -191,14 +191,13 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: /build
+                  root: ./build
                   paths:
                       - release
 
     publish-github-releases:
         docker:
             - image: circleci/rust:stretch
-        environment:
         steps:
             - attach_workspace:
                   at: /workspace
