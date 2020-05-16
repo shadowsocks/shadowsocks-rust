@@ -17,7 +17,7 @@ jobs:
         steps:
             - checkout
             - run:
-                  name: "APT install dependencies"
+                  name: "APT Install Dependencies"
                   command: |
                       sudo apt-get update
                       sudo apt-get install -y build-essential
@@ -29,7 +29,7 @@ jobs:
             - restore_cache:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             - run:
-                  name: "Build release"
+                  name: "Build Release"
                   command: BUILD_EXTRA_FEATURES="openssl-vendored local-redir" ./build-host-release
                   no_output_timeout: 1h
             - save_cache:
@@ -95,13 +95,13 @@ jobs:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             # - run: ./build-host-release
             - run:
-                  name: "Build release"
+                  name: "Build Release"
                   command: |
                       $env:Path += ";C:\Users\circleci\.cargo\bin"
                       cargo build --release --features "aes-pmac-siv"
                   no_output_timeout: 1h
             - run:
-                  name: "Package release"
+                  name: "Package Release"
                   command: |
                       $ProgressPreference = "SilentlyContinue"
                       $env:Path += ";C:\Users\circleci\.cargo\bin;."
@@ -150,7 +150,7 @@ jobs:
         steps:
             - checkout
             - run:
-                  name: "APT install dependencies"
+                  name: "APT Install Dependencies"
                   command: |
                       sudo apt-get update
                       sudo apt-get install curl
@@ -177,7 +177,7 @@ jobs:
                   key: cargo-cache-{{ arch }}
             - run: cargo install cross
             - run:
-                  name: "Build release"
+                  name: "Build Releases"
                   command: |
                       cd build
                       ./build-release
@@ -202,10 +202,22 @@ jobs:
             - attach_workspace:
                   at: /tmp/workspace
             - run:
-                  name: "Publish release on GitHub"
+                  name: "Publish Release on GitHub"
                   command: |
-                      go get github.com/tcnksm/ghr
-                      ghr -t "${GITHUB_TOKEN}" -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" -c "${CIRCLE_SHA1}" -replace "${CIRCLE_TAG}" /tmp/workspace/build/release
+                      if [[ ! -z "${CIRCLE_TAG}" ]]; then
+                          go get github.com/tcnksm/ghr
+                          EXTRA_FLAGS="-replace"
+                          if [[ "${CIRCLE_TAG}" == *"-alpha."* ]]; then
+                              EXTRA_FLAGS="${EXTRA_FLAGS} -prerelease"
+                          fi
+                          ghr -t "${GITHUB_TOKEN}" \
+                              -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" \
+                              -c "${CIRCLE_SHA1}" \
+                              "${EXTRA_FLAGS}" \
+                              "${CIRCLE_TAG}" /tmp/workspace/build/release
+                      else
+                          echo "Current build is not tagged."
+                      fi
 workflows:
     version: 2
     build-releases:
