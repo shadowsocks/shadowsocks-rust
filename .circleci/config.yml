@@ -208,7 +208,8 @@ workflows:
                       - build-linux
                       - build-windows
                       - build-docker
-                  branches:
-                      ignore: /.*/
-                  tags:
-                      only: /^v\d+\.\d+\.\d+$/
+                  filters:
+                      branches:
+                          only: master
+                      tags:
+                          only: /^v\d+\.\d+\.\d+$/
