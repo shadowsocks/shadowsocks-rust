@@ -234,6 +234,6 @@ workflows:
                       - build-docker
                   filters:
                       branches:
-                          only: master
+                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
