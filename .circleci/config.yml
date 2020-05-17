@@ -197,7 +197,7 @@ jobs:
 
     publish-github-releases:
         docker:
-            - image: circleci/golang:1.8
+            - image: circleci/golang:1.12
         steps:
             - attach_workspace:
                   at: /tmp/workspace
@@ -220,20 +220,17 @@ jobs:
                       else
                           echo "Current build is not tagged."
                       fi
+
 workflows:
     version: 2
     build-releases:
         jobs:
             - build-linux:
                   filters:
-                      branches:
-                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - build-windows:
                   filters:
-                      branches:
-                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - build-docker:
