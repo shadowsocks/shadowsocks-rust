@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
@@ -102,34 +103,45 @@ fn should_forward_by_response(
     query: &Query,
 ) -> bool {
     if let Some(acl) = acl {
-        macro_rules! examine_record {
-            ($rec:ident, $is_answer:expr) => {
-                if let RData::CNAME(ref name) = $rec.rdata() {
-                    match check_name_in_proxy_list(acl, name) {
-                        Some(value) => return value,
-                        None => continue,
+        if let Ok(ref local_response) = local_response {
+            let mut names = HashSet::new();
+            names.insert(query.name());
+            macro_rules! examine_record {
+                ($rec:ident, $is_answer:expr) => {
+                    if let RData::CNAME(ref name) = $rec.rdata() {
+                        if $is_answer {
+                            if let Some(value) = check_name_in_proxy_list(acl, name) {
+                                return value;
+                            }
+                        }
+                        names.insert(name);
+                        continue;
                     }
-                } else if $is_answer && !query.query_type().is_any() && $rec.record_type() != query.query_type() {
-                    warn!("local DNS response has inconsistent answer type {} for query {}", $rec.record_type(), query);
+                    if $is_answer && !query.query_type().is_any() && $rec.record_type() != query.query_type() {
+                        warn!("local DNS response has inconsistent answer type {} for query {}",
+                              $rec.record_type(), query);
+                        return true;
+                    }
+                    let forward = match $rec.rdata() {
+                        RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V4(*ip)),
+                        RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V6(*ip)),
+                        RData::PTR(_) => unreachable!(),
+                        _ => acl.is_default_in_proxy_list(),
+                    };
+                    if !forward {
+                        return false;
+                    }
+                };
+            }
+            for rec in local_response.answers() {
+                if !names.contains(rec.name()) {
+                    warn!("local DNS response contains unexpected name {} for query {}", rec.name(), query);
                     return true;
                 }
-                let forward = match $rec.rdata() {
-                    RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V4(*ip)),
-                    RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V6(*ip)),
-                    RData::PTR(_) => unreachable!(),
-                    _ => acl.is_default_in_proxy_list(),
-                };
-                if !forward {
-                    return false;
-                }
-            };
-        }
-        if let Ok(ref local_response) = local_response {
-            for rec in local_response.answers() {
                 examine_record!(rec, true);
             }
             for rec in local_response.additionals() {
-                if rec.name() == query.name() {
+                if names.contains(rec.name()) {
                     examine_record!(rec, false);
                 }
             }
