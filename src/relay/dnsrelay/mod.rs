@@ -106,6 +106,20 @@ fn should_forward_by_response(
         if let Ok(ref local_response) = local_response {
             let mut names = HashSet::new();
             names.insert(query.name());
+            macro_rules! examine_name {
+                ($name:expr, $is_answer:expr) => {{
+                    names.insert($name);
+                    if $is_answer {
+                        if let Some(value) = check_name_in_proxy_list(acl, $name) {
+                            value
+                        } else {
+                            acl.is_default_in_proxy_list()
+                        }
+                    } else {
+                        acl.is_default_in_proxy_list()
+                    }
+                }}
+            }
             macro_rules! examine_record {
                 ($rec:ident, $is_answer:expr) => {
                     if let RData::CNAME(ref name) = $rec.rdata() {
@@ -125,6 +139,10 @@ fn should_forward_by_response(
                     let forward = match $rec.rdata() {
                         RData::A(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V4(*ip)),
                         RData::AAAA(ref ip) => acl.check_ip_in_proxy_list(&IpAddr::V6(*ip)),
+                        // MX records cause type A additional section processing for the host specified by EXCHANGE.
+                        RData::MX(ref mx) => examine_name!(mx.exchange(), $is_answer),
+                        // NS records cause both the usual additional section processing to locate a type A record...
+                        RData::NS(ref name) => examine_name!(name, $is_answer),
                         RData::PTR(_) => unreachable!(),
                         _ => acl.is_default_in_proxy_list(),
                     };
