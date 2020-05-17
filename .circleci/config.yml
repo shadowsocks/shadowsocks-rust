@@ -226,14 +226,20 @@ workflows:
         jobs:
             - build-linux:
                   filters:
+                      branches:
+                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - build-windows:
                   filters:
+                      branches:
+                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - build-docker:
                   filters:
+                      branches:
+                          ignore: /.*/
                       tags:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - publish-github-releases:
@@ -241,8 +247,3 @@ workflows:
                       - build-linux
                       - build-windows
                       - build-docker
-                  filters:
-                      branches:
-                          only: master
-                      tags:
-                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
