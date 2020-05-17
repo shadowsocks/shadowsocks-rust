@@ -224,11 +224,25 @@ workflows:
     version: 2
     build-releases:
         jobs:
-            - build-linux
-            - build-windows
-            - build-docker
+            - build-linux:
+                  filters:
+                      tags:
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
+            - build-windows:
+                  filters:
+                      tags:
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
+            - build-docker:
+                  filters:
+                      tags:
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - publish-github-releases:
                   requires:
                       - build-linux
                       - build-windows
                       - build-docker
+                  filters:
+                      branches:
+                          only: master
+                      tags:
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
