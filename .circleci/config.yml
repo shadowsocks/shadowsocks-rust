@@ -41,7 +41,7 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: ./build
+                  root: build
                   paths:
                       - release
 
@@ -138,7 +138,7 @@ jobs:
                   path: build\\release
                   destination: releases
             - persist_to_workspace:
-                  root: ./build
+                  root: build
                   paths:
                       - release
 
@@ -191,7 +191,7 @@ jobs:
                   path: ./build/release
                   destination: releases
             - persist_to_workspace:
-                  root: ./build
+                  root: build
                   paths:
                       - release
 
@@ -204,6 +204,8 @@ jobs:
             - run:
                   name: "Publish Release on GitHub"
                   command: |
+                      ls -alh /tmp/workspace/release
+
                       if [[ ! -z "${CIRCLE_TAG}" ]]; then
                           go get github.com/tcnksm/ghr
                           EXTRA_FLAGS="-replace"
@@ -214,7 +216,7 @@ jobs:
                               -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" \
                               -c "${CIRCLE_SHA1}" \
                               "${EXTRA_FLAGS}" \
-                              "${CIRCLE_TAG}" /tmp/workspace/build/release
+                              "${CIRCLE_TAG}" /tmp/workspace/release
                       else
                           echo "Current build is not tagged."
                       fi
