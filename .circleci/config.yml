@@ -244,3 +244,8 @@ workflows:
                       - build-linux
                       - build-windows
                       - build-docker
+                  filters:
+                      branches:
+                          ignore: /.*/
+                      tags:
+                          only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
