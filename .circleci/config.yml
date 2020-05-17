@@ -215,7 +215,7 @@ jobs:
                           ghr -t "${GITHUB_TOKEN}" \
                               -u "${CIRCLE_PROJECT_USERNAME}" -r "${CIRCLE_PROJECT_REPONAME}" \
                               -c "${CIRCLE_SHA1}" \
-                              "${EXTRA_FLAGS}" \
+                              ${EXTRA_FLAGS} \
                               "${CIRCLE_TAG}" /tmp/workspace/release
                       else
                           echo "Current build is not tagged."
