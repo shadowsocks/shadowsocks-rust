@@ -460,8 +460,9 @@ Example configuration:
 
 It supports the following features:
 
-* [x] Socks5 CONNECT command
-* [x] Socks5 UDP ASSOCIATE command (partial)
+* [x] SOCKS5 CONNECT command
+* [x] SOCKS5 UDP ASSOCIATE command (partial)
+* [x] SOCKS4/4a CONNECT command
 * [x] Various crypto algorithms
 * [x] Load balancing (multiple servers) and server delay checking
 * [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
