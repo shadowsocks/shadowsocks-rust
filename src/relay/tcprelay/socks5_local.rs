@@ -1,4 +1,4 @@
-//! Local server that accepts SOCKS 5 protocol
+//! Local server that accepts SOCKS5 protocol
 
 use std::{
     io::{self, ErrorKind},
@@ -28,7 +28,7 @@ struct UdpConfig {
     client_addr: SocketAddr,
 }
 
-async fn handle_socks5_connect<'a>(
+async fn handle_socks5_connect(
     server: &SharedPlainServerStatistic,
     stream: &mut TcpStream,
     client_addr: SocketAddr,
@@ -86,7 +86,7 @@ async fn handle_socks5_connect<'a>(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!("CONNECT relay established {} <-> {}", client_addr, addr,);
+    debug!("CONNECT relay established {} <-> {}", client_addr, addr);
 
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, addr),

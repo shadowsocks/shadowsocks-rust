@@ -30,6 +30,8 @@ mod validator;
 
 const AVAILABLE_PROTOCOLS: &[&str] = &[
     "socks5",
+    #[cfg(feature = "local-socks4")]
+    "socks4",
     #[cfg(feature = "local-http")]
     "http",
     #[cfg(feature = "local-tunnel")]
@@ -128,6 +130,8 @@ fn main() {
 
     let config_type = match matches.value_of("PROTOCOL") {
         Some("socks5") => ConfigType::Socks5Local,
+        #[cfg(feature = "local-socks4")]
+        Some("socks4") => ConfigType::Socks4Local,
         #[cfg(feature = "local-http")]
         Some("http") => ConfigType::HttpLocal,
         #[cfg(feature = "local-tunnel")]

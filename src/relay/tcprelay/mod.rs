@@ -27,6 +27,7 @@ mod redir;
 #[cfg(feature = "local-redir")]
 mod redir_local;
 pub mod server;
+mod socks4_local;
 mod socks5_local;
 mod stream;
 #[cfg(feature = "local-tunnel")]

@@ -583,6 +583,12 @@ pub enum ConfigType {
     /// Requires `local` configuration
     Socks5Local,
 
+    /// Config for socks4 local
+    ///
+    /// Requires `local` configuration
+    #[cfg(feature = "local-socks4")]
+    Socks4Local,
+
     /// Config for HTTP local
     ///
     /// Requires `local` configuration
@@ -619,6 +625,8 @@ impl ConfigType {
     pub fn is_local(self) -> bool {
         match self {
             ConfigType::Socks5Local => true,
+            #[cfg(feature = "local-socks4")]
+            ConfigType::Socks4Local => true,
             #[cfg(feature = "local-dns-relay")]
             ConfigType::DnsLocal => true,
             #[cfg(feature = "local-tunnel")]
@@ -635,6 +643,8 @@ impl ConfigType {
     pub fn is_server(self) -> bool {
         match self {
             ConfigType::Socks5Local => false,
+            #[cfg(feature = "local-socks4")]
+            ConfigType::Socks4Local => false,
             #[cfg(feature = "local-dns-relay")]
             ConfigType::DnsLocal => false,
             #[cfg(feature = "local-tunnel")]

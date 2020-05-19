@@ -47,18 +47,25 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     let mut vf = Vec::new();
 
     let enable_tcp = match config_type {
-        #[cfg(not(target_os = "android"))]
         // Socks5 always true, because UDP associate command also requires a TCP connection
+        #[cfg(not(target_os = "android"))]
         ConfigType::Socks5Local => true,
         // On Android, we allows UDP only mode to support fallback UDP upstream
         #[cfg(target_os = "android")]
         ConfigType::Socks5Local => mode.enable_tcp(),
+
+        // Socks4 always true
+        #[cfg(feature = "local-socks4")]
+        ConfigType::Socks4Local => true,
+
         // Tunnel mode controlled by this flag
         #[cfg(feature = "local-tunnel")]
         ConfigType::TunnelLocal => mode.enable_tcp(),
+
         // HTTP must be TCP
         #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => true,
+
         // Redir mode controlled by this flag
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => mode.enable_tcp(),

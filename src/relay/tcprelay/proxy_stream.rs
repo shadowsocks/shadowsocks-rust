@@ -463,6 +463,8 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
         ConfigType::Server => svr_cfg.addr(),
 
         ConfigType::Socks5Local => svr_cfg.external_addr(),
+        #[cfg(feature = "local-socks4")]
+        ConfigType::Socks4Local => svr_cfg.external_addr(),
         #[cfg(feature = "local-tunnel")]
         ConfigType::TunnelLocal => svr_cfg.external_addr(),
         #[cfg(feature = "local-dns-relay")]
