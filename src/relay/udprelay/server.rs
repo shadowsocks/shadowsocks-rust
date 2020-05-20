@@ -15,7 +15,6 @@ use tokio::{
     self,
     net::udp::{RecvHalf, SendHalf},
     sync::{mpsc, Mutex},
-    time,
 };
 
 use crate::{
@@ -330,16 +329,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
-        let (recv_len, src) = match time::timeout(timeout, r.recv_from(&mut pkt_buf)).await {
-            Ok(r) => r?,
-            Err(..) => {
-                // Cleanup expired association
-                // Do not consume this iterator, it will updates expire time of items that traversed
-                let mut assoc_map = assoc_map.lock().await;
-                let _ = assoc_map.iter();
-                continue;
-            }
-        };
+        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];
