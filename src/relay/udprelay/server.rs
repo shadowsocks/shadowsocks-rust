@@ -268,6 +268,16 @@ impl UdpAssociation {
     }
 }
 
+fn serialize(saddr: &SocketAddr) -> [u8; 18] {
+    let mut result = [0; 18];
+    result[..16].copy_from_slice(&match saddr.ip() {
+        IpAddr::V4(ref ip) => ip.to_ipv6_mapped(),
+        IpAddr::V6(ref ip) => ip.clone(),
+    }.octets());
+    result[16..].copy_from_slice(&saddr.port().to_ne_bytes());
+    result
+}
+
 async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, svr_idx: usize) -> io::Result<()> {
     let svr_cfg = context.server_config(svr_idx);
     let listen_addr = svr_cfg.addr().bind_addr(&context).await?;
@@ -299,7 +309,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
 
         tokio::spawn(async move {
             while let Some((src, pkt)) = rx.recv().await {
-                let cache_key = src.to_string();
+                let cache_key = serialize(&src);
                 {
                     let mut amap = assoc_map.lock().await;
 
@@ -360,7 +370,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
             let mut assoc_map = assoc_map.lock().await;
 
             // Get or create an association
-            let assoc = match assoc_map.entry(src.to_string()) {
+            let assoc = match assoc_map.entry(serialize(&src)) {
                 Entry::Occupied(oc) => oc.into_mut(),
                 Entry::Vacant(vc) => vc.insert(
                     UdpAssociation::associate(context.clone(), svr_idx, src, tx.clone())
