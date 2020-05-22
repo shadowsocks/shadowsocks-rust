@@ -93,7 +93,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let (mut r, mut w) = l.split();
 
-    info!("shadowsocks UDP listening on {}", local_addr);
+    info!("shadowsocks SOCKS5 UDP listening on {}", local_addr);
 
     // NOTE: Associations are only eliminated by expire time by default
     // So it may exhaust all available file descriptors

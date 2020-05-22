@@ -163,7 +163,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let servers = PlainPingBalancer::new(context, ServerType::Tcp).await;
 
-    info!("shadowsocks TCP listening on {}", actual_local_addr);
+    info!("shadowsocks SOCKS4/4a TCP listening on {}", actual_local_addr);
 
     loop {
         let (socket, peer_addr) = listener.accept().await?;
