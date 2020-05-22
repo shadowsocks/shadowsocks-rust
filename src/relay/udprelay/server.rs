@@ -271,9 +271,9 @@ impl UdpAssociation {
 fn serialize(saddr: &SocketAddr) -> [u8; 18] {
     let mut result = [0; 18];
     result[..16].copy_from_slice(&match saddr.ip() {
-        IpAddr::V4(ref ip) => &ip.to_ipv6_mapped(),
-        IpAddr::V6(ref ip) => ip,
-    }.octets());
+        IpAddr::V4(ref ip) => ip.to_ipv6_mapped().octets(),
+        IpAddr::V6(ref ip) => ip.octets(),
+    });
     result[16..].copy_from_slice(&saddr.port().to_ne_bytes());
     result
 }
