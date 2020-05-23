@@ -137,10 +137,11 @@ impl Upstream for UdpUpstream {
             SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
         }, 0)).await?;
-        socket.send_to(&generate_query_message(query).to_vec()?, self.server).await?;
+        socket.connect(self.server).await?;
+        socket.send(&generate_query_message(query).to_vec()?).await?;
         let mut response = vec![0; 512];
-        socket.recv_from(&mut response).await?;
-        Ok(Message::from_vec(&response)?)
+        let len = socket.recv(&mut response).await?;
+        Ok(Message::from_vec(&response[..len])?)
     }
 }
 

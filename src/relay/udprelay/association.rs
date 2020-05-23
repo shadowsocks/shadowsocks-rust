@@ -19,7 +19,10 @@ use log::{debug, error, warn};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
-    net::udp::{RecvHalf, SendHalf},
+    net::{
+        udp::{RecvHalf, SendHalf},
+        UdpSocket,
+    },
     sync::{mpsc, Mutex},
     time,
 };
@@ -76,6 +79,10 @@ impl ProxyAssociation {
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
         debug!("created UDP association {} <-> {}", src_addr, remote_bind_addr);
+
+        // connect() to remote server to avoid resolving server's address every call of send()
+        // ref: #263
+        ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -145,6 +152,10 @@ impl ProxyAssociation {
         let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
+        // connect() to remote server to avoid resolving server's address every call of send()
+        // ref: #263
+        ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
+
         // A socket for bypassed
         let bypass_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let bypass_bind_addr = bypass_udp.local_addr().expect("determine port bound to");
@@ -180,6 +191,19 @@ impl ProxyAssociation {
         let watchers = vec![bypass_watcher, remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
+    }
+
+    async fn connect_remote(context: &Context, svr_cfg: &ServerConfig, remote_udp: &UdpSocket) -> io::Result<()> {
+        match svr_cfg.addr() {
+            ServerAddr::SocketAddr(ref remote_addr) => {
+                remote_udp.connect(remote_addr).await?;
+            }
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context, dname, *port, |addr| { remote_udp.connect(&addr).await })?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn send(&mut self, target: Address, payload: Vec<u8>) {
@@ -287,15 +311,7 @@ impl ProxyAssociation {
         let mut encrypt_buf = BytesMut::new();
         encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
-        let send_len = match svr_cfg.addr() {
-            ServerAddr::SocketAddr(ref remote_addr) => socket.send_to(&encrypt_buf[..], remote_addr).await?,
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| {
-                    socket.send_to(&encrypt_buf[..], &addr).await
-                })?
-                .1
-            }
-        };
+        let send_len = socket.send(&encrypt_buf[..]).await?;
 
         if encrypt_buf.len() != send_len {
             warn!(
@@ -402,7 +418,7 @@ impl ProxyAssociation {
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
-        let (recv_n, _) = socket.recv_from(&mut recv_buf).await?;
+        let recv_n = socket.recv(&mut recv_buf).await?;
 
         let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
             None => {
