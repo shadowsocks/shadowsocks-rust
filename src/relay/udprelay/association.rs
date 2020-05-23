@@ -19,7 +19,10 @@ use log::{debug, error, warn};
 use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
-    net::udp::{RecvHalf, SendHalf},
+    net::{
+        udp::{RecvHalf, SendHalf},
+        UdpSocket,
+    },
     sync::{mpsc, Mutex},
     time,
 };
@@ -77,14 +80,9 @@ impl ProxyAssociation {
 
         debug!("created UDP association {} <-> {}", src_addr, remote_bind_addr);
 
-        match server.server_config().addr() {
-            ServerAddr::SocketAddr(ref remote_addr) => remote_udp.connect(remote_addr).await?,
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(server.context(), dname, *port, |addr| {
-                    remote_udp.connect(&addr).await
-                })?;
-            }
-        }
+        // connect() to remote server to avoid resolving server's address every call of send()
+        // ref: #263
+        ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
 
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
@@ -154,6 +152,10 @@ impl ProxyAssociation {
         let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
+        // connect() to remote server to avoid resolving server's address every call of send()
+        // ref: #263
+        ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
+
         // A socket for bypassed
         let bypass_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let bypass_bind_addr = bypass_udp.local_addr().expect("determine port bound to");
@@ -189,6 +191,19 @@ impl ProxyAssociation {
         let watchers = vec![bypass_watcher, remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
+    }
+
+    async fn connect_remote(context: &Context, svr_cfg: &ServerConfig, remote_udp: &UdpSocket) -> io::Result<()> {
+        match svr_cfg.addr() {
+            ServerAddr::SocketAddr(ref remote_addr) => {
+                remote_udp.connect(remote_addr).await?;
+            }
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context, dname, *port, |addr| { remote_udp.connect(&addr).await })?;
+            }
+        }
+
+        Ok(())
     }
 
     async fn send(&mut self, target: Address, payload: Vec<u8>) {
