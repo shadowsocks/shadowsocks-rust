@@ -3,18 +3,12 @@
 use std::{
     io::{self, Cursor, ErrorKind, Read},
     net::SocketAddr,
-    sync::Arc,
 };
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use log::{debug, error, info, trace};
-use lru_time_cache::{Entry, LruCache};
-use tokio::{
-    self,
-    sync::{mpsc, Mutex},
-    time,
-};
+use tokio::{self, sync::mpsc};
 
 use crate::{
     context::SharedContext,
@@ -26,8 +20,7 @@ use crate::{
 };
 
 use super::{
-    association::{ProxyAssociation, ProxySend},
-    DEFAULT_TIMEOUT,
+    association::{ProxyAssociation, ProxyAssociationManager, ProxySend},
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
@@ -95,38 +88,25 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     info!("shadowsocks SOCKS5 UDP listening on {}", local_addr);
 
-    // NOTE: Associations are only eliminated by expire time by default
-    // So it may exhaust all available file descriptors
-    let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-    let assoc_map = if let Some(max_assoc) = context.config().udp_max_associations {
-        LruCache::with_expiry_duration_and_capacity(timeout, max_assoc)
-    } else {
-        LruCache::with_expiry_duration(timeout)
-    };
-    let assoc_map = Arc::new(Mutex::new(assoc_map));
-    let assoc_map_cloned = assoc_map.clone();
+    let assoc_manager = ProxyAssociationManager::new(context.config());
+    let assoc_manager_cloned = assoc_manager.clone();
 
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     // FIXME: Channel size 1024?
     let (tx, mut rx) = mpsc::channel::<(SocketAddr, Address, Vec<u8>)>(1024);
     tokio::spawn(async move {
-        let assoc_map = assoc_map_cloned;
+        let assoc_manager = assoc_manager_cloned;
 
         while let Some((src, target, pkt)) = rx.recv().await {
             let cache_key = src.to_string();
-            {
-                let mut amap = assoc_map.lock().await;
-
-                // Check or update expire time
-                if amap.get(&cache_key).is_none() {
-                    debug!(
-                        "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
-                        src,
-                        pkt.len()
-                    );
-                    continue;
-                }
+            if !assoc_manager.keep_alive(&cache_key).await {
+                debug!(
+                    "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
+                    src,
+                    pkt.len()
+                );
+                continue;
             }
 
             let payload = assemble_packet(target, &pkt);
@@ -141,16 +121,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     });
 
     loop {
-        let (recv_len, src) = match time::timeout(timeout, r.recv_from(&mut pkt_buf)).await {
-            Ok(r) => r?,
-            Err(..) => {
-                // Cleanup expired association
-                // Do not consume this iterator, it will updates expire time of items that traversed
-                let mut assoc_map = assoc_map.lock().await;
-                let _ = assoc_map.iter();
-                continue;
-            }
-        };
+        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task
@@ -182,33 +153,23 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         };
 
         // Check or (re)create an association
-        {
-            // Locks the whole association map
-            let mut assoc_map = assoc_map.lock().await;
+        let res = assoc_manager
+            .send_packet(src.to_string(), target, payload, async {
+                // Pick a server
+                let server = balancer.pick_server();
 
-            // Get or create an association
-            let assoc = match assoc_map.entry(src.to_string()) {
-                Entry::Occupied(oc) => oc.into_mut(),
-                Entry::Vacant(vc) => {
-                    // Pick a server
-                    let server = balancer.pick_server();
+                let sender = ProxyHandler {
+                    src_addr: src,
+                    response_tx: tx.clone(),
+                };
 
-                    let sender = ProxyHandler {
-                        src_addr: src,
-                        response_tx: tx.clone(),
-                    };
+                ProxyAssociation::associate_with_acl(src, server, sender).await
+            })
+            .await;
 
-                    vc.insert(
-                        ProxyAssociation::associate_with_acl(src, server, sender)
-                            .await
-                            .expect("create UDP association"),
-                    )
-                }
-            };
-
-            // FIXME: Lock is still kept for a mutable reference
-            // Send to local -> remote task
-            assoc.send(target, payload).await;
+        if let Err(err) = res {
+            error!("failed to create UDP association, {}", err);
+            return Err(err);
         }
     }
 }

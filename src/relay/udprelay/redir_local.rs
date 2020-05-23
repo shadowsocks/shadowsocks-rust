@@ -1,11 +1,9 @@
 //! UDP relay local server
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{io, net::SocketAddr};
 
 use async_trait::async_trait;
 use log::{error, info, trace};
-use lru_time_cache::{Entry, LruCache};
-use tokio::{self, sync::Mutex, time};
 
 use crate::{
     config::RedirType,
@@ -18,20 +16,16 @@ use crate::{
 };
 
 use super::{
-    association::{ProxyAssociation, ProxySend},
+    association::{ProxyAssociation, ProxyAssociationManager, ProxySend},
     redir::sys::UdpRedirSocket,
-    DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
-
-type AssocMap = LruCache<String, ProxyAssociation>;
-type SharedAssocMap = Arc<Mutex<AssocMap>>;
 
 struct ProxyHandler {
     ty: RedirType,
     src_addr: SocketAddr,
     cache_key: String,
-    assoc_map: SharedAssocMap,
+    assoc_map: ProxyAssociationManager<String>,
 }
 
 impl ProxyHandler {
@@ -39,7 +33,7 @@ impl ProxyHandler {
         ty: RedirType,
         src_addr: SocketAddr,
         cache_key: String,
-        assoc_map: SharedAssocMap,
+        assoc_map: ProxyAssociationManager<String>,
     ) -> io::Result<ProxyHandler> {
         Ok(ProxyHandler {
             ty,
@@ -62,12 +56,7 @@ impl ProxySend for ProxyHandler {
             local_udp.send_to(&data, &self.src_addr).await?;
 
             // Update LRU
-            {
-                let mut amap = self.assoc_map.lock().await;
-
-                // Check or update expire time
-                let _ = amap.get(&self.cache_key);
-            }
+            self.assoc_map.keep_alive(&self.cache_key).await;
 
             return Ok(());
         }
@@ -94,29 +83,12 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     info!("shadowsocks UDP redirect listening on {}", local_addr);
 
-    // NOTE: Associations are only eliminated by expire time by default
-    // So it may exhaust all available file descriptors
-    let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-    let assoc_map = if let Some(max_assoc) = context.config().udp_max_associations {
-        LruCache::with_expiry_duration_and_capacity(timeout, max_assoc)
-    } else {
-        LruCache::with_expiry_duration(timeout)
-    };
-    let assoc_map = Arc::new(Mutex::new(assoc_map));
+    let assoc_manager = ProxyAssociationManager::new(context.config());
 
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
-        let (recv_len, src, dst) = match time::timeout(timeout, l.recv_from_redir(&mut pkt_buf)).await {
-            Ok(r) => r?,
-            Err(..) => {
-                // Cleanup expired association
-                // Do not consume this iterator, it will updates expire time of items that traversed
-                let mut assoc_map = assoc_map.lock().await;
-                let _ = assoc_map.iter();
-                continue;
-            }
-        };
+        let (recv_len, src, dst) = l.recv_from_redir(&mut pkt_buf).await?;
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task
@@ -145,41 +117,32 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let is_bypassed = context.check_target_bypassed(&target).await;
 
         // Check or (re)create an association
-        {
-            // Locks the whole association map
-            let mut ref_assoc_map = assoc_map.lock().await;
+        let cache_key = format!("{}-{}", src, dst);
+        let cache_key_cloned = cache_key.clone();
+        let res = assoc_manager
+            .send_packet(cache_key, target, pkt.to_vec(), async {
+                // Pick a server
+                let server = balancer.pick_server();
 
-            let cache_key = format!("{}-{}", src, dst);
-
-            // Get or create an association
-            let assoc = match ref_assoc_map.entry(cache_key.clone()) {
-                Entry::Occupied(oc) => oc.into_mut(),
-                Entry::Vacant(vc) => {
-                    // Pick a server
-                    let server = balancer.pick_server();
-
-                    let sender = match ProxyHandler::new(ty, src, cache_key, assoc_map.clone()) {
-                        Ok(s) => s,
-                        Err(err) => {
-                            error!("create UDP association for {} <-> {}, error: {}", src, dst, err);
-                            continue;
-                        }
-                    };
-
-                    let assoc = if is_bypassed {
-                        ProxyAssociation::associate_bypassed(src, server, sender).await
-                    } else {
-                        ProxyAssociation::associate_proxied(src, server, sender).await
+                let sender = match ProxyHandler::new(ty, src, cache_key_cloned, assoc_manager.clone()) {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!("create UDP association for {} <-> {}, error: {}", src, dst, err);
+                        return Err(err);
                     }
-                    .expect("create UDP association");
+                };
 
-                    vc.insert(assoc)
+                if is_bypassed {
+                    ProxyAssociation::associate_bypassed(src, server, sender).await
+                } else {
+                    ProxyAssociation::associate_proxied(src, server, sender).await
                 }
-            };
+            })
+            .await;
 
-            // FIXME: Lock is still kept for a mutable reference
-            // Send to local -> remote task
-            assoc.send(target, pkt.to_vec()).await;
+        if let Err(err) = res {
+            error!("failed to create UDP association, {}", err);
+            return Err(err);
         }
     }
 }

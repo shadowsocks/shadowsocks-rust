@@ -5,22 +5,26 @@
 #![allow(dead_code)]
 
 use std::{
+    future::Future,
     io::{self, Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
 use bytes::BytesMut;
 use futures::future::{self, AbortHandle};
 use log::{debug, error, warn};
+use lru_time_cache::{Entry, LruCache};
 use tokio::{
     self,
     net::udp::{RecvHalf, SendHalf},
-    sync::mpsc,
+    sync::{mpsc, Mutex},
+    time,
 };
 
 use crate::{
-    config::{ServerAddr, ServerConfig},
+    config::{Config, ServerAddr, ServerConfig},
     context::Context,
     relay::{
         loadbalancing::server::{ServerData, SharedServerStatistic},
@@ -31,6 +35,7 @@ use crate::{
 
 use super::{
     crypto_io::{decrypt_payload, encrypt_payload},
+    DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
 
@@ -419,5 +424,84 @@ impl ProxyAssociation {
         }
 
         Ok((addr, payload))
+    }
+}
+
+#[derive(Clone)]
+pub struct ProxyAssociationManager<K> {
+    map: Arc<Mutex<LruCache<K, ProxyAssociation>>>,
+    watcher: AbortHandle,
+}
+
+impl<K> Drop for ProxyAssociationManager<K> {
+    fn drop(&mut self) {
+        self.watcher.abort()
+    }
+}
+
+impl<K> ProxyAssociationManager<K>
+where
+    K: Ord + Clone + Send + 'static,
+{
+    /// Create a new ProxyAssociationManager based on Config
+    pub fn new(config: &Config) -> ProxyAssociationManager<K> {
+        let timeout = config.udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+
+        // TODO: Set default capacity by getrlimit #262
+        // Associations are only eliminated by expire time by default
+        // So it may exhaust all available file descriptors
+        let assoc_map = if let Some(max_assoc) = config.udp_max_associations {
+            LruCache::with_expiry_duration_and_capacity(timeout, max_assoc)
+        } else {
+            LruCache::with_expiry_duration(timeout)
+        };
+
+        let map = Arc::new(Mutex::new(assoc_map));
+
+        // Create a task for releasing timed out association
+        let map2 = map.clone();
+        let (release_task, watcher) = future::abortable(async move {
+            let mut interval = time::interval(timeout);
+            loop {
+                interval.tick().await;
+
+                let mut m = map2.lock().await;
+                // Cleanup expired association
+                // Do not consume this iterator, it will updates expire time of items that traversed
+                let _ = m.iter();
+            }
+        });
+
+        tokio::spawn(release_task);
+
+        ProxyAssociationManager { map, watcher }
+    }
+
+    /// Try to reset ProxyAssociation's last used time by key
+    ///
+    /// Return true if ProxyAssociation is still exist
+    pub async fn keep_alive(&self, key: &K) -> bool {
+        let mut assoc = self.map.lock().await;
+        assoc.get(key).is_some()
+    }
+
+    /// Send a packet to target address
+    ///
+    /// Create a new association by `create_fut` if association doesn't exist
+    pub async fn send_packet<F>(&self, key: K, target: Address, pkt: Vec<u8>, create_fut: F) -> io::Result<()>
+    where
+        F: Future<Output = io::Result<ProxyAssociation>>,
+    {
+        let mut assoc_map = self.map.lock().await;
+        let assoc = match assoc_map.entry(key) {
+            Entry::Occupied(oc) => oc.into_mut(),
+            Entry::Vacant(vc) => vc.insert(create_fut.await?),
+        };
+
+        // FIXME: Lock is still kept for a mutable reference
+        // Send to local -> remote task
+        assoc.send(target, pkt).await;
+
+        Ok(())
     }
 }
