@@ -77,6 +77,15 @@ impl ProxyAssociation {
 
         debug!("created UDP association {} <-> {}", src_addr, remote_bind_addr);
 
+        match server.server_config().addr() {
+            ServerAddr::SocketAddr(ref remote_addr) => remote_udp.connect(remote_addr).await?,
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(server.context(), dname, *port, |addr| {
+                    remote_udp.connect(&addr).await
+                })?;
+            }
+        }
+
         // Create a channel for sending packets to remote
         // FIXME: Channel size 1024?
         let (tx, rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
@@ -287,15 +296,7 @@ impl ProxyAssociation {
         let mut encrypt_buf = BytesMut::new();
         encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
-        let send_len = match svr_cfg.addr() {
-            ServerAddr::SocketAddr(ref remote_addr) => socket.send_to(&encrypt_buf[..], remote_addr).await?,
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| {
-                    socket.send_to(&encrypt_buf[..], &addr).await
-                })?
-                .1
-            }
-        };
+        let send_len = socket.send(&encrypt_buf[..]).await?;
 
         if encrypt_buf.len() != send_len {
             warn!(
@@ -402,7 +403,7 @@ impl ProxyAssociation {
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
-        let (recv_n, _) = socket.recv_from(&mut recv_buf).await?;
+        let recv_n = socket.recv(&mut recv_buf).await?;
 
         let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
             None => {

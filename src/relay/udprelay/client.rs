@@ -28,18 +28,25 @@ pub struct ServerClient {
     socket: UdpSocket,
     method: CipherType,
     key: Bytes,
-    server_addr: ServerAddr,
 }
 
 impl ServerClient {
     /// Create a client to communicate with Shadowsocks' UDP server
-    pub async fn new(svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
+    pub async fn new(context: &Context, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let socket = create_udp_socket(&local_addr).await?;
+        match svr_cfg.addr() {
+            ServerAddr::SocketAddr(ref remote_addr) => socket.connect(remote_addr).await?,
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context, dname, *port, |addr| {
+                    socket.connect(&addr).await
+                })?;
+            }
+        };
         Ok(ServerClient {
-            socket: create_udp_socket(&local_addr).await?,
+            socket,
             method: svr_cfg.method(),
             key: svr_cfg.clone_key(),
-            server_addr: svr_cfg.addr().clone(),
         })
     }
 
@@ -61,16 +68,7 @@ impl ServerClient {
         let mut encrypt_buf = BytesMut::new();
         encrypt_payload(context, self.method, &self.key, &send_buf, &mut encrypt_buf)?;
 
-        let send_len = match self.server_addr {
-            ServerAddr::SocketAddr(ref remote_addr) => {
-                try_timeout(self.socket.send_to(&encrypt_buf[..], remote_addr), Some(timeout)).await?
-            }
-            ServerAddr::DomainName(ref dname, port) => lookup_then!(context, dname, port, |addr| {
-                try_timeout(self.socket.send_to(&encrypt_buf[..], addr), Some(timeout)).await
-            })
-            .map(|(_, l)| l)?,
-        };
-
+        let send_len = try_timeout(self.socket.send(&encrypt_buf[..]), Some(timeout)).await?;
         assert_eq!(encrypt_buf.len(), send_len);
 
         Ok(())
@@ -83,7 +81,7 @@ impl ServerClient {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        let (recv_n, ..) = try_timeout(self.socket.recv_from(&mut recv_buf), Some(timeout)).await?;
+        let recv_n = try_timeout(self.socket.recv(&mut recv_buf), Some(timeout)).await?;
 
         let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
             None => {
@@ -102,7 +100,7 @@ impl ServerClient {
         cur.read_to_end(&mut payload)?;
 
         debug!(
-            "UDP server client recv_from {}, payload length {} bytes",
+            "UDP server client recv {}, payload length {} bytes",
             addr,
             payload.len()
         );

@@ -474,7 +474,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
 
         let addr = Address::SocketAddress(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53));
 
-        let mut client = UdpServerClient::new(stat.server_config()).await?;
+        let mut client = UdpServerClient::new(stat.context(), stat.server_config()).await?;
         client.send_to(stat.context(), &addr, DNS_QUERY).await?;
         let _ = client.recv_from(stat.context()).await?;
 
