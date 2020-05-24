@@ -96,7 +96,7 @@ impl ProxyAssociation {
         tokio::spawn(Self::l2r_packet_proxied(src_addr, server.clone(), rx, remote_sender));
 
         // REMOTE <- LOCAL task
-        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, false);
         let watchers = vec![remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
@@ -131,7 +131,7 @@ impl ProxyAssociation {
         tokio::spawn(Self::l2r_packet_bypassed(src_addr, server.clone(), rx, remote_sender));
 
         // REMOTE <- LOCAL task
-        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, true);
         let watchers = vec![remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
@@ -186,8 +186,9 @@ impl ProxyAssociation {
 
         // LOCAL <- REMOTE task
 
-        let bypass_watcher = Self::r2l_packet_abortable(src_addr, server.clone(), sender.clone(), bypass_receiver);
-        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver);
+        let bypass_watcher =
+            Self::r2l_packet_abortable(src_addr, server.clone(), sender.clone(), bypass_receiver, true);
+        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, false);
         let watchers = vec![bypass_watcher, remote_watcher];
 
         Ok(ProxyAssociation { tx, watchers })
@@ -366,6 +367,7 @@ impl ProxyAssociation {
         server: SharedServerStatistic<S>,
         sender: H,
         socket: RecvHalf,
+        is_bypassed: bool,
     ) -> AbortHandle
     where
         S: ServerData + Send + 'static,
@@ -377,7 +379,11 @@ impl ProxyAssociation {
         tokio::spawn(async move {
             let _ = relay_task.await;
 
-            debug!("UDP association {} <- .. task is closing", src_addr);
+            debug!(
+                "UDP association ({}) {} <- .. task is closing",
+                if is_bypassed { "bypassed" } else { "proxied" },
+                src_addr
+            );
         });
 
         relay_watcher
@@ -512,6 +518,7 @@ where
     /// Try to reset ProxyAssociation's last used time by key
     ///
     /// Return true if ProxyAssociation is still exist
+    #[inline]
     pub async fn keep_alive(&self, key: &K) -> bool {
         let mut assoc = self.inner.map.lock().await;
         assoc.get(key).is_some()
