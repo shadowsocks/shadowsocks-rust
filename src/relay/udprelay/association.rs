@@ -316,12 +316,19 @@ impl ProxyAssociation {
 
         if encrypt_buf.len() != send_len {
             warn!(
-                "UDP association {} -> {} via proxy {} payload truncated, expected {} bytes, but sent {} bytes",
+                "UDP association {} -> {} (proxied) {} payload truncated, expected {} bytes, but sent {} bytes",
                 src_addr,
                 target,
                 svr_cfg.addr(),
                 encrypt_buf.len(),
                 send_len
+            );
+        } else {
+            debug!(
+                "UDP association {} -> {} (proxied) sent {} bytes",
+                src_addr,
+                target,
+                payload.len()
             );
         }
 
@@ -351,11 +358,18 @@ impl ProxyAssociation {
 
         if payload.len() != send_len {
             warn!(
-                "UDP association {} -> {} payload truncated, expected {} bytes, but sent {} bytes",
+                "UDP association {} -> {} (bypassed) payload truncated, expected {} bytes, but sent {} bytes",
                 src_addr,
                 target,
                 payload.len(),
                 send_len
+            );
+        } else {
+            debug!(
+                "UDP association {} -> {} (bypassed) sent {} bytes",
+                src_addr,
+                target,
+                payload.len()
             );
         }
 
@@ -404,6 +418,12 @@ impl ProxyAssociation {
         loop {
             match Self::recv_packet_proxied(context, svr_cfg, &mut socket).await {
                 Ok((addr, data)) => {
+                    debug!(
+                        "UDP association {} <- .., payload length {} bytes",
+                        src_addr,
+                        data.len()
+                    );
+
                     if let Err(err) = sender.send_packet(addr, data).await {
                         error!("UDP association send {} <- .., error: {}", src_addr, err);
                     }
@@ -505,6 +525,10 @@ where
                 // Cleanup expired association
                 // Do not consume this iterator, it will updates expire time of items that traversed
                 let _ = m.iter();
+
+                if m.len() > 0 {
+                    debug!("UDP associations totally kept {}", m.len());
+                }
             }
         });
 
@@ -682,10 +706,8 @@ impl ServerAssociation {
 
         let addr = Address::read_from(&mut cur).await?;
 
-        debug!("UDP ASSOCIATE {} <-> {} establishing", src, addr);
-
         if context.check_outbound_blocked(&addr) {
-            warn!("outbound {} is blocked by ACL rules", addr);
+            warn!("{} -> outbound {} is blocked by ACL rules", src, addr);
             return Ok(());
         }
 
