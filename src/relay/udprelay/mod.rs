@@ -71,8 +71,4 @@ mod utils;
 pub const MAXIMUM_UDP_PAYLOAD_SIZE: usize = 65536;
 
 /// Default association expire time
-///
-/// FIXME: It is very hard to decide how long this value should be.
-/// For some usecases, clients may open a socket for sending just one packet,
-/// which will eventually cause too many *useless* associations are kept in the server.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
