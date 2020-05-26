@@ -25,13 +25,13 @@ async fn handle_socks4_connect(
     server: &SharedPlainServerStatistic,
     mut stream: BufReader<TcpStream>,
     client_addr: SocketAddr,
-    addr: &Address,
+    addr: Address,
 ) -> io::Result<()> {
     let context = server.context();
     let svr_cfg = server.server_config();
 
     // NOTE: Shadowsocks server uses SOCKS5 Address
-    let ss_addr = From::from(addr.clone());
+    let ss_addr = addr.into();
 
     let mut svr_s = match ProxyStream::connect(server.clone_context(), svr_cfg, &ss_addr).await {
         Ok(svr_s) => {
@@ -87,28 +87,28 @@ async fn handle_socks4_connect(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
-    debug!("CONNECT relay established {} <-> {}", client_addr, addr);
+    debug!("CONNECT relay established {} <-> {}", client_addr, ss_addr);
 
     match future::select(rhalf, whalf).await {
-        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, addr),
+        Either::Left((Ok(..), _)) => trace!("CONNECT relay {} -> {} closed", client_addr, ss_addr),
         Either::Left((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
+                trace!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
+                error!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             }
         }
-        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, addr),
+        Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, ss_addr),
         Either::Right((Err(err), _)) => {
             if let ErrorKind::TimedOut = err.kind() {
-                trace!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
+                trace!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
+                error!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             }
         }
     }
 
-    debug!("CONNECT relay {} <-> {} closed", client_addr, addr);
+    debug!("CONNECT relay {} <-> {} closed", client_addr, ss_addr);
 
     Ok(())
 }
@@ -137,7 +137,7 @@ async fn handle_socks4_client(server: &SharedPlainServerStatistic, s: TcpStream)
         Command::Connect => {
             debug!("CONNECT {}", handshake_req.dst);
 
-            handle_socks4_connect(server, s, client_addr, &handshake_req.dst).await
+            handle_socks4_connect(server, s, client_addr, handshake_req.dst).await
         }
         Command::Bind => {
             warn!("BIND is not supported");

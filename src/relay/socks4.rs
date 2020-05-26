@@ -115,7 +115,7 @@ impl fmt::Display for ResultCode {
 pub enum Address {
     /// Socket address (IP Address)
     SocketAddress(SocketAddrV4),
-    /// Domain name address
+    /// Domain name address (SOCKS4a)
     DomainNameAddress(String, u16),
 }
 

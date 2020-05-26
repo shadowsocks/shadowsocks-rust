@@ -10,6 +10,7 @@ pub mod manager;
 #[cfg(feature = "local-redir")]
 pub(crate) mod redir;
 pub mod server;
+#[cfg(feature = "local-socks4")]
 pub mod socks4;
 pub mod socks5;
 pub(crate) mod sys;
