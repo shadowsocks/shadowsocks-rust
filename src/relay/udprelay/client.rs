@@ -38,9 +38,7 @@ impl ServerClient {
         match svr_cfg.addr() {
             ServerAddr::SocketAddr(ref remote_addr) => socket.connect(remote_addr).await?,
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| {
-                    socket.connect(&addr).await
-                })?;
+                lookup_then!(context, dname, *port, |addr| { socket.connect(&addr).await })?;
             }
         };
         Ok(ServerClient {
@@ -61,7 +59,7 @@ impl ServerClient {
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::new();
+        let mut send_buf = Vec::with_capacity(addr.serialized_len() + payload.len());
         addr.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
 
@@ -96,7 +94,7 @@ impl ServerClient {
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
         let addr = Address::read_from(&mut cur).await?;
 
-        let mut payload = Vec::new();
+        let mut payload = Vec::with_capacity(recv_n - cur.position() as usize);
         cur.read_to_end(&mut payload)?;
 
         debug!(

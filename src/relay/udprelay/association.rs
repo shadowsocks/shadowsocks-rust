@@ -310,7 +310,7 @@ impl ProxyAssociation {
         socket: &mut SendHalf,
     ) -> io::Result<()> {
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::new();
+        let mut send_buf = Vec::with_capacity(target.serialized_len() + payload.len());
         target.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
 
@@ -464,7 +464,7 @@ impl ProxyAssociation {
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
         let addr = Address::read_from(&mut cur).await?;
 
-        let mut payload = Vec::new();
+        let mut payload = Vec::with_capacity(recv_n - cur.position() as usize);
         cur.read_to_end(&mut payload)?;
 
         #[cfg(feature = "local-flow-stat")]
@@ -786,7 +786,7 @@ impl ServerAssociation {
         let addr = Address::SocketAddress(remote_addr);
 
         // CLIENT <- SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::new();
+        let mut send_buf = Vec::with_capacity(addr.serialized_len() + remote_recv_len);
         addr.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(&remote_buf[..remote_recv_len]);
 

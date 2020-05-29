@@ -55,7 +55,7 @@ async fn parse_packet(pkt: &[u8]) -> io::Result<(Address, Vec<u8>)> {
     let addr = header.address;
 
     // The remaining is PAYLOAD
-    let mut payload = Vec::new();
+    let mut payload = Vec::with_capacity(pkt.len() - cur.position() as usize);
     cur.read_to_end(&mut payload)?;
 
     Ok((addr, payload))
