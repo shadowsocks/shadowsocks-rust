@@ -146,6 +146,11 @@ impl ProxyAssociation {
         S: ServerData + Send + 'static,
         H: ProxySend + Clone + Send + 'static,
     {
+        // Proxies everything if there is no ACL configured.
+        if server.context().acl().is_none() {
+            return ProxyAssociation::associate_proxied(src_addr, server, sender).await;
+        }
+
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 
