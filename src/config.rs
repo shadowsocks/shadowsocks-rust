@@ -595,6 +595,15 @@ pub enum ConfigType {
     #[cfg(feature = "local-http")]
     HttpLocal,
 
+    /// Config for HTTPS local
+    ///
+    /// Requires `local` configuration
+    #[cfg(all(
+        feature = "local-http",
+        any(feature = "local-http-native-tls", feature = "local-http-rustls")
+    ))]
+    HttpsLocal,
+
     /// Config for tunnel local
     ///
     /// Requires `local` and `forward` configuration
@@ -633,6 +642,11 @@ impl ConfigType {
             ConfigType::TunnelLocal => true,
             #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => true,
+            #[cfg(all(
+                feature = "local-http",
+                any(feature = "local-http-native-tls", feature = "local-http-rustls")
+            ))]
+            ConfigType::HttpsLocal => true,
             #[cfg(feature = "local-redir")]
             ConfigType::RedirLocal => true,
             ConfigType::Server | ConfigType::Manager => false,
@@ -651,6 +665,11 @@ impl ConfigType {
             ConfigType::TunnelLocal => false,
             #[cfg(feature = "local-http")]
             ConfigType::HttpLocal => false,
+            #[cfg(all(
+                feature = "local-http",
+                any(feature = "local-http-native-tls", feature = "local-http-rustls")
+            ))]
+            ConfigType::HttpsLocal => false,
             #[cfg(feature = "local-redir")]
             ConfigType::RedirLocal => false,
             ConfigType::Manager => false,
@@ -958,6 +977,11 @@ pub struct Config {
     ///
     /// Set to `true` if you want to query IPv6 addresses before IPv4
     pub ipv6_first: bool,
+    /// TLS cryptographic identify (X509)
+    #[cfg(feature = "local-http-native-tls")]
+    pub tls_identity_path: Option<PathBuf>,
+    #[cfg(feature = "local-http-native-tls")]
+    pub tls_identity_password: Option<String>,
 }
 
 /// Configuration parsing error kind
@@ -1048,6 +1072,10 @@ impl Config {
             local_dns_addr: None,
             remote_dns_addr: None,
             ipv6_first: false,
+            #[cfg(feature = "local-http-native-tls")]
+            tls_identity_path: None,
+            #[cfg(feature = "local-http-native-tls")]
+            tls_identity_password: None,
         }
     }
 

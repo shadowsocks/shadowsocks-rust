@@ -66,6 +66,13 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => true,
 
+        // HTTPS must be TCP
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        ConfigType::HttpsLocal => true,
+
         // Redir mode controlled by this flag
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => mode.enable_tcp(),

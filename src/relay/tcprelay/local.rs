@@ -14,6 +14,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::TunnelLocal => super::tunnel_local::run(context).await,
         #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => super::http_local::run(context).await,
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        ConfigType::HttpsLocal => super::http_local::run(context).await,
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => super::redir_local::run(context).await,
         #[cfg(feature = "local-dns-relay")]

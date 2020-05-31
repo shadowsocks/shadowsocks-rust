@@ -29,6 +29,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         ConfigType::RedirLocal => super::redir_local::run(context).await,
         #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => unreachable!(),
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        ConfigType::HttpsLocal => unreachable!(),
         #[cfg(feature = "local-dns-relay")]
         ConfigType::DnsLocal => unreachable!(),
         ConfigType::Server => unreachable!(),

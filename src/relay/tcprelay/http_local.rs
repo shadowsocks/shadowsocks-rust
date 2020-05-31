@@ -39,6 +39,7 @@ use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
+    config::ConfigType,
     context::SharedContext,
     relay::{
         loadbalancing::server::{
@@ -826,31 +827,65 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let bind_addr = local_addr.bind_addr(&context).await?;
 
     let bypass_client = Client::builder().build::<_, Body>(DirectConnector::new(context.clone()));
-    let servers: PingBalancer<ServerScore> = PingBalancer::new(context, ServerType::Tcp).await;
+    let servers: PingBalancer<ServerScore> = PingBalancer::new(context.clone(), ServerType::Tcp).await;
     let servers = Arc::new(servers);
 
-    let make_service = make_service_fn(|socket: &AddrStream| {
-        let client_addr = socket.remote_addr();
-        let servers = servers.clone();
-        let bypass_client = bypass_client.clone();
+    match context.config().config_type {
+        ConfigType::HttpLocal => {
+            let make_service = make_service_fn(|socket: &AddrStream| {
+                let client_addr = socket.remote_addr();
+                let servers = servers.clone();
+                let bypass_client = bypass_client.clone();
 
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                let svr_score = servers.pick_server();
-                server_dispatch(req, svr_score, client_addr, bypass_client.clone())
-            }))
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                        let svr_score = servers.pick_server();
+                        server_dispatch(req, svr_score, client_addr, bypass_client.clone())
+                    }))
+                }
+            });
+
+            // HTTP Proxy protocol only defined in HTTP 1.x
+            let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
+            info!("shadowsocks HTTP listening on {}", server.local_addr());
+
+            if let Err(err) = server.await {
+                use std::io::Error;
+
+                error!("hyper server exited with error: {}", err);
+                return Err(Error::new(ErrorKind::Other, err));
+            }
         }
-    });
+        #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
+        ConfigType::HttpsLocal => {
+            use super::http_tls::{TlsAcceptor, TlsStream};
 
-    // HTTP Proxy protocol only defined in HTTP 1.x
-    let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
-    info!("shadowsocks HTTP listening on {}", server.local_addr());
+            let make_service = make_service_fn(|socket: &TlsStream| {
+                let client_addr = socket.remote_addr();
+                let servers = servers.clone();
+                let bypass_client = bypass_client.clone();
 
-    if let Err(err) = server.await {
-        use std::io::Error;
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
+                        let svr_score = servers.pick_server();
+                        server_dispatch(req, svr_score, client_addr, bypass_client.clone())
+                    }))
+                }
+            });
 
-        error!("hyper server exited with error: {}", err);
-        return Err(Error::new(ErrorKind::Other, err));
+            let acceptor = TlsAcceptor::bind(context.config(), &bind_addr)?;
+            info!("shadowsocks HTTPS listening on {}", acceptor.local_addr());
+
+            let server = Server::builder(acceptor).http1_only(true).serve(make_service);
+
+            if let Err(err) = server.await {
+                use std::io::Error;
+
+                error!("hyper server exited with error: {}", err);
+                return Err(Error::new(ErrorKind::Other, err));
+            }
+        }
+        _ => unreachable!("http_local::run shouldn't used with {:?}", context.config().config_type),
     }
 
     Ok(())

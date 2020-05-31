@@ -471,6 +471,11 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
         ConfigType::DnsLocal => svr_cfg.external_addr(),
         #[cfg(feature = "local-http")]
         ConfigType::HttpLocal => svr_cfg.external_addr(),
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        ConfigType::HttpsLocal => svr_cfg.external_addr(),
         #[cfg(feature = "local-redir")]
         ConfigType::RedirLocal => svr_cfg.external_addr(),
 

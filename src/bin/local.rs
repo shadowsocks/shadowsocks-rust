@@ -34,6 +34,11 @@ const AVAILABLE_PROTOCOLS: &[&str] = &[
     "socks4",
     #[cfg(feature = "local-http")]
     "http",
+    #[cfg(all(
+        feature = "local-http",
+        any(feature = "local-http-native-tls", feature = "local-http-rustls")
+    ))]
+    "https",
     #[cfg(feature = "local-tunnel")]
     "tunnel",
     #[cfg(feature = "local-redir")]
@@ -122,6 +127,14 @@ fn main() {
         );
     }
 
+    #[cfg(feature = "local-http-native-tls")]
+    {
+        app = clap_app!(@app (app)
+            (@arg TLS_IDENTITY_PATH: --("tls-identity") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PASSWORD] "TLS identity file (PKCS #12) path for HTTPS server")
+            (@arg TLS_IDENTITY_PASSWORD: --("tls-identity-password") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PATH] "TLS identity file's password for HTTPS server")
+        );
+    }
+
     let matches = app.get_matches();
     drop(available_ciphers);
 
@@ -134,6 +147,11 @@ fn main() {
         Some("socks4") => ConfigType::Socks4Local,
         #[cfg(feature = "local-http")]
         Some("http") => ConfigType::HttpLocal,
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        Some("https") => ConfigType::HttpsLocal,
         #[cfg(feature = "local-tunnel")]
         Some("tunnel") => ConfigType::TunnelLocal,
         #[cfg(feature = "local-redir")]
@@ -266,6 +284,17 @@ fn main() {
 
         if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
             config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
+        }
+    }
+
+    #[cfg(feature = "local-http-native-tls")]
+    {
+        if let Some(ipath) = matches.value_of("TLS_IDENTITY_PATH") {
+            config.tls_identity_path = Some(ipath.into());
+        }
+
+        if let Some(ipwd) = matches.value_of("TLS_IDENTITY_PASSWORD") {
+            config.tls_identity_password = Some(ipwd.into());
         }
     }
 

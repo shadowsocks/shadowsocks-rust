@@ -19,6 +19,11 @@ mod connection;
 mod crypto_io;
 #[cfg(feature = "local-http")]
 mod http_local;
+#[cfg(all(
+    feature = "local-http",
+    any(feature = "local-http-native-tls", feature = "local-http-rustls")
+))]
+mod http_tls;
 pub mod local;
 mod monitor;
 mod proxy_stream;
