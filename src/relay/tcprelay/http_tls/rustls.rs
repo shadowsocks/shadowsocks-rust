@@ -71,7 +71,7 @@ impl TlsAcceptor {
             let err = io::Error::new(io::ErrorKind::Other, format!("setting certificate: {}", err));
             return Err(err);
         }
-        config.set_protocols(&["h2".into(), "http/1.1".into()]);
+        // config.set_protocols(&["h2".into(), "http/1.1".into()]);
 
         let server_config = Arc::new(config);
 
@@ -101,7 +101,7 @@ impl TlsAcceptor {
         match rustls::internal::pemfile::rsa_private_keys(&mut BufReader::new(key)) {
             Ok(pk) => Ok(pk),
             Err(..) => {
-                let err = io::Error::new(io::ErrorKind::InvalidData, "error while loading PKCS #8 private keys");
+                let err = io::Error::new(io::ErrorKind::InvalidData, "error while loading RSA private keys");
                 Err(err)
             }
         }

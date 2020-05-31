@@ -885,7 +885,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 return Err(Error::new(ErrorKind::Other, err));
             }
         }
-        _ => unreachable!("http_local::run shouldn't used with {:?}", context.config().config_type),
+        _ => unreachable!(
+            "http_local::run shouldn't be used with {:?}",
+            context.config().config_type
+        ),
     }
 
     Ok(())
