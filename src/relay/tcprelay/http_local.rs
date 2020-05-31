@@ -242,7 +242,7 @@ impl tower::Service<Uri> for ShadowSocksConnector {
                         match ProxyStream::connect_proxied(context.clone(), svr_cfg, &addr).await {
                             Ok(s) => {
                                 if is_https {
-                                    let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
+                                    let host = dst.host().unwrap().trim_start_matches('[').trim_end_matches(']');
                                     ProxyHttpStream::connect_https(s, host).await
                                 } else {
                                     Ok(ProxyHttpStream::connect_http(s))
