@@ -135,6 +135,14 @@ fn main() {
         );
     }
 
+    #[cfg(feature = "local-http-rustls")]
+    {
+        app = clap_app!(@app (app)
+            (@arg TLS_IDENTITY_CERT_PATH: --("tls-identity-certificate") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PRIVATE_KEY_PATH] "TLS identity certificate (PEM) path for HTTPS server")
+            (@arg TLS_IDENTITY_PRIVATE_KEY_PATH: --("tls-identity-private-key") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_CERT_PATH] "TLS identity private key (PEM), PKCS #8 or RSA syntax, for HTTPS server")
+        );
+    }
+
     let matches = app.get_matches();
     drop(available_ciphers);
 
@@ -295,6 +303,17 @@ fn main() {
 
         if let Some(ipwd) = matches.value_of("TLS_IDENTITY_PASSWORD") {
             config.tls_identity_password = Some(ipwd.into());
+        }
+    }
+
+    #[cfg(feature = "local-http-rustls")]
+    {
+        if let Some(cpath) = matches.value_of("TLS_IDENTITY_CERT_PATH") {
+            config.tls_identity_certificate_path = Some(cpath.into());
+        }
+
+        if let Some(kpath) = matches.value_of("TLS_IDENTITY_PRIVATE_KEY_PATH") {
+            config.tls_identity_private_key_path = Some(kpath.into());
         }
     }
 

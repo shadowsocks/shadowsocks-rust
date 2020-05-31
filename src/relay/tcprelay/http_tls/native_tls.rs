@@ -1,10 +1,9 @@
-//! TLS support implementation by native-tls
+//! TLS support by [native-tls](https://crates.io/crates/native-tls)
 
 use std::{
     fs::File,
     future::Future,
-    io,
-    io::Read,
+    io::{self, Read},
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -16,6 +15,7 @@ use hyper::server::{
     accept::Accept,
     conn::{AddrIncoming, AddrStream},
 };
+use log::trace;
 use native_tls::Identity;
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -33,6 +33,8 @@ impl TlsAcceptor {
     pub fn bind(config: &Config, addr: &SocketAddr) -> io::Result<TlsAcceptor> {
         let id_path = config.tls_identity_path.as_ref().expect("identity path");
         let id_pwd = config.tls_identity_password.as_ref().expect("identify password");
+
+        trace!("creating TLS acceptor with identity: {}", id_path.display());
 
         let mut id_file = File::open(id_path)?;
         let mut id_buf = Vec::new();

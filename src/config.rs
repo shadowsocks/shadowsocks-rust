@@ -977,11 +977,18 @@ pub struct Config {
     ///
     /// Set to `true` if you want to query IPv6 addresses before IPv4
     pub ipv6_first: bool,
-    /// TLS cryptographic identify (X509)
+    /// TLS cryptographic identity (X509), PKCS #12 format
     #[cfg(feature = "local-http-native-tls")]
     pub tls_identity_path: Option<PathBuf>,
+    /// TLS cryptographic identity's password
     #[cfg(feature = "local-http-native-tls")]
     pub tls_identity_password: Option<String>,
+    /// TLS cryptographic identity, certificate file path (PEM)
+    #[cfg(feature = "local-http-rustls")]
+    pub tls_identity_certificate_path: Option<PathBuf>,
+    /// TLS cryptographic identity, private keys (PEM), RSA or PKCS #8
+    #[cfg(feature = "local-http-rustls")]
+    pub tls_identity_private_key_path: Option<PathBuf>,
 }
 
 /// Configuration parsing error kind
@@ -1076,6 +1083,10 @@ impl Config {
             tls_identity_path: None,
             #[cfg(feature = "local-http-native-tls")]
             tls_identity_password: None,
+            #[cfg(feature = "local-http-rustls")]
+            tls_identity_certificate_path: None,
+            #[cfg(feature = "local-http-rustls")]
+            tls_identity_private_key_path: None,
         }
     }
 
