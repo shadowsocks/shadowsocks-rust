@@ -472,6 +472,7 @@ It supports the following features:
 * [x] Defend against replay attacks, [shadowsocks/shadowsocks-org#44](https://github.com/shadowsocks/shadowsocks-org/issues/44)
 * [x] Manager APIs, supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
 * [x] ACL (Access Control List)
+* [x] Support HTTP/HTTPS Proxy protocol
 
 ## TODO
 
