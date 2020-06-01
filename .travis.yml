@@ -66,4 +66,4 @@ script:
     cargo test --no-fail-fast --features local-redir;
     fi
 
-cache: cargo
+# cache: cargo
