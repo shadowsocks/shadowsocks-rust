@@ -132,7 +132,7 @@ impl ServerState {
     /// Create a global shared server state
     pub async fn new_shared(config: &Config) -> SharedServerState {
         let state = ServerState {
-            dns_resolver: match create_resolver(config.get_dns_config(), config.timeout, config.ipv6_first).await {
+            dns_resolver: match create_resolver(config.get_dns_config(), config.ipv6_first).await {
                 Ok(resolver) => Some(resolver),
                 Err(..) => None,
             },

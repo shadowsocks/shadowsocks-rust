@@ -32,7 +32,7 @@ async fn handle_client(
     socket: TcpStream,
     peer_addr: SocketAddr,
 ) -> io::Result<()> {
-    let timeout = svr_cfg.timeout().or(context.config().timeout);
+    let timeout = svr_cfg.timeout();
 
     if let Err(err) = socket.set_keepalive(timeout) {
         error!("failed to set keep alive: {:?}", err);

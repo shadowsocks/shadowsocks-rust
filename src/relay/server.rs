@@ -93,7 +93,7 @@ pub(crate) async fn run_with(
     // If specified manager-address, reports transmission statistic to it
     //
     // Dont do that if server is created by manager
-    if context.config().manager_addr.is_some() {
+    if context.config().manager.is_some() {
         let report_fut = manager_report_task(context.clone(), flow_stat);
         vf.push(report_fut.boxed());
     }
@@ -108,7 +108,8 @@ pub(crate) async fn run_with(
 }
 
 async fn manager_report_task(context: SharedContext, flow_stat: SharedMultiServerFlowStatistic) -> io::Result<()> {
-    let manager_addr = context.config().manager_addr.as_ref().unwrap();
+    let manager_config = context.config().manager.as_ref().unwrap();
+    let manager_addr = &manager_config.addr;
     let mut socket = ManagerDatagram::bind_for(manager_addr).await?;
 
     while context.server_running() {

@@ -911,6 +911,28 @@ impl FromStr for RedirType {
     }
 }
 
+/// Configuration for Manager
+#[derive(Clone, Debug)]
+pub struct ManagerConfig {
+    /// Address of `ss-manager`. Send servers' statistic data to the manager server
+    pub addr: ManagerAddr,
+    /// Manager's default method
+    pub method: Option<CipherType>,
+    /// Timeout for TCP connections, setting to manager's created servers
+    pub timeout: Option<Duration>,
+}
+
+impl ManagerConfig {
+    /// Create a ManagerConfig with default options
+    pub fn new(addr: ManagerAddr) -> ManagerConfig {
+        ManagerConfig {
+            addr,
+            method: None,
+            timeout: None,
+        }
+    }
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -934,10 +956,8 @@ pub struct Config {
     pub mode: Mode,
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
-    /// Address of `ss-manager`. Send servers' statistic data to the manager server
-    pub manager_addr: Option<ManagerAddr>,
-    /// Manager's default method
-    pub manager_method: Option<CipherType>,
+    /// Manager's configuration
+    pub manager: Option<ManagerConfig>,
     /// Config is for Client or Server
     pub config_type: ConfigType,
     /// Timeout for UDP Associations, default is 5 minutes
@@ -946,8 +966,6 @@ pub struct Config {
     pub udp_max_associations: Option<usize>,
     /// `RLIMIT_NOFILE` option for *nix systems
     pub nofile: Option<u64>,
-    /// Timeout for TCP connections, could be replaced by server*.timeout
-    pub timeout: Option<Duration>,
     /// ACL configuration
     pub acl: Option<AccessControl>,
     /// Path to stat callback unix address, only for Android
@@ -1060,13 +1078,11 @@ impl Config {
             dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
-            manager_addr: None,
-            manager_method: None,
+            manager: None,
             config_type,
             udp_timeout: None,
             udp_max_associations: None,
             nofile: None,
-            timeout: None,
             acl: None,
             tcp_redir: RedirType::tcp_default(),
             udp_redir: RedirType::udp_default(),
@@ -1209,6 +1225,17 @@ impl Config {
             }
         }
 
+        // Set timeout globally
+        if let Some(timeout) = config.timeout {
+            let timeout = Duration::from_secs(timeout);
+            // Set as a default timeout
+            for svr in &mut nconfig.server {
+                if svr.timeout.is_none() {
+                    svr.timeout = Some(timeout);
+                }
+            }
+        }
+
         // Manager Address
         if let Some(ma) = config.manager_address {
             let manager = match config.manager_port {
@@ -1230,7 +1257,13 @@ impl Config {
                 }
             };
 
-            nconfig.manager_addr = Some(manager);
+            let manager_config = ManagerConfig {
+                addr: manager,
+                method: None,
+                timeout: None,
+            };
+
+            nconfig.manager = Some(manager_config);
         }
 
         // DNS
@@ -1259,14 +1292,11 @@ impl Config {
         // UDP
         nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
+        // Maximum associations to be kept simultaneously
         nconfig.udp_max_associations = config.udp_max_associations;
 
         // RLIMIT_NOFILE
         nconfig.nofile = config.nofile;
-
-        // TCP timeout
-        // This is mostly used for manager for creating new servers
-        nconfig.timeout = config.timeout.map(Duration::from_secs);
 
         // Uses IPv6 first
         if let Some(f) = config.ipv6_first {
@@ -1370,7 +1400,7 @@ impl Config {
         }
 
         if self.config_type.is_manager() {
-            if self.manager_addr.is_some() {
+            if self.manager.is_some() {
                 return Ok(());
             }
 
@@ -1424,7 +1454,7 @@ impl fmt::Display for Config {
                 jconf.password = Some(svr.password().to_string());
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
-                jconf.timeout = svr.timeout().or(self.timeout).map(|t| t.as_secs());
+                jconf.timeout = svr.timeout().map(|t| t.as_secs());
             }
             _ => {
                 let mut vsvr = Vec::new();
@@ -1448,19 +1478,18 @@ impl fmt::Display for Config {
                 }
 
                 jconf.servers = Some(vsvr);
-                jconf.timeout = self.timeout.map(|t| t.as_secs());
             }
         }
 
-        if let Some(ref ma) = self.manager_addr {
-            jconf.manager_address = Some(match *ma {
+        if let Some(ref m) = self.manager {
+            jconf.manager_address = Some(match m.addr {
                 ManagerAddr::SocketAddr(ref saddr) => saddr.ip().to_string(),
                 ManagerAddr::DomainName(ref dname, ..) => dname.clone(),
                 #[cfg(unix)]
                 ManagerAddr::UnixSocketAddr(ref path) => path.display().to_string(),
             });
 
-            jconf.manager_port = match *ma {
+            jconf.manager_port = match m.addr {
                 ManagerAddr::SocketAddr(ref saddr) => Some(saddr.port()),
                 ManagerAddr::DomainName(.., port) => Some(port),
                 #[cfg(unix)]

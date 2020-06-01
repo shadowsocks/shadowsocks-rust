@@ -3,7 +3,6 @@
 use std::{
     io::{self, Error, ErrorKind},
     net::SocketAddr,
-    time::Duration,
 };
 
 use log::{error, trace};
@@ -16,15 +15,8 @@ use super::tokio_dns_resolver::resolve as tokio_resolve;
 use crate::context::Context;
 
 /// Create a `trust-dns` asynchronous DNS resolver
-pub async fn create_resolver(
-    dns: Option<ResolverConfig>,
-    timeout: Option<Duration>,
-    ipv6_first: bool,
-) -> io::Result<TokioAsyncResolver> {
+pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> io::Result<TokioAsyncResolver> {
     let mut resolver_opts = ResolverOpts::default();
-    if let Some(d) = timeout {
-        resolver_opts.timeout = d;
-    }
 
     if ipv6_first {
         resolver_opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;

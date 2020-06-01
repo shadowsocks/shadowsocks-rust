@@ -7,7 +7,10 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -22,6 +25,7 @@ use shadowsocks::{
     Config,
     ConfigType,
     ManagerAddr,
+    ManagerConfig,
     Mode,
     ServerAddr,
     ServerConfig,
@@ -46,8 +50,9 @@ fn main() {
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
-        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] "Encryption method")
+        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR] "Server's encryption method")
+        (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
 
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
@@ -58,6 +63,9 @@ fn main() {
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
+
+        (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
+        (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
     );
 
     let matches = app
@@ -91,8 +99,12 @@ fn main() {
             .parse::<CipherType>()
             .expect("encryption method");
         let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
+        let timeout = matches
+            .value_of("TIMEOUT")
+            .map(|t| t.parse::<u64>().expect("timeout"))
+            .map(Duration::from_secs);
 
-        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, None, None);
+        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, timeout, None);
 
         if let Some(p) = matches.value_of("PLUGIN") {
             let plugin = PluginConfig {
@@ -132,7 +144,7 @@ fn main() {
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_addr = Some(m.parse::<ManagerAddr>().expect("manager address"));
+        config.manager = Some(ManagerConfig::new(m.parse::<ManagerAddr>().expect("manager address")));
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {
@@ -151,6 +163,14 @@ fn main() {
 
     if matches.is_present("IPV6_FIRST") {
         config.ipv6_first = true;
+    }
+
+    if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
+        config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+    }
+
+    if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
+        config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
     }
 
     // DONE READING options

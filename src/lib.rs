@@ -82,7 +82,7 @@ use std::io;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
-    config::{ClientConfig, Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
+    config::{ClientConfig, Config, ConfigType, ManagerAddr, ManagerConfig, Mode, ServerAddr, ServerConfig},
     relay::{
         local::run as run_local,
         manager::run as run_manager,

@@ -382,12 +382,12 @@ impl ManagerService {
     async fn handle_add(&mut self, p: protocol::ServerConfig) -> io::Result<Option<Vec<u8>>> {
         trace!("ACTION \"add\" {:?}", p);
 
+        let manager_config = self.context.config().manager.as_ref().expect("manager config");
+
         let server_port = p.server_port;
 
         let method = match p.method {
-            None => self.context
-                .config()
-                .manager_method
+            None => manager_config.method
                 // Default method as shadowsocks-libev's ss-server
                 // Just for compatiblity, some shadowsocks manager relies on this default method
                 .unwrap_or(CipherType::ChaCha20IetfPoly1305),
@@ -405,7 +405,7 @@ impl ManagerService {
             ServerAddr::from(bind_addr),
             p.password,
             method,
-            None,
+            manager_config.timeout,
             match p.plugin {
                 Some(pp) => Some(PluginConfig {
                     plugin: pp,
@@ -437,9 +437,9 @@ impl ManagerService {
             config.no_delay = self.context.config().no_delay;
         }
 
-        // timeouts
+        // UDP configurations
         config.udp_timeout = self.context.config().udp_timeout;
-        config.timeout = self.context.config().timeout;
+        config.udp_max_associations = self.context.config().udp_max_associations;
 
         // Mode
         config.mode = self.context.config().mode;
@@ -557,14 +557,15 @@ pub async fn run(config: Config) -> io::Result<()> {
     // Create a context containing a DNS resolver and server running state flag.
     let state = ServerState::new_shared(&config).await;
     let context = Context::new_with_state_shared(config, state.clone());
-
-    let bind_addr = match context.config().manager_addr {
-        Some(ref a) => a,
+    let manager_config = match context.config().manager {
+        Some(ref mc) => mc,
         None => {
-            let err = Error::new(ErrorKind::Other, "missing `manager_addr` in configuration");
+            let err = Error::new(ErrorKind::Other, "missing `manager` in configuration");
             return Err(err);
         }
     };
+
+    let bind_addr = &manager_config.addr;
 
     let mut service = ManagerService::bind(bind_addr, context.clone()).await?;
 

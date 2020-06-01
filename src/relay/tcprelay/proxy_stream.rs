@@ -285,14 +285,13 @@ impl ProxyStream {
     pub async fn connect_direct(context: SharedContext, addr: &Address) -> io::Result<ProxyStream> {
         debug!("connect to {} directly (bypassed)", addr);
 
-        // NOTE: Direct connection's timeout is controlled by the global key
-        let timeout = context.config().timeout;
+        // FIXME: No timeout for direct connections
 
         let stream = match *addr {
-            Address::SocketAddress(ref saddr) => try_timeout(tcp_stream_connect(&saddr, &context), timeout).await?,
+            Address::SocketAddress(ref saddr) => tcp_stream_connect(&saddr, &context).await?,
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
-                    try_timeout(tcp_stream_connect(&saddr, &context), timeout).await
+                    tcp_stream_connect(&saddr, &context).await
                 })?
                 .1
             }
@@ -300,7 +299,7 @@ impl ProxyStream {
 
         Ok(ProxyStream {
             context,
-            connection: ProxyConnection::Direct(Connection::new(stream, timeout)),
+            connection: ProxyConnection::Direct(Connection::new(stream, None)),
         })
     }
 
@@ -457,7 +456,7 @@ async fn connect_proxy_server_internal(
 
 /// Connect to proxy server with `ServerConfig`
 async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::Result<STcpStream> {
-    let timeout = svr_cfg.timeout().or(context.config().timeout);
+    let timeout = svr_cfg.timeout();
 
     let svr_addr = match context.config().config_type {
         ConfigType::Server => svr_cfg.addr(),

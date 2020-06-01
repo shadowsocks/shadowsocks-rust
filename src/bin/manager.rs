@@ -7,7 +7,10 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::net::{IpAddr, SocketAddr};
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -21,6 +24,7 @@ use shadowsocks::{
     Config,
     ConfigType,
     ManagerAddr,
+    ManagerConfig,
     Mode,
     ServerAddr,
 };
@@ -50,6 +54,7 @@ fn main() {
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
         (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) +next_line_help "Default encryption method")
+        (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} "Default timeout seconds for TCP relay")
 
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
@@ -79,10 +84,6 @@ fn main() {
         None => Config::new(ConfigType::Manager),
     };
 
-    if let Some(method) = matches.value_of("ENCRYPT_METHOD") {
-        config.manager_method = Some(method.parse().expect("encryption method"));
-    }
-
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
         let bind_addr = match bind_addr.parse::<IpAddr>() {
             Ok(ip) => ServerAddr::from(SocketAddr::new(ip, 0)),
@@ -109,7 +110,21 @@ fn main() {
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
-        config.manager_addr = Some(m.parse::<ManagerAddr>().expect("manager bind address"));
+        if let Some(ref mut manager_config) = config.manager {
+            manager_config.addr = m.parse::<ManagerAddr>().expect("manager-address");
+        } else {
+            config.manager = Some(ManagerConfig::new(m.parse::<ManagerAddr>().expect("manager-address")));
+        }
+    }
+
+    if let Some(ref mut manager_config) = config.manager {
+        if let Some(m) = matches.value_of("ENCRYPT_METHOD") {
+            manager_config.method = Some(m.parse::<CipherType>().expect("encrypt-method"));
+        }
+
+        if let Some(t) = matches.value_of("TIMEOUT") {
+            manager_config.timeout = Some(Duration::from_secs(t.parse::<u64>().expect("timeout")));
+        }
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {
@@ -132,7 +147,7 @@ fn main() {
 
     // DONE reading options
 
-    if config.manager_addr.is_none() {
+    if config.manager.is_none() {
         eprintln!(
             "missing `manager_address`, consider specifying it by --manager-address command line option, \
              or \"manager_address\" and \"manager_port\" keys in configuration file"

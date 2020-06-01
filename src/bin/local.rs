@@ -4,6 +4,8 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
+use std::time::Duration;
+
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::info;
@@ -60,8 +62,9 @@ fn main() {
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
-        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR ENCRYPT_METHOD] "Password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR PASSWORD] +next_line_help "Encryption method")
+        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR] +next_line_help "Server's encryption method")
+        (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
 
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
@@ -79,6 +82,9 @@ fn main() {
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
+
+        (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
+        (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
     );
 
     // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
@@ -187,7 +193,12 @@ fn main() {
             .expect("encryption method");
         let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
-        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, None, None);
+        let timeout = matches
+            .value_of("TIMEOUT")
+            .map(|t| t.parse::<u64>().expect("timeout"))
+            .map(Duration::from_secs);
+
+        let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method, timeout, None);
 
         if let Some(p) = matches.value_of("PLUGIN") {
             let plugin = PluginConfig {
@@ -315,6 +326,14 @@ fn main() {
         if let Some(kpath) = matches.value_of("TLS_IDENTITY_PRIVATE_KEY_PATH") {
             config.tls_identity_private_key_path = Some(kpath.into());
         }
+    }
+
+    if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
+        config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+    }
+
+    if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
+        config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
     }
 
     // DONE READING options
