@@ -32,15 +32,27 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `aes-pmac-siv` - Enabled `aes-*-pmac-siv` encryption algorithm. (Experimental)
 
+  * Supported by [`miscreant`](https://crates.io/crates/miscreant), enable hardware accerlation on x86/x86\_64 with `RUSTFLAGS=-Ctarget-feature=+aes,+ssse3`
+
 * `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using Tokio's `basic_scheduler`).
 
 * `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
 
 * `local-http` - Allow using HTTP protocol for `sslocal`
 
-Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http"]`.
+  * `local-http-native-tls` - Support HTTPS with [`native-tls`](https://crates.io/crates/native-tls)
+  
+  * `local-http-rustls` - Support HTTPS with [`rustls`](https://crates.io/crates/rustls)
 
-NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`.
+* `local-tunnel` - Allow using tunnel protocol for `sslocal`
+
+* `local-socks4` - Allow using SOCKS4/4a protocol for `sslocal`
+
+* `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
+
+Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]`.
+
+NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`, `local-http-native-tls`.
 
 ### **crates.io**
 
