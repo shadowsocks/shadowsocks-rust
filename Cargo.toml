@@ -119,7 +119,7 @@ lru_time_cache = "0.10"
 hyper = { version = "0.13", optional = true }
 http = { version = "0.2", optional = true }
 tower = { version = "0.3", optional = true }
-pin-project = "0.4"
+pin-project = "0.4.17"
 socket2 = "0.3"
 cfg-if = "0.1"
 bloomfilter = "^1.0.2"
