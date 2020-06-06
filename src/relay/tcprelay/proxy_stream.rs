@@ -12,7 +12,7 @@ use std::{
 use bytes::{Buf, BytesMut};
 use futures::ready;
 use log::{debug, error, trace};
-use pin_project::{pin_project, project};
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
 
 use crate::{
@@ -50,7 +50,6 @@ impl ProxiedConnection {
 }
 
 impl AsyncRead for ProxiedConnection {
-    #[project]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         self.project().stream.poll_read(cx, buf)
     }
@@ -163,7 +162,7 @@ impl AsyncWrite for ProxiedConnection {
     }
 }
 
-#[pin_project]
+#[pin_project(project = ProxyConnectionProj)]
 enum ProxyConnection {
     Direct(#[pin] STcpStream),
     Proxied(#[pin] ProxiedConnection),
@@ -188,36 +187,29 @@ impl ProxyConnection {
 
 macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
-        // #[project]
         match $self.as_mut().project() {
-            // ProxyConnection::Direct(stream) => stream.$method($($param),*),
-            __ProxyConnectionProjection::Direct(stream) => stream.$method($($param),*),
-            // ProxyConnection::Proxied(stream) => stream.$method($($param),*),
-            __ProxyConnectionProjection::Proxied(stream) => stream.$method($($param),*),
+            ProxyConnectionProj::Direct(stream) => stream.$method($($param),*),
+            ProxyConnectionProj::Proxied(stream) => stream.$method($($param),*),
         }
     };
 }
 
 impl AsyncRead for ProxyConnection {
-    #[project]
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         forward_call!(self, poll_read, cx, buf)
     }
 }
 
 impl AsyncWrite for ProxyConnection {
-    #[project]
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         // let p = forward_call!(self, poll_write, cx, buf);
         forward_call!(self, poll_write, cx, buf)
     }
 
-    #[project]
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_flush, cx)
     }
 
-    #[project]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_shutdown, cx)
     }

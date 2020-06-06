@@ -55,7 +55,7 @@ use crate::{
 
 use super::ProxyStream;
 
-#[pin_project]
+#[pin_project(project = ProxyHttpStreamProj)]
 enum ProxyHttpStream {
     Http(#[pin] ProxyStream),
     #[cfg(feature = "local-http-native-tls")]
@@ -167,13 +167,10 @@ impl ProxyHttpStream {
 
 macro_rules! forward_call {
     ($self:expr, $method:ident $(, $param:expr)*) => {
-        // #[project]
         match $self.as_mut().project() {
-            // ProxyHttpStream::Http(stream) => stream.$method($($param),*),
-            __ProxyHttpStreamProjection::Http(stream) => stream.$method($($param),*),
+            ProxyHttpStreamProj::Http(stream) => stream.$method($($param),*),
             #[cfg(any(feature = "local-http-native-tls", feature = "local-http-rustls"))]
-            // ProxyHttpStream::Https(stream, ..) => stream.$method($($param),*),
-            __ProxyHttpStreamProjection::Https(stream, ..) => stream.$method($($param),*),
+            ProxyHttpStreamProj::Https(stream, ..) => stream.$method($($param),*),
         }
     };
 }
