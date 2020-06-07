@@ -40,6 +40,11 @@ pub fn encrypt_payload(
     dst: &mut BytesMut,
 ) -> io::Result<()> {
     match t.category() {
+        CipherCategory::None => {
+            // FIXME: Is there a better way to prevent copying?
+            dst.put_slice(payload);
+            Ok(())
+        }
         CipherCategory::Stream => encrypt_payload_stream(context, t, key, payload, dst),
         CipherCategory::Aead => encrypt_payload_aead(context, t, key, payload, dst),
     }
@@ -114,6 +119,12 @@ fn encrypt_payload_aead(
 /// Decrypt payload from ShadowSocks UDP encrypted packet
 pub fn decrypt_payload(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
     match t.category() {
+        CipherCategory::None => {
+            // FIXME: Is there a better way to prevent copying?
+            let mut buf = Vec::with_capacity(payload.len());
+            buf.extend(payload);
+            Ok(Some(buf))
+        }
         CipherCategory::Stream => decrypt_payload_stream(context, t, key, payload),
         CipherCategory::Aead => decrypt_payload_aead(context, t, key, payload),
     }

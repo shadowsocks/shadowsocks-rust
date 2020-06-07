@@ -263,6 +263,8 @@ pub enum CipherType {
 /// Category of ciphers
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CipherCategory {
+    /// No encryption
+    None,
     /// Stream ciphers is used for OLD ShadowSocks protocol, which uses stream ciphers to encrypt data payloads
     Stream,
     /// AEAD ciphers is used in modern ShadowSocks protocol, which sends data in separate packets
@@ -542,6 +544,8 @@ impl CipherType {
     /// Get category of cipher
     pub fn category(self) -> CipherCategory {
         match self {
+            CipherType::None | CipherType::Plain => CipherCategory::None,
+
             CipherType::Aes128Gcm | CipherType::Aes256Gcm | CipherType::ChaCha20IetfPoly1305 => CipherCategory::Aead,
 
             #[cfg(feature = "sodium")]

@@ -10,11 +10,11 @@ use byteorder::{BigEndian, ByteOrder};
 use rand::Rng;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::UdpSocket
+    net::UdpSocket,
 };
 use trust_dns_proto::{
     op::{Message, Query},
-    rr::{DNSClass, RecordType, Name, RData},
+    rr::{DNSClass, Name, RData, RecordType},
 };
 
 #[cfg(unix)]
@@ -25,10 +25,7 @@ use tokio::net::UnixStream;
 use crate::{
     config::{Config, ServerConfig},
     context::SharedContext,
-    relay::{
-        socks5::Address,
-        tcprelay::ProxyStream,
-    },
+    relay::{socks5::Address, tcprelay::ProxyStream},
 };
 
 #[derive(Debug)]
@@ -118,8 +115,8 @@ pub async fn write_message<T: AsyncWriteExt + Unpin>(stream: &mut T, message: &M
 }
 
 async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
-    where
-        T: AsyncReadExt + AsyncWriteExt + Unpin,
+where
+    T: AsyncReadExt + AsyncWriteExt + Unpin,
 {
     write_message(stream, &generate_query_message(query)).await?;
     read_message(stream).await
@@ -133,10 +130,14 @@ pub struct UdpUpstream {
 #[async_trait]
 impl Upstream for UdpUpstream {
     async fn lookup(&self, query: &Query) -> io::Result<Message> {
-        let mut socket = UdpSocket::bind(SocketAddr::new(match self.server {
-            SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
-        }, 0)).await?;
+        let mut socket = UdpSocket::bind(SocketAddr::new(
+            match self.server {
+                SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+            },
+            0,
+        ))
+        .await?;
         socket.connect(self.server).await?;
         socket.send(&generate_query_message(query).to_vec()?).await?;
         let mut response = vec![0; 512];
@@ -165,14 +166,15 @@ pub struct ProxyTcpUpstream<F> {
 
 impl<F> Debug for ProxyTcpUpstream<F> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ProxyTcpUpstream")
-            .field("ns", &self.ns)
-            .finish()
+        f.debug_struct("ProxyTcpUpstream").field("ns", &self.ns).finish()
     }
 }
 
 #[async_trait]
-impl<F> Upstream for ProxyTcpUpstream<F> where F: Fn() -> ServerConfig + Send + Sync {
+impl<F> Upstream for ProxyTcpUpstream<F>
+where
+    F: Fn() -> ServerConfig + Send + Sync,
+{
     async fn lookup(&self, query: &Query) -> io::Result<Message> {
         let mut stream = ProxyStream::connect_proxied(self.context.clone(), &(self.svr_cfg)(), &self.ns).await?;
         stream_lookup(query, &mut stream).await

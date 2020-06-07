@@ -30,6 +30,7 @@ use tokio::{
 use crate::{
     config::{Config, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
+    crypto::CipherCategory,
     relay::{
         loadbalancing::server::{ServerData, SharedServerStatistic},
         socks5::Address,
@@ -314,18 +315,24 @@ impl ProxyAssociation {
         target.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
 
-        let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+        let (send_len, expected_len) = if let CipherCategory::None = svr_cfg.method().category() {
+            let send_len = socket.send(&send_buf).await?;
+            (send_len, send_buf.len())
+        } else {
+            let mut encrypt_buf = BytesMut::new();
+            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
-        let send_len = socket.send(&encrypt_buf[..]).await?;
+            let send_len = socket.send(&encrypt_buf).await?;
+            (send_len, encrypt_buf.len())
+        };
 
-        if encrypt_buf.len() != send_len {
+        if expected_len != send_len {
             warn!(
                 "UDP association {} -> {} (proxied) {} payload truncated, expected {} bytes, but sent {} bytes",
                 src_addr,
                 target,
                 svr_cfg.addr(),
-                encrypt_buf.len(),
+                expected_len,
                 send_len
             );
         } else {
@@ -451,16 +458,22 @@ impl ProxyAssociation {
 
         let recv_n = socket.recv(&mut recv_buf).await?;
 
-        let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
-            None => {
-                error!("UDP packet too short, received length {}", recv_n);
-                let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
-                return Err(err);
-            }
-            Some(b) => b,
+        let mut cur = if let CipherCategory::None = svr_cfg.method().category() {
+            recv_buf.truncate(recv_n);
+            Cursor::new(recv_buf)
+        } else {
+            let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
+                None => {
+                    error!("UDP packet too short, received length {}", recv_n);
+                    let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
+                    return Err(err);
+                }
+                Some(b) => b,
+            };
+            Cursor::new(decrypt_buf)
         };
+
         // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
-        let mut cur = Cursor::new(decrypt_buf);
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
         let addr = Address::read_from(&mut cur).await?;
 
@@ -640,7 +653,7 @@ impl ServerAssociation {
                 while let Some(pkt) = rx.recv().await {
                     // pkt is already a raw packet, so just send it
                     if let Err(err) =
-                        ServerAssociation::relay_l2r(&context, src_addr, &mut sender, &pkt[..], timeout, svr_cfg).await
+                        ServerAssociation::relay_l2r(&context, src_addr, &mut sender, pkt, timeout, svr_cfg).await
                     {
                         error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
@@ -687,28 +700,32 @@ impl ServerAssociation {
         context: &Context,
         src: SocketAddr,
         remote_udp: &mut SendHalf,
-        pkt: &[u8],
+        pkt: Vec<u8>,
         timeout: Duration,
         svr_cfg: &ServerConfig,
     ) -> io::Result<()> {
         // First of all, decrypt payload CLIENT -> SERVER
-        let decrypted_pkt = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), pkt) {
-            Ok(Some(pkt)) => pkt,
-            Ok(None) => {
-                error!("failed to decrypt pkt in UDP relay, packet too short");
-                let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
-                return Err(err);
-            }
-            Err(err) => {
-                error!("failed to decrypt pkt in UDP relay: {}", err);
-                let err = io::Error::new(io::ErrorKind::InvalidData, "decrypt failed");
-                return Err(err);
-            }
+        let mut cur = if let CipherCategory::None = svr_cfg.method().category() {
+            Cursor::new(pkt)
+        } else {
+            let decrypted_pkt = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &pkt) {
+                Ok(Some(pkt)) => pkt,
+                Ok(None) => {
+                    error!("failed to decrypt pkt in UDP relay, packet too short");
+                    let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
+                    return Err(err);
+                }
+                Err(err) => {
+                    error!("failed to decrypt pkt in UDP relay: {}", err);
+                    let err = io::Error::new(io::ErrorKind::InvalidData, "decrypt failed");
+                    return Err(err);
+                }
+            };
+
+            Cursor::new(decrypted_pkt)
         };
 
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut cur = Cursor::new(decrypted_pkt);
-
         let addr = Address::read_from(&mut cur).await?;
 
         if context.check_outbound_blocked(&addr) {
@@ -786,18 +803,27 @@ impl ServerAssociation {
         let addr = Address::SocketAddress(remote_addr);
 
         // CLIENT <- SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::with_capacity(addr.serialized_len() + remote_recv_len);
+        let mut send_buf = BytesMut::with_capacity(addr.serialized_len() + remote_recv_len);
         addr.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(&remote_buf[..remote_recv_len]);
 
-        let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+        if let CipherCategory::None = svr_cfg.method().category() {
+            // Send back to src_addr
+            if let Err(err) = response_tx.send((src_addr, send_buf)).await {
+                error!("failed to send packet into response channel, error: {}", err);
 
-        // Send back to src_addr
-        if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
-            error!("failed to send packet into response channel, error: {}", err);
+                // FIXME: What to do? Ignore?
+            }
+        } else {
+            let mut encrypt_buf = BytesMut::new();
+            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
-            // FIXME: What to do? Ignore?
+            // Send back to src_addr
+            if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
+                error!("failed to send packet into response channel, error: {}", err);
+
+                // FIXME: What to do? Ignore?
+            }
         }
 
         Ok(())

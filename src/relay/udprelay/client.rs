@@ -7,13 +7,13 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
-use log::{debug, error};
+use log::{debug, error, warn};
 use tokio::net::UdpSocket;
 
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
-    crypto::CipherType,
+    crypto::{CipherCategory, CipherType},
     relay::{socks5::Address, sys::create_udp_socket, utils::try_timeout},
 };
 
@@ -63,11 +63,28 @@ impl ServerClient {
         addr.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
 
-        let mut encrypt_buf = BytesMut::new();
-        encrypt_payload(context, self.method, &self.key, &send_buf, &mut encrypt_buf)?;
+        if let CipherCategory::None = self.method.category() {
+            let send_len = try_timeout(self.socket.send(&send_buf), Some(timeout)).await?;
+            if send_buf.len() != send_len {
+                warn!(
+                    "UDP server client send {} bytes, but actually sent {} bytes",
+                    send_buf.len(),
+                    send_len
+                );
+            }
+        } else {
+            let mut encrypt_buf = BytesMut::new();
+            encrypt_payload(context, self.method, &self.key, &send_buf, &mut encrypt_buf)?;
 
-        let send_len = try_timeout(self.socket.send(&encrypt_buf[..]), Some(timeout)).await?;
-        assert_eq!(encrypt_buf.len(), send_len);
+            let send_len = try_timeout(self.socket.send(&encrypt_buf), Some(timeout)).await?;
+            if encrypt_buf.len() != send_len {
+                warn!(
+                    "UDP server client send {} bytes, but actually sent {} bytes",
+                    encrypt_buf.len(),
+                    send_len
+                );
+            }
+        }
 
         Ok(())
     }
@@ -81,16 +98,22 @@ impl ServerClient {
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let recv_n = try_timeout(self.socket.recv(&mut recv_buf), Some(timeout)).await?;
 
-        let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
-            None => {
-                error!("UDP packet too short, received length {}", recv_n);
-                let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
-                return Err(err);
-            }
-            Some(b) => b,
+        let mut cur = if let CipherCategory::None = self.method.category() {
+            let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
+                None => {
+                    error!("UDP packet too short, received length {}", recv_n);
+                    let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
+                    return Err(err);
+                }
+                Some(b) => b,
+            };
+            Cursor::new(decrypt_buf)
+        } else {
+            recv_buf.truncate(recv_n);
+            Cursor::new(recv_buf)
         };
+
         // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
-        let mut cur = Cursor::new(decrypt_buf);
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
         let addr = Address::read_from(&mut cur).await?;
 

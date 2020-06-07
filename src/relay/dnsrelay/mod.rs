@@ -31,7 +31,7 @@ fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
     let mut iter = name.iter().rev();
     let mut next = || match iter.next() {
         Some(label) => std::str::from_utf8(label).unwrap_or("*"),
-        None => "0",    // zero fill the missing labels
+        None => "0", // zero fill the missing labels
     };
     if !"arpa".eq_ignore_ascii_case(next()) {
         return acl.is_default_in_proxy_list();
@@ -56,7 +56,14 @@ fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
                 }
             }
             acl.check_ip_in_proxy_list(&IpAddr::V6(Ipv6Addr::new(
-                segments[0], segments[1], segments[2], segments[3], segments[4], segments[5], segments[6], segments[7]
+                segments[0],
+                segments[1],
+                segments[2],
+                segments[3],
+                segments[4],
+                segments[5],
+                segments[6],
+                segments[7],
             )))
         }
         _ => acl.is_default_in_proxy_list(),
@@ -118,7 +125,7 @@ fn should_forward_by_response(
                     } else {
                         acl.is_default_in_proxy_list()
                     }
-                }}
+                }};
             }
             macro_rules! examine_record {
                 ($rec:ident, $is_answer:expr) => {
@@ -132,8 +139,11 @@ fn should_forward_by_response(
                         continue;
                     }
                     if $is_answer && !query.query_type().is_any() && $rec.record_type() != query.query_type() {
-                        warn!("local DNS response has inconsistent answer type {} for query {}",
-                              $rec.record_type(), query);
+                        warn!(
+                            "local DNS response has inconsistent answer type {} for query {}",
+                            $rec.record_type(),
+                            query
+                        );
                         return true;
                     }
                     let forward = match $rec.rdata() {
@@ -153,7 +163,11 @@ fn should_forward_by_response(
             }
             for rec in local_response.answers() {
                 if !names.contains(rec.name()) {
-                    warn!("local DNS response contains unexpected name {} for query {}", rec.name(), query);
+                    warn!(
+                        "local DNS response contains unexpected name {} for query {}",
+                        rec.name(),
+                        query
+                    );
                     return true;
                 }
                 examine_record!(rec, true);
@@ -183,7 +197,10 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
         // Start querying name servers
         debug!(
             "attempting lookup of {:?} {} with ns {:?} and {:?}",
-            query.query_type(), query.name(), local, remote
+            query.query_type(),
+            query.name(),
+            local,
+            remote
         );
 
         let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
@@ -274,7 +291,7 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
 
 async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
     relay: Arc<DnsRelay<Remote>>,
-    bind_addr: SocketAddr
+    bind_addr: SocketAddr,
 ) -> io::Result<()> {
     let mut listener = TcpListener::bind(&bind_addr).await?;
 
@@ -302,7 +319,7 @@ async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
 
 async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
     relay: Arc<DnsRelay<Remote>>,
-    bind_addr: SocketAddr
+    bind_addr: SocketAddr,
 ) -> io::Result<()> {
     let socket = create_udp_socket(&bind_addr).await?;
 
@@ -379,12 +396,13 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             context: context.clone(),
             svr_cfg: move || balancer.pick_server().server_config().clone(),
             ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
-        }
+        },
     });
 
     future::select(
         tokio::spawn(run_tcp(relay.clone(), bind_addr)),
         tokio::spawn(run_udp(relay, bind_addr)),
-    ).await;
+    )
+    .await;
     Ok(())
 }

@@ -28,11 +28,13 @@ use super::{
 };
 
 enum DecryptedReader {
+    None,
     Aead(AeadDecryptedReader),
     Stream(StreamDecryptedReader),
 }
 
 enum EncryptedWriter {
+    None,
     Aead(AeadEncryptedWriter),
     Stream(StreamEncryptedWriter),
 }
@@ -62,9 +64,14 @@ impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
     pub fn new(context: SharedContext, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
         let method = svr_cfg.method();
+        if method.category() == CipherCategory::None {
+            return CryptoStream::<S>::new_none(stream);
+        }
+
         let prev_len = match method.category() {
             CipherCategory::Stream => method.iv_size(),
             CipherCategory::Aead => method.salt_size(),
+            CipherCategory::None => 0,
         };
 
         let iv = match method.category() {
@@ -92,12 +99,14 @@ impl<S> CryptoStream<S> {
                 trace!("generated AEAD cipher salt {:?}", local_salt);
                 local_salt
             }
+            CipherCategory::None => Bytes::new(),
         };
 
         let method = svr_cfg.method();
         let enc = match method.category() {
             CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, svr_cfg.key(), iv)),
             CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, svr_cfg.key(), iv)),
+            CipherCategory::None => EncryptedWriter::None,
         };
 
         CryptoStream {
@@ -105,6 +114,15 @@ impl<S> CryptoStream<S> {
             dec: None,
             enc,
             read_status: ReadStatus::WaitIv(context, vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
+        }
+    }
+
+    fn new_none(stream: S) -> CryptoStream<S> {
+        CryptoStream {
+            stream,
+            dec: Some(DecryptedReader::None),
+            enc: EncryptedWriter::None,
+            read_status: ReadStatus::Established,
         }
     }
 
@@ -148,6 +166,7 @@ where
                     trace!("got AEAD cipher salt {:?}", ByteStr::new(&buf));
                     DecryptedReader::Aead(AeadDecryptedReader::new(method, key, &buf))
                 }
+                CipherCategory::None => DecryptedReader::None,
             };
 
             self.dec = Some(dec);
@@ -162,6 +181,7 @@ where
         ready!(this.poll_read_handshake(ctx))?;
 
         match *this.dec.as_mut().unwrap() {
+            DecryptedReader::None => Pin::new(&mut this.stream).poll_read(ctx, buf),
             DecryptedReader::Aead(ref mut r) => r.poll_read_decrypted(ctx, &mut this.stream, buf),
             DecryptedReader::Stream(ref mut r) => r.poll_read_decrypted(ctx, &mut this.stream, buf),
         }
@@ -175,6 +195,7 @@ where
     fn priv_poll_write(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
         match this.enc {
+            EncryptedWriter::None => Pin::new(&mut this.stream).poll_write(ctx, buf),
             EncryptedWriter::Aead(ref mut w) => w.poll_write_encrypted(ctx, &mut this.stream, buf),
             EncryptedWriter::Stream(ref mut w) => w.poll_write_encrypted(ctx, &mut this.stream, buf),
         }
