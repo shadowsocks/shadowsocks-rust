@@ -29,6 +29,7 @@ use shadowsocks::{
     ServerAddr,
 };
 
+mod allocator;
 mod logging;
 mod monitor;
 mod validator;

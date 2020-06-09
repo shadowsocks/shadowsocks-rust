@@ -80,6 +80,8 @@ local-redir = []
 local-tunnel = []
 # Enable SOCKS4/4a protocol for sslocal
 local-socks4 = []
+# Enable jemalloc for binaries
+jemalloc = ["jemallocator"]
 
 [dependencies]
 log = "0.4"
@@ -89,7 +91,7 @@ env_logger = { version = "0.7", default-features = false, features = ["termcolor
 chrono = "0.4"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
-tokio = { version = "^0.2.11", features = ["macros", "net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util"] }
+tokio = { version = "^0.2.11", features = ["macros", "net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util", "parking_lot"] }
 tokio-native-tls = { version = "0.1", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.13", optional = true }
@@ -136,6 +138,7 @@ iprange = "^0.6.3"
 ipnet = "2.2"
 async-trait = "0.1"
 lazy_static = "1.4"
+jemallocator = { version = "0.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

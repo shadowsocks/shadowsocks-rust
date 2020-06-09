@@ -26,6 +26,7 @@ use shadowsocks::{
     ServerConfig,
 };
 
+mod allocator;
 mod logging;
 mod monitor;
 mod validator;

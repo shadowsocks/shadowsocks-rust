@@ -8,6 +8,8 @@ use qrcode::{types::Color, QrCode};
 
 use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
+mod allocator;
+
 const BLACK: &str = "\x1b[40m  \x1b[0m";
 const WHITE: &str = "\x1b[47m  \x1b[0m";
 
