@@ -84,17 +84,25 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
 /// Perform a DNS resolution
 pub async fn resolve(context: &Context, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
     match context.dns_resolver() {
-        Some(resolver) => match resolver.lookup_ip(addr).await {
-            Ok(lookup_result) => Ok(lookup_result.iter().map(|ip| SocketAddr::new(ip, port)).collect()),
-            Err(err) => {
-                let err = Error::new(
-                    ErrorKind::Other,
-                    format!("dns resolve {}:{} error: {}", addr, port, err),
-                );
-                Err(err)
+        Some(resolver) => {
+            trace!("DNS resolving {}:{} with trust-dns", addr, port);
+
+            match resolver.lookup_ip(addr).await {
+                Ok(lookup_result) => Ok(lookup_result.iter().map(|ip| SocketAddr::new(ip, port)).collect()),
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                    );
+                    Err(err)
+                }
             }
-        },
+        }
         // Fallback to tokio's DNS resolver
-        None => tokio_resolve(context, addr, port).await,
+        None => {
+            trace!("DNS resolving {}:{} with tokio (fallback)", addr, port);
+
+            tokio_resolve(context, addr, port).await
+        }
     }
 }

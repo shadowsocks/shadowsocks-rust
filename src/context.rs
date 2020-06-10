@@ -13,7 +13,7 @@ use std::{
 use std::{net::IpAddr, time::Duration};
 
 use bloomfilter::Bloom;
-use log::warn;
+use log::{log_enabled, warn};
 #[cfg(feature = "local-dns-relay")]
 use lru_time_cache::LruCache;
 use spin::Mutex;
@@ -293,9 +293,36 @@ impl Context {
 
     /// Perform a DNS resolution
     pub async fn dns_resolve(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-        #[cfg(feature = "local-dns-relay")]
-        return self.local_dns().lookup_ip(host, port).await;
-        #[cfg(not(feature = "local-dns-relay"))]
+        if log_enabled!(log::Level::Debug) {
+            use log::debug;
+            use std::time::Instant;
+
+            let start = Instant::now();
+            let result = self.dns_resolve_inner(host, port).await;
+            let elapsed = Instant::now() - start;
+            debug!(
+                "DNS resolved {}:{} elapsed: {}.{:03}s, {:?}",
+                host,
+                port,
+                elapsed.as_secs(),
+                elapsed.subsec_millis(),
+                result
+            );
+            result
+        } else {
+            self.dns_resolve_inner(host, port).await
+        }
+    }
+
+    #[cfg(feature = "local-dns-relay")]
+    #[inline(always)]
+    async fn dns_resolve_inner(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+        self.local_dns().lookup_ip(host, port).await
+    }
+
+    #[cfg(not(feature = "local-dns-relay"))]
+    #[inline(always)]
+    async fn dns_resolve_inner(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         resolve(self, host, port).await
     }
 
@@ -327,7 +354,7 @@ impl Context {
     pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
         match self.acl() {
             None => false,
-            Some(ref a) => a.check_client_blocked(addr),
+            Some(a) => a.check_client_blocked(addr),
         }
     }
 
@@ -335,7 +362,7 @@ impl Context {
     pub fn check_outbound_blocked(&self, addr: &Address) -> bool {
         match self.acl() {
             None => false,
-            Some(ref a) => a.check_outbound_blocked(addr),
+            Some(a) => a.check_outbound_blocked(addr),
         }
     }
 
@@ -343,7 +370,7 @@ impl Context {
     pub fn check_resolved_outbound_blocked(&self, addr: &SocketAddr) -> bool {
         match self.acl() {
             None => false,
-            Some(ref a) => a.check_resolved_outbound_blocked(addr),
+            Some(a) => a.check_resolved_outbound_blocked(addr),
         }
     }
 
@@ -354,7 +381,7 @@ impl Context {
             != match self.acl() {
                 // Proxy everything by default
                 None => true,
-                Some(ref a) => a.check_ip_in_proxy_list(addr),
+                Some(a) => a.check_ip_in_proxy_list(addr),
             };
         let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
         match reverse_lookup_cache.get_mut(addr) {
@@ -374,10 +401,12 @@ impl Context {
         }
     }
 
-    pub fn acl(&self) -> &Option<AccessControl> {
-        &self.config.acl
+    /// Get ACL control instance
+    pub fn acl(&self) -> Option<&AccessControl> {
+        self.config.acl.as_ref()
     }
 
+    /// Get local DNS connector
     #[cfg(feature = "local-dns-relay")]
     pub fn local_dns(&self) -> &LocalUpstream {
         &self.local_dns
@@ -388,21 +417,43 @@ impl Context {
         match self.acl() {
             // Proxy everything by default
             None => false,
-            Some(ref a) => {
-                #[cfg(feature = "local-dns-relay")]
-                {
-                    if let Address::SocketAddress(ref saddr) = target {
-                        // do the reverse lookup in our local cache
-                        let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
-                        // if a qname is found
-                        if let Some(forward) = reverse_lookup_cache.get(&saddr.ip()) {
-                            return !*forward;
-                        }
-                    }
+            Some(a) => {
+                if log_enabled!(log::Level::Debug) {
+                    use log::debug;
+                    use std::time::Instant;
+
+                    let start = Instant::now();
+                    let r = self.check_target_bypassed_with_acl(a, target).await;
+                    let elapsed = Instant::now() - start;
+                    debug!(
+                        "check bypassing {} elapsed {}.{:03}s, result: {}",
+                        target,
+                        elapsed.as_secs(),
+                        elapsed.subsec_millis(),
+                        if r { "bypassed" } else { "proxied" }
+                    );
+                    r
+                } else {
+                    self.check_target_bypassed_with_acl(a, target).await
                 }
-                a.check_target_bypassed(self, target).await
             }
         }
+    }
+
+    #[inline(always)]
+    async fn check_target_bypassed_with_acl(&self, a: &AccessControl, target: &Address) -> bool {
+        #[cfg(feature = "local-dns-relay")]
+        {
+            if let Address::SocketAddress(ref saddr) = target {
+                // do the reverse lookup in our local cache
+                let mut reverse_lookup_cache = self.reverse_lookup_cache.lock();
+                // if a qname is found
+                if let Some(forward) = reverse_lookup_cache.get(&saddr.ip()) {
+                    return !*forward;
+                }
+            }
+        }
+        a.check_target_bypassed(self, target).await
     }
 
     /// Get client flow statistics

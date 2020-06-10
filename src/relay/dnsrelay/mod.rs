@@ -83,7 +83,7 @@ fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
 }
 
 /// given the query, determine whether remote/local query should be used, or inconclusive
-fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option<bool> {
+fn should_forward_by_query(acl: Option<&AccessControl>, query: &Query) -> Option<bool> {
     if let Some(acl) = acl {
         if query.query_class() != DNSClass::IN {
             // unconditionally use default for all non-IN queries
@@ -105,7 +105,7 @@ fn should_forward_by_query(acl: &Option<AccessControl>, query: &Query) -> Option
 
 /// given the local response, determine whether remote response should be used instead
 fn should_forward_by_response(
-    acl: &Option<AccessControl>,
+    acl: Option<&AccessControl>,
     local_response: &io::Result<Message>,
     query: &Query,
 ) -> bool {

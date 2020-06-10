@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use log::warn;
+use log::{trace, warn};
 use tokio::net::lookup_host;
 
 use crate::context::Context;
@@ -14,6 +14,10 @@ pub async fn resolve(_: &Context, addr: &str, port: u16) -> io::Result<Vec<Socke
     static TOKIO_USED: AtomicBool = AtomicBool::new(false);
     if !TOKIO_USED.swap(true, Ordering::Relaxed) {
         warn!("Tokio resolver is used. Performance might deteriorate.");
+    }
+
+    if cfg!(not(feature = "trust-dns")) {
+        trace!("DNS resolving {}:{} with tokio", addr, port);
     }
 
     match lookup_host((addr, port)).await {
