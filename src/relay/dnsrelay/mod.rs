@@ -274,8 +274,16 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
                 for rec in result.answers() {
                     debug!("dns answer: {:?}", rec);
                     match rec.rdata() {
-                        RData::A(ref ip) => self.context.add_to_reverse_lookup_cache(&IpAddr::V4(*ip), forward),
-                        RData::AAAA(ref ip) => self.context.add_to_reverse_lookup_cache(&IpAddr::V6(*ip), forward),
+                        RData::A(ref ip) => {
+                            self.context
+                                .add_to_reverse_lookup_cache(&IpAddr::V4(*ip), forward)
+                                .await
+                        }
+                        RData::AAAA(ref ip) => {
+                            self.context
+                                .add_to_reverse_lookup_cache(&IpAddr::V6(*ip), forward)
+                                .await
+                        }
                         _ => (),
                     }
                 }

@@ -65,6 +65,7 @@ impl Rules {
     }
 
     /// Check if the specified address matches these rules
+    #[allow(dead_code)]
     fn check_address_matched(&self, addr: &Address) -> bool {
         match *addr {
             Address::SocketAddress(ref saddr) => self.check_ip_matched(&saddr.ip()),
@@ -373,12 +374,24 @@ impl AccessControl {
     ///
     /// NOTE: `Address::DomainName` is only validated by regex rules,
     ///       resolved addresses are checked in the `lookup_outbound_then!` macro
-    pub fn check_outbound_blocked(&self, outbound: &Address) -> bool {
-        self.outbound_block.check_address_matched(outbound)
-    }
+    pub async fn check_outbound_blocked(&self, context: &Context, outbound: &Address) -> bool {
+        match outbound {
+            Address::SocketAddress(saddr) => self.outbound_block.check_ip_matched(&saddr.ip()),
+            Address::DomainNameAddress(host, port) => {
+                if self.outbound_block.check_host_matched(host) {
+                    return true;
+                }
 
-    /// Check resolved outbound address is blocked (for server)
-    pub fn check_resolved_outbound_blocked(&self, outbound: &SocketAddr) -> bool {
-        self.outbound_block.check_ip_matched(&outbound.ip())
+                if let Ok(vaddr) = context.dns_resolve(host, *port).await {
+                    for addr in vaddr {
+                        if self.outbound_block.check_ip_matched(&addr.ip()) {
+                            return true;
+                        }
+                    }
+                }
+
+                false
+            }
+        }
     }
 }

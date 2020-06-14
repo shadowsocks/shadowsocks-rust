@@ -728,7 +728,7 @@ impl ServerAssociation {
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
         let addr = Address::read_from(&mut cur).await?;
 
-        if context.check_outbound_blocked(&addr) {
+        if context.check_outbound_blocked(&addr).await {
             warn!("{} -> outbound {} is blocked by ACL rules", src, addr);
             return Ok(());
         }
@@ -749,7 +749,7 @@ impl ServerAssociation {
                 );
                 try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
             }
-            Address::DomainNameAddress(ref dname, port) => lookup_outbound_then!(context, dname, port, |remote_addr| {
+            Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, |remote_addr| {
                 match try_timeout(remote_udp.send_to(body, &remote_addr), Some(timeout)).await {
                     Ok(l) => {
                         debug!(

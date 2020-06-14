@@ -65,7 +65,7 @@ async fn handle_client(
     debug!("RELAY {} <-> {} establishing", peer_addr, remote_addr);
 
     // Check if remote_addr matches any ACL rules
-    if context.check_outbound_blocked(&remote_addr) {
+    if context.check_outbound_blocked(&remote_addr).await {
         warn!("outbound {} is blocked by ACL rules", remote_addr);
         return Ok(());
     }
@@ -94,7 +94,7 @@ async fn handle_client(
             }
         }
         Address::DomainNameAddress(ref dname, port) => {
-            let result = lookup_outbound_then!(&context, dname.as_str(), port, |addr| {
+            let result = lookup_then!(&context, dname.as_str(), port, |addr| {
                 match try_timeout(connect_tcp_stream(&addr, &bind_addr), timeout).await {
                     Ok(s) => Ok(s),
                     Err(err) => {
@@ -188,7 +188,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
                 match listener.accept().await {
                     Ok((socket, peer_addr)) => {
                         // Check ACL rules
-                        if context.check_client_blocked(&peer_addr) {
+                        if context.check_client_blocked(&peer_addr).await {
                             warn!("client {} is blocked by ACL rules", peer_addr);
                             continue;
                         }

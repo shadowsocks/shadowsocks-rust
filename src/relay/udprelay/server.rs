@@ -101,7 +101,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
         }
 
         // Check ACL
-        if context.check_client_blocked(&src) {
+        if context.check_client_blocked(&src).await {
             warn!("client {} is blocked by ACL rules", src);
             continue;
         }

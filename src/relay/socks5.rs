@@ -206,6 +206,7 @@ impl From<Error> for io::Error {
 
 /// SOCKS5 address type
 #[derive(Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "acl-check-cache", derive(PartialOrd, Ord))]
 pub enum Address {
     /// Socket address (IP Address)
     SocketAddress(SocketAddr),
