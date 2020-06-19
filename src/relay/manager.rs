@@ -12,11 +12,11 @@ use std::{
 };
 
 use byte_string::ByteStr;
-use futures::future;
+use futures::future::{self, AbortHandle};
 use log::{debug, error, trace, warn};
 #[cfg(unix)]
 use tokio::net::UnixDatagram;
-use tokio::{self, net::UdpSocket, sync::oneshot};
+use tokio::{self, net::UdpSocket};
 
 use crate::{
     config::{Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
@@ -61,19 +61,22 @@ mod protocol {
 struct ServerInstance {
     config: Config,
     flow_stat: SharedServerFlowStatistic,
-    #[allow(dead_code)] // This is not dead_code, dropping watcher_tx will inform server task to quit
-    watcher_tx: oneshot::Sender<()>,
+    watcher: AbortHandle,
+}
+
+impl Drop for ServerInstance {
+    fn drop(&mut self) {
+        self.watcher.abort();
+    }
 }
 
 impl ServerInstance {
     async fn start_server(config: Config, server_state: SharedServerState) -> io::Result<ServerInstance> {
         let server_port = config.server[0].addr().port();
 
-        let (watcher_tx, watcher_rx) = oneshot::channel::<()>();
-
         let flow_stat = MultiServerFlowStatistic::new_shared(&config);
 
-        {
+        let watcher = {
             // Run server in current process, sharing the same tokio runtime
             //
             // NOTE: This may make different users interfere with each other,
@@ -82,16 +85,15 @@ impl ServerInstance {
             let config = config.clone();
             let flow_stat = flow_stat.clone();
 
+            let (server, watcher) = future::abortable(server::run_with(config, flow_stat, server_state));
+
             tokio::spawn(async move {
-                let server = server::run_with(config, flow_stat, server_state);
-
-                tokio::pin!(server);
-                tokio::pin!(watcher_rx);
-
-                let _ = future::select(server, watcher_rx).await;
+                let _ = server.await;
                 debug!("server listening on port {} exited", server_port);
             });
-        }
+
+            watcher
+        };
 
         let flow_stat = flow_stat
             .get(server_port)
@@ -103,7 +105,7 @@ impl ServerInstance {
         Ok(ServerInstance {
             config,
             flow_stat,
-            watcher_tx,
+            watcher,
         })
     }
 
