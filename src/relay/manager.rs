@@ -6,6 +6,7 @@
 use std::os::unix::net::SocketAddr as UnixSocketAddr;
 use std::{
     collections::HashMap,
+    fmt,
     io::{self, Error, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str,
@@ -13,7 +14,7 @@ use std::{
 
 use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 #[cfg(unix)]
 use tokio::net::UnixDatagram;
 use tokio::{self, net::UdpSocket};
@@ -228,6 +229,15 @@ impl ManagerDatagram {
             },
         }
     }
+
+    /// Returns the local address that this socket is bound to.
+    pub fn local_addr(&self) -> io::Result<ManagerSocketAddr> {
+        match *self {
+            ManagerDatagram::UdpDatagram(ref socket) => socket.local_addr().map(ManagerSocketAddr::SocketAddr),
+            #[cfg(unix)]
+            ManagerDatagram::UnixDatagram(ref dgram) => dgram.local_addr().map(ManagerSocketAddr::UnixSocketAddr),
+        }
+    }
 }
 
 /// Target address for manager for representing client connections
@@ -249,6 +259,16 @@ impl ManagerSocketAddr {
     }
 }
 
+impl fmt::Display for ManagerSocketAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ManagerSocketAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
+            #[cfg(unix)]
+            ManagerSocketAddr::UnixSocketAddr(ref saddr) => fmt::Debug::fmt(saddr, f),
+        }
+    }
+}
+
 struct ManagerService {
     socket: ManagerDatagram,
     servers: HashMap<u16, ServerInstance>,
@@ -264,6 +284,10 @@ impl ManagerService {
             servers: HashMap::new(),
             context,
         })
+    }
+
+    fn local_addr(&self) -> io::Result<ManagerSocketAddr> {
+        self.socket.local_addr()
     }
 
     async fn serve(&mut self) -> io::Result<()> {
@@ -570,6 +594,9 @@ pub async fn run(config: Config) -> io::Result<()> {
     let bind_addr = &manager_config.addr;
 
     let mut service = ManagerService::bind(bind_addr, context.clone()).await?;
+
+    let actual_local_addr = service.local_addr()?;
+    info!("shadowsocks manager listening on {}", actual_local_addr);
 
     // Creates known servers in configuration
     let config = context.config();
