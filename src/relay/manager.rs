@@ -89,8 +89,17 @@ impl ServerInstance {
             let (server, watcher) = future::abortable(server::run_with(config, flow_stat, server_state));
 
             tokio::spawn(async move {
-                let _ = server.await;
-                debug!("server listening on port {} exited", server_port);
+                match server.await {
+                    Ok(unexpected_exit) => {
+                        error!(
+                            "server listening on port {} exited with result {:?}",
+                            server_port, unexpected_exit
+                        );
+                    }
+                    Err(..) => {
+                        debug!("server listening on port {} killed", server_port);
+                    }
+                }
             });
 
             watcher
