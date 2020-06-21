@@ -843,7 +843,17 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             });
 
             // HTTP Proxy protocol only defined in HTTP 1.x
-            let server = Server::bind(&bind_addr).http1_only(true).serve(make_service);
+            let server = match Server::try_bind(&bind_addr) {
+                Ok(builder) => builder.http1_only(true).serve(make_service),
+                Err(err) => {
+                    let err = io::Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("failed to bind {} ({}), {}", local_addr, bind_addr, err),
+                    );
+                    return Err(err);
+                }
+            };
+
             info!("shadowsocks HTTP listening on {}", server.local_addr());
 
             if let Err(err) = server.await {

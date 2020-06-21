@@ -166,9 +166,10 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
             let addr = svr_cfg.external_addr();
             let addr = addr.bind_addr(&context).await?;
 
-            let listener = TcpListener::bind(&addr)
-                .await
-                .unwrap_or_else(|err| panic!("failed to listen on {}, {}", addr, err));
+            let listener = TcpListener::bind(&addr).await.map_err(|err| {
+                error!("failed to listen on {} ({}), {}", svr_cfg.external_addr(), addr, err);
+                err
+            })?;
 
             let local_addr = listener.local_addr().expect("determine port bound to");
             info!("shadowsocks TCP listening on {}", local_addr);

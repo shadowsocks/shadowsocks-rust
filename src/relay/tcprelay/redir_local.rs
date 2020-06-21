@@ -93,9 +93,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let redir_ty = context.config().tcp_redir;
 
-    let mut listener = TcpListener::bind_redir(redir_ty, &bind_addr)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to listen on {}, {}", local_addr, err));
+    let mut listener = TcpListener::bind_redir(redir_ty, &bind_addr).await.map_err(|err| {
+        error!("failed to listen on {} ({}), {}", local_addr, bind_addr, err);
+        err
+    })?;
 
     let actual_local_addr = listener.local_addr().expect("determine port bound to");
 
