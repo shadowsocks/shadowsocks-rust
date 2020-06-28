@@ -19,6 +19,7 @@ use tokio::{self, runtime::Builder};
 
 use shadowsocks::{
     acl::AccessControl,
+    config::ManagerServerHost,
     crypto::CipherType,
     run_manager,
     Config,
@@ -50,6 +51,7 @@ fn main() {
                 Servers defined will be created when process is started.")
 
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
+        (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
 
@@ -125,6 +127,10 @@ fn main() {
 
         if let Some(t) = matches.value_of("TIMEOUT") {
             manager_config.timeout = Some(Duration::from_secs(t.parse::<u64>().expect("timeout")));
+        }
+
+        if let Some(sh) = matches.value_of("SERVER_HOST") {
+            manager_config.server_host = sh.parse::<ManagerServerHost>().unwrap();
         }
     }
 

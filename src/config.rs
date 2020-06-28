@@ -42,7 +42,7 @@
 //! These defined server will be used with a load balancing algorithm.
 
 use std::{
-    convert::From,
+    convert::{From, Infallible},
     default::Default,
     error,
     fmt::{self, Debug, Display, Formatter},
@@ -911,6 +911,47 @@ impl FromStr for RedirType {
     }
 }
 
+/// Host for servers to bind
+///
+/// Servers will bind to a port of this host
+#[derive(Clone, Debug)]
+pub enum ManagerServerHost {
+    /// Domain name
+    Domain(String),
+    /// IP address
+    Ip(IpAddr),
+}
+
+impl Default for ManagerServerHost {
+    fn default() -> ManagerServerHost {
+        ManagerServerHost::Ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
+    }
+}
+
+impl FromStr for ManagerServerHost {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.parse::<IpAddr>() {
+            Ok(s) => Ok(ManagerServerHost::Ip(s)),
+            Err(..) => Ok(ManagerServerHost::Domain(s.to_owned())),
+        }
+    }
+}
+
+impl ManagerServerHost {
+    /// Get resolved socket address for servers to bind
+    pub async fn bind_addr(&self, ctx: &Context, port: u16) -> io::Result<SocketAddr> {
+        match *self {
+            ManagerServerHost::Domain(ref domain) => {
+                let vaddrs = ctx.dns_resolve(domain, port).await?;
+                Ok(vaddrs[0])
+            }
+            ManagerServerHost::Ip(ip) => Ok(SocketAddr::new(ip, port)),
+        }
+    }
+}
+
 /// Configuration for Manager
 #[derive(Clone, Debug)]
 pub struct ManagerConfig {
@@ -920,6 +961,10 @@ pub struct ManagerConfig {
     pub method: Option<CipherType>,
     /// Timeout for TCP connections, setting to manager's created servers
     pub timeout: Option<Duration>,
+    /// IP/Host for servers to bind (inbound)
+    ///
+    /// Note: Outbound address is defined in Config.local_addr
+    pub server_host: ManagerServerHost,
 }
 
 impl ManagerConfig {
@@ -929,7 +974,13 @@ impl ManagerConfig {
             addr,
             method: None,
             timeout: None,
+            server_host: ManagerServerHost::default(),
         }
+    }
+
+    /// Get resolved socket address for servers to bind
+    pub async fn bind_addr(&self, ctx: &Context, port: u16) -> io::Result<SocketAddr> {
+        self.server_host.bind_addr(ctx, port).await
     }
 }
 
@@ -1257,12 +1308,7 @@ impl Config {
                 }
             };
 
-            let manager_config = ManagerConfig {
-                addr: manager,
-                method: None,
-                timeout: None,
-            };
-
+            let manager_config = ManagerConfig::new(manager);
             nconfig.manager = Some(manager_config);
         }
 
