@@ -37,13 +37,6 @@ jobs:
                       - /usr/local/cargo/registry
                       - ./target
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
-            - store_artifacts:
-                  path: ./build/release
-                  destination: releases
-            - persist_to_workspace:
-                  root: build
-                  paths:
-                      - release
 
     build-windows:
         executor: windows/default
@@ -160,6 +153,7 @@ jobs:
                       cd build
                       docker build -t shadowsocks-rust:x86_64-pc-windows-gnu -f Dockerfile.x86_64-pc-windows-gnu .
                       docker build -t shadowsocks-rust:x86_64-unknown-linux-musl -f Dockerfile.x86_64-unknown-linux-musl .
+                      docker build -t shadowsocks-rust:x86_64-unknown-linux-gnu -f Dockerfile.x86_64-unknown-linux-gnu .
                       docker build -t shadowsocks-rust:arm-unknown-linux-gnueabihf -f Dockerfile.arm-unknown-linux-gnueabihf .
                       docker build -t shadowsocks-rust:aarch64-unknown-linux-gnu -f Dockerfile.aarch64-unknown-linux-gnu .
             - run:
@@ -181,7 +175,7 @@ jobs:
                   command: |
                       cd build
                       ./build-release
-                  no_output_timeout: 1h
+                  no_output_timeout: 2h
             - save_cache:
                   paths:
                       - /usr/local/cargo/registry
@@ -241,7 +235,6 @@ workflows:
                           only: /^v\d+\.\d+\.\d+(-alpha\.\d+)?$/
             - publish-github-releases:
                   requires:
-                      - build-linux
                       - build-windows
                       - build-docker
                   filters:

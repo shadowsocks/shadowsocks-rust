@@ -20,7 +20,15 @@ while getopts "t:" opt; do
 done
 
 if [[ "${#targets[@]}" == "0" ]]; then
-    targets=("x86_64-unknown-linux-musl" "x86_64-pc-windows-gnu" "arm-unknown-linux-gnueabihf" "aarch64-unknown-linux-gnu")
+    targets=(
+        "x86_64-unknown-linux-musl"
+        "x86_64-unknown-linux-gnu"
+
+        "x86_64-pc-windows-gnu"
+
+        "arm-unknown-linux-gnueabihf" # armhf, hard
+        "aarch64-unknown-linux-gnu"
+    )
 fi
 
 function build() {
