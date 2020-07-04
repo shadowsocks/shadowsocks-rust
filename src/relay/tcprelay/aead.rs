@@ -130,6 +130,21 @@ impl DecryptedReader {
             BigEndian::read_u16(&len_buf) as usize
         };
 
+        if len > MAX_PACKET_SIZE {
+            // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
+            //
+            // AEAD TCP protocol have reserved the higher two bits for future use
+
+            let err = io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
+                    len
+                ),
+            );
+            return Poll::Ready(Err(err));
+        }
+
         // Clear buffer before overwriting it
         self.buffer.clear();
         self.data.clear();
