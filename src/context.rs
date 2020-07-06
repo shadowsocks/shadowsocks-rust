@@ -20,7 +20,7 @@ use log::{log_enabled, warn};
 #[cfg(any(feature = "local-dns-relay", feature = "acl-check-cache"))]
 use lru_time_cache::LruCache;
 use spin::Mutex as SpinMutex;
-#[cfg(feature = "acl-check-cache")]
+#[cfg(any(feature = "local-dns-relay", feature = "acl-check-cache"))]
 use tokio::sync::Mutex as AsyncMutex;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
