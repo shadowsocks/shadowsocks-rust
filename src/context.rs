@@ -2,7 +2,7 @@
 
 #[cfg(feature = "local-dns-relay")]
 use std::net::IpAddr;
-#[cfg(any(feature = "local-dns-relay", feature = "acl-check-cache"))]
+#[cfg(feature = "local-dns-relay")]
 use std::time::Duration;
 use std::{
     io,
@@ -14,13 +14,11 @@ use std::{
 };
 
 use bloomfilter::Bloom;
-#[cfg(feature = "acl-check-cache")]
-use log::trace;
 use log::{log_enabled, warn};
-#[cfg(any(feature = "local-dns-relay", feature = "acl-check-cache"))]
+#[cfg(feature = "local-dns-relay")]
 use lru_time_cache::LruCache;
 use spin::Mutex as SpinMutex;
-#[cfg(any(feature = "local-dns-relay", feature = "acl-check-cache"))]
+#[cfg(feature = "local-dns-relay")]
 use tokio::sync::Mutex as AsyncMutex;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
@@ -163,77 +161,6 @@ impl ServerState {
 /// `ServerState` wrapped in `Arc`
 pub type SharedServerState = Arc<ServerState>;
 
-/// ACL check result cache
-#[cfg(feature = "acl-check-cache")]
-struct AclCheckCache {
-    target_cache: AsyncMutex<LruCache<Address, bool>>,
-    outbound_cache: AsyncMutex<LruCache<Address, bool>>,
-    client_cache: AsyncMutex<LruCache<SocketAddr, bool>>,
-}
-
-#[cfg(feature = "acl-check-cache")]
-impl AclCheckCache {
-    /// Create a cache with default configuration
-    fn new() -> AclCheckCache {
-        const TARGET_CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60);
-        const TARGET_CACHE_COUNT: usize = 256;
-
-        const OUTBOUND_CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60);
-        const OUTBOUND_CACHE_COUNT: usize = 1024;
-
-        const CLIENT_CACHE_DURATION: Duration = Duration::from_secs(24 * 60 * 60);
-        const CLIENT_CACHE_COUNT: usize = 1024;
-
-        AclCheckCache {
-            target_cache: AsyncMutex::new(LruCache::with_expiry_duration_and_capacity(
-                TARGET_CACHE_DURATION,
-                TARGET_CACHE_COUNT,
-            )),
-            outbound_cache: AsyncMutex::new(LruCache::with_expiry_duration_and_capacity(
-                OUTBOUND_CACHE_DURATION,
-                OUTBOUND_CACHE_COUNT,
-            )),
-            client_cache: AsyncMutex::new(LruCache::with_expiry_duration_and_capacity(
-                CLIENT_CACHE_DURATION,
-                CLIENT_CACHE_COUNT,
-            )),
-        }
-    }
-
-    /// Check target bypassed in cache
-    async fn check_target_bypassed(&self, target: &Address) -> Option<bool> {
-        self.target_cache.lock().await.get(target).map(|x| *x)
-    }
-
-    /// Update target bypassed into cache
-    async fn update_target_bypassed(&self, target: Address, bypassed: bool) -> bool {
-        self.target_cache.lock().await.insert(target, bypassed);
-        bypassed
-    }
-
-    /// Check client blocked in cache
-    async fn check_client_blocked(&self, client: &SocketAddr) -> Option<bool> {
-        self.client_cache.lock().await.get(client).map(|x| *x)
-    }
-
-    /// Update client blocked in cache
-    async fn update_client_blocked(&self, client: SocketAddr, blocked: bool) -> bool {
-        self.client_cache.lock().await.insert(client, blocked);
-        blocked
-    }
-
-    /// Check outbound blocked in cache
-    async fn check_outbound_blocked(&self, outbound: &Address) -> Option<bool> {
-        self.outbound_cache.lock().await.get(outbound).map(|x| *x)
-    }
-
-    /// Update outbound blocked in cache
-    async fn update_outbound_blocked(&self, outbound: Address, blocked: bool) -> bool {
-        self.outbound_cache.lock().await.insert(outbound, blocked);
-        blocked
-    }
-}
-
 /// Shared basic configuration for the whole server
 pub struct Context {
     config: Config,
@@ -260,10 +187,6 @@ pub struct Context {
     // For local DNS upstream
     #[cfg(feature = "local-dns-relay")]
     local_dns: LocalUpstream,
-
-    // ACL check result cache
-    #[cfg(feature = "acl-check-cache")]
-    acl_check_cache: AclCheckCache,
 }
 
 /// Unique context thw whole server
@@ -321,8 +244,6 @@ impl Context {
             ))),
             #[cfg(feature = "local-dns-relay")]
             local_dns,
-            #[cfg(feature = "acl-check-cache")]
-            acl_check_cache: AclCheckCache::new(),
         }
     }
 
@@ -431,7 +352,6 @@ impl Context {
     }
 
     /// Check client ACL (for server)
-    #[cfg(not(feature = "acl-check-cache"))]
     pub async fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
         match self.acl() {
             None => false,
@@ -439,56 +359,11 @@ impl Context {
         }
     }
 
-    /// Check client ACL (for server)
-    #[cfg(feature = "acl-check-cache")]
-    pub async fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
-        match self.acl() {
-            None => false,
-            Some(a) => {
-                if let Some(r) = self.acl_check_cache.check_client_blocked(addr).await {
-                    trace!(
-                        "check client {} cached result: {}",
-                        addr,
-                        if r { "blocked" } else { "passed" }
-                    );
-
-                    return r;
-                }
-
-                let r = a.check_client_blocked(addr);
-                self.acl_check_cache.update_client_blocked(addr.clone(), r).await
-            }
-        }
-    }
-
     /// Check outbound address ACL (for server)
-    #[cfg(not(feature = "acl-check-cache"))]
     pub async fn check_outbound_blocked(&self, addr: &Address) -> bool {
         match self.acl() {
             None => false,
             Some(a) => a.check_outbound_blocked(self, addr).await,
-        }
-    }
-
-    /// Check outbound address ACL (for server)
-    #[cfg(feature = "acl-check-cache")]
-    pub async fn check_outbound_blocked(&self, addr: &Address) -> bool {
-        match self.acl() {
-            None => false,
-            Some(a) => {
-                if let Some(r) = self.acl_check_cache.check_outbound_blocked(addr).await {
-                    trace!(
-                        "check outbound {} cached result: {}",
-                        addr,
-                        if r { "blocked" } else { "passed" }
-                    );
-
-                    return r;
-                }
-
-                let r = a.check_outbound_blocked(self, addr).await;
-                self.acl_check_cache.update_outbound_blocked(addr.clone(), r).await
-            }
         }
     }
 
@@ -554,25 +429,6 @@ impl Context {
     }
 
     #[inline(always)]
-    #[cfg(feature = "acl-check-cache")]
-    async fn check_target_bypassed_with_acl(&self, a: &AccessControl, target: &Address) -> bool {
-        // ACL checking may need over 500ms (DNS resolving)
-        if let Some(bypassed) = self.acl_check_cache.check_target_bypassed(target).await {
-            trace!(
-                "check bypassing {} cached result: {}",
-                target,
-                if bypassed { "bypassed" } else { "proxied" }
-            );
-
-            return bypassed;
-        }
-
-        let r = a.check_target_bypassed(self, target).await;
-        self.acl_check_cache.update_target_bypassed(target.clone(), r).await
-    }
-
-    #[inline(always)]
-    #[cfg(not(feature = "acl-check-cache"))]
     async fn check_target_bypassed_with_acl(&self, a: &AccessControl, target: &Address) -> bool {
         a.check_target_bypassed(self, target).await
     }

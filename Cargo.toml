@@ -82,9 +82,6 @@ local-tunnel = []
 local-socks4 = []
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
-# ACL lookup cache
-# This feature requires rustc >= 1.45.0, requires std::net::SocketAddr to impl PartialOrd, Ord
-acl-check-cache = []
 
 [dependencies]
 log = "0.4"
