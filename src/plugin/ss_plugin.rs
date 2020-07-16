@@ -21,14 +21,18 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
         .stdin(Stdio::null());
 
     if let Some(ref opt) = plugin.plugin_opt {
-        cmd.env("SS_PLUGIN_OPTIONS", opt);
-        #[cfg(target_os = "android")]
-        {
-            // Add VPN flags to the commandline as well
-            if opt.contains(";V") {
-                cmd.arg("-V");
-            }
-        }
+		if cfg!(target_os = "android")
+		{
+			let mut tmp = opt.clone();
+			// Add VPN flags to the commandline as well
+			if tmp.contains(";V") {
+				cmd.arg("-V");
+				tmp = tmp.replace(";V", "")
+			}
+			cmd.env("SS_PLUGIN_OPTIONS", tmp);
+		} else {
+			cmd.env("SS_PLUGIN_OPTIONS", opt);
+		}
     }
 
     cmd
