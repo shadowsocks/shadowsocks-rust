@@ -368,7 +368,7 @@ impl AsyncRead for ProxyStream {
         {
             if self.is_proxied() {
                 if let Poll::Ready(Ok(n)) = p {
-                    self.context().local_flow_statistic().tcp().incr_tx(n as u64);
+                    self.context().local_flow_statistic().tcp().incr_rx(n as u64);
                 }
             }
         }
@@ -386,7 +386,7 @@ impl AsyncWrite for ProxyStream {
         {
             if self.is_proxied() {
                 if let Poll::Ready(Ok(n)) = p {
-                    self.context().local_flow_statistic().tcp().incr_rx(n as u64);
+                    self.context().local_flow_statistic().tcp().incr_tx(n as u64);
                 }
             }
         }
