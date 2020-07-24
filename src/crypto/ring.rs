@@ -100,22 +100,51 @@ impl RingAeadCipher {
     }
 }
 
+struct SealBuffer<'a> {
+    buffer: &'a mut [u8],
+    input_len: usize,
+}
+
+impl<'a> AsRef<[u8]> for SealBuffer<'a> {
+    fn as_ref(&self) -> &[u8] {
+        &self.buffer[..self.input_len]
+    }
+}
+
+impl<'a> AsMut<[u8]> for SealBuffer<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.buffer[..self.input_len]
+    }
+}
+
+impl<'a, 'in_out> Extend<&'in_out u8> for SealBuffer<'a> {
+    fn extend<T: IntoIterator<Item = &'in_out u8>>(&mut self, iter: T) {
+        let mut idx = 0;
+        for b in iter {
+            self.buffer[self.input_len + idx] = *b;
+            idx += 1;
+        }
+    }
+}
+
 impl AeadEncryptor for RingAeadCipher {
     fn encrypt(&mut self, input: &[u8], output: &mut [u8]) {
         let tag_len = self.cipher_type.tag_size();
         let buf_len = input.len() + tag_len;
         assert_eq!(output.len(), buf_len);
 
-        let mut buf = BytesMut::with_capacity(output.len());
-        buf.put_slice(input);
+        output[..input.len()].copy_from_slice(input);
+
+        let mut buf = SealBuffer {
+            buffer: output,
+            input_len: input.len(),
+        };
 
         if let RingAeadCryptoVariant::Seal(ref mut key) = self.cipher {
             key.seal_in_place_append_tag(Aad::empty(), &mut buf).unwrap();
         } else {
             unreachable!("encrypt is called on a non-seal cipher");
         }
-
-        output.copy_from_slice(&buf[..buf_len]);
     }
 }
 
