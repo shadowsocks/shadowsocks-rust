@@ -8,7 +8,12 @@ use std::{
 };
 
 use byte_string::ByteStr;
-use bytes::Bytes;
+use bytes::{
+    buf::ext::{BufMutExt, Limit},
+    BufMut,
+    Bytes,
+    BytesMut,
+};
 use futures::ready;
 use log::{debug, trace};
 use tokio::{
@@ -44,7 +49,7 @@ enum ReadStatus {
     /// Waiting for initializing vector (or nonce for AEAD ciphers)
     ///
     /// (context, Buffer, already_read_bytes, method, key)
-    WaitIv(SharedContext, Vec<u8>, usize, CipherType, Bytes),
+    WaitIv(SharedContext, Limit<BytesMut>, CipherType, Bytes),
 
     /// Connection is established, DecryptedReader is initialized
     Established,
@@ -113,7 +118,12 @@ impl<S> CryptoStream<S> {
             stream,
             dec: None,
             enc,
-            read_status: ReadStatus::WaitIv(context, vec![0u8; prev_len], 0usize, method, svr_cfg.clone_key()),
+            read_status: ReadStatus::WaitIv(
+                context,
+                BytesMut::with_capacity(prev_len).limit(prev_len),
+                method,
+                svr_cfg.clone_key(),
+            ),
         }
     }
 
@@ -137,21 +147,22 @@ where
     S: AsyncRead + Unpin,
 {
     fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        if let ReadStatus::WaitIv(ref ctx, ref mut buf, ref mut pos, method, ref key) = self.read_status {
-            while *pos < buf.len() {
-                let n = ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buf[*pos..]))?;
+        if let ReadStatus::WaitIv(ref ctx, ref mut buf, method, ref key) = self.read_status {
+            while buf.has_remaining_mut() {
+                let n = ready!(Pin::new(&mut self.stream).poll_read_buf(cx, buf))?;
                 if n == 0 {
                     use std::io::ErrorKind;
                     return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                 }
-                *pos += n;
             }
 
+            let nonce = buf.get_ref();
+
             // Got iv/salt, check if it is repeated
-            if ctx.check_nonce_and_set(buf) {
+            if ctx.check_nonce_and_set(nonce) {
                 use std::io::{Error, ErrorKind};
 
-                debug!("detected repeated iv/salt {:?}", ByteStr::new(buf));
+                debug!("detected repeated iv/salt {:?}", ByteStr::new(nonce));
 
                 let err = Error::new(ErrorKind::Other, "detected repeated iv/salt");
                 return Poll::Ready(Err(err));
@@ -159,12 +170,12 @@ where
 
             let dec = match method.category() {
                 CipherCategory::Stream => {
-                    trace!("got Stream cipher IV {:?}", ByteStr::new(&buf));
-                    DecryptedReader::Stream(StreamDecryptedReader::new(method, key, &buf))
+                    trace!("got Stream cipher IV {:?}", ByteStr::new(nonce));
+                    DecryptedReader::Stream(StreamDecryptedReader::new(method, key, nonce))
                 }
                 CipherCategory::Aead => {
-                    trace!("got AEAD cipher salt {:?}", ByteStr::new(&buf));
-                    DecryptedReader::Aead(AeadDecryptedReader::new(method, key, &buf))
+                    trace!("got AEAD cipher salt {:?}", ByteStr::new(nonce));
+                    DecryptedReader::Aead(AeadDecryptedReader::new(method, key, nonce))
                 }
                 CipherCategory::None => DecryptedReader::None,
             };

@@ -18,7 +18,8 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
         .env("SS_REMOTE_PORT", remote.port().to_string())
         .env("SS_LOCAL_HOST", local.ip().to_string())
         .env("SS_LOCAL_PORT", local.port().to_string())
-        .stdin(Stdio::null());
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
 
     if let Some(ref opt) = plugin.plugin_opt {
         cmd.env("SS_PLUGIN_OPTIONS", opt);

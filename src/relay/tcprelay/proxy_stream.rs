@@ -9,7 +9,7 @@ use std::{
     time::Duration,
 };
 
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
 use log::{debug, error, trace};
 use pin_project::pin_project;
@@ -25,7 +25,7 @@ use super::{connection::Connection, CryptoStream, STcpStream};
 
 enum ProxiedConnectState {
     Connected(Address),
-    Handshaking { buf: BytesMut, data_len: usize },
+    Handshaking { buf: BytesMut },
     Established,
 }
 
@@ -73,71 +73,80 @@ impl AsyncWrite for ProxiedConnection {
                     //
                     // For lower latency, first packet should be sent back quickly,
                     // so TCP_NODELAY should be kept enabled until the first data packet is received.
+
+                    // A new buffer must be allocated
+                    // CryptoStream will encrypt all data into one packet
+                    //
+                    // Vectored IO is not applicable here.
                     let addr_len = addr.serialized_len();
                     let mut buf = BytesMut::with_capacity(addr_len + data.len());
                     addr.write_to_buf(&mut buf);
-                    buf.extend_from_slice(data);
+                    buf.put_slice(data);
 
-                    trace!("sending handshake address {} with data {} bytes", addr, data.len());
+                    trace!(
+                        "sending handshake address {} ({} bytes) with data {} bytes, totally {} bytes",
+                        addr,
+                        addr_len,
+                        data.len(),
+                        buf.remaining()
+                    );
 
                     // Fast path
                     //
                     // For CryptoStream (Stream and AEAD), poll_write will return Ready(..) until all data have been sent out
-                    match this.stream.poll_write(cx, &buf) {
+                    match this.stream.poll_write_buf(cx, &mut buf) {
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                         Poll::Ready(Ok(n)) => {
-                            buf.advance(n);
-
-                            let remaining = buf.remaining();
-                            if remaining < data.len() {
+                            if buf.remaining() < data.len() {
                                 // Ok, written some data with Address
-                                let written_len = data.len() - remaining;
+                                let written_len = data.len() - buf.remaining();
 
                                 trace!(
-                                    "sent handshake address {} with {} bytes of data, data len {} bytes",
+                                    "sent handshake address {} ({} bytes) with {} bytes of data, data len {} bytes, totally {} bytes",
                                     addr,
+                                    addr_len,
                                     written_len,
                                     data.len(),
+                                    n,
                                 );
 
                                 self.state = ProxiedConnectState::Established;
                                 return Poll::Ready(Ok(written_len));
+                            } else {
+                                trace!(
+                                    "sending handshake address {} ({} bytes) partially {} bytes, data len {} bytes",
+                                    addr,
+                                    addr_len,
+                                    n,
+                                    data.len()
+                                );
                             }
 
                             // FALLTHROUGH
                             // Handshaking branch will try to poll_write again
-                            self.state = ProxiedConnectState::Handshaking {
-                                buf,
-                                data_len: data.len(),
-                            };
+                            self.state = ProxiedConnectState::Handshaking { buf };
                         }
                         Poll::Pending => {
                             // poll_write is not ready, let Handshaking branch try again later
-                            self.state = ProxiedConnectState::Handshaking {
-                                buf,
-                                data_len: data.len(),
-                            };
+                            self.state = ProxiedConnectState::Handshaking { buf };
 
                             return Poll::Pending;
                         }
                     }
                 }
-                ProxiedConnectState::Handshaking { ref mut buf, data_len } => {
-                    let data_len = *data_len;
-
+                ProxiedConnectState::Handshaking { ref mut buf } => {
                     // Try to write at least addr_len size
-                    let n = ready!(this.stream.poll_write(cx, buf))?;
-                    buf.advance(n);
+                    let n = ready!(this.stream.poll_write_buf(cx, buf))?;
 
-                    let remaining = buf.remaining();
-                    if remaining < data_len {
+                    if buf.remaining() < data.len() {
                         // Ok, written some data with Address
-                        let written_len = data_len - remaining;
+                        let written_len = data.len() - buf.remaining();
 
                         trace!(
-                            "sent handshake address with {} bytes of data, data len {} bytes",
+                            "sent handshake address with {} bytes of data, data len {} bytes, totally {} bytes",
                             written_len,
-                            data_len
+                            data.len(),
+                            n,
                         );
 
                         self.state = ProxiedConnectState::Established;

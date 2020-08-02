@@ -50,6 +50,9 @@ pub struct Plugins {
 }
 
 impl Drop for Plugins {
+    // NOTE: Even we have set `Command.kill_on_drop(true)`, processes may not be killed when `Child` handles are dropped.
+    // https://github.com/tokio-rs/tokio/issues/2685
+
     #[cfg(not(unix))]
     fn drop(&mut self) {
         for plugin in &mut self.plugins {

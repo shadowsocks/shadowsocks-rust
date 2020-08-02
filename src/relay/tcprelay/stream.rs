@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::ready;
 use tokio::prelude::*;
 
@@ -87,7 +87,7 @@ impl DecryptedReader {
 
 enum EncryptWriteStep {
     Nothing,
-    Writing(BytesMut, usize),
+    Writing(BytesMut),
 }
 
 /// Writer wrapper that will encrypt data automatically
@@ -139,16 +139,15 @@ impl EncryptedWriter {
 
                     self.cipher_update(data, &mut buf)?;
 
-                    self.steps = EncryptWriteStep::Writing(buf, 0);
+                    self.steps = EncryptWriteStep::Writing(buf);
                 }
-                EncryptWriteStep::Writing(ref mut buf, ref mut pos) => {
-                    while *pos < buf.len() {
-                        let n = ready!(Pin::new(&mut *w).poll_write(ctx, &buf[*pos..]))?;
+                EncryptWriteStep::Writing(ref mut buf) => {
+                    while buf.remaining() > 0 {
+                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, buf))?;
                         if n == 0 {
                             use std::io::ErrorKind;
                             return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                         }
-                        *pos += n;
                     }
 
                     self.steps = EncryptWriteStep::Nothing;

@@ -30,6 +30,7 @@ use tokio::process::Command;
 pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, mode: PluginMode) -> Command {
     let mut cmd = Command::new(&plugin.plugin);
     cmd.stdin(Stdio::null())
+        .kill_on_drop(true)
         .arg("--data-dir")
         .arg(format!("/tmp/{}_{}_{}", plugin.plugin, remote, local)); // FIXME: Not compatible in Windows
 

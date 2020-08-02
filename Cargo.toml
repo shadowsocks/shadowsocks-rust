@@ -42,7 +42,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]
+default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
 # Enables ciphers that depending on libsodium
 # chacha20, xchacha20, chacha20-ietf
 # salsa20, xsalsa20
