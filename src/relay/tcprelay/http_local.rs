@@ -391,11 +391,8 @@ fn host_addr(uri: &Uri) -> Option<Address> {
 }
 
 fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_proxy: bool) -> bool {
-    let mut conn_keep_alive = match version {
-        Version::HTTP_09 | Version::HTTP_10 => false,
-        // HTTP/1.1, HTTP/2, HTTP/3 keeps alive by default
-        _ => true,
-    };
+    // HTTP/1.1, HTTP/2, HTTP/3 keeps alive by default
+    let mut conn_keep_alive = !matches!(version, Version::HTTP_09 | Version::HTTP_10);
 
     if check_proxy {
         // Modern browers will send Proxy-Connection instead of Connection

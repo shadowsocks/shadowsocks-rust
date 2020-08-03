@@ -180,10 +180,7 @@ enum ProxyConnection {
 impl ProxyConnection {
     /// Check if the underlying connection is proxied
     fn is_proxied(&self) -> bool {
-        match *self {
-            ProxyConnection::Proxied { .. } => true,
-            _ => false,
-        }
+        matches!(*self, ProxyConnection::Proxied { .. })
     }
 
     fn local_addr(&self) -> io::Result<SocketAddr> {
