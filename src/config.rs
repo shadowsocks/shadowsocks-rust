@@ -679,10 +679,7 @@ impl ConfigType {
 
     /// Check if it is manager server type
     pub fn is_manager(self) -> bool {
-        match self {
-            ConfigType::Manager => true,
-            _ => false,
-        }
+        matches!(self, ConfigType::Manager)
     }
 }
 
@@ -696,17 +693,11 @@ pub enum Mode {
 
 impl Mode {
     pub fn enable_udp(self) -> bool {
-        match self {
-            Mode::UdpOnly | Mode::TcpAndUdp => true,
-            _ => false,
-        }
+        matches!(self, Mode::UdpOnly | Mode::TcpAndUdp)
     }
 
     pub fn enable_tcp(self) -> bool {
-        match self {
-            Mode::TcpOnly | Mode::TcpAndUdp => true,
-            _ => false,
-        }
+        matches!(self, Mode::TcpOnly | Mode::TcpAndUdp)
     }
 }
 

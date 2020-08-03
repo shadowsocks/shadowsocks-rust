@@ -119,10 +119,8 @@ impl<'a> AsMut<[u8]> for SealBuffer<'a> {
 
 impl<'a, 'in_out> Extend<&'in_out u8> for SealBuffer<'a> {
     fn extend<T: IntoIterator<Item = &'in_out u8>>(&mut self, iter: T) {
-        let mut idx = 0;
-        for b in iter {
+        for (idx, b) in iter.into_iter().enumerate() {
             self.buffer[self.input_len + idx] = *b;
-            idx += 1;
         }
     }
 }
