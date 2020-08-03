@@ -82,6 +82,8 @@ local-tunnel = []
 local-socks4 = []
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
+# Enable bundled tcmalloc
+tcmalloc-vendored = ["tcmalloc/bundled"]
 
 [dependencies]
 log = "0.4"
@@ -139,6 +141,8 @@ ipnet = "2.2"
 async-trait = "0.1"
 lazy_static = "1.4"
 jemallocator = { version = "0.3", optional = true }
+mimalloc = { version = "0.1", optional = true }
+tcmalloc = { version = "0.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

@@ -50,6 +50,14 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
 
+#### Memory Allocators
+
+This project uses system (libc) memory allocator (Rust's default). But it also allows you to use other famous allocators by features:
+
+* `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
+* `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
+* `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
+
 Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]`.
 
 NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`, `local-http-native-tls`.
