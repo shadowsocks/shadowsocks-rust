@@ -46,6 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build release
+        shell: bash
         run: ./build-host-release
       - uses: actions/upload-artifact@v2
         with:
