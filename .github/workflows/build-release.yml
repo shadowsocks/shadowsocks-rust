@@ -31,3 +31,23 @@ jobs:
         with:
           name: releases
           path: build/release/*
+
+  build-native:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            extra-features: openssl-vendored local-redir
+          - os: windows-latest
+            extra-features: openssl-vendored
+          - os: macos-latest
+            extra-features: openssl-vendored local-redir
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build release
+        run: ./build-host-release
+      - uses: actions/upload-artifact@v2
+        with:
+          name: releases
+          path: build/release/*
