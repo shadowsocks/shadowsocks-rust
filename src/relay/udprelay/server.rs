@@ -71,7 +71,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
                     break;
                 }
 
-                flow_stat.udp().incr_tx(pkt.len() as u64);
+                flow_stat.udp().incr_tx(pkt.len());
             }
 
             // FIXME: How to stop the outer listener Future?
@@ -87,7 +87,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
         let pkt = &pkt_buf[..recv_len];
 
         trace!("received UDP packet from {}, length {} bytes", src, recv_len);
-        flow_stat.udp().incr_rx(pkt.len() as u64);
+        flow_stat.udp().incr_rx(pkt.len());
 
         if recv_len == 0 {
             // For windows, it will generate a ICMP Port Unreachable Message

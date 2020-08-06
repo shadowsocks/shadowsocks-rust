@@ -37,7 +37,7 @@ where
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        this.flow_stat.tcp().incr_rx(n as u64);
+        this.flow_stat.tcp().incr_rx(n);
         Poll::Ready(Ok(n))
     }
 }
@@ -53,7 +53,7 @@ where
             Poll::Ready(n) => n,
             Poll::Pending => return Poll::Pending,
         };
-        this.flow_stat.tcp().incr_tx(n as u64);
+        this.flow_stat.tcp().incr_tx(n);
         Poll::Ready(Ok(n))
     }
 

@@ -119,7 +119,7 @@ impl ServerInstance {
         })
     }
 
-    fn flow_trans_stat(&self) -> u64 {
+    fn flow_trans_stat(&self) -> usize {
         self.flow_stat.trans_stat()
     }
 }
