@@ -32,21 +32,38 @@ jobs:
           name: releases
           path: build/release/*
 
-  build-native:
+  build-unix:
     runs-on: ${{ matrix.os }}
     env:
       BUILD_EXTRA_FEATURES: ${{ matrix.extra-features }}
+      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             extra-features: openssl-vendored local-redir
-          - os: windows-latest
-            extra-features: openssl-vendored
           - os: macos-latest
             extra-features: openssl-vendored local-redir
     steps:
       - uses: actions/checkout@v2
+      - name: Build release
+        shell: bash
+        run: ./build-host-release
+      - uses: actions/upload-artifact@v2
+        with:
+          name: releases
+          path: build/release/*
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      OPENSSL_STATIC: 1
+      OPENSSL_DIR: "C:\\Program Files\\OpenSSL-Win64\\"
+      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
+    steps:
+      - uses: actions/checkout@v2
+      - name: setup (windows)
+        run: choco install openssl
       - name: Build release
         shell: bash
         run: ./build-host-release
