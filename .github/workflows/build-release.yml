@@ -34,6 +34,8 @@ jobs:
 
   build-native:
     runs-on: ${{ matrix.os }}
+    env:
+      BUILD_EXTRA_FEATURES: ${{ matrix.extra-features }}
     strategy:
       matrix:
         include:
