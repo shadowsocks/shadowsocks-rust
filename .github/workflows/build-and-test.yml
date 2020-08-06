@@ -16,9 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --features "aes-pmac-siv" --verbose
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --features "aes-pmac-siv" --verbose
 
   build-windows:
     runs-on: windows-latest
@@ -26,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --features "aes-pmac-siv openssl-vendored" --verbose
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --features "aes-pmac-siv openssl-vendored" --verbose
 
   build-macos:
     runs-on: macos-latest
@@ -36,6 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --features "aes-pmac-siv" --verbose
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --features "aes-pmac-siv" --verbose
