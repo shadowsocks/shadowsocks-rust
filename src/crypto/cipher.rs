@@ -15,6 +15,7 @@ use openssl::nid::Nid;
 #[cfg(feature = "openssl")]
 use openssl::symm;
 use rand::{self, RngCore};
+#[cfg(feature = "ring-aead-ciphers")]
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -161,8 +162,11 @@ const CIPHER_AES_256_PMAC_SIV: &str = "aes-256-pmac-siv";
 const CIPHER_PLAIN: &str = "plain";
 const CIPHER_NONE: &str = "none";
 
+#[cfg(feature = "ring-aead-ciphers")]
 const CIPHER_AES_128_GCM: &str = "aes-128-gcm";
+#[cfg(feature = "ring-aead-ciphers")]
 const CIPHER_AES_256_GCM: &str = "aes-256-gcm";
+#[cfg(feature = "ring-aead-ciphers")]
 const CIPHER_CHACHA20_IETF_POLY1305: &str = "chacha20-ietf-poly1305";
 #[cfg(feature = "sodium")]
 const CIPHER_XCHACHA20_IETF_POLY1305: &str = "xchacha20-ietf-poly1305";
@@ -247,9 +251,12 @@ pub enum CipherType {
     #[cfg(feature = "sodium")]
     ChaCha20Ietf,
 
+    #[cfg(feature = "ring-aead-ciphers")]
     Aes128Gcm,
+    #[cfg(feature = "ring-aead-ciphers")]
     Aes256Gcm,
 
+    #[cfg(feature = "ring-aead-ciphers")]
     ChaCha20IetfPoly1305,
     #[cfg(feature = "sodium")]
     XChaCha20IetfPoly1305,
@@ -358,9 +365,12 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::ChaCha20 | CipherType::Salsa20 | CipherType::XSalsa20 | CipherType::ChaCha20Ietf => 32,
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes128Gcm => AES_128_GCM.key_len(),
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes256Gcm => AES_256_GCM.key_len(),
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.key_len(),
 
             #[cfg(feature = "sodium")]
@@ -507,8 +517,11 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::ChaCha20Ietf => 12,
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes128Gcm => AES_128_GCM.nonce_len(),
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes256Gcm => AES_256_GCM.nonce_len(),
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.nonce_len(),
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => 24,
@@ -546,6 +559,7 @@ impl CipherType {
         match self {
             CipherType::None | CipherType::Plain => CipherCategory::None,
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes128Gcm | CipherType::Aes256Gcm | CipherType::ChaCha20IetfPoly1305 => CipherCategory::Aead,
 
             #[cfg(feature = "sodium")]
@@ -563,8 +577,11 @@ impl CipherType {
         assert!(self.category() == CipherCategory::Aead);
 
         match self {
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes128Gcm => AES_128_GCM.tag_len(),
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes256Gcm => AES_256_GCM.tag_len(),
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::ChaCha20IetfPoly1305 => CHACHA20_POLY1305.tag_len(),
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => 16,
@@ -675,8 +692,11 @@ impl CipherType {
             #[cfg(feature = "sodium")]
             CipherType::ChaCha20Ietf => CIPHER_CHACHA20_IETF,
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes128Gcm => CIPHER_AES_128_GCM,
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::Aes256Gcm => CIPHER_AES_256_GCM,
+            #[cfg(feature = "ring-aead-ciphers")]
             CipherType::ChaCha20IetfPoly1305 => CIPHER_CHACHA20_IETF_POLY1305,
             #[cfg(feature = "sodium")]
             CipherType::XChaCha20IetfPoly1305 => CIPHER_XCHACHA20_IETF_POLY1305,
@@ -771,9 +791,12 @@ impl FromStr for CipherType {
             #[cfg(feature = "sodium")]
             CIPHER_CHACHA20_IETF => Ok(CipherType::ChaCha20Ietf),
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CIPHER_AES_128_GCM => Ok(CipherType::Aes128Gcm),
+            #[cfg(feature = "ring-aead-ciphers")]
             CIPHER_AES_256_GCM => Ok(CipherType::Aes256Gcm),
 
+            #[cfg(feature = "ring-aead-ciphers")]
             CIPHER_CHACHA20_IETF_POLY1305 => Ok(CipherType::ChaCha20IetfPoly1305),
             #[cfg(feature = "sodium")]
             CIPHER_XCHACHA20_IETF_POLY1305 => Ok(CipherType::XChaCha20IetfPoly1305),
@@ -822,6 +845,7 @@ mod test_cipher {
         assert_eq!(ty.iv_size(), 16);
     }
 
+    #[cfg(feature = "ring-aead-ciphers")]
     #[test]
     fn classic_bytes_to_key() {
         let ty = CipherType::Aes256Gcm;

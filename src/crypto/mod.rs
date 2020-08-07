@@ -15,6 +15,7 @@ pub mod dummy;
 pub mod openssl;
 #[cfg(feature = "rc4")]
 pub mod rc4_md5;
+#[cfg(feature = "ring-aead-ciphers")]
 pub mod ring;
 #[cfg(feature = "aes-pmac-siv")]
 pub mod siv;
