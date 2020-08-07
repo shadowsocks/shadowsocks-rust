@@ -49,13 +49,16 @@ function build() {
 
     EXTRA_FLAG=""
     if [[ "$TARGET" == "mips"* ]]; then
+        # This is because `ring` doesn't support MIPS
+        # https://github.com/shadowsocks/shadowsocks-rust/issues/273
+        # https://github.com/briansmith/ring/issues/562
         EXTRA_FEATURES="sodium rc4 aes-cfb aes-ctr local-http local-http-native-tls local-tunnel local-socks4 local-redir"
         EXTRA_FLAG="--no-default-features"
     fi
 
     cross build --target "${TARGET}" \
                 --features "aes-pmac-siv openssl-vendored ${EXTRA_FEATURES}" \
-		${EXTRA_FLAG} \
+                ${EXTRA_FLAG} \
                 --release
 
     if [[ $? != "0" ]]; then
