@@ -42,7 +42,10 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
+default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
+# Enables AEAD ciphers that depending on ring
+# aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
+ring-aead-ciphers = ["ring"]
 # Enables ciphers that depending on libsodium
 # chacha20, xchacha20, chacha20-ietf
 # salsa20, xsalsa20
@@ -104,7 +107,7 @@ json5 = "0.2"
 base64 = "0.12"
 bytes = "0.5"
 byteorder = "1"
-ring = "0.16"
+ring = { version = "0.16", optional = true }
 md-5 = "0.8"
 digest = "0.8"
 typenum = "1.11"
