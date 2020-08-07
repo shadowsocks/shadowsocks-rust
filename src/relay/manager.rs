@@ -425,7 +425,7 @@ impl ManagerService {
             None => manager_config.method
                 // Default method as shadowsocks-libev's ss-server
                 // Just for compatiblity, some shadowsocks manager relies on this default method
-                .unwrap_or(CipherType::ChaCha20IetfPoly1305),
+                .unwrap_or(CipherType::None),
             Some(method) => match method.parse::<CipherType>() {
                 Ok(m) => m,
                 Err(..) => {
