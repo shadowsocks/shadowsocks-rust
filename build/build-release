@@ -28,6 +28,9 @@ if [[ "${#targets[@]}" == "0" ]]; then
 
         "arm-unknown-linux-gnueabihf" # armhf, hard
         "aarch64-unknown-linux-gnu"
+
+        "mips-unknown-linux-musl"     # big endian
+        "mipsel-unknown-linux-musl"   # little endian
     )
 fi
 
@@ -44,8 +47,15 @@ function build() {
         EXTRA_FEATURES="local-redir"
     fi
 
+    EXTRA_FLAG=""
+    if [[ "$TARGET" == "mips"* ]]; then
+        EXTRA_FEATURES="sodium rc4 aes-cfb aes-ctr local-http local-http-native-tls local-tunnel local-socks4 local-redir"
+        EXTRA_FLAG="--no-default-features"
+    fi
+
     cross build --target "${TARGET}" \
                 --features "aes-pmac-siv openssl-vendored ${EXTRA_FEATURES}" \
+		${EXTRA_FLAG} \
                 --release
 
     if [[ $? != "0" ]]; then
