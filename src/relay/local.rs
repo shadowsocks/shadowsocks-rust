@@ -176,7 +176,7 @@ async fn flow_report_task(context: SharedContext) -> io::Result<()> {
         let tx = flow_stat.tcp().tx() + flow_stat.udp().tx();
         let rx = flow_stat.tcp().rx() + flow_stat.udp().rx();
 
-        let buf: [u64; 2] = [tx, rx];
+        let buf: [u64; 2] = [tx as u64, rx as u64];
         let buf = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 16) };
 
         match time::timeout(timeout, stream.write_all(buf)).await {

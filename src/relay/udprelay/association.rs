@@ -346,7 +346,7 @@ impl ProxyAssociation {
 
         #[cfg(feature = "local-flow-stat")]
         {
-            context.local_flow_statistic().udp().incr_tx(send_len as u64);
+            context.local_flow_statistic().udp().incr_tx(send_len);
         }
 
         Ok(())
@@ -482,7 +482,7 @@ impl ProxyAssociation {
 
         #[cfg(feature = "local-flow-stat")]
         {
-            context.local_flow_statistic().udp().incr_rx(recv_n as u64);
+            context.local_flow_statistic().udp().incr_rx(recv_n);
         }
 
         Ok((addr, payload))
