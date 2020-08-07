@@ -44,12 +44,12 @@ jobs:
           docker build -t shadowsocks-rust:arm-unknown-linux-gnueabihf -f Dockerfile.arm-unknown-linux-gnueabihf .
           ./build-release -t shadowsocks-rust:arm-unknown-linux-gnueabihf
 
-      - name: Build aaarch64-unknown-linux-gnu
+      - name: Build aarch64-unknown-linux-gnu
         timeout-minutes: 120
         run: |
           cd build
-          docker build -t shadowsocks-rust:aaarch64-unknown-linux-gnu -f Dockerfile.aaarch64-unknown-linux-gnu .
-          ./build-release -t shadowsocks-rust:aaarch64-unknown-linux-gnu
+          docker build -t shadowsocks-rust:aarch64-unknown-linux-gnu -f Dockerfile.aarch64-unknown-linux-gnu .
+          ./build-release -t shadowsocks-rust:aarch64-unknown-linux-gnu
 
       - name: Build mips-unknown-linux-musl
         timeout-minutes: 120
