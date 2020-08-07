@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
 
 jobs:
   build-linux:

@@ -13,8 +13,10 @@ while getopts "t:" opt; do
 done
 
 ROOT_DIR=$( cd $( dirname $0 ) && pwd )
-VERSION=$(grep -E '^version' "${ROOT_DIR}/Cargo.toml" | awk '{print $3}' | sed 's/"//g')
+VERSION=$(grep -E '^version' "${ROOT_DIR}/../Cargo.toml" | awk '{print $3}' | sed 's/"//g')
 HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
+
+echo "Started build release for ${HOST_TRIPLE} ..."
 
 if [[ "${BUILD_TARGET}" != "" ]]; then
     cargo build --release --features "aes-pmac-siv ${BUILD_EXTRA_FEATURES}" --target "${BUILD_TARGET}"
@@ -33,16 +35,16 @@ fi
 
 TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}")
 
-RELEASE_FOLDER="${ROOT_DIR}/build/release"
+RELEASE_FOLDER="${ROOT_DIR}/release"
 RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${HOST_TRIPLE}"
 
 mkdir -p "${RELEASE_FOLDER}"
 
 # Into release folder
 if [[ "${BUILD_TARGET}" != "" ]]; then
-    cd "target/${BUILD_TARGET}/release"
+    cd "${ROOT_DIR}/../target/${BUILD_TARGET}/release"
 else
-    cd "target/release"
+    cd "${ROOT_DIR}/../target/release"
 fi
 
 if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
@@ -66,3 +68,5 @@ else
     cd "${RELEASE_FOLDER}"
     shasum -a 256 "${RELEASE_PACKAGE_FILE_NAME}" > "${RELEASE_PACKAGE_FILE_NAME}.sha256"
 fi
+
+echo "Finished build release ${RELEASE_PACKAGE_FILE_PATH}"

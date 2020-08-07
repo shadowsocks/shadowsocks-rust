@@ -37,20 +37,18 @@ jobs:
   build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: ${{ matrix.extra-features }}
+      BUILD_EXTRA_FEATURES: "openssl-vendored local-redir"
       RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     strategy:
       matrix:
-        include:
-          - os: ubuntu-latest
-            extra-features: openssl-vendored local-redir
-          - os: macos-latest
-            extra-features: openssl-vendored local-redir
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v2
       - name: Build release
         shell: bash
-        run: ./build-host-release
+        run: |
+          cd build
+          ./build-host-release
       - uses: actions/upload-artifact@v2
         with:
           name: releases
@@ -64,11 +62,10 @@ jobs:
       RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     steps:
       - uses: actions/checkout@v2
-      - name: setup (windows)
-        run: choco install openssl
       - name: Build release
-        shell: bash
-        run: ./build-host-release
+        run: |
+          cd build
+          pwsh build-host-release.ps1
       - uses: actions/upload-artifact@v2
         with:
           name: releases

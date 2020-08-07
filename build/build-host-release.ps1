@@ -1,0 +1,43 @@
+<#
+    OpenSSL is already installed on windows-latest virtual environment.
+    If you need OpenSSL, consider install it by:
+
+    choco install openssl
+#>
+$ErrorActionPreference = "Stop"
+
+$TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
+
+Write-Host "Started building release for ${TargetTriple} ..."
+
+cargo build --release --features "aes-pmac-siv openssl-vendored"
+
+$Version = (Select-String -Pattern '^version *= *"([^"]*)"$' -Path "${PSScriptRoot}\..\Cargo.toml" | foreach {$_.Matches.Value}).split()[-1]
+$Version = $Version -replace '"'
+
+$PackageReleasePath = "${PSScriptRoot}\release"
+$PackageName = "shadowsocks-v${Version}.${TargetTriple}.zip"
+$PackagePath = "${PackageReleasePath}\${PackageName}"
+
+Write-Host $Version
+Write-Host $PackageReleasePath
+Write-Host $PackageName
+Write-Host $PackagePath
+
+Pushd "${PSScriptRoot}\..\target\release"
+
+$ProgressPreference = "SilentlyContinue"
+New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
+$CompressParam = @{
+    LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe"
+    DestinationPath = "${PackagePath}"
+}
+Compress-Archive @CompressParam
+
+Write-Host "Created release packet ${PackagePath}"
+
+$PackageChecksumPath = "${PackagePath}.sha256"
+$PackageHash = (Get-FileHash -Path "${PackagePath}" -Algorithm SHA256).Hash
+"${PackageHash}  ${PackageName}" | Out-File -FilePath "${PackageChecksumPath}"
+
+Write-Host "Created release packet checksum ${PackageChecksumPath}"
