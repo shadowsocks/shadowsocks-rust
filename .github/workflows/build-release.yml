@@ -34,10 +34,13 @@ jobs:
           docker build -t shadowsocks-rust:${{ matrix.target }} -f Dockerfile.${{ matrix.target }} .
           ./build-release -t ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v2
+      - name: Upload Github Assets
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: releases
-          path: build/release/*
+          files: build/release/*
+          fail_on_unmatched_files: true
 
   build-unix:
     runs-on: ${{ matrix.os }}
@@ -49,15 +52,20 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v2
+
       - name: Build release
         shell: bash
         run: |
           cd build
           ./build-host-release
-      - uses: actions/upload-artifact@v2
+
+      - name: Upload Github Assets
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: releases
-          path: build/release/*
+          files: build/release/*
+          fail_on_unmatched_files: true
 
   build-windows:
     runs-on: windows-latest
@@ -67,11 +75,16 @@ jobs:
       RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     steps:
       - uses: actions/checkout@v2
+
       - name: Build release
         run: |
           cd build
           pwsh build-host-release.ps1
-      - uses: actions/upload-artifact@v2
+
+      - name: Upload Github Assets
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: releases
-          path: build/release/*
+          files: build/release/*
+          fail_on_unmatched_files: true
