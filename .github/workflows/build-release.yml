@@ -49,7 +49,8 @@ jobs:
       RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # os: [ubuntu-latest, macos-latest]
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v2
 
