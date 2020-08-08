@@ -73,7 +73,7 @@ fn main() {
         (version: shadowsocks::VERSION)
         (about: "Encode and decode ShadowSocks URL")
         (@arg ENCODE: -e --encode +takes_value conflicts_with[DECODE] "Encode the server configuration in the provided JSON file")
-        (@arg DECODE: -d --decode +takes_value conflicts_with[ENCODE] "Decode the server configuration from the provide ShadowSocks URL")
+        (@arg DECODE: -d --decode +takes_value "Decode the server configuration from the provide ShadowSocks URL")
         (@arg QRCODE: -c --qrcode !takes_value "Generate the QRCode with the provided configuration")
         (@group ACTION =>
             (@attributes +required ... arg[ENCODE DECODE])

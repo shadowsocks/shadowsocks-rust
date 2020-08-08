@@ -56,7 +56,7 @@ fn main() {
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
         (@arg VERBOSE: -v ... "Set the level of debug")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
-        (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
+        (@arg TCP_AND_UDP: -U "Server mode TCP_AND_UDP")
 
         (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
