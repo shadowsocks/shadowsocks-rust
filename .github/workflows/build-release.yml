@@ -40,7 +40,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref, '-') }}
 
   build-unix:
     runs-on: ${{ matrix.os }}
@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref, '-') }}
 
   build-windows:
     runs-on: windows-latest
@@ -87,4 +87,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref, '-') }}
