@@ -1,11 +1,10 @@
 # shadowsocks-rust
 
-[![Build Status](https://img.shields.io/travis/shadowsocks/shadowsocks-rust.svg)](https://travis-ci.org/shadowsocks/shadowsocks-rust)
-[![Build status](https://ci.appveyor.com/api/projects/status/h3ny0dov7v9xioa5?svg=true)](https://ci.appveyor.com/project/zonyitoo/shadowsocks-rust-0grjf)
+![Build & Test](https://github.com/shadowsocks/shadowsocks-rust/workflows/Build%20&%20Test/badge.svg)
+![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/workflows/Build%20Releases/badge.svg)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
-[![CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-rust.svg?style=svg)](https://circleci.com/gh/shadowsocks/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
