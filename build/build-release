@@ -34,6 +34,11 @@ if [[ "${#targets[@]}" == "0" ]]; then
     )
 fi
 
+[[ -z $upx ]] && upx="echo pending"
+if [[ $upx == "echo pending" ]] && hash upx 2>/dev/null; then
+	upx="upx -9"
+fi
+
 function build() {
     cd "$CUR_DIR/.."
 
@@ -72,8 +77,14 @@ function build() {
         PKG_NAME="shadowsocks-v${VERSION}.${TARGET}.tar.xz"
         PKG_PATH="${PKG_DIR}/${PKG_NAME}"
 
-        echo "* Packaging XZ in ${PKG_PATH} ..."
         cd ${RELEASE_DIR}
+
+        if [[ "$TARGET" == "mips"* ]]; then
+            # Enable upx for MIPS.
+            $upx sslocal ssserver ssurl ssmanager #>/dev/null
+        fi
+
+        echo "* Packaging XZ in ${PKG_PATH} ..."
         tar -cJf ${PKG_PATH} \
             "sslocal" \
             "ssserver" \
