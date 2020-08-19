@@ -6,13 +6,13 @@
 #>
 $ErrorActionPreference = "Stop"
 
-$TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | foreach {$_.Matches.Value}).split()[-1]
+$TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | ForEach-Object { $_.Matches.Value }).split()[-1]
 
 Write-Host "Started building release for ${TargetTriple} ..."
 
 cargo build --release --features "aes-pmac-siv openssl-vendored"
 
-$Version = (Select-String -Pattern '^version *= *"([^"]*)"$' -Path "${PSScriptRoot}\..\Cargo.toml" | foreach {$_.Matches.Value}).split()[-1]
+$Version = (Select-String -Pattern '^version *= *"([^"]*)"$' -Path "${PSScriptRoot}\..\Cargo.toml" | ForEach-Object { $_.Matches.Value }).split()[-1]
 $Version = $Version -replace '"'
 
 $PackageReleasePath = "${PSScriptRoot}\release"
@@ -24,12 +24,12 @@ Write-Host $PackageReleasePath
 Write-Host $PackageName
 Write-Host $PackagePath
 
-Pushd "${PSScriptRoot}\..\target\release"
+Push-Location "${PSScriptRoot}\..\target\release"
 
 $ProgressPreference = "SilentlyContinue"
 New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
 $CompressParam = @{
-    LiteralPath = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe"
+    LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe"
     DestinationPath = "${PackagePath}"
 }
 Compress-Archive @CompressParam

@@ -46,7 +46,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       BUILD_EXTRA_FEATURES: "openssl-vendored local-redir"
-      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     strategy:
       matrix:
         # os: [ubuntu-latest, macos-latest]
@@ -71,9 +70,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      OPENSSL_STATIC: 1
+      OPENSSL_STATIC: "1"
       OPENSSL_DIR: "C:\\Program Files\\OpenSSL-Win64\\"
-      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
     steps:
       - uses: actions/checkout@v2
 

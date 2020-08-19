@@ -19,5 +19,7 @@ RUN curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM
     V=1 make -j${nprocs} && make install && \
     cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
 
-ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" \
-    SODIUM_LIB_DIR=/usr/x86_64-w64-mingw32/lib
+# ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" \
+#     SODIUM_LIB_DIR=/usr/x86_64-w64-mingw32/lib
+
+ENV SODIUM_LIB_DIR=/usr/x86_64-w64-mingw32/lib
