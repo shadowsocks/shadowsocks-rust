@@ -4,11 +4,15 @@ use std::{
     io,
     io::{Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
 };
 
 use bytes::{Bytes, BytesMut};
 use log::{debug, error, warn};
-use tokio::net::UdpSocket;
+use tokio::net::{
+    udp::{RecvHalf, SendHalf},
+    UdpSocket,
+};
 
 use crate::{
     config::{ServerAddr, ServerConfig},
@@ -22,6 +26,62 @@ use super::{
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
+
+struct Half<T> {
+    half: T,
+    inner: Arc<HalfInner>,
+}
+
+struct HalfInner {
+    method: CipherType,
+    key: Bytes,
+}
+
+/// Receive half of a UDP client for communicating with ShadowSocks' server
+pub struct ServerClientRecvHalf(Half<RecvHalf>);
+
+impl ServerClientRecvHalf {
+    /// Receive packet from Shadowsocks' UDP server
+    pub async fn recv_from(&mut self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
+        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+
+        // Waiting for response from server SERVER -> CLIENT
+        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let recv_n = try_timeout(self.0.half.recv(&mut recv_buf), Some(timeout)).await?;
+        let (addr, payload) =
+            ServerClient::parse_resp(context, self.0.inner.method, &self.0.inner.key, &recv_buf[..recv_n]).await?;
+        Ok((addr, payload))
+    }
+}
+
+/// Send half of a UDP client for communicating with ShadowSocks' server
+pub struct ServerClientSendHalf(Half<SendHalf>);
+
+impl ServerClientSendHalf {
+    /// Send a UDP packet to addr through proxy
+    pub async fn send_to(&mut self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
+        debug!(
+            "UDP server client send to {}, payload length {} bytes",
+            addr,
+            payload.len()
+        );
+
+        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+
+        let send_buf = ServerClient::pack_req(self.0.inner.method, &self.0.inner.key, context, addr, payload).await?;
+
+        let send_len = try_timeout(self.0.half.send(&send_buf), Some(timeout)).await?;
+        if send_buf.len() != send_len {
+            warn!(
+                "UDP server client send {} bytes, but actually sent {} bytes",
+                send_buf.len(),
+                send_len
+            );
+        }
+        Ok(())
+    }
+}
 
 /// UDP client for communicating with ShadowSocks' server
 pub struct ServerClient {
@@ -48,6 +108,42 @@ impl ServerClient {
         })
     }
 
+    /// Split the UDP client into receive and send halves.
+    pub fn split(self) -> (ServerClientRecvHalf, ServerClientSendHalf) {
+        let (r, s) = self.socket.split();
+        let hi = Arc::new(HalfInner {
+            method: self.method,
+            key: self.key,
+        });
+        (
+            ServerClientRecvHalf(Half {
+                half: r,
+                inner: hi.clone(),
+            }),
+            ServerClientSendHalf(Half { half: s, inner: hi }),
+        )
+    }
+
+    async fn pack_req(
+        method: CipherType,
+        key: &Bytes,
+        context: &Context,
+        addr: &Address,
+        payload: &[u8],
+    ) -> io::Result<Vec<u8>> {
+        // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
+        let mut send_buf = Vec::with_capacity(addr.serialized_len() + payload.len());
+        addr.write_to_buf(&mut send_buf);
+        send_buf.extend_from_slice(payload);
+        if let CipherCategory::None = method.category() {
+            Ok(send_buf)
+        } else {
+            let mut encrypt_buf = BytesMut::new();
+            encrypt_payload(context, method, key, &send_buf, &mut encrypt_buf)?;
+            Ok(encrypt_buf.freeze().as_ref().to_vec())
+        }
+    }
+
     /// Send a UDP packet to addr through proxy
     pub async fn send_to(&mut self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
         debug!(
@@ -58,53 +154,32 @@ impl ServerClient {
 
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
-        // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::with_capacity(addr.serialized_len() + payload.len());
-        addr.write_to_buf(&mut send_buf);
-        send_buf.extend_from_slice(payload);
+        let send_buf = Self::pack_req(self.method, &self.key, context, addr, payload).await?;
 
-        if let CipherCategory::None = self.method.category() {
-            let send_len = try_timeout(self.socket.send(&send_buf), Some(timeout)).await?;
-            if send_buf.len() != send_len {
-                warn!(
-                    "UDP server client send {} bytes, but actually sent {} bytes",
-                    send_buf.len(),
-                    send_len
-                );
-            }
-        } else {
-            let mut encrypt_buf = BytesMut::new();
-            encrypt_payload(context, self.method, &self.key, &send_buf, &mut encrypt_buf)?;
-
-            let send_len = try_timeout(self.socket.send(&encrypt_buf), Some(timeout)).await?;
-            if encrypt_buf.len() != send_len {
-                warn!(
-                    "UDP server client send {} bytes, but actually sent {} bytes",
-                    encrypt_buf.len(),
-                    send_len
-                );
-            }
+        let send_len = try_timeout(self.socket.send(&send_buf), Some(timeout)).await?;
+        if send_buf.len() != send_len {
+            warn!(
+                "UDP server client send {} bytes, but actually sent {} bytes",
+                send_buf.len(),
+                send_len
+            );
         }
 
         Ok(())
     }
 
-    /// Receive packet from Shadowsocks' UDP server
-    pub async fn recv_from(&mut self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
-        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-
-        // Waiting for response from server SERVER -> CLIENT
-        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        let recv_n = try_timeout(self.socket.recv(&mut recv_buf), Some(timeout)).await?;
-
-        let mut cur = if let CipherCategory::None = self.method.category() {
-            recv_buf.truncate(recv_n);
-            Cursor::new(recv_buf)
+    async fn parse_resp(
+        context: &Context,
+        method: CipherType,
+        key: &Bytes,
+        recv_buf: &[u8],
+    ) -> io::Result<(Address, Vec<u8>)> {
+        let mut cur = if let CipherCategory::None = method.category() {
+            Cursor::new(recv_buf.to_vec())
         } else {
-            let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
+            let decrypt_buf = match decrypt_payload(context, method, key, recv_buf)? {
                 None => {
-                    error!("UDP packet too short, received length {}", recv_n);
+                    error!("UDP packet too short, received length {}", recv_buf.len());
                     let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");
                     return Err(err);
                 }
@@ -117,7 +192,7 @@ impl ServerClient {
         // FIXME: Address is ignored. Maybe useful in the future if we uses one common UdpSocket for communicate with remote server
         let addr = Address::read_from(&mut cur).await?;
 
-        let mut payload = Vec::with_capacity(recv_n - cur.position() as usize);
+        let mut payload = Vec::with_capacity(recv_buf.len() - cur.position() as usize);
         cur.read_to_end(&mut payload)?;
 
         debug!(
@@ -126,6 +201,18 @@ impl ServerClient {
             payload.len()
         );
 
+        Ok((addr, payload))
+    }
+
+    /// Receive packet from Shadowsocks' UDP server
+    pub async fn recv_from(&mut self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
+        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
+
+        // Waiting for response from server SERVER -> CLIENT
+        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let recv_n = try_timeout(self.socket.recv(&mut recv_buf), Some(timeout)).await?;
+        let (addr, payload) = Self::parse_resp(context, self.method, &self.key, &recv_buf[..recv_n]).await?;
         Ok((addr, payload))
     }
 }
