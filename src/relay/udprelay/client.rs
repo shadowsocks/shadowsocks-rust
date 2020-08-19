@@ -99,6 +99,9 @@ impl ServerClient {
         let recv_n = try_timeout(self.socket.recv(&mut recv_buf), Some(timeout)).await?;
 
         let mut cur = if let CipherCategory::None = self.method.category() {
+            recv_buf.truncate(recv_n);
+            Cursor::new(recv_buf)
+        } else {
             let decrypt_buf = match decrypt_payload(context, self.method, &self.key, &recv_buf[..recv_n])? {
                 None => {
                     error!("UDP packet too short, received length {}", recv_n);
@@ -108,9 +111,6 @@ impl ServerClient {
                 Some(b) => b,
             };
             Cursor::new(decrypt_buf)
-        } else {
-            recv_buf.truncate(recv_n);
-            Cursor::new(recv_buf)
         };
 
         // SERVER -> CLIENT protocol: ADDRESS + PAYLOAD
