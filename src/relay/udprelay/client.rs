@@ -130,17 +130,17 @@ impl ServerClient {
         context: &Context,
         addr: &Address,
         payload: &[u8],
-    ) -> io::Result<Vec<u8>> {
+    ) -> io::Result<Bytes> {
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
-        let mut send_buf = Vec::with_capacity(addr.serialized_len() + payload.len());
+        let mut send_buf = BytesMut::with_capacity(addr.serialized_len() + payload.len());
         addr.write_to_buf(&mut send_buf);
         send_buf.extend_from_slice(payload);
         if let CipherCategory::None = method.category() {
-            Ok(send_buf)
+            Ok(send_buf.freeze())
         } else {
-            let mut encrypt_buf = BytesMut::new();
+            let mut encrypt_buf = BytesMut::with_capacity(send_buf.len());
             encrypt_payload(context, method, key, &send_buf, &mut encrypt_buf)?;
-            Ok(encrypt_buf.freeze().as_ref().to_vec())
+            Ok(encrypt_buf.freeze())
         }
     }
 

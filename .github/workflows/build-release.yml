@@ -69,9 +69,9 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    env:
-      OPENSSL_STATIC: "1"
-      OPENSSL_DIR: "C:\\Program Files\\OpenSSL-Win64\\"
+    # env:
+    #   OPENSSL_STATIC: "1"
+    #   OPENSSL_DIR: "C:\\Program Files\\OpenSSL-Win64\\"
     steps:
       - uses: actions/checkout@v2
 
