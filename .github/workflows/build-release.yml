@@ -71,7 +71,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
+      RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3,+crt-static"
     # env:
     #   OPENSSL_STATIC: "1"
     #   OPENSSL_DIR: "C:\\Program Files\\OpenSSL-Win64\\"
