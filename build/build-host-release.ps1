@@ -11,6 +11,9 @@ $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | ForEach-Objec
 Write-Host "Started building release for ${TargetTriple} ..."
 
 cargo build --release --features "aes-pmac-siv openssl-vendored"
+if (!$?) {
+    exit $LASTEXITCODE
+}
 
 $Version = (Select-String -Pattern '^version *= *"([^"]*)"$' -Path "${PSScriptRoot}\..\Cargo.toml" | ForEach-Object { $_.Matches.Value }).split()[-1]
 $Version = $Version -replace '"'
