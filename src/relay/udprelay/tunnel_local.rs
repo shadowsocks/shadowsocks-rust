@@ -122,7 +122,6 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         if let Err(err) = res {
             error!("failed to create UDP association, {}", err);
-            return Err(err);
         }
     }
 }

@@ -203,10 +203,26 @@ impl ProxyAssociation {
     async fn connect_remote(context: &Context, svr_cfg: &ServerConfig, remote_udp: &UdpSocket) -> io::Result<()> {
         match svr_cfg.addr() {
             ServerAddr::SocketAddr(ref remote_addr) => {
-                remote_udp.connect(remote_addr).await?;
+                let res = remote_udp.connect(remote_addr).await;
+                if let Err(ref err) = res {
+                    error!(
+                        "UDP association UdpSocket::connect failed, addr: {}, err: {}",
+                        remote_addr, err
+                    );
+                }
+                res?;
             }
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| { remote_udp.connect(&addr).await })?;
+                lookup_then!(context, dname, *port, |addr| {
+                    let res = remote_udp.connect(&addr).await;
+                    if let Err(ref err) = res {
+                        error!(
+                            "UDP association UdpSocket::connect failed, addr: {}:{} (resolved: {}), err: {}",
+                            dname, port, addr, err
+                        );
+                    }
+                    res
+                })?;
             }
         }
 
