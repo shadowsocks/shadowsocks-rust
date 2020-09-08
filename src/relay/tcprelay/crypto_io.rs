@@ -140,6 +140,11 @@ impl<S> CryptoStream<S> {
     pub fn get_ref(&self) -> &S {
         &self.stream
     }
+
+    /// Consume the CryptoStream and return the internal stream instance
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
 }
 
 impl<S> CryptoStream<S>

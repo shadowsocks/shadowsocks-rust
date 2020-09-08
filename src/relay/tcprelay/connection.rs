@@ -90,6 +90,11 @@ where
     pub fn get_ref(&self) -> &S {
         self.stream.get_ref()
     }
+
+    /// Get the internal stream and consume this Connection
+    pub fn into_inner(self) -> S {
+        self.stream.into_inner()
+    }
 }
 
 #[inline]

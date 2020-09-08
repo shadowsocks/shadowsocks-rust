@@ -24,6 +24,10 @@ impl<S> TcpMonStream<S> {
     pub fn new(flow_stat: SharedServerFlowStatistic, stream: S) -> TcpMonStream<S> {
         TcpMonStream { stream, flow_stat }
     }
+
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
 }
 
 impl<S> AsyncRead for TcpMonStream<S>

@@ -58,6 +58,12 @@ async fn handle_client(
                 "failed to decode Address, may be wrong method or key, from client {}, error: {}",
                 peer_addr, err
             );
+
+            // Hold the TCP connection until it closes by itself for preventing active probing.
+            // Further discussion: https://github.com/shadowsocks/shadowsocks-rust/issues/292
+            let mut tcp = stream.into_inner().into_inner().into_inner();
+            let _ = super::ignore_until_end(&mut tcp).await;
+
             return Err(From::from(err));
         }
     };
