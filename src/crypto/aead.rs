@@ -10,6 +10,7 @@ use crate::crypto::siv::MiscreantCipher;
 use crate::crypto::sodium::SodiumAeadCipher;
 
 use bytes::{Bytes, BytesMut};
+use cfg_if::cfg_if;
 use hkdf::Hkdf;
 use sha1::Sha1;
 
@@ -126,29 +127,183 @@ pub fn make_skey(t: CipherType, key: &[u8], salt: &[u8]) -> Bytes {
     skey.freeze()
 }
 
-/// Increase nonce by 1
-///
-/// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
-#[cfg(feature = "sodium")]
-pub fn increase_nonce(nonce: &mut [u8]) {
-    use libsodium_sys::sodium_increment;
+cfg_if! {
+    if #[cfg(feature = "sodium")] {
+        /// Increase nonce by 1
+        ///
+        /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk (Little-Endian)
+        pub fn increase_nonce(nonce: &mut [u8]) {
+            use libsodium_sys::sodium_increment;
 
-    unsafe {
-        sodium_increment(nonce.as_mut_ptr(), nonce.len());
+            unsafe {
+                sodium_increment(nonce.as_mut_ptr(), nonce.len());
+            }
+        }
+    } else {
+        if #[cfg(target_endian = "little")] {
+            if #[cfg(target_pointer_width = "32")] {
+                /// Increase nonce by 1
+                ///
+                /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk (Little-Endian)
+                #[inline]
+                pub fn increase_nonce(nonce: &mut [u8]) {
+                    increase_nonce_32_le(nonce);
+                }
+
+            } else if #[cfg(target_pointer_width = "64")] {
+                /// Increase nonce by 1
+                ///
+                /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk (Little-Endian)
+                #[inline]
+                pub fn increase_nonce(nonce: &mut [u8]) {
+                    increase_nonce_64_le(nonce);
+                }
+            } else {
+                /// Increase nonce by 1
+                ///
+                /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk (Little-Endian)
+                #[inline]
+                pub fn increase_nonce(nonce: &mut [u8]) {
+                    increase_nonce_classic_le(nonce);
+                }
+            }
+
+        } else {
+            /// Increase nonce by 1
+            ///
+            /// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk (Little-Endian)
+            #[inline]
+            pub fn increase_nonce(nonce: &mut [u8]) {
+                // Since current arthitecture is BE, integer add operations must be called after bswap operation.
+                // bswap operation in most platforms are combinations of many instructions.
+                increase_nonce_classic_le(nonce);
+            }
+        }
     }
 }
 
-/// Increase nonce by 1
-///
-/// AEAD ciphers requires to increase nonce after encrypt/decrypt every chunk
-#[cfg(not(feature = "sodium"))]
-pub fn increase_nonce(nonce: &mut [u8]) {
+#[allow(dead_code)]
+fn increase_nonce_classic_le(nonce: &mut [u8]) {
     for i in nonce {
-        if std::u8::MAX == *i {
+        if u8::MAX == *i {
             *i = 0;
         } else {
             *i += 1;
             return;
         }
+    }
+}
+
+#[allow(dead_code)]
+fn increase_nonce_32_le(nonce: &mut [u8]) {
+    let data = nonce.as_mut_ptr();
+
+    let mut i = 0;
+    while i + 4 < nonce.len() {
+        let v = unsafe { &mut *(data.offset(i as isize) as *mut u32) };
+        if *v == u32::MAX {
+            *v = 0;
+        } else {
+            *v += 1;
+            return;
+        }
+        i += 4;
+    }
+
+    if i < nonce.len() {
+        increase_nonce_classic_le(&mut nonce[i..]);
+    }
+}
+
+#[allow(dead_code)]
+fn increase_nonce_64_le(nonce: &mut [u8]) {
+    let data = nonce.as_mut_ptr();
+
+    let mut i = 0;
+    while i + 8 < nonce.len() {
+        let v = unsafe { &mut *(data.offset(i as isize) as *mut u64) };
+        if *v == u64::MAX {
+            *v = 0;
+        } else {
+            *v += 1;
+            return;
+        }
+        i += 8;
+    }
+
+    if i + 4 < nonce.len() {
+        increase_nonce_32_le(&mut nonce[i..]);
+    } else if i < nonce.len() {
+        increase_nonce_classic_le(&mut nonce[i..]);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn increase_nonce_classic_le() {
+        let mut v1 = [0, 0, 0, 0];
+        super::increase_nonce_classic_le(&mut v1);
+        assert_eq!(v1, [1, 0, 0, 0]);
+
+        let mut v2 = [0xff, 0, 0, 0];
+        super::increase_nonce_classic_le(&mut v2);
+        assert_eq!(v2, [0, 1, 0, 0]);
+
+        let mut v3 = [0xff, 0xff, 0xff, 0xff];
+        super::increase_nonce_classic_le(&mut v3);
+        assert_eq!(v3, [0, 0, 0, 0]);
+    }
+
+    #[test]
+    #[cfg(target_endian = "little")]
+    fn increase_nonce_32_le() {
+        let mut v1 = [0, 0, 0, 0];
+        super::increase_nonce_32_le(&mut v1);
+        assert_eq!(v1, [1, 0, 0, 0]);
+
+        let mut v2 = [0xff, 0, 0, 0];
+        super::increase_nonce_32_le(&mut v2);
+        assert_eq!(v2, [0, 1, 0, 0]);
+
+        let mut v3 = [0xff, 0xff, 0xff, 0xff];
+        super::increase_nonce_32_le(&mut v3);
+        assert_eq!(v3, [0, 0, 0, 0]);
+
+        let mut v4 = [0, 0, 0, 0, 0, 0];
+        super::increase_nonce_32_le(&mut v4);
+        assert_eq!(v4, [1, 0, 0, 0, 0, 0]);
+
+        let mut v5 = [0xff, 0xff, 0xff, 0xff, 0, 0];
+        super::increase_nonce_32_le(&mut v5);
+        assert_eq!(v5, [0, 0, 0, 0, 1, 0]);
+    }
+
+    #[test]
+    #[cfg(target_endian = "little")]
+    fn increase_nonce_64_le() {
+        let mut v1 = [0, 0, 0, 0, 0, 0, 0, 0];
+        super::increase_nonce_64_le(&mut v1);
+        assert_eq!(v1, [1, 0, 0, 0, 0, 0, 0, 0]);
+
+        let mut v2 = [0xff, 0, 0, 0, 0, 0, 0, 0];
+        super::increase_nonce_64_le(&mut v2);
+        assert_eq!(v2, [0, 1, 0, 0, 0, 0, 0, 0]);
+
+        let mut v3 = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        super::increase_nonce_64_le(&mut v3);
+        assert_eq!(v3, [0, 0, 0, 0, 0, 0, 0, 0]);
+
+        let mut v4 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        super::increase_nonce_64_le(&mut v4);
+        assert_eq!(v4, [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+        let mut v5 = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0];
+        super::increase_nonce_64_le(&mut v5);
+        assert_eq!(v5, [0, 0, 0, 0, 0, 0, 0, 0, 1, 0]);
+
+        let mut v6 = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0];
+        super::increase_nonce_64_le(&mut v6);
+        assert_eq!(v6, [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]);
     }
 }
