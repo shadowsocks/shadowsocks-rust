@@ -636,16 +636,8 @@ impl ServerAssociation {
         mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
     ) -> io::Result<ServerAssociation> {
         // Create a socket for receiving packets
-        let local_addr = match context.config().local_addr {
-            None => {
-                // Let system allocate an address for us
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
-            }
-            Some(ref addr) => {
-                // Uses configured local address
-                addr.bind_addr(&context).await?
-            }
-        };
+        // Let system allocate an address for us (INADDR_ANY)
+        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
         let remote_udp = create_udp_socket(&local_addr).await?;
 
         let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
