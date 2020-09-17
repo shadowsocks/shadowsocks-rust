@@ -155,6 +155,7 @@ jobs:
                       docker build -t shadowsocks-rust:x86_64-unknown-linux-musl -f Dockerfile.x86_64-unknown-linux-musl .
                       docker build -t shadowsocks-rust:x86_64-unknown-linux-gnu -f Dockerfile.x86_64-unknown-linux-gnu .
                       docker build -t shadowsocks-rust:arm-unknown-linux-gnueabihf -f Dockerfile.arm-unknown-linux-gnueabihf .
+                      docker build -t shadowsocks-rust:arm-unknown-linux-musleabi -f Dockerfile.arm-unknown-linux-musleabi .
                       docker build -t shadowsocks-rust:aarch64-unknown-linux-gnu -f Dockerfile.aarch64-unknown-linux-gnu .
             - run:
                   name: "Install Rust"
