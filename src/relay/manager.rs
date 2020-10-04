@@ -445,6 +445,7 @@ impl ManagerService {
                 Some(pp) => Some(PluginConfig {
                     plugin: pp,
                     plugin_opt: p.plugin_opt,
+                    plugin_arg: None,
                 }),
                 None => None,
             },

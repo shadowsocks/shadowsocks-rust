@@ -98,6 +98,8 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    plugin_arg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
@@ -422,6 +424,7 @@ impl ServerConfig {
                         plugin = Some(PluginConfig {
                             plugin: p.to_owned(),
                             plugin_opt: vsp.next().map(ToOwned::to_owned),
+                            plugin_arg: None,
                         })
                     }
                 }
@@ -1210,6 +1213,7 @@ impl Config {
                     Some(plugin) => Some(PluginConfig {
                         plugin,
                         plugin_opt: config.plugin_opts,
+                        plugin_arg: config.plugin_arg,
                     }),
                 };
 
@@ -1257,6 +1261,7 @@ impl Config {
                     Some(p) => Some(PluginConfig {
                         plugin: p,
                         plugin_opt: svr.plugin_opts,
+                        plugin_arg: None,
                     }),
                 };
 
@@ -1491,6 +1496,7 @@ impl fmt::Display for Config {
                 jconf.password = Some(svr.password().to_string());
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
+                jconf.plugin_arg = svr.plugin().and_then(|p| p.plugin_arg.clone());
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
             }
             _ => {
