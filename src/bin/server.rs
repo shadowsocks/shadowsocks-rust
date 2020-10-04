@@ -111,6 +111,7 @@ fn main() {
             let plugin = PluginConfig {
                 plugin: p.to_owned(),
                 plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+                plugin_arg: None,
             };
 
             sc.set_plugin(plugin);

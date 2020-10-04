@@ -25,5 +25,9 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
         cmd.env("SS_PLUGIN_OPTIONS", opt);
     }
 
+    if let Some(ref arg) = plugin.plugin_arg {
+        cmd.arg(arg);
+    }
+
     cmd
 }

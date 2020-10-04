@@ -35,6 +35,7 @@ mod ss_plugin;
 pub struct PluginConfig {
     pub plugin: String,
     pub plugin_opt: Option<String>,
+    pub plugin_arg: Option<String>,
 }
 
 /// Mode of Plugin
