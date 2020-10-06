@@ -34,7 +34,7 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
         .arg("--data-dir")
         .arg(format!("/tmp/{}_{}_{}", plugin.plugin, remote, local)); // FIXME: Not compatible in Windows
 
-    if let Some(ref opt) = plugin.plugin_opt {
+    if let Some(ref opt) = plugin.plugin_opts {
         cmd.args(opt.split(' '));
     }
 
@@ -50,6 +50,10 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
             .arg("server")
             .arg(remote.to_string()),
     };
+
+    if !plugin.plugin_args.is_empty() {
+        cmd.args(&plugin.plugin_args);
+    }
 
     cmd
 }
