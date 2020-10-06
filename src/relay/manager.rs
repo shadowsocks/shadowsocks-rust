@@ -48,7 +48,7 @@ mod protocol {
         #[serde(skip_serializing_if = "Option::is_none")]
         pub plugin: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        pub plugin_opt: Option<String>,
+        pub plugin_opts: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub mode: Option<String>,
     }
@@ -444,8 +444,8 @@ impl ManagerService {
             match p.plugin {
                 Some(pp) => Some(PluginConfig {
                     plugin: pp,
-                    plugin_opt: p.plugin_opt,
-                    plugin_arg: None,
+                    plugin_opts: p.plugin_opts,
+                    plugin_args: Vec::new(),
                 }),
                 None => None,
             },
@@ -519,7 +519,7 @@ impl ManagerService {
                 password: svr_cfg.password().to_string(),
                 no_delay: None,
                 plugin: None,
-                plugin_opt: None,
+                plugin_opts: None,
                 mode: None,
             };
 

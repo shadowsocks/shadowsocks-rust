@@ -204,8 +204,8 @@ fn main() {
         if let Some(p) = matches.value_of("PLUGIN") {
             let plugin = PluginConfig {
                 plugin: p.to_owned(),
-                plugin_opt: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
-                plugin_arg: None,
+                plugin_opts: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+                plugin_args: Vec::new(),
             };
 
             sc.set_plugin(plugin);

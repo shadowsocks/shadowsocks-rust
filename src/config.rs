@@ -98,7 +98,7 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plugin_arg: Option<String>,
+    plugin_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,6 +129,8 @@ struct SSServerExtConfig {
     plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
 }
@@ -345,7 +347,7 @@ impl ServerConfig {
         let mut url = format!("ss://{}@{}", encoded_user_info, self.addr());
         if let Some(c) = self.plugin() {
             let mut plugin = c.plugin.clone();
-            if let Some(ref opt) = c.plugin_opt {
+            if let Some(ref opt) = c.plugin_opts {
                 plugin += ";";
                 plugin += opt;
             }
@@ -423,8 +425,8 @@ impl ServerConfig {
                     Some(p) => {
                         plugin = Some(PluginConfig {
                             plugin: p.to_owned(),
-                            plugin_opt: vsp.next().map(ToOwned::to_owned),
-                            plugin_arg: None,
+                            plugin_opts: vsp.next().map(ToOwned::to_owned),
+                            plugin_args: Vec::new(), // SIP002 doesn't have arguments for plugins
                         })
                     }
                 }
@@ -1212,8 +1214,8 @@ impl Config {
                     None => None,
                     Some(plugin) => Some(PluginConfig {
                         plugin,
-                        plugin_opt: config.plugin_opts,
-                        plugin_arg: config.plugin_arg,
+                        plugin_opts: config.plugin_opts,
+                        plugin_args: config.plugin_args.unwrap_or_default(),
                     }),
                 };
 
@@ -1260,8 +1262,8 @@ impl Config {
                     None => None,
                     Some(p) => Some(PluginConfig {
                         plugin: p,
-                        plugin_opt: svr.plugin_opts,
-                        plugin_arg: None,
+                        plugin_opts: svr.plugin_opts,
+                        plugin_args: svr.plugin_args.unwrap_or_default(),
                     }),
                 };
 
@@ -1495,8 +1497,14 @@ impl fmt::Display for Config {
                 jconf.method = Some(svr.method().to_string());
                 jconf.password = Some(svr.password().to_string());
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
-                jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opt.clone());
-                jconf.plugin_arg = svr.plugin().and_then(|p| p.plugin_arg.clone());
+                jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opts.clone());
+                jconf.plugin_args = svr.plugin().and_then(|p| {
+                    if p.plugin_args.is_empty() {
+                        None
+                    } else {
+                        Some(p.plugin_args.clone())
+                    }
+                });
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
             }
             _ => {
@@ -1515,7 +1523,14 @@ impl fmt::Display for Config {
                         password: svr.password().to_string(),
                         method: svr.method().to_string(),
                         plugin: svr.plugin().map(|p| p.plugin.to_string()),
-                        plugin_opts: svr.plugin().and_then(|p| p.plugin_opt.clone()),
+                        plugin_opts: svr.plugin().and_then(|p| p.plugin_opts.clone()),
+                        plugin_args: svr.plugin().and_then(|p| {
+                            if p.plugin_args.is_empty() {
+                                None
+                            } else {
+                                Some(p.plugin_args.clone())
+                            }
+                        }),
                         timeout: svr.timeout().map(|t| t.as_secs()),
                     });
                 }

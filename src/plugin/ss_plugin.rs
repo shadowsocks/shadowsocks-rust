@@ -6,9 +6,10 @@ use tokio::process::Command;
 
 pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, _mode: PluginMode) -> Command {
     trace!(
-        "Starting plugin \"{}\", opt: {:?} remote: {}, local: {}",
+        "Starting plugin \"{}\", opt: {:?}, arg: {:?}, remote: {}, local: {}",
         plugin.plugin,
-        plugin.plugin_opt,
+        plugin.plugin_opts,
+        plugin.plugin_args,
         remote,
         local
     );
@@ -21,12 +22,12 @@ pub fn plugin_cmd(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr
         .stdin(Stdio::null())
         .kill_on_drop(true);
 
-    if let Some(ref opt) = plugin.plugin_opt {
+    if let Some(ref opt) = plugin.plugin_opts {
         cmd.env("SS_PLUGIN_OPTIONS", opt);
     }
 
-    if let Some(ref arg) = plugin.plugin_arg {
-        cmd.arg(arg);
+    if !plugin.plugin_args.is_empty() {
+        cmd.args(&plugin.plugin_args);
     }
 
     cmd

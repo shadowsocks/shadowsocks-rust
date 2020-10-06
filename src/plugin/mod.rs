@@ -34,8 +34,8 @@ mod ss_plugin;
 #[derive(Debug, Clone)]
 pub struct PluginConfig {
     pub plugin: String,
-    pub plugin_opt: Option<String>,
-    pub plugin_arg: Option<String>,
+    pub plugin_opts: Option<String>,
+    pub plugin_args: Vec<String>,
 }
 
 /// Mode of Plugin
