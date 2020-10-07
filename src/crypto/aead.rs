@@ -211,6 +211,8 @@ fn increase_nonce_32_le(nonce: &mut [u8]) {
     }
 
     if i < nonce.len() {
+        // unlikely (missing intrinsic)
+
         increase_nonce_classic_le(&mut nonce[i..]);
     }
 }
@@ -231,10 +233,14 @@ fn increase_nonce_64_le(nonce: &mut [u8]) {
         i += 8;
     }
 
-    if i + 4 < nonce.len() {
-        increase_nonce_32_le(&mut nonce[i..]);
-    } else if i < nonce.len() {
-        increase_nonce_classic_le(&mut nonce[i..]);
+    if i < nonce.len() {
+        // unlinkely (missing intrinsic)
+
+        if i + 4 < nonce.len() {
+            increase_nonce_32_le(&mut nonce[i..]);
+        } else {
+            increase_nonce_classic_le(&mut nonce[i..]);
+        }
     }
 }
 
