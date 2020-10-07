@@ -90,11 +90,19 @@ async fn handle_client(
 
             match try_timeout(connect_tcp_stream(saddr, &bind_addr), timeout).await {
                 Ok(s) => {
-                    debug!("connected to remote {}", saddr);
+                    if let Some(ref ba) = bind_addr {
+                        debug!("connected to remote {} via {}", saddr, ba);
+                    } else {
+                        debug!("connected to remote {}", saddr);
+                    }
                     s
                 }
                 Err(err) => {
-                    error!("failed to connect remote {}, {}", saddr, err);
+                    if let Some(ref ba) = bind_addr {
+                        error!("failed to connect remote {} via {}, {}", saddr, ba, err);
+                    } else {
+                        error!("failed to connect remote {}, {}", saddr, err);
+                    }
                     return Err(err);
                 }
             }
@@ -115,11 +123,19 @@ async fn handle_client(
 
             match result {
                 Ok((addr, s)) => {
-                    trace!("connected remote {}:{} (resolved: {})", dname, port, addr);
+                    if let Some(ref ba) = bind_addr {
+                        debug!("connected remote {}:{} (resolved: {}) via {}", dname, port, addr, ba);
+                    } else {
+                        debug!("connected remote {}:{} (resolved: {})", dname, port, addr);
+                    }
                     s
                 }
                 Err(err) => {
-                    error!("failed to connect remote {}:{}, {}", dname, port, err);
+                    if let Some(ref ba) = bind_addr {
+                        error!("failed to connect remote {}:{} via {}, {}", dname, port, ba, err);
+                    } else {
+                        error!("failed to connect remote {}:{}, {}", dname, port, err);
+                    }
                     return Err(err);
                 }
             }
