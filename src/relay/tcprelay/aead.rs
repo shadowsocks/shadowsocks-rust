@@ -43,7 +43,7 @@ use std::{
 };
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
 use tokio::prelude::*;
 
@@ -224,7 +224,7 @@ impl DecryptedReader {
 
 enum EncryptWriteStep {
     Nothing,
-    Writing(BytesMut),
+    Writing,
 }
 
 /// Writer wrapper that will encrypt data automatically
@@ -232,17 +232,21 @@ pub struct EncryptedWriter {
     cipher: BoxAeadEncryptor,
     tag_size: usize,
     steps: EncryptWriteStep,
-    nonce: Option<Bytes>,
+    buf: BytesMut,
 }
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], nonce: Bytes) -> EncryptedWriter {
+    pub fn new(t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+        // nonce should be sent with the first packet
+        let mut buf = BytesMut::with_capacity(nonce.len());
+        buf.put(nonce);
+
         EncryptedWriter {
-            cipher: crypto::new_aead_encryptor(t, key, &nonce),
+            cipher: crypto::new_aead_encryptor(t, key, nonce),
             tag_size: t.tag_size(),
             steps: EncryptWriteStep::Nothing,
-            nonce: Some(nonce),
+            buf,
         }
     }
 
@@ -279,43 +283,35 @@ impl EncryptedWriter {
                     let output_length = self.buffer_size(data);
                     let data_length = data.len() as u16;
 
-                    // Send the first packet with nonce
-                    let nonce_length = match self.nonce {
-                        Some(ref n) => n.len(),
-                        None => 0,
-                    };
-
-                    let mut buf = BytesMut::with_capacity(nonce_length + output_length);
-
-                    // Put nonce first
-                    if let Some(n) = self.nonce.take() {
-                        buf.extend(n);
-                    }
+                    self.buf.reserve(output_length);
 
                     let mut data_len_buf = [0u8; 2];
                     BigEndian::write_u16(&mut data_len_buf, data_length);
 
                     unsafe {
-                        let b = slice::from_raw_parts_mut(buf.bytes_mut().as_mut_ptr() as *mut u8, output_length);
+                        let b = slice::from_raw_parts_mut(self.buf.bytes_mut().as_mut_ptr() as *mut u8, output_length);
 
                         let output_length_size = 2 + self.tag_size;
                         self.cipher.encrypt(&data_len_buf, &mut b[..output_length_size]);
                         self.cipher.encrypt(data, &mut b[output_length_size..output_length]);
 
-                        buf.advance_mut(output_length);
+                        self.buf.advance_mut(output_length);
                     }
 
-                    self.steps = EncryptWriteStep::Writing(buf);
+                    self.steps = EncryptWriteStep::Writing;
                 }
-                EncryptWriteStep::Writing(ref mut buf) => {
-                    while buf.remaining() > 0 {
-                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, buf))?;
+                EncryptWriteStep::Writing => {
+                    while self.buf.remaining() > 0 {
+                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, &mut self.buf))?;
                         if n == 0 {
                             use std::io::ErrorKind;
                             return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
                         }
                     }
 
+                    // Reclaim buffer
+                    // NOTE: This operation won't free allocated memory
+                    self.buf.clear();
                     self.steps = EncryptWriteStep::Nothing;
                     return Poll::Ready(Ok(()));
                 }

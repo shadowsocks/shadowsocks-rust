@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
 use tokio::prelude::*;
 
@@ -87,23 +87,27 @@ impl DecryptedReader {
 
 enum EncryptWriteStep {
     Nothing,
-    Writing(BytesMut),
+    Writing,
 }
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter {
     cipher: BoxStreamCipher,
     steps: EncryptWriteStep,
-    iv: Option<Bytes>,
+    buf: BytesMut,
 }
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], iv: Bytes) -> EncryptedWriter {
+    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter {
+        // iv should be sent with the first packet
+        let mut buf = BytesMut::with_capacity(iv.len());
+        buf.put(iv);
+
         EncryptedWriter {
             cipher: new_stream(t, key, &iv, CryptoMode::Encrypt),
             steps: EncryptWriteStep::Nothing,
-            iv: Some(iv),
+            buf,
         }
     }
 
@@ -124,26 +128,13 @@ impl EncryptedWriter {
         loop {
             match self.steps {
                 EncryptWriteStep::Nothing => {
-                    // Send the first packet with iv
-                    let iv_length = match self.iv {
-                        Some(ref i) => i.len(),
-                        None => 0,
-                    };
-
-                    let mut buf = BytesMut::with_capacity(iv_length + self.buffer_size(data));
-
-                    // Put iv first
-                    if let Some(i) = self.iv.take() {
-                        buf.extend(i);
-                    }
-
-                    self.cipher_update(data, &mut buf)?;
-
-                    self.steps = EncryptWriteStep::Writing(buf);
+                    self.buf.reserve(self.buffer_size(data));
+                    self.cipher.update(data, &mut self.buf)?;
+                    self.steps = EncryptWriteStep::Writing;
                 }
-                EncryptWriteStep::Writing(ref mut buf) => {
-                    while buf.remaining() > 0 {
-                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, buf))?;
+                EncryptWriteStep::Writing => {
+                    while self.buf.remaining() > 0 {
+                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, &mut self.buf))?;
                         if n == 0 {
                             use std::io::ErrorKind;
                             return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
@@ -155,15 +146,6 @@ impl EncryptedWriter {
                 }
             }
         }
-    }
-
-    fn cipher_update<B: BufMut>(&mut self, data: &[u8], buf: &mut B) -> io::Result<()> {
-        self.cipher.update(data, buf).map_err(From::from)
-    }
-
-    #[allow(dead_code)]
-    fn cipher_finalize<B: BufMut>(&mut self, buf: &mut B) -> io::Result<()> {
-        self.cipher.finalize(buf).map_err(From::from)
     }
 
     fn buffer_size(&self, data: &[u8]) -> usize {

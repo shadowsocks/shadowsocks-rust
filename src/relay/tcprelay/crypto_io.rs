@@ -109,8 +109,8 @@ impl<S> CryptoStream<S> {
 
         let method = svr_cfg.method();
         let enc = match method.category() {
-            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, svr_cfg.key(), iv)),
-            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, svr_cfg.key(), iv)),
+            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, svr_cfg.key(), &iv)),
+            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, svr_cfg.key(), &iv)),
             CipherCategory::None => EncryptedWriter::None,
         };
 
