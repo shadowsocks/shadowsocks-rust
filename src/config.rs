@@ -218,6 +218,42 @@ impl<I: Into<String>> From<(I, u16)> for ServerAddr {
     }
 }
 
+impl From<Address> for ServerAddr {
+    fn from(addr: Address) -> ServerAddr {
+        match addr {
+            Address::SocketAddress(sa) => ServerAddr::SocketAddr(sa),
+            Address::DomainNameAddress(dn, port) => ServerAddr::DomainName(dn, port),
+        }
+    }
+}
+
+impl From<&Address> for ServerAddr {
+    fn from(addr: &Address) -> ServerAddr {
+        match *addr {
+            Address::SocketAddress(sa) => ServerAddr::SocketAddr(sa),
+            Address::DomainNameAddress(ref dn, port) => ServerAddr::DomainName(dn.clone(), port),
+        }
+    }
+}
+
+impl From<ServerAddr> for Address {
+    fn from(addr: ServerAddr) -> Address {
+        match addr {
+            ServerAddr::SocketAddr(sa) => Address::SocketAddress(sa),
+            ServerAddr::DomainName(dn, port) => Address::DomainNameAddress(dn, port),
+        }
+    }
+}
+
+impl From<&ServerAddr> for Address {
+    fn from(addr: &ServerAddr) -> Address {
+        match *addr {
+            ServerAddr::SocketAddr(sa) => Address::SocketAddress(sa),
+            ServerAddr::DomainName(ref dn, port) => Address::DomainNameAddress(dn.clone(), port),
+        }
+    }
+}
+
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -1011,6 +1047,10 @@ pub struct Config {
     pub udp_timeout: Option<Duration>,
     /// Maximum number of UDP Associations, default is unconfigured
     pub udp_max_associations: Option<usize>,
+    /// UDP relay's bind address, it uses `local_addr` by default
+    ///
+    /// Resolving Android's issue: https://github.com/shadowsocks/shadowsocks-android/issues/2571
+    pub udp_bind_addr: Option<ClientConfig>,
     /// `RLIMIT_NOFILE` option for *nix systems
     pub nofile: Option<u64>,
     /// ACL configuration
@@ -1129,6 +1169,7 @@ impl Config {
             config_type,
             udp_timeout: None,
             udp_max_associations: None,
+            udp_bind_addr: None,
             nofile: None,
             acl: None,
             tcp_redir: RedirType::tcp_default(),

@@ -76,8 +76,13 @@ fn assemble_packet(addr: Address, pkt: &[u8]) -> Bytes {
 
 /// Starts a UDP local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = context.config().local_addr.as_ref().expect("local config");
-    let bind_addr = local_addr.bind_addr(&context).await?;
+    let bind_addr = match context.config().udp_bind_addr {
+        Some(ref bind_addr) => bind_addr.bind_addr(&context).await?,
+        None => {
+            let local_addr = context.config().local_addr.as_ref().expect("local config");
+            local_addr.bind_addr(&context).await?
+        }
+    };
 
     let l = create_udp_socket(&bind_addr).await?;
     let local_addr = l.local_addr().expect("determine port bound to");

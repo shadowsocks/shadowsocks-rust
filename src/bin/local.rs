@@ -86,6 +86,8 @@ fn main() {
 
         (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
+
+        (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
     );
 
     // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
@@ -336,6 +338,10 @@ fn main() {
 
     if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
         config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
+    }
+
+    if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
+        config.udp_bind_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
     }
 
     // DONE READING options

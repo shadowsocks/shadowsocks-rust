@@ -196,7 +196,17 @@ async fn handle_socks5_client(
             Ok(())
         }
         socks5::Command::UdpAssociate => {
-            if udp_conf.enable_udp {
+            if let Some(ref bind_addr) = server.config().udp_bind_addr {
+                debug!("UDP ASSOCIATE {}", addr);
+
+                let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, bind_addr.into());
+                rh.write_to(&mut s).await?;
+
+                // Hold the connection until it ends by its own
+                ignore_until_end(&mut s).await?;
+
+                Ok(())
+            } else if udp_conf.enable_udp {
                 debug!("UDP ASSOCIATE {}", addr);
                 let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, From::from(udp_conf.client_addr));
                 rh.write_to(&mut s).await?;
