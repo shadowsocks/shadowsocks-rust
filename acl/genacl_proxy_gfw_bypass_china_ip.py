@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
 
-'''
-This is a script for demostrating how ACL works
-
-THANKS:
-
-- gfwlist: https://github.com/gfwlist/gfwlist
-- gfwlist.acl: https://github.com/NateScarlet/gfwlist.acl
-- china_ip_list: https://github.com/17mon/china_ip_list
-'''
-
 from urllib import request, parse
 import logging
 import sys
@@ -21,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 GFW_TRANSLATED_URL = "https://raw.githubusercontent.com/NateScarlet/gfwlist.acl/master/gfwlist.acl.json"
 CHINA_IP_LIST_URL = "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt"
+CUSTOM_BYPASS = [
+    "127.0.0.1",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+]
+CUSTOM_PROXY = [
+
+]
 
 
 def fetch_url_content(url):
@@ -40,6 +39,7 @@ def write_gfw_list(fp):
 def write_china_ip(fp):
     china_ip_list = fetch_url_content(CHINA_IP_LIST_URL)
     fp.write(china_ip_list)
+    fp.write(b"\n")
 
 
 try:
@@ -61,5 +61,19 @@ with open(output_file_path, 'wb') as fp:
     write_gfw_list(fp)
     fp.write(b"\n[bypass_list]\n")
     write_china_ip(fp)
+
+    if len(CUSTOM_BYPASS) > 0:
+        logger.info("CUSTOM_BYPASS {} lines".format(len(CUSTOM_BYPASS)))
+        fp.write(b"\n[bypass_list]\n")
+        for a in CUSTOM_BYPASS:
+            fp.write(a.encode("utf-8"))
+            fp.write(b"\n")
+
+    if len(CUSTOM_PROXY) > 0:
+        logger.info("CUSTOM_PROXY {} lines".format(len(CUSTOM_PROXY)))
+        fp.write(b"\n[proxy_list]\n")
+        for a in CUSTOM_PROXY:
+            fp.write(a.encode("utf-8"))
+            fp.write(b"\n")
 
 logger.info("DONE")
