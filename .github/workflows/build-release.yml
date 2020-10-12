@@ -55,6 +55,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install GNU tar
+        if: runner.os == 'macOS'
+        run: |
+          brew install gnu-tar
+          echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
+
       - name: Build release
         shell: bash
         run: |

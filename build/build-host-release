@@ -60,6 +60,11 @@ if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
 else
     # For others, Linux, OS X, uses tar.xz
 
+    # For Darwin, .DS_Store and other related files should be ignored
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        export COPYFILE_DISABLE=1
+    fi
+
     RELEASE_PACKAGE_FILE_NAME="${RELEASE_PACKAGE_NAME}.tar.xz"
     RELEASE_PACKAGE_FILE_PATH="${RELEASE_FOLDER}/${RELEASE_PACKAGE_FILE_NAME}"
     tar -cJf "${RELEASE_PACKAGE_FILE_PATH}" "${TARGETS[@]}"

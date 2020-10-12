@@ -3,8 +3,10 @@
 CUR_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' ${CUR_DIR}/../Cargo.toml | awk '{print $3}' | sed 's/"//g')
 
-## Disable OS X ACL file
-export COPYFILE_DISABLE=1
+## Disable macos ACL file
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    export COPYFILE_DISABLE=1
+fi
 
 targets=()
 
