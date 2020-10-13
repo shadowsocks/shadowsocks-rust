@@ -494,23 +494,30 @@ impl ProxyAssociation {
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
     {
-        let relay_fut = Self::r2l_packet(src_addr, server, sender, socket);
-        let (relay_task, relay_watcher) = future::abortable(relay_fut);
+        if is_bypassed {
+            let relay_fut = Self::r2l_packet_bypassed(src_addr, server, sender, socket);
+            let (relay_task, relay_watcher) = future::abortable(relay_fut);
 
-        tokio::spawn(async move {
-            let _ = relay_task.await;
+            tokio::spawn(async move {
+                let _ = relay_task.await;
+                debug!("UDP association (bypassed) {} <- .. task is closing", src_addr);
+            });
 
-            debug!(
-                "UDP association ({}) {} <- .. task is closing",
-                if is_bypassed { "bypassed" } else { "proxied" },
-                src_addr
-            );
-        });
+            relay_watcher
+        } else {
+            let relay_fut = Self::r2l_packet_proxied(src_addr, server, sender, socket);
+            let (relay_task, relay_watcher) = future::abortable(relay_fut);
 
-        relay_watcher
+            tokio::spawn(async move {
+                let _ = relay_task.await;
+                debug!("UDP association (proxied) {} <- .. task is closing", src_addr);
+            });
+
+            relay_watcher
+        }
     }
 
-    async fn r2l_packet<S, H>(
+    async fn r2l_packet_proxied<S, H>(
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut sender: H,
@@ -581,6 +588,54 @@ impl ProxyAssociation {
         }
 
         Ok((addr, payload))
+    }
+
+    async fn r2l_packet_bypassed<S, H>(
+        src_addr: SocketAddr,
+        server: SharedServerStatistic<S>,
+        mut sender: H,
+        mut socket: RecvHalf,
+    ) where
+        S: ServerData + Send + 'static,
+        H: ProxySend + Send + 'static,
+    {
+        let context = server.context();
+
+        loop {
+            match Self::recv_packet_bypassed(context, &mut socket).await {
+                Ok((addr, data)) => {
+                    debug!(
+                        "UDP association {} <- .., payload length {} bytes",
+                        src_addr,
+                        data.len()
+                    );
+
+                    if let Err(err) = sender.send_packet(addr, data).await {
+                        error!("UDP association send {} <- .., error: {}", src_addr, err);
+                    }
+                }
+                Err(err) => {
+                    error!("UDP association recv {} <- .., error: {}", src_addr, err);
+                }
+            }
+        }
+    }
+
+    #[allow(unused_variables)]
+    async fn recv_packet_bypassed(context: &Context, socket: &mut RecvHalf) -> io::Result<(Address, Vec<u8>)> {
+        // Waiting for response from server SERVER -> CLIENT
+        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+
+        let (recv_n, addr) = socket.recv_from(&mut recv_buf).await?;
+        recv_buf.truncate(recv_n);
+
+        #[cfg(feature = "local-flow-stat")]
+        {
+            context.local_flow_statistic().udp().incr_rx(recv_n);
+        }
+
+        Ok((addr.into(), recv_buf))
     }
 }
 
