@@ -906,6 +906,7 @@ impl Display for RedirType {
     }
 }
 
+/// Error type for `RedirType`'s `FromStr::Err`
 #[derive(Debug)]
 pub struct InvalidRedirType;
 
