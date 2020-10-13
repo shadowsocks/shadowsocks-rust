@@ -761,6 +761,8 @@ impl Drop for ServerAssociation {
     }
 }
 
+type SharedResolvedAddressCache = Arc<SyncMutex<LruCache<SocketAddr, Address>>>;
+
 impl ServerAssociation {
     /// Create an association with addr
     pub async fn associate(
@@ -786,16 +788,33 @@ impl ServerAssociation {
 
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
+        // ResolvedIP:Port -> Domain:Port
+        // When received a packet, we have to translate it back to the domain name address to clients
+        //
+        // FIXME: 512 is not a thoughtful value.
+        let resolved_address_cache = Arc::new(SyncMutex::new(LruCache::with_expiry_duration_and_capacity(
+            timeout, 512,
+        )));
+
         // local -> remote
         {
             let context = context.clone();
+            let resolved_address_cache = resolved_address_cache.clone();
             tokio::spawn(async move {
                 let svr_cfg = context.server_config(svr_idx);
 
                 while let Some(pkt) = rx.recv().await {
                     // pkt is already a raw packet, so just send it
-                    if let Err(err) =
-                        ServerAssociation::relay_l2r(&context, src_addr, &mut sender, pkt, timeout, svr_cfg).await
+                    if let Err(err) = ServerAssociation::relay_l2r(
+                        &context,
+                        src_addr,
+                        &mut sender,
+                        pkt,
+                        timeout,
+                        svr_cfg,
+                        &resolved_address_cache,
+                    )
+                    .await
                     {
                         error!("failed to relay packet, {} -> ..., error: {}", src_addr, err);
 
@@ -812,7 +831,16 @@ impl ServerAssociation {
 
             loop {
                 // Read and send back to source
-                match ServerAssociation::relay_r2l(&context, src_addr, &mut receiver, &mut response_tx, svr_cfg).await {
+                match ServerAssociation::relay_r2l(
+                    &context,
+                    src_addr,
+                    &mut receiver,
+                    &mut response_tx,
+                    svr_cfg,
+                    &resolved_address_cache,
+                )
+                .await
+                {
                     Ok(..) => {}
                     Err(err) => {
                         error!("failed to receive packet, {} <- .., error: {}", src_addr, err);
@@ -845,6 +873,7 @@ impl ServerAssociation {
         pkt: Vec<u8>,
         timeout: Duration,
         svr_cfg: &ServerConfig,
+        resolved_address_cache: &SharedResolvedAddressCache,
     ) -> io::Result<()> {
         // First of all, decrypt payload CLIENT -> SERVER
         let mut cur = if let CipherCategory::None = svr_cfg.method().category() {
@@ -892,6 +921,9 @@ impl ServerAssociation {
                 try_timeout(remote_udp.send_to(body, remote_addr), Some(timeout)).await?
             }
             Address::DomainNameAddress(ref dname, port) => lookup_then!(context, dname, port, |remote_addr| {
+                // Record the address mapping no matter send_to is succeeded or not
+                resolved_address_cache.lock().insert(remote_addr, addr.clone());
+
                 match try_timeout(remote_udp.send_to(body, &remote_addr), Some(timeout)).await {
                     Ok(l) => {
                         debug!(
@@ -930,19 +962,23 @@ impl ServerAssociation {
         remote_udp: &mut RecvHalf,
         response_tx: &mut mpsc::Sender<(SocketAddr, BytesMut)>,
         svr_cfg: &ServerConfig,
+        resolved_address_cache: &SharedResolvedAddressCache,
     ) -> io::Result<()> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut remote_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (remote_recv_len, remote_addr) = remote_udp.recv_from(&mut remote_buf).await?;
 
-        debug!(
-            "UDP ASSOCIATE {} <- {}, payload length {} bytes",
-            src_addr, remote_addr, remote_recv_len
-        );
+        let addr = match resolved_address_cache.lock().get(&remote_addr) {
+            // Translate it back to the domain name address from the request
+            Some(a) => a.clone(),
+            None => Address::from(remote_addr),
+        };
 
-        // FIXME: The Address should be the Address that client sent
-        let addr = Address::SocketAddress(remote_addr);
+        debug!(
+            "UDP ASSOCIATE {} <- {} ({}), payload length {} bytes",
+            src_addr, addr, remote_addr, remote_recv_len
+        );
 
         // CLIENT <- SERVER protocol: ADDRESS + PAYLOAD
         let mut send_buf = BytesMut::with_capacity(addr.serialized_len() + remote_recv_len);

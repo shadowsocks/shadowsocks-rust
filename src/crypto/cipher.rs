@@ -395,10 +395,10 @@ impl CipherType {
         let mut d = Md5::new();
         while result.len() < key_len {
             if let Some(ref rm) = m {
-                d.input(rm);
+                d.update(rm);
             }
-            d.input(key);
-            let digest = d.result_reset();
+            d.update(key);
+            let digest = d.finalize_reset();
             result.put(&*digest);
 
             m = Some(digest);

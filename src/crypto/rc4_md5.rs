@@ -14,10 +14,10 @@ pub struct Rc4Md5Cipher {
 impl Rc4Md5Cipher {
     pub fn new(key: &[u8], iv: &[u8], mode: CryptoMode) -> Rc4Md5Cipher {
         let mut md5_digest = Md5::new();
-        md5_digest.input(key);
-        md5_digest.input(iv);
+        md5_digest.update(key);
+        md5_digest.update(iv);
 
-        let key = md5_digest.result();
+        let key = md5_digest.finalize();
 
         Rc4Md5Cipher {
             crypto: OpenSSLCrypto::new(CipherType::Rc4, &key, b"", mode),
