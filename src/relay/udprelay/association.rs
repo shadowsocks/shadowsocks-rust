@@ -17,6 +17,7 @@ use bytes::BytesMut;
 use futures::future::{self, AbortHandle};
 use log::{debug, error, warn};
 use lru_time_cache::{Entry, LruCache};
+use spin::Mutex as SyncMutex;
 use tokio::{
     self,
     net::{
@@ -50,25 +51,83 @@ pub trait ProxySend {
     async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()>;
 }
 
+struct ProxyTaskWatchers {
+    proxied_watcher: SyncMutex<Option<AbortHandle>>,
+    bypassed_watcher: SyncMutex<Option<AbortHandle>>,
+}
+
+impl ProxyTaskWatchers {
+    fn new(pw: Option<AbortHandle>, bw: Option<AbortHandle>) -> ProxyTaskWatchers {
+        ProxyTaskWatchers {
+            proxied_watcher: SyncMutex::new(pw),
+            bypassed_watcher: SyncMutex::new(bw),
+        }
+    }
+
+    fn set_proxied_watcher(&self, h: AbortHandle) {
+        *self.proxied_watcher.lock() = Some(h);
+    }
+
+    fn set_bypassed_watcher(&self, h: AbortHandle) {
+        *self.bypassed_watcher.lock() = Some(h);
+    }
+}
+
+#[derive(Clone)]
 pub struct ProxyAssociation {
     tx: mpsc::Sender<(Address, Vec<u8>)>,
-    watchers: Vec<AbortHandle>,
+    watchers: Arc<ProxyTaskWatchers>,
 }
 
 impl Drop for ProxyAssociation {
     fn drop(&mut self) {
-        for watcher in &self.watchers {
-            watcher.abort();
+        if let Some(ref h) = *self.watchers.proxied_watcher.lock() {
+            h.abort();
+        }
+
+        if let Some(ref h) = *self.watchers.bypassed_watcher.lock() {
+            h.abort();
         }
     }
 }
 
 impl ProxyAssociation {
+    fn create(
+        pw: Option<AbortHandle>,
+        bw: Option<AbortHandle>,
+    ) -> (ProxyAssociation, mpsc::Receiver<(Address, Vec<u8>)>) {
+        // Create a channel for sending packets to remote
+        // FIXME: Channel size 1024?
+        let (tx, rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
+        let watchers = Arc::new(ProxyTaskWatchers::new(pw, bw));
+
+        (ProxyAssociation { tx, watchers }, rx)
+    }
+
     pub async fn associate_proxied<S, H>(
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         sender: H,
     ) -> io::Result<ProxyAssociation>
+    where
+        S: ServerData + Send + 'static,
+        H: ProxySend + Send + 'static,
+    {
+        let (remote_sender, remote_watcher) = Self::create_associate_proxied(src_addr, server.clone(), sender).await?;
+        let (assoc, rx) = ProxyAssociation::create(Some(remote_watcher), None);
+
+        // LOCAL -> REMOTE task
+        // All packets will be sent directly to proxy
+        tokio::spawn(Self::l2r_packet_proxied(src_addr, server.clone(), rx, remote_sender));
+
+        Ok(assoc)
+    }
+
+    async fn create_associate_proxied<S, H>(
+        src_addr: SocketAddr,
+        server: SharedServerStatistic<S>,
+        sender: H,
+    ) -> io::Result<(SendHalf, AbortHandle)>
     where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
@@ -79,28 +138,22 @@ impl ProxyAssociation {
         let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
-        debug!("created UDP association {} <-> {}", src_addr, remote_bind_addr);
+        debug!(
+            "created UDP association {} <-> {} (proxied)",
+            src_addr, remote_bind_addr
+        );
 
         // connect() to remote server to avoid resolving server's address every call of send()
         // ref: #263
         ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
 
-        // Create a channel for sending packets to remote
-        // FIXME: Channel size 1024?
-        let (tx, rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
-
         // Splits socket into sender and receiver
         let (remote_receiver, remote_sender) = remote_udp.split();
 
-        // LOCAL -> REMOTE task
-        // All packets will be sent directly to proxy
-        tokio::spawn(Self::l2r_packet_proxied(src_addr, server.clone(), rx, remote_sender));
-
-        // REMOTE <- LOCAL task
+        // LOCAL <- REMOTE task
         let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, false);
-        let watchers = vec![remote_watcher];
 
-        Ok(ProxyAssociation { tx, watchers })
+        Ok((remote_sender, remote_watcher))
     }
 
     pub async fn associate_bypassed<S, H>(
@@ -112,30 +165,43 @@ impl ProxyAssociation {
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
     {
+        let (remote_sender, remote_watcher) = Self::create_associate_bypassed(src_addr, server.clone(), sender).await?;
+        let (assoc, rx) = ProxyAssociation::create(None, Some(remote_watcher));
+
+        // LOCAL -> REMOTE task
+        // All packets will be sent directly to proxy
+        tokio::spawn(Self::l2r_packet_bypassed(src_addr, server, rx, remote_sender));
+
+        Ok(assoc)
+    }
+
+    async fn create_associate_bypassed<S, H>(
+        src_addr: SocketAddr,
+        server: SharedServerStatistic<S>,
+        sender: H,
+    ) -> io::Result<(SendHalf, AbortHandle)>
+    where
+        S: ServerData + Send + 'static,
+        H: ProxySend + Send + 'static,
+    {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 
         let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
-        debug!("created UDP association {} <-> {}", src_addr, remote_bind_addr);
-
-        // Create a channel for sending packets to remote
-        // FIXME: Channel size 1024?
-        let (tx, rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
+        debug!(
+            "created UDP association {} <-> {} (bypassed)",
+            src_addr, remote_bind_addr
+        );
 
         // Splits socket into sender and receiver
         let (remote_receiver, remote_sender) = remote_udp.split();
 
-        // LOCAL -> REMOTE task
-        // All packets will be sent directly to proxy
-        tokio::spawn(Self::l2r_packet_bypassed(src_addr, server.clone(), rx, remote_sender));
-
         // REMOTE <- LOCAL task
         let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, true);
-        let watchers = vec![remote_watcher];
 
-        Ok(ProxyAssociation { tx, watchers })
+        Ok((remote_sender, remote_watcher))
     }
 
     pub async fn associate_with_acl<S, H>(
@@ -152,52 +218,17 @@ impl ProxyAssociation {
             return ProxyAssociation::associate_proxied(src_addr, server, sender).await;
         }
 
-        // Create a socket for receiving packets
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-
-        let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
-        let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
-
-        // connect() to remote server to avoid resolving server's address every call of send()
-        // ref: #263
-        ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
-
-        // A socket for bypassed
-        let bypass_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
-        let bypass_bind_addr = bypass_udp.local_addr().expect("determine port bound to");
-
-        debug!(
-            "created UDP association {} <-> {}, {}",
-            src_addr, remote_bind_addr, bypass_bind_addr
-        );
-
-        // Create a channel for sending packets to remote
-        // FIXME: Channel size 1024?
-        let (tx, rx) = mpsc::channel::<(Address, Vec<u8>)>(1024);
-
-        // Splits socket into sender and receiver
-        let (remote_receiver, remote_sender) = remote_udp.split();
-        let (bypass_receiver, bypass_sender) = bypass_udp.split();
+        let (assoc, rx) = ProxyAssociation::create(None, None);
 
         // LOCAL -> REMOTE task
         // Packets may be sent via proxy decided by acl rules
 
-        tokio::spawn(Self::l2r_packet_acl(
-            src_addr,
-            server.clone(),
-            rx,
-            bypass_sender,
-            remote_sender,
-        ));
+        {
+            let assoc = assoc.clone();
+            tokio::spawn(async move { assoc.l2r_packet_acl(src_addr, server, rx, sender).await });
+        }
 
-        // LOCAL <- REMOTE task
-
-        let bypass_watcher =
-            Self::r2l_packet_abortable(src_addr, server.clone(), sender.clone(), bypass_receiver, true);
-        let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, false);
-        let watchers = vec![bypass_watcher, remote_watcher];
-
-        Ok(ProxyAssociation { tx, watchers })
+        Ok(assoc)
     }
 
     async fn connect_remote(context: &Context, svr_cfg: &ServerConfig, remote_udp: &UdpSocket) -> io::Result<()> {
@@ -236,26 +267,74 @@ impl ProxyAssociation {
         }
     }
 
-    async fn l2r_packet_acl<S>(
+    async fn l2r_packet_acl<S, H>(
+        &self,
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut rx: mpsc::Receiver<(Address, Vec<u8>)>,
-        mut bypass_sender: SendHalf,
-        mut remote_sender: SendHalf,
+        sender: H,
     ) where
         S: ServerData + Send + 'static,
+        H: ProxySend + Clone + Send + 'static,
     {
         let context = server.context();
         let svr_cfg = server.server_config();
 
+        let mut bypass_sender_opt = None;
+        let mut remote_sender_opt = None;
+
         while let Some((addr, payload)) = rx.recv().await {
             // Check if addr should be bypassed
+            //
+            // Bypassed and Proxied are 2 separated associations, will be created dynamically.
             let is_bypassed = context.check_target_bypassed(&addr).await;
 
             let res = if is_bypassed {
-                Self::send_packet_bypassed(src_addr, context, &addr, &payload, &mut bypass_sender).await
+                if bypass_sender_opt.is_none() {
+                    let server = server.clone();
+                    let sender = sender.clone();
+
+                    let bypass_sender = match Self::create_associate_bypassed(src_addr, server, sender).await {
+                        Ok((bypass_sender, bypass_watcher)) => {
+                            self.watchers.set_bypassed_watcher(bypass_watcher);
+                            bypass_sender
+                        }
+                        Err(err) => {
+                            error!(
+                                "creating UDP association from {} (bypassed) failed, err: {}",
+                                src_addr, err
+                            );
+                            continue;
+                        }
+                    };
+                    bypass_sender_opt = Some(bypass_sender);
+                }
+
+                let bypass_sender = bypass_sender_opt.as_mut().unwrap();
+                Self::send_packet_bypassed(src_addr, context, &addr, &payload, bypass_sender).await
             } else {
-                Self::send_packet_proxied(src_addr, context, svr_cfg, &addr, &payload, &mut remote_sender).await
+                if remote_sender_opt.is_none() {
+                    let server = server.clone();
+                    let sender = sender.clone();
+
+                    let remote_sender = match Self::create_associate_proxied(src_addr, server, sender).await {
+                        Ok((remote_sender, remote_watcher)) => {
+                            self.watchers.set_proxied_watcher(remote_watcher);
+                            remote_sender
+                        }
+                        Err(err) => {
+                            error!(
+                                "creating UDP association from {} (proxied) failed, err: {}",
+                                src_addr, err
+                            );
+                            continue;
+                        }
+                    };
+                    remote_sender_opt = Some(remote_sender);
+                }
+
+                let remote_sender = remote_sender_opt.as_mut().unwrap();
+                Self::send_packet_proxied(src_addr, context, svr_cfg, &addr, &payload, remote_sender).await
             };
 
             if let Err(err) = res {
