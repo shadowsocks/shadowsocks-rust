@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.8.21"
+version = "1.9.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -92,7 +92,7 @@ clap = { version = "2.33", features = ["suggestions", "wrap_help"] }
 log4rs = "0.13"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
-tokio = { version = "^0.2.11", features = ["macros", "net", "signal", "time", "sync", "process", "rt-threaded", "rt-core", "stream", "io-util", "parking_lot"] }
+tokio = { version = "^0.3", features = ["full"] }
 tokio-native-tls = { version = "0.1", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.14", optional = true }
@@ -128,8 +128,7 @@ socket2 = "0.3"
 cfg-if = "1.0"
 bloomfilter = "^1.0.2"
 spin = "0.7"
-mio = "0.6"
-mio-uds = "0.6"
+mio = { version = "0.7", features = ["udp", "uds"] }
 serde_json = "1.0"
 regex = "1"
 strum = "0.19"

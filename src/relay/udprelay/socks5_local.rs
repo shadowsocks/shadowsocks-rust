@@ -3,6 +3,7 @@
 use std::{
     io::{self, Cursor, ErrorKind, Read},
     net::SocketAddr,
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -89,7 +90,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
 
-    let (mut r, mut w) = l.split();
+    let r = Arc::new(l);
+    let w = r.clone();
 
     info!("shadowsocks SOCKS5 UDP listening on {}", local_addr);
 

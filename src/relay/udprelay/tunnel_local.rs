@@ -1,6 +1,6 @@
 //! UDP relay local server
 
-use std::{io, net::SocketAddr};
+use std::{io, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use log::{debug, error, info, trace};
@@ -46,7 +46,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
 
-    let (mut r, mut w) = l.split();
+    let r = Arc::new(l);
+    let w = r.clone();
 
     let forward_target = context.config().forward.clone().expect("`forward` address in config");
 

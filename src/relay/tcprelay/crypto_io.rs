@@ -16,10 +16,7 @@ use bytes::{
 };
 use futures::ready;
 use log::{debug, trace};
-use tokio::{
-    io::{ReadHalf, WriteHalf},
-    prelude::*,
-};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     config::ServerConfig,
@@ -154,7 +151,12 @@ where
     fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let ReadStatus::WaitIv(ref ctx, ref mut buf, method, ref key) = self.read_status {
             while buf.has_remaining_mut() {
-                let n = ready!(Pin::new(&mut self.stream).poll_read_buf(cx, buf))?;
+                let mut buffer = ReadBuf::uninit(buf.bytes_mut());
+                ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buffer))?;
+                let n = buffer.filled().len();
+                unsafe {
+                    buf.advance_mut(n);
+                }
                 if n == 0 {
                     use std::io::ErrorKind;
                     return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
@@ -192,7 +194,7 @@ where
         Poll::Ready(Ok(()))
     }
 
-    fn priv_poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn priv_poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         ready!(this.poll_read_handshake(ctx))?;
 
@@ -243,7 +245,7 @@ impl<S> AsyncRead for CryptoStream<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         self.priv_poll_read(ctx, buf)
     }
 }

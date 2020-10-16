@@ -45,7 +45,7 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
-use tokio::prelude::*;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
@@ -88,15 +88,15 @@ impl DecryptedReader {
         &mut self,
         ctx: &mut Context<'_>,
         r: &mut R,
-        dst: &mut [u8],
-    ) -> Poll<io::Result<usize>>
+        dst: &mut ReadBuf,
+    ) -> Poll<io::Result<()>>
     where
         R: AsyncRead + Unpin,
     {
         while self.pos >= self.data.len() {
             // Already received EOF
             if self.got_final {
-                return Poll::Ready(Ok(0));
+                return Poll::Ready(Ok(()));
             }
 
             // Refill buffer
@@ -107,10 +107,10 @@ impl DecryptedReader {
         }
 
         let remaining_len = self.data.len() - self.pos;
-        let n = cmp::min(dst.len(), remaining_len);
-        (&mut dst[..n]).copy_from_slice(&self.data[self.pos..self.pos + n]);
+        let n = cmp::min(dst.remaining(), remaining_len);
+        dst.put_slice(&self.data[self.pos..self.pos + n]);
         self.pos += n;
-        Poll::Ready(Ok(n))
+        Poll::Ready(Ok(()))
     }
 
     fn poll_read_decrypted_length<R>(&mut self, ctx: &mut Context<'_>, r: &mut R) -> Poll<io::Result<()>>
@@ -202,8 +202,9 @@ impl DecryptedReader {
             let remaining = size - self.buffer.len();
             unsafe {
                 // It has enough space, I am sure about that
-                let buffer = slice::from_raw_parts_mut(self.buffer.bytes_mut().as_mut_ptr() as *mut u8, remaining);
-                let n = ready!(Pin::new(&mut *r).poll_read(ctx, buffer))?;
+                let mut buffer = ReadBuf::uninit(self.buffer.bytes_mut());
+                ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
+                let n = buffer.filled().len();
                 if n == 0 {
                     if self.buffer.is_empty() && allow_eof && !self.got_final {
                         // Read nothing
@@ -301,8 +302,9 @@ impl EncryptedWriter {
                     self.steps = EncryptWriteStep::Writing;
                 }
                 EncryptWriteStep::Writing => {
-                    while self.buf.remaining() > 0 {
-                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, &mut self.buf))?;
+                    while self.buf.has_remaining() {
+                        let n = ready!(Pin::new(&mut *w).poll_write(ctx, self.buf.bytes()))?;
+                        self.buf.advance(n);
                         if n == 0 {
                             use std::io::ErrorKind;
                             return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));

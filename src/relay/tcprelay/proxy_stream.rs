@@ -13,7 +13,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
 use log::{debug, error, trace};
 use pin_project::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     config::{ConfigType, ServerAddr, ServerConfig},
@@ -50,7 +50,7 @@ impl ProxiedConnection {
 }
 
 impl AsyncRead for ProxiedConnection {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         self.project().stream.poll_read(cx, buf)
     }
 }
@@ -94,9 +94,11 @@ impl AsyncWrite for ProxiedConnection {
                     // Fast path
                     //
                     // For CryptoStream (Stream and AEAD), poll_write will return Ready(..) until all data have been sent out
-                    match this.stream.poll_write_buf(cx, &mut buf) {
+                    match this.stream.poll_write(cx, buf.bytes()) {
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                         Poll::Ready(Ok(n)) => {
+                            buf.advance(n);
+
                             if buf.remaining() < data.len() {
                                 // Ok, written some data with Address
                                 let written_len = data.len() - buf.remaining();
@@ -136,7 +138,8 @@ impl AsyncWrite for ProxiedConnection {
                 }
                 ProxiedConnectState::Handshaking { ref mut buf } => {
                     // Try to write at least addr_len size
-                    let n = ready!(this.stream.poll_write_buf(cx, buf))?;
+                    let n = ready!(this.stream.poll_write(cx, buf.bytes()))?;
+                    buf.advance(n);
 
                     if buf.remaining() < data.len() {
                         // Ok, written some data with Address
@@ -201,7 +204,7 @@ macro_rules! forward_call {
 }
 
 impl AsyncRead for ProxyConnection {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_read, cx, buf)
     }
 }
@@ -366,15 +369,19 @@ impl ProxyStream {
 }
 
 impl AsyncRead for ProxyStream {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let before_remain = buf.remaining();
         let p = self.as_mut().project().connection.poll_read(cx, buf);
 
         // Flow statistic for Android client
         #[cfg(feature = "local-flow-stat")]
         {
             if self.is_proxied() {
-                if let Poll::Ready(Ok(n)) = p {
-                    self.context().local_flow_statistic().tcp().incr_rx(n);
+                if let Poll::Ready(Ok(..)) = p {
+                    self.context()
+                        .local_flow_statistic()
+                        .tcp()
+                        .incr_rx(before_remain - buf.remaining());
                 }
             }
         }

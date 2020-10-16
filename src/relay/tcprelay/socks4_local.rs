@@ -89,6 +89,9 @@ async fn handle_socks4_connect(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
+    tokio::pin!(rhalf);
+    tokio::pin!(whalf);
+
     debug!("CONNECT relay established {} <-> {}", client_addr, ss_addr);
 
     match future::select(rhalf, whalf).await {
@@ -118,9 +121,10 @@ async fn handle_socks4_connect(
 async fn handle_socks4_client(server: &SharedPlainServerStatistic, s: TcpStream) -> io::Result<()> {
     let svr_cfg = server.server_config();
 
-    if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
-        error!("failed to set keep alive: {:?}", err);
-    }
+    // FIXME: set_keepalive have been removed from tokio 0.3
+    // if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
+    //     error!("failed to set keep alive: {:?}", err);
+    // }
 
     // Enable TCP_NODELAY for quick handshaking
     if let Err(err) = s.set_nodelay(true) {
@@ -157,7 +161,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = context.config().local_addr.as_ref().expect("local config");
     let bind_addr = local_addr.bind_addr(&context).await?;
 
-    let mut listener = TcpListener::bind(&bind_addr).await.map_err(|err| {
+    let listener = TcpListener::bind(&bind_addr).await.map_err(|err| {
         error!("failed to listen on {} ({}), {}", local_addr, bind_addr, err);
         err
     })?;

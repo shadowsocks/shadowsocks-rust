@@ -3,6 +3,7 @@
 use std::{
     io,
     net::{IpAddr, SocketAddr},
+    sync::Arc,
 };
 
 use bytes::BytesMut;
@@ -41,7 +42,8 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     let local_addr = listener.local_addr().expect("determine port bound to");
     info!("shadowsocks UDP listening on {}", local_addr);
 
-    let (mut r, mut w) = listener.split();
+    let r = Arc::new(listener);
+    let w = r.clone();
 
     let assoc_manager = ServerAssociationManager::new(context.config());
 

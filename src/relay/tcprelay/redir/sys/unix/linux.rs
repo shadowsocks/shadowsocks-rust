@@ -6,8 +6,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 use crate::{
     config::RedirType,
@@ -93,12 +92,10 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
 }
 
 fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
-    let domain = match *addr {
-        SocketAddr::V4(..) => Domain::ipv4(),
-        SocketAddr::V6(..) => Domain::ipv6(),
+    let socket = match *addr {
+        SocketAddr::V4(..) => TcpSocket::new_v4(),
+        SocketAddr::V6(..) => TcpSocket::new_v6(),
     };
-
-    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
 
     // For Linux 2.4+ TPROXY
     // Sockets have to set IP_TRANSPARENT for retrieving original destination by getsockname()
@@ -128,15 +125,11 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         }
     }
 
-    // tokio requires non-blocked socket, and allow reuse addr
-    socket.set_nonblocking(true)?;
-    socket.set_reuse_address(true)?;
-
-    let addr = SockAddr::from(*addr);
+    // tokio requires allow reuse addr
+    socket.set_reuseaddr(true)?;
 
     // bind, listen as original
-    socket.bind(&addr)?;
-    socket.listen(1024)?; // backlogs = 1024 as mio's default
-
-    TcpListener::from_std(socket.into_tcp_listener())
+    socket.bind(addr)?;
+    // listen backlogs = 1024 as mio's default
+    socket.listen(1024).await
 }

@@ -4,15 +4,11 @@ use std::{
     io,
     io::{Cursor, Read},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
 };
 
 use bytes::{Bytes, BytesMut};
 use log::{debug, error, warn};
-use tokio::net::{
-    udp::{RecvHalf, SendHalf},
-    UdpSocket,
-};
+use tokio::net::UdpSocket;
 
 use crate::{
     config::{ServerAddr, ServerConfig},
@@ -26,62 +22,6 @@ use super::{
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
-
-struct Half<T> {
-    half: T,
-    inner: Arc<HalfInner>,
-}
-
-struct HalfInner {
-    method: CipherType,
-    key: Bytes,
-}
-
-/// Receive half of a UDP client for communicating with ShadowSocks' server
-pub struct ServerClientRecvHalf(Half<RecvHalf>);
-
-impl ServerClientRecvHalf {
-    /// Receive packet from Shadowsocks' UDP server
-    pub async fn recv_from(&mut self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
-        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-
-        // Waiting for response from server SERVER -> CLIENT
-        // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-        let recv_n = try_timeout(self.0.half.recv(&mut recv_buf), Some(timeout)).await?;
-        let (addr, payload) =
-            ServerClient::parse_resp(context, self.0.inner.method, &self.0.inner.key, &recv_buf[..recv_n]).await?;
-        Ok((addr, payload))
-    }
-}
-
-/// Send half of a UDP client for communicating with ShadowSocks' server
-pub struct ServerClientSendHalf(Half<SendHalf>);
-
-impl ServerClientSendHalf {
-    /// Send a UDP packet to addr through proxy
-    pub async fn send_to(&mut self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
-        debug!(
-            "UDP server client send to {}, payload length {} bytes",
-            addr,
-            payload.len()
-        );
-
-        let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
-
-        let send_buf = ServerClient::pack_req(self.0.inner.method, &self.0.inner.key, context, addr, payload).await?;
-
-        let send_len = try_timeout(self.0.half.send(&send_buf), Some(timeout)).await?;
-        if send_buf.len() != send_len {
-            warn!(
-                "UDP server client send {} bytes, but actually sent {} bytes",
-                send_buf.len(),
-                send_len
-            );
-        }
-        Ok(())
-    }
-}
 
 /// UDP client for communicating with ShadowSocks' server
 pub struct ServerClient {
@@ -108,22 +48,6 @@ impl ServerClient {
         })
     }
 
-    /// Split the UDP client into receive and send halves.
-    pub fn split(self) -> (ServerClientRecvHalf, ServerClientSendHalf) {
-        let (r, s) = self.socket.split();
-        let hi = Arc::new(HalfInner {
-            method: self.method,
-            key: self.key,
-        });
-        (
-            ServerClientRecvHalf(Half {
-                half: r,
-                inner: hi.clone(),
-            }),
-            ServerClientSendHalf(Half { half: s, inner: hi }),
-        )
-    }
-
     async fn pack_req(
         method: CipherType,
         key: &Bytes,
@@ -145,7 +69,7 @@ impl ServerClient {
     }
 
     /// Send a UDP packet to addr through proxy
-    pub async fn send_to(&mut self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
+    pub async fn send_to(&self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
         debug!(
             "UDP server client send to {}, payload length {} bytes",
             addr,
@@ -205,7 +129,7 @@ impl ServerClient {
     }
 
     /// Receive packet from Shadowsocks' UDP server
-    pub async fn recv_from(&mut self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
+    pub async fn recv_from(&self, context: &Context) -> io::Result<(Address, Vec<u8>)> {
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
         // Waiting for response from server SERVER -> CLIENT

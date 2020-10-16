@@ -36,7 +36,7 @@ use hyper::{
 };
 use log::{debug, error, info, trace};
 use pin_project::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     config::ConfigType,
@@ -176,7 +176,7 @@ macro_rules! forward_call {
 }
 
 impl AsyncRead for ProxyHttpStream {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_read, cx, buf)
     }
 }
@@ -532,6 +532,9 @@ async fn establish_connect_tunnel(upgraded: Upgraded, stream: ProxyStream, clien
 
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
+
+    tokio::pin!(rhalf);
+    tokio::pin!(whalf);
 
     debug!("CONNECT relay established {} <-> {}", client_addr, addr);
 

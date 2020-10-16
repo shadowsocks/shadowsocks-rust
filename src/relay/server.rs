@@ -70,7 +70,7 @@ pub(crate) async fn run_with(
     let context = if mode.enable_tcp() {
         if config.has_server_plugins() {
             let plugins = Plugins::launch_plugins(&mut config, PluginMode::Server).await?;
-            vf.push(plugins.boxed());
+            vf.push(plugins.join_all().boxed());
         }
 
         let context = Context::new_with_state_shared(config, server_stat);
@@ -148,7 +148,7 @@ async fn manager_report_task(context: SharedContext, flow_stat: SharedMultiServe
         }
 
         // Report every 10 seconds
-        time::delay_for(Duration::from_secs(10)).await;
+        time::sleep(Duration::from_secs(10)).await;
     }
 
     Ok(())

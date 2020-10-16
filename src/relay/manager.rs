@@ -2,8 +2,6 @@
 //!
 //! Service for managing multiple relay servers
 
-#[cfg(unix)]
-use std::os::unix::net::SocketAddr as UnixSocketAddr;
 use std::{
     collections::HashMap,
     fmt,
@@ -16,7 +14,7 @@ use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
 use log::{debug, error, info, trace, warn};
 #[cfg(unix)]
-use tokio::net::UnixDatagram;
+use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 use tokio::{self, net::UdpSocket};
 
 use crate::{

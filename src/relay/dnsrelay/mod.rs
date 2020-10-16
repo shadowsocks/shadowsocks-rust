@@ -301,7 +301,7 @@ async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
     relay: Arc<DnsRelay<Remote>>,
     bind_addr: SocketAddr,
 ) -> io::Result<()> {
-    let mut listener = TcpListener::bind(&bind_addr).await?;
+    let listener = TcpListener::bind(&bind_addr).await?;
 
     let actual_local_addr = listener.local_addr()?;
     info!("shadowsocks DNS relay listening on tcp:{}", actual_local_addr);
@@ -334,8 +334,8 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
     let actual_local_addr = socket.local_addr()?;
     info!("shadowsocks DNS relay listening on udp:{}", actual_local_addr);
 
-    let (mut rx, tx) = socket.split();
-    let tx = Arc::new(tokio::sync::Mutex::new(tx));
+    let rx = Arc::new(socket);
+    let tx = rx.clone();
 
     loop {
         let mut req_buffer: [u8; 512] = [0; 512];
@@ -369,7 +369,7 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
                     error!("failed to serialize message, error: {}", err);
                 }
                 Ok(res_buffer) => {
-                    if let Err(err) = tx.lock().await.send_to(&res_buffer, &src).await {
+                    if let Err(err) = tx.send_to(&res_buffer, &src).await {
                         error!("DNS send back UDP error: {}", err);
                     }
                 }
