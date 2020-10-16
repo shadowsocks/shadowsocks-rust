@@ -14,7 +14,7 @@ use std::{
 };
 
 use futures::{future, ready};
-use mio_uds::UnixStream as MioUnixStream;
+use mio::net::UnixStream as MioUnixStream;
 use tokio::io::{AsyncRead, AsyncWrite, PollEvented};
 
 /// A UnixStream supports transferring FDs between processes

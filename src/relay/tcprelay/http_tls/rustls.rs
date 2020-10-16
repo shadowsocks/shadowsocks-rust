@@ -17,7 +17,7 @@ use hyper::server::{
 };
 use log::trace;
 use pin_project::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_rustls::rustls::{self, NoClientAuth, PrivateKey, ServerConfig};
 
 use crate::config::Config;
@@ -174,7 +174,7 @@ macro_rules! forward_stream_method {
 }
 
 impl AsyncRead for TlsStream {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         forward_stream_method!(self, cx, poll_read, buf)
     }
 }

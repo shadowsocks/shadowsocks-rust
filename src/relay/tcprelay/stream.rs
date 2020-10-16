@@ -11,7 +11,7 @@ use std::{
 use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
 use bytes::{Buf, BufMut, BytesMut};
 use futures::ready;
-use tokio::prelude::*;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::BUFFER_SIZE;
 
@@ -43,29 +43,30 @@ impl DecryptedReader {
         &mut self,
         ctx: &mut Context<'_>,
         r: &mut R,
-        dst: &mut [u8],
-    ) -> Poll<io::Result<usize>>
+        dst: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>>
     where
         R: AsyncRead + Unpin,
     {
         while self.pos >= self.buffer.len() {
             if self.got_final {
-                return Poll::Ready(Ok(0));
+                return Poll::Ready(Ok(()));
             }
 
-            let n = ready!(Pin::new(&mut *r).poll_read(ctx, &mut self.incoming_buffer))?;
+            let mut buf = ReadBuf::new(&mut self.incoming_buffer);
+            ready!(Pin::new(&mut *r).poll_read(ctx, &mut buf))?;
+            let data = buf.filled();
 
             // Reset pointers
             self.buffer.clear();
             self.pos = 0;
 
-            if n == 0 {
+            if data.len() == 0 {
                 // Finialize block
                 self.buffer.reserve(self.buffer_size(&[]));
                 self.cipher.finalize(&mut self.buffer)?;
                 self.got_final = true;
             } else {
-                let data = &self.incoming_buffer[..n];
                 // Ensure we have enough space
                 let buffer_len = self.buffer_size(data);
                 self.buffer.reserve(buffer_len);
@@ -74,10 +75,10 @@ impl DecryptedReader {
         }
 
         let remaining_len = self.buffer.len() - self.pos;
-        let n = cmp::min(dst.len(), remaining_len);
-        (&mut dst[..n]).copy_from_slice(&self.buffer[self.pos..self.pos + n]);
+        let n = cmp::min(dst.remaining(), remaining_len);
+        dst.put_slice(&self.buffer[self.pos..self.pos + n]);
         self.pos += n;
-        Poll::Ready(Ok(n))
+        Poll::Ready(Ok(()))
     }
 
     fn buffer_size(&self, data: &[u8]) -> usize {
@@ -133,8 +134,9 @@ impl EncryptedWriter {
                     self.steps = EncryptWriteStep::Writing;
                 }
                 EncryptWriteStep::Writing => {
-                    while self.buf.remaining() > 0 {
-                        let n = ready!(Pin::new(&mut *w).poll_write_buf(ctx, &mut self.buf))?;
+                    while self.buf.has_remaining() {
+                        let n = ready!(Pin::new(&mut *w).poll_write(ctx, self.buf.bytes()))?;
+                        self.buf.advance(n);
                         if n == 0 {
                             use std::io::ErrorKind;
                             return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
