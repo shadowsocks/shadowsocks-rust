@@ -13,11 +13,8 @@
 //! ```
 
 use std::{
-    future::Future,
     io::{self, Error},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    pin::Pin,
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
@@ -57,8 +54,10 @@ impl Drop for Plugins {
     #[cfg(not(unix))]
     fn drop(&mut self) {
         for plugin in &mut self.plugins {
-            debug!("killing plugin process {}", plugin.id());
-            let _ = plugin.kill();
+            if let Some(id) = plugin.id() {
+                debug!("killing plugin process {}", id);
+                let _ = plugin.start_kill();
+            }
         }
     }
 
@@ -70,61 +69,65 @@ impl Drop for Plugins {
 
         // Step.1 Send SIGTERM to let them exit gracefully
         for plugin in &self.plugins {
-            debug!("terminating plugin process {}", plugin.id());
+            if let Some(id) = plugin.id() {
+                debug!("terminating plugin process {}", id);
 
-            unsafe {
-                let ret = libc::kill(plugin.id() as libc::pid_t, libc::SIGTERM);
-                if ret != 0 {
-                    let err = io::Error::last_os_error();
-                    error!("terminating plugin process {}, error: {}", plugin.id(), err);
+                unsafe {
+                    let ret = libc::kill(id as libc::pid_t, libc::SIGTERM);
+                    if ret != 0 {
+                        let err = io::Error::last_os_error();
+                        error!("terminating plugin process {}, error: {}", id, err);
+                    }
                 }
             }
         }
 
         // Step.2 Waits for gracefully exit
         for plugin in &self.plugins {
-            const MAX_WAIT_DURATION: Duration = Duration::from_millis(10);
+            if let Some(id) = plugin.id() {
+                const MAX_WAIT_DURATION: Duration = Duration::from_millis(10);
 
-            let start = Instant::now();
+                let start = Instant::now();
 
-            loop {
-                unsafe {
-                    let mut status: libc::c_int = 0;
-                    let ret = libc::waitpid(plugin.id() as libc::pid_t, &mut status, libc::WNOHANG);
-                    if ret < 0 {
-                        let err = io::Error::last_os_error();
-                        error!("waitpid({}) error: {}", plugin.id(), err);
-                        break;
-                    } else if ret > 0 {
-                        // subprocess is finished
-                        debug!("plugin process {} is terminated gracefully", plugin.id());
-                        exited.insert(plugin.id());
+                loop {
+                    match plugin.try_wait() {
+                        Ok(Some(status)) => {
+                            // subprocess is finished
+                            debug!(
+                                "plugin process {} is terminated gracefully with status: {:?}",
+                                id, status
+                            );
+                            exited.insert(id);
+                            break;
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            error!("plugin process waitpid error: {}", err);
+                            break;
+                        }
+                    }
+
+                    let elapsed = Instant::now() - start;
+                    if elapsed > MAX_WAIT_DURATION {
+                        debug!("plugin process {} isn't terminated in {:?}", id, MAX_WAIT_DURATION);
                         break;
                     }
-                }
 
-                let elapsed = Instant::now() - start;
-                if elapsed > MAX_WAIT_DURATION {
-                    debug!(
-                        "plugin process {} isn't terminated in {:?}",
-                        plugin.id(),
-                        MAX_WAIT_DURATION
-                    );
-                    break;
+                    std::thread::yield_now();
                 }
-
-                std::thread::yield_now();
             }
         }
 
         // Step.3 SIGKILL. Kill all of them forcibly
         for plugin in &mut self.plugins {
-            if exited.contains(&plugin.id()) {
-                continue;
-            }
+            if let Some(id) = plugin.id() {
+                if exited.contains(&id) {
+                    continue;
+                }
 
-            if let Ok(..) = plugin.kill() {
-                debug!("killed plugin process {}", plugin.id());
+                if let Ok(..) = plugin.start_kill() {
+                    debug!("killed plugin process {}", id);
+                }
             }
         }
     }
@@ -164,7 +167,7 @@ impl Plugins {
                                     c.plugin,
                                     local_addr,
                                     svr.addr(),
-                                    process.id()
+                                    process.id().unwrap_or(0)
                                 );
                             }
                             PluginMode::Server => {
@@ -173,7 +176,7 @@ impl Plugins {
                                     c.plugin,
                                     svr.addr(),
                                     local_addr,
-                                    process.id()
+                                    process.id().unwrap_or(0)
                                 );
                             }
                         }
@@ -269,26 +272,23 @@ impl Plugins {
     pub fn is_empty(&self) -> bool {
         self.plugins.is_empty()
     }
-}
 
-impl Future for Plugins {
-    type Output = io::Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    /// Join all plugins
+    pub(crate) async fn join_all(mut self) -> io::Result<()> {
         for p in &mut self.plugins {
-            match Pin::new(p).poll(cx) {
-                Poll::Ready(Ok(exit_status)) => {
+            match p.wait().await {
+                Ok(exit_status) => {
                     let msg = format!("plugin exited unexpectedly with {}", exit_status);
-                    return Poll::Ready(Err(Error::new(io::ErrorKind::Other, msg)));
+                    return Err(Error::new(io::ErrorKind::Other, msg));
                 }
-                Poll::Ready(Err(err)) => {
+                Err(err) => {
                     error!("error while waiting for plugin subprocess: {}", err);
-                    return Poll::Ready(Err(err));
+                    return Err(err);
                 }
-                Poll::Pending => {}
             }
         }
-        Poll::Pending
+
+        Ok(())
     }
 }
 

@@ -88,7 +88,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
         if config.has_server_plugins() {
             let plugins = Plugins::launch_plugins(&mut config, PluginMode::Client).await?;
-            vf.push(plugins.boxed());
+            vf.push(plugins.join_all().boxed());
         }
 
         let context = Context::new_with_state_shared(config, state);

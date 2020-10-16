@@ -130,7 +130,7 @@ pub struct UdpUpstream {
 #[async_trait]
 impl Upstream for UdpUpstream {
     async fn lookup(&self, query: &Query) -> io::Result<Message> {
-        let mut socket = UdpSocket::bind(SocketAddr::new(
+        let socket = UdpSocket::bind(SocketAddr::new(
             match self.server {
                 SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),

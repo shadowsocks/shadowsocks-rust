@@ -10,7 +10,7 @@ use std::{
 use log::trace;
 use pin_project::pin_project;
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
 };
 
@@ -114,21 +114,25 @@ impl Socks5Client {
 }
 
 impl AsyncRead for Socks5Client {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for Socks5Client {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         self.project().stream.poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_shutdown(cx)
     }
 }
@@ -149,21 +153,25 @@ impl ServerClient {
 }
 
 impl AsyncRead for ServerClient {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context, buf: &mut [u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for ServerClient {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         self.project().stream.poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
         self.project().stream.poll_shutdown(cx)
     }
 }

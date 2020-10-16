@@ -8,8 +8,9 @@ use std::{
     task::{Context, Poll},
 };
 
+use futures::ready;
 use pin_project::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::relay::flow::SharedServerFlowStatistic;
 
@@ -34,15 +35,13 @@ impl<S> AsyncRead for TcpMonStream<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let this = self.project();
 
-        let n = match this.stream.poll_read(cx, buf)? {
-            Poll::Ready(n) => n,
-            Poll::Pending => return Poll::Pending,
-        };
-        this.flow_stat.tcp().incr_rx(n);
-        Poll::Ready(Ok(n))
+        let before_remain = buf.remaining();
+        ready!(this.stream.poll_read(cx, buf))?;
+        this.flow_stat.tcp().incr_rx(before_remain - buf.remaining());
+        Poll::Ready(Ok(()))
     }
 }
 

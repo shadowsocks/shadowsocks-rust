@@ -12,9 +12,9 @@ use futures::ready;
 use log::error;
 use pin_project::pin_project;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, BufReader, ReadHalf, WriteHalf},
+    io::{AsyncRead, AsyncWrite, BufReader, ReadBuf, ReadHalf, WriteHalf},
     net::TcpStream,
-    time::{self, Delay},
+    time::{self, Sleep},
 };
 
 /// Methods required for a TCP Connection
@@ -38,7 +38,7 @@ pub struct Connection<S> {
     stream: BufReader<S>,
     // Timer instance
     // Read and Write operations shares the same timer
-    timer: Option<Delay>,
+    timer: Option<Sleep>,
     // User defined server timeout
     timeout: Option<Duration>,
     // TCP_NODELAY
@@ -112,7 +112,7 @@ impl<S> Connection<S> {
                 return Poll::Ready(Err(make_timeout_error()));
             } else {
                 match self.timeout {
-                    Some(timeout) => self.timer = Some(time::delay_for(timeout)),
+                    Some(timeout) => self.timer = Some(time::sleep(timeout)),
                     None => break,
                 }
             }
@@ -139,7 +139,7 @@ impl<S> AsyncRead for Connection<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         match self.as_mut().project().stream.poll_read(cx, buf) {
             Poll::Ready(r) => {
                 self.cancel_timeout();

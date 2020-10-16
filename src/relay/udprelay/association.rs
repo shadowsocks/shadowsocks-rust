@@ -20,10 +20,7 @@ use lru_time_cache::{Entry, LruCache};
 use spin::Mutex as SyncMutex;
 use tokio::{
     self,
-    net::{
-        udp::{RecvHalf, SendHalf},
-        UdpSocket,
-    },
+    net::UdpSocket,
     sync::{mpsc, Mutex},
     time,
 };
@@ -127,7 +124,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         sender: H,
-    ) -> io::Result<(SendHalf, AbortHandle)>
+    ) -> io::Result<(Arc<UdpSocket>, AbortHandle)>
     where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
@@ -148,7 +145,8 @@ impl ProxyAssociation {
         ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
 
         // Splits socket into sender and receiver
-        let (remote_receiver, remote_sender) = remote_udp.split();
+        let remote_receiver = Arc::new(remote_udp);
+        let remote_sender = remote_receiver.clone();
 
         // LOCAL <- REMOTE task
         let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, false);
@@ -179,7 +177,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         sender: H,
-    ) -> io::Result<(SendHalf, AbortHandle)>
+    ) -> io::Result<(Arc<UdpSocket>, AbortHandle)>
     where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
@@ -196,7 +194,8 @@ impl ProxyAssociation {
         );
 
         // Splits socket into sender and receiver
-        let (remote_receiver, remote_sender) = remote_udp.split();
+        let remote_receiver = Arc::new(remote_udp);
+        let remote_sender = remote_receiver.clone();
 
         // REMOTE <- LOCAL task
         let remote_watcher = Self::r2l_packet_abortable(src_addr, server, sender, remote_receiver, true);
@@ -352,7 +351,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut rx: mpsc::Receiver<(Address, Vec<u8>)>,
-        mut remote_sender: SendHalf,
+        remote_sender: Arc<UdpSocket>,
     ) where
         S: ServerData + Send + 'static,
     {
@@ -360,7 +359,7 @@ impl ProxyAssociation {
         let svr_cfg = server.server_config();
 
         while let Some((addr, payload)) = rx.recv().await {
-            let res = Self::send_packet_proxied(src_addr, context, svr_cfg, &addr, &payload, &mut remote_sender).await;
+            let res = Self::send_packet_proxied(src_addr, context, svr_cfg, &addr, &payload, &remote_sender).await;
 
             if let Err(err) = res {
                 error!(
@@ -377,14 +376,14 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut rx: mpsc::Receiver<(Address, Vec<u8>)>,
-        mut remote_sender: SendHalf,
+        remote_sender: Arc<UdpSocket>,
     ) where
         S: ServerData + Send + 'static,
     {
         let context = server.context();
 
         while let Some((addr, payload)) = rx.recv().await {
-            let res = Self::send_packet_bypassed(src_addr, context, &addr, &payload, &mut remote_sender).await;
+            let res = Self::send_packet_bypassed(src_addr, context, &addr, &payload, &remote_sender).await;
 
             if let Err(err) = res {
                 error!(
@@ -403,7 +402,7 @@ impl ProxyAssociation {
         svr_cfg: &ServerConfig,
         target: &Address,
         payload: &[u8],
-        socket: &mut SendHalf,
+        socket: &UdpSocket,
     ) -> io::Result<()> {
         // CLIENT -> SERVER protocol: ADDRESS + PAYLOAD
         let mut send_buf = Vec::with_capacity(target.serialized_len() + payload.len());
@@ -452,7 +451,7 @@ impl ProxyAssociation {
         context: &Context,
         target: &Address,
         payload: &[u8],
-        socket: &mut SendHalf,
+        socket: &UdpSocket,
     ) -> io::Result<()> {
         // BYPASSED, so just send it directly without any modifications
 
@@ -487,7 +486,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         sender: H,
-        socket: RecvHalf,
+        socket: Arc<UdpSocket>,
         is_bypassed: bool,
     ) -> AbortHandle
     where
@@ -521,7 +520,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut sender: H,
-        mut socket: RecvHalf,
+        socket: Arc<UdpSocket>,
     ) where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
@@ -530,7 +529,7 @@ impl ProxyAssociation {
         let svr_cfg = server.server_config();
 
         loop {
-            match Self::recv_packet_proxied(context, svr_cfg, &mut socket).await {
+            match Self::recv_packet_proxied(context, svr_cfg, &socket).await {
                 Ok((addr, data)) => {
                     debug!(
                         "UDP association {} <- .., payload length {} bytes",
@@ -552,7 +551,7 @@ impl ProxyAssociation {
     async fn recv_packet_proxied(
         context: &Context,
         svr_cfg: &ServerConfig,
-        socket: &mut RecvHalf,
+        socket: &UdpSocket,
     ) -> io::Result<(Address, Vec<u8>)> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
@@ -594,7 +593,7 @@ impl ProxyAssociation {
         src_addr: SocketAddr,
         server: SharedServerStatistic<S>,
         mut sender: H,
-        mut socket: RecvHalf,
+        socket: Arc<UdpSocket>,
     ) where
         S: ServerData + Send + 'static,
         H: ProxySend + Send + 'static,
@@ -602,7 +601,7 @@ impl ProxyAssociation {
         let context = server.context();
 
         loop {
-            match Self::recv_packet_bypassed(context, &mut socket).await {
+            match Self::recv_packet_bypassed(context, &socket).await {
                 Ok((addr, data)) => {
                     debug!(
                         "UDP association {} <- .., payload length {} bytes",
@@ -622,7 +621,7 @@ impl ProxyAssociation {
     }
 
     #[allow(unused_variables)]
-    async fn recv_packet_bypassed(context: &Context, socket: &mut RecvHalf) -> io::Result<(Address, Vec<u8>)> {
+    async fn recv_packet_bypassed(context: &Context, socket: &UdpSocket) -> io::Result<(Address, Vec<u8>)> {
         // Waiting for response from server SERVER -> CLIENT
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
@@ -784,7 +783,8 @@ impl ServerAssociation {
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(1024);
 
         // Splits socket into sender and receiver
-        let (mut receiver, mut sender) = remote_udp.split();
+        let receiver = Arc::new(remote_udp);
+        let sender = receiver.clone();
 
         let timeout = context.config().udp_timeout.unwrap_or(DEFAULT_TIMEOUT);
 
@@ -808,7 +808,7 @@ impl ServerAssociation {
                     if let Err(err) = ServerAssociation::relay_l2r(
                         &context,
                         src_addr,
-                        &mut sender,
+                        &sender,
                         pkt,
                         timeout,
                         svr_cfg,
@@ -834,7 +834,7 @@ impl ServerAssociation {
                 match ServerAssociation::relay_r2l(
                     &context,
                     src_addr,
-                    &mut receiver,
+                    &receiver,
                     &mut response_tx,
                     svr_cfg,
                     &resolved_address_cache,
@@ -869,7 +869,7 @@ impl ServerAssociation {
     async fn relay_l2r(
         context: &Context,
         src: SocketAddr,
-        remote_udp: &mut SendHalf,
+        remote_udp: &UdpSocket,
         pkt: Vec<u8>,
         timeout: Duration,
         svr_cfg: &ServerConfig,
@@ -959,7 +959,7 @@ impl ServerAssociation {
     async fn relay_r2l(
         context: &Context,
         src_addr: SocketAddr,
-        remote_udp: &mut RecvHalf,
+        remote_udp: &UdpSocket,
         response_tx: &mut mpsc::Sender<(SocketAddr, BytesMut)>,
         svr_cfg: &ServerConfig,
         resolved_address_cache: &SharedResolvedAddressCache,

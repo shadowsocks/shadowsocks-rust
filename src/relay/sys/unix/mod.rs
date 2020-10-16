@@ -7,8 +7,7 @@ use std::{
 };
 
 use cfg_if::cfg_if;
-use socket2::{Domain, Protocol, Socket, Type};
-use tokio::net::{TcpStream, UdpSocket};
+use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 
 use crate::context::Context;
 
@@ -71,13 +70,10 @@ cfg_if! {
 /// create a new TCP stream
 #[inline(always)]
 pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
-    let domain = match *saddr {
-        SocketAddr::V4(..) => Domain::ipv4(),
-        SocketAddr::V6(..) => Domain::ipv6(),
+    let socket = match *saddr {
+        SocketAddr::V4(..) => TcpSocket::new_v4()?,
+        SocketAddr::V6(..) => TcpSocket::new_v6()?,
     };
-
-    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
-    socket.set_nonblocking(true)?;
 
     // Any traffic to localhost should not be protected
     // This is a workaround for VPNService
@@ -106,8 +102,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
     }
 
     // it's important that the socket is protected before connecting
-    let stream = socket.into_tcp_stream();
-    TcpStream::connect_std(stream, &saddr).await
+    socket.connect(*saddr).await
 }
 
 /// Create a `UdpSocket` binded to `addr`

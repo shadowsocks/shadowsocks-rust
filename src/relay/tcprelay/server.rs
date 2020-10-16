@@ -35,9 +35,10 @@ async fn handle_client(
 ) -> io::Result<()> {
     let timeout = svr_cfg.timeout();
 
-    if let Err(err) = socket.set_keepalive(timeout) {
-        error!("failed to set keep alive: {:?}", err);
-    }
+    // FIXME: set_keepalive have been removed from tokio 0.3
+    // if let Err(err) = socket.set_keepalive(timeout) {
+    //     error!("failed to set keep alive: {:?}", err);
+    // }
 
     trace!("got connection addr {} with proxy server {:?}", peer_addr, svr_cfg);
 
@@ -156,6 +157,9 @@ async fn handle_client(
     // CLIENT <- SERVER
     let whalf = copy(&mut sr, &mut cw);
 
+    tokio::pin!(rhalf);
+    tokio::pin!(whalf);
+
     match future::select(rhalf, whalf).await {
         Either::Left((Ok(_), _)) => trace!("RELAY {} -> {} closed", peer_addr, remote_addr),
         Either::Left((Err(err), _)) => {
@@ -185,7 +189,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
     let vec_fut = FuturesUnordered::new();
 
     for (idx, svr_cfg) in context.config().server.iter().enumerate() {
-        let mut listener = {
+        let listener = {
             let addr = svr_cfg.external_addr();
             let addr = addr.bind_addr(&context).await?;
 
