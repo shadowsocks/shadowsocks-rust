@@ -72,21 +72,18 @@ fn main() {
     let app = clap_app!(ssurl =>
         (version: shadowsocks::VERSION)
         (about: "Encode and decode ShadowSocks URL")
-        (@arg ENCODE: -e --encode +takes_value conflicts_with[DECODE] "Encode the server configuration in the provided JSON file")
-        (@arg DECODE: -d --decode +takes_value "Decode the server configuration from the provide ShadowSocks URL")
+        (@arg ENCODE_CONFIG_PATH: -e --encode +takes_value conflicts_with[DECODE_CONFIG_PATH] required_unless[DECODE_CONFIG_PATH] "Encode the server configuration in the provided JSON file")
+        (@arg DECODE_CONFIG_PATH: -d --decode +takes_value required_unless[ENCODE_CONFIG_PATH] "Decode the server configuration from the provide ShadowSocks URL")
         (@arg QRCODE: -c --qrcode !takes_value "Generate the QRCode with the provided configuration")
-        (@group ACTION =>
-            (@attributes +required ... arg[ENCODE DECODE])
-        )
     );
 
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");
 
-    if let Some(file) = matches.value_of("ENCODE") {
+    if let Some(file) = matches.value_of("ENCODE_CONFIG_PATH") {
         encode(file, need_qrcode);
-    } else if let Some(encoded) = matches.value_of("DECODE") {
+    } else if let Some(encoded) = matches.value_of("DECODE_CONFIG_PATH") {
         decode(encoded, need_qrcode);
     } else {
         println!("Use -h for more detail");
