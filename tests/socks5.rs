@@ -1,4 +1,7 @@
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::{
+    net::{SocketAddr, ToSocketAddrs},
+    str,
+};
 
 use tokio::{
     prelude::*,
@@ -57,7 +60,7 @@ impl Socks5TestServer {
         let client_cfg = self.cli_config.clone();
         tokio::spawn(run_local(client_cfg));
 
-        time::delay_for(Duration::from_secs(1)).await;
+        time::sleep(Duration::from_secs(1)).await;
     }
 }
 
@@ -88,7 +91,10 @@ async fn socks5_relay_stream() {
     let mut buf = Vec::new();
     c.read_to_end(&mut buf).await.unwrap();
 
-    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+
+    let http_status = b"HTTP/1.0 200 OK\r\n";
+    buf.starts_with(http_status);
 }
 
 #[tokio::test]
@@ -118,5 +124,8 @@ async fn socks5_relay_aead() {
     let mut buf = Vec::new();
     c.read_to_end(&mut buf).await.unwrap();
 
-    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+
+    let http_status = b"HTTP/1.0 200 OK\r\n";
+    buf.starts_with(http_status);
 }

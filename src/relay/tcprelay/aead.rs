@@ -198,25 +198,29 @@ impl DecryptedReader {
     where
         R: AsyncRead + Unpin,
     {
-        while self.buffer.len() < size {
-            let remaining = size - self.buffer.len();
+        let mut remaining = size - self.buffer.len();
+        while remaining > 0 {
+            let mut buffer = ReadBuf::uninit(&mut self.buffer.bytes_mut()[..remaining]);
+
+            // It has enough space, I am sure about that
+            ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
+            let n = buffer.filled().len();
             unsafe {
-                // It has enough space, I am sure about that
-                let mut buffer = ReadBuf::uninit(self.buffer.bytes_mut());
-                ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
-                let n = buffer.filled().len();
-                if n == 0 {
-                    if self.buffer.is_empty() && allow_eof && !self.got_final {
-                        // Read nothing
-                        self.got_final = true;
-                        return Poll::Ready(Ok(()));
-                    } else {
-                        use std::io::ErrorKind;
-                        return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
-                    }
-                }
                 self.buffer.advance_mut(n);
             }
+
+            if n == 0 {
+                if self.buffer.is_empty() && allow_eof && !self.got_final {
+                    // Read nothing
+                    self.got_final = true;
+                    return Poll::Ready(Ok(()));
+                } else {
+                    use std::io::ErrorKind;
+                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
+                }
+            }
+
+            remaining -= n;
         }
 
         Poll::Ready(Ok(()))

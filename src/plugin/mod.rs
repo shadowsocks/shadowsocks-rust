@@ -83,7 +83,7 @@ impl Drop for Plugins {
         }
 
         // Step.2 Waits for gracefully exit
-        for plugin in &self.plugins {
+        for plugin in &mut self.plugins {
             if let Some(id) = plugin.id() {
                 const MAX_WAIT_DURATION: Duration = Duration::from_millis(10);
 

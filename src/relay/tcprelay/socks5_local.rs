@@ -123,9 +123,10 @@ async fn handle_socks5_client(
     mut s: TcpStream,
     udp_conf: UdpConfig,
 ) -> io::Result<()> {
-    let svr_cfg = server.server_config();
-
+    // let svr_cfg = server.server_config();
+    //
     // FIXME: set_keepalive have been removed from tokio 0.3
+    //        Related issue: https://github.com/rust-lang/rust/issues/69774
     // if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
     //     error!("failed to set keep alive: {:?}", err);
     // }
@@ -258,7 +259,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             Ok(s) => s,
             Err(err) => {
                 error!("accept failed with error: {}", err);
-                time::delay_for(Duration::from_secs(1)).await;
+                time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
         };

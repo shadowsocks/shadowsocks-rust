@@ -405,13 +405,12 @@ fn main() {
 
     info!("shadowsocks {}", shadowsocks::VERSION);
 
-    let mut builder = Builder::new();
-    if cfg!(feature = "single-threaded") {
-        builder.basic_scheduler();
+    let mut builder = if cfg!(feature = "single-threaded") {
+        Builder::new_current_thread()
     } else {
-        builder.threaded_scheduler();
-    }
-    let mut runtime = builder.enable_all().build().expect("create tokio Runtime");
+        Builder::new_multi_thread()
+    };
+    let runtime = builder.enable_all().build().expect("create tokio Runtime");
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
         let server = run_local(config);
