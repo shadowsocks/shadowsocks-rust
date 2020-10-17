@@ -1,5 +1,7 @@
 #![cfg(feature = "local-tunnel")]
 
+use std::str;
+
 use tokio::{
     self,
     net::{TcpStream, UdpSocket},
@@ -47,7 +49,7 @@ async fn tcp_tunnel() {
     tokio::spawn(run_local(local_config));
     tokio::spawn(run_server(server_config));
 
-    time::delay_for(Duration::from_secs(1)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
     // Connect it directly, because it is now established a TCP tunnel with www.example.com
     let mut stream = TcpStream::connect("127.0.0.1:9110").await.unwrap();
@@ -59,7 +61,10 @@ async fn tcp_tunnel() {
     let mut buf = Vec::new();
     stream.read_to_end(&mut buf).await.unwrap();
 
-    println!("Got reply from server: {}", String::from_utf8(buf).unwrap());
+    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+
+    let http_status = b"HTTP/1.0 200 OK\r\n";
+    buf.starts_with(http_status);
 }
 
 #[tokio::test]
@@ -99,7 +104,7 @@ async fn udp_tunnel() {
 
     // Start a UDP echo server
     tokio::spawn(async {
-        let mut socket = UdpSocket::bind("127.0.0.1:9230").await.unwrap();
+        let socket = UdpSocket::bind("127.0.0.1:9230").await.unwrap();
 
         let mut buf = vec![0u8; 65536];
         let (n, src) = socket.recv_from(&mut buf).await.unwrap();
@@ -109,13 +114,18 @@ async fn udp_tunnel() {
         socket.send_to(&buf[..n], src).await.unwrap();
     });
 
-    time::delay_for(Duration::from_secs(1)).await;
+    time::sleep(Duration::from_secs(1)).await;
 
-    let mut socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    socket.send_to(b"HELLO WORLD", "127.0.0.1:9210").await.unwrap();
+    let payload = b"HELLO WORLD";
+
+    let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    socket.send_to(payload, "127.0.0.1:9210").await.unwrap();
 
     let mut buf = vec![0u8; 65536];
     let n = socket.recv(&mut buf).await.unwrap();
 
-    println!("Got reply from server: {}", ::std::str::from_utf8(&buf[..n]).unwrap());
+    let recv_payload = &buf[..n];
+    println!("Got reply from server: {}", str::from_utf8(recv_payload).unwrap());
+
+    assert_eq!(recv_payload, payload);
 }

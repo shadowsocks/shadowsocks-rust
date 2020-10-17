@@ -370,6 +370,7 @@ impl ProxyStream {
 
 impl AsyncRead for ProxyStream {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        #[allow(unused_variables)]
         let before_remain = buf.remaining();
         let p = self.as_mut().project().connection.poll_read(cx, buf);
 

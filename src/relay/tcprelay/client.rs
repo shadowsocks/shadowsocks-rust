@@ -41,7 +41,7 @@ impl Socks5Client {
     /// Connects to `addr` via `proxy`
     pub async fn connect<A>(addr: A, proxy: &SocketAddr) -> io::Result<Socks5Client>
     where
-        Address: From<A>,
+        A: Into<Address>,
     {
         let mut s = TcpStream::connect(proxy).await?;
 
@@ -57,7 +57,7 @@ impl Socks5Client {
         assert_eq!(hsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
 
         // 2. Send request header
-        let h = TcpRequestHeader::new(Command::TcpConnect, From::from(addr));
+        let h = TcpRequestHeader::new(Command::TcpConnect, addr.into());
         trace!("going to connect, req: {:?}", h);
         h.write_to(&mut s).await?;
 
@@ -76,9 +76,11 @@ impl Socks5Client {
     }
 
     /// UDP Associate `addr` via `proxy`
+    ///
+    /// According to RFC, `addr` is the address that your UDP socket binds to
     pub async fn udp_associate<A>(addr: A, proxy: &SocketAddr) -> io::Result<(Socks5Client, Address)>
     where
-        Address: From<A>,
+        A: Into<Address>,
     {
         let mut s = TcpStream::connect(proxy).await?;
 
@@ -94,7 +96,7 @@ impl Socks5Client {
         assert_eq!(hsp.chosen_method, socks5::SOCKS5_AUTH_METHOD_NONE);
 
         // 2. Send request header
-        let h = TcpRequestHeader::new(Command::UdpAssociate, From::from(addr));
+        let h = TcpRequestHeader::new(Command::UdpAssociate, addr.into());
         trace!("going to connect, req: {:?}", h);
 
         h.write_to(&mut s).await?;
