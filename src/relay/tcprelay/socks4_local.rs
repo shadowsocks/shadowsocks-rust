@@ -119,9 +119,10 @@ async fn handle_socks4_connect(
 }
 
 async fn handle_socks4_client(server: &SharedPlainServerStatistic, s: TcpStream) -> io::Result<()> {
-    let svr_cfg = server.server_config();
-
+    // let svr_cfg = server.server_config();
+    //
     // FIXME: set_keepalive have been removed from tokio 0.3
+    //        Related issue: https://github.com/rust-lang/rust/issues/69774
     // if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
     //     error!("failed to set keep alive: {:?}", err);
     // }

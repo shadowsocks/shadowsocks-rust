@@ -6,7 +6,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
-use bytes::{Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use log::{debug, error, warn};
 use tokio::net::UdpSocket;
 
@@ -14,7 +14,12 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
     crypto::{CipherCategory, CipherType},
-    relay::{socks5::Address, sys::create_udp_socket, utils::try_timeout},
+    relay::{
+        socks5::{Address, UdpAssociateHeader},
+        sys::create_udp_socket,
+        tcprelay::client::Socks5Client as Socks5TcpClient,
+        utils::try_timeout,
+    },
 };
 
 use super::{
@@ -22,6 +27,70 @@ use super::{
     DEFAULT_TIMEOUT,
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
+
+/// Socks5 proxy client
+pub struct Socks5Client {
+    socket: UdpSocket,
+
+    // Socks5 protocol requires to keep this TCP connection alive
+    // Theoretically if this connection is broken, the association is broken too, but the UDP Socks5 server in this crate doesn't behave like that
+    #[allow(dead_code)]
+    assoc_client: Socks5TcpClient,
+}
+
+impl Socks5Client {
+    /// Create a new UDP associate to `proxy`
+    pub async fn associate(proxy: &SocketAddr) -> io::Result<Socks5Client> {
+        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let socket = create_udp_socket(&local_addr).await?;
+
+        // The actual bind address, tell the proxy that I am going to send packets from this address
+        let local_addr = socket.local_addr()?;
+
+        let (assoc_client, proxy_addr) = Socks5TcpClient::udp_associate(local_addr, proxy).await?;
+        match proxy_addr {
+            Address::SocketAddress(sa) => socket.connect(sa).await?,
+            // FIXME: `connect` will use tokio's builtin DNS resolver.
+            // But if we want to use `trust-dns`, we have to initialize a `Context` instance (for the global `AsyncResolver` instance)
+            Address::DomainNameAddress(ref dname, port) => socket.connect((dname.as_str(), port)).await?,
+        }
+
+        Ok(Socks5Client { socket, assoc_client })
+    }
+
+    /// Returns a future that sends data on the socket to the given address.
+    pub async fn send_to<A>(&self, buf: &[u8], target: A) -> io::Result<usize>
+    where
+        A: Into<Address>,
+    {
+        // ShadowSocks doesn't support UDP fragmentation, so it will always be 0
+        let header = UdpAssociateHeader::new(0, target.into());
+        let header_len = header.serialized_len();
+        let mut send_buf = BytesMut::with_capacity(header.serialized_len() + buf.len());
+        header.write_to_buf(&mut send_buf);
+        send_buf.put_slice(buf);
+
+        let n = self.socket.send(&send_buf).await?;
+        Ok(if n <= header_len { 0 } else { n - header_len })
+    }
+
+    /// Returns a future that receives a single datagram on the socket. On success, the future resolves to the number of bytes read and the origin.
+    ///
+    /// The function must be called with valid byte array buf of sufficient size to hold the message bytes.
+    /// If a message is too long to fit in the supplied buffer, excess bytes may be discarded.
+    pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, Address)> {
+        let mut recv_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let n = self.socket.recv(&mut recv_buf).await?;
+
+        // Address + Payload
+        let mut cur = Cursor::new(&recv_buf[..n]);
+
+        let header = UdpAssociateHeader::read_from(&mut cur).await?;
+        let n = cur.read(buf)?;
+
+        Ok((n, header.address))
+    }
+}
 
 /// UDP client for communicating with ShadowSocks' server
 pub struct ServerClient {

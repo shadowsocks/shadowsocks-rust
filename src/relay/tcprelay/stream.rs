@@ -58,17 +58,18 @@ impl DecryptedReader {
             let data = buf.filled();
 
             // Reset pointers
+            // So the outer loop will break if data.len() != 0
             self.buffer.clear();
             self.pos = 0;
 
             if data.len() == 0 {
                 // Finialize block
-                self.buffer.reserve(self.buffer_size(&[]));
+                self.buffer.reserve(self.cipher.buffer_size(&[]));
                 self.cipher.finalize(&mut self.buffer)?;
                 self.got_final = true;
             } else {
                 // Ensure we have enough space
-                let buffer_len = self.buffer_size(data);
+                let buffer_len = self.cipher.buffer_size(data);
                 self.buffer.reserve(buffer_len);
                 self.cipher.update(data, &mut self.buffer)?;
             }
@@ -79,10 +80,6 @@ impl DecryptedReader {
         dst.put_slice(&self.buffer[self.pos..self.pos + n]);
         self.pos += n;
         Poll::Ready(Ok(()))
-    }
-
-    fn buffer_size(&self, data: &[u8]) -> usize {
-        self.cipher.buffer_size(data)
     }
 }
 
