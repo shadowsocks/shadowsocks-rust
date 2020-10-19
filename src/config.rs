@@ -22,14 +22,14 @@
 //! {
 //!     "servers": [
 //!         {
-//!             "address": "127.0.0.1",
-//!             "port": 1080,
+//!             "server": "127.0.0.1",
+//!             "server_port": 1080,
 //!             "password": "hellofuck",
 //!             "method": "bf-cfb"
 //!         },
 //!         {
-//!             "address": "127.0.0.1",
-//!             "port": 1081,
+//!             "server": "127.0.0.1",
+//!             "server_port": 1081,
 //!             "password": "hellofuck",
 //!             "method": "aes-128-cfb"
 //!         }
@@ -117,12 +117,19 @@ struct SSConfig {
     nofile: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remarks: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SSServerExtConfig {
-    address: String,
-    port: u16,
+    // SIP008 https://github.com/shadowsocks/shadowsocks-org/issues/89
+    //
+    // `address` and `port` are non-standard field name only for shadowsocks-rust
+    #[serde(alias = "address")]
+    server: String,
+    #[serde(alias = "port")]
+    server_port: u16,
     password: String,
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -133,6 +140,8 @@ struct SSServerExtConfig {
     plugin_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remarks: Option<String>,
 }
 
 /// Server address
@@ -271,6 +280,8 @@ pub struct ServerConfig {
     plugin: Option<PluginConfig>,
     /// Plugin address
     plugin_addr: Option<ServerAddr>,
+    /// Remark (Profile Name), normally used as an identifier of this erver
+    remarks: Option<String>,
 }
 
 impl ServerConfig {
@@ -291,6 +302,7 @@ impl ServerConfig {
             enc_key,
             plugin,
             plugin_addr: None,
+            remarks: None,
         }
     }
 
@@ -1262,7 +1274,9 @@ impl Config {
                 };
 
                 let timeout = config.timeout.map(Duration::from_secs);
-                let nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
+                let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
+
+                nsvr.remarks = config.remarks;
 
                 nconfig.server.push(nsvr);
             }
@@ -1280,11 +1294,14 @@ impl Config {
         // Ext servers
         if let Some(servers) = config.servers {
             for svr in servers {
-                let addr = match svr.address.parse::<Ipv4Addr>() {
-                    Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, svr.port))),
-                    Err(..) => match svr.address.parse::<Ipv6Addr>() {
-                        Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, svr.port, 0, 0))),
-                        Err(..) => ServerAddr::DomainName(svr.address, svr.port),
+                let address = svr.server;
+                let port = svr.server_port;
+
+                let addr = match address.parse::<Ipv4Addr>() {
+                    Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))),
+                    Err(..) => match address.parse::<Ipv6Addr>() {
+                        Ok(v6) => ServerAddr::SocketAddr(SocketAddr::V6(SocketAddrV6::new(v6, port, 0, 0))),
+                        Err(..) => ServerAddr::DomainName(address, port),
                     },
                 };
 
@@ -1310,7 +1327,9 @@ impl Config {
                 };
 
                 let timeout = svr.timeout.or(config.timeout).map(Duration::from_secs);
-                let nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
+                let mut nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
+
+                nsvr.remarks = svr.remarks;
 
                 nconfig.server.push(nsvr);
             }
@@ -1548,17 +1567,18 @@ impl fmt::Display for Config {
                     }
                 });
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
+                jconf.remarks = svr.remarks.clone();
             }
             _ => {
                 let mut vsvr = Vec::new();
 
                 for svr in &self.server {
                     vsvr.push(SSServerExtConfig {
-                        address: match *svr.addr() {
+                        server: match *svr.addr() {
                             ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
                             ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
                         },
-                        port: match *svr.addr() {
+                        server_port: match *svr.addr() {
                             ServerAddr::SocketAddr(ref sa) => sa.port(),
                             ServerAddr::DomainName(.., port) => port,
                         },
@@ -1574,6 +1594,7 @@ impl fmt::Display for Config {
                             }
                         }),
                         timeout: svr.timeout().map(|t| t.as_secs()),
+                        remarks: svr.remarks.clone(),
                     });
                 }
 
