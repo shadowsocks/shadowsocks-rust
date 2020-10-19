@@ -94,9 +94,9 @@ log4rs = "0.13"
 openssl = { version = "0.10", optional = true }
 libc = "^0.2.68"
 tokio = { version = "^0.3", features = ["full"] }
-tokio-native-tls = { version = "0.1", optional = true }
+tokio-native-tls = { version = "0.2", optional = true }
 native-tls = { version = "0.2", optional = true }
-tokio-rustls = { version = "0.14", optional = true }
+tokio-rustls = { version = "0.20", optional = true }
 webpki-roots = { version = "0.20", optional = true }
 rustls-native-certs = { version = "0.4", optional = true }
 futures = "0.3"
