@@ -1897,7 +1897,7 @@ dependencies = [
  "tcmalloc",
  "tokio 0.3.2",
  "tokio-native-tls",
- "tokio-rustls 0.14.1",
+ "tokio-rustls 0.20.0",
  "tower",
  "trust-dns-proto",
  "trust-dns-resolver",
@@ -2181,12 +2181,12 @@ dependencies = [
 
 [[package]]
 name = "tokio-native-tls"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd608593a919a8e05a7d1fc6df885e40f6a88d3a70a3a7eff23ff27964eda069"
+checksum = "501c8252b73bd01379aaae1521523c2629ff1bc6ea46c29e0baff515cee60f1b"
 dependencies = [
  "native-tls",
- "tokio 0.2.22",
+ "tokio 0.3.0",
 ]
 
 [[package]]
@@ -2203,13 +2203,12 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.14.1"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e12831b255bcfa39dc0436b01e19fea231a37db570686c06ee72c423479f889a"
+checksum = "7ba3f045b4a15afc543ffe6e02bae7ecf372e89a0f9f8c4b15b13f0ceed4f105"
 dependencies = [
- "futures-core",
  "rustls 0.18.1",
- "tokio 0.2.22",
+ "tokio 0.3.0",
  "webpki",
 ]
 
