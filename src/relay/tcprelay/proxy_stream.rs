@@ -508,9 +508,11 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
             }
             Err(err) => {
                 // Connection failure, retry
-                debug!(
+                trace!(
                     "failed to connect {}, retried {} times (last err: {})",
-                    svr_addr, retry_time, err
+                    svr_addr,
+                    retry_time,
+                    err
                 );
                 last_err = Some(err);
 
@@ -523,7 +525,7 @@ async fn connect_proxy_server(context: &Context, svr_cfg: &ServerConfig) -> io::
     }
 
     let last_err = last_err.unwrap();
-    error!(
+    debug!(
         "failed to connect {}, retried {} times, last_err: {}",
         svr_addr, RETRY_TIMES, last_err
     );
