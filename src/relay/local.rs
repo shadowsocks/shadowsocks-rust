@@ -159,7 +159,7 @@ async fn flow_report_task(context: SharedContext) -> io::Result<()> {
 
     while context.server_running() {
         // keep it as libev's default, 0.5 seconds
-        time::delay_for(Duration::from_millis(500)).await;
+        time::sleep(Duration::from_millis(500)).await;
         let mut stream = match time::timeout(timeout, UnixStream::connect(path)).await {
             Ok(Ok(s)) => s,
             Ok(Err(err)) => {

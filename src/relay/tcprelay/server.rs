@@ -236,7 +236,7 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
                     }
                     Err(err) => {
                         error!("accept failed with error: {}", err);
-                        time::delay_for(Duration::from_secs(1)).await;
+                        time::sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                 }
