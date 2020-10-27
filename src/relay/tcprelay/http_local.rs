@@ -841,7 +841,10 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
             // HTTP Proxy protocol only defined in HTTP 1.x
             let server = match Server::try_bind(&bind_addr) {
-                Ok(builder) => builder.http1_only(true).serve(make_service),
+                Ok(builder) => builder
+                    .http1_only(true)
+                    .tcp_sleep_on_accept_errors(true)
+                    .serve(make_service),
                 Err(err) => {
                     let err = io::Error::new(
                         ErrorKind::InvalidInput,

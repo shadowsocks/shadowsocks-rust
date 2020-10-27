@@ -3,11 +3,15 @@
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
+    time::Duration,
 };
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    time,
+};
 
 use crate::{
     context::SharedContext,
@@ -104,7 +108,14 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     info!("shadowsocks TCP redirect listening on {}", actual_local_addr);
 
     loop {
-        let (socket, peer_addr) = listener.accept().await?;
+        let (socket, peer_addr) = match listener.accept().await {
+            Ok(s) => s,
+            Err(err) => {
+                error!("accept failed with error: {}", err);
+                time::delay_for(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
         let server = servers.pick_server();
 
         trace!("got connection {}", peer_addr);

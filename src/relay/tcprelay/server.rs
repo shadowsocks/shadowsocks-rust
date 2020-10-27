@@ -1,6 +1,6 @@
 //! Relay for TCP server that running on the server side
 
-use std::{io, io::ErrorKind, net::SocketAddr};
+use std::{io, io::ErrorKind, net::SocketAddr, time::Duration};
 
 use futures::{
     future::{self, Either},
@@ -10,6 +10,7 @@ use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},
+    time,
 };
 
 use crate::{
@@ -230,8 +231,9 @@ pub async fn run(context: SharedContext, flow_stat: SharedMultiServerFlowStatist
                         });
                     }
                     Err(err) => {
-                        error!("server run failed: {}", err);
-                        break;
+                        error!("accept failed with error: {}", err);
+                        time::delay_for(Duration::from_secs(1)).await;
+                        continue;
                     }
                 }
             }

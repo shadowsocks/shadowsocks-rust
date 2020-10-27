@@ -3,6 +3,7 @@
 use std::{
     io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::Duration,
 };
 
 use futures::future::{self, Either};
@@ -10,6 +11,7 @@ use log::{debug, error, info, trace, warn};
 use tokio::{
     self,
     net::{TcpListener, TcpStream},
+    time,
 };
 
 use crate::{
@@ -248,7 +250,14 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     info!("shadowsocks SOCKS5 TCP listening on {}", actual_local_addr);
 
     loop {
-        let (socket, peer_addr) = listener.accept().await?;
+        let (socket, peer_addr) = match listener.accept().await {
+            Ok(s) => s,
+            Err(err) => {
+                error!("accept failed with error: {}", err);
+                time::delay_for(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
         let server = servers.pick_server();
 
         trace!("got connection {}", peer_addr);
