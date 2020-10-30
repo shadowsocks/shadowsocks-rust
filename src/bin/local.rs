@@ -82,7 +82,9 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
+        (@arg LOG_CONFIG: --("log-config") +takes_value "log4rs configuration file")
 
         (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
@@ -155,8 +157,14 @@ fn main() {
     let matches = app.get_matches();
     drop(available_ciphers);
 
-    let debug_level = matches.occurrences_of("VERBOSE");
-    logging::init(debug_level, "sslocal", matches.is_present("LOG_WITHOUT_TIME"));
+    match matches.value_of("LOG_CONFIG") {
+        Some(path) => {
+            logging::init_with_file(path);
+        }
+        None => {
+            logging::init_with_config("sslocal", &matches);
+        }
+    }
 
     let config_type = match matches.value_of("PROTOCOL") {
         Some("socks5") => ConfigType::Socks5Local,

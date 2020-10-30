@@ -1,54 +1,66 @@
-use std::io::Write;
+use std::path::Path;
 
-use chrono::{offset::Local, SecondsFormat};
-use env_logger::Builder;
+use clap::ArgMatches;
 use log::LevelFilter;
+use log4rs::{
+    append::console::{ConsoleAppender, Target},
+    config::{Appender, Config, Logger, Root},
+    encode::pattern::PatternEncoder,
+};
 
-pub fn init(debug_level: u64, bin_name: &str, without_time: bool) {
-    let mut log_builder = Builder::from_default_env();
-    log_builder.filter(Some(bin_name), LevelFilter::Info);
-    log_builder.filter(Some("shadowsocks"), LevelFilter::Info);
+pub fn init_with_file<P>(path: P)
+where
+    P: AsRef<Path>,
+{
+    log4rs::init_file(path, Default::default()).expect("init logging with file");
+}
 
-    log_builder.format(move |buf, record| {
-        if !without_time {
-            write!(buf, "{} ", Local::now().to_rfc3339_opts(SecondsFormat::Millis, false))?;
-        }
+pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
+    let debug_level = matches.occurrences_of("VERBOSE");
+    let without_time = matches.is_present("LOG_WITHOUT_TIME");
 
-        write!(buf, "{:<5}", buf.default_styled_level(record.level()))?;
-
-        if debug_level > 0 {
-            if let Some(mp) = record.module_path() {
-                write!(buf, " [{}]", mp)?;
-            }
-        }
-
-        writeln!(buf, " {}", record.args())
-    });
-
-    match debug_level {
-        0 => {
-            // Default filter
-        }
-        1 => {
-            log_builder
-                .filter(Some(bin_name), LevelFilter::Debug)
-                .filter(Some("shadowsocks"), LevelFilter::Debug);
-        }
-        2 => {
-            log_builder
-                .filter(Some(bin_name), LevelFilter::Trace)
-                .filter(Some("shadowsocks"), LevelFilter::Trace);
-        }
-        3 => {
-            log_builder
-                .filter(Some(bin_name), LevelFilter::Trace)
-                .filter(Some("shadowsocks"), LevelFilter::Trace)
-                .filter(None, LevelFilter::Debug);
-        }
-        _ => {
-            log_builder.filter(None, LevelFilter::Trace);
-        }
+    let mut pattern = String::new();
+    if !without_time {
+        pattern += "{d} ";
     }
+    pattern += "{h({l}):<5} ";
+    if debug_level >= 1 {
+        pattern += "[{P}:{I}] [{M}] ";
+    }
+    pattern += "{m}{n}";
 
-    log_builder.init();
+    let logging_builder = Config::builder().appender(
+        Appender::builder().build(
+            "console",
+            Box::new(
+                ConsoleAppender::builder()
+                    .encoder(Box::new(PatternEncoder::new(&pattern)))
+                    .target(Target::Stderr)
+                    .build(),
+            ),
+        ),
+    );
+
+    let config = match debug_level {
+        0 => logging_builder
+            .logger(Logger::builder().build(bin_name, LevelFilter::Info))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Info))
+            .build(Root::builder().appender("console").build(LevelFilter::Off)),
+        1 => logging_builder
+            .logger(Logger::builder().build(bin_name, LevelFilter::Debug))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Debug))
+            .build(Root::builder().appender("console").build(LevelFilter::Off)),
+        2 => logging_builder
+            .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
+            .build(Root::builder().appender("console").build(LevelFilter::Off)),
+        3 => logging_builder
+            .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
+            .build(Root::builder().appender("console").build(LevelFilter::Debug)),
+        _ => logging_builder.build(Root::builder().appender("console").build(LevelFilter::Trace)),
+    }
+    .expect("logging");
+
+    log4rs::init_config(config).expect("logging");
 }
