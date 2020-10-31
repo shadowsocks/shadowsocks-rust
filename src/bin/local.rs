@@ -27,6 +27,8 @@ use shadowsocks::{
 };
 
 mod allocator;
+#[cfg(unix)]
+mod daemonize;
 mod logging;
 mod monitor;
 mod validator;
@@ -151,6 +153,14 @@ fn main() {
         app = clap_app!(@app (app)
             (@arg TLS_IDENTITY_CERT_PATH: --("tls-identity-certificate") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PRIVATE_KEY_PATH] "TLS identity certificate (PEM) path for HTTPS server")
             (@arg TLS_IDENTITY_PRIVATE_KEY_PATH: --("tls-identity-private-key") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_CERT_PATH] "TLS identity private key (PEM), PKCS #8 or RSA syntax, for HTTPS server")
+        );
+    }
+
+    #[cfg(unix)]
+    {
+        app = clap_app!(@app (app)
+            (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
+            (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
         );
     }
 
@@ -372,6 +382,11 @@ fn main() {
         );
         println!("{}", matches.usage());
         return;
+    }
+
+    #[cfg(unix)]
+    if matches.is_present("DAEMONIZE") {
+        daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
     }
 
     info!("shadowsocks {}", shadowsocks::VERSION);

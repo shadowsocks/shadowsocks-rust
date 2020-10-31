@@ -31,6 +31,8 @@ use shadowsocks::{
 };
 
 mod allocator;
+#[cfg(unix)]
+mod daemonize;
 mod logging;
 mod monitor;
 mod validator;
@@ -38,7 +40,7 @@ mod validator;
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
 
-    let app = clap_app!(shadowsocks =>
+    let mut app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
         (@arg VERBOSE: -v ... "Set the level of debug")
@@ -65,6 +67,14 @@ fn main() {
         (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
         (@arg LOG_CONFIG: --("log-config") +takes_value "log4rs configuration file")
     );
+
+    #[cfg(unix)]
+    {
+        app = clap_app!(@app (app)
+            (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
+            (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
+        );
+    }
 
     let matches = app
         .arg(
@@ -169,6 +179,11 @@ fn main() {
         );
         println!("{}", matches.usage());
         return;
+    }
+
+    #[cfg(unix)]
+    if matches.is_present("DAEMONIZE") {
+        daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
     }
 
     info!("shadowsocks {}", shadowsocks::VERSION);
