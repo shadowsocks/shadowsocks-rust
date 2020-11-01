@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr};
 
 use async_trait::async_trait;
-use log::{error, info, trace};
+use log::{debug, info, trace};
 
 use crate::{
     config::RedirType,
@@ -128,7 +128,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                     Ok(s) => s,
                     Err(err) => {
                         debug!("create UDP association for {} <-> {}, error: {}", src, dst, err);
-                        continue;
+                        return Err(err);
                     }
                 };
 
