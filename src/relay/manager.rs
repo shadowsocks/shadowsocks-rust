@@ -456,6 +456,7 @@ impl ManagerService {
 
         config.local_addr = self.context.config().local_addr.clone();
 
+        // Mode
         if let Some(mode) = p.mode {
             config.mode = match mode.parse::<Mode>() {
                 Ok(m) => m,
@@ -464,6 +465,8 @@ impl ManagerService {
                     return Err(err);
                 }
             };
+        } else {
+            config.mode = self.context.config().mode;
         }
 
         // TCP_NODELAY
@@ -476,9 +479,6 @@ impl ManagerService {
         // UDP configurations
         config.udp_timeout = self.context.config().udp_timeout;
         config.udp_max_associations = self.context.config().udp_max_associations;
-
-        // Mode
-        config.mode = self.context.config().mode;
 
         // ACL
         // FIXME: AccessControl structure may be quite expensive to copy
