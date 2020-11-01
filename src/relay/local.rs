@@ -163,11 +163,11 @@ async fn flow_report_task(context: SharedContext) -> io::Result<()> {
         let mut stream = match time::timeout(timeout, UnixStream::connect(path)).await {
             Ok(Ok(s)) => s,
             Ok(Err(err)) => {
-                error!("send client flow statistic error: {}", err);
+                debug!("send client flow statistic error: {}", err);
                 continue;
             }
             Err(..) => {
-                error!("send client flow statistic error: timeout");
+                debug!("send client flow statistic error: timeout");
                 continue;
             }
         };
@@ -182,10 +182,10 @@ async fn flow_report_task(context: SharedContext) -> io::Result<()> {
         match time::timeout(timeout, stream.write_all(buf)).await {
             Ok(Ok(..)) => {}
             Ok(Err(err)) => {
-                error!("send client flow statistic error: {}", err);
+                debug!("send client flow statistic error: {}", err);
             }
             Err(..) => {
-                error!("send client flow statistic error: timeout");
+                debug!("send client flow statistic error: timeout");
             }
         }
     }

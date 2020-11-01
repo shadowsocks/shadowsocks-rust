@@ -426,9 +426,13 @@ async fn connect_proxy_server_internal(
                 match try_timeout(tcp_stream_connect(&addr, &context), timeout).await {
                     Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
-                        debug!(
+                        trace!(
                             "failed to connect proxy {} ({}:{} ({})) try another (err: {})",
-                            orig_svr_addr, domain, port, addr, e
+                            orig_svr_addr,
+                            domain,
+                            port,
+                            addr,
+                            e
                         );
                         Err(e)
                     }
@@ -441,7 +445,7 @@ async fn connect_proxy_server_internal(
                     Ok(s)
                 }
                 Err(err) => {
-                    error!(
+                    debug!(
                         "failed to connect proxy {} ({}:{}), {}",
                         orig_svr_addr, domain, port, err
                     );

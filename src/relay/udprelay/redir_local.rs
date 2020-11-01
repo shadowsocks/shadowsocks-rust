@@ -127,8 +127,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 let sender = match ProxyHandler::new(ty, src, cache_key_cloned, assoc_manager.clone()) {
                     Ok(s) => s,
                     Err(err) => {
-                        error!("create UDP association for {} <-> {}, error: {}", src, dst, err);
-                        return Err(err);
+                        debug!("create UDP association for {} <-> {}, error: {}", src, dst, err);
+                        continue;
                     }
                 };
 
@@ -141,7 +141,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             .await;
 
         if let Err(err) = res {
-            error!("failed to create UDP association, {}", err);
+            debug!("failed to create UDP association, {}", err);
         }
     }
 }

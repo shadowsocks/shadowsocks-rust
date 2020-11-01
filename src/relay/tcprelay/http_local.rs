@@ -541,7 +541,7 @@ async fn establish_connect_tunnel(upgraded: Upgraded, stream: ProxyStream, clien
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
+                debug!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, addr),
@@ -549,7 +549,7 @@ async fn establish_connect_tunnel(upgraded: Upgraded, stream: ProxyStream, clien
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
+                debug!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }

@@ -97,7 +97,7 @@ async fn handle_socks4_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
+                debug!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, ss_addr),
@@ -105,7 +105,7 @@ async fn handle_socks4_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
+                debug!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             }
         }
     }

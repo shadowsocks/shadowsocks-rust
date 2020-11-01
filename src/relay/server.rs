@@ -135,7 +135,7 @@ async fn manager_report_task(context: SharedContext, flow_stat: SharedMultiServe
                         );
                     }
                     Err(err) => {
-                        error!(
+                        debug!(
                             "failed to send {} for server \"{}\" to manager \"{}\", error: {}",
                             stat,
                             svr_cfg.addr(),

@@ -323,13 +323,13 @@ impl ManagerService {
             let n = match self.socket.send_to(&resp_pkt, &src_addr).await {
                 Ok(n) => n,
                 Err(err) => {
-                    error!("response send_to failed, destination: {:?}, error: {}", src_addr, err);
+                    debug!("response send_to failed, destination: {:?}, error: {}", src_addr, err);
                     continue;
                 }
             };
 
             if n != resp_pkt.len() {
-                error!(
+                warn!(
                     "response packet truncated, packet: {}, sent: {}, destination: {:?}",
                     resp_pkt.len(),
                     n,

@@ -162,7 +162,7 @@ async fn handle_client(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("RELAY {} -> {} closed with error {}", peer_addr, remote_addr, err);
             } else {
-                error!("RELAY {} -> {} closed with error {}", peer_addr, remote_addr, err);
+                debug!("RELAY {} -> {} closed with error {}", peer_addr, remote_addr, err);
             }
         }
         Either::Right((Ok(_), _)) => trace!("RELAY {} <- {} closed", peer_addr, remote_addr),
@@ -170,7 +170,7 @@ async fn handle_client(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("RELAY {} <- {} closed with error {}", peer_addr, remote_addr, err);
             } else {
-                error!("RELAY {} <- {} closed with error {}", peer_addr, remote_addr, err);
+                debug!("RELAY {} <- {} closed with error {}", peer_addr, remote_addr, err);
             }
         }
     }
