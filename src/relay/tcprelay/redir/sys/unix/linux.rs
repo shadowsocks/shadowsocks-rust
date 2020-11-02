@@ -109,15 +109,15 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         let ret = match *addr {
             SocketAddr::V4(..) => libc::setsockopt(
                 fd,
-                libc::SOL_IP,
+                libc::IPPROTO_IP,
                 libc::IP_TRANSPARENT,
                 &enable as *const _ as *const _,
                 mem::size_of_val(&enable) as libc::socklen_t,
             ),
             SocketAddr::V6(..) => libc::setsockopt(
                 fd,
-                libc::SOL_IPV6,
-                libc::IP_TRANSPARENT,
+                libc::IPPROTO_IPV6,
+                libc::IPV6_TRANSPARENT,
                 &enable as *const _ as *const _,
                 mem::size_of_val(&enable) as libc::socklen_t,
             ),
