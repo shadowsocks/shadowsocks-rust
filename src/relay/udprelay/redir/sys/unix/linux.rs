@@ -103,14 +103,23 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
 
     let enable: libc::c_int = 1;
     unsafe {
-        // 1. Set IP_TRANSPARENT to allow binding to non-local addresses
-        let ret = libc::setsockopt(
-            fd,
-            libc::SOL_IP,
-            libc::IP_TRANSPARENT,
-            &enable as *const _ as *const _,
-            mem::size_of_val(&enable) as libc::socklen_t,
-        );
+        // 1. Set IP_TRANSPARENT, IPV6_TRANSPARENT to allow binding to non-local addresses
+        let ret = match *addr {
+            SocketAddr::V4(..) => libc::setsockopt(
+                fd,
+                libc::SOL_IP,
+                libc::IP_TRANSPARENT,
+                &enable as *const _ as *const _,
+                mem::size_of_val(&enable) as libc::socklen_t,
+            ),
+            SocketAddr::V6(..) => libc::setsockopt(
+                fd,
+                libc::SOL_IPV6,
+                libc::IPV6_TRANSPARENT,
+                &enable as *const _ as *const _,
+                mem::size_of_val(&enable) as libc::socklen_t,
+            ),
+        };
         if ret != 0 {
             return Err(Error::last_os_error());
         }
