@@ -1882,7 +1882,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.8.23"
+version = "1.8.24"
 dependencies = [
  "async-trait",
  "base64 0.13.0",
