@@ -87,6 +87,24 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
         }
     }
 
+    // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
+    // NOTE: This will require CAP_NET_ADMIN capability (root in most cases)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(mark) = context.config().outbound_fwmark {
+        let ret = unsafe {
+            libc::setsockopt(
+                socket.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_MARK,
+                &mark as *const _ as *const _,
+                mem::size_of_val(&mark) as libc::socklen_t,
+            )
+        };
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
     // it's important that the socket is protected before connecting
     let stream = socket.into_tcp_stream();
     TcpStream::connect_std(stream, &saddr).await

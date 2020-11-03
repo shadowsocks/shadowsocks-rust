@@ -1052,6 +1052,9 @@ pub struct Config {
     pub mode: Mode,
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
+    /// Set `SO_MARK` socket option for outbound sockets
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub outbound_fwmark: Option<u32>,
     /// Manager's configuration
     pub manager: Option<ManagerConfig>,
     /// Config is for Client or Server
@@ -1178,6 +1181,8 @@ impl Config {
             dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            outbound_fwmark: None,
             manager: None,
             config_type,
             udp_timeout: None,

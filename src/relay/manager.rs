@@ -476,6 +476,12 @@ impl ManagerService {
             config.no_delay = self.context.config().no_delay;
         }
 
+        // SO_MARK
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            config.outbound_fwmark = self.context.config().outbound_fwmark;
+        }
+
         // UDP configurations
         config.udp_timeout = self.context.config().udp_timeout;
         config.udp_max_associations = self.context.config().udp_max_associations;
