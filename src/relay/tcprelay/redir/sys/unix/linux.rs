@@ -18,7 +18,7 @@ use crate::{
 
 #[async_trait]
 impl TcpListenerRedirExt for TcpListener {
-    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener> {
+    async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener> {
         match ty {
             RedirType::Redirect => {
                 // REDIRECT rule doesn't need to set IP_TRANSPARENT
@@ -26,7 +26,7 @@ impl TcpListenerRedirExt for TcpListener {
             }
             RedirType::TProxy => {
                 // TPROXY rule requires IP_TRANSPARENT
-                create_redir_listener(addr)
+                create_redir_listener(addr).await
             }
             _ => Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -91,10 +91,10 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     }
 }
 
-fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
-    let socket = match *addr {
-        SocketAddr::V4(..) => TcpSocket::new_v4(),
-        SocketAddr::V6(..) => TcpSocket::new_v6(),
+async fn create_redir_listener(addr: SocketAddr) -> io::Result<TcpListener> {
+    let socket = match addr {
+        SocketAddr::V4(..) => TcpSocket::new_v4()?,
+        SocketAddr::V6(..) => TcpSocket::new_v6()?,
     };
 
     // For Linux 2.4+ TPROXY
@@ -103,7 +103,7 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         let fd = socket.as_raw_fd();
 
         let enable: libc::c_int = 1;
-        let ret = match *addr {
+        let ret = match addr {
             SocketAddr::V4(..) => libc::setsockopt(
                 fd,
                 libc::IPPROTO_IP,
@@ -131,5 +131,5 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
     // bind, listen as original
     socket.bind(addr)?;
     // listen backlogs = 1024 as mio's default
-    socket.listen(1024).await
+    socket.listen(1024)
 }

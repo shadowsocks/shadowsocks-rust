@@ -29,7 +29,7 @@ impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind(ty: RedirType, addr: &SocketAddr) -> io::Result<UdpRedirSocket> {
+    pub fn bind(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
         if ty == RedirType::NotSupported {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -37,17 +37,17 @@ impl UdpRedirSocket {
             ));
         }
 
-        let domain = match *addr {
+        let domain = match addr {
             SocketAddr::V4(..) => Domain::ipv4(),
             SocketAddr::V6(..) => Domain::ipv6(),
         };
         let socket = Socket::new(domain, Type::dgram(), Some(Protocol::udp()))?;
-        set_socket_before_bind(addr, &socket)?;
+        set_socket_before_bind(&addr, &socket)?;
 
         socket.set_nonblocking(true)?;
         socket.set_reuse_address(true)?;
 
-        socket.bind(&SockAddr::from(*addr))?;
+        socket.bind(&SockAddr::from(addr))?;
 
         let msock = mio::net::UdpSocket::from_socket(socket.into_udp_socket())?;
         let io = PollEvented::new(msock)?;
@@ -55,11 +55,11 @@ impl UdpRedirSocket {
     }
 
     /// Send data to the socket to the given target address
-    pub async fn send_to(&mut self, buf: &[u8], target: &SocketAddr) -> io::Result<usize> {
+    pub async fn send_to(&mut self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
         poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
     }
 
-    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: &SocketAddr) -> Poll<io::Result<usize>> {
+    fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
         ready!(self.io.poll_write_ready(cx))?;
 
         match self.io.get_ref().send_to(buf, target) {

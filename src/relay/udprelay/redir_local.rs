@@ -48,12 +48,12 @@ impl ProxyHandler {
 impl ProxySend for ProxyHandler {
     async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()> {
         // Redirect only if the target is a SocketAddress
-        if let Address::SocketAddress(ref dst_addr) = addr {
+        if let Address::SocketAddress(dst_addr) = addr {
             // Create a socket binds to destination addr
             // This only works for systems that supports binding to non-local addresses
             let mut local_udp = UdpRedirSocket::bind(self.ty, dst_addr)?;
 
-            local_udp.send_to(&data, &self.src_addr).await?;
+            local_udp.send_to(&data, self.src_addr).await?;
 
             // Update LRU
             self.assoc_map.keep_alive(&self.cache_key).await;
@@ -75,8 +75,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let ty = context.config().udp_redir;
 
-    // let l = create_socket(&bind_addr).await?;
-    let mut l = UdpRedirSocket::bind(ty, &bind_addr)?;
+    let mut l = UdpRedirSocket::bind(ty, bind_addr)?;
     let local_addr = l.local_addr().expect("determine port bound to");
 
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;

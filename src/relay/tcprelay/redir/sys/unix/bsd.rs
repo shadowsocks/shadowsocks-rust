@@ -14,7 +14,7 @@ use crate::{
 
 #[async_trait]
 impl TcpListenerRedirExt for TcpListener {
-    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener> {
+    async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener> {
         match ty {
             #[cfg(any(
                 target_os = "openbsd",
