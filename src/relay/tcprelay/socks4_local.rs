@@ -184,7 +184,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_socks4_client(&server, socket).await {
-                error!("TCP socks4 client exited with error: {}", err);
+                debug!("TCP socks4 client exited with error: {}", err);
             }
         });
     }

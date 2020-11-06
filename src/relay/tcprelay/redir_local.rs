@@ -134,7 +134,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             };
 
             if let Err(err) = handle_redir_client(&server, socket, dst_addr).await {
-                error!("TCP redirect client, error: {:?}", err);
+                debug!("TCP redirect client, error: {:?}", err);
             }
         });
     }

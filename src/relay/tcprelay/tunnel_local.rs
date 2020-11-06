@@ -132,7 +132,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_tunnel_client(&server, socket).await {
-                error!("TCP tunnel client exited with error: {:?}", err);
+                debug!("TCP tunnel client exited with error: {:?}", err);
             }
         });
     }
