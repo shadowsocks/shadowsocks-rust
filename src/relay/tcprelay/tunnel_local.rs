@@ -56,7 +56,7 @@ async fn establish_client_tcp_tunnel<'a>(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("TUNNEL relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("TUNNEL relay {} -> {} closed with error {}", client_addr, addr, err);
+                debug!("TUNNEL relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("TUNNEL relay {} <- {} closed", client_addr, addr),
@@ -64,7 +64,7 @@ async fn establish_client_tcp_tunnel<'a>(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("TUNNEL relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("TUNNEL relay {} <- {} closed with error {}", client_addr, addr, err);
+                debug!("TUNNEL relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
@@ -137,7 +137,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_tunnel_client(&server, socket).await {
-                error!("TCP tunnel client exited with error: {:?}", err);
+                debug!("TCP tunnel client exited with error: {:?}", err);
             }
         });
     }

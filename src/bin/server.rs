@@ -62,7 +62,7 @@ fn main() {
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
 
-        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+        (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
 
@@ -78,6 +78,13 @@ fn main() {
         app = clap_app!(@app (app)
             (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
             (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        app = clap_app!(@app (app)
+            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
         );
     }
 
@@ -161,6 +168,11 @@ fn main() {
 
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(mark) = matches.value_of("OUTBOUND_FWMARK") {
+        config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {

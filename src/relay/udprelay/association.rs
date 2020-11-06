@@ -322,7 +322,7 @@ impl ProxyAssociation {
                             remote_sender
                         }
                         Err(err) => {
-                            error!(
+                            debug!(
                                 "creating UDP association from {} (proxied) failed, err: {}",
                                 src_addr, err
                             );

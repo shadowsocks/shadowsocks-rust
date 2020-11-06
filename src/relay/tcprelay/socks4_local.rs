@@ -100,7 +100,7 @@ async fn handle_socks4_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
+                debug!("CONNECT relay {} -> {} closed with error {}", client_addr, ss_addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, ss_addr),
@@ -108,7 +108,7 @@ async fn handle_socks4_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             } else {
-                error!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
+                debug!("CONNECT relay {} <- {} closed with error {}", client_addr, ss_addr, err);
             }
         }
     }
@@ -189,7 +189,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_socks4_client(&server, socket).await {
-                error!("TCP socks4 client exited with error: {}", err);
+                debug!("TCP socks4 client exited with error: {}", err);
             }
         });
     }

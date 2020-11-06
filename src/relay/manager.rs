@@ -321,13 +321,13 @@ impl ManagerService {
             let n = match self.socket.send_to(&resp_pkt, &src_addr).await {
                 Ok(n) => n,
                 Err(err) => {
-                    error!("response send_to failed, destination: {:?}, error: {}", src_addr, err);
+                    debug!("response send_to failed, destination: {:?}, error: {}", src_addr, err);
                     continue;
                 }
             };
 
             if n != resp_pkt.len() {
-                error!(
+                warn!(
                     "response packet truncated, packet: {}, sent: {}, destination: {:?}",
                     resp_pkt.len(),
                     n,
@@ -472,6 +472,12 @@ impl ManagerService {
             config.no_delay = b;
         } else {
             config.no_delay = self.context.config().no_delay;
+        }
+
+        // SO_MARK
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            config.outbound_fwmark = self.context.config().outbound_fwmark;
         }
 
         // UDP configurations

@@ -20,10 +20,11 @@ use crate::{
     },
 };
 
+use byte_string::ByteStr;
 use log::{debug, info, trace};
 use tokio::{
     self,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     sync::{Barrier, Mutex},
     time,
 };
@@ -454,17 +455,71 @@ impl<S: ServerData + 'static> PingBalancer<S> {
         );
     }
 
-    async fn check_request_tcp(stat: &ServerStatistic<S>) -> io::Result<()> {
+    /// Detect TCP connectivity with Chromium [Network Portal Detection](https://www.chromium.org/chromium-os/chromiumos-design-docs/network-portal-detection)
+    #[allow(dead_code)]
+    async fn check_request_tcp_chromium(stat: &ServerStatistic<S>) -> io::Result<()> {
         static GET_BODY: &[u8] =
-            b"GET /generate_204 HTTP/1.1\r\nHost: dl.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
+            b"GET /generate_204 HTTP/1.1\r\nHost: clients3.google.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
 
-        let addr = Address::DomainNameAddress("dl.google.com".to_owned(), 80);
+        let addr = Address::DomainNameAddress("clients3.google.com".to_owned(), 80);
 
         let mut stream = TcpServerClient::connect(stat.clone_context(), &addr, stat.server_config()).await?;
         stream.write_all(GET_BODY).await?;
 
-        let mut buf = [0u8; 1];
-        stream.read_exact(&mut buf).await?;
+        let mut reader = BufReader::new(stream);
+
+        let mut buf = Vec::new();
+        reader.read_until(b'\n', &mut buf).await?;
+
+        static EXPECTED_HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 204 No Content\r\n";
+        if buf != EXPECTED_HTTP_STATUS_LINE {
+            use std::io::{Error, ErrorKind};
+
+            debug!(
+                "unexpected response from http://clients3.google.com/generate_204, {:?}",
+                ByteStr::new(&buf)
+            );
+
+            let err = Error::new(
+                ErrorKind::InvalidData,
+                "unexpected response from http://clients3.google.com/generate_204",
+            );
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    /// Detect TCP connectivity with Firefox's http://detectportal.firefox.com/success.txt
+    async fn check_request_tcp_firefox(stat: &ServerStatistic<S>) -> io::Result<()> {
+        static GET_BODY: &[u8] =
+            b"GET /success.txt HTTP/1.1\r\nHost: detectportal.firefox.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
+
+        let addr = Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80);
+
+        let mut stream = TcpServerClient::connect(stat.clone_context(), &addr, stat.server_config()).await?;
+        stream.write_all(GET_BODY).await?;
+
+        let mut reader = BufReader::new(stream);
+
+        let mut buf = Vec::new();
+        reader.read_until(b'\n', &mut buf).await?;
+
+        static EXPECTED_HTTP_STATUS_LINE: &[u8] = b"HTTP/1.1 200 OK\r\n";
+        if buf != EXPECTED_HTTP_STATUS_LINE {
+            use std::io::{Error, ErrorKind};
+
+            debug!(
+                "unexpected response from http://detectportal.firefox.com/success.txt, {:?}",
+                ByteStr::new(&buf)
+            );
+
+            let err = Error::new(
+                ErrorKind::InvalidData,
+                "unexpected response from http://detectportal.firefox.com/success.txt",
+            );
+            return Err(err);
+        }
 
         Ok(())
     }
@@ -483,7 +538,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
 
     async fn check_request(stat: &ServerStatistic<S>, server_type: ServerType) -> io::Result<()> {
         match server_type {
-            ServerType::Tcp => PingBalancer::<S>::check_request_tcp(stat).await,
+            ServerType::Tcp => PingBalancer::<S>::check_request_tcp_firefox(stat).await,
             ServerType::Udp => PingBalancer::<S>::check_request_udp(stat).await,
         }
     }

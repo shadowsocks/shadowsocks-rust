@@ -99,7 +99,7 @@ async fn handle_socks5_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
+                debug!("CONNECT relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("CONNECT relay {} <- {} closed", client_addr, addr),
@@ -107,7 +107,7 @@ async fn handle_socks5_connect(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
+                debug!("CONNECT relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
@@ -271,7 +271,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         let udp_conf = udp_conf.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_socks5_client(&server, socket, udp_conf).await {
-                error!("TCP socks5 client exited with error: {}", err);
+                debug!("TCP socks5 client exited with error: {}", err);
             }
         });
     }

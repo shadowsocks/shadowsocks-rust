@@ -116,7 +116,7 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
             .await;
 
         if let Err(err) = res {
-            error!("failed to create UDP association, {}", err);
+            debug!("failed to create UDP association, {}", err);
         }
     }
 }

@@ -55,7 +55,7 @@ fn main() {
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
         (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
-        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+        (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
         (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) +next_line_help "Default encryption method")
@@ -73,6 +73,13 @@ fn main() {
         app = clap_app!(@app (app)
             (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
             (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        app = clap_app!(@app (app)
+            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
         );
     }
 
@@ -128,6 +135,11 @@ fn main() {
 
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(mark) = matches.value_of("OUTBOUND_FWMARK") {
+        config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
     }
 
     if let Some(m) = matches.value_of("MANAGER_ADDRESS") {

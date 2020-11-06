@@ -81,7 +81,7 @@ fn main() {
 
         (@arg PROTOCOL: --protocol +takes_value default_value("socks5") possible_values(AVAILABLE_PROTOCOLS) +next_line_help "Protocol that for communicating with clients")
 
-        (@arg NO_DELAY: --("no-delay") !takes_value "Set no-delay option for socket")
+        (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
 
@@ -101,6 +101,13 @@ fn main() {
             .help("Resolve hostname to IPv6 address first"),
     );
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        app = clap_app!(@app (app)
+            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
+        );
+    }
+
     #[cfg(feature = "local-redir")]
     {
         let available_redir_types = RedirType::available_types();
@@ -118,7 +125,8 @@ fn main() {
         }
     }
 
-    if cfg!(target_os = "android") {
+    #[cfg(target_os = "android")]
+    {
         app = clap_app!(@app (app)
             (@arg VPN_MODE: --vpn "Enable VPN mode (only for Android)")
         );
@@ -239,7 +247,8 @@ fn main() {
         config.server.push(svr_addr);
     }
 
-    if cfg!(target_os = "android") {
+    #[cfg(target_os = "android")]
+    {
         config.local_dns_path = Some(From::from("local_dns_path"));
 
         if matches.is_present("VPN_MODE") {
@@ -292,6 +301,11 @@ fn main() {
 
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(mark) = matches.value_of("OUTBOUND_FWMARK") {
+        config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
     }
 
     if let Some(nofile) = matches.value_of("NOFILE") {

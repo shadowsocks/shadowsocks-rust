@@ -30,6 +30,7 @@ validate_type!(
     "should be either ip:port, domain:port or /path/to/unix.sock"
 );
 validate_type!(validate_u64, u64, "should be unsigned integer");
+validate_type!(validate_u32, u32, "should be unsigned integer");
 
 pub fn validate_server_url(v: String) -> Result<(), String> {
     match ServerConfig::from_url(&v) {

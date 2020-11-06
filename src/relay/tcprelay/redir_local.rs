@@ -53,7 +53,7 @@ async fn establish_client_tcp_redir<'a>(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("REDIR relay {} -> {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("REDIR relay {} -> {} closed with error {}", client_addr, addr, err);
+                debug!("REDIR relay {} -> {} closed with error {}", client_addr, addr, err);
             }
         }
         Either::Right((Ok(..), _)) => trace!("REDIR relay {} <- {} closed", client_addr, addr),
@@ -61,7 +61,7 @@ async fn establish_client_tcp_redir<'a>(
             if let ErrorKind::TimedOut = err.kind() {
                 trace!("REDIR relay {} <- {} closed with error {}", client_addr, addr, err);
             } else {
-                error!("REDIR relay {} <- {} closed with error {}", client_addr, addr, err);
+                debug!("REDIR relay {} <- {} closed with error {}", client_addr, addr, err);
             }
         }
     }
@@ -134,7 +134,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             };
 
             if let Err(err) = handle_redir_client(&server, socket, dst_addr).await {
-                error!("TCP redirect client, error: {:?}", err);
+                debug!("TCP redirect client, error: {:?}", err);
             }
         });
     }

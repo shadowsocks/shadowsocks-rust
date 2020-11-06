@@ -98,7 +98,7 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
     };
 
     // For Linux 2.4+ TPROXY
-    // Sockets have to set IP_TRANSPARENT for retrieving original destination by getsockname()
+    // Sockets have to set IP_TRANSPARENT, IPV6_TRANSPARENT for retrieving original destination by getsockname()
     unsafe {
         let fd = socket.as_raw_fd();
 
@@ -106,15 +106,15 @@ fn create_redir_listener(addr: &SocketAddr) -> io::Result<TcpListener> {
         let ret = match *addr {
             SocketAddr::V4(..) => libc::setsockopt(
                 fd,
-                libc::SOL_IP,
+                libc::IPPROTO_IP,
                 libc::IP_TRANSPARENT,
                 &enable as *const _ as *const _,
                 mem::size_of_val(&enable) as libc::socklen_t,
             ),
             SocketAddr::V6(..) => libc::setsockopt(
                 fd,
-                libc::SOL_IPV6,
-                libc::IP_TRANSPARENT,
+                libc::IPPROTO_IPV6,
+                libc::IPV6_TRANSPARENT,
                 &enable as *const _ as *const _,
                 mem::size_of_val(&enable) as libc::socklen_t,
             ),
