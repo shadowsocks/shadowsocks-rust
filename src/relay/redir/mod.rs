@@ -14,7 +14,7 @@ pub trait TcpListenerRedirExt {
     // Create a TcpListener for transparent proxy
     //
     // Implementation is platform dependent
-    async fn bind_redir(ty: RedirType, addr: &SocketAddr) -> io::Result<TcpListener>;
+    async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener>;
 }
 
 pub trait TcpStreamRedirExt {

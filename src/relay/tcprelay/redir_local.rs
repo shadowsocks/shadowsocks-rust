@@ -45,6 +45,9 @@ async fn establish_client_tcp_redir<'a>(
     let rhalf = copy(&mut r, &mut svr_w);
     let whalf = copy(&mut svr_r, &mut w);
 
+    tokio::pin!(rhalf);
+    tokio::pin!(whalf);
+
     debug!("REDIR relay established {} <-> {}", client_addr, addr);
 
     match future::select(rhalf, whalf).await {
@@ -72,11 +75,11 @@ async fn establish_client_tcp_redir<'a>(
 }
 
 async fn handle_redir_client(server: &SharedPlainServerStatistic, s: TcpStream, daddr: SocketAddr) -> io::Result<()> {
-    let svr_cfg = server.server_config();
-
-    if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
-        error!("failed to set keep alive: {:?}", err);
-    }
+    // let svr_cfg = server.server_config();
+    //
+    // if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
+    //     error!("failed to set keep alive: {:?}", err);
+    // }
 
     if server.config().no_delay {
         if let Err(err) = s.set_nodelay(true) {
@@ -97,7 +100,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let redir_ty = context.config().tcp_redir;
 
-    let mut listener = TcpListener::bind_redir(redir_ty, &bind_addr).await.map_err(|err| {
+    let listener = TcpListener::bind_redir(redir_ty, bind_addr).await.map_err(|err| {
         error!("failed to listen on {} ({}), {}", local_addr, bind_addr, err);
         err
     })?;

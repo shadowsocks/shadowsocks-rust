@@ -13,7 +13,7 @@ use crate::{
 
 #[async_trait]
 impl TcpListenerRedirExt for TcpListener {
-    async fn bind_redir(_ty: RedirType, _addr: &SocketAddr) -> io::Result<TcpListener> {
+    async fn bind_redir(_ty: RedirType, _addr: SocketAddr) -> io::Result<TcpListener> {
         let err = Error::new(
             ErrorKind::InvalidInput,
             "not supported tcp transparent proxy on Windows",
