@@ -3,7 +3,7 @@
 use std::{
     convert::TryInto,
     io::{self, Error, ErrorKind, Read, Write},
-    mem::{self, MaybeUninit},
+    mem,
     net::Shutdown,
     os::unix::io::{AsRawFd, RawFd},
     path::Path,
@@ -15,18 +15,18 @@ use std::{
 
 use futures::{future, ready};
 use mio::net::UnixStream as MioUnixStream;
-use tokio::io::{AsyncRead, AsyncWrite, PollEvented};
+use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 /// A UnixStream supports transferring FDs between processes
 pub struct UnixStream {
-    io: PollEvented<MioUnixStream>,
+    io: AsyncFd<MioUnixStream>,
 }
 
 impl UnixStream {
     /// Connects to the socket named by `path`.
     pub async fn connect<P: AsRef<Path>>(path: P) -> io::Result<UnixStream> {
         let uds = MioUnixStream::connect(path)?;
-        let io = PollEvented::new(uds)?;
+        let io = AsyncFd::new(uds)?;
 
         future::poll_fn(|cx| io.poll_write_ready(cx)).await?;
         Ok(UnixStream { io })
@@ -58,11 +58,7 @@ impl UnixStream {
 }
 
 impl AsyncRead for UnixStream {
-    unsafe fn prepare_uninitialized_buffer(&self, _: &mut [MaybeUninit<u8>]) -> bool {
-        false
-    }
-
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         self.poll_read_priv(cx, buf)
     }
 }
@@ -94,24 +90,34 @@ impl UnixStream {
     // of view, it will result in unexpected behavior in the form of lost
     // notifications and tasks hanging.
 
-    pub(crate) fn poll_read_priv(&self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
+    pub(crate) fn poll_read_priv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-        match self.io.get_ref().read(buf) {
+        let b = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+        match self.io.get_ref().read(b) {
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.io.clear_read_ready(cx, mio::Ready::readable())?;
+                read_guard.clear_ready();
                 Poll::Pending
             }
-            x => Poll::Ready(x),
+            Ok(n) => {
+                // Safety: We trust `UnixStream::read` to have filled up `n` bytes
+                // in the buffer.
+                unsafe {
+                    buf.assume_init(n);
+                }
+                buf.advance(n);
+                return Poll::Ready(Ok(()));
+            }
+            Err(e) => return Poll::Ready(Err(e)),
         }
     }
 
     pub(crate) fn poll_write_priv(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        ready!(self.io.poll_write_ready(cx))?;
+        let mut write_guard = ready!(self.io.poll_write_ready(cx))?;
 
         match self.io.get_ref().write(buf) {
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                self.io.clear_write_ready(cx)?;
+                write_guard.clear_ready();
                 Poll::Pending
             }
             x => Poll::Ready(x),
