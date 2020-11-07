@@ -107,10 +107,16 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let enable: libc::c_int = 1;
 
     // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_BINDANY,
+        libc::IPPROTO_IPV6 => libc::IPV6_BINDANY,
+        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
+    };
+
     let ret = libc::setsockopt(
         fd,
         level,
-        libc::IP_BINDANY,
+        opt,
         &enable as *const _ as *const _,
         mem::size_of_val(&enable) as libc::socklen_t,
     );
@@ -122,7 +128,7 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
 }
 
 #[cfg(target_os = "openbsd")]
-fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let fd = socket.as_raw_fd();
 
     let enable: libc::c_int = 1;
@@ -130,7 +136,7 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     // https://man.openbsd.org/getsockopt.2
     let ret = libc::setsockopt(
         fd,
-        level,
+        libc::SOL_SOCKET,
         libc::SO_BINDANY,
         &enable as *const _ as *const _,
         mem::size_of_val(&enable) as libc::socklen_t,
