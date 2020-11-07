@@ -72,7 +72,7 @@ async fn socks5_relay_stream() {
     const LOCAL_ADDR: &str = "127.0.0.1:8200";
 
     const PASSWORD: &str = "test-password";
-    const METHOD: CipherType = CipherType::Aes128Gcm;
+    const METHOD: CipherType = CipherType::Aes128Cfb;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run().await;

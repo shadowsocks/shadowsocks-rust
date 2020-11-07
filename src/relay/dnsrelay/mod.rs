@@ -304,7 +304,7 @@ async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
     let listener = TcpListener::bind(&bind_addr).await?;
 
     let actual_local_addr = listener.local_addr()?;
-    info!("shadowsocks DNS relay listening on tcp:{}", actual_local_addr);
+    info!("shadowsocks DNS relay (TCP) listening on {}", actual_local_addr);
 
     loop {
         let (mut stream, src) = listener.accept().await?;
@@ -332,7 +332,7 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
     let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
-    info!("shadowsocks DNS relay listening on udp:{}", actual_local_addr);
+    info!("shadowsocks DNS relay (UDP) listening on {}", actual_local_addr);
 
     let rx = Arc::new(socket);
     let tx = rx.clone();

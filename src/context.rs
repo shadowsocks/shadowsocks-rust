@@ -27,8 +27,6 @@ use trust_dns_resolver::TokioAsyncResolver;
 use crate::crypto::CipherType;
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
-#[cfg(not(feature = "local-dns-relay"))]
-use crate::relay::dns_resolver::resolve;
 #[cfg(feature = "local-dns-relay")]
 use crate::relay::dnsrelay::upstream::LocalUpstream;
 #[cfg(feature = "local-flow-stat")]
@@ -36,7 +34,7 @@ use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
-    relay::socks5::Address,
+    relay::{dns_resolver::resolve, socks5::Address},
 };
 
 // Entries for server's bloom filter
@@ -186,7 +184,7 @@ pub struct Context {
 
     // For local DNS upstream
     #[cfg(feature = "local-dns-relay")]
-    local_dns: LocalUpstream,
+    local_dns: Option<LocalUpstream>,
 }
 
 /// Unique context thw whole server
@@ -229,7 +227,11 @@ impl Context {
 
         let nonce_ppbloom = SpinMutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns-relay")]
-        let local_dns = LocalUpstream::new(&config);
+        let local_dns = if config.is_local_dns_relay() {
+            Some(LocalUpstream::new(&config))
+        } else {
+            None
+        };
 
         Context {
             config,
@@ -318,7 +320,10 @@ impl Context {
     #[cfg(feature = "local-dns-relay")]
     #[inline(always)]
     async fn dns_resolve_impl(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
-        self.local_dns().lookup_ip(host, port).await
+        match self.local_dns {
+            Some(ref local_dns) => local_dns.lookup_ip(host, port).await,
+            None => resolve(self, host, port).await,
+        }
     }
 
     #[cfg(not(feature = "local-dns-relay"))]
@@ -402,7 +407,7 @@ impl Context {
     /// Get local DNS connector
     #[cfg(feature = "local-dns-relay")]
     pub fn local_dns(&self) -> &LocalUpstream {
-        &self.local_dns
+        &self.local_dns.as_ref().expect("local DNS uninitialized")
     }
 
     /// Check target address ACL (for client)
