@@ -94,12 +94,12 @@ fn generate_query_message(query: &Query) -> Message {
 }
 
 pub async fn read_message<T: AsyncReadExt + Unpin>(stream: &mut T) -> io::Result<Message> {
-    let mut res_buffer = vec![0; 2];
-    stream.read_exact(&mut res_buffer[0..2]).await?;
+    let mut res_buffer = [0; 2];
+    stream.read_exact(&mut res_buffer).await?;
 
-    let size = BigEndian::read_u16(&res_buffer[0..2]) as usize;
+    let size = BigEndian::read_u16(&res_buffer) as usize;
     let mut res_buffer = vec![0; size];
-    stream.read_exact(&mut res_buffer[0..size]).await?;
+    stream.read_exact(&mut res_buffer).await?;
 
     Ok(Message::from_vec(&res_buffer)?)
 }

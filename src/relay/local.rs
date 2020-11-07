@@ -118,24 +118,20 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     }
 
     #[cfg(feature = "local-dns-relay")]
-    {
-        if context.config().dns_local_addr.is_some() {
-            use crate::relay::dnsrelay::run as run_dns;
+    if context.config().is_local_dns_relay() {
+        use crate::relay::dnsrelay::run as run_dns;
 
-            // DNS relay local server
-            let dns_relay = run_dns(context.clone());
-            vf.push(dns_relay.boxed());
-        }
+        // DNS relay local server
+        let dns_relay = run_dns(context.clone());
+        vf.push(dns_relay.boxed());
     }
 
     #[cfg(feature = "local-flow-stat")]
-    {
-        if context.config().stat_path.is_some() {
-            // For Android's flow statistic
+    if context.config().stat_path.is_some() {
+        // For Android's flow statistic
 
-            let report_fut = flow_report_task(context.clone());
-            vf.push(report_fut.boxed());
-        }
+        let report_fut = flow_report_task(context.clone());
+        vf.push(report_fut.boxed());
     }
 
     let (res, ..) = select_all(vf.into_iter()).await;

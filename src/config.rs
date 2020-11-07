@@ -1524,6 +1524,12 @@ impl Config {
 
         Ok(())
     }
+
+    /// Check if DNS Relay is enabled
+    #[cfg(feature = "local-dns-relay")]
+    pub(crate) fn is_local_dns_relay(&self) -> bool {
+        self.config_type == ConfigType::DnsLocal || self.local_dns_addr.is_some() || self.local_dns_path.is_some()
+    }
 }
 
 impl fmt::Display for Config {

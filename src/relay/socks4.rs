@@ -56,7 +56,7 @@ impl Command {
 }
 
 /// SOCKS4 Result Code
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Eq, PartialEq)]
 pub enum ResultCode {
     /// 90: request granted
     RequestGranted,
@@ -324,8 +324,11 @@ impl HandshakeResponse {
         let _ = r.read_exact(&mut buf).await?;
 
         let vn = buf[0];
-        if vn != consts::SOCKS4_VERSION {
-            let err = Error::new(ErrorKind::InvalidData, format!("unsupported socks version {:#x}", vn));
+        if vn != 0 {
+            let err = Error::new(
+                ErrorKind::InvalidData,
+                format!("unsupported socks4 response version {:#x}", vn),
+            );
             return Err(err);
         }
 
