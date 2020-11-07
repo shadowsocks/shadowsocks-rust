@@ -525,13 +525,35 @@ impl<S: ServerData + 'static> PingBalancer<S> {
     }
 
     async fn check_request_udp(stat: &ServerStatistic<S>) -> io::Result<()> {
-        static DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x05\x62\x61\x69\x64\x75\x03\x63\x6f\x6d\x00\x00\x01\x00\x01";
+        // TransactionID: 0x1234
+        // Flags: 0x0100 RD
+        // Questions: 0x0001
+        // Answer RRs: 0x0000
+        // Authority RRs: 0x0000
+        // Additional RRs: 0x0000
+        // Queries
+        //    - QNAME: \x07 firefox \x03 com \x00
+        //    - QTYPE: 0x0001 A
+        //    - QCLASS: 0x0001 IN
+        static DNS_QUERY: &[u8] =
+            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
 
         let addr = Address::SocketAddress(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53));
 
         let client = UdpServerClient::new(stat.context(), stat.server_config()).await?;
         client.send_to(stat.context(), &addr, DNS_QUERY).await?;
-        let _ = client.recv_from(stat.context()).await?;
+
+        let (_, dns_answer) = client.recv_from(stat.context()).await?;
+
+        // DNS packet must have at least 6 * 2 bytes
+        if dns_answer.len() < 12 || &dns_answer[0..2] != b"\x12\x34" {
+            use std::io::{Error, ErrorKind};
+
+            debug!("unexpected response from 8.8.8.8:53, {:?}", ByteStr::new(&dns_answer));
+
+            let err = Error::new(ErrorKind::InvalidData, "unexpected response from 8.8.8.8:53");
+            return Err(err);
+        }
 
         Ok(())
     }
