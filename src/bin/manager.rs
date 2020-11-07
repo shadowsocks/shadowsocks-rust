@@ -40,6 +40,7 @@ mod validator;
 fn main() {
     let available_ciphers = CipherType::available_ciphers();
 
+    #[allow(unused_mut)]
     let mut app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
