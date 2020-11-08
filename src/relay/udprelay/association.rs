@@ -15,7 +15,7 @@ use std::{
 use async_trait::async_trait;
 use bytes::BytesMut;
 use futures::future::{self, AbortHandle};
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use spin::Mutex as SyncMutex;
 use tokio::{
@@ -136,13 +136,22 @@ impl ProxyAssociation {
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
         debug!(
-            "created UDP association {} <-> {} (proxied)",
-            src_addr, remote_bind_addr
+            "created UDP association {} <-> {} (from {}) (proxied)",
+            src_addr,
+            server.server_config().addr(),
+            remote_bind_addr
         );
 
         // connect() to remote server to avoid resolving server's address every call of send()
         // ref: #263
         ProxyAssociation::connect_remote(server.context(), server.server_config(), &remote_udp).await?;
+
+        trace!(
+            "connected UDP remote server {} for association {} <-> {} (proxied)",
+            server.server_config().addr(),
+            src_addr,
+            remote_bind_addr
+        );
 
         // Splits socket into sender and receiver
         let remote_receiver = Arc::new(remote_udp);
