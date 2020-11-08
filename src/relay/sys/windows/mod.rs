@@ -15,10 +15,7 @@ use crate::context::Context;
 ///
 /// It also disables `WSAECONNRESET` for UDP socket
 pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
-    // FIXME: Temporary solution. Should be replaced by tokio's UdpSocket::as_raw_socket
-    // https://github.com/tokio-rs/tokio/issues/2017
-
-    let socket = ::std::net::UdpSocket::bind(addr)?;
+    let socket = UdpSocket::bind(addr).await?;
     let handle = socket.as_raw_socket() as SOCKET;
 
     unsafe {
@@ -56,7 +53,7 @@ pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
         }
     }
 
-    UdpSocket::from_std(socket)
+    Ok(socket)
 }
 
 /// create a new TCP stream
