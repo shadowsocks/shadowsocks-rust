@@ -67,6 +67,6 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, _context: &Context) -> io::R
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_udp_socket_with_context(addr: &SocketAddr, _context: &Context) -> io::Result<UdpSocket> {
+pub async fn create_outbound_udp_socket(addr: &SocketAddr, _context: &Context) -> io::Result<UdpSocket> {
     create_udp_socket(addr).await
 }

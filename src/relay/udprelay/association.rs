@@ -35,7 +35,7 @@ use crate::{
     relay::{
         loadbalancing::server::{ServerData, SharedServerStatistic},
         socks5::Address,
-        sys::{create_udp_socket, create_udp_socket_with_context},
+        sys::create_outbound_udp_socket,
         utils::try_timeout,
     },
 };
@@ -135,7 +135,7 @@ impl ProxyAssociation {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 
-        let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
+        let remote_udp = create_outbound_udp_socket(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
         debug!(
@@ -187,7 +187,7 @@ impl ProxyAssociation {
         // Create a socket for receiving packets
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
 
-        let remote_udp = create_udp_socket_with_context(&local_addr, server.context()).await?;
+        let remote_udp = create_outbound_udp_socket(&local_addr, server.context()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
 
         debug!(
@@ -774,7 +774,7 @@ impl ServerAssociation {
         // Create a socket for receiving packets
         // Let system allocate an address for us (INADDR_ANY)
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let remote_udp = create_udp_socket(&local_addr).await?;
+        let remote_udp = create_outbound_udp_socket(&local_addr, &context).await?;
 
         let local_addr = remote_udp.local_addr().expect("could not determine port bound to");
         debug!("created UDP Association for {} from {}", src_addr, local_addr);

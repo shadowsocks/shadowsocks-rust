@@ -18,7 +18,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
     crypto::{CipherCategory, CipherType},
-    relay::{socks5::Address, sys::create_udp_socket, utils::try_timeout},
+    relay::{socks5::Address, sys::create_outbound_udp_socket, utils::try_timeout},
 };
 
 use super::{
@@ -94,7 +94,7 @@ impl ServerClient {
     /// Create a client to communicate with Shadowsocks' UDP server
     pub async fn new(context: &Context, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
         let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let socket = create_udp_socket(&local_addr).await?;
+        let socket = create_outbound_udp_socket(&local_addr, context).await?;
         match svr_cfg.addr() {
             ServerAddr::SocketAddr(ref remote_addr) => socket.connect(remote_addr).await?,
             ServerAddr::DomainName(ref dname, port) => {

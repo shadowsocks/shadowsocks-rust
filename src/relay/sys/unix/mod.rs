@@ -112,7 +112,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_udp_socket_with_context(addr: &SocketAddr, context: &Context) -> io::Result<UdpSocket> {
+pub async fn create_outbound_udp_socket(addr: &SocketAddr, context: &Context) -> io::Result<UdpSocket> {
     let socket = UdpSocket::bind(addr).await?;
 
     // Any traffic to localhost should be protected
