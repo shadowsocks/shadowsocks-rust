@@ -64,7 +64,7 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 #[cfg(feature = "trust-dns")]
-use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
+use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 use url::{self, Url};
 
 use crate::{
@@ -74,6 +74,13 @@ use crate::{
     plugin::PluginConfig,
     relay::{dns_resolver::resolve_bind_addr, socks5::Address},
 };
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+enum SSDnsConfig {
+    Simple(String),
+    TrustDns(ResolverConfig),
+}
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
@@ -108,7 +115,7 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    dns: Option<String>,
+    dns: Option<SSDnsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1047,7 +1054,8 @@ pub struct Config {
     /// - `google`
     /// - `cloudflare`, `cloudflare_tls`, `cloudflare_https`
     /// - `quad9`, `quad9_tls`
-    pub dns: Option<String>,
+    #[cfg(feature = "trust-dns")]
+    pub dns: Option<ResolverConfig>,
     /// Server mode, `tcp_only`, `tcp_and_udp`, and `udp_only`
     pub mode: Mode,
     /// Set `TCP_NODELAY` socket option
@@ -1178,6 +1186,7 @@ impl Config {
             server: Vec::new(),
             local_addr: None,
             forward: None,
+            #[cfg(feature = "trust-dns")]
             dns: None,
             mode: Mode::TcpOnly,
             no_delay: false,
@@ -1377,7 +1386,75 @@ impl Config {
         }
 
         // DNS
-        nconfig.dns = config.dns;
+        nconfig.dns = match config.dns {
+            Some(SSDnsConfig::Simple(ds)) => {
+                match &ds[..] {
+                    "google" => Some(ResolverConfig::google()),
+
+                    "cloudflare" => Some(ResolverConfig::cloudflare()),
+                    #[cfg(feature = "dns-over-tls")]
+                    "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
+                    #[cfg(feature = "dns-over-https")]
+                    "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
+
+                    "quad9" => Some(ResolverConfig::quad9()),
+                    #[cfg(feature = "dns-over-tls")]
+                    "quad9_tls" => Some(ResolverConfig::quad9_tls()),
+
+                    nameservers => {
+                        // Set ips directly
+                        // Similar to shadowsocks-libev's `ares_set_servers_ports_csv`
+                        //
+                        // ```
+                        // host[:port][,host[:port]]...
+                        // ```
+                        //
+                        // For example:
+                        //     `192.168.1.100,192.168.1.101,3.4.5.6`
+                        let mut c = ResolverConfig::new();
+                        for part in nameservers.split(',') {
+                            let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
+                                socket_addr
+                            } else if let Ok(ipaddr) = part.parse::<IpAddr>() {
+                                SocketAddr::new(ipaddr, 53)
+                            } else {
+                                let e = Error::new(
+                                    ErrorKind::Invalid,
+                                    "invalid `dns` value, can only be host[:port][,host[:port]]...",
+                                    None,
+                                );
+                                return Err(e);
+                            };
+
+                            c.add_name_server(NameServerConfig {
+                                socket_addr,
+                                protocol: Protocol::Udp,
+                                tls_dns_name: None,
+                                trust_nx_responses: false,
+                                #[cfg(feature = "dns-over-tls")]
+                                tls_config: None,
+                            });
+                            c.add_name_server(NameServerConfig {
+                                socket_addr,
+                                protocol: Protocol::Tcp,
+                                tls_dns_name: None,
+                                trust_nx_responses: false,
+                                #[cfg(feature = "dns-over-tls")]
+                                tls_config: None,
+                            });
+                        }
+
+                        if c.name_servers().is_empty() {
+                            None
+                        } else {
+                            Some(c)
+                        }
+                    }
+                }
+            }
+            Some(SSDnsConfig::TrustDns(c)) => Some(c),
+            None => None,
+        };
 
         // Mode
         if let Some(m) = config.mode {
@@ -1430,45 +1507,10 @@ impl Config {
         Config::load_from_str(&content[..], config_type)
     }
 
-    #[doc(hidden)]
     #[cfg(feature = "trust-dns")]
     /// Get `trust-dns`'s `ResolverConfig` by DNS configuration string
-    pub fn get_dns_config(&self) -> Option<ResolverConfig> {
-        self.dns.as_ref().and_then(|ds| {
-            match &ds[..] {
-                "google" => Some(ResolverConfig::google()),
-
-                "cloudflare" => Some(ResolverConfig::cloudflare()),
-                #[cfg(feature = "dns-over-tls")]
-                "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
-                #[cfg(feature = "dns-over-https")]
-                "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
-
-                "quad9" => Some(ResolverConfig::quad9()),
-                #[cfg(feature = "dns-over-tls")]
-                "quad9_tls" => Some(ResolverConfig::quad9_tls()),
-
-                _ => {
-                    // Set ips directly
-                    //
-                    // TODO: Support customizable DNS over TLS or HTTPS
-                    match ds.parse::<IpAddr>() {
-                        Ok(ip) => Some(ResolverConfig::from_parts(
-                            None,
-                            vec![],
-                            NameServerConfigGroup::from_ips_clear(&[ip], 53),
-                        )),
-                        Err(..) => {
-                            error!(
-                                "Failed to parse DNS \"{}\" in config to IpAddr, fallback to system config",
-                                ds
-                            );
-                            None
-                        }
-                    }
-                }
-            }
-        })
+    pub(crate) fn get_dns_config(&self) -> Option<ResolverConfig> {
+        self.dns.clone()
     }
 
     /// Check if there are any plugin are enabled with servers
@@ -1636,7 +1678,7 @@ impl fmt::Display for Config {
         }
 
         if let Some(ref dns) = self.dns {
-            jconf.dns = Some(dns.to_string());
+            jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
         }
 
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
