@@ -49,8 +49,6 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
-use super::BUFFER_SIZE;
-
 /// AEAD packet payload must be smaller than 0x3FFF
 const MAX_PACKET_SIZE: usize = 0x3FFF;
 
@@ -74,8 +72,9 @@ pub struct DecryptedReader {
 impl DecryptedReader {
     pub fn new(t: CipherType, key: &[u8], nonce: &[u8]) -> DecryptedReader {
         DecryptedReader {
-            buffer: BytesMut::with_capacity(BUFFER_SIZE),
-            data: BytesMut::with_capacity(BUFFER_SIZE),
+            // Initialize for the first length block
+            buffer: BytesMut::with_capacity(2 + t.tag_size()),
+            data: BytesMut::new(),
             cipher: crypto::new_aead_decryptor(t, key, nonce),
             pos: 0,
             tag_size: t.tag_size(),
