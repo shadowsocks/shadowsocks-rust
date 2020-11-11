@@ -30,14 +30,13 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
                 conf,
                 resolver_opts
             );
-            TokioAsyncResolver::tokio(conf, resolver_opts).await
+            TokioAsyncResolver::tokio(conf, resolver_opts)
         }
 
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
         #[cfg(any(unix, windows))]
         None => {
-            use tokio::runtime::Handle;
-            use trust_dns_resolver::system_conf::read_system_conf;
+            use trust_dns_resolver::{name_server::TokioHandle, system_conf::read_system_conf};
 
             // use the system resolver configuration
             let (config, mut opts) = match read_system_conf() {
@@ -64,7 +63,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
                 opts
             );
 
-            TokioAsyncResolver::new(config, opts, Handle::current()).await
+            TokioAsyncResolver::new(config, opts, TokioHandle)
         }
 
         #[cfg(not(any(unix, windows)))]
@@ -75,7 +74,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
                 ResolverConfig::google(),
                 resolver_opts
             );
-            TokioAsyncResolver::tokio(ResolverConfig::google(), resolver_opts).await
+            TokioAsyncResolver::tokio(ResolverConfig::google(), resolver_opts)
         }
     }
     .map_err(From::from)

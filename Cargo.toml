@@ -39,8 +39,7 @@ incremental = false
 panic = "abort"
 
 [features]
-#default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
-default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
+default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
 # Enables AEAD ciphers that depending on ring
 # aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
 ring-aead-ciphers = ["ring"]
@@ -115,8 +114,10 @@ url = "2.1"
 byte_string = "1.0"
 libsodium-sys = { version = "0.2", optional = true }
 miscreant = { version = "0.5", default-features = false, features = ["std", "pmac"], optional = true }
-trust-dns-resolver = { version = "0.19", optional = true }
-trust-dns-proto = { version = "0.19", optional = true }
+# trust-dns-resolver = { version = "0.19", optional = true }
+# trust-dns-proto = { version = "0.19", optional = true }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
+trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
 hkdf = "0.10"
 hmac = "0.10"
 sha-1 = "0.9"
@@ -156,3 +157,6 @@ daemonize = "^0.4.1"
 
 [dev-dependencies]
 env_logger = "0.8"
+
+[patch.crates-io]
+h2 = { git = "https://github.com/hyperium/h2.git" }
