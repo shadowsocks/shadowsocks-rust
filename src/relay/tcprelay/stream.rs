@@ -15,27 +15,24 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::BUFFER_SIZE;
 
-const DUMMY_BUFFER: [u8; BUFFER_SIZE] = [0u8; BUFFER_SIZE];
-
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader {
     buffer: BytesMut,
     cipher: BoxStreamCipher,
     pos: usize,
     got_final: bool,
-    incoming_buffer: Vec<u8>,
+    incoming_buffer: Box<[u8]>,
 }
 
 impl DecryptedReader {
     pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader {
         let cipher = new_stream(t, key, iv, CryptoMode::Decrypt);
-        let buffer_size = cipher.buffer_size(&DUMMY_BUFFER);
         DecryptedReader {
-            buffer: BytesMut::with_capacity(buffer_size),
+            buffer: BytesMut::new(),
             cipher,
             pos: 0,
             got_final: false,
-            incoming_buffer: vec![0u8; BUFFER_SIZE],
+            incoming_buffer: vec![0u8; BUFFER_SIZE].into_boxed_slice(),
         }
     }
 
