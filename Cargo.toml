@@ -39,7 +39,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
+default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4", "local-dns"]
 # Enables AEAD ciphers that depending on ring
 # aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
 ring-aead-ciphers = ["ring"]

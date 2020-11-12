@@ -321,7 +321,7 @@ impl Context {
     #[inline(always)]
     async fn dns_resolve_impl(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         match self.local_dns {
-            Some(ref local_dns) => local_dns.lookup_ip(host, port).await,
+            Some(ref local_dns) => local_dns.lookup_ip(self, host, port).await,
             None => resolve(self, host, port).await,
         }
     }

@@ -7,7 +7,7 @@ use std::{
 };
 
 use futures::future;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use tokio::net::TcpListener;
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
@@ -203,18 +203,18 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
             remote
         );
 
-        let remote_response_fut = try_timeout(remote.lookup(query), Some(Duration::new(3, 0)));
-        let local_response_fut = try_timeout(local.lookup(query), Some(Duration::new(3, 0)));
+        let remote_response_fut = try_timeout(remote.lookup(&self.context, query), Some(Duration::new(3, 0)));
+        let local_response_fut = try_timeout(local.lookup(&self.context, query), Some(Duration::new(3, 0)));
 
         match should_forward_by_query(acl, query) {
             Some(true) => {
                 let remote_response = remote_response_fut.await;
-                debug!("pick remote response (query): {:?}", remote_response);
+                trace!("pick remote response (query): {:?}", remote_response);
                 return (remote_response, true);
             }
             Some(false) => {
                 let local_response = local_response_fut.await;
-                debug!("pick local response (query): {:?}", local_response);
+                trace!("pick local response (query): {:?}", local_response);
                 return (local_response, false);
             }
             None => (),
@@ -235,7 +235,7 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
             tokio::select! {
                 response = &mut remote_response_fut, if remote_response.is_none() => {
                     if use_remote {
-                        debug!("pick remote response (response): {:?}", response);
+                        trace!("pick remote response (response): {:?}", response);
                         return (response, true);
                     } else {
                         remote_response = Some(response);
@@ -243,10 +243,10 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
                 }
                 decision = &mut decider, if !use_remote => {
                     if let Some(local_response) = decision {
-                        debug!("pick local response (response): {:?}", local_response);
+                        trace!("pick local response (response): {:?}", local_response);
                         return (local_response, false);
                     } else if let Some(remote_response) = remote_response {
-                        debug!("pick remote response (response): {:?}", remote_response);
+                        trace!("pick remote response (response): {:?}", remote_response);
                         return (remote_response, true);
                     } else {
                         use_remote = true;
@@ -272,7 +272,7 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
             let (r, forward) = self.acl_lookup(&request.queries()[0]).await;
             if let Ok(result) = r {
                 for rec in result.answers() {
-                    debug!("dns answer: {:?}", rec);
+                    trace!("dns answer: {:?}", rec);
                     match rec.rdata() {
                         RData::A(ref ip) => {
                             self.context
@@ -312,9 +312,9 @@ async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
         tokio::spawn(async move {
             match upstream::read_message(&mut stream).await {
                 Ok(request) => {
-                    debug!("received src: {}, query: {:?}", src, request);
+                    trace!("received src: {}, query: {:?}", src, request);
                     let message = relay.resolve(request).await;
-                    debug!("DNS src: {}, final response: {:?}", src, message);
+                    trace!("DNS src: {}, final response: {:?}", src, message);
                     if let Err(err) = upstream::write_message(&mut stream, &message).await {
                         error!("failed to write DNS response, error: {}", err);
                     }
@@ -383,7 +383,12 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let local_addr = match context.config().config_type {
         ConfigType::DnsLocal => {
             // Standalone server
-            context.config().local_addr.as_ref().expect("local config")
+            context
+                .config()
+                .dns_local_addr
+                .as_ref()
+                .or(context.config().local_addr.as_ref())
+                .expect("dns relay addr")
         }
         c if c.is_local() => {
             // Integrated mode

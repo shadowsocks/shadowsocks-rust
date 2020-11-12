@@ -1,15 +1,17 @@
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::io::AsRawFd;
 use std::{
     io::{self, Error, ErrorKind},
     mem,
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
-    os::unix::io::{AsRawFd, RawFd},
-    path::Path,
 };
+#[cfg(any(target_os = "android"))]
+use std::{os::unix::io::RawFd, path::Path};
 
 use cfg_if::cfg_if;
 use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 
-use crate::context::Context;
+use crate::config::Config;
 
 /// Convert `sockaddr_storage` to `SocketAddr`
 #[allow(dead_code)]
@@ -59,17 +61,13 @@ cfg_if! {
 
             Ok(())
         }
-    } else {
-        #[inline(always)]
-        async fn protect<P: AsRef<Path>>(_protect_path: P, _fd: RawFd) -> io::Result<()> {
-            Ok(())
-        }
     }
 }
 
 /// create a new TCP stream
 #[inline(always)]
-pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Result<TcpStream> {
+#[allow(unused_variables)]
+pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &Config) -> io::Result<TcpStream> {
     let socket = match *saddr {
         SocketAddr::V4(..) => TcpSocket::new_v4()?,
         SocketAddr::V6(..) => TcpSocket::new_v6()?,
@@ -77,8 +75,9 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
 
     // Any traffic to localhost should not be protected
     // This is a workaround for VPNService
-    if cfg!(target_os = "android") && !saddr.ip().is_loopback() {
-        if let Some(ref path) = context.config().protect_path {
+    #[cfg(target_os = "android")]
+    if !saddr.ip().is_loopback() {
+        if let Some(ref path) = config.protect_path {
             protect(path, socket.as_raw_fd()).await?;
         }
     }
@@ -86,7 +85,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
     // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
     // NOTE: This will require CAP_NET_ADMIN capability (root in most cases)
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(mark) = context.config().outbound_fwmark {
+    if let Some(mark) = config.outbound_fwmark {
         let ret = unsafe {
             libc::setsockopt(
                 socket.as_raw_fd(),
@@ -107,13 +106,15 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, context: &Context) -> io::Re
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_outbound_udp_socket(addr: &SocketAddr, context: &Context) -> io::Result<UdpSocket> {
+#[allow(unused_variables)]
+pub async fn create_outbound_udp_socket(addr: &SocketAddr, config: &Config) -> io::Result<UdpSocket> {
     let socket = UdpSocket::bind(addr).await?;
 
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService
-    if cfg!(target_os = "android") && !addr.ip().is_loopback() {
-        if let Some(ref path) = context.config().protect_path {
+    #[cfg(target_os = "android")]
+    if !addr.ip().is_loopback() {
+        if let Some(ref path) = config.protect_path {
             protect(path, socket.as_raw_fd()).await?;
         }
     }
@@ -121,7 +122,7 @@ pub async fn create_outbound_udp_socket(addr: &SocketAddr, context: &Context) ->
     // Set SO_MARK for mark-based routing on Linux (since 2.6.25)
     // NOTE: This will require CAP_NET_ADMIN capability (root in most cases)
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Some(mark) = context.config().outbound_fwmark {
+    if let Some(mark) = config.outbound_fwmark {
         let ret = unsafe {
             libc::setsockopt(
                 socket.as_raw_fd(),
