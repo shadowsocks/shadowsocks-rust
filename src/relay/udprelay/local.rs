@@ -34,7 +34,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
             any(feature = "local-http-native-tls", feature = "local-http-rustls")
         ))]
         ConfigType::HttpsLocal => unreachable!(),
-        #[cfg(feature = "local-dns-relay")]
+        #[cfg(feature = "local-dns")]
         ConfigType::DnsLocal => unreachable!(),
         ConfigType::Server => unreachable!(),
         ConfigType::Manager => unreachable!(),

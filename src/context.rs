@@ -1,8 +1,8 @@
 //! Shadowsocks Server Context
 
-#[cfg(feature = "local-dns-relay")]
+#[cfg(feature = "local-dns")]
 use std::net::IpAddr;
-#[cfg(feature = "local-dns-relay")]
+#[cfg(feature = "local-dns")]
 use std::time::Duration;
 use std::{
     io,
@@ -15,10 +15,10 @@ use std::{
 
 use bloomfilter::Bloom;
 use log::{log_enabled, warn};
-#[cfg(feature = "local-dns-relay")]
+#[cfg(feature = "local-dns")]
 use lru_time_cache::LruCache;
 use spin::Mutex as SpinMutex;
-#[cfg(feature = "local-dns-relay")]
+#[cfg(feature = "local-dns")]
 use tokio::sync::Mutex as AsyncMutex;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
@@ -27,7 +27,7 @@ use trust_dns_resolver::TokioAsyncResolver;
 use crate::crypto::CipherType;
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
-#[cfg(feature = "local-dns-relay")]
+#[cfg(feature = "local-dns")]
 use crate::relay::dnsrelay::upstream::LocalUpstream;
 #[cfg(feature = "local-flow-stat")]
 use crate::relay::flow::ServerFlowStatistic;
@@ -179,11 +179,11 @@ pub struct Context {
     local_flow_statistic: ServerFlowStatistic,
 
     // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     reverse_lookup_cache: AsyncMutex<LruCache<IpAddr, bool>>,
 
     // For local DNS upstream
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     local_dns: Option<LocalUpstream>,
 }
 
@@ -226,7 +226,7 @@ impl Context {
         }
 
         let nonce_ppbloom = SpinMutex::new(PingPongBloom::new(config.config_type));
-        #[cfg(feature = "local-dns-relay")]
+        #[cfg(feature = "local-dns")]
         let local_dns = if config.is_local_dns_relay() {
             Some(LocalUpstream::new(&config))
         } else {
@@ -240,11 +240,11 @@ impl Context {
             nonce_ppbloom,
             #[cfg(feature = "local-flow-stat")]
             local_flow_statistic: ServerFlowStatistic::new(),
-            #[cfg(feature = "local-dns-relay")]
+            #[cfg(feature = "local-dns")]
             reverse_lookup_cache: AsyncMutex::new(LruCache::with_expiry_duration(Duration::from_secs(
                 3 * 24 * 60 * 60,
             ))),
-            #[cfg(feature = "local-dns-relay")]
+            #[cfg(feature = "local-dns")]
             local_dns,
         }
     }
@@ -317,7 +317,7 @@ impl Context {
         }
     }
 
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     #[inline(always)]
     async fn dns_resolve_impl(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         match self.local_dns {
@@ -326,7 +326,7 @@ impl Context {
         }
     }
 
-    #[cfg(not(feature = "local-dns-relay"))]
+    #[cfg(not(feature = "local-dns"))]
     #[inline(always)]
     async fn dns_resolve_impl(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         resolve(self, host, port).await
@@ -373,7 +373,7 @@ impl Context {
     }
 
     /// Add a record to the reverse lookup cache
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     pub async fn add_to_reverse_lookup_cache(&self, addr: &IpAddr, forward: bool) {
         let is_exception = forward
             != match self.acl() {
@@ -405,7 +405,7 @@ impl Context {
     }
 
     /// Get local DNS connector
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     pub fn local_dns(&self) -> &LocalUpstream {
         &self.local_dns.as_ref().expect("local DNS uninitialized")
     }
@@ -416,7 +416,7 @@ impl Context {
             // Proxy everything by default
             None => false,
             Some(a) => {
-                #[cfg(feature = "local-dns-relay")]
+                #[cfg(feature = "local-dns")]
                 {
                     if let Address::SocketAddress(ref saddr) = target {
                         // do the reverse lookup in our local cache

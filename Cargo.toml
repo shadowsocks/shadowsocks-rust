@@ -64,8 +64,7 @@ dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https-rustls"]
 # by enabling this feature will try to build or use prebuilt OpenSSL libraries
 openssl-vendored = ["native-tls/vendored", "openssl/vendored"]
 # Enable DNS-relay
-# Currently is only used in Android
-local-dns-relay = ["trust-dns-proto"]
+local-dns = ["trust-dns-proto"]
 # Enable client flow statistic report
 # Currently is only used in Android
 local-flow-stat = []

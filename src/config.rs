@@ -679,7 +679,7 @@ pub enum ConfigType {
     /// Config for dns relay local
     ///
     /// Requires `local` configuration
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     DnsLocal,
 
     /// Config for server
@@ -696,7 +696,7 @@ impl ConfigType {
             ConfigType::Socks5Local => true,
             #[cfg(feature = "local-socks4")]
             ConfigType::Socks4Local => true,
-            #[cfg(feature = "local-dns-relay")]
+            #[cfg(feature = "local-dns")]
             ConfigType::DnsLocal => true,
             #[cfg(feature = "local-tunnel")]
             ConfigType::TunnelLocal => true,
@@ -719,7 +719,7 @@ impl ConfigType {
             ConfigType::Socks5Local => false,
             #[cfg(feature = "local-socks4")]
             ConfigType::Socks4Local => false,
-            #[cfg(feature = "local-dns-relay")]
+            #[cfg(feature = "local-dns")]
             ConfigType::DnsLocal => false,
             #[cfg(feature = "local-tunnel")]
             ConfigType::TunnelLocal => false,
@@ -784,112 +784,33 @@ impl FromStr for Mode {
     }
 }
 
-/// Transparent Proxy type
-#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter)]
-pub enum RedirType {
-    /// For not supported platforms
-    NotSupported,
+cfg_if! {
+    if #[cfg(feature = "local-redir")] {
+        /// Transparent Proxy type
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter)]
+        pub enum RedirType {
+            /// For not supported platforms
+            NotSupported,
 
-    /// For Linux-like systems' Netfilter `REDIRECT`. Only for TCP connections.
-    ///
-    /// This is supported from Linux 2.4 Kernel. Document: https://www.netfilter.org/documentation/index.html#documentation-howto
-    ///
-    /// NOTE: Filter rule `REDIRECT` can only be applied to TCP connections.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    Redirect,
-
-    /// For Linux-like systems' Netfilter TPROXY rule.
-    ///
-    /// NOTE: Filter rule `TPROXY` can be applied to TCP and UDP connections.
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    TProxy,
-
-    /// Packet Filter (pf)
-    ///
-    /// Supported by OpenBSD 3.0+, FreeBSD 5.3+, NetBSD 3.0+, Solaris 11.3+, macOS 10.7+, iOS, QNX
-    ///
-    /// Document: https://www.freebsd.org/doc/handbook/firewalls-pf.html
-    #[cfg(any(
-        target_os = "openbsd",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "solaris",
-        target_os = "macos",
-        target_os = "ios"
-    ))]
-    PacketFilter,
-
-    /// IPFW
-    ///
-    /// Supported by FreeBSD, macOS 10.6- (Have been removed completely on macOS 10.10)
-    ///
-    /// Document: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
-    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
-    IpFirewall,
-}
-
-impl RedirType {
-    cfg_if! {
-        if #[cfg(any(target_os = "linux", target_os = "android"))] {
-            /// Default TCP transparent proxy solution on this platform
-            pub fn tcp_default() -> RedirType {
-                RedirType::Redirect
-            }
-
-            /// Default UDP transparent proxy solution on this platform
-            pub fn udp_default() -> RedirType {
-                RedirType::TProxy
-            }
-        } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
-            /// Default TCP transparent proxy solution on this platform
-            pub fn tcp_default() -> RedirType {
-                RedirType::PacketFilter
-            }
-
-            /// Default UDP transparent proxy solution on this platform
-            pub fn udp_default() -> RedirType {
-                RedirType::PacketFilter
-            }
-        } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
-            /// Default TCP transparent proxy solution on this platform
-            pub fn tcp_default() -> RedirType {
-                RedirType::PacketFilter
-            }
-
-            /// Default UDP transparent proxy solution on this platform
-            pub fn udp_default() -> RedirType {
-                RedirType::NotSupported
-            }
-        } else {
-            /// Default TCP transparent proxy solution on this platform
-            pub fn tcp_default() -> RedirType {
-                RedirType::NotSupported
-            }
-
-            /// Default UDP transparent proxy solution on this platform
-            pub fn udp_default() -> RedirType {
-                RedirType::NotSupported
-            }
-        }
-    }
-
-    /// Check if transparent proxy is supported on this platform
-    pub fn is_supported(self) -> bool {
-        self != RedirType::NotSupported
-    }
-
-    /// Name of redirect type (transparent proxy type)
-    pub fn name(self) -> &'static str {
-        match self {
-            // Dummy, shouldn't be used in any useful situations
-            RedirType::NotSupported => "not_supported",
-
+            /// For Linux-like systems' Netfilter `REDIRECT`. Only for TCP connections.
+            ///
+            /// This is supported from Linux 2.4 Kernel. Document: https://www.netfilter.org/documentation/index.html#documentation-howto
+            ///
+            /// NOTE: Filter rule `REDIRECT` can only be applied to TCP connections.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            RedirType::Redirect => "redirect",
+            Redirect,
 
+            /// For Linux-like systems' Netfilter TPROXY rule.
+            ///
+            /// NOTE: Filter rule `TPROXY` can be applied to TCP and UDP connections.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            RedirType::TProxy => "tproxy",
+            TProxy,
 
+            /// Packet Filter (pf)
+            ///
+            /// Supported by OpenBSD 3.0+, FreeBSD 5.3+, NetBSD 3.0+, Solaris 11.3+, macOS 10.7+, iOS, QNX
+            ///
+            /// Document: https://www.freebsd.org/doc/handbook/firewalls-pf.html
             #[cfg(any(
                 target_os = "openbsd",
                 target_os = "freebsd",
@@ -898,67 +819,150 @@ impl RedirType {
                 target_os = "macos",
                 target_os = "ios"
             ))]
-            RedirType::PacketFilter => "pf",
+            PacketFilter,
 
+            /// IPFW
+            ///
+            /// Supported by FreeBSD, macOS 10.6- (Have been removed completely on macOS 10.10)
+            ///
+            /// Document: https://www.freebsd.org/doc/handbook/firewalls-ipfw.html
             #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
-            RedirType::IpFirewall => "ipfw",
+            IpFirewall,
         }
-    }
 
-    /// Get all available types
-    pub fn available_types() -> Vec<&'static str> {
-        let mut v = Vec::new();
-        for e in Self::iter() {
-            match e {
-                RedirType::NotSupported => continue,
-                #[allow(unreachable_patterns)]
-                _ => v.push(e.name()),
+        impl RedirType {
+            cfg_if! {
+                if #[cfg(any(target_os = "linux", target_os = "android"))] {
+                    /// Default TCP transparent proxy solution on this platform
+                    pub fn tcp_default() -> RedirType {
+                        RedirType::Redirect
+                    }
+
+                    /// Default UDP transparent proxy solution on this platform
+                    pub fn udp_default() -> RedirType {
+                        RedirType::TProxy
+                    }
+                } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
+                    /// Default TCP transparent proxy solution on this platform
+                    pub fn tcp_default() -> RedirType {
+                        RedirType::PacketFilter
+                    }
+
+                    /// Default UDP transparent proxy solution on this platform
+                    pub fn udp_default() -> RedirType {
+                        RedirType::PacketFilter
+                    }
+                } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
+                    /// Default TCP transparent proxy solution on this platform
+                    pub fn tcp_default() -> RedirType {
+                        RedirType::PacketFilter
+                    }
+
+                    /// Default UDP transparent proxy solution on this platform
+                    pub fn udp_default() -> RedirType {
+                        RedirType::NotSupported
+                    }
+                } else {
+                    /// Default TCP transparent proxy solution on this platform
+                    pub fn tcp_default() -> RedirType {
+                        RedirType::NotSupported
+                    }
+
+                    /// Default UDP transparent proxy solution on this platform
+                    pub fn udp_default() -> RedirType {
+                        RedirType::NotSupported
+                    }
+                }
+            }
+
+            /// Check if transparent proxy is supported on this platform
+            pub fn is_supported(self) -> bool {
+                self != RedirType::NotSupported
+            }
+
+            /// Name of redirect type (transparent proxy type)
+            pub fn name(self) -> &'static str {
+                match self {
+                    // Dummy, shouldn't be used in any useful situations
+                    RedirType::NotSupported => "not_supported",
+
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    RedirType::Redirect => "redirect",
+
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    RedirType::TProxy => "tproxy",
+
+                    #[cfg(any(
+                        target_os = "openbsd",
+                        target_os = "freebsd",
+                        target_os = "netbsd",
+                        target_os = "solaris",
+                        target_os = "macos",
+                        target_os = "ios"
+                    ))]
+                    RedirType::PacketFilter => "pf",
+
+                    #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+                    RedirType::IpFirewall => "ipfw",
+                }
+            }
+
+            /// Get all available types
+            pub fn available_types() -> Vec<&'static str> {
+                let mut v = Vec::new();
+                for e in Self::iter() {
+                    match e {
+                        RedirType::NotSupported => continue,
+                        #[allow(unreachable_patterns)]
+                        _ => v.push(e.name()),
+                    }
+                }
+                v
             }
         }
-        v
-    }
-}
 
-impl Display for RedirType {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
+        impl Display for RedirType {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str(self.name())
+            }
+        }
 
-/// Error type for `RedirType`'s `FromStr::Err`
-#[derive(Debug)]
-pub struct InvalidRedirType;
+        /// Error type for `RedirType`'s `FromStr::Err`
+        #[derive(Debug)]
+        pub struct InvalidRedirType;
 
-impl FromStr for RedirType {
-    type Err = InvalidRedirType;
+        impl FromStr for RedirType {
+            type Err = InvalidRedirType;
 
-    fn from_str(s: &str) -> Result<RedirType, InvalidRedirType> {
-        match s {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            "redirect" => Ok(RedirType::Redirect),
+            fn from_str(s: &str) -> Result<RedirType, InvalidRedirType> {
+                match s {
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    "redirect" => Ok(RedirType::Redirect),
 
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            "tproxy" => Ok(RedirType::TProxy),
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    "tproxy" => Ok(RedirType::TProxy),
 
-            #[cfg(any(
-                target_os = "openbsd",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "solaris",
-                target_os = "macos",
-                target_os = "ios",
-            ))]
-            "pf" => Ok(RedirType::PacketFilter),
+                    #[cfg(any(
+                        target_os = "openbsd",
+                        target_os = "freebsd",
+                        target_os = "netbsd",
+                        target_os = "solaris",
+                        target_os = "macos",
+                        target_os = "ios",
+                    ))]
+                    "pf" => Ok(RedirType::PacketFilter),
 
-            #[cfg(any(
-                target_os = "freebsd",
-                target_os = "macos",
-                target_os = "ios",
-                target_os = "dragonfly"
-            ))]
-            "ipfw" => Ok(RedirType::IpFirewall),
+                    #[cfg(any(
+                        target_os = "freebsd",
+                        target_os = "macos",
+                        target_os = "ios",
+                        target_os = "dragonfly"
+                    ))]
+                    "ipfw" => Ok(RedirType::IpFirewall),
 
-            _ => Err(InvalidRedirType),
+                    _ => Err(InvalidRedirType),
+                }
+            }
         }
     }
 }
@@ -1044,6 +1048,7 @@ pub struct Config {
     /// Local server's bind address, or ShadowSocks server's outbound address
     pub local_addr: Option<ClientConfig>,
     /// Destination address for tunnel
+    #[cfg(feature = "local-tunnel")]
     pub forward: Option<Address>,
     /// DNS configuration, uses system-wide DNS configuration by default
     ///
@@ -1079,28 +1084,32 @@ pub struct Config {
     pub nofile: Option<u64>,
     /// ACL configuration
     pub acl: Option<AccessControl>,
-    /// Path to stat callback unix address, only for Android
     /// TCP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
     pub tcp_redir: RedirType,
     /// UDP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
     pub udp_redir: RedirType,
-    /// Android flow statistic report Unix socket path
+    /// Flow statistic report Unix socket path (only for Android)
     #[cfg(feature = "local-flow-stat")]
     pub stat_path: Option<PathBuf>,
     /// Path to protect callback unix address, only for Android
     pub protect_path: Option<PathBuf>,
-    /// Path for local DNS resolver, only for Android
+    /// Path for local DNS resolver
+    #[cfg(all(feature = "local-dns", target_os = "android"))]
     pub local_dns_path: Option<PathBuf>,
     /// Internal DNS's bind address
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     pub dns_local_addr: Option<ClientConfig>,
     /// Local DNS's address
     ///
     /// Sending DNS query directly to this address
+    #[cfg(feature = "local-dns")]
     pub local_dns_addr: Option<SocketAddr>,
     /// Remote DNS's address
     ///
     /// Sending DNS query through proxy to this address
+    #[cfg(feature = "local-dns")]
     pub remote_dns_addr: Option<Address>,
     /// Uses IPv6 addresses first
     ///
@@ -1185,6 +1194,7 @@ impl Config {
         Config {
             server: Vec::new(),
             local_addr: None,
+            #[cfg(feature = "local-tunnel")]
             forward: None,
             #[cfg(feature = "trust-dns")]
             dns: None,
@@ -1199,15 +1209,20 @@ impl Config {
             udp_bind_addr: None,
             nofile: None,
             acl: None,
+            #[cfg(feature = "local-redir")]
             tcp_redir: RedirType::tcp_default(),
+            #[cfg(feature = "local-redir")]
             udp_redir: RedirType::udp_default(),
             #[cfg(feature = "local-flow-stat")]
             stat_path: None,
             protect_path: None,
+            #[cfg(all(feature = "local-dns", target_os = "android"))]
             local_dns_path: None,
-            #[cfg(feature = "local-dns-relay")]
+            #[cfg(feature = "local-dns")]
             dns_local_addr: None,
+            #[cfg(feature = "local-dns")]
             local_dns_addr: None,
+            #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
             ipv6_first: false,
             #[cfg(feature = "local-http-native-tls")]
@@ -1568,9 +1583,19 @@ impl Config {
     }
 
     /// Check if DNS Relay is enabled
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     pub(crate) fn is_local_dns_relay(&self) -> bool {
-        self.config_type == ConfigType::DnsLocal || self.local_dns_addr.is_some() || self.local_dns_path.is_some()
+        if self.config_type == ConfigType::DnsLocal || self.local_dns_addr.is_some() {
+            return true;
+        }
+
+        cfg_if! {
+            if #[cfg(target_os = "android")] {
+                self.local_dns_path.is_some()
+            } else {
+                false
+            }
+        }
     }
 }
 
