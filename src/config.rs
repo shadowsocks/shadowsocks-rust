@@ -61,8 +61,6 @@ use bytes::Bytes;
 use cfg_if::cfg_if;
 use log::error;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 use url::{self, Url};
@@ -786,6 +784,9 @@ impl FromStr for Mode {
 
 cfg_if! {
     if #[cfg(feature = "local-redir")] {
+        use strum::IntoEnumIterator;
+        use strum_macros::EnumIter;
+
         /// Transparent Proxy type
         #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter)]
         pub enum RedirType {
@@ -1094,6 +1095,7 @@ pub struct Config {
     #[cfg(feature = "local-flow-stat")]
     pub stat_path: Option<PathBuf>,
     /// Path to protect callback unix address, only for Android
+    #[cfg(target_os = "android")]
     pub protect_path: Option<PathBuf>,
     /// Path for local DNS resolver
     #[cfg(all(feature = "local-dns", target_os = "android"))]
@@ -1215,6 +1217,7 @@ impl Config {
             udp_redir: RedirType::udp_default(),
             #[cfg(feature = "local-flow-stat")]
             stat_path: None,
+            #[cfg(target_os = "android")]
             protect_path: None,
             #[cfg(all(feature = "local-dns", target_os = "android"))]
             local_dns_path: None,

@@ -50,9 +50,9 @@ function build() {
 
     RELEASE_DIR="target/${TARGET}/release"
 
-    EXTRA_FEATURES="local-dns"
+    EXTRA_FEATURES=""
     if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
-        EXTRA_FEATURES+=" local-redir"
+        EXTRA_FEATURES+="local-redir"
     fi
 
     EXTRA_FLAG=""
@@ -60,7 +60,7 @@ function build() {
         # This is because `ring` doesn't support MIPS
         # https://github.com/shadowsocks/shadowsocks-rust/issues/273
         # https://github.com/briansmith/ring/issues/562
-        EXTRA_FEATURES="sodium rc4 aes-cfb aes-ctr local-http local-http-native-tls local-tunnel local-socks4 local-redir local-dns"
+        EXTRA_FEATURES="sodium rc4 aes-cfb aes-ctr local-http local-http-native-tls local-tunnel local-socks4 local-redir"
         EXTRA_FLAG="--no-default-features"
     fi
 

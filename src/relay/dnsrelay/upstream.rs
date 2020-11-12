@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::{
     fmt,
     fmt::{Debug, Formatter},
@@ -7,25 +9,20 @@ use std::{
 
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
+use cfg_if::cfg_if;
 use rand::Rng;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::UdpSocket,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use trust_dns_proto::{
     op::{Message, Query},
     rr::{DNSClass, Name, RData, RecordType},
 };
 
-#[cfg(unix)]
-use std::path::PathBuf;
-#[cfg(unix)]
-use tokio::net::UnixStream;
-
 use crate::{
     config::{Config, ServerConfig},
-    context::SharedContext,
-    relay::{socks5::Address, tcprelay::ProxyStream},
+    context::{Context, SharedContext},
+    relay::{socks5::Address, sys::create_outbound_udp_socket, tcprelay::ProxyStream},
 };
 
 #[derive(Debug)]
@@ -38,35 +35,43 @@ pub enum LocalUpstream {
 
 impl LocalUpstream {
     pub fn new(config: &Config) -> LocalUpstream {
-        #[cfg(target_os = "android")]
-        return LocalUpstream::UnixSocket(UnixSocketUpstream {
-            path: config.local_dns_path.clone().expect("local query DNS path"),
-        });
-        #[cfg(not(target_os = "android"))]
-        LocalUpstream::Udp(UdpUpstream {
-            server: config.local_dns_addr.clone().expect("local query DNS address"),
-        })
-    }
-
-    pub async fn lookup(&self, query: &Query) -> io::Result<Message> {
-        match self {
-            LocalUpstream::Udp(upstream) => upstream.lookup(query).await,
-            // LocalUpstream::Tcp(upstream) => upstream.lookup(query),
-            #[cfg(unix)]
-            LocalUpstream::UnixSocket(upstream) => upstream.lookup(query).await,
+        cfg_if! {
+            if #[cfg(target_os = "android")] {
+                LocalUpstream::UnixSocket(UnixSocketUpstream {
+                    path: config.local_dns_path.clone().expect("local query DNS path"),
+                })
+            } else {
+                LocalUpstream::Udp(UdpUpstream {
+                    server: config.local_dns_addr.clone().expect("local query DNS address"),
+                })
+            }
         }
     }
 
-    pub async fn lookup_ip(&self, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
+    pub async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
+        match self {
+            LocalUpstream::Udp(upstream) => upstream.lookup(context, query).await,
+            // LocalUpstream::Tcp(upstream) => upstream.lookup(query),
+            #[cfg(unix)]
+            LocalUpstream::UnixSocket(upstream) => upstream.lookup(context, query).await,
+        }
+    }
+
+    pub async fn lookup_ip(&self, context: &Context, host: &str, port: u16) -> io::Result<Vec<SocketAddr>> {
         let mut name = Name::from_utf8(host)?;
         name.set_fqdn(true);
+
         let mut queryv4 = Query::new();
         queryv4.set_query_class(DNSClass::IN);
         queryv4.set_name(name);
+
         let mut queryv6 = queryv4.clone();
         queryv4.set_query_type(RecordType::A);
         queryv6.set_query_type(RecordType::AAAA);
-        let (responsev4, responsev6) = tokio::try_join!(self.lookup(&queryv4), self.lookup(&queryv6))?;
+
+        let (responsev4, responsev6) =
+            tokio::try_join!(self.lookup(context, &queryv4), self.lookup(context, &queryv6))?;
+
         macro_rules! parse {
             ($response:expr) => {
                 $response.answers().iter().filter_map(|rec| match rec.rdata() {
@@ -82,7 +87,7 @@ impl LocalUpstream {
 
 #[async_trait]
 pub trait Upstream: Debug {
-    async fn lookup(&self, query: &Query) -> io::Result<Message>;
+    async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message>;
 }
 
 fn generate_query_message(query: &Query) -> Message {
@@ -122,22 +127,30 @@ where
     read_message(stream).await
 }
 
-#[derive(Debug)]
 pub struct UdpUpstream {
     pub server: SocketAddr,
 }
 
+impl Debug for UdpUpstream {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UdpUpstream").field("ns", &self.server).finish()
+    }
+}
+
 #[async_trait]
 impl Upstream for UdpUpstream {
-    async fn lookup(&self, query: &Query) -> io::Result<Message> {
-        let socket = UdpSocket::bind(SocketAddr::new(
+    async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
+        // TODO: Reuse UdpSocket for sending queries
+
+        let local_addr = SocketAddr::new(
             match self.server {
                 SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                 SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
             },
             0,
-        ))
-        .await?;
+        );
+        let socket = create_outbound_udp_socket(&local_addr, context.config()).await?;
+
         socket.connect(self.server).await?;
         socket.send(&generate_query_message(query).to_vec()?).await?;
         let mut response = vec![0; 512];
@@ -175,7 +188,7 @@ impl<F> Upstream for ProxyTcpUpstream<F>
 where
     F: Fn() -> ServerConfig + Send + Sync,
 {
-    async fn lookup(&self, query: &Query) -> io::Result<Message> {
+    async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
         let mut stream = ProxyStream::connect_proxied(self.context.clone(), &(self.svr_cfg)(), &self.ns).await?;
         stream_lookup(query, &mut stream).await
     }
@@ -190,7 +203,7 @@ pub struct UnixSocketUpstream {
 #[cfg(unix)]
 #[async_trait]
 impl Upstream for UnixSocketUpstream {
-    async fn lookup(&self, query: &Query) -> io::Result<Message> {
+    async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
         let mut stream = UnixStream::connect(&self.path).await?;
         stream_lookup(query, &mut stream).await
     }

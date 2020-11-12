@@ -289,10 +289,10 @@ impl ProxyStream {
         // FIXME: No timeout for direct connections
 
         let stream = match *addr {
-            Address::SocketAddress(ref saddr) => tcp_stream_connect(&saddr, &context).await?,
+            Address::SocketAddress(ref saddr) => tcp_stream_connect(&saddr, context.config()).await?,
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(context, domain, port, |saddr| {
-                    tcp_stream_connect(&saddr, &context).await
+                    tcp_stream_connect(&saddr, context.config()).await
                 })?
                 .1
             }
@@ -425,13 +425,13 @@ async fn connect_proxy_server_internal(
 ) -> io::Result<STcpStream> {
     match svr_addr {
         ServerAddr::SocketAddr(ref addr) => {
-            let stream = try_timeout(tcp_stream_connect(&addr, &context), timeout).await?;
+            let stream = try_timeout(tcp_stream_connect(&addr, context.config()), timeout).await?;
             trace!("connected proxy {} ({})", orig_svr_addr, addr);
             Ok(STcpStream::new(stream, timeout))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
-                match try_timeout(tcp_stream_connect(&addr, &context), timeout).await {
+                match try_timeout(tcp_stream_connect(&addr, context.config()), timeout).await {
                     Ok(s) => Ok(STcpStream::new(s, timeout)),
                     Err(e) => {
                         trace!(

@@ -9,7 +9,7 @@ use winapi::{
     },
 };
 
-use crate::context::Context;
+use crate::config::Config;
 
 /// Create a `UdpSocket` binded to `addr`
 ///
@@ -58,12 +58,12 @@ pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
 
 /// create a new TCP stream
 #[inline(always)]
-pub async fn tcp_stream_connect(saddr: &SocketAddr, _context: &Context) -> io::Result<TcpStream> {
+pub async fn tcp_stream_connect(saddr: &SocketAddr, _context: &Config) -> io::Result<TcpStream> {
     TcpStream::connect(saddr).await
 }
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_outbound_udp_socket(addr: &SocketAddr, _context: &Context) -> io::Result<UdpSocket> {
+pub async fn create_outbound_udp_socket(addr: &SocketAddr, _context: &Config) -> io::Result<UdpSocket> {
     create_udp_socket(addr).await
 }
