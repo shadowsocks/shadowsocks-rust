@@ -117,7 +117,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         vf.push(udp_fut.boxed());
     }
 
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     if context.config().is_local_dns_relay() {
         use crate::relay::dnsrelay::run as run_dns;
 

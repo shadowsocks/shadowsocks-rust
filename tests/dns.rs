@@ -1,4 +1,4 @@
-#![cfg(feature = "local-dns-relay")]
+#![cfg(feature = "local-dns")]
 
 use std::time::Duration;
 

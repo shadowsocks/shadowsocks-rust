@@ -48,6 +48,8 @@ const AVAILABLE_PROTOCOLS: &[&str] = &[
     "tunnel",
     #[cfg(feature = "local-redir")]
     "redir",
+    #[cfg(feature = "local-dns")]
+    "dns",
 ];
 
 fn main() {
@@ -77,8 +79,6 @@ fn main() {
         (@group SERVER_CONFIG =>
             (@attributes +multiple arg[SERVER_ADDR URL]))
 
-        (@arg FORWARD_ADDR: -f --("forward-addr") +takes_value {validator::validate_address} required_if("PROTOCOL", "tunnel") "Forwarding data directly to this address (for tunnel)")
-
         (@arg PROTOCOL: --protocol +takes_value default_value("socks5") possible_values(AVAILABLE_PROTOCOLS) +next_line_help "Protocol that for communicating with clients")
 
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
@@ -100,6 +100,13 @@ fn main() {
             .short("6")
             .help("Resolve hostname to IPv6 address first"),
     );
+
+    #[cfg(feature = "local-tunnel")]
+    {
+        app = clap_app!(@app (app)
+            (@arg FORWARD_ADDR: -f --("forward-addr") +takes_value {validator::validate_address} required_if("PROTOCOL", "tunnel") "Forwarding data directly to this address (for tunnel)")
+        );
+    }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
@@ -135,16 +142,16 @@ fn main() {
     #[cfg(feature = "local-flow-stat")]
     {
         app = clap_app!(@app (app)
-            (@arg STAT_PATH: --("stat-path") +takes_value "Specify stat_path for traffic stat (only for Android)")
+            (@arg STAT_PATH: --("stat-path") +takes_value "Specify socket path (unix domain socket) for sending traffic statistic")
         );
     }
 
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns") +takes_value {validator::validate_socket_addr} "Specify the address of local DNS server (only for Android)")
-            (@arg REMOTE_DNS_ADDR: --("remote-dns") +takes_value {validator::validate_address} "Specify the address of remote DNS server (only for Android)")
-            (@arg DNS_LOCAL_ADDR: --("dns-relay") +takes_value {validator::validate_server_addr} "Specify the address of DNS relay (only for Android)")
+            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value {validator::validate_socket_addr} "Specify the address of local DNS server, send queries directly")
+            (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
+            (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_server_addr} "DNS address, listen to this address if specified")
         );
     }
 
@@ -199,6 +206,8 @@ fn main() {
         Some("tunnel") => ConfigType::TunnelLocal,
         #[cfg(feature = "local-redir")]
         Some("redir") => ConfigType::RedirLocal,
+        #[cfg(feature = "local-dns")]
+        Some("dns") => ConfigType::DnsLocal,
         Some(p) => panic!("not supported `protocol` \"{}\"", p),
         None => ConfigType::Socks5Local,
     };
@@ -247,15 +256,16 @@ fn main() {
         config.server.push(svr_addr);
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(all(feature = "local-dns", target_os = "android"))]
     {
         config.local_dns_path = Some(From::from("local_dns_path"));
+    }
 
-        if matches.is_present("VPN_MODE") {
-            // A socket `protect_path` in CWD
-            // Same as shadowsocks-libev's android.c
-            config.protect_path = Some(From::from("protect_path"));
-        }
+    #[cfg(target_os = "android")]
+    if matches.is_present("VPN_MODE") {
+        // A socket `protect_path` in CWD
+        // Same as shadowsocks-libev's android.c
+        config.protect_path = Some(From::from("protect_path"));
     }
 
     #[cfg(feature = "local-flow-stat")]
@@ -265,7 +275,7 @@ fn main() {
         }
     }
 
-    #[cfg(feature = "local-dns-relay")]
+    #[cfg(feature = "local-dns")]
     {
         use std::net::SocketAddr;
 
@@ -326,6 +336,7 @@ fn main() {
         config.ipv6_first = true;
     }
 
+    #[cfg(feature = "local-tunnel")]
     if let Some(faddr) = matches.value_of("FORWARD_ADDR") {
         let addr = faddr.parse::<Address>().expect("forward-addr");
         config.forward = Some(addr);
