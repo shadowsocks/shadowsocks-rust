@@ -194,6 +194,7 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
         let acl = self.context.acl();
         let local = self.context.local_dns();
         let remote = &self.remote_upstream;
+
         // Start querying name servers
         debug!(
             "attempting lookup of {:?} {} with ns {:?} and {:?}",
@@ -355,14 +356,14 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
             }
         };
 
-        debug!("received src: {}, query: {:?}", src, request);
+        trace!("DNS query from {}, {:?}", src, request);
 
         let relay = relay.clone();
         let tx = tx.clone();
 
         tokio::spawn(async move {
             let message = relay.resolve(request).await;
-            debug!("DNS src: {}, final response: {:?}", src, message);
+            trace!("DNS response to {}, {:?}", src, message);
 
             match message.to_vec() {
                 Err(err) => {
