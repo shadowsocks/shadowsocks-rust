@@ -4,11 +4,14 @@ use std::{
     fmt,
     fmt::{Debug, Formatter},
     io,
+    marker::PhantomData,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
+use bytes::{BufMut, BytesMut};
+use log::trace;
 use rand::Rng;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
@@ -19,9 +22,14 @@ use trust_dns_proto::{
 };
 
 use crate::{
-    config::{Config, LocalDnsAddr, ServerConfig},
+    config::{Config, LocalDnsAddr},
     context::{Context, SharedContext},
-    relay::{socks5::Address, sys::create_outbound_udp_socket, tcprelay::ProxyStream},
+    relay::{
+        loadbalancing::server::{ServerData, SharedServerStatistic},
+        socks5::Address,
+        sys::create_outbound_udp_socket,
+        tcprelay::ProxyStream,
+    },
 };
 
 #[derive(Debug)]
@@ -108,11 +116,12 @@ pub async fn read_message<T: AsyncReadExt + Unpin>(stream: &mut T) -> io::Result
 pub async fn write_message<T: AsyncWriteExt + Unpin>(stream: &mut T, message: &Message) -> io::Result<()> {
     let req_buffer = message.to_vec()?;
     let size = req_buffer.len();
-    let mut send_buffer = vec![0; size + 2];
 
-    BigEndian::write_u16(&mut send_buffer[0..2], size as u16);
-    send_buffer[2..size + 2].copy_from_slice(&req_buffer[0..size]);
-    stream.write_all(&send_buffer[0..size + 2]).await
+    let mut send_buffer = BytesMut::with_capacity(2 + size);
+    send_buffer.put_u16(size as u16);
+    send_buffer.put_slice(&req_buffer);
+
+    stream.write_all(&send_buffer).await
 }
 
 async fn stream_lookup<T>(query: &Query, stream: &mut T) -> io::Result<Message>
@@ -137,6 +146,8 @@ impl Debug for UdpUpstream {
 impl Upstream for UdpUpstream {
     async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
         // TODO: Reuse UdpSocket for sending queries
+
+        trace!("DNS local query {:?} to {}", query, self.server);
 
         let local_addr = SocketAddr::new(
             match self.server {
@@ -167,25 +178,51 @@ impl Upstream for UdpUpstream {
 //     }
 // }
 
-pub struct ProxyTcpUpstream<F> {
-    pub context: SharedContext,
-    pub svr_cfg: F,
-    pub ns: Address,
+pub struct ProxyTcpUpstream<F, S>
+where
+    S: ServerData,
+{
+    context: SharedContext,
+    svr_cfg: F,
+    ns: Address,
+    _s: PhantomData<S>,
 }
 
-impl<F> Debug for ProxyTcpUpstream<F> {
+impl<F, S> ProxyTcpUpstream<F, S>
+where
+    S: ServerData,
+    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
+{
+    pub fn new(context: SharedContext, svr_cfg: F, ns: Address) -> ProxyTcpUpstream<F, S> {
+        ProxyTcpUpstream {
+            context,
+            svr_cfg,
+            ns,
+            _s: PhantomData,
+        }
+    }
+}
+
+impl<F, S> Debug for ProxyTcpUpstream<F, S>
+where
+    S: ServerData,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxyTcpUpstream").field("ns", &self.ns).finish()
     }
 }
 
 #[async_trait]
-impl<F> Upstream for ProxyTcpUpstream<F>
+impl<F, S> Upstream for ProxyTcpUpstream<F, S>
 where
-    F: Fn() -> ServerConfig + Send + Sync,
+    S: ServerData,
+    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
 {
     async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
-        let mut stream = ProxyStream::connect_proxied(self.context.clone(), &(self.svr_cfg)(), &self.ns).await?;
+        let svr_data = (self.svr_cfg)();
+        let svr_cfg = svr_data.server_config();
+        trace!("DNS proxied query {:?} via {} to {}", query, svr_cfg.addr(), self.ns);
+        let mut stream = ProxyStream::connect_proxied(self.context.clone(), &svr_cfg, &self.ns).await?;
         stream_lookup(query, &mut stream).await
     }
 }
