@@ -1640,17 +1640,7 @@ impl Config {
     /// Check if DNS Relay is enabled
     #[cfg(feature = "local-dns")]
     pub(crate) fn is_local_dns_relay(&self) -> bool {
-        if self.config_type == ConfigType::DnsLocal || self.local_dns_addr.is_some() {
-            return true;
-        }
-
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                self.local_dns_path.is_some()
-            } else {
-                false
-            }
-        }
+        self.config_type == ConfigType::DnsLocal || self.dns_bind_addr.is_some()
     }
 }
 
