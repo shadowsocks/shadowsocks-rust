@@ -9,7 +9,6 @@ use std::{
 
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
-use cfg_if::cfg_if;
 use rand::Rng;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
@@ -20,7 +19,7 @@ use trust_dns_proto::{
 };
 
 use crate::{
-    config::{Config, ServerConfig},
+    config::{Config, LocalDnsAddr, ServerConfig},
     context::{Context, SharedContext},
     relay::{socks5::Address, sys::create_outbound_udp_socket, tcprelay::ProxyStream},
 };
@@ -35,16 +34,13 @@ pub enum LocalUpstream {
 
 impl LocalUpstream {
     pub fn new(config: &Config) -> LocalUpstream {
-        cfg_if! {
-            if #[cfg(target_os = "android")] {
-                LocalUpstream::UnixSocket(UnixSocketUpstream {
-                    path: config.local_dns_path.clone().expect("local query DNS path"),
-                })
-            } else {
-                LocalUpstream::Udp(UdpUpstream {
-                    server: config.local_dns_addr.clone().expect("local query DNS address"),
-                })
+        match config.local_dns_addr {
+            Some(LocalDnsAddr::SocketAddr(ns)) => LocalUpstream::Udp(UdpUpstream { server: ns }),
+            #[cfg(unix)]
+            Some(LocalDnsAddr::UnixSocketAddr(ref p)) => {
+                LocalUpstream::UnixSocket(UnixSocketUpstream { path: p.clone() })
             }
+            None => panic!("LocalUpstream requires config.local_dns_addr"),
         }
     }
 

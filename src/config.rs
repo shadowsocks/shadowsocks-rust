@@ -584,6 +584,61 @@ impl From<PathBuf> for ManagerAddr {
     }
 }
 
+cfg_if! {
+    if #[cfg(feature = "local-dns")] {
+        /// Parse `LocalDnsAddr` error
+        #[derive(Debug)]
+        pub struct LocalDnsAddrError;
+
+        /// Address for Manager server
+        #[derive(Debug, Clone)]
+        pub enum LocalDnsAddr {
+            /// IP address
+            SocketAddr(SocketAddr),
+            /// Unix socket path
+            #[cfg(unix)]
+            UnixSocketAddr(PathBuf),
+        }
+
+        impl FromStr for LocalDnsAddr {
+            type Err = LocalDnsAddrError;
+
+            fn from_str(s: &str) -> Result<LocalDnsAddr, LocalDnsAddrError> {
+                match s.parse::<SocketAddr>() {
+                    Ok(socket_addr) => Ok(LocalDnsAddr::SocketAddr(socket_addr)),
+                    #[cfg(unix)]
+                    Err(..) => Ok(LocalDnsAddr::UnixSocketAddr(PathBuf::from(s))),
+                    #[cfg(not(unix))]
+                    Err(..) => Err(LocalDnsAddrError),
+                }
+            }
+        }
+
+        impl Display for LocalDnsAddr {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                match *self {
+                    LocalDnsAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
+                    #[cfg(unix)]
+                    LocalDnsAddr::UnixSocketAddr(ref path) => fmt::Display::fmt(&path.display(), f),
+                }
+            }
+        }
+
+        impl From<SocketAddr> for LocalDnsAddr {
+            fn from(addr: SocketAddr) -> LocalDnsAddr {
+                LocalDnsAddr::SocketAddr(addr)
+            }
+        }
+
+        #[cfg(unix)]
+        impl From<PathBuf> for LocalDnsAddr {
+            fn from(p: PathBuf) -> LocalDnsAddr {
+                LocalDnsAddr::UnixSocketAddr(p)
+            }
+        }
+    }
+}
+
 /// Shadowsocks URL parsing Error
 #[derive(Debug, Clone)]
 pub enum UrlParseError {
@@ -1097,17 +1152,14 @@ pub struct Config {
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub protect_path: Option<PathBuf>,
-    /// Path for local DNS resolver
-    #[cfg(all(feature = "local-dns", target_os = "android"))]
-    pub local_dns_path: Option<PathBuf>,
     /// Internal DNS's bind address
     #[cfg(feature = "local-dns")]
-    pub dns_local_addr: Option<ClientConfig>,
+    pub dns_bind_addr: Option<ClientConfig>,
     /// Local DNS's address
     ///
     /// Sending DNS query directly to this address
     #[cfg(feature = "local-dns")]
-    pub local_dns_addr: Option<SocketAddr>,
+    pub local_dns_addr: Option<LocalDnsAddr>,
     /// Remote DNS's address
     ///
     /// Sending DNS query through proxy to this address
@@ -1222,7 +1274,7 @@ impl Config {
             #[cfg(all(feature = "local-dns", target_os = "android"))]
             local_dns_path: None,
             #[cfg(feature = "local-dns")]
-            dns_local_addr: None,
+            dns_bind_addr: None,
             #[cfg(feature = "local-dns")]
             local_dns_addr: None,
             #[cfg(feature = "local-dns")]

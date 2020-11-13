@@ -380,29 +380,24 @@ async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
 
 /// Start a DNS relay local server
 pub async fn run(context: SharedContext) -> io::Result<()> {
-    let local_addr = match context.config().config_type {
-        ConfigType::DnsLocal => {
-            // Standalone server
-            context
-                .config()
-                .dns_local_addr
-                .as_ref()
-                .or(context.config().local_addr.as_ref())
-                .expect("dns relay addr")
+    let bind_addr = match context.config().dns_bind_addr {
+        None => {
+            if matches!(context.config().config_type, ConfigType::DnsLocal) {
+                match context.config().local_addr {
+                    None => panic!("DNS relay requires dns_bind_addr or local_addr"),
+                    Some(ref addr) => addr.bind_addr(&context).await?,
+                }
+            } else {
+                panic!("Local dns relay requires dns_bind_addr");
+            }
         }
-        c if c.is_local() => {
-            // Integrated mode
-            context.config().dns_local_addr.as_ref().expect("dns relay addr")
-        }
-        _ => {
-            panic!("ConfigType must be DnsLocal");
-        }
+        Some(ref bind_addr) => bind_addr.bind_addr(&context).await?,
     };
-    let bind_addr = local_addr.bind_addr(&context).await?;
 
     let config = context.config();
     // FIXME: We use TCP to send remote queries by default, which should be configuable.
     let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
+
     let relay = Arc::new(DnsRelay {
         context: context.clone(),
         remote_upstream: upstream::ProxyTcpUpstream {
