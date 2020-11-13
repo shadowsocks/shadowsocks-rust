@@ -227,7 +227,7 @@ impl Context {
 
         let nonce_ppbloom = SpinMutex::new(PingPongBloom::new(config.config_type));
         #[cfg(feature = "local-dns")]
-        let local_dns = if config.is_local_dns_relay() {
+        let local_dns = if config.local_dns_addr.is_some() {
             Some(LocalUpstream::new(&config))
         } else {
             None

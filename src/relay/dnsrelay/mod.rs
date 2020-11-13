@@ -401,11 +401,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
 
     let relay = Arc::new(DnsRelay {
         context: context.clone(),
-        remote_upstream: upstream::ProxyTcpUpstream {
-            context: context.clone(),
-            svr_cfg: move || balancer.pick_server().server_config().clone(),
-            ns: config.remote_dns_addr.clone().expect("remote query DNS address"),
-        },
+        remote_upstream: upstream::ProxyTcpUpstream::new(
+            context.clone(),
+            move || balancer.pick_server(),
+            config.remote_dns_addr.clone().expect("remote query DNS address"),
+        ),
     });
 
     future::select(
