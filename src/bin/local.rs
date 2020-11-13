@@ -149,7 +149,7 @@ fn main() {
     #[cfg(feature = "local-dns")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_socket_addr} "Specify the address of local DNS server, send queries directly")
+            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_local_dns_addr} "Specify the address of local DNS server, send queries directly")
             (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
             (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value {validator::validate_server_addr} "DNS address, listen to this address if specified")
         );
@@ -256,16 +256,17 @@ fn main() {
         config.server.push(svr_addr);
     }
 
-    #[cfg(all(feature = "local-dns", target_os = "android"))]
-    {
-        config.local_dns_path = Some(From::from("local_dns_path"));
-    }
-
     #[cfg(target_os = "android")]
     if matches.is_present("VPN_MODE") {
         // A socket `protect_path` in CWD
         // Same as shadowsocks-libev's android.c
         config.protect_path = Some(From::from("protect_path"));
+
+        // Set default config.local_dns_addr
+        #[cfg(feature = "local-dns")]
+        if config.local_dns_addr.is_none() {
+            config.local_dns_addr = Some(From::from("local_dns_path"));
+        }
     }
 
     #[cfg(feature = "local-flow-stat")]
@@ -277,10 +278,10 @@ fn main() {
 
     #[cfg(feature = "local-dns")]
     {
-        use std::net::SocketAddr;
+        use shadowsocks::config::LocalDnsAddr;
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-            let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
+            let addr = local_dns_addr.parse::<LocalDnsAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
         }
 
@@ -291,7 +292,7 @@ fn main() {
 
         if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
             let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
-            config.dns_local_addr = Some(addr);
+            config.dns_bind_addr = Some(addr);
         }
     }
 
