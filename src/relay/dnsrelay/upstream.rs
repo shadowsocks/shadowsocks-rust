@@ -4,7 +4,6 @@ use std::{
     fmt,
     fmt::{Debug, Formatter},
     io,
-    marker::PhantomData,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
@@ -23,10 +22,10 @@ use trust_dns_proto::{
 };
 
 use crate::{
-    config::{Config, LocalDnsAddr},
+    config::{Config, LocalDnsAddr, Mode, ServerConfig},
     context::{Context, SharedContext},
     relay::{
-        loadbalancing::server::{ServerData, SharedServerStatistic},
+        loadbalancing::server::{PlainPingBalancer, ServerType},
         socks5::Address,
         sys::{create_outbound_udp_socket, tcp_stream_connect},
         tcprelay::ProxyStream,
@@ -212,101 +211,67 @@ impl Upstream for TcpUpstream {
     }
 }
 
-pub struct ProxyTcpUpstream<F, S>
-where
-    S: ServerData,
-{
-    context: SharedContext,
-    svr_cfg: F,
-    ns: Address,
-    _s: PhantomData<S>,
+enum ProxyUpstreamMode {
+    TcpOnly {
+        balancer: PlainPingBalancer,
+    },
+    UdpOnly {
+        balancer: PlainPingBalancer,
+    },
+    TcpAndUdp {
+        tcp_balancer: PlainPingBalancer,
+        udp_balancer: PlainPingBalancer,
+    },
 }
 
-impl<F, S> ProxyTcpUpstream<F, S>
-where
-    S: ServerData,
-    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
-{
-    pub fn new(context: SharedContext, svr_cfg: F, ns: Address) -> ProxyTcpUpstream<F, S> {
-        ProxyTcpUpstream {
-            context,
-            svr_cfg,
-            ns,
-            _s: PhantomData,
+impl Debug for ProxyUpstreamMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ProxyUpstreamMode::TcpOnly { .. } => f.write_str("TcpOnly"),
+            ProxyUpstreamMode::UdpOnly { .. } => f.write_str("UdpOnly"),
+            ProxyUpstreamMode::TcpAndUdp { .. } => f.write_str("TcpAndUdp"),
         }
     }
 }
 
-impl<F, S> Debug for ProxyTcpUpstream<F, S>
-where
-    S: ServerData,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ProxyTcpUpstream").field("ns", &self.ns).finish()
-    }
+pub struct ProxyUpstream {
+    context: SharedContext,
+    ns: Address,
+    mode: ProxyUpstreamMode,
 }
 
-#[async_trait]
-impl<F, S> Upstream for ProxyTcpUpstream<F, S>
-where
-    S: ServerData,
-    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
-{
-    async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
-        let svr_data = (self.svr_cfg)();
-        let svr_cfg = svr_data.server_config();
+impl ProxyUpstream {
+    pub async fn new(context: SharedContext, ns: Address) -> ProxyUpstream {
+        let mode = match context.config().mode {
+            Mode::TcpOnly => ProxyUpstreamMode::TcpOnly {
+                balancer: PlainPingBalancer::new(context.clone(), ServerType::Tcp).await,
+            },
+            Mode::UdpOnly => ProxyUpstreamMode::UdpOnly {
+                balancer: PlainPingBalancer::new(context.clone(), ServerType::Udp).await,
+            },
+            Mode::TcpAndUdp => ProxyUpstreamMode::TcpAndUdp {
+                tcp_balancer: PlainPingBalancer::new(context.clone(), ServerType::Tcp).await,
+                udp_balancer: PlainPingBalancer::new(context.clone(), ServerType::Udp).await,
+            },
+        };
+
+        ProxyUpstream { context, ns, mode }
+    }
+
+    async fn tcp_lookup(&self, svr_cfg: &ServerConfig, query: &Query) -> io::Result<Message> {
         trace!(
             "DNS TCP proxied query {:?} via {} to {}",
             query,
             svr_cfg.addr(),
             self.ns
         );
-        let mut stream = ProxyStream::connect_proxied(self.context.clone(), &svr_cfg, &self.ns).await?;
+        let mut stream = ProxyStream::connect_proxied(self.context.clone(), svr_cfg, &self.ns).await?;
         stream_lookup(query, &mut stream).await
     }
-}
 
-pub struct ProxyUdpUpstream<F, S>
-where
-    S: ServerData,
-{
-    svr_cfg: F,
-    ns: Address,
-    _s: PhantomData<S>,
-}
+    async fn udp_lookup(&self, svr_cfg: &ServerConfig, query: &Query) -> io::Result<Message> {
+        let context = &self.context;
 
-impl<F, S> ProxyUdpUpstream<F, S>
-where
-    S: ServerData,
-    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
-{
-    pub fn new(svr_cfg: F, ns: Address) -> ProxyUdpUpstream<F, S> {
-        ProxyUdpUpstream {
-            svr_cfg,
-            ns,
-            _s: PhantomData,
-        }
-    }
-}
-
-impl<F, S> Debug for ProxyUdpUpstream<F, S>
-where
-    S: ServerData,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ProxyUdpUpstream").field("ns", &self.ns).finish()
-    }
-}
-
-#[async_trait]
-impl<F, S> Upstream for ProxyUdpUpstream<F, S>
-where
-    S: ServerData,
-    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
-{
-    async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
-        let svr_data = (self.svr_cfg)();
-        let svr_cfg = svr_data.server_config();
         trace!(
             "DNS UDP proxied query {:?} via {} to {}",
             query,
@@ -323,6 +288,73 @@ where
 
         let (_, recv_buf) = client.recv_from(context).await?;
         Message::from_vec(&recv_buf).map_err(From::from)
+    }
+}
+
+impl Debug for ProxyUpstream {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProxyUpstream").field("ns", &self.ns).finish()
+    }
+}
+
+#[async_trait]
+impl Upstream for ProxyUpstream {
+    async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
+        match self.mode {
+            ProxyUpstreamMode::TcpOnly { ref balancer } => {
+                let svr_cfg = balancer.pick_server();
+                self.tcp_lookup(svr_cfg.server_config(), query).await
+            }
+            ProxyUpstreamMode::UdpOnly { ref balancer } => {
+                let svr_cfg = balancer.pick_server();
+                self.udp_lookup(svr_cfg.server_config(), query).await
+            }
+            ProxyUpstreamMode::TcpAndUdp {
+                ref tcp_balancer,
+                ref udp_balancer,
+            } => {
+                let tcp_svr_cfg = tcp_balancer.pick_server();
+                let tcp_fut = self.tcp_lookup(tcp_svr_cfg.server_config(), query);
+                tokio::pin!(tcp_fut);
+
+                let udp_svr_cfg = udp_balancer.pick_server();
+                let udp_fut = self.udp_lookup(udp_svr_cfg.server_config(), query);
+                tokio::pin!(udp_fut);
+
+                match future::select(tcp_fut, udp_fut).await {
+                    Either::Left((tcp_result, udp_fut)) => match tcp_result {
+                        Ok(message) => {
+                            trace!("ProxyUpstream {} TCP query answer, {:?}", self.ns, message);
+                            Ok(message)
+                        }
+                        Err(err) => {
+                            trace!(
+                                "ProxyUpstream {} TCP query failed, error: {}, continue with UDP query, {:?}",
+                                self.ns,
+                                err,
+                                query
+                            );
+                            udp_fut.await
+                        }
+                    },
+                    Either::Right((udp_result, tcp_fut)) => match udp_result {
+                        Ok(message) => {
+                            trace!("ProxyUpstream {} UDP query answer, {:?}", self.ns, message);
+                            Ok(message)
+                        }
+                        Err(err) => {
+                            trace!(
+                                "ProxyUpstream {} UDP query failed, error: {}, continue with TCP query, {:?}",
+                                self.ns,
+                                err,
+                                query
+                            );
+                            tcp_fut.await
+                        }
+                    },
+                }
+            }
+        }
     }
 }
 

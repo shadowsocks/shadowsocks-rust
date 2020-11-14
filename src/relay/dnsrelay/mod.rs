@@ -17,14 +17,10 @@ use crate::{
     acl::AccessControl,
     config::ConfigType,
     context::SharedContext,
-    relay::{
-        loadbalancing::server::{PlainPingBalancer, ServerType},
-        sys::create_udp_socket,
-        utils::try_timeout,
-    },
+    relay::{sys::create_udp_socket, utils::try_timeout},
 };
 
-use self::upstream::{ProxyTcpUpstream, ProxyUdpUpstream};
+use self::upstream::ProxyUpstream;
 
 pub(crate) mod upstream;
 
@@ -409,27 +405,11 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         .clone()
         .expect("remote query DNS address");
 
-    let udp_dns = {
-        let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
+    let proxy_upstream = ProxyUpstream::new(context.clone(), remote_dns_addr).await;
+    let proxy_relay = Arc::new(DnsRelay::new(context.clone(), proxy_upstream));
 
-        let relay = DnsRelay::new(
-            context.clone(),
-            ProxyUdpUpstream::new(move || balancer.pick_server(), remote_dns_addr.clone()),
-        );
-
-        run_udp(Arc::new(relay), bind_addr)
-    };
-
-    let tcp_dns = {
-        let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
-
-        let relay = DnsRelay::new(
-            context.clone(),
-            ProxyTcpUpstream::new(context.clone(), move || balancer.pick_server(), remote_dns_addr.clone()),
-        );
-
-        run_tcp(Arc::new(relay), bind_addr)
-    };
+    let udp_dns = run_udp(proxy_relay.clone(), bind_addr);
+    let tcp_dns = run_tcp(proxy_relay, bind_addr);
 
     select! {
         res = udp_dns => res,
