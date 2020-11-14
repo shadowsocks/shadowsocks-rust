@@ -215,8 +215,8 @@ where
             remote
         );
 
-        let remote_response_fut = try_timeout(remote.lookup(&self.context, query), Some(Duration::new(3, 0)));
-        let local_response_fut = try_timeout(local.lookup(&self.context, query), Some(Duration::new(3, 0)));
+        let remote_response_fut = try_timeout(remote.lookup(&self.context, query), Some(Duration::from_secs(5)));
+        let local_response_fut = try_timeout(local.lookup(&self.context, query), Some(Duration::from_secs(5)));
 
         match should_forward_by_query(acl, query) {
             Some(true) => {

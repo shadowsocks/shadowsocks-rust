@@ -1,21 +1,23 @@
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{
-    fmt,
-    fmt::{Debug, Display, Formatter},
+    fmt::{self, Debug, Display},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    time::Duration,
 };
 
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use futures::{future, future::Either};
 use log::trace;
 use rand::Rng;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
 use tokio::net::UnixStream;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    time,
+};
 use trust_dns_proto::{
     op::{Message, Query},
     rr::{DNSClass, Name, RData, RecordType},
@@ -67,31 +69,20 @@ impl LocalUpstream {
     pub async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
         match self {
             LocalUpstream::TcpAndUdp(tcp, udp) => {
-                match future::select(tcp.lookup(context, query), udp.lookup(context, query)).await {
-                    Either::Left((tcp_result, udp_fut)) => match tcp_result {
-                        Ok(message) => Ok(message),
-                        Err(err) => {
-                            trace!(
-                                "LocalUpstream {} TCP query failed, error: {}, continue with UDP query, {:?}",
-                                err,
-                                tcp.server,
-                                query
-                            );
-                            udp_fut.await
-                        }
-                    },
-                    Either::Right((udp_result, tcp_fut)) => match udp_result {
-                        Ok(message) => Ok(message),
-                        Err(err) => {
-                            trace!(
-                                "LocalUpstream {} UDP query failed, error: {}, continue with TCP query, {:?}",
-                                err,
-                                udp.server,
-                                query
-                            );
-                            tcp_fut.await
-                        }
-                    },
+                // UDP than TCP.
+                // Because UDP should always be faster than TCP.
+
+                match time::timeout(Duration::from_secs(2), udp.lookup(context, query)).await {
+                    Ok(Ok(message)) => Ok(message),
+                    Ok(Err(..)) | Err(..) => {
+                        trace!(
+                            "LocalUpstream {} UDP query failed, continue with TCP query, {:?}",
+                            udp.server,
+                            query
+                        );
+
+                        tcp.lookup(context, query).await
+                    }
                 }
             }
             #[cfg(unix)]
@@ -175,7 +166,7 @@ pub struct UdpUpstream {
 }
 
 impl Debug for UdpUpstream {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UdpUpstream").field("ns", &self.server).finish()
     }
 }
@@ -302,13 +293,13 @@ impl ProxyUpstream {
 }
 
 impl Debug for ProxyUpstream {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxyUpstream").field("ns", &self.ns).finish()
     }
 }
 
 impl Display for ProxyUpstream {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.mode {
             ProxyUpstreamMode::TcpOnly { .. } => write!(f, "tcp://{}", self.ns),
             ProxyUpstreamMode::UdpOnly { .. } => write!(f, "udp://{}", self.ns),
@@ -333,45 +324,28 @@ impl Upstream for ProxyUpstream {
                 ref tcp_balancer,
                 ref udp_balancer,
             } => {
-                let tcp_svr_cfg = tcp_balancer.pick_server();
-                let tcp_fut = self.tcp_lookup(tcp_svr_cfg.server_config(), query);
-                tokio::pin!(tcp_fut);
-
                 let udp_svr_cfg = udp_balancer.pick_server();
-                let udp_fut = self.udp_lookup(udp_svr_cfg.server_config(), query);
-                tokio::pin!(udp_fut);
 
-                match future::select(tcp_fut, udp_fut).await {
-                    Either::Left((tcp_result, udp_fut)) => match tcp_result {
-                        Ok(message) => {
-                            trace!("ProxyUpstream {} TCP query answer, {:?}", self.ns, message);
-                            Ok(message)
-                        }
-                        Err(err) => {
-                            trace!(
-                                "ProxyUpstream {} TCP query failed, error: {}, continue with UDP query, {:?}",
-                                self.ns,
-                                err,
-                                query
-                            );
-                            udp_fut.await
-                        }
-                    },
-                    Either::Right((udp_result, tcp_fut)) => match udp_result {
-                        Ok(message) => {
-                            trace!("ProxyUpstream {} UDP query answer, {:?}", self.ns, message);
-                            Ok(message)
-                        }
-                        Err(err) => {
-                            trace!(
-                                "ProxyUpstream {} UDP query failed, error: {}, continue with TCP query, {:?}",
-                                self.ns,
-                                err,
-                                query
-                            );
-                            tcp_fut.await
-                        }
-                    },
+                match time::timeout(
+                    Duration::from_secs(2),
+                    self.udp_lookup(udp_svr_cfg.server_config(), query),
+                )
+                .await
+                {
+                    Ok(Ok(message)) => {
+                        trace!("ProxyUpstream {} TCP query answer, {:?}", self.ns, message);
+                        Ok(message)
+                    }
+                    Ok(Err(..)) | Err(..) => {
+                        trace!(
+                            "ProxyUpstream {} UDP query failed, continue with TCP query, {:?}",
+                            self.ns,
+                            query
+                        );
+
+                        let tcp_svr_cfg = tcp_balancer.pick_server();
+                        self.tcp_lookup(tcp_svr_cfg.server_config(), query).await
+                    }
                 }
             }
         }
