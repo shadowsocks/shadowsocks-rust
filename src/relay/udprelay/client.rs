@@ -7,7 +7,7 @@ use std::{
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
-use log::{debug, error, warn};
+use log::{error, trace, warn};
 use tokio::net::UdpSocket;
 
 use crate::{
@@ -139,7 +139,7 @@ impl ServerClient {
 
     /// Send a UDP packet to addr through proxy
     pub async fn send_to(&self, context: &Context, addr: &Address, payload: &[u8]) -> io::Result<()> {
-        debug!(
+        trace!(
             "UDP server client send to {}, payload length {} bytes",
             addr,
             payload.len()
@@ -188,7 +188,7 @@ impl ServerClient {
         let mut payload = Vec::with_capacity(recv_buf.len() - cur.position() as usize);
         cur.read_to_end(&mut payload)?;
 
-        debug!(
+        trace!(
             "UDP server client recv {}, payload length {} bytes",
             addr,
             payload.len()
