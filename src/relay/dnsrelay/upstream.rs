@@ -11,6 +11,7 @@ use std::{
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
+use futures::{future, future::Either};
 use log::trace;
 use rand::Rng;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -27,15 +28,15 @@ use crate::{
     relay::{
         loadbalancing::server::{ServerData, SharedServerStatistic},
         socks5::Address,
-        sys::create_outbound_udp_socket,
+        sys::{create_outbound_udp_socket, tcp_stream_connect},
         tcprelay::ProxyStream,
+        udprelay::client::ServerClient as UdpServerClient,
     },
 };
 
 #[derive(Debug)]
 pub enum LocalUpstream {
-    Udp(UdpUpstream),
-    // Tcp(TcpUpstream),
+    TcpAndUdp(TcpUpstream, UdpUpstream),
     #[cfg(unix)]
     UnixSocket(UnixSocketUpstream),
 }
@@ -43,7 +44,9 @@ pub enum LocalUpstream {
 impl LocalUpstream {
     pub fn new(config: &Config) -> LocalUpstream {
         match config.local_dns_addr {
-            Some(LocalDnsAddr::SocketAddr(ns)) => LocalUpstream::Udp(UdpUpstream { server: ns }),
+            Some(LocalDnsAddr::SocketAddr(ns)) => {
+                LocalUpstream::TcpAndUdp(TcpUpstream { server: ns }, UdpUpstream { server: ns })
+            }
             #[cfg(unix)]
             Some(LocalDnsAddr::UnixSocketAddr(ref p)) => {
                 LocalUpstream::UnixSocket(UnixSocketUpstream { path: p.clone() })
@@ -54,8 +57,34 @@ impl LocalUpstream {
 
     pub async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
         match self {
-            LocalUpstream::Udp(upstream) => upstream.lookup(context, query).await,
-            // LocalUpstream::Tcp(upstream) => upstream.lookup(query),
+            LocalUpstream::TcpAndUdp(tcp, udp) => {
+                match future::select(tcp.lookup(context, query), udp.lookup(context, query)).await {
+                    Either::Left((tcp_result, udp_fut)) => match tcp_result {
+                        Ok(message) => Ok(message),
+                        Err(err) => {
+                            trace!(
+                                "LocalUpstream {} TCP query failed, error: {}, continue with UDP query, {:?}",
+                                err,
+                                tcp.server,
+                                query
+                            );
+                            udp_fut.await
+                        }
+                    },
+                    Either::Right((udp_result, tcp_fut)) => match udp_result {
+                        Ok(message) => Ok(message),
+                        Err(err) => {
+                            trace!(
+                                "LocalUpstream {} UDP query failed, error: {}, continue with TCP query, {:?}",
+                                err,
+                                udp.server,
+                                query
+                            );
+                            tcp_fut.await
+                        }
+                    },
+                }
+            }
             #[cfg(unix)]
             LocalUpstream::UnixSocket(upstream) => upstream.lookup(context, query).await,
         }
@@ -147,7 +176,7 @@ impl Upstream for UdpUpstream {
     async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
         // TODO: Reuse UdpSocket for sending queries
 
-        trace!("DNS local query {:?} to {}", query, self.server);
+        trace!("DNS local UDP query {:?} to {}", query, self.server);
 
         let local_addr = SocketAddr::new(
             match self.server {
@@ -166,17 +195,22 @@ impl Upstream for UdpUpstream {
     }
 }
 
-// #[derive(Debug)]
-// pub struct TcpUpstream {
-//     pub server: SocketAddr,
-// }
-//
-// #[async_trait]
-// impl Upstream for TcpUpstream {
-//     async fn lookup(&self, query: &Query) -> Result<Message> {
-//         unimplemented!()
-//     }
-// }
+#[derive(Debug)]
+pub struct TcpUpstream {
+    pub server: SocketAddr,
+}
+
+#[async_trait]
+impl Upstream for TcpUpstream {
+    async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
+        // TODO: Reuse UdpSocket for sending queries
+
+        trace!("DNS local TCP query {:?} to {}", query, self.server);
+
+        let mut stream = tcp_stream_connect(&self.server, context.config()).await?;
+        stream_lookup(query, &mut stream).await
+    }
+}
 
 pub struct ProxyTcpUpstream<F, S>
 where
@@ -221,9 +255,74 @@ where
     async fn lookup(&self, _context: &Context, query: &Query) -> io::Result<Message> {
         let svr_data = (self.svr_cfg)();
         let svr_cfg = svr_data.server_config();
-        trace!("DNS proxied query {:?} via {} to {}", query, svr_cfg.addr(), self.ns);
+        trace!(
+            "DNS TCP proxied query {:?} via {} to {}",
+            query,
+            svr_cfg.addr(),
+            self.ns
+        );
         let mut stream = ProxyStream::connect_proxied(self.context.clone(), &svr_cfg, &self.ns).await?;
         stream_lookup(query, &mut stream).await
+    }
+}
+
+pub struct ProxyUdpUpstream<F, S>
+where
+    S: ServerData,
+{
+    svr_cfg: F,
+    ns: Address,
+    _s: PhantomData<S>,
+}
+
+impl<F, S> ProxyUdpUpstream<F, S>
+where
+    S: ServerData,
+    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
+{
+    pub fn new(svr_cfg: F, ns: Address) -> ProxyUdpUpstream<F, S> {
+        ProxyUdpUpstream {
+            svr_cfg,
+            ns,
+            _s: PhantomData,
+        }
+    }
+}
+
+impl<F, S> Debug for ProxyUdpUpstream<F, S>
+where
+    S: ServerData,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProxyUdpUpstream").field("ns", &self.ns).finish()
+    }
+}
+
+#[async_trait]
+impl<F, S> Upstream for ProxyUdpUpstream<F, S>
+where
+    S: ServerData,
+    F: Fn() -> SharedServerStatistic<S> + Send + Sync,
+{
+    async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message> {
+        let svr_data = (self.svr_cfg)();
+        let svr_cfg = svr_data.server_config();
+        trace!(
+            "DNS UDP proxied query {:?} via {} to {}",
+            query,
+            svr_cfg.addr(),
+            self.ns
+        );
+
+        let client = UdpServerClient::new(context, svr_cfg).await?;
+
+        let message = generate_query_message(query);
+        let send_buf = message.to_vec()?;
+
+        client.send_to(context, &self.ns, &send_buf).await?;
+
+        let (_, recv_buf) = client.recv_from(context).await?;
+        Message::from_vec(&recv_buf).map_err(From::from)
     }
 }
 
