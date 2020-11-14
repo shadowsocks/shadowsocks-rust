@@ -192,7 +192,7 @@ where
 
 impl<Remote> DnsRelay<Remote>
 where
-    Remote: Upstream + Display,
+    Remote: Upstream,
 {
     fn new(context: SharedContext, remote_upstream: Remote) -> DnsRelay<Remote> {
         DnsRelay {
@@ -207,13 +207,7 @@ where
         let remote = &self.remote_upstream;
 
         // Start querying name servers
-        debug!(
-            "DNS lookup {:?} {} with ns LOCAL: {}, REMOTE: {}",
-            query.query_type(),
-            query.name(),
-            local,
-            remote
-        );
+        debug!("DNS lookup {:?} {}", query.query_type(), query.name());
 
         let remote_response_fut = try_timeout(remote.lookup(&self.context, query), Some(Duration::from_secs(5)));
         let local_response_fut = try_timeout(local.lookup(&self.context, query), Some(Duration::from_secs(5)));
@@ -316,7 +310,12 @@ where
     let listener = TcpListener::bind(&bind_addr).await?;
 
     let actual_local_addr = listener.local_addr()?;
-    info!("shadowsocks DNS relay (TCP) listening on {}", actual_local_addr);
+    info!(
+        "shadowsocks DNS relay (TCP) listening on {}, local {}, remote {}",
+        actual_local_addr,
+        relay.context.local_dns(),
+        relay.remote_upstream
+    );
 
     loop {
         let (mut stream, src) = listener.accept().await?;
@@ -344,7 +343,12 @@ where
     let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
-    info!("shadowsocks DNS relay (UDP) listening on {}", actual_local_addr);
+    info!(
+        "shadowsocks DNS relay (UDP) listening on {}, local {}, remote {}",
+        actual_local_addr,
+        relay.context.local_dns(),
+        relay.remote_upstream
+    );
 
     let rx = Arc::new(socket);
     let tx = rx.clone();
