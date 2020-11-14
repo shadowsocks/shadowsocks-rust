@@ -636,6 +636,13 @@ cfg_if! {
                 LocalDnsAddr::UnixSocketAddr(p)
             }
         }
+
+        #[cfg(unix)]
+        impl From<&str> for LocalDnsAddr {
+            fn from(p: &str) -> LocalDnsAddr {
+                LocalDnsAddr::UnixSocketAddr(PathBuf::from(p))
+            }
+        }
     }
 }
 
