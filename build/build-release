@@ -50,7 +50,7 @@ function build() {
 
     RELEASE_DIR="target/${TARGET}/release"
 
-    EXTRA_FEATURES="local-dns "
+    EXTRA_FEATURES=""
     if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
         EXTRA_FEATURES+="local-redir"
     fi
