@@ -1271,8 +1271,6 @@ impl Config {
             stat_path: None,
             #[cfg(target_os = "android")]
             protect_path: None,
-            #[cfg(all(feature = "local-dns", target_os = "android"))]
-            local_dns_path: None,
             #[cfg(feature = "local-dns")]
             dns_bind_addr: None,
             #[cfg(feature = "local-dns")]
