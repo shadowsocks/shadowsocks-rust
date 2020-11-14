@@ -129,7 +129,7 @@ impl AeadEncryptor for RingAeadCipher {
     fn encrypt(&mut self, input: &[u8], output: &mut [u8]) {
         let tag_len = self.cipher_type.tag_size();
         let buf_len = input.len() + tag_len;
-        assert_eq!(output.len(), buf_len);
+        assert!(output.len() >= buf_len);
 
         output[..input.len()].copy_from_slice(input);
 
@@ -149,7 +149,7 @@ impl AeadEncryptor for RingAeadCipher {
 impl AeadDecryptor for RingAeadCipher {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()> {
         let tag_len = self.cipher_type.tag_size();
-        assert_eq!(output.len() + tag_len, input.len());
+        assert!(output.len() + tag_len >= input.len());
 
         let mut buf = BytesMut::with_capacity(input.len());
         buf.put_slice(input);

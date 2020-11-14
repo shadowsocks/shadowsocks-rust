@@ -229,7 +229,7 @@ impl AeadEncryptor for SodiumAeadCipher {
 impl AeadDecryptor for SodiumAeadCipher {
     fn decrypt(&mut self, input: &[u8], output: &mut [u8]) -> CipherResult<()> {
         let tag_len = self.cipher_type.tag_size();
-        assert!(output.len() >= input.len() - tag_len);
+        assert!(output.len() + tag_len >= input.len());
 
         let mut len: c_ulonglong = output.len() as c_ulonglong;
 
