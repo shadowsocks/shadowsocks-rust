@@ -39,7 +39,7 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4", "local-dns"]
+default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
 # Enables AEAD ciphers that depending on ring
 # aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
 ring-aead-ciphers = ["ring"]
@@ -65,6 +65,8 @@ dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https-rustls"]
 openssl-vendored = ["native-tls/vendored", "openssl/vendored"]
 # Enable DNS-relay
 local-dns = ["trust-dns-proto"]
+# Backward compatibility, DO NOT USE
+local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
 local-flow-stat = []
