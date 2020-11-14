@@ -6,9 +6,8 @@ use std::{
     time::Duration,
 };
 
-use futures::future;
 use log::{debug, error, info, trace, warn};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, select};
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
     rr::{DNSClass, Name, RData, RecordType},
@@ -25,7 +24,9 @@ use crate::{
     },
 };
 
-pub mod upstream;
+use self::upstream::{ProxyTcpUpstream, ProxyUdpUpstream};
+
+pub(crate) mod upstream;
 
 fn should_forward_by_ptr_name(acl: &AccessControl, name: &Name) -> bool {
     let mut iter = name.iter().rev();
@@ -190,6 +191,13 @@ struct DnsRelay<Remote: upstream::Upstream> {
 }
 
 impl<Remote: upstream::Upstream> DnsRelay<Remote> {
+    fn new(context: SharedContext, remote_upstream: Remote) -> DnsRelay<Remote> {
+        DnsRelay {
+            context,
+            remote_upstream,
+        }
+    }
+
     async fn acl_lookup(&self, query: &Query) -> (io::Result<Message>, bool) {
         let acl = self.context.acl();
         let local = self.context.local_dns();
@@ -395,23 +403,36 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
         Some(ref bind_addr) => bind_addr.bind_addr(&context).await?,
     };
 
-    let config = context.config();
-    // FIXME: We use TCP to send remote queries by default, which should be configuable.
-    let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
+    let remote_dns_addr = context
+        .config()
+        .remote_dns_addr
+        .clone()
+        .expect("remote query DNS address");
 
-    let relay = Arc::new(DnsRelay {
-        context: context.clone(),
-        remote_upstream: upstream::ProxyTcpUpstream::new(
+    let udp_dns = {
+        let balancer = PlainPingBalancer::new(context.clone(), ServerType::Udp).await;
+
+        let relay = DnsRelay::new(
             context.clone(),
-            move || balancer.pick_server(),
-            config.remote_dns_addr.clone().expect("remote query DNS address"),
-        ),
-    });
+            ProxyUdpUpstream::new(move || balancer.pick_server(), remote_dns_addr.clone()),
+        );
 
-    future::select(
-        tokio::spawn(run_tcp(relay.clone(), bind_addr)),
-        tokio::spawn(run_udp(relay, bind_addr)),
-    )
-    .await;
-    Ok(())
+        run_udp(Arc::new(relay), bind_addr)
+    };
+
+    let tcp_dns = {
+        let balancer = PlainPingBalancer::new(context.clone(), ServerType::Tcp).await;
+
+        let relay = DnsRelay::new(
+            context.clone(),
+            ProxyTcpUpstream::new(context.clone(), move || balancer.pick_server(), remote_dns_addr.clone()),
+        );
+
+        run_tcp(Arc::new(relay), bind_addr)
+    };
+
+    select! {
+        res = udp_dns => res,
+        res = tcp_dns => res,
+    }
 }
