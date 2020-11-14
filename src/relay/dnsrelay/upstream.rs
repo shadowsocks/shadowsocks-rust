@@ -2,7 +2,7 @@
 use std::path::PathBuf;
 use std::{
     fmt,
-    fmt::{Debug, Formatter},
+    fmt::{Debug, Display, Formatter},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
@@ -38,6 +38,16 @@ pub enum LocalUpstream {
     TcpAndUdp(TcpUpstream, UdpUpstream),
     #[cfg(unix)]
     UnixSocket(UnixSocketUpstream),
+}
+
+impl Display for LocalUpstream {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LocalUpstream::TcpAndUdp(ref t, ..) => write!(f, "tcp+udp://{}", t.server),
+            #[cfg(unix)]
+            LocalUpstream::UnixSocket(ref u) => write!(f, "unix://{}", u.path.display()),
+        }
+    }
 }
 
 impl LocalUpstream {
@@ -118,7 +128,7 @@ impl LocalUpstream {
 }
 
 #[async_trait]
-pub trait Upstream: Debug {
+pub trait Upstream {
     async fn lookup(&self, context: &Context, query: &Query) -> io::Result<Message>;
 }
 
@@ -294,6 +304,16 @@ impl ProxyUpstream {
 impl Debug for ProxyUpstream {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxyUpstream").field("ns", &self.ns).finish()
+    }
+}
+
+impl Display for ProxyUpstream {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.mode {
+            ProxyUpstreamMode::TcpOnly { .. } => write!(f, "tcp://{}", self.ns),
+            ProxyUpstreamMode::UdpOnly { .. } => write!(f, "udp://{}", self.ns),
+            ProxyUpstreamMode::TcpAndUdp { .. } => write!(f, "tcp+udp://{}", self.ns),
+        }
     }
 }
 

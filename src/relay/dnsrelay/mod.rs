@@ -1,5 +1,6 @@
 use std::{
     collections::HashSet,
+    fmt::Display,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
@@ -20,7 +21,7 @@ use crate::{
     relay::{sys::create_udp_socket, utils::try_timeout},
 };
 
-use self::upstream::ProxyUpstream;
+use self::upstream::{ProxyUpstream, Upstream};
 
 pub(crate) mod upstream;
 
@@ -181,12 +182,18 @@ fn should_forward_by_response(
     }
 }
 
-struct DnsRelay<Remote: upstream::Upstream> {
+struct DnsRelay<Remote>
+where
+    Remote: Upstream,
+{
     context: SharedContext,
     remote_upstream: Remote,
 }
 
-impl<Remote: upstream::Upstream> DnsRelay<Remote> {
+impl<Remote> DnsRelay<Remote>
+where
+    Remote: Upstream + Display,
+{
     fn new(context: SharedContext, remote_upstream: Remote) -> DnsRelay<Remote> {
         DnsRelay {
             context,
@@ -201,7 +208,7 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
 
         // Start querying name servers
         debug!(
-            "attempting lookup of {:?} {} with ns {:?} and {:?}",
+            "DNS lookup {:?} {} with ns LOCAL: {}, REMOTE: {}",
             query.query_type(),
             query.name(),
             local,
@@ -302,10 +309,10 @@ impl<Remote: upstream::Upstream> DnsRelay<Remote> {
     }
 }
 
-async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
-    relay: Arc<DnsRelay<Remote>>,
-    bind_addr: SocketAddr,
-) -> io::Result<()> {
+async fn run_tcp<Remote>(relay: Arc<DnsRelay<Remote>>, bind_addr: SocketAddr) -> io::Result<()>
+where
+    Remote: Upstream + Display + Send + Sync + 'static,
+{
     let listener = TcpListener::bind(&bind_addr).await?;
 
     let actual_local_addr = listener.local_addr()?;
@@ -330,10 +337,10 @@ async fn run_tcp<Remote: upstream::Upstream + Send + Sync + 'static>(
     }
 }
 
-async fn run_udp<Remote: upstream::Upstream + Send + Sync + 'static>(
-    relay: Arc<DnsRelay<Remote>>,
-    bind_addr: SocketAddr,
-) -> io::Result<()> {
+async fn run_udp<Remote>(relay: Arc<DnsRelay<Remote>>, bind_addr: SocketAddr) -> io::Result<()>
+where
+    Remote: Upstream + Display + Send + Sync + 'static,
+{
     let socket = create_udp_socket(&bind_addr).await?;
 
     let actual_local_addr = socket.local_addr()?;
