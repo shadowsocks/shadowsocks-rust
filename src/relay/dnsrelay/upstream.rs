@@ -333,7 +333,7 @@ impl Upstream for ProxyUpstream {
                 .await
                 {
                     Ok(Ok(message)) => {
-                        trace!("ProxyUpstream {} TCP query answer, {:?}", self.ns, message);
+                        trace!("ProxyUpstream {} UDP query answer, {:?}", self.ns, message);
                         Ok(message)
                     }
                     Ok(Err(..)) | Err(..) => {
