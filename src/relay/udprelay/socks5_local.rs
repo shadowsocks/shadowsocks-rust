@@ -4,12 +4,13 @@ use std::{
     io::{self, Cursor, ErrorKind, Read},
     net::SocketAddr,
     sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
 use bytes::{Bytes, BytesMut};
 use log::{debug, error, info, trace};
-use tokio::{self, sync::mpsc};
+use tokio::{self, sync::mpsc, time};
 
 use crate::{
     context::SharedContext,
@@ -128,7 +129,14 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     });
 
     loop {
-        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
+        let (recv_len, src) = match r.recv_from(&mut pkt_buf).await {
+            Ok(o) => o,
+            Err(err) => {
+                error!("recv_from failed with err: {}", err);
+                time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task

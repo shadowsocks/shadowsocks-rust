@@ -4,12 +4,13 @@ use std::{
     io,
     net::{IpAddr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 
 use bytes::BytesMut;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info, trace, warn};
-use tokio::{self, sync::mpsc};
+use tokio::{self, sync::mpsc, time};
 
 use crate::{
     context::SharedContext,
@@ -83,7 +84,14 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
-        let (recv_len, src) = r.recv_from(&mut pkt_buf).await?;
+        let (recv_len, src) = match r.recv_from(&mut pkt_buf).await {
+            Ok(o) => o,
+            Err(err) => {
+                error!("recv_from failed with err: {}", err);
+                time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         let pkt = &pkt_buf[..recv_len];

@@ -8,7 +8,7 @@ use std::{
 };
 
 use log::{debug, error, info, trace, warn};
-use tokio::{net::TcpListener, select};
+use tokio::{net::TcpListener, select, time};
 use trust_dns_proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
     rr::{DNSClass, Name, RData, RecordType},
@@ -318,7 +318,15 @@ where
     );
 
     loop {
-        let (mut stream, src) = listener.accept().await?;
+        let (mut stream, src) = match listener.accept().await {
+            Ok(s) => s,
+            Err(err) => {
+                error!("accept failed with error: {}", err);
+                time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
         let relay = relay.clone();
         tokio::spawn(async move {
             match upstream::read_message(&mut stream).await {
@@ -354,8 +362,8 @@ where
     let tx = rx.clone();
 
     loop {
-        let mut req_buffer: [u8; 512] = [0; 512];
-        let (_, src) = match rx.recv_from(&mut req_buffer).await {
+        let mut req_buffer = [0u8; 512];
+        let (n, src) = match rx.recv_from(&mut req_buffer).await {
             Ok(x) => x,
             Err(e) => {
                 error!("DNS relay read from UDP socket error: {}", e);
@@ -363,20 +371,23 @@ where
             }
         };
 
-        let request = match Message::from_vec(&req_buffer) {
-            Ok(x) => x,
-            Err(e) => {
-                error!("failed to parse UDP query message, error: {:?}", e);
-                continue;
-            }
-        };
-
-        trace!("DNS query from {}, {:?}", src, request);
+        trace!("DNS recv {} bytes from {}", n, src);
 
         let relay = relay.clone();
         let tx = tx.clone();
 
         tokio::spawn(async move {
+            let req_buffer = &req_buffer[..n];
+
+            let request = match Message::from_vec(&req_buffer) {
+                Ok(x) => x,
+                Err(e) => {
+                    error!("failed to parse UDP query message, error: {:?}", e);
+                    return;
+                }
+            };
+
+            trace!("DNS query from {}, {:?}", src, request);
             let message = relay.resolve(request).await;
             trace!("DNS response to {}, {:?}", src, message);
 
