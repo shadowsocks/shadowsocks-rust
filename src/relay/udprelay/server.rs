@@ -1,16 +1,10 @@
 //! UDP relay proxy server
 
-use std::{
-    io,
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, sync::Arc, time::Duration};
 
-use bytes::BytesMut;
 use futures::{stream::FuturesUnordered, StreamExt};
 use log::{debug, error, info, trace, warn};
-use tokio::{self, sync::mpsc, time};
+use tokio::{self, time};
 
 use crate::{
     context::SharedContext,
@@ -21,19 +15,9 @@ use crate::{
 };
 
 use super::{
-    association::{ServerAssociation, ServerAssociationManager},
+    association::{ServerAssociation, ServerAssociationManager, ServerProxyHandler},
     MAXIMUM_UDP_PAYLOAD_SIZE,
 };
-
-fn association_key(saddr: &SocketAddr) -> [u8; 18] {
-    let mut result = [0; 18];
-    result[..16].copy_from_slice(&match saddr.ip() {
-        IpAddr::V4(ref ip) => ip.to_ipv6_mapped().octets(),
-        IpAddr::V6(ref ip) => ip.octets(),
-    });
-    result[16..].copy_from_slice(&saddr.port().to_ne_bytes());
-    result
-}
 
 async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, svr_idx: usize) -> io::Result<()> {
     let svr_cfg = context.server_config(svr_idx);
@@ -47,39 +31,6 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
     let w = r.clone();
 
     let assoc_manager = ServerAssociationManager::new(context.config());
-
-    // FIXME: Channel size 1024?
-    let (tx, mut rx) = mpsc::channel::<(SocketAddr, BytesMut)>(1024);
-
-    {
-        // Tokio task for sending data back to clients
-
-        let assoc_manager = assoc_manager.clone();
-        let flow_stat = flow_stat.clone();
-
-        tokio::spawn(async move {
-            while let Some((src, pkt)) = rx.recv().await {
-                let cache_key = association_key(&src);
-                if !assoc_manager.keep_alive(&cache_key).await {
-                    debug!(
-                        "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
-                        src,
-                        pkt.len()
-                    );
-                    continue;
-                }
-
-                if let Err(err) = w.send_to(&pkt, &src).await {
-                    error!("UDP packet send failed, err: {:?}", err);
-                    break;
-                }
-
-                flow_stat.udp().incr_tx(pkt.len());
-            }
-
-            // FIXME: How to stop the outer listener Future?
-        });
-    }
 
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
@@ -118,8 +69,9 @@ async fn listen(context: SharedContext, flow_stat: SharedServerFlowStatistic, sv
 
         // Check or (re)create an association
         let res = assoc_manager
-            .send_packet(association_key(&src), pkt.to_vec(), async {
-                ServerAssociation::associate(context.clone(), svr_idx, src, tx.clone()).await
+            .send_packet(ServerProxyHandler::association_key(&src), pkt.to_vec(), async {
+                let handler = ServerProxyHandler::new(src, assoc_manager.clone(), flow_stat.clone(), w.clone());
+                ServerAssociation::associate(context.clone(), svr_idx, src, handler).await
             })
             .await;
 

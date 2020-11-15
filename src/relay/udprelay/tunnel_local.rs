@@ -3,8 +3,8 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use log::{debug, error, info, trace};
-use tokio::{self, sync::mpsc, time};
+use log::{debug, error, info, trace, warn};
+use tokio::{self, net::UdpSocket, time};
 
 use crate::{
     context::SharedContext,
@@ -23,16 +23,48 @@ use super::{
 #[derive(Clone)]
 struct ProxyHandler {
     src_addr: SocketAddr,
-    response_tx: mpsc::Sender<(SocketAddr, Address, Vec<u8>)>,
+    cache_key: String,
+    assoc_manager: ProxyAssociationManager<String>,
+    tx: Arc<UdpSocket>,
+}
+
+impl ProxyHandler {
+    fn new(src_addr: SocketAddr, assoc_manager: ProxyAssociationManager<String>, tx: Arc<UdpSocket>) -> ProxyHandler {
+        ProxyHandler {
+            src_addr,
+            cache_key: src_addr.to_string(),
+            assoc_manager,
+            tx,
+        }
+    }
 }
 
 #[async_trait]
 impl ProxySend for ProxyHandler {
-    async fn send_packet(&mut self, addr: Address, data: Vec<u8>) -> io::Result<()> {
-        if let Err(err) = self.response_tx.send((self.src_addr, addr, data)).await {
-            error!("UDP associate response channel error: {}", err);
+    async fn send_packet(&mut self, _addr: Address, data: Vec<u8>) -> io::Result<()> {
+        if !self.assoc_manager.keep_alive(&self.cache_key).await {
+            debug!(
+                "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
+                self.src_addr,
+                data.len()
+            );
+            return Ok(());
         }
-        Ok(())
+
+        match self.tx.send_to(&data, &self.src_addr).await {
+            Ok(n) => {
+                if n < data.len() {
+                    warn!(
+                        "UDP association {} <- ... payload truncated, expecting {} bytes, but sent {} bytes",
+                        self.src_addr,
+                        data.len(),
+                        n
+                    );
+                }
+                Ok(())
+            }
+            Err(err) => return Err(err),
+        }
     }
 }
 
@@ -57,34 +89,8 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     );
 
     let assoc_manager = ProxyAssociationManager::new(context.config());
-    let assoc_manager_cloned = assoc_manager.clone();
 
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
-
-    // FIXME: Channel size 1024?
-    let (tx, mut rx) = mpsc::channel::<(SocketAddr, Address, Vec<u8>)>(1024);
-    tokio::spawn(async move {
-        let assoc_manager = assoc_manager_cloned;
-
-        while let Some((src, _, pkt)) = rx.recv().await {
-            let cache_key = src.to_string();
-            if !assoc_manager.keep_alive(&cache_key).await {
-                debug!(
-                    "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
-                    src,
-                    pkt.len()
-                );
-                continue;
-            }
-
-            if let Err(err) = w.send_to(&pkt, &src).await {
-                error!("UDP packet send failed, err: {:?}", err);
-                break;
-            }
-        }
-
-        // FIXME: How to stop the outer listener Future?
-    });
 
     loop {
         let (recv_len, src) = match r.recv_from(&mut pkt_buf).await {
@@ -94,7 +100,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
-        }; 
+        };
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task
@@ -119,10 +125,7 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
                 // Pick a server
                 let server = balancer.pick_server();
 
-                let sender = ProxyHandler {
-                    src_addr: src,
-                    response_tx: tx.clone(),
-                };
+                let sender = ProxyHandler::new(src, assoc_manager.clone(), w.clone());
 
                 ProxyAssociation::associate_with_acl(src, server, sender).await
             })

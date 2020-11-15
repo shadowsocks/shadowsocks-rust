@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use tokio::time;
 
 use crate::{
@@ -54,7 +54,19 @@ impl ProxySend for ProxyHandler {
             // This only works for systems that supports binding to non-local addresses
             let mut local_udp = UdpRedirSocket::bind(self.ty, dst_addr)?;
 
-            local_udp.send_to(&data, self.src_addr).await?;
+            match local_udp.send_to(&data, self.src_addr).await {
+                Ok(n) => {
+                    if n < data.len() {
+                        warn!(
+                            "UDP association {} <- ... payload truncated, expecting {} bytes, but sent {} bytes",
+                            self.src_addr,
+                            data.len(),
+                            n
+                        );
+                    }
+                }
+                Err(err) => return Err(err),
+            }
 
             // Update LRU
             self.assoc_map.keep_alive(&self.cache_key).await;

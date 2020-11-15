@@ -30,6 +30,7 @@ use crate::{
     context::{Context, SharedContext},
     crypto::CipherCategory,
     relay::{
+        flow::SharedServerFlowStatistic,
         loadbalancing::server::{ServerData, SharedServerStatistic},
         socks5::Address,
         sys::create_outbound_udp_socket,
@@ -753,6 +754,78 @@ where
 /// Association manager for local
 pub type ProxyAssociationManager<K> = AssociationManager<K, ProxyAssociation>;
 
+/// Server Association's Key type
+pub type ServerAssociationKey = [u8; 18];
+
+/// Handler for handing remote response
+pub struct ServerProxyHandler {
+    src_addr: SocketAddr,
+    cache_key: ServerAssociationKey,
+    assoc_manager: ServerAssociationManager<ServerAssociationKey>,
+    flow_stat: SharedServerFlowStatistic,
+    tx: Arc<UdpSocket>,
+}
+
+impl ServerProxyHandler {
+    /// Create a new ServerProxyHandler
+    pub fn new(
+        src_addr: SocketAddr,
+        assoc_manager: ServerAssociationManager<ServerAssociationKey>,
+        flow_stat: SharedServerFlowStatistic,
+        tx: Arc<UdpSocket>,
+    ) -> ServerProxyHandler {
+        ServerProxyHandler {
+            src_addr,
+            cache_key: ServerProxyHandler::association_key(&src_addr),
+            assoc_manager,
+            flow_stat,
+            tx,
+        }
+    }
+
+    /// Make server association key
+    pub fn association_key(saddr: &SocketAddr) -> ServerAssociationKey {
+        let mut result = [0; 18];
+        result[..16].copy_from_slice(&match saddr.ip() {
+            IpAddr::V4(ref ip) => ip.to_ipv6_mapped().octets(),
+            IpAddr::V6(ref ip) => ip.octets(),
+        });
+        result[16..].copy_from_slice(&saddr.port().to_ne_bytes());
+        result
+    }
+
+    /// Send packet back to source client
+    pub async fn send_packet(&self, pkt: &[u8]) -> io::Result<()> {
+        if !self.assoc_manager.keep_alive(&self.cache_key).await {
+            debug!(
+                "UDP association {} <-> ... is already expired, throwing away packet {} bytes",
+                self.src_addr,
+                pkt.len()
+            );
+            return Ok(());
+        }
+
+        let n = match self.tx.send_to(&pkt, &self.src_addr).await {
+            Ok(n) => {
+                if n < pkt.len() {
+                    warn!(
+                        "UDP association {} <- ... payload truncated, expecting {} bytes, but sent {} bytes",
+                        self.src_addr,
+                        pkt.len(),
+                        n
+                    );
+                }
+                n
+            }
+            Err(err) => return Err(err),
+        };
+
+        self.flow_stat.udp().incr_tx(n);
+
+        Ok(())
+    }
+}
+
 // Represent a UDP association in server
 pub struct ServerAssociation {
     // local -> remote Queue
@@ -777,7 +850,7 @@ impl ServerAssociation {
         context: SharedContext,
         svr_idx: usize,
         src_addr: SocketAddr,
-        mut response_tx: mpsc::Sender<(SocketAddr, BytesMut)>,
+        response_tx: ServerProxyHandler,
     ) -> io::Result<ServerAssociation> {
         // Create a socket for receiving packets
         // Let system allocate an address for us (INADDR_ANY)
@@ -844,7 +917,7 @@ impl ServerAssociation {
                     &context,
                     src_addr,
                     &receiver,
-                    &mut response_tx,
+                    &response_tx,
                     svr_cfg,
                     &resolved_address_cache,
                 )
@@ -969,7 +1042,7 @@ impl ServerAssociation {
         context: &Context,
         src_addr: SocketAddr,
         remote_udp: &UdpSocket,
-        response_tx: &mut mpsc::Sender<(SocketAddr, BytesMut)>,
+        response_tx: &ServerProxyHandler,
         svr_cfg: &ServerConfig,
         resolved_address_cache: &SharedResolvedAddressCache,
     ) -> io::Result<()> {
@@ -996,7 +1069,7 @@ impl ServerAssociation {
 
         if let CipherCategory::None = svr_cfg.method().category() {
             // Send back to src_addr
-            if let Err(err) = response_tx.send((src_addr, send_buf)).await {
+            if let Err(err) = response_tx.send_packet(&send_buf).await {
                 error!("failed to send packet into response channel, error: {}", err);
 
                 // FIXME: What to do? Ignore?
@@ -1006,7 +1079,7 @@ impl ServerAssociation {
             encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
 
             // Send back to src_addr
-            if let Err(err) = response_tx.send((src_addr, encrypt_buf)).await {
+            if let Err(err) = response_tx.send_packet(&encrypt_buf).await {
                 error!("failed to send packet into response channel, error: {}", err);
 
                 // FIXME: What to do? Ignore?
