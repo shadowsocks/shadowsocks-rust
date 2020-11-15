@@ -1461,75 +1461,78 @@ impl Config {
         }
 
         // DNS
-        nconfig.dns = match config.dns {
-            Some(SSDnsConfig::Simple(ds)) => {
-                match &ds[..] {
-                    "google" => Some(ResolverConfig::google()),
+        #[cfg(feature = "trust-dns")]
+        {
+            nconfig.dns = match config.dns {
+                Some(SSDnsConfig::Simple(ds)) => {
+                    match &ds[..] {
+                        "google" => Some(ResolverConfig::google()),
 
-                    "cloudflare" => Some(ResolverConfig::cloudflare()),
-                    #[cfg(feature = "dns-over-tls")]
-                    "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
-                    #[cfg(feature = "dns-over-https")]
-                    "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
+                        "cloudflare" => Some(ResolverConfig::cloudflare()),
+                        #[cfg(feature = "dns-over-tls")]
+                        "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
+                        #[cfg(feature = "dns-over-https")]
+                        "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
 
-                    "quad9" => Some(ResolverConfig::quad9()),
-                    #[cfg(feature = "dns-over-tls")]
-                    "quad9_tls" => Some(ResolverConfig::quad9_tls()),
+                        "quad9" => Some(ResolverConfig::quad9()),
+                        #[cfg(feature = "dns-over-tls")]
+                        "quad9_tls" => Some(ResolverConfig::quad9_tls()),
 
-                    nameservers => {
-                        // Set ips directly
-                        // Similar to shadowsocks-libev's `ares_set_servers_ports_csv`
-                        //
-                        // ```
-                        // host[:port][,host[:port]]...
-                        // ```
-                        //
-                        // For example:
-                        //     `192.168.1.100,192.168.1.101,3.4.5.6`
-                        let mut c = ResolverConfig::new();
-                        for part in nameservers.split(',') {
-                            let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
-                                socket_addr
-                            } else if let Ok(ipaddr) = part.parse::<IpAddr>() {
-                                SocketAddr::new(ipaddr, 53)
+                        nameservers => {
+                            // Set ips directly
+                            // Similar to shadowsocks-libev's `ares_set_servers_ports_csv`
+                            //
+                            // ```
+                            // host[:port][,host[:port]]...
+                            // ```
+                            //
+                            // For example:
+                            //     `192.168.1.100,192.168.1.101,3.4.5.6`
+                            let mut c = ResolverConfig::new();
+                            for part in nameservers.split(',') {
+                                let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
+                                    socket_addr
+                                } else if let Ok(ipaddr) = part.parse::<IpAddr>() {
+                                    SocketAddr::new(ipaddr, 53)
+                                } else {
+                                    let e = Error::new(
+                                        ErrorKind::Invalid,
+                                        "invalid `dns` value, can only be host[:port][,host[:port]]...",
+                                        None,
+                                    );
+                                    return Err(e);
+                                };
+
+                                c.add_name_server(NameServerConfig {
+                                    socket_addr,
+                                    protocol: Protocol::Udp,
+                                    tls_dns_name: None,
+                                    trust_nx_responses: false,
+                                    #[cfg(feature = "dns-over-tls")]
+                                    tls_config: None,
+                                });
+                                c.add_name_server(NameServerConfig {
+                                    socket_addr,
+                                    protocol: Protocol::Tcp,
+                                    tls_dns_name: None,
+                                    trust_nx_responses: false,
+                                    #[cfg(feature = "dns-over-tls")]
+                                    tls_config: None,
+                                });
+                            }
+
+                            if c.name_servers().is_empty() {
+                                None
                             } else {
-                                let e = Error::new(
-                                    ErrorKind::Invalid,
-                                    "invalid `dns` value, can only be host[:port][,host[:port]]...",
-                                    None,
-                                );
-                                return Err(e);
-                            };
-
-                            c.add_name_server(NameServerConfig {
-                                socket_addr,
-                                protocol: Protocol::Udp,
-                                tls_dns_name: None,
-                                trust_nx_responses: false,
-                                #[cfg(feature = "dns-over-tls")]
-                                tls_config: None,
-                            });
-                            c.add_name_server(NameServerConfig {
-                                socket_addr,
-                                protocol: Protocol::Tcp,
-                                tls_dns_name: None,
-                                trust_nx_responses: false,
-                                #[cfg(feature = "dns-over-tls")]
-                                tls_config: None,
-                            });
-                        }
-
-                        if c.name_servers().is_empty() {
-                            None
-                        } else {
-                            Some(c)
+                                Some(c)
+                            }
                         }
                     }
                 }
-            }
-            Some(SSDnsConfig::TrustDns(c)) => Some(c),
-            None => None,
-        };
+                Some(SSDnsConfig::TrustDns(c)) => Some(c),
+                None => None,
+            };
+        }
 
         // Mode
         if let Some(m) = config.mode {
