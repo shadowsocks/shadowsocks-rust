@@ -1,9 +1,10 @@
 //! UDP relay local server
 
-use std::{io, net::SocketAddr};
+use std::{io, net::SocketAddr, time::Duration};
 
 use async_trait::async_trait;
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
+use tokio::time;
 
 use crate::{
     config::RedirType,
@@ -87,7 +88,14 @@ pub async fn run(context: SharedContext) -> io::Result<()> {
     let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
     loop {
-        let (recv_len, src, dst) = l.recv_from_redir(&mut pkt_buf).await?;
+        let (recv_len, src, dst) = match l.recv_from_redir(&mut pkt_buf).await {
+            Ok(o) => o,
+            Err(err) => {
+                error!("recv_from_redir failed with err: {}", err);
+                time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
 
         // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
         // Copy bytes, because udp_associate runs in another tokio Task
