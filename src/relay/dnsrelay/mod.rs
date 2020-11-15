@@ -367,6 +367,7 @@ where
             Ok(x) => x,
             Err(e) => {
                 error!("DNS relay read from UDP socket error: {}", e);
+                time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
         };
