@@ -88,12 +88,6 @@ jobs:
                   key: cargo-cache-{{ arch }}-{{ checksum "rust-version" }}-{{ checksum "Cargo.lock" }}
             # - run: ./build-host-release
             - run:
-                  name: "Build Release"
-                  command: |
-                      $env:Path += ";C:\Users\circleci\.cargo\bin"
-                      cargo build --release --features "aes-pmac-siv"
-                  no_output_timeout: 1h
-            - run:
                   name: "Package Release"
                   command: |
                       $ProgressPreference = "SilentlyContinue"

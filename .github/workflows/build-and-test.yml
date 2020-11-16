@@ -24,10 +24,6 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build
-        run: cargo build --features "aes-pmac-siv local-redir" --verbose
-      - name: Run tests
-        run: cargo test --features "aes-pmac-siv local-redir" --verbose
 
   build-windows:
     runs-on: windows-latest
@@ -41,10 +37,6 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build
-        run: cargo build --features "aes-pmac-siv openssl-vendored" --verbose
-      - name: Run tests
-        run: cargo test --features "aes-pmac-siv openssl-vendored" --verbose
 
   build-macos:
     runs-on: macos-latest
@@ -63,7 +55,3 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build
-        run: cargo build --features "aes-pmac-siv local-redir" --verbose
-      - name: Run tests
-        run: cargo test --features "aes-pmac-siv local-redir" --verbose

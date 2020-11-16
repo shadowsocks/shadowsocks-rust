@@ -1,4 +1,8 @@
 //! Stream protocol implementation
+use futures::ready;
+use bytes::{Buf, BufMut, BytesMut};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use shadowsocks_crypto::v1::{CipherKind, Cipher};
 
 use std::{
     cmp,
@@ -8,31 +12,26 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::crypto::{new_stream, BoxStreamCipher, CipherType, CryptoMode};
-use bytes::{Buf, BufMut, BytesMut};
-use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use super::BUFFER_SIZE;
+// use super::BUFFER_SIZE;
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader {
     buffer: BytesMut,
-    cipher: BoxStreamCipher,
+    cipher: Cipher,
     pos: usize,
     got_final: bool,
-    incoming_buffer: Box<[u8]>,
+    // incoming_buffer: Box<[u8]>,
 }
 
 impl DecryptedReader {
-    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> DecryptedReader {
-        let cipher = new_stream(t, key, iv, CryptoMode::Decrypt);
+    pub fn new(method: CipherKind, key: &[u8], iv: &[u8]) -> DecryptedReader {
+        let cipher = Cipher::new(method, key, iv);
         DecryptedReader {
             buffer: BytesMut::new(),
             cipher,
             pos: 0,
             got_final: false,
-            incoming_buffer: vec![0u8; BUFFER_SIZE].into_boxed_slice(),
+            // incoming_buffer: vec![0u8; BUFFER_SIZE].into_boxed_slice(),
         }
     }
 
@@ -45,31 +44,33 @@ impl DecryptedReader {
     where
         R: AsyncRead + Unpin,
     {
+        let mut buf = [0u8; 1 << 14];
         while self.pos >= self.buffer.len() {
             if self.got_final {
                 return Poll::Ready(Ok(()));
             }
 
-            let mut buf = ReadBuf::new(&mut self.incoming_buffer);
-            ready!(Pin::new(&mut *r).poll_read(ctx, &mut buf))?;
-            let data = buf.filled();
+            let mut buffer = ReadBuf::new(&mut buf);
+            // let mut buf = ReadBuf::new(&mut self.incoming_buffer);
+            ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
+            let amt = buffer.filled().len();
+
+            if amt == 0 {
+                self.got_final = true;
+                continue;
+            }
+
+            let m    = buffer.filled_mut();
+            
+            assert_eq!(self.cipher.decrypt_packet(m), true);
 
             // Reset pointers
             // So the outer loop will break if data.len() != 0
             self.buffer.clear();
             self.pos = 0;
 
-            if data.len() == 0 {
-                // Finialize block
-                self.buffer.reserve(self.cipher.buffer_size(&[]));
-                self.cipher.finalize(&mut self.buffer)?;
-                self.got_final = true;
-            } else {
-                // Ensure we have enough space
-                let buffer_len = self.cipher.buffer_size(data);
-                self.buffer.reserve(buffer_len);
-                self.cipher.update(data, &mut self.buffer)?;
-            }
+            // Ensure we have enough space
+            self.buffer.put_slice(m);
         }
 
         let remaining_len = self.buffer.len() - self.pos;
@@ -87,20 +88,20 @@ enum EncryptWriteStep {
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter {
-    cipher: BoxStreamCipher,
+    cipher: Cipher,
     steps: EncryptWriteStep,
     buf: BytesMut,
 }
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], iv: &[u8]) -> EncryptedWriter {
+    pub fn new(method: CipherKind, key: &[u8], iv: &[u8]) -> EncryptedWriter {
         // iv should be sent with the first packet
         let mut buf = BytesMut::with_capacity(iv.len());
         buf.put(iv);
 
         EncryptedWriter {
-            cipher: new_stream(t, key, &iv, CryptoMode::Encrypt),
+            cipher: Cipher::new(method, key, &iv),
             steps: EncryptWriteStep::Nothing,
             buf,
         }
@@ -119,12 +120,13 @@ impl EncryptedWriter {
         W: AsyncWrite + Unpin,
     {
         // FIXME: How about finalize?
-
         loop {
             match self.steps {
                 EncryptWriteStep::Nothing => {
-                    self.buf.reserve(self.buffer_size(data));
-                    self.cipher.update(data, &mut self.buf)?;
+                    let mut payload = data.to_vec();
+                    self.cipher.encrypt_packet(&mut payload);
+                    self.buf.put_slice(&payload);
+
                     self.steps = EncryptWriteStep::Writing;
                 }
                 EncryptWriteStep::Writing => {
@@ -142,9 +144,5 @@ impl EncryptedWriter {
                 }
             }
         }
-    }
-
-    fn buffer_size(&self, data: &[u8]) -> usize {
-        self.cipher.buffer_size(data)
     }
 }

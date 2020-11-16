@@ -19,174 +19,200 @@
 //! | Fixed  | Variable  |   Fixed   |
 //! +--------+-----------+-----------+
 //! ```
+use crate::context::Context;
 
-use std::{io, slice};
-
+use log::{debug, trace};
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
-use log::{debug, trace};
+use shadowsocks_crypto::v1::{CipherCategory, CipherKind, Cipher, random_iv_or_salt};
 
-use crate::{
-    context::Context,
-    crypto::{self, CipherCategory, CipherType, CryptoMode},
-};
+use std::io;
+
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
 pub fn encrypt_payload(
     context: &Context,
-    t: CipherType,
+    method: CipherKind,
     key: &[u8],
     payload: &[u8],
     dst: &mut BytesMut,
 ) -> io::Result<()> {
-    match t.category() {
+    match method.category() {
         CipherCategory::None => {
             // FIXME: Is there a better way to prevent copying?
             dst.put_slice(payload);
             Ok(())
-        }
-        CipherCategory::Stream => encrypt_payload_stream(context, t, key, payload, dst),
-        CipherCategory::Aead => encrypt_payload_aead(context, t, key, payload, dst),
+        },
+        CipherCategory::Stream => {
+            encrypt_payload_stream(context, method, key, payload, dst)
+        },
+        CipherCategory::Aead => {
+            encrypt_payload_aead(context, method, key, payload, dst)
+        },
     }
 }
 
 fn encrypt_payload_stream(
     context: &Context,
-    t: CipherType,
+    method: CipherKind,
     key: &[u8],
     payload: &[u8],
     dst: &mut BytesMut,
 ) -> io::Result<()> {
-    let iv = loop {
-        let iv = t.gen_init_vec();
-        if context.check_nonce_and_set(&iv) {
-            continue;
-        }
-        break iv;
-    };
-    let mut cipher = crypto::new_stream(t, key, &iv, CryptoMode::Encrypt);
+    let plen   = payload.len();
+    let iv_len = method.iv_len();
 
+    let mut iv = [0u8; 32];
+    let iv = &mut iv[..iv_len];
+    if iv_len > 0 {
+        loop {
+            random_iv_or_salt(iv);
+            if !context.check_nonce_and_set(&iv) {
+                break;
+            }
+        }
+    } else {
+        context.check_nonce_and_set(&iv);
+    }
+
+
+    let mut cipher = Cipher::new(method, &key, &iv);
     trace!("UDP packet generated stream iv {:?}", ByteStr::new(&iv));
 
-    dst.reserve(iv.len() + payload.len());
+    dst.reserve(iv_len + plen);
 
-    // First of all, IV
-    dst.put_slice(&iv);
+    dst.extend_from_slice(&iv);
+    dst.extend_from_slice(payload);
 
     // Encrypted data
-    cipher.update(&payload[..], dst)?;
-    cipher.finalize(dst)?;
+    let data: &mut [u8] = dst.as_mut();
+    cipher.encrypt_packet(&mut data[iv_len..]);
 
     Ok(())
 }
 
 fn encrypt_payload_aead(
     context: &Context,
-    t: CipherType,
+    method: CipherKind,
     key: &[u8],
     payload: &[u8],
     dst: &mut BytesMut,
 ) -> io::Result<()> {
-    let salt = loop {
-        let salt = t.gen_salt();
-        if context.check_nonce_and_set(&salt) {
-            continue;
+    let plen     = payload.len();
+    let salt_len = method.salt_len();
+
+    let mut salt = [0u8; 32];
+    let salt = &mut salt[..salt_len];
+
+    if salt_len > 0 {
+        loop {
+            random_iv_or_salt(salt);
+            if !context.check_nonce_and_set(&salt) {
+                break;
+            }
         }
-        break salt;
-    };
-    let tag_size = t.tag_size();
-    let mut cipher = crypto::new_aead_encryptor(t, key, &salt);
+    } else {
+        context.check_nonce_and_set(&salt);
+    }
+
+    let mut cipher = Cipher::new(method, &key, &salt);
+
+    let tag_len = cipher.tag_len();
 
     trace!("UDP packet generated AEAD salt {:?}", ByteStr::new(&salt));
 
-    dst.reserve(salt.len() + payload.len() + tag_size);
+    dst.reserve(salt_len + plen + tag_len);
 
     // First of all, salt
-    dst.put_slice(&salt);
+    dst.extend_from_slice(&salt);
+    dst.extend_from_slice(payload);
+    dst.resize(dst.len() + tag_len, 0);
 
     // Encrypted data
-    unsafe {
-        let remaining = dst.bytes_mut();
-        let b = slice::from_raw_parts_mut(remaining.as_mut_ptr() as *mut u8, remaining.len());
-
-        cipher.encrypt(payload, b);
-        dst.advance_mut(payload.len() + tag_size);
-    }
+    let data: &mut [u8] = dst.as_mut();
+    cipher.encrypt_packet(&mut data[salt_len..]);
 
     Ok(())
 }
 
+
 /// Decrypt payload from ShadowSocks UDP encrypted packet
-pub fn decrypt_payload(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
-    match t.category() {
+pub fn decrypt_payload(context: &Context, method: CipherKind, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+    match method.category() {
         CipherCategory::None => {
             // FIXME: Is there a better way to prevent copying?
             let mut buf = Vec::with_capacity(payload.len());
-            buf.extend(payload);
+            buf.extend_from_slice(payload);
             Ok(Some(buf))
-        }
-        CipherCategory::Stream => decrypt_payload_stream(context, t, key, payload),
-        CipherCategory::Aead => decrypt_payload_aead(context, t, key, payload),
+        },
+        CipherCategory::Stream => {
+            decrypt_payload_stream(context, method, key, payload)
+        },
+        CipherCategory::Aead => {
+            decrypt_payload_aead(context, method, key, payload)
+        },
     }
 }
 
-fn decrypt_payload_stream(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
-    let iv_size = t.iv_size();
-    if payload.len() < iv_size {
+fn decrypt_payload_stream(context: &Context, method: CipherKind, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+    let plen   = payload.len();
+    let iv_len = method.iv_len();
+
+    if plen < iv_len {
         return Ok(None);
     }
 
-    let iv = &payload[..iv_size];
+    let iv = &payload[..iv_len];
+
     if context.check_nonce_and_set(iv) {
-        use std::io::{Error, ErrorKind};
-
         debug!("detected repeated iv {:?}", ByteStr::new(iv));
-
-        let err = Error::new(ErrorKind::Other, "detected repeated iv");
-        return Err(err);
+        return Err(io::Error::new(io::ErrorKind::Other, "detected repeated iv"));
     }
 
-    let data = &payload[iv_size..];
-
+    let data = &payload[iv_len..];
+    
     trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
+    let mut cipher = Cipher::new(method, key, iv);
 
-    let mut cipher = crypto::new_stream(t, key, iv, CryptoMode::Decrypt);
-
-    let mut recv_payload = Vec::with_capacity(data.len());
-    cipher.update(data, &mut recv_payload)?;
-    cipher.finalize(&mut recv_payload)?;
-
-    Ok(Some(recv_payload))
+    let mut buf = vec![0u8; data.len()];
+    buf[..data.len()].copy_from_slice(data);
+    
+    assert_eq!(cipher.decrypt_packet(&mut buf), true);
+    
+    Ok(Some(buf))
 }
 
-fn decrypt_payload_aead(context: &Context, t: CipherType, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
-    let tag_size = t.tag_size();
-    let salt_size = t.salt_size();
-
-    if payload.len() < tag_size + salt_size {
+fn decrypt_payload_aead(context: &Context, method: CipherKind, key: &[u8], payload: &[u8]) -> io::Result<Option<Vec<u8>>> {
+    let salt_len = method.salt_len();
+    if payload.len() < salt_len {
         return Ok(None);
     }
 
-    let salt = &payload[..salt_size];
+    let (salt, payload) = payload.split_at(salt_len);
     if context.check_nonce_and_set(salt) {
-        use std::io::{Error, ErrorKind};
-
         debug!("detected repeated salt {:?}", ByteStr::new(salt));
-
-        let err = Error::new(ErrorKind::Other, "detected repeated salt");
-        return Err(err);
+        return Err(io::Error::new(io::ErrorKind::Other, "detected repeated salt"));
     }
-
-    let data = &payload[salt_size..];
 
     trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
 
-    let data_length = payload.len() - tag_size - salt_size;
+    let mut cipher = Cipher::new(method, &key, &salt);
+    let tag_len = cipher.tag_len();
 
-    let mut cipher = crypto::new_aead_decryptor(t, key, salt);
+    if payload.len() < tag_len {
+        return Ok(None);
+    }
 
-    let mut recv_payload = vec![0u8; data_length];
-    cipher.decrypt(data, &mut recv_payload)?;
+    let mut buf = vec![0u8; payload.len()];
+    buf[..payload.len()].copy_from_slice(payload);
 
-    Ok(Some(recv_payload))
+
+    if !cipher.decrypt_packet(&mut buf) {
+        return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
+    }
+
+    // NOTE: 移除 TAG 数据。
+    buf.truncate(buf.len() - tag_len);
+
+    Ok(Some(buf))
 }

@@ -31,6 +31,11 @@
 //! |      2       |     Fixed     |   Variable   |   Fixed    |
 //! +--------------+---------------+--------------+------------+
 //! ```
+use futures::ready;
+use bytes::{Buf, BufMut, BytesMut};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use shadowsocks_crypto::v1::{CipherKind, Cipher};
+
 
 use std::{
     cmp,
@@ -42,12 +47,6 @@ use std::{
     u16,
 };
 
-use byteorder::{BigEndian, ByteOrder};
-use bytes::{Buf, BufMut, BytesMut};
-use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use crate::crypto::{self, BoxAeadDecryptor, BoxAeadEncryptor, CipherType};
 
 /// AEAD packet payload must be smaller than 0x3FFF
 const MAX_PACKET_SIZE: usize = 0x3FFF;
@@ -62,7 +61,7 @@ enum DecryptReadStep {
 pub struct DecryptedReader {
     buffer: BytesMut,
     data: BytesMut,
-    cipher: BoxAeadDecryptor,
+    cipher: Cipher,
     pos: usize,
     tag_size: usize,
     steps: DecryptReadStep,
@@ -70,14 +69,14 @@ pub struct DecryptedReader {
 }
 
 impl DecryptedReader {
-    pub fn new(t: CipherType, key: &[u8], nonce: &[u8]) -> DecryptedReader {
+    pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> DecryptedReader {
         DecryptedReader {
             // Initialize for the first length block
-            buffer: BytesMut::with_capacity(2 + t.tag_size()),
+            buffer: BytesMut::with_capacity(2 + method.tag_len()),
             data: BytesMut::new(),
-            cipher: crypto::new_aead_decryptor(t, key, nonce),
+            cipher: Cipher::new(method, key, nonce),
             pos: 0,
-            tag_size: t.tag_size(),
+            tag_size: method.tag_len(),
             steps: DecryptReadStep::Length,
             got_final: false,
         }
@@ -101,7 +100,7 @@ impl DecryptedReader {
             // Refill buffer
             match self.steps {
                 DecryptReadStep::Length => ready!(self.poll_read_decrypted_length(ctx, r))?,
-                DecryptReadStep::Data(len) => ready!(self.poll_read_decrypted_data(ctx, r, len))?,
+                DecryptReadStep::Data(plen) => ready!(self.poll_read_decrypted_data(ctx, r, plen))?,
             }
         }
 
@@ -116,29 +115,33 @@ impl DecryptedReader {
     where
         R: AsyncRead + Unpin,
     {
-        let buf_len = 2 + self.tag_size;
-        ready!(self.poll_read_exact(ctx, r, buf_len, true))?;
+        let mlen = 2 + self.tag_size;
+        ready!(self.poll_read_exact(ctx, r, mlen, true))?;
+        
         if self.got_final {
             return Poll::Ready(Ok(()));
         }
 
         // Done reading, decrypt it
-        let len = {
-            let mut len_buf = [0u8; 2];
-            self.cipher.decrypt(&self.buffer[..], &mut len_buf)?;
-            BigEndian::read_u16(&len_buf) as usize
+        let plen = {
+            let m = &mut self.buffer[..mlen];
+
+            if !self.cipher.decrypt_packet(m) {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
+            }
+
+            u16::from_be_bytes([self.buffer[0], self.buffer[1]]) as usize
         };
 
-        if len > MAX_PACKET_SIZE {
+        if plen > MAX_PACKET_SIZE {
             // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
             //
             // AEAD TCP protocol have reserved the higher two bits for future use
-
             let err = io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
                     "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
-                    len
+                    plen
                 ),
             );
             return Poll::Ready(Err(err));
@@ -150,28 +153,35 @@ impl DecryptedReader {
         self.pos = 0;
 
         // Next step, read data
-        self.steps = DecryptReadStep::Data(len);
-        self.buffer.reserve(len + self.tag_size);
-        self.data.reserve(len);
+        self.steps = DecryptReadStep::Data(plen);
+        self.buffer.reserve(plen + self.tag_size);
+        self.data.reserve(plen);
 
         Poll::Ready(Ok(()))
     }
 
-    fn poll_read_decrypted_data<R>(&mut self, ctx: &mut Context<'_>, r: &mut R, size: usize) -> Poll<io::Result<()>>
+    fn poll_read_decrypted_data<R>(&mut self, ctx: &mut Context<'_>, r: &mut R, plen: usize) -> Poll<io::Result<()>>
     where
         R: AsyncRead + Unpin,
     {
-        let buf_len = size + self.tag_size;
-        ready!(self.poll_read_exact(ctx, r, buf_len, false))?;
+        let mlen = plen + self.tag_size;
+        ready!(self.poll_read_exact(ctx, r, mlen, false))?;
 
         // Done reading data, decrypt it
         unsafe {
+            let m: &mut [u8] = self.buffer.as_mut();
+            assert_eq!(m.len(), mlen);
+
+            if !self.cipher.decrypt_packet(m) {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
+            }
+
             // It has enough space, I am sure about that
-            let buffer = slice::from_raw_parts_mut(self.data.bytes_mut().as_mut_ptr() as *mut u8, size);
-            self.cipher.decrypt(&self.buffer[..], buffer)?;
+            let data = slice::from_raw_parts_mut(self.data.bytes_mut().as_mut_ptr() as *mut u8, plen);
+            data[..].copy_from_slice(&self.buffer[..plen]);
 
             // Move forward the pointer
-            self.data.advance_mut(size);
+            self.data.advance_mut(plen);
         }
 
         // Clear buffer before overwriting it
@@ -214,8 +224,7 @@ impl DecryptedReader {
                     self.got_final = true;
                     return Poll::Ready(Ok(()));
                 } else {
-                    use std::io::ErrorKind;
-                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
+                    return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
                 }
             }
 
@@ -233,7 +242,7 @@ enum EncryptWriteStep {
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter {
-    cipher: BoxAeadEncryptor,
+    cipher: Cipher,
     tag_size: usize,
     steps: EncryptWriteStep,
     buf: BytesMut,
@@ -241,14 +250,14 @@ pub struct EncryptedWriter {
 
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
-    pub fn new(t: CipherType, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
         // nonce should be sent with the first packet
         let mut buf = BytesMut::with_capacity(nonce.len());
         buf.put(nonce);
 
         EncryptedWriter {
-            cipher: crypto::new_aead_encryptor(t, key, nonce),
-            tag_size: t.tag_size(),
+            cipher: Cipher::new(method, key, nonce),
+            tag_size: method.tag_len(),
             steps: EncryptWriteStep::Nothing,
             buf,
         }
@@ -284,22 +293,25 @@ impl EncryptedWriter {
         loop {
             match self.steps {
                 EncryptWriteStep::Nothing => {
-                    let output_length = self.buffer_size(data);
-                    let data_length = data.len() as u16;
+                    let plen = data.len();
+                    let mlen = 2 + self.tag_size + plen + self.tag_size;
 
-                    self.buf.reserve(output_length);
-
-                    let mut data_len_buf = [0u8; 2];
-                    BigEndian::write_u16(&mut data_len_buf, data_length);
+                    self.buf.reserve(mlen);
 
                     unsafe {
-                        let b = slice::from_raw_parts_mut(self.buf.bytes_mut().as_mut_ptr() as *mut u8, output_length);
+                        let len_octets = (plen as u16).to_be_bytes();
+                        let m = slice::from_raw_parts_mut(self.buf.bytes_mut().as_mut_ptr() as *mut u8, mlen);
+                        m[0] = len_octets[0];
+                        m[1] = len_octets[1];
 
-                        let output_length_size = 2 + self.tag_size;
-                        self.cipher.encrypt(&data_len_buf, &mut b[..output_length_size]);
-                        self.cipher.encrypt(data, &mut b[output_length_size..output_length]);
+                        let hlen = 2 + self.tag_size;
 
-                        self.buf.advance_mut(output_length);
+                        m[hlen..mlen - self.tag_size].copy_from_slice(data);
+
+                        self.cipher.encrypt_packet(&mut m[..hlen]);
+                        self.cipher.encrypt_packet(&mut m[hlen..mlen]);
+
+                        self.buf.advance_mut(mlen);
                     }
 
                     self.steps = EncryptWriteStep::Writing;
@@ -309,8 +321,7 @@ impl EncryptedWriter {
                         let n = ready!(Pin::new(&mut *w).poll_write(ctx, self.buf.bytes()))?;
                         self.buf.advance(n);
                         if n == 0 {
-                            use std::io::ErrorKind;
-                            return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
+                            return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
                         }
                     }
 
@@ -322,10 +333,5 @@ impl EncryptedWriter {
                 }
             }
         }
-    }
-
-    fn buffer_size(&self, data: &[u8]) -> usize {
-        2 + self.tag_size // len and len_tag
-        + data.len() + self.tag_size // data and data_tag
     }
 }

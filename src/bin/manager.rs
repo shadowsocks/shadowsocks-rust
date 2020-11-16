@@ -16,11 +16,11 @@ use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
+use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     acl::AccessControl,
     config::ManagerServerHost,
-    crypto::CipherType,
     run_manager,
     Config,
     ConfigType,
@@ -38,7 +38,7 @@ mod monitor;
 mod validator;
 
 fn main() {
-    let available_ciphers = CipherType::available_ciphers();
+    // let available_ciphers = CipherKind::available_ciphers();
 
     #[allow(unused_mut)]
     let mut app = clap_app!(shadowsocks =>
@@ -59,7 +59,7 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) +next_line_help "Default encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value +next_line_help "Default encryption method")
         (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} "Default timeout seconds for TCP relay")
 
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
@@ -92,7 +92,7 @@ fn main() {
         )
         .get_matches();
 
-    drop(available_ciphers);
+    // drop(available_ciphers);
 
     match matches.value_of("LOG_CONFIG") {
         Some(path) => {
@@ -153,7 +153,7 @@ fn main() {
 
     if let Some(ref mut manager_config) = config.manager {
         if let Some(m) = matches.value_of("ENCRYPT_METHOD") {
-            manager_config.method = Some(m.parse::<CipherType>().expect("encrypt-method"));
+            manager_config.method = Some(m.parse::<CipherKind>().expect("encrypt-method"));
         }
 
         if let Some(t) = matches.value_of("TIMEOUT") {

@@ -6,14 +6,16 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
+
 use bytes::{BufMut, Bytes, BytesMut};
 use log::{error, trace, warn};
 use tokio::net::UdpSocket;
+use shadowsocks_crypto::v1::{CipherCategory, CipherKind};
+
 
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
-    crypto::{CipherCategory, CipherType},
     relay::{
         socks5::{Address, UdpAssociateHeader},
         sys::{create_outbound_udp_socket, create_udp_socket},
@@ -31,7 +33,6 @@ use super::{
 /// Socks5 proxy client
 pub struct Socks5Client {
     socket: UdpSocket,
-
     // Socks5 protocol requires to keep this TCP connection alive
     // Theoretically if this connection is broken, the association is broken too, but the UDP Socks5 server in this crate doesn't behave like that
     #[allow(dead_code)]
@@ -95,7 +96,7 @@ impl Socks5Client {
 /// UDP client for communicating with ShadowSocks' server
 pub struct ServerClient {
     socket: UdpSocket,
-    method: CipherType,
+    method: CipherKind,
     key: Bytes,
 }
 
@@ -110,15 +111,15 @@ impl ServerClient {
                 lookup_then!(context, dname, *port, |addr| { socket.connect(&addr).await })?;
             }
         };
-        Ok(ServerClient {
-            socket,
-            method: svr_cfg.method(),
-            key: svr_cfg.clone_key(),
-        })
+
+        let key    = svr_cfg.clone_key();
+        let method = svr_cfg.method();
+
+        Ok(ServerClient { socket, method, key, })
     }
 
     async fn pack_req(
-        method: CipherType,
+        method: CipherKind,
         key: &Bytes,
         context: &Context,
         addr: &Address,
@@ -163,7 +164,7 @@ impl ServerClient {
 
     async fn parse_resp(
         context: &Context,
-        method: CipherType,
+        method: CipherKind,
         key: &Bytes,
         recv_buf: &[u8],
     ) -> io::Result<(Address, Vec<u8>)> {

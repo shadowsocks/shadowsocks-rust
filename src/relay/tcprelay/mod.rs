@@ -14,9 +14,12 @@ use tokio::{
 };
 
 mod aead;
+mod stream;
+mod crypto_io;
+
 pub mod client;
 mod connection;
-mod crypto_io;
+
 #[cfg(feature = "local-http")]
 mod http_local;
 #[cfg(all(
@@ -35,7 +38,7 @@ pub mod server;
 #[cfg(feature = "local-socks4")]
 mod socks4_local;
 mod socks5_local;
-mod stream;
+
 #[cfg(feature = "local-tunnel")]
 mod tunnel_local;
 mod utils;

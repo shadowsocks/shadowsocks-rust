@@ -10,14 +10,13 @@ use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
+use shadowsocks_crypto::v1::CipherKind;
 
 #[cfg(feature = "local-redir")]
 use shadowsocks::config::RedirType;
 use shadowsocks::{
     acl::AccessControl,
-    crypto::CipherType,
     plugin::PluginConfig,
-    relay::socks5::Address,
     run_local,
     Config,
     ConfigType,
@@ -25,6 +24,10 @@ use shadowsocks::{
     ServerAddr,
     ServerConfig,
 };
+
+#[cfg(any(feature = "local-dns", feature = "local-tunnel", ))]
+use shadowsocks::relay::socks5::Address;
+
 
 mod allocator;
 #[cfg(unix)]
@@ -53,7 +56,7 @@ const AVAILABLE_PROTOCOLS: &[&str] = &[
 ];
 
 fn main() {
-    let available_ciphers = CipherType::available_ciphers();
+    // let available_ciphers = CipherType::available_ciphers();
 
     let mut app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
@@ -68,7 +71,7 @@ fn main() {
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(&available_ciphers) requires[SERVER_ADDR] +next_line_help "Server's encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] +next_line_help "Server's encryption method")
         (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
 
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
@@ -180,7 +183,7 @@ fn main() {
     }
 
     let matches = app.get_matches();
-    drop(available_ciphers);
+    // drop(available_ciphers);
 
     match matches.value_of("LOG_CONFIG") {
         Some(path) => {
@@ -227,7 +230,7 @@ fn main() {
         let method = matches
             .value_of("ENCRYPT_METHOD")
             .expect("encrypt-method")
-            .parse::<CipherType>()
+            .parse::<CipherKind>()
             .expect("encryption method");
         let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
