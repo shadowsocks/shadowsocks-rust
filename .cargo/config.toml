@@ -1,0 +1,27 @@
+[build]
+rustflags = [
+    "--print", "native-static-libs",
+]
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))']
+rustflags = [
+    # "--print", "native-static-libs",
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+pclmul,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+avx,+avx2,+fma,adx",
+]
+
+[target.'cfg(target_arch = "arm")']
+rustflags = [
+    # "--print", "native-static-libs",
+    "-C", "target-cpu=native",
+]
+
+# NOTE:
+#      Crypto: AES + PMULL + SHA1 + SHA2
+#      https://github.com/rust-lang/stdarch/blob/master/crates/std_detect/src/detect/arch/aarch64.rs#L26
+[target.'cfg(target_arch = "aarch64")']
+rustflags = [
+    # "--print", "native-static-libs",
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+crypto,+neon",
+]

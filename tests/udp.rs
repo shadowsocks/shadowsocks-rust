@@ -4,10 +4,10 @@ use std::net::SocketAddr;
 
 use log::debug;
 use tokio::time::{self, Duration};
+use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
-    crypto::CipherType,
     relay::{socks5::Address, udprelay::client::Socks5Client},
     run_local,
     run_server,
@@ -19,7 +19,7 @@ const LOCAL_ADDR: &str = "127.0.0.1:8291";
 const UDP_ECHO_SERVER_ADDR: &str = "127.0.0.1:50403";
 
 const PASSWORD: &str = "test-password";
-const METHOD: CipherType = CipherType::Aes128Gcm;
+const METHOD: CipherKind = CipherKind::AES_128_GCM;
 
 fn get_svr_config() -> Config {
     let mut cfg = Config::new(ConfigType::Server);

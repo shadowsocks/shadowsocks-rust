@@ -10,10 +10,10 @@ use tokio::{
     prelude::*,
     time::{self, Duration},
 };
+use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     config::{Config, ConfigType, ServerAddr, ServerConfig},
-    crypto::CipherType,
     relay::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},
     run_local,
     run_server,
@@ -26,7 +26,7 @@ pub struct Socks4TestServer {
 }
 
 impl Socks4TestServer {
-    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherType) -> Socks4TestServer
+    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherKind) -> Socks4TestServer
     where
         S: ToSocketAddrs,
         L: ToSocketAddrs,
@@ -73,7 +73,7 @@ async fn socks4_relay_connect() {
     const LOCAL_ADDR: &str = "127.0.0.1:7200";
 
     const PASSWORD: &str = "test-password";
-    const METHOD: CipherType = CipherType::Aes128Gcm;
+    const METHOD: CipherKind = CipherKind::AES_128_GCM;
 
     let svr = Socks4TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD);
     svr.run().await;

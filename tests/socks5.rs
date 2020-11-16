@@ -7,10 +7,10 @@ use tokio::{
     prelude::*,
     time::{self, Duration},
 };
+use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    crypto::CipherType,
     relay::{socks5::Address, tcprelay::client::Socks5Client},
     run_local,
     run_server,
@@ -23,7 +23,7 @@ pub struct Socks5TestServer {
 }
 
 impl Socks5TestServer {
-    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherType, enable_udp: bool) -> Socks5TestServer
+    pub fn new<S, L>(svr_addr: S, local_addr: L, pwd: &str, method: CipherKind, enable_udp: bool) -> Socks5TestServer
     where
         S: ToSocketAddrs,
         L: ToSocketAddrs,
@@ -72,7 +72,7 @@ async fn socks5_relay_stream() {
     const LOCAL_ADDR: &str = "127.0.0.1:8200";
 
     const PASSWORD: &str = "test-password";
-    const METHOD: CipherType = CipherType::Aes128Cfb;
+    const METHOD: CipherKind = CipherKind::AES_128_CFB128;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run().await;
@@ -105,7 +105,7 @@ async fn socks5_relay_aead() {
     const LOCAL_ADDR: &str = "127.0.0.1:8210";
 
     const PASSWORD: &str = "test-password";
-    const METHOD: CipherType = CipherType::Aes256Gcm;
+    const METHOD: CipherKind = CipherKind::AES_256_GCM;
 
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run().await;

@@ -24,11 +24,11 @@ use tokio::{
     sync::{mpsc, Mutex},
     time,
 };
+use shadowsocks_crypto::v1::CipherCategory;
 
 use crate::{
     config::{Config, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
-    crypto::CipherCategory,
     relay::{
         flow::SharedServerFlowStatistic,
         loadbalancing::server::{ServerData, SharedServerStatistic},
@@ -573,7 +573,7 @@ impl ProxyAssociation {
             recv_buf.truncate(recv_n);
             Cursor::new(recv_buf)
         } else {
-            let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &recv_buf[..recv_n])? {
+            let decrypt_buf = match decrypt_payload(context, svr_cfg.method(), &svr_cfg.key(), &recv_buf[..recv_n])? {
                 None => {
                     error!("UDP packet too short, received length {}", recv_n);
                     let err = io::Error::new(io::ErrorKind::InvalidData, "packet too short");

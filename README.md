@@ -10,30 +10,10 @@ This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
-## Dependencies
-
-* libcrypto (OpenSSL) (Required for `aes-*`, `camellia-*` and `rc4` ciphers)
-* libsodium >= 1.0.7 (Required for ciphers that are provided by libsodium)
 
 ## Build & Install
 
 ### Optional Features
-
-* `sodium` - Enabled linking to [`libsodium`](https://github.com/jedisct1/libsodium), which will also enable ciphers that depending on `libsodium`.
-
-* `rc4` - Enabled `rc4` encryption algorithm. Some OpenSSL Crypto does not ship with `rc4`, because it was already deprecated in 2015.
-
-* `aes-cfb` - Enabled `aes-*-cfb` encryption algorithm.
-
-* `aes-ctr` - Enabled `aes-*-ctr` encryption algorithm.
-
-* `camellia-cfb` - Enabled `camellia-*-cfb` encryption algorithm.
-
-* `aes-pmac-siv` - Enabled `aes-*-pmac-siv` encryption algorithm. (Experimental)
-
-  * Supported by [`miscreant`](https://crates.io/crates/miscreant), enable hardware accerlation on x86/x86\_64 with `RUSTFLAGS=-Ctarget-feature=+aes,+ssse3`
-
-* `single-threaded` - Let `sslocal` and `ssserver` run in single threaded mode (by using Tokio's `basic_scheduler`).
 
 * `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
 
@@ -57,9 +37,7 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 * `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
 * `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
 
-Default features: `["sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]`.
-
-NOTE: To disable dependency of OpenSSL, just disable feature `rc4`, `aes-cfb`, `aes-ctr`, `camellia-cfb`, `local-http-native-tls`.
+Default features: `["trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]`.
 
 ### **crates.io**
 
@@ -94,21 +72,6 @@ Use cargo to build.
 cargo build --release
 ```
 
-NOTE: [`libsodium-sys`](https://crates.io/crates/libsodium-sys) builds and links statically to the `libsodium` in its package. Here are some useful environment variables for customizing build processes:
-
-* Find `libsodium` installed in customized path:
-
-  * `SODIUM_LIB_DIR` - Directory path to `libsodium.a` or `sodium.lib`
-  * `SODIUM_SHARED` - Dynamic-link instead of default static-link
-
-* Find `libsodium` with `pkg-config` (*nix), `vcpkg` (MSVC)
-
-  * `SODIUM_USE_PKG_CONFIG=1`
-
-```bash
-SODIUM_USE_PKG_CONFIG=1 cargo build --release
-```
-
 Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
 
 ```bash
@@ -129,20 +92,12 @@ Requirements:
 ./build/build-release
 ```
 
-Then `sslocal`, `ssserver`, `sstunnel` and `ssurl` will be packaged in
+Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
 
 * `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
 * `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
-
-### Build OpenSSL from source
-
-Specify feature `openssl-vendored` to let [openssl](https://crates.io/crates/openssl) build from source.
-
-```bash
-cargo build --features "openssl-vendored"
-```
 
 ## Getting Started
 
@@ -407,14 +362,13 @@ Example configuration:
 * `camellia-192-cfb`, `camellia-192-cfb1`, `camellia-192-cfb8`, `camellia-192-cfb128`
 * `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
 * `rc4`, `rc4-md5`
-* `chacha20`, `salsa20`, `chacha20-ietf`
+* `chacha20-ietf`
 * `plain` (No encryption, just for debugging)
 
 ### AEAD Ciphers
 
 * `aes-128-gcm`, `aes-256-gcm`
-* `chacha20-ietf-poly1305`, `xchacha20-ietf-poly1305`
-* `aes-128-pmac-siv`, `aes-256-pmac-siv` (experimental)
+* `chacha20-ietf-poly1305`
 
 ## ACL
 

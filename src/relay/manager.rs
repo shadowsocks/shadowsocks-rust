@@ -16,11 +16,12 @@ use log::{debug, error, info, trace, warn};
 #[cfg(unix)]
 use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 use tokio::{self, net::UdpSocket};
+use shadowsocks_crypto::v1::CipherKind;
+
 
 use crate::{
     config::{Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
     context::{Context, ServerState, SharedContext, SharedServerState},
-    crypto::CipherType,
     plugin::PluginConfig,
     relay::{
         flow::{MultiServerFlowStatistic, SharedServerFlowStatistic},
@@ -423,8 +424,8 @@ impl ManagerService {
             None => manager_config.method
                 // Default method as shadowsocks-libev's ss-server
                 // Just for compatiblity, some shadowsocks manager relies on this default method
-                .unwrap_or(CipherType::None),
-            Some(method) => match method.parse::<CipherType>() {
+                .unwrap_or(CipherKind::NONE),
+            Some(method) => match method.parse::<CipherKind>() {
                 Ok(m) => m,
                 Err(..) => {
                     let err = Error::new(ErrorKind::Other, format!("unrecognized method \"{}\"", method));

@@ -39,30 +39,19 @@ incremental = false
 panic = "abort"
 
 [features]
-default = ["ring-aead-ciphers", "sodium", "rc4", "aes-cfb", "aes-ctr", "trust-dns", "local-http", "local-http-rustls", "local-tunnel", "local-socks4"]
-# Enables AEAD ciphers that depending on ring
-# aes-128-gcm, aes-256-gcm, chacha20-ietf-poly1305
-ring-aead-ciphers = ["ring"]
-# Enables ciphers that depending on libsodium
-# chacha20, xchacha20, chacha20-ietf
-# salsa20, xsalsa20
-# xchacha20-ietf-poly1305
-sodium = ["libsodium-sys"]
-rc4 = ["openssl"]
-aes-cfb = ["openssl"]
-aes-ctr = ["openssl"]
-aes-pmac-siv = ["miscreant"]
-camellia-cfb = ["openssl"]
+default = [
+    "trust-dns",
+    "local-http",
+    "local-http-rustls",
+    "local-tunnel",
+    "local-socks4"
+]
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver"]
 dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-rustls"]
 dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https-rustls"]
-# Enable vendored OpenSSL
-# rust-openssl tries to find OpenSSL system-wide by default,
-# by enabling this feature will try to build or use prebuilt OpenSSL libraries
-openssl-vendored = ["native-tls/vendored", "openssl/vendored"]
 # Enable DNS-relay
 local-dns = ["trust-dns-proto"]
 # Backward compatibility, DO NOT USE
@@ -86,65 +75,74 @@ jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
 tcmalloc-vendored = ["tcmalloc/bundled"]
 
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = [ "ring" ] }
+
+[target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = [ "ring" ] }
+
+[target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = [ ] }
+
 [dependencies]
-log = "0.4"
-rand = "0.7"
-clap = { version = "2.33", features = ["suggestions", "wrap_help"] }
+log    = "0.4"
+rand   = "0.7"
+clap   = { version = "2.33", features = ["wrap_help", "suggestions"] }
 log4rs = "0.13"
-openssl = { version = "0.10", optional = true }
-libc = "^0.2.68"
-tokio = { version = "^0.3", features = ["full"] }
+libc   = "0.2"
+bytes  = "0.5"
+url    = "2.1"
+regex  = "1"
+cfg-if = "1.0"
+base64 = "0.13"
+byteorder   = "1"
+byte_string = "1.0"
+lazy_static = "1.4"
+
+ring      = "0.16"
+
+spin    = "0.7"
+mio     = "0.6"
+mio-uds = "0.6"
+socket2 = "0.3"
+pin-project = "1.0"
+bloomfilter = "^1.0.2"
+
+json5 = "0.2"
+futures = "0.3"
+async-trait = "0.1"
+
+tokio = { version = "^0.3", features = [ "full" ] }
 tokio-native-tls = { version = "0.2", optional = true }
 native-tls = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.20", optional = true }
 webpki-roots = { version = "0.20", optional = true }
 rustls-native-certs = { version = "0.4", optional = true }
-futures = "0.3"
-json5 = "0.2"
-base64 = "0.13"
-bytes = "0.5"
-byteorder = "1"
-ring = { version = "0.16", optional = true }
-md-5 = "0.9"
-digest = "0.9"
-typenum = "1.11"
+
 qrcode = { version = "0.12", default-features = false }
-serde_urlencoded = "0.7"
 serde = { version = "1.0", features = ["derive"] }
-url = "2.1"
-byte_string = "1.0"
-libsodium-sys = { version = "0.2", optional = true }
-miscreant = { version = "0.5", default-features = false, features = ["std", "pmac"], optional = true }
+serde_json = "1.0"
+serde_urlencoded = "0.7"
+
+lru_time_cache = "0.11"
+http  = { version = "0.2",  optional = true }
 # trust-dns-resolver = { version = "0.19", optional = true }
-# trust-dns-proto = { version = "0.19", optional = true }
+# trust-dns-proto = "0.19"
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
 trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
-hkdf = "0.10"
-hmac = "0.10"
-sha-1 = "0.9"
-lru_time_cache = "0.11"
-# hyper = { version = "0.14", optional = true }
 hyper = { git = "https://github.com/hyperium/hyper.git", optional = true }
-http = { version = "0.2", optional = true }
-# tower = { version = "0.4", optional = true }
 tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
-pin-project = "1.0"
-socket2 = "0.3"
-cfg-if = "1.0"
-bloomfilter = "^1.0.2"
-spin = "0.7"
-mio = { version = "0.7", features = ["udp", "uds"] }
-serde_json = "1.0"
-regex = "1"
+
 strum = "0.19"
 strum_macros = "0.19"
-iprange = "^0.6.3"
 ipnet = "2.2"
-async-trait = "0.1"
-lazy_static = "1.4"
+iprange = "0.6"
+
+mimalloc     = { version = "0.1", optional = true }
+tcmalloc     = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
-mimalloc = { version = "0.1", optional = true }
-tcmalloc = { version = "0.3", optional = true }
+
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

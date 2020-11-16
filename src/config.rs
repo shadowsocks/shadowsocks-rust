@@ -57,22 +57,25 @@ use std::{
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
-use bytes::Bytes;
 use cfg_if::cfg_if;
 use log::error;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 use url::{self, Url};
+use bytes::Bytes;
+use shadowsocks_crypto::v1::{CipherKind, openssl_bytes_to_key};
+
 
 use crate::{
     acl::AccessControl,
     context::Context,
-    crypto::cipher::CipherType,
     plugin::PluginConfig,
     relay::{dns_resolver::resolve_bind_addr, socks5::Address},
 };
 
+
+#[cfg(feature = "trust-dns")]
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 enum SSDnsConfig {
@@ -112,6 +115,7 @@ struct SSConfig {
     udp_max_associations: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
+    #[cfg(feature = "trust-dns")]
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<SSDnsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -276,11 +280,12 @@ pub struct ServerConfig {
     /// Encryption password (key)
     password: String,
     /// Encryption type (method)
-    method: CipherType,
+    method: CipherKind,
     /// Connection timeout
     timeout: Option<Duration>,
-    /// Encryption key
+    // Encryption key
     enc_key: Bytes,
+    
     /// Plugin config
     plugin: Option<PluginConfig>,
     /// Plugin address
@@ -293,15 +298,18 @@ impl ServerConfig {
     /// Creates a new ServerConfig
     pub fn new(
         addr: ServerAddr,
-        pwd: String,
-        method: CipherType,
+        password: String,
+        method: CipherKind,
         timeout: Option<Duration>,
         plugin: Option<PluginConfig>,
     ) -> ServerConfig {
-        let enc_key = method.bytes_to_key(pwd.as_bytes());
+        let mut key = vec![0u8; method.key_len()];
+        openssl_bytes_to_key(password.as_bytes(), &mut key);
+        let enc_key = Bytes::copy_from_slice(&key);
+
         ServerConfig {
             addr,
-            password: pwd,
+            password,
             method,
             timeout,
             enc_key,
@@ -312,15 +320,19 @@ impl ServerConfig {
     }
 
     /// Create a basic config
-    pub fn basic(addr: SocketAddr, password: String, method: CipherType) -> ServerConfig {
+    pub fn basic(addr: SocketAddr, password: String, method: CipherKind) -> ServerConfig {
         ServerConfig::new(ServerAddr::SocketAddr(addr), password, method, None, None)
     }
 
     /// Set encryption method
-    pub fn set_method(&mut self, t: CipherType, pwd: String) {
-        self.password = pwd;
-        self.method = t;
-        self.enc_key = t.bytes_to_key(self.password.as_bytes());
+    pub fn set_method(&mut self, method: CipherKind, password: String) {
+        self.method = method;
+
+        let mut key = vec![0u8; method.key_len()];
+        openssl_bytes_to_key(password.as_bytes(), &mut key);
+
+        self.password = password;
+        self.enc_key = Bytes::copy_from_slice(&key);
     }
 
     /// Set plugin
@@ -354,7 +366,7 @@ impl ServerConfig {
     }
 
     /// Get method
-    pub fn method(&self) -> CipherType {
+    pub fn method(&self) -> CipherKind {
         self.method
     }
 
@@ -1077,7 +1089,7 @@ pub struct ManagerConfig {
     /// Address of `ss-manager`. Send servers' statistic data to the manager server
     pub addr: ManagerAddr,
     /// Manager's default method
-    pub method: Option<CipherType>,
+    pub method: Option<CipherKind>,
     /// Timeout for TCP connections, setting to manager's created servers
     pub timeout: Option<Duration>,
     /// IP/Host for servers to bind (inbound)
@@ -1341,7 +1353,7 @@ impl Config {
                     },
                 };
 
-                let method = match m.parse::<CipherType>() {
+                let method = match m.parse::<CipherKind>() {
                     Ok(m) => m,
                     Err(..) => {
                         let err = Error::new(
@@ -1394,7 +1406,7 @@ impl Config {
                     },
                 };
 
-                let method = match svr.method.parse::<CipherType>() {
+                let method = match svr.method.parse::<CipherKind>() {
                     Ok(m) => m,
                     Err(..) => {
                         let err = Error::new(
@@ -1755,6 +1767,7 @@ impl fmt::Display for Config {
             jconf.no_delay = Some(self.no_delay);
         }
 
+        #[cfg(feature = "trust-dns")]
         if let Some(ref dns) = self.dns {
             jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
         }

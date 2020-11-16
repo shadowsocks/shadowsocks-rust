@@ -15,19 +15,20 @@ use bytes::{
     BytesMut,
 };
 use futures::ready;
-use log::{debug, trace};
+use log::trace;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     config::ServerConfig,
     context::SharedContext,
-    crypto::{CipherCategory, CipherType},
 };
 
 use super::{
     aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
     stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
 };
+use shadowsocks_crypto::v1::{CipherCategory, CipherKind, random_iv_or_salt, };
+
 
 enum DecryptedReader {
     None,
@@ -46,7 +47,7 @@ enum ReadStatus {
     /// Waiting for initializing vector (or nonce for AEAD ciphers)
     ///
     /// (context, Buffer, already_read_bytes, method, key)
-    WaitIv(SharedContext, Limit<BytesMut>, CipherType, Bytes),
+    WaitIv(SharedContext, Limit<BytesMut>, CipherKind, Bytes),
 
     /// Connection is established, DecryptedReader is initialized
     Established,
@@ -65,21 +66,28 @@ impl<S: Unpin> Unpin for CryptoStream<S> {}
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
     pub fn new(context: SharedContext, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
-        let method = svr_cfg.method();
-        if method.category() == CipherCategory::None {
+        let method   = svr_cfg.method();
+        let category = method.category();
+        let key      = svr_cfg.clone_key();
+
+        if category == CipherCategory::None {
             return CryptoStream::<S>::new_none(stream);
         }
 
-        let prev_len = match method.category() {
-            CipherCategory::Stream => method.iv_size(),
-            CipherCategory::Aead => method.salt_size(),
+        let prev_len = match category {
+            CipherCategory::Stream => method.iv_len(),
+            CipherCategory::Aead => method.salt_len(),
             CipherCategory::None => 0,
         };
 
-        let iv = match method.category() {
+        let iv = match category {
             CipherCategory::Stream => {
                 let local_iv = loop {
-                    let iv = method.gen_init_vec();
+                    let mut iv = vec![0u8; prev_len];
+                    if prev_len > 0 {
+                        random_iv_or_salt(&mut iv);
+                    }
+                    
                     if context.check_nonce_and_set(&iv) {
                         // IV exist, generate another one
                         continue;
@@ -91,7 +99,11 @@ impl<S> CryptoStream<S> {
             }
             CipherCategory::Aead => {
                 let local_salt = loop {
-                    let salt = method.gen_salt();
+                    let mut salt = vec![0u8; prev_len];
+                    if prev_len > 0 {
+                        random_iv_or_salt(&mut salt);
+                    }
+                    
                     if context.check_nonce_and_set(&salt) {
                         // Salt exist, generate another one
                         continue;
@@ -101,16 +113,15 @@ impl<S> CryptoStream<S> {
                 trace!("generated AEAD cipher salt {:?}", local_salt);
                 local_salt
             }
-            CipherCategory::None => Bytes::new(),
+            CipherCategory::None => Vec::new(),
         };
 
-        let method = svr_cfg.method();
-        let enc = match method.category() {
-            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, svr_cfg.key(), &iv)),
-            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, svr_cfg.key(), &iv)),
+        let enc = match category {
+            CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, &key, &iv)),
+            CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, &key, &iv)),
             CipherCategory::None => EncryptedWriter::None,
         };
-
+        
         CryptoStream {
             stream,
             dec: None,
@@ -119,7 +130,7 @@ impl<S> CryptoStream<S> {
                 context,
                 BytesMut::with_capacity(prev_len).limit(prev_len),
                 method,
-                svr_cfg.clone_key(),
+                key,
             ),
         }
     }
@@ -158,8 +169,7 @@ where
                     buf.advance_mut(n);
                 }
                 if n == 0 {
-                    use std::io::ErrorKind;
-                    return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
+                    return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
                 }
             }
 
@@ -169,7 +179,7 @@ where
             if ctx.check_nonce_and_set(nonce) {
                 use std::io::{Error, ErrorKind};
 
-                debug!("detected repeated iv/salt {:?}", ByteStr::new(nonce));
+                trace!("detected repeated iv/salt {:?}", ByteStr::new(nonce));
 
                 let err = Error::new(ErrorKind::Other, "detected repeated iv/salt");
                 return Poll::Ready(Err(err));
@@ -236,8 +246,7 @@ where
     ///
     /// The two halfs share the same `CryptoStream<S>`
     pub fn split(self) -> (ReadHalf<CryptoStream<S>>, WriteHalf<CryptoStream<S>>) {
-        use tokio::io::split;
-        split(self)
+        tokio::io::split(self)
     }
 }
 
