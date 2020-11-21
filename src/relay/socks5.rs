@@ -13,7 +13,7 @@ use std::{
     vec,
 };
 
-use bytes::{buf::BufExt, Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use tokio::prelude::*;
 
 pub use self::consts::{
@@ -229,7 +229,7 @@ impl Address {
                 buf.resize(6, 0);
                 let _ = stream.read_exact(&mut buf).await?;
 
-                let mut cursor = buf.to_bytes();
+                let mut cursor = buf.freeze();
                 let v4addr = Ipv4Addr::new(cursor.get_u8(), cursor.get_u8(), cursor.get_u8(), cursor.get_u8());
                 let port = cursor.get_u16();
                 Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
@@ -266,9 +266,9 @@ impl Address {
                 buf.resize(buf_length, 0);
                 let _ = stream.read_exact(&mut buf).await?;
 
-                let mut cursor = buf.to_bytes();
+                let mut cursor = buf.freeze();
                 let mut raw_addr = Vec::with_capacity(length);
-                raw_addr.put(&mut BufExt::take(&mut cursor, length));
+                raw_addr.put(&mut Buf::take(&mut cursor, length));
                 let addr = match String::from_utf8(raw_addr) {
                     Ok(addr) => addr,
                     Err(..) => return Err(Error::new(Reply::GeneralFailure, "invalid address encoding")),

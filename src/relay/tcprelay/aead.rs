@@ -208,7 +208,11 @@ impl DecryptedReader {
     {
         let mut remaining = size - self.buffer.len();
         while remaining > 0 {
-            let mut buffer = ReadBuf::uninit(&mut self.buffer.bytes_mut()[..remaining]);
+            let raw_buffer = &mut self.buffer.bytes_mut()[..remaining];
+            assert_eq!(raw_buffer.len(), remaining);
+
+            let mut buffer =
+                unsafe { ReadBuf::uninit(slice::from_raw_parts_mut(raw_buffer.as_mut_ptr() as *mut _, remaining)) };
 
             // It has enough space, I am sure about that
             ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;

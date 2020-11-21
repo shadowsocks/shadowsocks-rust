@@ -77,71 +77,13 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = [ "ring" ] }
+shadowsocks-crypto = { version = "0.1", features = ["ring"] }
 
 [target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = [ "ring" ] }
+shadowsocks-crypto = { version = "0.1", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = [ ] }
-
-[dependencies]
-log    = "0.4"
-rand   = "0.7"
-clap   = { version = "2.33", features = ["wrap_help", "suggestions"] }
-log4rs = "0.13"
-libc   = "0.2"
-bytes  = "0.5"
-url    = "2.1"
-regex  = "1"
-cfg-if = "1.0"
-base64 = "0.13"
-byteorder   = "1"
-byte_string = "1.0"
-lazy_static = "1.4"
-
-ring      = "0.16"
-
-spin    = "0.7"
-mio     = "0.6"
-mio-uds = "0.6"
-socket2 = "0.3"
-pin-project = "1.0"
-bloomfilter = "^1.0.2"
-
-json5 = "0.2"
-futures = "0.3"
-async-trait = "0.1"
-
-tokio = { version = "^0.3", features = [ "full" ] }
-tokio-native-tls = { version = "0.2", optional = true }
-native-tls = { version = "0.2", optional = true }
-tokio-rustls = { version = "0.20", optional = true }
-webpki-roots = { version = "0.20", optional = true }
-rustls-native-certs = { version = "0.4", optional = true }
-
-qrcode = { version = "0.12", default-features = false }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_urlencoded = "0.7"
-
-lru_time_cache = "0.11"
-http  = { version = "0.2",  optional = true }
-# trust-dns-resolver = { version = "0.19", optional = true }
-# trust-dns-proto = "0.19"
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
-trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
-hyper = { git = "https://github.com/hyperium/hyper.git", optional = true, features = ["full"] }
-tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
-
-strum = "0.19"
-strum_macros = "0.19"
-ipnet = "2.2"
-iprange = "0.6"
-
-mimalloc     = { version = "0.1", optional = true }
-tcmalloc     = { version = "0.3", optional = true }
-jemallocator = { version = "0.3", optional = true }
+shadowsocks-crypto = { version = "0.1", features = [] }
 
 
 [target.'cfg(windows)'.dependencies]
@@ -152,7 +94,64 @@ winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 nix = "0.19"
 
 [target.'cfg(unix)'.dependencies]
-daemonize = "^0.4.1"
+daemonize = "0.4"
+
+[dependencies]
+log = "0.4"
+log4rs = "0.13"
+
+rand = "0.7"
+clap = { version = "2", features = ["wrap_help", "suggestions"] }
+libc = "0.2"
+bytes = "0.6"
+url = "2.2"
+regex = "1.4"
+cfg-if = "1"
+byteorder = "1.3"
+byte_string = "1.0"
+lazy_static = "1.4"
+spin = "0.7"
+pin-project = "1.0"
+bloomfilter = "1.0.2"
+lru_time_cache = "0.11"
+
+ring = "0.16"
+
+futures = "0.3"
+async-trait = "0.1"
+
+mio = "0.7"
+socket2 = "0.3"
+tokio = { version = "0.3.1", features = [ "full" ] }
+tokio-native-tls = { version = "0.2", optional = true }
+native-tls = { version = "0.2", optional = true }
+tokio-rustls = { version = "0.20", optional = true }
+webpki-roots = { version = "0.20", optional = true }
+rustls-native-certs = { version = "0.4", optional = true }
+
+json5 = "0.2"
+base64 = "0.13"
+qrcode = { version = "0.12", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_urlencoded = "0.7"
+strum = "0.19"
+strum_macros = "0.19"
+
+http = { version = "0.2", optional = true }
+# trust-dns-resolver = { version = "0.19", optional = true }
+# trust-dns-proto = "0.19"
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
+trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
+hyper = { git = "https://github.com/hyperium/hyper.git", optional = true, features = ["full"] }
+tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
+
+ipnet = "2.3"
+iprange = "0.6"
+
+mimalloc = { version = "0.1", optional = true }
+tcmalloc = { version = "0.3", optional = true }
+jemallocator = { version = "0.3", optional = true }
 
 [dev-dependencies]
 env_logger = "0.8"

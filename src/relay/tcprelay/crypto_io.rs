@@ -4,16 +4,12 @@ use std::{
     io,
     marker::Unpin,
     pin::Pin,
+    slice,
     task::{Context, Poll},
 };
 
 use byte_string::ByteStr;
-use bytes::{
-    buf::ext::{BufMutExt, Limit},
-    BufMut,
-    Bytes,
-    BytesMut,
-};
+use bytes::{buf::Limit, BufMut, Bytes, BytesMut};
 use futures::ready;
 use log::trace;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
@@ -156,7 +152,13 @@ where
     fn poll_read_handshake(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let ReadStatus::WaitIv(ref ctx, ref mut buf, method, ref key) = self.read_status {
             while buf.has_remaining_mut() {
-                let mut buffer = ReadBuf::uninit(buf.bytes_mut());
+                let raw_buffer = buf.bytes_mut();
+                let mut buffer = unsafe {
+                    ReadBuf::uninit(slice::from_raw_parts_mut(
+                        raw_buffer.as_mut_ptr() as *mut _,
+                        raw_buffer.len(),
+                    ))
+                };
                 ready!(Pin::new(&mut self.stream).poll_read(cx, &mut buffer))?;
                 let n = buffer.filled().len();
                 unsafe {
