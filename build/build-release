@@ -50,13 +50,12 @@ function build() {
 
     RELEASE_DIR="target/${TARGET}/release"
 
-    EXTRA_FEATURES=""
     if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
-        EXTRA_FEATURES+="local-redir"
+        EXTRA_FEATURES+=" local-redir"
     fi
 
     cross build --target "${TARGET}" \
-                --features "aes-pmac-siv openssl-vendored ${EXTRA_FEATURES}" \
+                --features "${EXTRA_FEATURES}" \
                 --release
 
     if [[ $? != "0" ]]; then
