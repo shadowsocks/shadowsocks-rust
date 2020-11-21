@@ -10,7 +10,7 @@ $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | ForEach-Objec
 
 Write-Host "Started building release for ${TargetTriple} ..."
 
-cargo build --release --features "aes-pmac-siv openssl-vendored"
+cargo +nightly build --release
 if (!$?) {
     exit $LASTEXITCODE
 }
