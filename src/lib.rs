@@ -91,10 +91,11 @@ pub use self::{
     },
 };
 
+pub use shadowsocks_crypto as crypto;
+
 pub mod acl;
 pub mod config;
 pub mod context;
-// pub mod crypto;
 pub mod plugin;
 pub mod relay;
 

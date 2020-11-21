@@ -16,11 +16,10 @@ use clap::{clap_app, Arg};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
-use shadowsocks_crypto::v1::CipherKind;
-
 
 use shadowsocks::{
     acl::AccessControl,
+    crypto::v1::{available_ciphers, CipherKind},
     plugin::PluginConfig,
     run_server,
     Config,
@@ -40,8 +39,6 @@ mod monitor;
 mod validator;
 
 fn main() {
-    // let available_ciphers = CipherType::available_ciphers();
-
     #[allow(unused_mut)]
     let mut app = clap_app!(shadowsocks =>
         (version: shadowsocks::VERSION)
@@ -56,7 +53,7 @@ fn main() {
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] "Server's encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] possible_values(available_ciphers()) +next_line_help "Server's encryption method")
         (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
 
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
