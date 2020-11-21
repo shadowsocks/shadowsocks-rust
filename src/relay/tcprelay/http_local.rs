@@ -22,7 +22,7 @@ use hyper::{
     header::HeaderValue,
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
-    upgrade::Upgraded,
+    upgrade::{self, Upgraded},
     Body,
     Client,
     HeaderMap,
@@ -698,7 +698,7 @@ async fn server_dispatch(
         // connection be upgraded, so we can't return a response inside
         // `on_upgrade` future.
         tokio::spawn(async move {
-            match req.into_body().on_upgrade().await {
+            match upgrade::on(req).await {
                 Ok(upgraded) => {
                     trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
 
