@@ -300,7 +300,7 @@ impl ProxyStream {
 
         Ok(ProxyStream {
             context,
-            connection: ProxyConnection::Direct(Connection::new(stream, None)),
+            connection: ProxyConnection::Direct(Connection::new(stream, None, false)),
         })
     }
 
@@ -427,12 +427,12 @@ async fn connect_proxy_server_internal(
         ServerAddr::SocketAddr(ref addr) => {
             let stream = try_timeout(tcp_stream_connect(&addr, context.config()), timeout).await?;
             trace!("connected proxy {} ({})", orig_svr_addr, addr);
-            Ok(STcpStream::new(stream, timeout))
+            Ok(STcpStream::new(stream, timeout, true))
         }
         ServerAddr::DomainName(ref domain, port) => {
             let result = lookup_then!(context, domain.as_str(), *port, |addr| {
                 match try_timeout(tcp_stream_connect(&addr, context.config()), timeout).await {
-                    Ok(s) => Ok(STcpStream::new(s, timeout)),
+                    Ok(s) => Ok(STcpStream::new(s, timeout, true)),
                     Err(e) => {
                         trace!(
                             "failed to connect proxy {} ({}:{} ({})) try another (err: {})",

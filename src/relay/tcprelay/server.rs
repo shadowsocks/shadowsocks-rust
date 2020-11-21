@@ -42,7 +42,7 @@ async fn handle_client(
 
     trace!("got connection addr {} with proxy server {:?}", peer_addr, svr_cfg);
 
-    let mut stream = STcpStream::new(socket, timeout);
+    let mut stream = STcpStream::new(socket, timeout, true);
     stream.set_nodelay(context.config().no_delay)?;
 
     // Wrap with a data transfer monitor

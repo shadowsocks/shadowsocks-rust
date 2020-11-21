@@ -49,7 +49,7 @@ pub struct Connection<S> {
     // `TCP_NODELAY` is already set on the internal socket for lower handshake latency.
     //
     // After the first packet, if `nodelay` is `false`, `TCP_NODELAY` status should be reset.
-    written_first_packet: bool,
+    written_handshake_packet: bool,
 }
 
 impl<S> Connection<S>
@@ -59,10 +59,15 @@ where
     /// Create a Connection with a stream S
     ///
     /// If `timeout` is Some(..), it will set a timer for both read and write operation.
-    pub fn new(stream: S, timeout: Option<Duration>) -> Connection<S> {
-        // Set `TCP_NODELAY` for quick handshaking
-        if let Err(err) = stream.set_nodelay(true) {
-            error!("failed to set TCP_NODELAY on socket, error: {:?}", err);
+    ///
+    /// If `need_handshake` is set to `true`, then the first `write` call (the handshake packet) will be sent immediately
+    /// (with `TCP_NODELAY` sockopt set).
+    pub fn new(stream: S, timeout: Option<Duration>, need_handshake: bool) -> Connection<S> {
+        if need_handshake {
+            // Set `TCP_NODELAY` for quick handshaking
+            if let Err(err) = stream.set_nodelay(true) {
+                error!("failed to set TCP_NODELAY on socket, error: {:?}", err);
+            }
         }
 
         Connection {
@@ -70,7 +75,7 @@ where
             timer: None,
             timeout,
             nodelay: false,
-            written_first_packet: false,
+            written_handshake_packet: !need_handshake,
         }
     }
 
@@ -79,7 +84,7 @@ where
         self.nodelay = nodelay;
 
         // If first packet hasn't sent, resetting nodelay is delayed
-        if self.written_first_packet {
+        if self.written_handshake_packet {
             self.stream.get_ref().set_nodelay(nodelay)?;
         }
 
@@ -105,6 +110,10 @@ fn make_timeout_error() -> io::Error {
 
 impl<S> Connection<S> {
     fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if let None = self.timeout {
+            return Poll::Ready(Ok(()));
+        }
+
         loop {
             if let Some(ref mut timer) = self.timer {
                 ready!(Pin::new(timer).poll(cx));
@@ -162,8 +171,8 @@ where
             Poll::Ready(r) => {
                 self.cancel_timeout();
 
-                if !self.written_first_packet {
-                    self.written_first_packet = true;
+                if !self.written_handshake_packet {
+                    self.written_handshake_packet = true;
 
                     if !self.nodelay {
                         // Reset `TCP_NODELAY`
