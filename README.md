@@ -359,6 +359,7 @@ Example configuration:
 
 ### Stream Ciphers
 
+* `table`
 * `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
 * `aes-192-cfb`, `aes-192-cfb1`, `aes-192-cfb8`, `aes-192-cfb128`
 * `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
@@ -458,7 +459,7 @@ It supports the following features:
 * [x] Documentation
 * [x] Extend configuration format
 * [x] Improved logging format (waiting for the new official log crate)
-* [ ] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
+* [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 * [x] Windows support.
 * [x] Build with stable `rustc`.
 * [x] Support HTTP Proxy protocol
