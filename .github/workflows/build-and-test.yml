@@ -24,6 +24,12 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build & Test (Default)
+        run: cargo test --verbose --no-fail-fast
+      - name: Build & Test (--no-default-feature)
+        run: cargo test --verbose --no-default-feature --no-fail-fast
+      - name: Build with All Features Enabled
+        run: cargo build --verbose --features "local-redir local-dns local-http-rustls dns-over-tls dns-over-https"
 
   build-windows:
     runs-on: windows-latest
@@ -37,6 +43,12 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build & Test (Default)
+        run: cargo test --verbose --no-fail-fast
+      - name: Build & Test (--no-default-feature)
+        run: cargo test --verbose --no-default-feature --no-fail-fast
+      - name: Build with All Features Enabled
+        run: cargo build --verbose --features "local-dns local-http-rustls dns-over-tls dns-over-https"
 
   build-macos:
     runs-on: macos-latest
@@ -55,3 +67,9 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build & Test (Default)
+        run: cargo test --verbose --no-fail-fast
+      - name: Build & Test (--no-default-feature)
+        run: cargo test --verbose --no-default-feature --no-fail-fast
+      - name: Build with All Features Enabled
+        run: cargo build --verbose --features "local-redir local-dns local-http-rustls dns-over-tls dns-over-https"
