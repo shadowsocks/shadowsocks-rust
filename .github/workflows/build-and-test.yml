@@ -31,7 +31,7 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo +nightly test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-redir local-dns local-http-rustls dns-over-tls dns-over-https"
+        run: cargo +nightly build --verbose --features "local-redir local-dns dns-over-tls"
 
   build-windows:
     runs-on: windows-latest
@@ -52,7 +52,7 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo +nightly test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-dns local-http-rustls dns-over-tls dns-over-https"
+        run: cargo +nightly build --verbose --features "local-dns dns-over-tls"
 
   build-macos:
     runs-on: macos-latest
@@ -78,4 +78,4 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo +nightly test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-redir local-dns local-http-rustls dns-over-tls dns-over-https"
+        run: cargo +nightly build --verbose --features "local-redir local-dns dns-over-tls"
