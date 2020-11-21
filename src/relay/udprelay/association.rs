@@ -24,11 +24,11 @@ use tokio::{
     sync::{mpsc, Mutex},
     time,
 };
-use shadowsocks_crypto::v1::CipherCategory;
 
 use crate::{
     config::{Config, ServerAddr, ServerConfig},
     context::{Context, SharedContext},
+    crypto::v1::CipherCategory,
     relay::{
         flow::SharedServerFlowStatistic,
         loadbalancing::server::{ServerData, SharedServerStatistic},

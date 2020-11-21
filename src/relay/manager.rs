@@ -16,12 +16,11 @@ use log::{debug, error, info, trace, warn};
 #[cfg(unix)]
 use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 use tokio::{self, net::UdpSocket};
-use shadowsocks_crypto::v1::CipherKind;
-
 
 use crate::{
     config::{Config, ConfigType, ManagerAddr, Mode, ServerAddr, ServerConfig},
     context::{Context, ServerState, SharedContext, SharedServerState},
+    crypto::v1::CipherKind,
     plugin::PluginConfig,
     relay::{
         flow::{MultiServerFlowStatistic, SharedServerFlowStatistic},

@@ -1,6 +1,5 @@
 [build.env]
 passthrough = [
-    "SODIUM_BUILD_STATIC",
     "HTTP_PROXY",
     "HTTPS_PROXY",
 ]

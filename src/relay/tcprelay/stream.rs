@@ -1,9 +1,4 @@
 //! Stream protocol implementation
-use futures::ready;
-use bytes::{Buf, BufMut, BytesMut};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use shadowsocks_crypto::v1::{CipherKind, Cipher};
-
 use std::{
     cmp,
     io,
@@ -11,6 +6,12 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+use bytes::{Buf, BufMut, BytesMut};
+use futures::ready;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use crate::crypto::v1::{Cipher, CipherKind};
 
 // use super::BUFFER_SIZE;
 
@@ -60,8 +61,8 @@ impl DecryptedReader {
                 continue;
             }
 
-            let m    = buffer.filled_mut();
-            
+            let m = buffer.filled_mut();
+
             assert_eq!(self.cipher.decrypt_packet(m), true);
 
             // Reset pointers

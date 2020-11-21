@@ -11,11 +11,7 @@ use crate::{
     config::{Config, ConfigType},
     context::{Context, ServerState},
     plugin::{PluginMode, Plugins},
-    relay::{
-        tcprelay::local::run as run_tcp,
-        udprelay::local::run as run_udp,
-        utils::set_nofile,
-    },
+    relay::{tcprelay::local::run as run_tcp, udprelay::local::run as run_udp, utils::set_nofile},
 };
 
 /// Relay server running under local environment.

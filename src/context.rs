@@ -23,8 +23,6 @@ use tokio::sync::Mutex as AsyncMutex;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::TokioAsyncResolver;
 
-#[cfg(any(feature = "sodium", feature = "rc4"))]
-use crate::crypto::CipherType;
 #[cfg(feature = "trust-dns")]
 use crate::relay::dns_resolver::create_resolver;
 #[cfg(feature = "local-dns")]
@@ -34,6 +32,7 @@ use crate::relay::flow::ServerFlowStatistic;
 use crate::{
     acl::AccessControl,
     config::{Config, ConfigType, ServerConfig},
+    crypto::v1::CipherKind,
     relay::{dns_resolver::resolve, socks5::Address},
 };
 
@@ -207,13 +206,7 @@ impl Context {
             // Warning for deprecated ciphers
             // The following stream ciphers have inherent weaknesses (see discussion at https://github.com/shadowsocks/shadowsocks-org/issues/36).
             // DO NOT USE. Implementors are advised to remove them as soon as possible.
-            let deprecated = match t {
-                #[cfg(feature = "sodium")]
-                CipherType::ChaCha20 | CipherType::Salsa20 => true,
-                #[cfg(feature = "rc4")]
-                CipherType::Rc4Md5 => true,
-                _ => false,
-            };
+            let deprecated = matches!(t, CipherKind::SS_RC4_MD5);
             if deprecated {
                 warn!(
                     "stream cipher {} (for server {}) have inherent weaknesses \

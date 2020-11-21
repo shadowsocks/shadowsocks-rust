@@ -6,16 +6,14 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
-
 use bytes::{BufMut, Bytes, BytesMut};
 use log::{error, trace, warn};
 use tokio::net::UdpSocket;
-use shadowsocks_crypto::v1::{CipherCategory, CipherKind};
-
 
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::Context,
+    crypto::v1::{CipherCategory, CipherKind},
     relay::{
         socks5::{Address, UdpAssociateHeader},
         sys::{create_outbound_udp_socket, create_udp_socket},
@@ -112,10 +110,10 @@ impl ServerClient {
             }
         };
 
-        let key    = svr_cfg.clone_key();
+        let key = svr_cfg.clone_key();
         let method = svr_cfg.method();
 
-        Ok(ServerClient { socket, method, key, })
+        Ok(ServerClient { socket, method, key })
     }
 
     async fn pack_req(

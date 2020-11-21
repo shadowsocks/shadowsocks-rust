@@ -10,10 +10,10 @@ use tokio::{
     prelude::*,
     time::{self, Duration},
 };
-use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     config::{Config, ConfigType, ServerAddr, ServerConfig},
+    crypto::v1::CipherKind,
     relay::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},
     run_local,
     run_server,

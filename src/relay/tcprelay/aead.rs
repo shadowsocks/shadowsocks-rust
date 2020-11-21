@@ -31,12 +31,6 @@
 //! |      2       |     Fixed     |   Variable   |   Fixed    |
 //! +--------------+---------------+--------------+------------+
 //! ```
-use futures::ready;
-use bytes::{Buf, BufMut, BytesMut};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use shadowsocks_crypto::v1::{CipherKind, Cipher};
-
-
 use std::{
     cmp,
     io,
@@ -47,6 +41,11 @@ use std::{
     u16,
 };
 
+use bytes::{Buf, BufMut, BytesMut};
+use futures::ready;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use crate::crypto::v1::{Cipher, CipherKind};
 
 /// AEAD packet payload must be smaller than 0x3FFF
 const MAX_PACKET_SIZE: usize = 0x3FFF;
@@ -117,7 +116,7 @@ impl DecryptedReader {
     {
         let mlen = 2 + self.tag_size;
         ready!(self.poll_read_exact(ctx, r, mlen, true))?;
-        
+
         if self.got_final {
             return Poll::Ready(Ok(()));
         }

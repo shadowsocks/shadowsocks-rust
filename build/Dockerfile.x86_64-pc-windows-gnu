@@ -1,23 +1,3 @@
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-
 FROM rustembedded/cross:x86_64-pc-windows-gnu
 
-ARG SODIUM_VERS="1.0.18"
-
-RUN apt-get update && \
-    apt-get install --no-install-recommends -y curl
-
-# Build a static copy of libsodium.
-# https://github.com/jedisct1/libsodium/blob/master/dist-build/msys2-win64.sh
-#
-# Could be removed in the future when this issue is fixed:
-# https://github.com/sodiumoxide/sodiumoxide/issues/386
-RUN curl -LO https://download.libsodium.org/libsodium/releases/libsodium-$SODIUM_VERS.tar.gz && \
-    tar xzf libsodium-$SODIUM_VERS.tar.gz && cd libsodium-$SODIUM_VERS && \
-    AR="x86_64-w64-mingw32-ar" CC="x86_64-w64-mingw32-gcc" CFLAGS="-Ofast -fomit-frame-pointer -m64 -mtune=westmere" ./configure --prefix=/usr/x86_64-w64-mingw32 --enable-shared=no --host=x86_64-w64-mingw32 && \
-    V=1 make -j${nprocs} && make install && \
-    cd .. && rm -rf libsodium-$SODIUM_VERS.tar.gz libsodium-$SODIUM_VERS
-
-ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3" \
-    SODIUM_LIB_DIR=/usr/x86_64-w64-mingw32/lib
+ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"

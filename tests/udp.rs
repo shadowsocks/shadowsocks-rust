@@ -4,10 +4,10 @@ use std::net::SocketAddr;
 
 use log::debug;
 use tokio::time::{self, Duration};
-use shadowsocks_crypto::v1::CipherKind;
 
 use shadowsocks::{
     config::{Config, ConfigType, Mode, ServerConfig},
+    crypto::v1::CipherKind,
     relay::{socks5::Address, udprelay::client::Socks5Client},
     run_local,
     run_server,

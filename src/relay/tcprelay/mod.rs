@@ -14,8 +14,8 @@ use tokio::{
 };
 
 mod aead;
-mod stream;
 mod crypto_io;
+mod stream;
 
 pub mod client;
 mod connection;

@@ -539,7 +539,7 @@ impl<S: ServerData + 'static> PingBalancer<S> {
             b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
 
         let addr = Address::SocketAddress(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53));
-        
+
         let client = UdpServerClient::new(stat.context(), stat.server_config()).await?;
         client.send_to(stat.context(), &addr, DNS_QUERY).await?;
 

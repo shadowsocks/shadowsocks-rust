@@ -134,8 +134,6 @@ trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optiona
 hyper = { git = "https://github.com/hyperium/hyper.git", optional = true, features = ["full"] }
 tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
 
-strum = "0.19"
-strum_macros = "0.19"
 ipnet = "2.2"
 iprange = "0.6"
 

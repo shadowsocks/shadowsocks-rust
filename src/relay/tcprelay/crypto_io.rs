@@ -21,14 +21,13 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 use crate::{
     config::ServerConfig,
     context::SharedContext,
+    crypto::v1::{random_iv_or_salt, CipherCategory, CipherKind},
 };
 
 use super::{
     aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
     stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
 };
-use shadowsocks_crypto::v1::{CipherCategory, CipherKind, random_iv_or_salt, };
-
 
 enum DecryptedReader {
     None,
@@ -66,9 +65,9 @@ impl<S: Unpin> Unpin for CryptoStream<S> {}
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
     pub fn new(context: SharedContext, stream: S, svr_cfg: &ServerConfig) -> CryptoStream<S> {
-        let method   = svr_cfg.method();
+        let method = svr_cfg.method();
         let category = method.category();
-        let key      = svr_cfg.clone_key();
+        let key = svr_cfg.clone_key();
 
         if category == CipherCategory::None {
             return CryptoStream::<S>::new_none(stream);
@@ -87,7 +86,7 @@ impl<S> CryptoStream<S> {
                     if prev_len > 0 {
                         random_iv_or_salt(&mut iv);
                     }
-                    
+
                     if context.check_nonce_and_set(&iv) {
                         // IV exist, generate another one
                         continue;
@@ -103,7 +102,7 @@ impl<S> CryptoStream<S> {
                     if prev_len > 0 {
                         random_iv_or_salt(&mut salt);
                     }
-                    
+
                     if context.check_nonce_and_set(&salt) {
                         // Salt exist, generate another one
                         continue;
@@ -121,17 +120,12 @@ impl<S> CryptoStream<S> {
             CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, &key, &iv)),
             CipherCategory::None => EncryptedWriter::None,
         };
-        
+
         CryptoStream {
             stream,
             dec: None,
             enc,
-            read_status: ReadStatus::WaitIv(
-                context,
-                BytesMut::with_capacity(prev_len).limit(prev_len),
-                method,
-                key,
-            ),
+            read_status: ReadStatus::WaitIv(context, BytesMut::with_capacity(prev_len).limit(prev_len), method, key),
         }
     }
 

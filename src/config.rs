@@ -57,23 +57,21 @@ use std::{
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
+use bytes::Bytes;
 use cfg_if::cfg_if;
 use log::error;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 use url::{self, Url};
-use bytes::Bytes;
-use shadowsocks_crypto::v1::{CipherKind, openssl_bytes_to_key};
-
 
 use crate::{
     acl::AccessControl,
     context::Context,
+    crypto::v1::{openssl_bytes_to_key, CipherKind},
     plugin::PluginConfig,
     relay::{dns_resolver::resolve_bind_addr, socks5::Address},
 };
-
 
 #[cfg(feature = "trust-dns")]
 #[derive(Serialize, Deserialize, Debug)]
@@ -285,7 +283,7 @@ pub struct ServerConfig {
     timeout: Option<Duration>,
     // Encryption key
     enc_key: Bytes,
-    
+
     /// Plugin config
     plugin: Option<PluginConfig>,
     /// Plugin address

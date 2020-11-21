@@ -361,7 +361,7 @@ Example configuration:
 * `camellia-128-cfb`, `camellia-128-cfb1`, `camellia-128-cfb8`, `camellia-128-cfb128`
 * `camellia-192-cfb`, `camellia-192-cfb1`, `camellia-192-cfb8`, `camellia-192-cfb128`
 * `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
-* `rc4`, `rc4-md5`
+* `rc4-md5`
 * `chacha20-ietf`
 * `plain` (No encryption, just for debugging)
 
