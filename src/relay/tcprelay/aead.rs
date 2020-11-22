@@ -115,8 +115,12 @@ impl DecryptedReader {
                 }
                 DecryptReadStep::LengthReadBuf => {
                     // Reset the ReadBuf offset
-                    dst.clear();
-                    dst.advance(self.read_buf_filled);
+                    let filled = dst.filled().len();
+                    if filled < self.read_buf_filled {
+                        let diff = self.read_buf_filled - filled;
+                        unsafe { dst.assume_init(diff) };
+                        dst.set_filled(self.read_buf_filled);
+                    }
 
                     match self.poll_read_decrypted_length_readbuf(ctx, r, dst) {
                         Poll::Ready(Ok(plen)) => {
@@ -187,8 +191,12 @@ impl DecryptedReader {
                 }
                 DecryptReadStep::DataReadBuf(plen) => {
                     // Reset the ReadBuf offset
-                    dst.clear();
-                    dst.advance(self.read_buf_filled);
+                    let filled = dst.filled().len();
+                    if filled < self.read_buf_filled {
+                        let diff = self.read_buf_filled - filled;
+                        unsafe { dst.assume_init(diff) };
+                        dst.set_filled(self.read_buf_filled);
+                    }
 
                     match self.poll_read_decrypted_data_readbuf(ctx, r, plen, dst) {
                         Poll::Ready(r) => return Poll::Ready(r),
@@ -327,8 +335,7 @@ impl DecryptedReader {
         }
 
         // dst.filled()[..plen] stores decrypted data
-        dst.clear();
-        dst.advance(plen);
+        dst.set_filled(plen);
 
         // Next step, read length
         self.steps = DecryptReadStep::Init;
@@ -360,6 +367,7 @@ impl DecryptedReader {
                 return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
             }
 
+            unsafe { dst.assume_init(n) };
             dst.advance(n);
             remaining -= n;
 
