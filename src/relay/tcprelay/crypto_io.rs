@@ -89,7 +89,7 @@ impl<S> CryptoStream<S> {
                     }
                     break iv;
                 };
-                trace!("generated Stream cipher IV {:?}", local_iv);
+                trace!("generated Stream cipher IV {:?}", ByteStr::new(&local_iv));
                 local_iv
             }
             CipherCategory::Aead => {
@@ -105,7 +105,7 @@ impl<S> CryptoStream<S> {
                     }
                     break salt;
                 };
-                trace!("generated AEAD cipher salt {:?}", local_salt);
+                trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
             }
             CipherCategory::None => Vec::new(),

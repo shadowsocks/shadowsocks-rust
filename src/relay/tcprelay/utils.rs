@@ -1,9 +1,21 @@
 //! Utility functions
 
-use std::{io, net::SocketAddr};
+use std::{
+    future::Future,
+    io,
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
+use futures::ready;
 use log::trace;
-use tokio::net::{TcpSocket, TcpStream};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    net::{TcpSocket, TcpStream},
+};
+
+use crate::crypto::v1::{CipherCategory, CipherKind};
 
 /// Connecting to a specific target with TCP protocol
 ///
@@ -44,4 +56,95 @@ pub async fn connect_tcp_stream(addr: &SocketAddr, outbound_addr: &Option<Socket
             socket.connect(*addr).await
         }
     }
+}
+
+pub struct ShadowTunnelCopy<'a, R: ?Sized, W: ?Sized> {
+    reader: &'a mut R,
+    read_done: bool,
+    writer: &'a mut W,
+    pos: usize,
+    cap: usize,
+    amt: u64,
+    buf: Box<[u8]>,
+}
+
+impl<R, W> Future for ShadowTunnelCopy<'_, R, W>
+where
+    R: AsyncRead + Unpin + ?Sized,
+    W: AsyncWrite + Unpin + ?Sized,
+{
+    type Output = io::Result<u64>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
+        loop {
+            // If our buffer is empty, then we need to read some data to
+            // continue.
+            if self.pos == self.cap && !self.read_done {
+                let me = &mut *self;
+                let mut buf = ReadBuf::new(&mut me.buf);
+                ready!(Pin::new(&mut *me.reader).poll_read(cx, &mut buf))?;
+                let n = buf.filled().len();
+                if n == 0 {
+                    self.read_done = true;
+                } else {
+                    self.pos = 0;
+                    self.cap = n;
+                }
+            }
+
+            // If our buffer has some data, let's write it out!
+            while self.pos < self.cap {
+                let me = &mut *self;
+                let i = ready!(Pin::new(&mut *me.writer).poll_write(cx, &me.buf[me.pos..me.cap]))?;
+                if i == 0 {
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "write zero byte into writer",
+                    )));
+                } else {
+                    self.pos += i;
+                    self.amt += i as u64;
+                }
+            }
+
+            // If we've written all the data and we've seen EOF, flush out the
+            // data and finish the transfer.
+            if self.pos == self.cap && self.read_done {
+                let me = &mut *self;
+                ready!(Pin::new(&mut *me.writer).poll_flush(cx))?;
+                return Poll::Ready(Ok(self.amt));
+            }
+        }
+    }
+}
+
+pub async fn shadow_tunnel_copy<'a, R, W>(method: CipherKind, reader: &'a mut R, writer: &'a mut W) -> io::Result<u64>
+where
+    R: AsyncRead + Unpin + ?Sized,
+    W: AsyncWrite + Unpin + ?Sized,
+{
+    let buffer_length = match method.category() {
+        CipherCategory::Stream | CipherCategory::None => {
+            // Stream cipher uses 16K buffer
+            1 << 14
+        }
+        CipherCategory::Aead => {
+            // AEAD cipher have a maximum packet size 0x3FFF
+            // Reserves some space for TAGS and length for AEAD
+            2 + method.tag_len() + super::aead::MAX_PACKET_SIZE + method.tag_len()
+        }
+    };
+
+    let buf = vec![0u8; buffer_length].into_boxed_slice();
+
+    ShadowTunnelCopy {
+        reader,
+        read_done: false,
+        writer,
+        amt: 0,
+        pos: 0,
+        cap: 0,
+        buf,
+    }
+    .await
 }

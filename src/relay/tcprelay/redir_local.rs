@@ -40,10 +40,11 @@ async fn establish_client_tcp_redir<'a>(
 
     let (mut r, mut w) = s.split();
 
+    use super::utils::shadow_tunnel_copy;
     use tokio::io::copy;
 
     let rhalf = copy(&mut r, &mut svr_w);
-    let whalf = copy(&mut svr_r, &mut w);
+    let whalf = shadow_tunnel_copy(svr_cfg.method(), &mut svr_r, &mut w);
 
     tokio::pin!(rhalf);
     tokio::pin!(whalf);

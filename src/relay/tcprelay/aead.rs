@@ -48,12 +48,14 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::crypto::v1::{Cipher, CipherKind};
 
 /// AEAD packet payload must be smaller than 0x3FFF
-const MAX_PACKET_SIZE: usize = 0x3FFF;
+pub const MAX_PACKET_SIZE: usize = 0x3FFF;
 
 #[derive(Debug)]
 enum DecryptReadStep {
     Init,
+    LengthReadBuf,
     LengthBuffered,
+    DataReadBuf(usize),
     DataBuffered(usize),
     Eof,
 }
@@ -66,6 +68,7 @@ pub struct DecryptedReader {
     buffered: bool,
     tag_size: usize,
     steps: DecryptReadStep,
+    read_buf_filled: usize,
 }
 
 impl DecryptedReader {
@@ -77,6 +80,7 @@ impl DecryptedReader {
             buffered: false,
             tag_size: method.tag_len(),
             steps: DecryptReadStep::Init,
+            read_buf_filled: 0,
         }
     }
 
@@ -98,8 +102,57 @@ impl DecryptedReader {
                     self.pos = 0;
                     self.buffered = false;
 
-                    self.buffer.reserve(2 + self.tag_size);
-                    self.steps = DecryptReadStep::LengthBuffered;
+                    let required_space = 2 + self.tag_size;
+
+                    if dst.remaining() >= required_space {
+                        // dst has enough space, use it directly
+                        self.steps = DecryptReadStep::LengthReadBuf;
+                        self.read_buf_filled = 0;
+                    } else {
+                        self.buffer.reserve(required_space);
+                        self.steps = DecryptReadStep::LengthBuffered;
+                    }
+                }
+                DecryptReadStep::LengthReadBuf => {
+                    // Reset the ReadBuf offset
+                    dst.clear();
+                    dst.advance(self.read_buf_filled);
+
+                    match self.poll_read_decrypted_length_readbuf(ctx, r, dst) {
+                        Poll::Ready(Ok(plen)) => {
+                            // First of all, reset the dst buffer to the original length
+                            dst.clear();
+
+                            // Next step, read data
+                            // Check if dst has enough space for reading data
+                            let required_space = plen + self.tag_size;
+                            if dst.remaining() >= required_space {
+                                // Fast path, use dst as buffer
+                                self.steps = DecryptReadStep::DataReadBuf(plen);
+                                self.read_buf_filled = 0;
+                            } else {
+                                // Slow path, use self.buffer as buffer
+                                self.buffer.clear();
+
+                                self.steps = DecryptReadStep::DataBuffered(plen);
+                                self.buffer.reserve(required_space);
+                            }
+                        }
+                        Poll::Ready(Err(err)) => {
+                            if err.kind() == ErrorKind::UnexpectedEof && dst.filled().len() == 0 {
+                                self.steps = DecryptReadStep::Eof;
+                            } else {
+                                return Poll::Ready(Err(err));
+                            }
+                        }
+                        Poll::Pending => {
+                            // Record offset
+                            //
+                            // FIXME: This is unsafe. If caller clears or changes the buffer, everything is doomed.
+                            self.read_buf_filled = dst.filled().len();
+                            return Poll::Pending;
+                        }
+                    }
                 }
                 DecryptReadStep::LengthBuffered => {
                     match ready!(self.poll_read_decrypted_length_buffered(ctx, r)) {
@@ -108,8 +161,20 @@ impl DecryptedReader {
                             self.buffer.clear();
 
                             // Next step, read data
-                            self.steps = DecryptReadStep::DataBuffered(plen);
-                            self.buffer.reserve(plen + self.tag_size);
+                            let required_space = plen + self.tag_size;
+                            if dst.remaining() < required_space {
+                                // Slow path, use self.buffer as buffer
+                                self.steps = DecryptReadStep::DataBuffered(plen);
+                                self.buffer.reserve(required_space);
+                            } else {
+                                // Fast path, use dst as buffer
+                                //
+                                // This branch is very unlikely to be executed, unless plen < 2
+                                dst.clear();
+
+                                self.steps = DecryptReadStep::DataReadBuf(plen);
+                                self.read_buf_filled = 0;
+                            }
                         }
                         Err(err) => {
                             if err.kind() == ErrorKind::UnexpectedEof && self.buffer.is_empty() {
@@ -120,6 +185,22 @@ impl DecryptedReader {
                         }
                     };
                 }
+                DecryptReadStep::DataReadBuf(plen) => {
+                    // Reset the ReadBuf offset
+                    dst.clear();
+                    dst.advance(self.read_buf_filled);
+
+                    match self.poll_read_decrypted_data_readbuf(ctx, r, plen, dst) {
+                        Poll::Ready(r) => return Poll::Ready(r),
+                        Poll::Pending => {
+                            // Record offset
+                            //
+                            // FIXME: This is unsafe. If caller clears or changes the buffer, everything is doomed.
+                            self.read_buf_filled = dst.filled().len();
+                            return Poll::Pending;
+                        }
+                    }
+                }
                 DecryptReadStep::DataBuffered(plen) => ready!(self.poll_read_decrypted_data_buffered(ctx, r, plen))?,
                 DecryptReadStep::Eof => return Poll::Ready(Ok(())),
             }
@@ -129,6 +210,7 @@ impl DecryptedReader {
         let n = cmp::min(dst.remaining(), remaining_len);
         dst.put_slice(&self.buffer[self.pos..self.pos + n]);
         self.pos += n;
+
         Poll::Ready(Ok(()))
     }
 
@@ -140,30 +222,7 @@ impl DecryptedReader {
         ready!(self.poll_read_exact_buffered(ctx, r, mlen))?;
 
         // Done reading, decrypt it
-        let plen = {
-            let m = &mut self.buffer[..mlen];
-
-            if !self.cipher.decrypt_packet(m) {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
-            }
-
-            u16::from_be_bytes([self.buffer[0], self.buffer[1]]) as usize
-        };
-
-        if plen > MAX_PACKET_SIZE {
-            // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
-            //
-            // AEAD TCP protocol have reserved the higher two bits for future use
-            let err = io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
-                    plen
-                ),
-            );
-            return Poll::Ready(Err(err));
-        }
-
+        let plen = DecryptedReader::decrypt_length(&mut self.cipher, &mut self.buffer[..mlen])?;
         Poll::Ready(Ok(plen))
     }
 
@@ -217,13 +276,125 @@ impl DecryptedReader {
             }
 
             if n == 0 {
-                return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
+                return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
             }
 
             remaining -= n;
         }
 
         Poll::Ready(Ok(()))
+    }
+
+    fn poll_read_decrypted_length_readbuf<R>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        r: &mut R,
+        dst: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<usize>>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mlen = 2 + self.tag_size;
+        ready!(self.poll_read_exact_readbuf(ctx, r, mlen, dst))?;
+
+        // Done reading, decrypt it
+        let m = dst.filled_mut();
+        assert_eq!(m.len(), mlen);
+
+        let plen = DecryptedReader::decrypt_length(&mut self.cipher, m)?;
+        Poll::Ready(Ok(plen))
+    }
+
+    fn poll_read_decrypted_data_readbuf<R>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        r: &mut R,
+        plen: usize,
+        dst: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mlen = plen + self.tag_size;
+        ready!(self.poll_read_exact_readbuf(ctx, r, mlen, dst))?;
+
+        // Done reading data, decrypt it
+        let m = dst.filled_mut();
+        assert_eq!(m.len(), mlen);
+
+        if !self.cipher.decrypt_packet(m) {
+            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
+        }
+
+        // dst.filled()[..plen] stores decrypted data
+        dst.clear();
+        dst.advance(plen);
+
+        // Next step, read length
+        self.steps = DecryptReadStep::Init;
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_read_exact_readbuf<R>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        r: &mut R,
+        size: usize,
+        dst: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut remaining = size - dst.filled().len();
+
+        while remaining > 0 {
+            let n = {
+                let mut buffer = dst.take(remaining);
+                ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
+
+                buffer.filled().len()
+            };
+
+            if n == 0 {
+                return Poll::Ready(Err(ErrorKind::UnexpectedEof.into()));
+            }
+
+            dst.advance(n);
+            remaining -= n;
+
+            assert_eq!(remaining, size - dst.filled().len());
+        }
+
+        assert_eq!(dst.filled().len(), size);
+
+        Poll::Ready(Ok(()))
+    }
+
+    fn decrypt_length(cipher: &mut Cipher, m: &mut [u8]) -> io::Result<usize> {
+        let plen = {
+            if !cipher.decrypt_packet(m) {
+                return Err(io::Error::new(ErrorKind::Other, "invalid tag-in"));
+            }
+
+            u16::from_be_bytes([m[0], m[1]]) as usize
+        };
+
+        if plen > MAX_PACKET_SIZE {
+            // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
+            //
+            // AEAD TCP protocol have reserved the higher two bits for future use
+            let err = io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
+                    plen
+                ),
+            );
+            return Err(err);
+        }
+
+        Ok(plen)
     }
 }
 

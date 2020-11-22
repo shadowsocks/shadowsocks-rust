@@ -41,6 +41,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::{
     config::ConfigType,
     context::SharedContext,
+    crypto::v1::CipherKind,
     relay::{
         loadbalancing::server::{
             PingBalancer,
@@ -524,14 +525,21 @@ impl Connection for ProxyHttpStream {
 type ShadowSocksHttpClient = Client<ShadowSocksConnector, Body>;
 type DirectHttpClient = Client<DirectConnector, Body>;
 
-async fn establish_connect_tunnel(upgraded: Upgraded, stream: ProxyStream, client_addr: SocketAddr, addr: Address) {
+async fn establish_connect_tunnel(
+    method: CipherKind,
+    upgraded: Upgraded,
+    stream: ProxyStream,
+    client_addr: SocketAddr,
+    addr: Address,
+) {
+    use super::utils::shadow_tunnel_copy;
     use tokio::io::{copy, split};
 
     let (mut r, mut w) = split(upgraded);
     let (mut svr_r, mut svr_w) = stream.split();
 
     let rhalf = copy(&mut r, &mut svr_w);
-    let whalf = copy(&mut svr_r, &mut w);
+    let whalf = shadow_tunnel_copy(method, &mut svr_r, &mut w);
 
     tokio::pin!(rhalf);
     tokio::pin!(whalf);
@@ -692,6 +700,8 @@ async fn server_dispatch(
 
         debug!("CONNECT relay connected {} <-> {}", client_addr, host);
 
+        let method = svr_cfg.method();
+
         // Upgrade to a TCP tunnel
         //
         // Note: only after client received an empty body with STATUS_OK can the
@@ -702,7 +712,7 @@ async fn server_dispatch(
                 Ok(upgraded) => {
                     trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
 
-                    establish_connect_tunnel(upgraded, stream, client_addr, host).await
+                    establish_connect_tunnel(method, upgraded, stream, client_addr, host).await
                 }
                 Err(e) => {
                     error!(
