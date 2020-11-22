@@ -151,7 +151,7 @@ fn main() {
         app = clap_app!(@app (app)
             (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_local_dns_addr} "Specify the address of local DNS server, send queries directly")
             (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
-            (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["LOCAL_DNS_ADDR", "REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
+            (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
         );
     }
 
@@ -283,6 +283,8 @@ fn main() {
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<LocalDnsAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
+        } else if config.local_dns_addr.is_none() {
+            panic!("--local-dns-addr is required for local-dns relay");
         }
 
         if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
