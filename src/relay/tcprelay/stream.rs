@@ -1,6 +1,5 @@
 //! Stream protocol implementation
 use std::{
-    cmp,
     io,
     marker::Unpin,
     pin::Pin,
@@ -17,23 +16,13 @@ use crate::crypto::v1::{Cipher, CipherKind};
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader {
-    buffer: BytesMut,
     cipher: Cipher,
-    pos: usize,
-    got_final: bool,
-    // incoming_buffer: Box<[u8]>,
 }
 
 impl DecryptedReader {
     pub fn new(method: CipherKind, key: &[u8], iv: &[u8]) -> DecryptedReader {
         let cipher = Cipher::new(method, key, iv);
-        DecryptedReader {
-            buffer: BytesMut::new(),
-            cipher,
-            pos: 0,
-            got_final: false,
-            // incoming_buffer: vec![0u8; BUFFER_SIZE].into_boxed_slice(),
-        }
+        DecryptedReader { cipher }
     }
 
     pub fn poll_read_decrypted<R>(
@@ -45,39 +34,15 @@ impl DecryptedReader {
     where
         R: AsyncRead + Unpin,
     {
-        let mut buf = [0u8; 1 << 14];
-        while self.pos >= self.buffer.len() {
-            if self.got_final {
-                return Poll::Ready(Ok(()));
-            }
+        let filled = dst.filled().len();
+        ready!(Pin::new(r).poll_read(ctx, dst))?;
 
-            let mut buffer = ReadBuf::new(&mut buf);
-            // let mut buf = ReadBuf::new(&mut self.incoming_buffer);
-            ready!(Pin::new(&mut *r).poll_read(ctx, &mut buffer))?;
-            let amt = buffer.filled().len();
-
-            if amt == 0 {
-                self.got_final = true;
-                continue;
-            }
-
-            let m = buffer.filled_mut();
-
+        // Decrypt inplace
+        let m = &mut dst.filled_mut()[filled..];
+        if !m.is_empty() {
             assert_eq!(self.cipher.decrypt_packet(m), true);
-
-            // Reset pointers
-            // So the outer loop will break if data.len() != 0
-            self.buffer.clear();
-            self.pos = 0;
-
-            // Ensure we have enough space
-            self.buffer.put_slice(m);
         }
 
-        let remaining_len = self.buffer.len() - self.pos;
-        let n = cmp::min(dst.remaining(), remaining_len);
-        dst.put_slice(&self.buffer[self.pos..self.pos + n]);
-        self.pos += n;
         Poll::Ready(Ok(()))
     }
 }

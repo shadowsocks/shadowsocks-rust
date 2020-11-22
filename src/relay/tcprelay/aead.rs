@@ -33,7 +33,7 @@
 //! ```
 use std::{
     cmp,
-    io,
+    io::{self, ErrorKind},
     marker::Unpin,
     pin::Pin,
     slice,
@@ -52,32 +52,31 @@ const MAX_PACKET_SIZE: usize = 0x3FFF;
 
 #[derive(Debug)]
 enum DecryptReadStep {
-    Length,
-    Data(usize),
+    Init,
+    LengthBuffered,
+    DataBuffered(usize),
+    Eof,
 }
 
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader {
     buffer: BytesMut,
-    data: BytesMut,
     cipher: Cipher,
     pos: usize,
+    buffered: bool,
     tag_size: usize,
     steps: DecryptReadStep,
-    got_final: bool,
 }
 
 impl DecryptedReader {
     pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> DecryptedReader {
         DecryptedReader {
-            // Initialize for the first length block
-            buffer: BytesMut::with_capacity(2 + method.tag_len()),
-            data: BytesMut::new(),
+            buffer: BytesMut::new(),
             cipher: Cipher::new(method, key, nonce),
             pos: 0,
+            buffered: false,
             tag_size: method.tag_len(),
-            steps: DecryptReadStep::Length,
-            got_final: false,
+            steps: DecryptReadStep::Init,
         }
     }
 
@@ -90,36 +89,55 @@ impl DecryptedReader {
     where
         R: AsyncRead + Unpin,
     {
-        while self.pos >= self.data.len() {
-            // Already received EOF
-            if self.got_final {
-                return Poll::Ready(Ok(()));
-            }
-
+        while !self.buffered || self.pos >= self.buffer.len() {
             // Refill buffer
             match self.steps {
-                DecryptReadStep::Length => ready!(self.poll_read_decrypted_length(ctx, r))?,
-                DecryptReadStep::Data(plen) => ready!(self.poll_read_decrypted_data(ctx, r, plen))?,
+                DecryptReadStep::Init => {
+                    // Cleanup buffer and ready for refill
+                    self.buffer.clear();
+                    self.pos = 0;
+                    self.buffered = false;
+
+                    self.buffer.reserve(2 + self.tag_size);
+                    self.steps = DecryptReadStep::LengthBuffered;
+                }
+                DecryptReadStep::LengthBuffered => {
+                    match ready!(self.poll_read_decrypted_length_buffered(ctx, r)) {
+                        Ok(plen) => {
+                            // Clear buffer before overwriting it
+                            self.buffer.clear();
+
+                            // Next step, read data
+                            self.steps = DecryptReadStep::DataBuffered(plen);
+                            self.buffer.reserve(plen + self.tag_size);
+                        }
+                        Err(err) => {
+                            if err.kind() == ErrorKind::UnexpectedEof && self.buffer.is_empty() {
+                                self.steps = DecryptReadStep::Eof;
+                            } else {
+                                return Poll::Ready(Err(err));
+                            }
+                        }
+                    };
+                }
+                DecryptReadStep::DataBuffered(plen) => ready!(self.poll_read_decrypted_data_buffered(ctx, r, plen))?,
+                DecryptReadStep::Eof => return Poll::Ready(Ok(())),
             }
         }
 
-        let remaining_len = self.data.len() - self.pos;
+        let remaining_len = self.buffer.len() - self.pos;
         let n = cmp::min(dst.remaining(), remaining_len);
-        dst.put_slice(&self.data[self.pos..self.pos + n]);
+        dst.put_slice(&self.buffer[self.pos..self.pos + n]);
         self.pos += n;
         Poll::Ready(Ok(()))
     }
 
-    fn poll_read_decrypted_length<R>(&mut self, ctx: &mut Context<'_>, r: &mut R) -> Poll<io::Result<()>>
+    fn poll_read_decrypted_length_buffered<R>(&mut self, ctx: &mut Context<'_>, r: &mut R) -> Poll<io::Result<usize>>
     where
         R: AsyncRead + Unpin,
     {
         let mlen = 2 + self.tag_size;
-        ready!(self.poll_read_exact(ctx, r, mlen, true))?;
-
-        if self.got_final {
-            return Poll::Ready(Ok(()));
-        }
+        ready!(self.poll_read_exact_buffered(ctx, r, mlen))?;
 
         // Done reading, decrypt it
         let plen = {
@@ -146,63 +164,40 @@ impl DecryptedReader {
             return Poll::Ready(Err(err));
         }
 
-        // Clear buffer before overwriting it
-        self.buffer.clear();
-        self.data.clear();
-        self.pos = 0;
-
-        // Next step, read data
-        self.steps = DecryptReadStep::Data(plen);
-        self.buffer.reserve(plen + self.tag_size);
-        self.data.reserve(plen);
-
-        Poll::Ready(Ok(()))
+        Poll::Ready(Ok(plen))
     }
 
-    fn poll_read_decrypted_data<R>(&mut self, ctx: &mut Context<'_>, r: &mut R, plen: usize) -> Poll<io::Result<()>>
+    fn poll_read_decrypted_data_buffered<R>(
+        &mut self,
+        ctx: &mut Context<'_>,
+        r: &mut R,
+        plen: usize,
+    ) -> Poll<io::Result<()>>
     where
         R: AsyncRead + Unpin,
     {
         let mlen = plen + self.tag_size;
-        ready!(self.poll_read_exact(ctx, r, mlen, false))?;
+        ready!(self.poll_read_exact_buffered(ctx, r, mlen))?;
 
         // Done reading data, decrypt it
-        unsafe {
-            let m: &mut [u8] = self.buffer.as_mut();
-            assert_eq!(m.len(), mlen);
+        let m: &mut [u8] = self.buffer.as_mut();
+        assert_eq!(m.len(), mlen);
 
-            if !self.cipher.decrypt_packet(m) {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
-            }
-
-            // It has enough space, I am sure about that
-            let data = slice::from_raw_parts_mut(self.data.bytes_mut().as_mut_ptr() as *mut u8, plen);
-            data[..].copy_from_slice(&self.buffer[..plen]);
-
-            // Move forward the pointer
-            self.data.advance_mut(plen);
+        if !self.cipher.decrypt_packet(m) {
+            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in")));
         }
 
-        // Clear buffer before overwriting it
-        self.buffer.clear();
-
-        // Reset read position
-        self.pos = 0;
+        // self.buffer[..plen] stores decrypted data
+        self.buffer.truncate(plen);
+        self.buffered = true;
 
         // Next step, read length
-        self.steps = DecryptReadStep::Length;
-        self.buffer.reserve(2 + self.tag_size);
+        self.steps = DecryptReadStep::Init;
 
         Poll::Ready(Ok(()))
     }
 
-    fn poll_read_exact<R>(
-        &mut self,
-        ctx: &mut Context<'_>,
-        r: &mut R,
-        size: usize,
-        allow_eof: bool,
-    ) -> Poll<io::Result<()>>
+    fn poll_read_exact_buffered<R>(&mut self, ctx: &mut Context<'_>, r: &mut R, size: usize) -> Poll<io::Result<()>>
     where
         R: AsyncRead + Unpin,
     {
@@ -222,13 +217,7 @@ impl DecryptedReader {
             }
 
             if n == 0 {
-                if self.buffer.is_empty() && allow_eof && !self.got_final {
-                    // Read nothing
-                    self.got_final = true;
-                    return Poll::Ready(Ok(()));
-                } else {
-                    return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
-                }
+                return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
             }
 
             remaining -= n;
