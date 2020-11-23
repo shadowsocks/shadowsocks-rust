@@ -192,6 +192,12 @@ fn main() {
         return;
     }
 
+    if let Err(err) = config.check_integrity() {
+        eprintln!("config integrity check failed, {}", err);
+        println!("{}", matches.usage());
+        return;
+    }
+
     #[cfg(unix)]
     if matches.is_present("DAEMONIZE") {
         daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));

@@ -1614,42 +1614,107 @@ impl Config {
     /// Check if all required fields are already set
     pub fn check_integrity(&self) -> Result<(), Error> {
         if self.config_type.is_local() {
-            if self.local_addr.is_some() {
-                return Ok(());
+            if self.local_addr.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `local_address` and `local_port` for client configuration",
+                    None,
+                );
+                return Err(err);
             }
 
-            let err = Error::new(
-                ErrorKind::MissingField,
-                "missing `local_address` and `local_port` for client configuration",
-                None,
-            );
-            return Err(err);
+            if self.server.is_empty() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `servers` for client configuration",
+                    None,
+                );
+                return Err(err);
+            }
         }
 
         if self.config_type.is_server() {
-            if !self.server.is_empty() {
-                return Ok(());
+            if self.server.is_empty() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing any valid servers in configuration",
+                    None,
+                );
+                return Err(err);
             }
-
-            let err = Error::new(
-                ErrorKind::MissingField,
-                "missing any valid servers in configuration",
-                None,
-            );
-            return Err(err);
         }
 
         if self.config_type.is_manager() {
-            if self.manager.is_some() {
-                return Ok(());
+            if self.manager.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `manager_addr` and `manager_port` in configuration",
+                    None,
+                );
+                return Err(err);
+            }
+        }
+
+        #[cfg(feature = "local-dns")]
+        if self.config_type == ConfigType::DnsLocal {
+            if self.dns_bind_addr.is_none() || self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `dns_bind_addr`, `local_dns_addr` or `remote_dns_addr` in configuration",
+                    None,
+                );
+                return Err(err);
+            }
+        } else if self.dns_bind_addr.is_some() {
+            // Run a DNS server in the same process
+            if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `local_dns_addr` or `remote_dns_addr` in configuration",
+                    None,
+                );
+                return Err(err);
+            }
+        }
+
+        #[cfg(all(
+            feature = "local-http",
+            any(feature = "local-http-native-tls", feature = "local-http-rustls")
+        ))]
+        if self.config_type == ConfigType::HttpsLocal {
+            #[cfg(feature = "local-http-rustls")]
+            if self.tls_identity_certificate_path.is_none() || self.tls_identity_private_key_path.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `tls_identity_certificate_path` or `tls_identity_private_key_path` in configuration",
+                    None,
+                );
+                return Err(err);
             }
 
-            let err = Error::new(
-                ErrorKind::MissingField,
-                "missing `manager_addr` and `manager_port` in configuration",
-                None,
-            );
+            #[cfg(feature = "local-http-native-tls")]
+            if self.tls_identity_path.is_none() || self.tls_identity_password.is_none() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `tls_identity_path` or `tls_identity_password` in configuration",
+                    None,
+                );
+                return Err(err);
+            }
+        }
+
+        #[cfg(feature = "local-flow-stat")]
+        if self.stat_path.is_none() {
+            let err = Error::new(ErrorKind::MissingField, "missing `stat_path` in configuration", None);
             return Err(err);
+        }
+
+        #[cfg(feature = "local-tunnel")]
+        if self.config_type == ConfigType::TunnelLocal {
+            if self.forward.is_none() {
+                let err = Error::new(ErrorKind::MissingField, "missing `forward` in configuration", None);
+                return Err(err);
+            }
         }
 
         Ok(())

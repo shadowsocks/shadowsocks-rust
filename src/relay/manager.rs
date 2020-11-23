@@ -576,6 +576,11 @@ impl ManagerService {
 pub async fn run(config: Config) -> io::Result<()> {
     assert!(config.config_type.is_manager());
 
+    if let Err(err) = config.check_integrity() {
+        let e = io::Error::new(ErrorKind::Other, err.desc);
+        return Err(e);
+    }
+
     if let Some(nofile) = config.nofile {
         debug!("setting RLIMIT_NOFILE to {}", nofile);
         if let Err(err) = set_nofile(nofile) {

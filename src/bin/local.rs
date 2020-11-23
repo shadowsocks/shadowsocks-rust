@@ -256,19 +256,6 @@ fn main() {
         config.server.push(svr_addr);
     }
 
-    #[cfg(target_os = "android")]
-    if matches.is_present("VPN_MODE") {
-        // A socket `protect_path` in CWD
-        // Same as shadowsocks-libev's android.c
-        config.protect_path = Some(From::from("protect_path"));
-
-        // Set default config.local_dns_addr
-        #[cfg(feature = "local-dns")]
-        if config.local_dns_addr.is_none() {
-            config.local_dns_addr = Some(From::from("local_dns_path"));
-        }
-    }
-
     #[cfg(feature = "local-flow-stat")]
     {
         if let Some(stat_path) = matches.value_of("STAT_PATH") {
@@ -283,8 +270,6 @@ fn main() {
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<LocalDnsAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
-        } else if config.local_dns_addr.is_none() {
-            panic!("--local-dns-addr is required for local-dns relay");
         }
 
         if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
@@ -295,6 +280,19 @@ fn main() {
         if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
             let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
             config.dns_bind_addr = Some(addr);
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    if matches.is_present("VPN_MODE") {
+        // A socket `protect_path` in CWD
+        // Same as shadowsocks-libev's android.c
+        config.protect_path = Some(From::from("protect_path"));
+
+        // Set default config.local_dns_addr
+        #[cfg(feature = "local-dns")]
+        if config.local_dns_addr.is_none() {
+            config.local_dns_addr = Some(From::from("local_dns_path"));
         }
     }
 
@@ -408,6 +406,12 @@ fn main() {
                 or --server-url command line option, \
                 or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
         );
+        println!("{}", matches.usage());
+        return;
+    }
+
+    if let Err(err) = config.check_integrity() {
+        eprintln!("config integrity check failed, {}", err);
         println!("{}", matches.usage());
         return;
     }
