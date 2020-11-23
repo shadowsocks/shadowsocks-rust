@@ -1,3 +1,0 @@
-FROM rustembedded/cross:x86_64-pc-windows-gnu
-
-ENV RUSTFLAGS="-Ctarget-feature=+aes,+ssse3"

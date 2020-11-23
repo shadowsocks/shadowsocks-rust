@@ -33,7 +33,6 @@ jobs:
         timeout-minutes: 120
         run: |
           cd build
-          docker build -t shadowsocks-rust:${{ matrix.target }} -f Dockerfile.${{ matrix.target }} .
           ./build-release -t ${{ matrix.target }}
 
       - name: Upload Github Assets

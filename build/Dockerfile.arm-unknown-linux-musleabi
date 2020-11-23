@@ -1,1 +1,0 @@
-FROM rustembedded/cross:arm-unknown-linux-musleabi-0.2.1

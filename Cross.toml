@@ -1,29 +1,5 @@
-[build.env]
-passthrough = [
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-]
-
-[target.x86_64-unknown-linux-musl]
-image = "shadowsocks-rust:x86_64-unknown-linux-musl"
-
-[target.x86_64-unknown-linux-gnu]
-image = "shadowsocks-rust:x86_64-unknown-linux-gnu"
-
-[target.x86_64-pc-windows-gnu]
-image = "shadowsocks-rust:x86_64-pc-windows-gnu"
-
-[target.arm-unknown-linux-gnueabihf]
-image = "shadowsocks-rust:arm-unknown-linux-gnueabihf"
-
-[target.arm-unknown-linux-musleabi]
-image = "shadowsocks-rust:arm-unknown-linux-musleabi"
-
-[target.aarch64-unknown-linux-gnu]
-image = "shadowsocks-rust:aarch64-unknown-linux-gnu"
-
 [target.mips-unknown-linux-musl]
-image = "shadowsocks-rust:mips-unknown-linux-musl"
+image = "rustembedded/cross:mips-unknown-linux-musl-0.2.1"
 
 [target.mipsel-unknown-linux-musl]
-image = "shadowsocks-rust:mipsel-unknown-linux-musl"
+image = "rustembedded/cross:mipsel-unknown-linux-musl-0.2.1"
