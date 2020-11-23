@@ -149,14 +149,13 @@ async fn handle_client(
     let (mut cr, mut cw) = stream.split();
     let (mut sr, mut sw) = remote_stream.split();
 
-    use super::utils::shadow_tunnel_copy;
-    use tokio::io::copy;
+    use super::utils::{copy_p2s, copy_s2p};
 
     // CLIENT -> SERVER
-    let rhalf = shadow_tunnel_copy(svr_cfg.method(), &mut cr, &mut sw);
+    let rhalf = copy_s2p(svr_cfg.method(), &mut cr, &mut sw);
 
     // CLIENT <- SERVER
-    let whalf = copy(&mut sr, &mut cw);
+    let whalf = copy_p2s(svr_cfg.method(), &mut sr, &mut cw);
 
     tokio::pin!(rhalf);
     tokio::pin!(whalf);

@@ -532,14 +532,14 @@ async fn establish_connect_tunnel(
     client_addr: SocketAddr,
     addr: Address,
 ) {
-    use super::utils::shadow_tunnel_copy;
-    use tokio::io::{copy, split};
+    use super::utils::{copy_p2s, copy_s2p};
+    use tokio::io::split;
 
     let (mut r, mut w) = split(upgraded);
     let (mut svr_r, mut svr_w) = stream.split();
 
-    let rhalf = copy(&mut r, &mut svr_w);
-    let whalf = shadow_tunnel_copy(method, &mut svr_r, &mut w);
+    let rhalf = copy_p2s(method, &mut r, &mut svr_w);
+    let whalf = copy_s2p(method, &mut svr_r, &mut w);
 
     tokio::pin!(rhalf);
     tokio::pin!(whalf);

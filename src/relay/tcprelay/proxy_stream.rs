@@ -204,6 +204,12 @@ macro_rules! forward_call {
 }
 
 impl AsyncRead for ProxyConnection {
+    /// Attempt to read decrypted data from reader
+    ///
+    /// ## Implementation Notes
+    ///
+    /// `DecryptedReader` will try to use `buf` to store immediate data. Any implementations that call `poll_read` MUST-NOT
+    /// modify `buf`'s underlying buffer when `Poll::Pending`.
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_read, cx, buf)
     }

@@ -25,6 +25,7 @@ impl DecryptedReader {
         DecryptedReader { cipher }
     }
 
+    /// Attempt to read decrypted data from reader
     pub fn poll_read_decrypted<R>(
         &mut self,
         ctx: &mut Context<'_>,

@@ -250,6 +250,12 @@ impl<S> AsyncRead for CryptoStream<S>
 where
     S: AsyncRead + Unpin,
 {
+    /// Attempt to read decrypted data from reader
+    ///
+    /// ## Implementation Notes
+    ///
+    /// `DecryptedReader` will try to use `buf` to store immediate data. Any implementations that call `poll_read` MUST-NOT
+    /// modify `buf`'s underlying buffer when `Poll::Pending`.
     fn poll_read(self: Pin<&mut Self>, ctx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         self.priv_poll_read(ctx, buf)
     }

@@ -84,6 +84,12 @@ impl DecryptedReader {
         }
     }
 
+    /// Attempt to read decrypted data from reader
+    ///
+    /// ## Implementation Notes
+    ///
+    /// `DecryptedReader` will try to use `dst` to store immediate data. Any implementations that call `poll_read_decrypted` MUST-NOT
+    /// modify `dst`'s underlying buffer when `Poll::Pending`.
     pub fn poll_read_decrypted<R>(
         &mut self,
         ctx: &mut Context<'_>,

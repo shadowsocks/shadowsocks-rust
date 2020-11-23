@@ -58,7 +58,7 @@ pub async fn connect_tcp_stream(addr: &SocketAddr, outbound_addr: &Option<Socket
     }
 }
 
-pub struct ShadowTunnelCopy<'a, R: ?Sized, W: ?Sized> {
+struct Copy<'a, R: ?Sized, W: ?Sized> {
     reader: &'a mut R,
     read_done: bool,
     writer: &'a mut W,
@@ -68,7 +68,21 @@ pub struct ShadowTunnelCopy<'a, R: ?Sized, W: ?Sized> {
     buf: Box<[u8]>,
 }
 
-impl<R, W> Future for ShadowTunnelCopy<'_, R, W>
+impl<'a, R: ?Sized, W: ?Sized> Copy<'a, R, W> {
+    fn new(reader: &'a mut R, writer: &'a mut W, buffer_length: usize) -> Copy<'a, R, W> {
+        Copy {
+            reader,
+            read_done: false,
+            writer,
+            amt: 0,
+            pos: 0,
+            cap: 0,
+            buf: vec![0u8; buffer_length].into_boxed_slice(),
+        }
+    }
+}
+
+impl<R, W> Future for Copy<'_, R, W>
 where
     R: AsyncRead + Unpin + ?Sized,
     W: AsyncWrite + Unpin + ?Sized,
@@ -118,7 +132,8 @@ where
     }
 }
 
-pub async fn shadow_tunnel_copy<'a, R, W>(method: CipherKind, reader: &'a mut R, writer: &'a mut W) -> io::Result<u64>
+/// Copy all data from encrypted `reader` to plain `writer`
+pub async fn copy_s2p<'a, R, W>(method: CipherKind, reader: &'a mut R, writer: &'a mut W) -> io::Result<u64>
 where
     R: AsyncRead + Unpin + ?Sized,
     W: AsyncWrite + Unpin + ?Sized,
@@ -131,20 +146,29 @@ where
         CipherCategory::Aead => {
             // AEAD cipher have a maximum packet size 0x3FFF
             // Reserves some space for TAGS and length for AEAD
-            2 + method.tag_len() + super::aead::MAX_PACKET_SIZE + method.tag_len()
+            super::aead::MAX_PACKET_SIZE + method.tag_len()
         }
     };
 
-    let buf = vec![0u8; buffer_length].into_boxed_slice();
+    Copy::new(reader, writer, buffer_length).await
+}
 
-    ShadowTunnelCopy {
-        reader,
-        read_done: false,
-        writer,
-        amt: 0,
-        pos: 0,
-        cap: 0,
-        buf,
-    }
-    .await
+/// Copy all data from plain `reader` to encrypted `writer`
+pub async fn copy_p2s<'a, R, W>(method: CipherKind, reader: &'a mut R, writer: &'a mut W) -> io::Result<u64>
+where
+    R: AsyncRead + Unpin + ?Sized,
+    W: AsyncWrite + Unpin + ?Sized,
+{
+    let buffer_length = match method.category() {
+        CipherCategory::Stream | CipherCategory::None => {
+            // Stream cipher uses 16K buffer
+            1 << 14
+        }
+        CipherCategory::Aead => {
+            // AEAD cipher have a maximum packet size 0x3FFF
+            super::aead::MAX_PACKET_SIZE
+        }
+    };
+
+    Copy::new(reader, writer, buffer_length).await
 }
