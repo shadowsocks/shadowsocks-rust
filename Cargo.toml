@@ -129,7 +129,7 @@ tokio-rustls = { version = "0.20", optional = true }
 webpki-roots = { version = "0.20", optional = true }
 rustls-native-certs = { version = "0.4", optional = true }
 
-json5 = "0.2"
+json5 = "0.3"
 base64 = "0.13"
 qrcode = { version = "0.12", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
