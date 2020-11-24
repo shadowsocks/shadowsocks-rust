@@ -124,8 +124,6 @@ struct SSConfig {
     nofile: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    remarks: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -149,6 +147,8 @@ struct SSServerExtConfig {
     timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     remarks: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
 }
 
 /// Server address
@@ -290,6 +290,8 @@ pub struct ServerConfig {
     plugin_addr: Option<ServerAddr>,
     /// Remark (Profile Name), normally used as an identifier of this erver
     remarks: Option<String>,
+    /// ID (SIP008) is a random generated UUID
+    id: Option<String>,
 }
 
 impl ServerConfig {
@@ -314,6 +316,7 @@ impl ServerConfig {
             plugin,
             plugin_addr: None,
             remarks: None,
+            id: None,
         }
     }
 
@@ -391,6 +394,26 @@ impl ServerConfig {
     /// Get server's external address
     pub fn external_addr(&self) -> &ServerAddr {
         self.plugin_addr.as_ref().unwrap_or(&self.addr)
+    }
+
+    /// Get server's remark
+    pub fn remarks(&self) -> Option<&str> {
+        self.remarks.as_ref().map(AsRef::as_ref)
+    }
+
+    /// Set server's remark
+    pub fn set_remarks(&mut self, remarks: String) {
+        self.remarks = Some(remarks);
+    }
+
+    /// Get server's ID (SIP008)
+    pub fn id(&self) -> Option<&str> {
+        self.id.as_ref().map(AsRef::as_ref)
+    }
+
+    /// Set server's ID (SIP008)
+    pub fn set_id(&mut self, id: String) {
+        self.id = Some(id)
     }
 
     /// Get URL for QRCode
@@ -1365,17 +1388,23 @@ impl Config {
 
                 let plugin = match config.plugin {
                     None => None,
-                    Some(plugin) => Some(PluginConfig {
-                        plugin,
-                        plugin_opts: config.plugin_opts,
-                        plugin_args: config.plugin_args.unwrap_or_default(),
-                    }),
+                    Some(p) => {
+                        if p.is_empty() {
+                            // SIP008 allows "plugin" to be an empty string
+                            // Empty string implies "no plugin"
+                            None
+                        } else {
+                            Some(PluginConfig {
+                                plugin: p,
+                                plugin_opts: config.plugin_opts,
+                                plugin_args: config.plugin_args.unwrap_or_default(),
+                            })
+                        }
+                    }
                 };
 
                 let timeout = config.timeout.map(Duration::from_secs);
-                let mut nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
-
-                nsvr.remarks = config.remarks;
+                let nsvr = ServerConfig::new(addr, pwd, method, timeout, plugin);
 
                 nconfig.server.push(nsvr);
             }
@@ -1418,17 +1447,26 @@ impl Config {
 
                 let plugin = match svr.plugin {
                     None => None,
-                    Some(p) => Some(PluginConfig {
-                        plugin: p,
-                        plugin_opts: svr.plugin_opts,
-                        plugin_args: svr.plugin_args.unwrap_or_default(),
-                    }),
+                    Some(p) => {
+                        if p.is_empty() {
+                            // SIP008 allows "plugin" to be an empty string
+                            // Empty string implies "no plugin"
+                            None
+                        } else {
+                            Some(PluginConfig {
+                                plugin: p,
+                                plugin_opts: svr.plugin_opts,
+                                plugin_args: svr.plugin_args.unwrap_or_default(),
+                            })
+                        }
+                    }
                 };
 
                 let timeout = svr.timeout.or(config.timeout).map(Duration::from_secs);
                 let mut nsvr = ServerConfig::new(addr, svr.password, method, timeout, plugin);
 
                 nsvr.remarks = svr.remarks;
+                nsvr.id = svr.id;
 
                 nconfig.server.push(nsvr);
             }
@@ -1655,6 +1693,16 @@ impl Config {
             }
         }
 
+        // Plugin shouldn't be an empty string
+        for server in &self.server {
+            if let Some(plugin) = server.plugin() {
+                if plugin.plugin.trim().is_empty() {
+                    let err = Error::new(ErrorKind::Malformed, "`plugin` shouldn't be an empty string", None);
+                    return Err(err);
+                }
+            }
+        }
+
         #[cfg(feature = "local-dns")]
         if self.config_type == ConfigType::DnsLocal {
             if self.dns_bind_addr.is_none() || self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
@@ -1750,7 +1798,7 @@ impl fmt::Display for Config {
         // For 1 servers, uses standard configure format
         match self.server.len() {
             0 => {}
-            1 => {
+            1 if self.server[0].id().is_none() && self.server[0].remarks.is_none() => {
                 let svr = &self.server[0];
 
                 jconf.server = Some(match *svr.addr() {
@@ -1773,7 +1821,6 @@ impl fmt::Display for Config {
                     }
                 });
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
-                jconf.remarks = svr.remarks.clone();
             }
             _ => {
                 let mut vsvr = Vec::new();
@@ -1801,6 +1848,7 @@ impl fmt::Display for Config {
                         }),
                         timeout: svr.timeout().map(|t| t.as_secs()),
                         remarks: svr.remarks.clone(),
+                        id: svr.id.clone(),
                     });
                 }
 
