@@ -604,7 +604,7 @@ checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
 [[package]]
 name = "hyper"
 version = "0.14.0-dev"
-source = "git+https://github.com/hyperium/hyper.git#121c33132c0950aaa422848cdc43f6691ddf5785"
+source = "git+https://github.com/hyperium/hyper.git#d6aadb830072959497f414c01bcdba4c8e681088"
 dependencies = [
  "bytes 0.6.0",
  "futures-channel",
@@ -1897,7 +1897,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-https"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#a931624c527b0db0f38260fddf3afe294121c7be"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
 dependencies = [
  "bytes 0.5.6",
  "cfg-if 1.0.0",
@@ -1919,7 +1919,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#a931624c527b0db0f38260fddf3afe294121c7be"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -1943,7 +1943,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#a931624c527b0db0f38260fddf3afe294121c7be"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -1968,7 +1968,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#a931624c527b0db0f38260fddf3afe294121c7be"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
 dependencies = [
  "futures-channel",
  "futures-io",
@@ -2028,9 +2028,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-segmentation"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8716a166f290ff49dabc18b44aa407cb7c6dbe1aa0971b44b8a24b0ca35aae"
+checksum = "bb0d2e7be6ae3a5fa87eed5fb451aff96f2573d2694942e40543ae0bbe19c796"
 
 [[package]]
 name = "unicode-width"
