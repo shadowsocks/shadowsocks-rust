@@ -424,7 +424,7 @@ impl ProxyAssociation {
             (send_len, send_buf.len())
         } else {
             let mut encrypt_buf = BytesMut::new();
-            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf);
 
             let send_len = socket.send(&encrypt_buf).await?;
             (send_len, encrypt_buf.len())
@@ -1076,7 +1076,7 @@ impl ServerAssociation {
             }
         } else {
             let mut encrypt_buf = BytesMut::new();
-            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf)?;
+            encrypt_payload(context, svr_cfg.method(), svr_cfg.key(), &send_buf, &mut encrypt_buf);
 
             // Send back to src_addr
             if let Err(err) = response_tx.send_packet(&encrypt_buf).await {

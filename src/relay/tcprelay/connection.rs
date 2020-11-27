@@ -110,7 +110,7 @@ fn make_timeout_error() -> io::Error {
 
 impl<S> Connection<S> {
     fn poll_timeout(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        if let None = self.timeout {
+        if self.timeout.is_none() {
             return Poll::Ready(Ok(()));
         }
 

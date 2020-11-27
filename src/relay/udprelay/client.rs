@@ -131,7 +131,7 @@ impl ServerClient {
             Ok(send_buf.freeze())
         } else {
             let mut encrypt_buf = BytesMut::with_capacity(send_buf.len());
-            encrypt_payload(context, method, key, &send_buf, &mut encrypt_buf)?;
+            encrypt_payload(context, method, key, &send_buf, &mut encrypt_buf);
             Ok(encrypt_buf.freeze())
         }
     }

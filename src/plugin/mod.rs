@@ -18,7 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::future;
+use futures::{future, FutureExt};
 use log::{debug, error, info, warn};
 use tokio::{net::TcpStream, process::Child, task};
 
@@ -275,20 +275,22 @@ impl Plugins {
 
     /// Join all plugins
     pub(crate) async fn join_all(mut self) -> io::Result<()> {
+        let mut vfut = Vec::new();
         for p in &mut self.plugins {
-            match p.wait().await {
-                Ok(exit_status) => {
-                    let msg = format!("plugin exited unexpectedly with {}", exit_status);
-                    return Err(Error::new(io::ErrorKind::Other, msg));
-                }
-                Err(err) => {
-                    error!("error while waiting for plugin subprocess: {}", err);
-                    return Err(err);
-                }
-            }
+            vfut.push(p.wait().boxed());
         }
 
-        Ok(())
+        let (o1, ..) = future::select_all(vfut).await;
+        match o1 {
+            Ok(exit_status) => {
+                let msg = format!("plugin exited unexpectedly with {}", exit_status);
+                return Err(Error::new(io::ErrorKind::Other, msg));
+            }
+            Err(err) => {
+                error!("error while waiting for plugin subprocess: {}", err);
+                return Err(err);
+            }
+        }
     }
 }
 

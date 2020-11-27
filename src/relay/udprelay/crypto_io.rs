@@ -31,31 +31,18 @@ use crate::{
 };
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
-pub fn encrypt_payload(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &[u8],
-    dst: &mut BytesMut,
-) -> io::Result<()> {
+pub fn encrypt_payload(context: &Context, method: CipherKind, key: &[u8], payload: &[u8], dst: &mut BytesMut) {
     match method.category() {
         CipherCategory::None => {
             // FIXME: Is there a better way to prevent copying?
             dst.put_slice(payload);
-            Ok(())
         }
         CipherCategory::Stream => encrypt_payload_stream(context, method, key, payload, dst),
         CipherCategory::Aead => encrypt_payload_aead(context, method, key, payload, dst),
     }
 }
 
-fn encrypt_payload_stream(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &[u8],
-    dst: &mut BytesMut,
-) -> io::Result<()> {
+fn encrypt_payload_stream(context: &Context, method: CipherKind, key: &[u8], payload: &[u8], dst: &mut BytesMut) {
     let plen = payload.len();
     let iv_len = method.iv_len();
 
@@ -83,17 +70,9 @@ fn encrypt_payload_stream(
     // Encrypted data
     let data: &mut [u8] = dst.as_mut();
     cipher.encrypt_packet(&mut data[iv_len..]);
-
-    Ok(())
 }
 
-fn encrypt_payload_aead(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &[u8],
-    dst: &mut BytesMut,
-) -> io::Result<()> {
+fn encrypt_payload_aead(context: &Context, method: CipherKind, key: &[u8], payload: &[u8], dst: &mut BytesMut) {
     let plen = payload.len();
     let salt_len = method.salt_len();
 
@@ -127,8 +106,6 @@ fn encrypt_payload_aead(
     // Encrypted data
     let data: &mut [u8] = dst.as_mut();
     cipher.encrypt_packet(&mut data[salt_len..]);
-
-    Ok(())
 }
 
 /// Decrypt payload from ShadowSocks UDP encrypted packet

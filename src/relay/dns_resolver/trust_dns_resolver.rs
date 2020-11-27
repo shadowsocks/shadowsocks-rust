@@ -45,7 +45,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
                     error!("failed to initialize DNS resolver with system-config, error: {}", err);
 
                     // From::from is required because on error type is different on Windows
-                    #[allow(clippy::identity_conversion)]
+                    #[allow(clippy::useless_conversion)]
                     return Err(From::from(err));
                 }
             };
