@@ -286,13 +286,47 @@ impl AccessControl {
     /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
     /// - `None` if `host` doesn't match any rules
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
-        // Addresses in proxy_list will be proxied
-        if self.white_list.check_host_matched(host) {
-            return Some(true);
-        }
-        // Addresses in bypass_list will be bypassed
-        if self.black_list.check_host_matched(host) {
-            return Some(false);
+        match self.mode {
+            // "[accept_all]" | "[proxy_all]"
+            Mode::BlackList => {
+                //
+                // [proxy_all]
+                // [proxy_list]
+                // (?:^|\.)cname\.example\.com$
+                // [bypass_list]
+                // (?:^|\.).example\.com$
+                //
+                // access: cname.example.com  => proxy
+                // access: (**).example.com   => direct
+                //
+                // Addresses in proxy_list will be proxied
+                if self.white_list.check_host_matched(host) {
+                    return Some(true);
+                }
+                // Addresses in bypass_list will be bypassed
+                if self.black_list.check_host_matched(host) {
+                    return Some(false);
+                }
+            },
+            // "[reject_all]" | "[bypass_all]"
+            Mode::WhiteList => {
+                //
+                // [bypass_all]
+                // [bypass_list]
+                // (?:^|\.)cname\.example\.com$
+                // [proxy_list]
+                // (?:^|\.).example\.com$
+                //
+                // access: cname.example.com  => direct
+                // access: (**).example.com   => proxy
+                //
+                if self.black_list.check_host_matched(host) {
+                    return Some(false);
+                }
+                if self.white_list.check_host_matched(host) {
+                    return Some(true);
+                }
+            },
         }
         None
     }
