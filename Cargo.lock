@@ -503,7 +503,7 @@ dependencies = [
 [[package]]
 name = "h2"
 version = "0.3.0"
-source = "git+https://github.com/hyperium/h2.git#73bf6a61ada04f332138b1eb0f79ecade219f00c"
+source = "git+https://github.com/hyperium/h2.git#dc3079ab89ca9fa7b79e014f5b2a835f30f4916b"
 dependencies = [
  "bytes 0.6.0",
  "fnv",
@@ -604,7 +604,7 @@ checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
 [[package]]
 name = "hyper"
 version = "0.14.0-dev"
-source = "git+https://github.com/hyperium/hyper.git#d6aadb830072959497f414c01bcdba4c8e681088"
+source = "git+https://github.com/hyperium/hyper.git#a470446deb2cb2c0e3700f67d9f70097d0d7d75f"
 dependencies = [
  "bytes 0.6.0",
  "futures-channel",
@@ -1284,9 +1284,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.16.17"
+version = "0.16.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5911690c9b773bab7e657471afc207f3827b249a657241327e3544d79bcabdd"
+checksum = "70017ed5c555d79ee3538fc63ca09c70ad8f317dcadc1adc2c496b60c22bb24f"
 dependencies = [
  "cc",
  "libc",
