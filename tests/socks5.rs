@@ -8,7 +8,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks::{
+use shadowsocks_core::{
     config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
     crypto::v1::CipherKind,
     relay::{socks5::Address, tcprelay::client::Socks5Client},

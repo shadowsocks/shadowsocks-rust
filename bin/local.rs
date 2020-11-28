@@ -12,8 +12,10 @@ use log::info;
 use tokio::{self, runtime::Builder};
 
 #[cfg(feature = "local-redir")]
-use shadowsocks::config::RedirType;
-use shadowsocks::{
+use shadowsocks_core::config::RedirType;
+#[cfg(any(feature = "local-dns", feature = "local-tunnel"))]
+use shadowsocks_core::relay::socks5::Address;
+use shadowsocks_core::{
     acl::AccessControl,
     crypto::v1::{available_ciphers, CipherKind},
     plugin::PluginConfig,
@@ -25,15 +27,13 @@ use shadowsocks::{
     ServerConfig,
 };
 
-#[cfg(any(feature = "local-dns", feature = "local-tunnel"))]
-use shadowsocks::relay::socks5::Address;
-
 mod allocator;
 #[cfg(unix)]
 mod daemonize;
 mod logging;
 mod monitor;
 mod validator;
+mod version;
 
 const AVAILABLE_PROTOCOLS: &[&str] = &[
     "socks5",
@@ -56,7 +56,7 @@ const AVAILABLE_PROTOCOLS: &[&str] = &[
 
 fn main() {
     let mut app = clap_app!(shadowsocks =>
-        (version: shadowsocks::VERSION)
+        (version: self::version::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
         (@arg VERBOSE: -v ... "Set the level of debug")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
@@ -265,7 +265,7 @@ fn main() {
 
     #[cfg(feature = "local-dns")]
     {
-        use shadowsocks::config::LocalDnsAddr;
+        use shadowsocks_core::config::LocalDnsAddr;
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<LocalDnsAddr>().expect("local dns address");
@@ -421,7 +421,7 @@ fn main() {
         daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
     }
 
-    info!("shadowsocks {}", shadowsocks::VERSION);
+    info!("shadowsocks {}", self::version::VERSION);
 
     let mut builder = if cfg!(feature = "single-threaded") {
         Builder::new_current_thread()

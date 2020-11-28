@@ -1,4 +1,4 @@
-# shadowsocks-rust
+# shadowsocks
 
 ![Build & Test](https://github.com/shadowsocks/shadowsocks-rust/workflows/Build%20&%20Test/badge.svg)
 ![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/workflows/Build%20Releases/badge.svg)

@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use log::debug;
 use tokio::time::{self, Duration};
 
-use shadowsocks::{
+use shadowsocks_core::{
     config::{Config, ConfigType, Mode, ServerConfig},
     crypto::v1::CipherKind,
     relay::{socks5::Address, udprelay::client::Socks5Client},

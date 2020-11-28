@@ -1,11 +1,11 @@
 [package]
-name = "shadowsocks-rust"
+name = "shadowsocks"
 version = "1.9.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
 readme = "README.md"
-documentation = "https://docs.rs/shadowsocks-rust"
+documentation = "https://docs.rs/shadowsocks"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2018"
@@ -13,24 +13,26 @@ edition = "2018"
 [badges]
 maintenance = { status = "passively-maintained" }
 
-[lib]
-name = "shadowsocks"
-
 [[bin]]
 name = "sslocal"
-path = "src/bin/local.rs"
+path = "bin/local.rs"
 
 [[bin]]
 name = "ssserver"
-path = "src/bin/server.rs"
+path = "bin/server.rs"
 
 [[bin]]
 name = "ssurl"
-path = "src/bin/ssurl.rs"
+path = "bin/ssurl.rs"
 
 [[bin]]
 name = "ssmanager"
-path = "src/bin/manager.rs"
+path = "bin/manager.rs"
+
+[workspace]
+members = [
+    "shadowsocks-core"
+]
 
 [profile.release]
 lto = "fat"
@@ -49,110 +51,56 @@ default = [
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
 # Enables trust-dns for replacing tokio's builtin DNS resolver
-trust-dns = ["trust-dns-resolver"]
-dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-rustls"]
-dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https-rustls"]
+trust-dns = ["shadowsocks-core/trust-dns"]
+dns-over-tls = ["shadowsocks-core/dns-over-tls"]
+dns-over-https = ["shadowsocks-core/dns-over-https"]
 # Enable DNS-relay
-local-dns = ["trust-dns-proto"]
+local-dns = ["shadowsocks-core/local-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = []
+local-flow-stat = ["shadowsocks-core/local-flow-stat"]
 # Enable HTTP protocol for sslocal
-local-http = ["hyper", "http", "tower"]
-local-http-native-tls = ["tokio-native-tls", "native-tls"]
-local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
+local-http = ["shadowsocks-core/local-http"]
+local-http-native-tls = ["shadowsocks-core/local-http-native-tls"]
+local-http-rustls = ["shadowsocks-core/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = []
+local-redir = ["shadowsocks-core/local-redir"]
 # Enable tunnel protocol for sslocal
-local-tunnel = []
+local-tunnel = ["shadowsocks-core/local-tunnel"]
 # Enable SOCKS4/4a protocol for sslocal
-local-socks4 = []
+local-socks4 = ["shadowsocks-core/local-socks4"]
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
 tcmalloc-vendored = ["tcmalloc/bundled"]
 
-
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = ["ring"] }
-
-[target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = ["ring"] }
-
-[target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.1", features = [] }
-
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
-
-# Just for the ioctl call macro
-[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
-nix = "0.19"
-
-[target.'cfg(unix)'.dependencies]
-daemonize = "0.4"
-
 [dependencies]
 log = "0.4"
 log4rs = "0.13"
 
-rand = "0.7"
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
-libc = "0.2"
-bytes = "0.6"
-url = "2.2"
-regex = "1.4"
 cfg-if = "1"
-byteorder = "1.3"
-byte_string = "1.0"
-lazy_static = "1.4"
-spin = "0.7"
-pin-project = "1.0"
-bloomfilter = "1.0.2"
-lru_time_cache = "0.11"
+qrcode = { version = "0.12", default-features = false }
 
 futures = "0.3"
-async-trait = "0.1"
-
-mio = "0.7"
-socket2 = "0.3"
 tokio = { version = "0.3.1", features = [ "full" ] }
-tokio-native-tls = { version = "0.2", optional = true }
-native-tls = { version = "0.2", optional = true }
-tokio-rustls = { version = "0.21", optional = true }
-webpki-roots = { version = "0.21", optional = true }
-rustls-native-certs = { version = "0.5", optional = true }
-
-json5 = "0.3"
-base64 = "0.13"
-qrcode = { version = "0.12", default-features = false }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_urlencoded = "0.7"
-strum = "0.19"
-strum_macros = "0.19"
-
-http = { version = "0.2", optional = true }
-# trust-dns-resolver = { version = "0.19", optional = true }
-# trust-dns-proto = "0.19"
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
-trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
-hyper = { git = "https://github.com/hyperium/hyper.git", optional = true, features = ["full"] }
-tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
-
-ipnet = "2.3"
-iprange = "0.6"
 
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
 
+shadowsocks-core = { path = "shadowsocks-core" }
+
+[target.'cfg(unix)'.dependencies]
+daemonize = "0.4"
+
 [dev-dependencies]
+byteorder = "1.3"
 env_logger = "0.8"
+byte_string = "1.0"
 
 [patch.crates-io]
 h2 = { git = "https://github.com/hyperium/h2.git" }

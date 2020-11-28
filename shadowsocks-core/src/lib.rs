@@ -73,13 +73,8 @@
 //! ```
 
 #![crate_type = "lib"]
-#![crate_name = "shadowsocks"]
-#![recursion_limit = "128"]
 
 use std::io;
-
-/// ShadowSocks version
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use self::{
     config::{ClientConfig, Config, ConfigType, ManagerAddr, ManagerConfig, Mode, ServerAddr, ServerConfig},

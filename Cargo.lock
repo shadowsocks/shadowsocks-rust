@@ -60,12 +60,6 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "base64"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
-
-[[package]]
-name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
@@ -588,7 +582,7 @@ checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
 [[package]]
 name = "hyper"
 version = "0.14.0-dev"
-source = "git+https://github.com/hyperium/hyper.git#a470446deb2cb2c0e3700f67d9f70097d0d7d75f"
+source = "git+https://github.com/hyperium/hyper.git#1ba2a141a6f8736446ff4a0111df347c0dc66f6c"
 dependencies = [
  "bytes 0.6.0",
  "futures-channel",
@@ -1283,24 +1277,11 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d1126dcf58e93cee7d098dbda643b5f92ed724f1f6a63007c1116eed6700c81"
-dependencies = [
- "base64 0.12.3",
- "log",
- "ring",
- "sct",
- "webpki",
-]
-
-[[package]]
-name = "rustls"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "064fd21ff87c6e87ed4506e68beb42459caa4a0e2eb144932e6776768556980b"
 dependencies = [
- "base64 0.13.0",
+ "base64",
  "log",
  "ring",
  "sct",
@@ -1314,7 +1295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a07b7c1885bd8ed3831c289b7870b13ef46fe0e856d288c30d9cc17d75a2092"
 dependencies = [
  "openssl-probe",
- "rustls 0.19.0",
+ "rustls",
  "schannel",
  "security-framework",
 ]
@@ -1452,48 +1433,51 @@ dependencies = [
 ]
 
 [[package]]
-name = "shadowsocks-crypto"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84db25042349bccfed0c40513ba3ee3522aeebef4f6c398fcc56e123e6e5c665"
-dependencies = [
- "crypto2",
- "rand",
- "ring",
-]
-
-[[package]]
-name = "shadowsocks-rust"
+name = "shadowsocks"
 version = "1.9.0"
 dependencies = [
- "async-trait",
- "base64 0.13.0",
- "bloomfilter",
  "byte_string",
  "byteorder",
- "bytes 0.6.0",
  "cfg-if 1.0.0",
  "clap",
  "daemonize",
  "env_logger",
  "futures",
+ "jemallocator",
+ "log",
+ "log4rs",
+ "mimalloc",
+ "qrcode",
+ "shadowsocks-core",
+ "tcmalloc",
+ "tokio",
+]
+
+[[package]]
+name = "shadowsocks-core"
+version = "1.9.0"
+dependencies = [
+ "async-trait",
+ "base64",
+ "bloomfilter",
+ "byte_string",
+ "byteorder",
+ "bytes 0.6.0",
+ "cfg-if 1.0.0",
+ "futures",
  "http",
  "hyper",
  "ipnet",
  "iprange",
- "jemallocator",
  "json5",
  "lazy_static",
  "libc",
  "log",
- "log4rs",
  "lru_time_cache",
- "mimalloc",
  "mio",
  "native-tls",
  "nix",
  "pin-project 1.0.2",
- "qrcode",
  "rand",
  "regex",
  "rustls-native-certs",
@@ -1505,16 +1489,26 @@ dependencies = [
  "spin 0.7.0",
  "strum",
  "strum_macros",
- "tcmalloc",
  "tokio",
  "tokio-native-tls",
- "tokio-rustls 0.21.0",
+ "tokio-rustls",
  "tower",
  "trust-dns-proto",
  "trust-dns-resolver",
  "url",
- "webpki-roots 0.21.0",
+ "webpki-roots",
  "winapi",
+]
+
+[[package]]
+name = "shadowsocks-crypto"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84db25042349bccfed0c40513ba3ee3522aeebef4f6c398fcc56e123e6e5c665"
+dependencies = [
+ "crypto2",
+ "rand",
+ "ring",
 ]
 
 [[package]]
@@ -1594,9 +1588,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b4f34193997d92804d359ed09953e25d5138df6bcc055a71bf68ee89fdf9223"
+checksum = "6c1e438504729046a5cfae47f97c30d6d083c7d91d94603efdae3477fc070d4c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1772,22 +1766,11 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ba3f045b4a15afc543ffe6e02bae7ecf372e89a0f9f8c4b15b13f0ceed4f105"
-dependencies = [
- "rustls 0.18.1",
- "tokio",
- "webpki",
-]
-
-[[package]]
-name = "tokio-rustls"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28c0f299ee89149992d30f2783e966bc6fc497f5a02fc470f8b0182851c04632"
 dependencies = [
- "rustls 0.19.0",
+ "rustls",
  "tokio",
  "webpki",
 ]
@@ -1809,7 +1792,7 @@ dependencies = [
 [[package]]
 name = "tower"
 version = "0.4.0"
-source = "git+https://github.com/tower-rs/tower.git#d4d1c67c6a0e4213a52abcc2b9df6cc58276ee39"
+source = "git+https://github.com/tower-rs/tower.git#3a8d31c60f927a7c7073851062ef0ec11f76c677"
 dependencies = [
  "futures-core",
  "pin-project 1.0.2",
@@ -1821,7 +1804,7 @@ dependencies = [
 [[package]]
 name = "tower-layer"
 version = "0.3.0"
-source = "git+https://github.com/tower-rs/tower.git#d4d1c67c6a0e4213a52abcc2b9df6cc58276ee39"
+source = "git+https://github.com/tower-rs/tower.git#3a8d31c60f927a7c7073851062ef0ec11f76c677"
 
 [[package]]
 name = "tower-service"
@@ -1881,29 +1864,29 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-https"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
 dependencies = [
- "bytes 0.5.6",
+ "bytes 0.6.0",
  "cfg-if 1.0.0",
  "data-encoding",
  "futures-util",
  "h2",
  "http",
  "log",
- "rustls 0.18.1",
+ "rustls",
  "thiserror",
  "tokio",
- "tokio-rustls 0.20.0",
+ "tokio-rustls",
  "trust-dns-proto",
  "trust-dns-rustls",
  "webpki",
- "webpki-roots 0.20.0",
+ "webpki-roots",
 ]
 
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -1927,7 +1910,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -1937,30 +1920,30 @@ dependencies = [
  "lru-cache",
  "parking_lot",
  "resolv-conf",
- "rustls 0.18.1",
+ "rustls",
  "serde",
  "smallvec",
  "thiserror",
  "tokio",
- "tokio-rustls 0.20.0",
+ "tokio-rustls",
  "trust-dns-https",
  "trust-dns-proto",
  "trust-dns-rustls",
- "webpki-roots 0.20.0",
+ "webpki-roots",
 ]
 
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#398ba5e71d078c8fe407b16cafa2b946302f8957"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
 dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
  "log",
- "rustls 0.18.1",
+ "rustls",
  "tokio",
- "tokio-rustls 0.20.0",
+ "tokio-rustls",
  "trust-dns-proto",
  "webpki",
 ]
@@ -2161,15 +2144,6 @@ checksum = "ab146130f5f790d45f82aeeb09e55a256573373ec64409fc19a6fb82fb1032ae"
 dependencies = [
  "ring",
  "untrusted",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f20dea7535251981a9670857150d571846545088359b28e4951d350bdaf179f"
-dependencies = [
- "webpki",
 ]
 
 [[package]]

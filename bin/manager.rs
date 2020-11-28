@@ -17,7 +17,7 @@ use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
 
-use shadowsocks::{
+use shadowsocks_core::{
     acl::AccessControl,
     config::ManagerServerHost,
     crypto::v1::{available_ciphers, CipherKind},
@@ -36,11 +36,12 @@ mod daemonize;
 mod logging;
 mod monitor;
 mod validator;
+mod version;
 
 fn main() {
     #[allow(unused_mut)]
     let mut app = clap_app!(shadowsocks =>
-        (version: shadowsocks::VERSION)
+        (version: self::version::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
         (@arg VERBOSE: -v ... "Set the level of debug")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
@@ -203,7 +204,7 @@ fn main() {
         daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
     }
 
-    info!("shadowsocks {}", shadowsocks::VERSION);
+    info!("shadowsocks {}", self::version::VERSION);
 
     let mut builder = if cfg!(feature = "single-threaded") {
         Builder::new_current_thread()
