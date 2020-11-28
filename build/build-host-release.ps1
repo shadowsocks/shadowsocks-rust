@@ -10,7 +10,7 @@ $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | ForEach-Objec
 
 Write-Host "Started building release for ${TargetTriple} ..."
 
-cargo +nightly build --release
+cargo build --release
 if (!$?) {
     exit $LASTEXITCODE
 }

@@ -25,13 +25,16 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install Rust nightly
-        run: rustup toolchain install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
       - name: Build & Test (Default)
-        run: cargo +nightly test --verbose --no-fail-fast
+        run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
-        run: cargo +nightly test --verbose --no-default-features --no-fail-fast
+        run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-redir local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-redir local-dns dns-over-tls"
 
   build-windows:
     runs-on: windows-latest
@@ -46,13 +49,16 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install Rust nightly
-        run: rustup toolchain install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
       - name: Build & Test (Default)
-        run: cargo +nightly test --verbose --no-fail-fast
+        run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
-        run: cargo +nightly test --verbose --no-default-features --no-fail-fast
+        run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-dns dns-over-tls"
 
   build-macos:
     runs-on: macos-latest
@@ -72,10 +78,13 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install Rust nightly
-        run: rustup toolchain install nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
       - name: Build & Test (Default)
-        run: cargo +nightly test --verbose --no-fail-fast
+        run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
-        run: cargo +nightly test --verbose --no-default-features --no-fail-fast
+        run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo +nightly build --verbose --features "local-redir local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-redir local-dns dns-over-tls"

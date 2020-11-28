@@ -19,9 +19,9 @@ HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
 echo "Started build release for ${HOST_TRIPLE} ..."
 
 if [[ "${BUILD_TARGET}" != "" ]]; then
-    cargo +nightly build --release --features "${BUILD_EXTRA_FEATURES}" --target "${BUILD_TARGET}"
+    cargo build --release --features "${BUILD_EXTRA_FEATURES}" --target "${BUILD_TARGET}"
 else
-    cargo +nightly build --release --features "${BUILD_EXTRA_FEATURES}"
+    cargo build --release --features "${BUILD_EXTRA_FEATURES}"
 fi
 
 if [[ "$?" != "0" ]]; then
