@@ -79,8 +79,8 @@ strum_macros = "0.19"
 http = { version = "0.2", optional = true }
 # trust-dns-resolver = { version = "0.19", optional = true }
 # trust-dns-proto = "0.19"
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3", features = ["serde-config"] }
-trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "upgrade-to-tokio-0.3" }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "main", features = ["serde-config"] }
+trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, branch = "main" }
 hyper = { git = "https://github.com/hyperium/hyper.git", optional = true, features = ["full"] }
 tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
 

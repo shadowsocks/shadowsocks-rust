@@ -884,13 +884,13 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.19.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85db2feff6bf70ebc3a4793191517d5f0331100a2f10f9bf93b5e5214f32b7b7"
+checksum = "b2ccba0cfe4fdf15982d1674c69b1fd80bad427d293849982668dfe454bd61f2"
 dependencies = [
  "bitflags",
  "cc",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "libc",
 ]
 
@@ -1864,7 +1864,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-https"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#a44e3f3e60f25ae091a9b598ee49d86dd147e152"
 dependencies = [
  "bytes 0.6.0",
  "cfg-if 1.0.0",
@@ -1886,7 +1886,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#a44e3f3e60f25ae091a9b598ee49d86dd147e152"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -1910,7 +1910,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#a44e3f3e60f25ae091a9b598ee49d86dd147e152"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -1935,7 +1935,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=upgrade-to-tokio-0.3#5a40cc2de152b1e490c39778da2d176772b1423f"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#a44e3f3e60f25ae091a9b598ee49d86dd147e152"
 dependencies = [
  "futures-channel",
  "futures-io",

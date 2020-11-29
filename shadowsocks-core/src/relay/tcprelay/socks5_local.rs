@@ -2,7 +2,7 @@
 
 use std::{
     io::{self, ErrorKind},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr},
     time::Duration,
 };
 
@@ -64,7 +64,7 @@ async fn handle_socks5_connect(
                 _ => Reply::NetworkUnreachable,
             };
 
-            let dummy_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+            let dummy_address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
             let header = TcpResponseHeader::new(reply, Address::SocketAddress(dummy_address));
             header.write_to(stream).await?;
 

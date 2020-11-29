@@ -6,7 +6,7 @@ use std::{
     collections::HashMap,
     fmt,
     io::{self, Error, ErrorKind},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, SocketAddr},
     str,
 };
 
@@ -158,7 +158,7 @@ impl ManagerDatagram {
         match *bind_addr {
             ManagerAddr::SocketAddr(..) | ManagerAddr::DomainName(..) => {
                 // Bind to 0.0.0.0 and let system allocate a port
-                let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+                let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
                 Ok(ManagerDatagram::UdpDatagram(create_udp_socket(&local_addr).await?))
             }
             #[cfg(unix)]

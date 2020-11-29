@@ -180,8 +180,8 @@ impl Upstream for UdpUpstream {
 
         let local_addr = SocketAddr::new(
             match self.server {
-                SocketAddr::V4(..) => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                SocketAddr::V6(..) => IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0)),
+                SocketAddr::V4(..) => Ipv4Addr::UNSPECIFIED.into(),
+                SocketAddr::V6(..) => Ipv6Addr::UNSPECIFIED.into(),
             },
             0,
         );

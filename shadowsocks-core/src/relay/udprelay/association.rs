@@ -7,7 +7,7 @@
 use std::{
     future::Future,
     io::{self, Cursor, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -131,7 +131,7 @@ impl ProxyAssociation {
         H: ProxySend + Send + 'static,
     {
         // Create a socket for receiving packets
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
 
         let remote_udp = create_outbound_udp_socket(&local_addr, server.context().config()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
@@ -193,7 +193,7 @@ impl ProxyAssociation {
         H: ProxySend + Send + 'static,
     {
         // Create a socket for receiving packets
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
 
         let remote_udp = create_outbound_udp_socket(&local_addr, server.context().config()).await?;
         let remote_bind_addr = remote_udp.local_addr().expect("determine port bound to");
@@ -854,7 +854,11 @@ impl ServerAssociation {
     ) -> io::Result<ServerAssociation> {
         // Create a socket for receiving packets
         // Let system allocate an address for us (INADDR_ANY)
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let bind_addr = match src_addr.ip() {
+            IpAddr::V4(..) => Ipv4Addr::UNSPECIFIED.into(),
+            IpAddr::V6(..) => Ipv6Addr::UNSPECIFIED.into(),
+        };
+        let local_addr = SocketAddr::new(bind_addr, 0);
         let remote_udp = create_outbound_udp_socket(&local_addr, context.config()).await?;
 
         let local_addr = remote_udp.local_addr().expect("could not determine port bound to");

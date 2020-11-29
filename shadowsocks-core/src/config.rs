@@ -202,10 +202,15 @@ impl FromStr for ServerAddr {
             Err(..) => {
                 let mut sp = s.split(':');
                 match (sp.next(), sp.next()) {
-                    (Some(dn), Some(port)) => match port.parse::<u16>() {
-                        Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
-                        Err(..) => Err(ServerAddrError),
-                    },
+                    (Some(dn), Some(port)) => {
+                        if dn.is_empty() {
+                            return Err(ServerAddrError);
+                        }
+                        match port.parse::<u16>() {
+                            Ok(port) => Ok(ServerAddr::DomainName(dn.to_owned(), port)),
+                            Err(..) => Err(ServerAddrError),
+                        }
+                    }
                     _ => Err(ServerAddrError),
                 }
             }
@@ -1076,7 +1081,7 @@ pub enum ManagerServerHost {
 
 impl Default for ManagerServerHost {
     fn default() -> ManagerServerHost {
-        ManagerServerHost::Ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)))
+        ManagerServerHost::Ip(Ipv4Addr::UNSPECIFIED.into())
     }
 }
 
@@ -1334,33 +1339,56 @@ impl Config {
 
         // Standard config
         // Client
-        if let Some(la) = config.local_address {
-            let port = match config.local_port {
-                // Let system allocate port by default
-                None => {
-                    let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
-                    return Err(err);
-                }
-                Some(p) => {
-                    if config_type.is_server() {
-                        // Server can only bind to address, port should always be 0
-                        0
-                    } else {
-                        p
+        //
+        // local_address is allowed to be NULL, which means to bind to ::1 or 127.0.0.1
+        //
+        // https://shadowsocks.org/en/config/quick-guide.html
+        match config.local_address {
+            Some(la) => {
+                let local_port = if config_type.is_local() {
+                    let local_port = config.local_port.unwrap_or(0);
+                    if local_port == 0 {
+                        let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
+                        return Err(err);
                     }
-                }
-            };
+                    local_port
+                } else if config_type.is_server() || config_type.is_manager() {
+                    // server's local_port is ignored
+                    0
+                } else {
+                    config.local_port.unwrap_or(0)
+                };
 
-            let local = match la.parse::<IpAddr>() {
-                Ok(ip) => ServerAddr::from(SocketAddr::new(ip, port)),
-                Err(..) => {
-                    // treated as domain
-                    ServerAddr::from((la, port))
-                }
-            };
+                let local_addr = match la.parse::<IpAddr>() {
+                    Ok(ip) => ServerAddr::from(SocketAddr::new(ip, local_port)),
+                    Err(..) => {
+                        // treated as domain
+                        ServerAddr::from((la, local_port))
+                    }
+                };
+                nconfig.local_addr = Some(local_addr);
+            }
+            None => {
+                if config_type.is_local() && config.local_port.is_some() {
+                    // Implementation note: This is not implemented like libev which will choose IPv6 or IPv6 LoopBack address
+                    // by checking all its remote servers if all of them supports IPv6.
+                    let ip = if config.ipv6_first.unwrap_or(false) {
+                        Ipv6Addr::LOCALHOST.into()
+                    } else {
+                        Ipv4Addr::LOCALHOST.into()
+                    };
 
-            nconfig.local_addr = Some(local);
-        }
+                    let local_port = config.local_port.unwrap_or(0);
+                    if local_port == 0 {
+                        let err = Error::new(ErrorKind::MissingField, "`local_port` shouldn't be 0", None);
+                        return Err(err);
+                    }
+
+                    let local_addr = ServerAddr::from(SocketAddr::new(ip, local_port));
+                    nconfig.local_addr = Some(local_addr);
+                }
+            }
+        };
 
         // Standard config
         // Server
@@ -1652,13 +1680,25 @@ impl Config {
     /// Check if all required fields are already set
     pub fn check_integrity(&self) -> Result<(), Error> {
         if self.config_type.is_local() {
-            if self.local_addr.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `local_address` and `local_port` for client configuration",
-                    None,
-                );
-                return Err(err);
+            match self.local_addr {
+                None => {
+                    let err = Error::new(
+                        ErrorKind::MissingField,
+                        "missing `local_address` and `local_port` for client configuration",
+                        None,
+                    );
+                    return Err(err);
+                }
+                Some(ref addr) => {
+                    if addr.port() == 0 {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "`local_port` couldn't be 0 for client configuration",
+                            None,
+                        );
+                        return Err(err);
+                    }
+                }
             }
 
             if self.server.is_empty() {
@@ -1680,6 +1720,17 @@ impl Config {
                 );
                 return Err(err);
             }
+
+            if let Some(ref addr) = self.local_addr {
+                if addr.port() != 0 {
+                    let err = Error::new(
+                        ErrorKind::Malformed,
+                        "`local_port` must be 0 for server configuration",
+                        None,
+                    );
+                    return Err(err);
+                }
+            }
         }
 
         if self.config_type.is_manager() {
@@ -1691,14 +1742,58 @@ impl Config {
                 );
                 return Err(err);
             }
+
+            if let Some(ref addr) = self.local_addr {
+                if addr.port() != 0 {
+                    let err = Error::new(
+                        ErrorKind::Malformed,
+                        "`local_port` must be 0 for server configuration",
+                        None,
+                    );
+                    return Err(err);
+                }
+            }
         }
 
-        // Plugin shouldn't be an empty string
         for server in &self.server {
+            // Plugin shouldn't be an empty string
             if let Some(plugin) = server.plugin() {
                 if plugin.plugin.trim().is_empty() {
                     let err = Error::new(ErrorKind::Malformed, "`plugin` shouldn't be an empty string", None);
                     return Err(err);
+                }
+            }
+
+            // Server's domain name shouldn't be an empty string
+            match server.addr() {
+                ServerAddr::SocketAddr(sa) => {
+                    if sa.port() == 0 {
+                        let err = Error::new(ErrorKind::Malformed, "`server_port` shouldn't be 0", None);
+                        return Err(err);
+                    }
+
+                    if self.config_type.is_local() {
+                        // Only server could bind to INADDR_ANY
+                        let ip = sa.ip();
+                        if ip.is_unspecified() {
+                            let err = Error::new(
+                                ErrorKind::Malformed,
+                                "`server` shouldn't be an unspecified address (INADDR_ANY)",
+                                None,
+                            );
+                            return Err(err);
+                        }
+                    }
+                }
+                ServerAddr::DomainName(dn, port) => {
+                    if dn.is_empty() || *port == 0 {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "`server` shouldn't be an empty string, `server_port` shouldn't be 0",
+                            None,
+                        );
+                        return Err(err);
+                    }
                 }
             }
         }

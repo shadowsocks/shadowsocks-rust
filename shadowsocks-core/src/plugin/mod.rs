@@ -14,7 +14,7 @@
 
 use std::{
     io::{self, Error},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     time::{Duration, Instant},
 };
 
@@ -144,8 +144,22 @@ impl Plugins {
             let mut svr_addr_opt = None;
 
             if let Some(c) = svr.plugin() {
-                let loop_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-                let local_addr = SocketAddr::new(loop_ip, get_local_port()?);
+                let loop_ip = match svr.addr() {
+                    ServerAddr::SocketAddr(sa) => match sa.ip() {
+                        IpAddr::V4(..) => Ipv4Addr::LOCALHOST.into(),
+                        IpAddr::V6(..) => Ipv6Addr::LOCALHOST.into(),
+                    },
+                    ServerAddr::DomainName(..) => {
+                        // FIXME: We should try to resolve domain name
+                        if config.ipv6_first {
+                            Ipv6Addr::LOCALHOST.into()
+                        } else {
+                            Ipv4Addr::LOCALHOST.into()
+                        }
+                    }
+                };
+
+                let local_addr = get_local_port(loop_ip)?;
 
                 match start_plugin(c, svr.addr(), &local_addr, mode) {
                     Err(err) => {
@@ -303,10 +317,9 @@ fn start_plugin(plugin: &PluginConfig, remote: &ServerAddr, local: &SocketAddr, 
     cmd.spawn()
 }
 
-fn get_local_port() -> io::Result<u16> {
-    let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0))?;
-    let addr = listener.local_addr()?;
-    Ok(addr.port())
+fn get_local_port(loop_ip: IpAddr) -> io::Result<SocketAddr> {
+    let listener = TcpListener::bind(SocketAddr::new(loop_ip, 0))?;
+    listener.local_addr()
 }
 
 #[cfg(test)]
@@ -315,7 +328,8 @@ mod test {
 
     #[test]
     fn generate_random_port() {
-        let port = get_local_port().unwrap();
-        println!("{:?}", port);
+        let loop_ip = Ipv4Addr::LOCALHOST.into();
+        let addr = get_local_port(loop_ip).unwrap();
+        println!("{:?}", addr);
     }
 }

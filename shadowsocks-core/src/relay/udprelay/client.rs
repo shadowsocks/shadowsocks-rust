@@ -3,7 +3,7 @@
 use std::{
     io,
     io::{Cursor, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -40,7 +40,7 @@ pub struct Socks5Client {
 impl Socks5Client {
     /// Create a new UDP associate to `proxy`
     pub async fn associate(proxy: &SocketAddr) -> io::Result<Socks5Client> {
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
+        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
         let socket = create_udp_socket(&local_addr).await?;
 
         // The actual bind address, tell the proxy that I am going to send packets from this address
@@ -101,12 +101,42 @@ pub struct ServerClient {
 impl ServerClient {
     /// Create a client to communicate with Shadowsocks' UDP server
     pub async fn new(context: &Context, svr_cfg: &ServerConfig) -> io::Result<ServerClient> {
-        let local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
-        let socket = create_outbound_udp_socket(&local_addr, context.config()).await?;
-        match svr_cfg.addr() {
-            ServerAddr::SocketAddr(ref remote_addr) => socket.connect(remote_addr).await?,
+        let socket = match svr_cfg.addr() {
+            ServerAddr::SocketAddr(ref remote_addr) => {
+                let socket = match remote_addr.ip() {
+                    IpAddr::V4(..) => {
+                        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
+                        create_outbound_udp_socket(&local_addr, context.config()).await?
+                    }
+                    IpAddr::V6(..) => {
+                        let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
+                        create_outbound_udp_socket(&local_addr, context.config()).await?
+                    }
+                };
+
+                socket.connect(remote_addr).await?;
+
+                socket
+            }
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context, dname, *port, |addr| { socket.connect(&addr).await })?;
+                let (_, socket) = lookup_then!(context, dname, *port, |addr| {
+                    let socket = match addr.ip() {
+                        IpAddr::V4(..) => {
+                            let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
+                            create_outbound_udp_socket(&local_addr, context.config()).await?
+                        }
+                        IpAddr::V6(..) => {
+                            let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
+                            create_outbound_udp_socket(&local_addr, context.config()).await?
+                        }
+                    };
+
+                    socket.connect(&addr).await?;
+
+                    Ok::<_, io::Error>(socket)
+                })?;
+
+                socket
             }
         };
 
