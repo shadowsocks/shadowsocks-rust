@@ -9,7 +9,7 @@ use tokio::{
     time,
 };
 
-use shadowsocks_core::{
+use shadowsocks::{
     config::{Config, ConfigType},
     run_local,
     run_server,

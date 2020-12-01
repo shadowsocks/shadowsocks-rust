@@ -10,7 +10,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks_core::{
+use shadowsocks::{
     config::{Config, ConfigType},
     relay::socks5::Address,
     run_local,

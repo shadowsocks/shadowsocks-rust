@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use tokio::{net::TcpStream, prelude::*, time};
 
-use shadowsocks_core::{
+use shadowsocks::{
     config::{Config, ConfigType},
     run_local,
     run_server,

@@ -1,5 +1,5 @@
 [package]
-name = "shadowsocks"
+name = "shadowsocks-rust"
 version = "1.9.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
@@ -31,7 +31,7 @@ path = "bin/manager.rs"
 
 [workspace]
 members = [
-    "shadowsocks-core"
+    "shadowsocks"
 ]
 
 [profile.release]
@@ -51,27 +51,27 @@ default = [
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
 # Enables trust-dns for replacing tokio's builtin DNS resolver
-trust-dns = ["shadowsocks-core/trust-dns"]
-dns-over-tls = ["shadowsocks-core/dns-over-tls"]
-dns-over-https = ["shadowsocks-core/dns-over-https"]
+trust-dns = ["shadowsocks/trust-dns"]
+dns-over-tls = ["shadowsocks/dns-over-tls"]
+dns-over-https = ["shadowsocks/dns-over-https"]
 # Enable DNS-relay
-local-dns = ["shadowsocks-core/local-dns"]
+local-dns = ["shadowsocks/local-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = ["shadowsocks-core/local-flow-stat"]
+local-flow-stat = ["shadowsocks/local-flow-stat"]
 # Enable HTTP protocol for sslocal
-local-http = ["shadowsocks-core/local-http"]
-local-http-native-tls = ["shadowsocks-core/local-http-native-tls"]
-local-http-rustls = ["shadowsocks-core/local-http-rustls"]
+local-http = ["shadowsocks/local-http"]
+local-http-native-tls = ["shadowsocks/local-http-native-tls"]
+local-http-rustls = ["shadowsocks/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["shadowsocks-core/local-redir"]
+local-redir = ["shadowsocks/local-redir"]
 # Enable tunnel protocol for sslocal
-local-tunnel = ["shadowsocks-core/local-tunnel"]
+local-tunnel = ["shadowsocks/local-tunnel"]
 # Enable SOCKS4/4a protocol for sslocal
-local-socks4 = ["shadowsocks-core/local-socks4"]
+local-socks4 = ["shadowsocks/local-socks4"]
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
@@ -92,7 +92,7 @@ mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
 
-shadowsocks-core = { path = "shadowsocks-core" }
+shadowsocks = { path = "shadowsocks" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.4"

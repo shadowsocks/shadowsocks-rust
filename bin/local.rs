@@ -12,10 +12,10 @@ use log::info;
 use tokio::{self, runtime::Builder};
 
 #[cfg(feature = "local-redir")]
-use shadowsocks_core::config::RedirType;
+use shadowsocks::config::RedirType;
 #[cfg(any(feature = "local-dns", feature = "local-tunnel"))]
-use shadowsocks_core::relay::socks5::Address;
-use shadowsocks_core::{
+use shadowsocks::relay::socks5::Address;
+use shadowsocks::{
     acl::AccessControl,
     crypto::v1::{available_ciphers, CipherKind},
     plugin::PluginConfig,
@@ -265,7 +265,7 @@ fn main() {
 
     #[cfg(feature = "local-dns")]
     {
-        use shadowsocks_core::config::LocalDnsAddr;
+        use shadowsocks::config::LocalDnsAddr;
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
             let addr = local_dns_addr.parse::<LocalDnsAddr>().expect("local dns address");

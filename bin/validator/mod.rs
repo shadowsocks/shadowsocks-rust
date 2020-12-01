@@ -5,8 +5,8 @@
 use std::net::SocketAddr;
 
 #[cfg(feature = "local-dns")]
-use shadowsocks_core::config::LocalDnsAddr;
-use shadowsocks_core::{relay::socks5::Address, ManagerAddr, ServerAddr, ServerConfig};
+use shadowsocks::config::LocalDnsAddr;
+use shadowsocks::{relay::socks5::Address, ManagerAddr, ServerAddr, ServerConfig};
 
 macro_rules! validate_type {
     ($name:ident, $ty:ty, $help:expr) => {

@@ -11,7 +11,7 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks_core::{
+use shadowsocks::{
     config::{Config, ConfigType, ServerAddr, ServerConfig},
     crypto::v1::CipherKind,
     relay::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},

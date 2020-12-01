@@ -17,7 +17,7 @@ use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
 
-use shadowsocks_core::{
+use shadowsocks::{
     acl::AccessControl,
     crypto::v1::{available_ciphers, CipherKind},
     plugin::PluginConfig,

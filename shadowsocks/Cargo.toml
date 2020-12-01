@@ -1,5 +1,5 @@
 [package]
-name = "shadowsocks-core"
+name = "shadowsocks"
 version = "1.9.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."

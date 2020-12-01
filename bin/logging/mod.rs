@@ -45,22 +45,22 @@ pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
         0 => logging_builder
             .logger(Logger::builder().build(bin_name, LevelFilter::Info))
             .logger(Logger::builder().build("shadowsocks", LevelFilter::Info))
-            .logger(Logger::builder().build("shadowsocks_core", LevelFilter::Info))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Info))
             .build(Root::builder().appender("console").build(LevelFilter::Off)),
         1 => logging_builder
             .logger(Logger::builder().build(bin_name, LevelFilter::Debug))
             .logger(Logger::builder().build("shadowsocks", LevelFilter::Debug))
-            .logger(Logger::builder().build("shadowsocks_core", LevelFilter::Debug))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Debug))
             .build(Root::builder().appender("console").build(LevelFilter::Off)),
         2 => logging_builder
             .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
             .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_core", LevelFilter::Trace))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
             .build(Root::builder().appender("console").build(LevelFilter::Off)),
         3 => logging_builder
             .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
             .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_core", LevelFilter::Trace))
+            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
             .build(Root::builder().appender("console").build(LevelFilter::Debug)),
         _ => logging_builder.build(Root::builder().appender("console").build(LevelFilter::Trace)),
     }

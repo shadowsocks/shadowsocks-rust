@@ -6,7 +6,7 @@
 use clap::clap_app;
 use qrcode::{types::Color, QrCode};
 
-use shadowsocks_core::config::{Config, ConfigType, ServerConfig};
+use shadowsocks::config::{Config, ConfigType, ServerConfig};
 
 mod allocator;
 mod version;
