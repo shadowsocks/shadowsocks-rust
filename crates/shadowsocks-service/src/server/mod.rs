@@ -30,10 +30,10 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let connect_opts = Arc::new(ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        outbound_fwmark: config.outbound_fwmark,
+        fwmark: config.outbound_fwmark,
 
         #[cfg(target_os = "android")]
-        outbound_vpn_protect_path: config.outbound_vpn_protect_path,
+        vpn_protect_path: config.outbound_vpn_protect_path,
 
         ..Default::default()
     });
