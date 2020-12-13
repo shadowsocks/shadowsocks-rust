@@ -14,7 +14,7 @@ use std::{
 
 use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
-use log::{debug, trace};
+use log::{debug, info, trace};
 use shadowsocks::{
     context::SharedContext,
     net::ConnectOpts,
@@ -143,6 +143,27 @@ impl<E> PingBalancerInner<E> {
 
             future::join_all(vfut).await;
 
+            let old_best_idx = self.best_idx.load(Ordering::Acquire);
+
+            let mut best_idx = 0;
+            let mut best_score = u64::MAX;
+            for (idx, server) in self.servers.iter().enumerate() {
+                if server.score() < best_score {
+                    best_idx = idx;
+                    best_score = server.score();
+                }
+            }
+            self.best_idx.store(best_idx, Ordering::Release);
+
+            if best_idx != old_best_idx {
+                info!(
+                    "switched best {} server from {} to {}",
+                    self.server_type,
+                    self.servers[old_best_idx].server_config().addr(),
+                    self.servers[best_idx].server_config().addr()
+                );
+            }
+
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
         }
     }
@@ -192,7 +213,7 @@ impl<E> PingChecker<E> {
             Err(..) => self.server.push_score(Score::Errored).await, // Penalty
         };
 
-        debug!(
+        trace!(
             "updated remote {} server {} (score: {})",
             self.server_type,
             self.server.server_config().addr(),
