@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use tokio::{net::TcpStream, prelude::*, time};
 
-use shadowsocks::{
-    config::{Config, ConfigType},
+use shadowsocks_service::{
+    config::{Config, ConfigType, ProtocolType},
     run_local,
     run_server,
 };
@@ -14,7 +14,7 @@ use shadowsocks::{
 async fn http_proxy() {
     let _ = env_logger::try_init();
 
-    let local_config = Config::load_from_str(
+    let mut local_config = Config::load_from_str(
         r#"{
             "local_port": 5110,
             "local_address": "127.0.0.1",
@@ -23,9 +23,10 @@ async fn http_proxy() {
             "password": "password",
             "method": "aes-256-gcm"
         }"#,
-        ConfigType::HttpLocal,
+        ConfigType::Local,
     )
     .unwrap();
+    local_config.local_protocol = ProtocolType::Http;
 
     let server_config = Config::load_from_str(
         r#"{

@@ -51,7 +51,6 @@ use std::time::Duration;
 
 pub use self::proxy_socket::ProxySocket;
 
-pub mod client;
 mod crypto_io;
 pub mod proxy_socket;
 

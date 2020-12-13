@@ -3,16 +3,14 @@
 use std::io::{self, Cursor, ErrorKind};
 
 use bytes::{BufMut, BytesMut};
-use tokio::net::{lookup_host, ToSocketAddrs, UdpSocket};
+use tokio::net::{ToSocketAddrs, UdpSocket};
 
-use crate::relay::{
-    socks5::{Address, Error, UdpAssociateHeader},
-    sys::create_udp_socket,
-    tcprelay::client::Socks5Client as Socks5TcpClient,
-};
+use shadowsocks::relay::socks5::{Address, Error, UdpAssociateHeader};
+
+use super::tcp_client::Socks5TcpClient;
 
 /// Socks5 proxy client
-pub struct Socks5Client {
+pub struct Socks5UdpClient {
     socket: UdpSocket,
     // Socks5 protocol requires to keep this TCP connection alive
     // Theoretically if this connection is broken, the association is broken too, but the UDP Socks5 server in this crate doesn't behave like that
@@ -20,35 +18,16 @@ pub struct Socks5Client {
     assoc_client: Option<Socks5TcpClient>,
 }
 
-impl Socks5Client {
+impl Socks5UdpClient {
     /// Create a new UDP associate client binds to a specific address
-    pub async fn bind<A>(addrs: A) -> io::Result<Socks5Client>
+    pub async fn bind<A>(addrs: A) -> io::Result<Socks5UdpClient>
     where
         A: ToSocketAddrs,
     {
-        let mut last_err = None;
-
-        for addr in lookup_host(addrs).await? {
-            match create_udp_socket(&addr).await {
-                Ok(socket) => {
-                    return Ok(Socks5Client {
-                        socket,
-                        assoc_client: None,
-                    });
-                }
-                Err(err) => {
-                    last_err = Some(err);
-                }
-            }
-        }
-
-        match last_err {
-            Some(err) => Err(err),
-            None => {
-                let err = io::Error::new(ErrorKind::Other, "addrs resolves to null");
-                Err(err)
-            }
-        }
+        Ok(Socks5UdpClient {
+            socket: UdpSocket::bind(addrs).await?,
+            assoc_client: None,
+        })
     }
 
     /// Create a new UDP associate to `proxy`

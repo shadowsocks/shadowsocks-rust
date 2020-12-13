@@ -8,12 +8,16 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks::{
-    config::{Config, ConfigType, Mode, ServerAddr, ServerConfig},
-    crypto::v1::CipherKind,
-    relay::{socks5::Address, tcprelay::client::Socks5Client},
+use shadowsocks_service::{
+    config::{Config, ConfigType, Mode, ProtocolType},
+    local::socks::client::socks5::Socks5TcpClient,
     run_local,
     run_server,
+    shadowsocks::{
+        config::{ServerAddr, ServerConfig},
+        crypto::v1::CipherKind,
+        relay::socks5::Address,
+    },
 };
 
 pub struct Socks5TestServer {
@@ -35,15 +39,16 @@ impl Socks5TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg
             },
             cli_config: {
-                let mut cfg = Config::new(ConfigType::Socks5Local);
+                let mut cfg = Config::new(ConfigType::Local);
                 cfg.local_addr = Some(ServerAddr::from(local_addr));
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
+                cfg.local_protocol = ProtocolType::Socks;
                 cfg
             },
         }
@@ -77,7 +82,7 @@ async fn socks5_relay_stream() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run().await;
 
-    let mut c = Socks5Client::connect(
+    let mut c = Socks5TcpClient::connect(
         Address::DomainNameAddress("www.example.com".to_owned(), 80),
         svr.client_addr(),
     )
@@ -110,7 +115,7 @@ async fn socks5_relay_aead() {
     let svr = Socks5TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD, false);
     svr.run().await;
 
-    let mut c = Socks5Client::connect(
+    let mut c = Socks5TcpClient::connect(
         Address::DomainNameAddress("www.example.com".to_owned(), 80),
         svr.client_addr(),
     )

@@ -4,12 +4,8 @@ pub use self::{
     config::{ManagerAddr, ServerAddr, ServerConfig},
     manager::{ManagerClient, ManagerListener},
     relay::{
-        tcprelay::{
-            client::Socks5Client as TcpSocks5Client,
-            proxy_listener::ProxyListener,
-            proxy_stream::ProxyClientStream,
-        },
-        udprelay::{client::Socks5Client as UdpSocks5Client, proxy_socket::ProxySocket},
+        tcprelay::{proxy_listener::ProxyListener, proxy_stream::ProxyClientStream},
+        udprelay::proxy_socket::ProxySocket,
     },
 };
 

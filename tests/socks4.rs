@@ -11,12 +11,15 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks::{
-    config::{Config, ConfigType, ServerAddr, ServerConfig},
-    crypto::v1::CipherKind,
-    relay::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},
+use shadowsocks_service::{
+    config::{Config, ConfigType, ProtocolType},
+    local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},
     run_local,
     run_server,
+    shadowsocks::{
+        config::{ServerAddr, ServerConfig},
+        crypto::v1::CipherKind,
+    },
 };
 
 pub struct Socks4TestServer {
@@ -38,13 +41,14 @@ impl Socks4TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg
             },
             cli_config: {
-                let mut cfg = Config::new(ConfigType::Socks4Local);
+                let mut cfg = Config::new(ConfigType::Local);
                 cfg.local_addr = Some(ServerAddr::from(local_addr));
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
+                cfg.local_protocol = ProtocolType::Socks;
                 cfg
             },
         }

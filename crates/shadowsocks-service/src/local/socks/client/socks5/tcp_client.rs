@@ -8,12 +8,7 @@ use std::{
 
 use log::trace;
 use pin_project::pin_project;
-use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::{TcpStream, ToSocketAddrs},
-};
-
-use crate::relay::socks5::{
+use shadowsocks::relay::socks5::{
     self,
     Address,
     Command,
@@ -24,17 +19,21 @@ use crate::relay::socks5::{
     TcpRequestHeader,
     TcpResponseHeader,
 };
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    net::{TcpStream, ToSocketAddrs},
+};
 
 /// Socks5 proxy client
 #[pin_project]
-pub struct Socks5Client {
+pub struct Socks5TcpClient {
     #[pin]
     stream: TcpStream,
 }
 
-impl Socks5Client {
+impl Socks5TcpClient {
     /// Connects to `addr` via `proxy`
-    pub async fn connect<A, P>(addr: A, proxy: P) -> Result<Socks5Client, Error>
+    pub async fn connect<A, P>(addr: A, proxy: P) -> Result<Socks5TcpClient, Error>
     where
         A: Into<Address>,
         P: ToSocketAddrs,
@@ -65,13 +64,13 @@ impl Socks5Client {
             r => return Err(Error::Reply(r)),
         }
 
-        Ok(Socks5Client { stream: s })
+        Ok(Socks5TcpClient { stream: s })
     }
 
     /// UDP Associate `addr` via `proxy`
     ///
     /// According to RFC, `addr` is the address that your UDP socket binds to
-    pub async fn udp_associate<A, P>(addr: A, proxy: P) -> Result<(Socks5Client, Address), Error>
+    pub async fn udp_associate<A, P>(addr: A, proxy: P) -> Result<(Socks5TcpClient, Address), Error>
     where
         A: Into<Address>,
         P: ToSocketAddrs,
@@ -102,11 +101,11 @@ impl Socks5Client {
             r => return Err(Error::Reply(r)),
         }
 
-        Ok((Socks5Client { stream: s }, hp.address))
+        Ok((Socks5TcpClient { stream: s }, hp.address))
     }
 }
 
-impl AsyncRead for Socks5Client {
+impl AsyncRead for Socks5TcpClient {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
@@ -116,7 +115,7 @@ impl AsyncRead for Socks5Client {
     }
 }
 
-impl AsyncWrite for Socks5Client {
+impl AsyncWrite for Socks5TcpClient {
     fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         self.project().stream.poll_write(cx, buf)
     }

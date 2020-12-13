@@ -2,6 +2,7 @@
 
 pub use self::server::Socks;
 
+pub mod client;
 pub mod server;
 pub mod socks4;
 mod socks4_server;

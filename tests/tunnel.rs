@@ -10,11 +10,11 @@ use tokio::{
     time::{self, Duration},
 };
 
-use shadowsocks::{
-    config::{Config, ConfigType},
-    relay::socks5::Address,
+use shadowsocks_service::{
+    config::{Config, ConfigType, ProtocolType},
     run_local,
     run_server,
+    shadowsocks::relay::socks5::Address,
 };
 
 #[tokio::test]
@@ -30,10 +30,10 @@ async fn tcp_tunnel() {
             "password": "password",
             "method": "aes-256-gcm"
         }"#,
-        ConfigType::TunnelLocal,
+        ConfigType::Local,
     )
     .unwrap();
-
+    local_config.local_protocol = ProtocolType::Tunnel;
     local_config.forward = Some("www.example.com:80".parse::<Address>().unwrap());
 
     let server_config = Config::load_from_str(
@@ -85,10 +85,10 @@ async fn udp_tunnel() {
             "method": "aes-256-gcm",
             "mode": "tcp_and_udp"
         }"#,
-        ConfigType::TunnelLocal,
+        ConfigType::Local,
     )
     .unwrap();
-
+    local_config.local_protocol = ProtocolType::Tunnel;
     local_config.forward = Some("8.8.8.8:53".parse::<Address>().unwrap());
 
     let server_config = Config::load_from_str(
