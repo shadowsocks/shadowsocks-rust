@@ -6,10 +6,13 @@
 use clap::clap_app;
 use qrcode::{types::Color, QrCode};
 
-use shadowsocks::config::{Config, ConfigType, ServerConfig};
+use shadowsocks_service::{
+    config::{Config, ConfigType},
+    shadowsocks::config::ServerConfig,
+};
 
-mod allocator;
-mod version;
+/// shadowsocks version
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const BLACK: &str = "\x1b[40m  \x1b[0m";
 const WHITE: &str = "\x1b[47m  \x1b[0m";
@@ -71,7 +74,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
 fn main() {
     let app = clap_app!(ssurl =>
-        (version: self::version::VERSION)
+        (version: VERSION)
         (about: "Encode and decode ShadowSocks URL")
         (@arg ENCODE_CONFIG_PATH: -e --encode +takes_value conflicts_with[DECODE_CONFIG_PATH] required_unless[DECODE_CONFIG_PATH] "Encode the server configuration in the provided JSON file")
         (@arg DECODE_CONFIG_PATH: -d --decode +takes_value required_unless[ENCODE_CONFIG_PATH] "Decode the server configuration from the provide ShadowSocks URL")

@@ -1,0 +1,70 @@
+[package]
+name = "shadowsocks"
+version = "1.9.0"
+authors = ["Shadowsocks Contributors"]
+description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
+repository = "https://github.com/shadowsocks/shadowsocks-rust"
+readme = "README.md"
+documentation = "https://docs.rs/shadowsocks-core"
+keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
+license = "MIT"
+edition = "2018"
+
+[badges]
+maintenance = { status = "passively-maintained" }
+
+[features]
+default = [
+    "trust-dns",
+]
+
+# Uses trust-dns instead of tokio's builtin DNS resolver
+trust-dns = ["trust-dns-resolver"]
+
+[dependencies]
+log = "0.4"
+
+libc = "0.2"
+bytes = "0.6"
+cfg-if = "1"
+byte_string = "1.0"
+base64 = "0.13"
+url = "2.2"
+lazy_static = "1.4"
+spin = "0.7"
+pin-project = "1.0"
+bloomfilter = "1.0.2"
+thiserror = "1.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_urlencoded = "0.7"
+serde_json = "1.0"
+
+futures = "0.3"
+async-trait = "0.1"
+
+mio = "0.7"
+socket2 = "0.3"
+tokio = { version = "0.3.1", features = ["full"] }
+
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = ["ring"] }
+
+[target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = ["ring"] }
+
+[target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "arm", target_arch = "aarch64")))'.dependencies]
+shadowsocks-crypto = { version = "0.1", features = [] }
+
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
+
+# Just for the ioctl call macro
+[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+nix = "0.19"
+
+[dev-dependencies]
+env_logger = "0.8"
