@@ -10,11 +10,7 @@ use std::{
 use futures::{future, FutureExt};
 use log::{error, info};
 use shadowsocks::{
-    config::ServerType,
-    context::{Context, SharedContext},
-    dns_resolver::DnsResolver,
     lookup_then,
-    net::ConnectOpts,
     plugin::{Plugin, PluginMode},
     ServerConfig,
 };
@@ -26,52 +22,41 @@ use tokio::{
 use crate::{
     config::ClientConfig,
     local::{
-        acl::AccessControl,
+        context::ServiceContext,
         loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerType as BalancerServerType},
     },
-    net::FlowStat,
 };
 
 use super::{socks4_server::Socks4, socks5_server::Socks5};
 
 pub struct Socks {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
+    context: Arc<ServiceContext>,
     client_config: ClientConfig,
     servers: Vec<ServerConfig>,
-    connect_opts: Arc<ConnectOpts>,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
     nodelay: bool,
-    acl: Option<Arc<AccessControl>>,
 }
 
 impl Socks {
     pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>) -> Socks {
-        let context = Context::new_shared(ServerType::Server);
-        Socks::with_context(context, client_config, servers)
+        let context = ServiceContext::new();
+        Socks::with_context(Arc::new(context), client_config, servers)
     }
 
-    fn with_context(context: SharedContext, client_config: ClientConfig, servers: Vec<ServerConfig>) -> Socks {
+    pub fn with_context(
+        context: Arc<ServiceContext>,
+        client_config: ClientConfig,
+        servers: Vec<ServerConfig>,
+    ) -> Socks {
         Socks {
             context,
-            flow_stat: Arc::new(FlowStat::new()),
             client_config,
             servers,
-            connect_opts: Arc::new(ConnectOpts::default()),
             udp_expiry_duration: None,
             udp_capacity: 256,
             nodelay: false,
-            acl: None,
         }
-    }
-
-    pub fn flow_stat(&self) -> &Arc<FlowStat> {
-        &self.flow_stat
-    }
-
-    pub fn set_connect_opts(&mut self, opts: Arc<ConnectOpts>) {
-        self.connect_opts = opts;
     }
 
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
@@ -84,15 +69,6 @@ impl Socks {
 
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
-    }
-
-    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
-        let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
-        context.set_dns_resolver(resolver)
-    }
-
-    pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
-        self.acl = Some(acl);
     }
 
     pub async fn run(mut self) -> io::Result<()> {
@@ -118,14 +94,16 @@ impl Socks {
         let listener = match self.client_config {
             ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
-                lookup_then!(&self.context, dname, port, |addr| { TcpListener::bind(addr).await })?.1
+                lookup_then!(self.context.context_ref(), dname, port, |addr| {
+                    TcpListener::bind(addr).await
+                })?
+                .1
             }
         };
 
         info!("shadowsocks socks listening on {}", self.client_config);
 
-        let mut balancer_builder =
-            PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp, self.connect_opts.clone());
+        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
 
         for server in self.servers {
             let server_ident = BasicServerIdent::new(server);
@@ -153,11 +131,8 @@ impl Socks {
 
             let server = balancer.best_server();
             let context = self.context.clone();
-            let connect_opts = self.connect_opts.clone();
-            let flow_stat = self.flow_stat.clone();
             let nodelay = self.nodelay;
             let client_config = client_config.clone();
-            let acl = self.acl.clone();
 
             tokio::spawn(Socks::handle_tcp_client(
                 context,
@@ -165,24 +140,18 @@ impl Socks {
                 stream,
                 server,
                 peer_addr,
-                connect_opts,
-                flow_stat,
                 nodelay,
-                acl,
             ));
         }
     }
 
     async fn handle_tcp_client(
-        context: SharedContext,
+        context: Arc<ServiceContext>,
         client_config: Arc<ClientConfig>,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
-        connect_opts: Arc<ConnectOpts>,
-        flow_stat: Arc<FlowStat>,
         nodelay: bool,
-        acl: Option<Arc<AccessControl>>,
     ) -> io::Result<()> {
         let mut version_buffer = [0u8; 1];
         let n = stream.peek(&mut version_buffer).await?;
@@ -192,12 +161,12 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4::new(context, flow_stat, connect_opts, nodelay, acl);
+                let handler = Socks4::new(context, nodelay);
                 handler.handle_socks4_client(stream, server, peer_addr).await
             }
 
             0x05 => {
-                let handler = Socks5::new(context, flow_stat, connect_opts, nodelay, acl);
+                let handler = Socks5::new(context, nodelay);
                 handler
                     .handle_socks5_client(&client_config, stream, server, peer_addr)
                     .await

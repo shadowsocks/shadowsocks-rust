@@ -8,10 +8,6 @@ use std::{
 
 use futures::{future, FutureExt};
 use shadowsocks::{
-    config::ServerType,
-    context::{Context, SharedContext},
-    dns_resolver::DnsResolver,
-    net::ConnectOpts,
     plugin::{Plugin, PluginMode},
     relay::socks5::Address,
     ServerConfig,
@@ -19,19 +15,17 @@ use shadowsocks::{
 
 use crate::{
     config::{ClientConfig, Mode},
-    net::FlowStat,
+    local::context::ServiceContext,
 };
 
-use super::{tcprelay::TcpTunnel, udprelay::UdpTunnel};
+use super::{tcprelay::run_tcp_tunnel, udprelay::UdpTunnel};
 
 pub struct Tunnel {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
+    context: Arc<ServiceContext>,
     client_config: ClientConfig,
     servers: Vec<ServerConfig>,
     forward_addr: Address,
     mode: Mode,
-    connect_opts: Arc<ConnectOpts>,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
     nodelay: bool,
@@ -39,36 +33,26 @@ pub struct Tunnel {
 
 impl Tunnel {
     pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>, forward_addr: Address) -> Tunnel {
-        let context = Context::new_shared(ServerType::Server);
-        Tunnel::with_context(context, client_config, servers, forward_addr)
+        let context = ServiceContext::new();
+        Tunnel::with_context(Arc::new(context), client_config, servers, forward_addr)
     }
 
-    fn with_context(
-        context: SharedContext,
+    pub fn with_context(
+        context: Arc<ServiceContext>,
         client_config: ClientConfig,
         servers: Vec<ServerConfig>,
         forward_addr: Address,
     ) -> Tunnel {
         Tunnel {
             context,
-            flow_stat: Arc::new(FlowStat::new()),
             client_config,
             servers,
             forward_addr,
             mode: Mode::TcpOnly,
-            connect_opts: Arc::new(ConnectOpts::default()),
             udp_expiry_duration: None,
             udp_capacity: 256,
             nodelay: false,
         }
-    }
-
-    pub fn flow_stat(&self) -> &Arc<FlowStat> {
-        &self.flow_stat
-    }
-
-    pub fn set_connect_opts(&mut self, opts: Arc<ConnectOpts>) {
-        self.connect_opts = opts;
     }
 
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
@@ -85,11 +69,6 @@ impl Tunnel {
 
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
-    }
-
-    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
-        let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
-        context.set_dns_resolver(resolver)
     }
 
     pub async fn run(mut self) -> io::Result<()> {
@@ -117,22 +96,19 @@ impl Tunnel {
     }
 
     async fn run_tcp_tunnel(&self) -> io::Result<()> {
-        let server = TcpTunnel::new(
+        run_tcp_tunnel(
             self.context.clone(),
-            self.flow_stat.clone(),
-            self.connect_opts.clone(),
+            &self.client_config,
+            self.servers.clone(),
+            &self.forward_addr,
             self.nodelay,
-        );
-        server
-            .run(&self.client_config, self.servers.clone(), &self.forward_addr)
-            .await
+        )
+        .await
     }
 
     async fn run_udp_tunnel(&self) -> io::Result<()> {
         let mut server = UdpTunnel::new(
             self.context.clone(),
-            self.flow_stat.clone(),
-            self.connect_opts.clone(),
             self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
             self.udp_capacity,
         );

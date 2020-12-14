@@ -19,13 +19,12 @@ default = [
     "local-http",
     "local-http-rustls",
     "local-tunnel",
-    "local-socks4"
 ]
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver", "shadowsocks/trust-dns"]
-dns-over-tls = ["trust-dns-resolver/dns-over-tls"]
+dns-over-tls = ["trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-rustls"]
 dns-over-https = ["trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
@@ -44,8 +43,6 @@ local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
 local-redir = ["strum", "strum_macros"]
 # Enable tunnel protocol for sslocal
 local-tunnel = []
-# Enable SOCKS4/4a protocol for sslocal
-local-socks4 = []
 
 [dependencies]
 log = "0.4"

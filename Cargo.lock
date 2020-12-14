@@ -1912,11 +1912,31 @@ dependencies = [
  "lru-cache",
  "parking_lot",
  "resolv-conf",
+ "rustls",
  "serde",
  "smallvec",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "trust-dns-proto",
+ "trust-dns-rustls",
+ "webpki-roots",
+]
+
+[[package]]
+name = "trust-dns-rustls"
+version = "0.20.0-alpha.3"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#15a9b1bcfc1fd9987d4b0af93581b4d627acb23e"
+dependencies = [
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "log",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "trust-dns-proto",
+ "webpki",
 ]
 
 [[package]]

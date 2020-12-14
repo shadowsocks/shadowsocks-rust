@@ -10,8 +10,7 @@ use std::{
 
 use pin_project::pin_project;
 use shadowsocks::{
-    context::SharedContext,
-    net::{ConnectOpts, TcpStream},
+    net::TcpStream,
     relay::{
         socks5::Address,
         tcprelay::proxy_stream::{ProxyClientStream, ProxyClientStreamReadHalf, ProxyClientStreamWriteHalf},
@@ -26,8 +25,8 @@ use tokio::{
 };
 
 use crate::{
-    local::{acl::AccessControl, loadbalancing::ServerIdent},
-    net::{FlowStat, MonProxyStream},
+    local::{context::ServiceContext, loadbalancing::ServerIdent},
+    net::MonProxyStream,
 };
 
 use super::auto_proxy_io::AutoProxyIo;
@@ -40,57 +39,49 @@ pub enum AutoProxyClientStream {
 
 impl AutoProxyClientStream {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_with_opts_acl<A, I>(
-        context: SharedContext,
-        server: &I,
-        addr: A,
-        opts: &ConnectOpts,
-        flow_stat: Arc<FlowStat>,
-        acl: &AccessControl,
-    ) -> io::Result<AutoProxyClientStream>
+    pub async fn connect<A, I>(context: Arc<ServiceContext>, server: &I, addr: A) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
         I: ServerIdent,
     {
         let addr = addr.into();
-        if acl.check_target_bypassed(&context, &addr).await {
-            AutoProxyClientStream::connect_bypassed_with_opts(context, addr, opts).await
+        if context.check_target_bypassed(&addr).await {
+            AutoProxyClientStream::connect_bypassed(context, addr).await
         } else {
-            AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts, flow_stat).await
+            AutoProxyClientStream::connect_proxied(context, server, addr).await
         }
     }
 
     /// Connect directly to target `addr`
-    pub async fn connect_bypassed_with_opts<A>(
-        context: SharedContext,
-        addr: A,
-        opts: &ConnectOpts,
-    ) -> io::Result<AutoProxyClientStream>
+    pub async fn connect_bypassed<A>(context: Arc<ServiceContext>, addr: A) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
     {
         // Connect directly.
         let addr = addr.into();
-        let stream = TcpStream::connect_remote_with_opts(&context, &addr, opts).await?;
+        let stream = TcpStream::connect_remote_with_opts(context.context_ref(), &addr, context.connect_opts()).await?;
         Ok(AutoProxyClientStream::Bypassed(stream.into()))
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_proxied_with_opts<A, I>(
-        context: SharedContext,
+    pub async fn connect_proxied<A, I>(
+        context: Arc<ServiceContext>,
         server: &I,
         addr: A,
-        opts: &ConnectOpts,
-        flow_stat: Arc<FlowStat>,
     ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
         I: ServerIdent,
     {
         let svr_cfg = server.server_config();
-        let stream = match ProxyClientStream::connect_with_opts_map(context, svr_cfg, addr, opts, |stream| {
-            MonProxyStream::from_stream(stream, flow_stat)
-        })
+        let flow_stat = context.flow_stat();
+        let stream = match ProxyClientStream::connect_with_opts_map(
+            context.context(),
+            svr_cfg,
+            addr,
+            context.connect_opts(),
+            |stream| MonProxyStream::from_stream(stream, flow_stat),
+        )
         .await
         {
             Ok(s) => s,
@@ -100,26 +91,6 @@ impl AutoProxyClientStream {
             }
         };
         Ok(AutoProxyClientStream::Proxied(stream))
-    }
-
-    pub(crate) async fn connect_with_opts_acl_opt<A, I>(
-        context: SharedContext,
-        server: &I,
-        addr: A,
-        opts: &ConnectOpts,
-        flow_stat: Arc<FlowStat>,
-        acl: &Option<Arc<AccessControl>>,
-    ) -> io::Result<AutoProxyClientStream>
-    where
-        A: Into<Address>,
-        I: ServerIdent,
-    {
-        match *acl {
-            None => AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts, flow_stat).await,
-            Some(ref acl) => {
-                AutoProxyClientStream::connect_with_opts_acl(context, server, addr, opts, flow_stat, acl).await
-            }
-        }
     }
 
     pub fn local_addr(&self) -> io::Result<SocketAddr> {

@@ -12,25 +12,20 @@ use futures::{future::BoxFuture, FutureExt};
 use hyper::Uri;
 use log::error;
 use pin_project::pin_project;
-use shadowsocks::{context::SharedContext, net::ConnectOpts};
 use tower::Service;
 
-use crate::{
-    local::{loadbalancing::BasicServerIdent, net::AutoProxyClientStream},
-    net::FlowStat,
-};
+use crate::local::{context::ServiceContext, loadbalancing::BasicServerIdent, net::AutoProxyClientStream};
 
 use super::{http_stream::ProxyHttpStream, utils::host_addr};
 
 #[derive(Clone)]
 pub struct BypassConnector {
-    context: SharedContext,
-    connect_opts: Arc<ConnectOpts>,
+    context: Arc<ServiceContext>,
 }
 
 impl BypassConnector {
-    pub fn new(context: SharedContext, connect_opts: Arc<ConnectOpts>) -> BypassConnector {
-        BypassConnector { context, connect_opts }
+    pub fn new(context: Arc<ServiceContext>) -> BypassConnector {
+        BypassConnector { context }
     }
 }
 
@@ -45,7 +40,6 @@ impl Service<Uri> for BypassConnector {
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         let context = self.context.clone();
-        let connect_opts = self.connect_opts.clone();
 
         BypassConnecting {
             fut: async move {
@@ -61,7 +55,7 @@ impl Service<Uri> for BypassConnector {
                         Err(err)
                     }
                     Some(addr) => {
-                        let s = AutoProxyClientStream::connect_bypassed_with_opts(context, addr, &connect_opts).await?;
+                        let s = AutoProxyClientStream::connect_bypassed(context, addr).await?;
 
                         if is_https {
                             let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
@@ -93,25 +87,13 @@ impl Future for BypassConnecting {
 
 #[derive(Clone)]
 pub struct ProxyConnector {
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     server: Arc<BasicServerIdent>,
-    connect_opts: Arc<ConnectOpts>,
-    flow_stat: Arc<FlowStat>,
 }
 
 impl ProxyConnector {
-    pub fn new(
-        context: SharedContext,
-        server: Arc<BasicServerIdent>,
-        connect_opts: Arc<ConnectOpts>,
-        flow_stat: Arc<FlowStat>,
-    ) -> ProxyConnector {
-        ProxyConnector {
-            context,
-            server,
-            connect_opts,
-            flow_stat,
-        }
+    pub fn new(context: Arc<ServiceContext>, server: Arc<BasicServerIdent>) -> ProxyConnector {
+        ProxyConnector { context, server }
     }
 }
 
@@ -126,9 +108,7 @@ impl Service<Uri> for ProxyConnector {
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         let context = self.context.clone();
-        let connect_opts = self.connect_opts.clone();
         let server = self.server.clone();
-        let flow_stat = self.flow_stat.clone();
 
         ProxyConnecting {
             fut: async move {
@@ -144,14 +124,7 @@ impl Service<Uri> for ProxyConnector {
                         Err(err)
                     }
                     Some(addr) => {
-                        let s = AutoProxyClientStream::connect_proxied_with_opts(
-                            context,
-                            server.as_ref(),
-                            addr,
-                            &connect_opts,
-                            flow_stat,
-                        )
-                        .await?;
+                        let s = AutoProxyClientStream::connect_proxied(context, server.as_ref(), addr).await?;
 
                         if is_https {
                             let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');

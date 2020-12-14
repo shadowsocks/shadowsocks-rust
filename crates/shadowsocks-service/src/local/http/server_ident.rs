@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use hyper::{Body, Client};
-use shadowsocks::{config::ServerConfig, context::SharedContext, net::ConnectOpts};
+use shadowsocks::config::ServerConfig;
 
-use crate::{
-    local::loadbalancing::{BasicServerIdent, ServerIdent, ServerScore},
-    net::FlowStat,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::{BasicServerIdent, ServerIdent, ServerScore},
 };
 
 use super::{connector::ProxyConnector, http_client::ProxyHttpClient};
@@ -19,15 +19,9 @@ pub struct HttpServerIdent {
 }
 
 impl HttpServerIdent {
-    pub fn new(
-        context: SharedContext,
-        svr_cfg: ServerConfig,
-        connect_opts: Arc<ConnectOpts>,
-        flow_stat: Arc<FlowStat>,
-    ) -> HttpServerIdent {
+    pub fn new(context: Arc<ServiceContext>, svr_cfg: ServerConfig) -> HttpServerIdent {
         let basic = Arc::new(BasicServerIdent::new(svr_cfg));
-        let proxy_client =
-            Client::builder().build::<_, Body>(ProxyConnector::new(context, basic.clone(), connect_opts, flow_stat));
+        let proxy_client = Client::builder().build::<_, Body>(ProxyConnector::new(context, basic.clone()));
 
         HttpServerIdent { basic, proxy_client }
     }

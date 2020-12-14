@@ -3,7 +3,6 @@
 use std::{
     convert::Infallible,
     io::{self, ErrorKind},
-    path::PathBuf,
     sync::Arc,
 };
 
@@ -18,92 +17,39 @@ use hyper::{
 };
 use log::{error, info};
 use shadowsocks::{
-    config::{ServerAddr, ServerConfig, ServerType},
-    context::{Context, SharedContext},
-    dns_resolver::DnsResolver,
+    config::{ServerAddr, ServerConfig},
     lookup_then,
-    net::ConnectOpts,
     plugin::{Plugin, PluginMode},
 };
 
 use crate::{
     config::ClientConfig,
     local::{
-        acl::AccessControl,
+        context::ServiceContext,
         loadbalancing::{PingBalancerBuilder, ServerType as BalancerServerType},
     },
-    net::FlowStat,
 };
 
 use super::{connector::BypassConnector, dispatcher::HttpDispatcher, server_ident::HttpServerIdent};
 
 pub struct Http {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
+    context: Arc<ServiceContext>,
     client_config: ClientConfig,
     servers: Vec<ServerConfig>,
-    connect_opts: Arc<ConnectOpts>,
-    acl: Option<Arc<AccessControl>>,
-    #[cfg(feature = "local-http-native-tls")]
-    tls_identity_path: Option<PathBuf>,
-    #[cfg(feature = "local-http-native-tls")]
-    tls_identity_password: Option<String>,
-    #[cfg(feature = "local-http-rustls")]
-    tls_identity_certificate_path: Option<PathBuf>,
-    #[cfg(feature = "local-http-rustls")]
-    tls_identity_private_key_path: Option<PathBuf>,
 }
 
 impl Http {
     pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>) -> Http {
-        let context = Context::new_shared(ServerType::Server);
-        Http::with_context(context, client_config, servers)
+        let context = ServiceContext::new();
+        Http::with_context(Arc::new(context), client_config, servers)
     }
 
-    fn with_context(context: SharedContext, client_config: ClientConfig, servers: Vec<ServerConfig>) -> Http {
+    pub fn with_context(context: Arc<ServiceContext>, client_config: ClientConfig, servers: Vec<ServerConfig>) -> Http {
         Http {
             context,
-            flow_stat: Arc::new(FlowStat::new()),
             client_config,
             servers,
-            connect_opts: Arc::new(ConnectOpts::default()),
-            acl: None,
-            #[cfg(feature = "local-http-native-tls")]
-            tls_identity_path: None,
-            #[cfg(feature = "local-http-native-tls")]
-            tls_identity_password: None,
-            #[cfg(feature = "local-http-rustls")]
-            tls_identity_certificate_path: None,
-            #[cfg(feature = "local-http-rustls")]
-            tls_identity_private_key_path: None,
         }
-    }
-
-    pub fn flow_stat(&self) -> &Arc<FlowStat> {
-        &self.flow_stat
-    }
-
-    pub fn set_connect_opts(&mut self, opts: Arc<ConnectOpts>) {
-        self.connect_opts = opts;
-    }
-
-    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
-        let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
-        context.set_dns_resolver(resolver)
-    }
-
-    pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
-        self.acl = Some(acl);
-    }
-
-    #[cfg(feature = "local-http-native-tls")]
-    fn is_https(&self) -> bool {
-        self.tls_identity_path.is_some() && self.tls_identity_password.is_some()
-    }
-
-    #[cfg(feature = "local-http-rustls")]
-    fn is_https(&self) -> bool {
-        self.tls_identity_certificate_path.is_some() && self.tls_identity_private_key_path.is_some()
     }
 
     pub async fn run(mut self) -> io::Result<()> {
@@ -126,61 +72,39 @@ impl Http {
     }
 
     async fn run_http_server(self) -> io::Result<()> {
-        let mut balancer_builder =
-            PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp, self.connect_opts.clone());
+        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
 
         for server in self.servers {
-            let server_ident = HttpServerIdent::new(
-                self.context.clone(),
-                server,
-                self.connect_opts.clone(),
-                self.flow_stat.clone(),
-            );
+            let server_ident = HttpServerIdent::new(self.context.clone(), server);
             balancer_builder.add_server(server_ident);
         }
 
         let (balancer, checker) = balancer_builder.build();
         tokio::spawn(checker);
 
-        let bypass_client =
-            Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone(), self.connect_opts.clone()));
+        let bypass_client = Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone()));
 
         let context = self.context.clone();
-        let connect_opts = self.connect_opts.clone();
-        let flow_stat = self.flow_stat.clone();
-        let acl = self.acl.clone();
         let make_service = make_service_fn(|socket: &AddrStream| {
             let client_addr = socket.remote_addr();
             let balancer = balancer.clone();
             let bypass_client = bypass_client.clone();
             let context = context.clone();
-            let connect_opts = connect_opts.clone();
-            let flow_stat = flow_stat.clone();
-            let acl = acl.clone();
 
             async move {
                 Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
                     let server = balancer.best_server();
-                    HttpDispatcher::new(
-                        context.clone(),
-                        req,
-                        server,
-                        client_addr,
-                        bypass_client.clone(),
-                        connect_opts.clone(),
-                        flow_stat.clone(),
-                        acl.clone(),
-                    )
-                    .dispatch()
+                    HttpDispatcher::new(context.clone(), req, server, client_addr, bypass_client.clone()).dispatch()
                 }))
             }
         });
 
         let bind_result = match self.client_config {
             ServerAddr::SocketAddr(sa) => Server::try_bind(&sa),
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(&self.context, dname, port, |addr| { Server::try_bind(&addr) }).map(|(_, b)| b)
-            }
+            ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
+                Server::try_bind(&addr)
+            })
+            .map(|(_, b)| b),
         };
 
         // HTTP Proxy protocol only defined in HTTP 1.x

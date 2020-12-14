@@ -3,7 +3,6 @@
 use std::{
     io::{self, ErrorKind},
     pin::Pin,
-    sync::Arc,
     task::{self, Poll},
 };
 
@@ -56,6 +55,7 @@ impl ProxyHttpStream {
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use lazy_static::lazy_static;
         use log::warn;
+        use std::sync::Arc;
         use tokio_rustls::{
             rustls::{ClientConfig, Session},
             webpki::DNSNameRef,

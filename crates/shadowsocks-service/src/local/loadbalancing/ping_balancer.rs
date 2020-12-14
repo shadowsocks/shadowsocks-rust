@@ -15,19 +15,17 @@ use std::{
 use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
 use log::{debug, info, trace};
-use shadowsocks::{
-    context::SharedContext,
-    net::ConnectOpts,
-    relay::{
-        socks5::Address,
-        tcprelay::proxy_stream::ProxyClientStream,
-        udprelay::{proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
-    },
+use shadowsocks::relay::{
+    socks5::Address,
+    tcprelay::proxy_stream::ProxyClientStream,
+    udprelay::{proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time,
 };
+
+use crate::local::context::ServiceContext;
 
 use super::{
     server_data::ServerIdent,
@@ -54,25 +52,19 @@ where
     C: ServerIdent,
 {
     servers: Vec<Arc<C>>,
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     server_type: ServerType,
-    connect_opts: Arc<ConnectOpts>,
 }
 
 impl<C> PingBalancerBuilder<C>
 where
     C: ServerIdent,
 {
-    pub fn new(
-        context: SharedContext,
-        server_type: ServerType,
-        connect_opts: Arc<ConnectOpts>,
-    ) -> PingBalancerBuilder<C> {
+    pub fn new(context: Arc<ServiceContext>, server_type: ServerType) -> PingBalancerBuilder<C> {
         PingBalancerBuilder {
             servers: Vec::new(),
             context,
             server_type,
-            connect_opts,
         }
     }
 
@@ -88,7 +80,6 @@ where
             best_idx: AtomicUsize::new(0),
             context: self.context,
             server_type: self.server_type,
-            connect_opts: self.connect_opts,
         };
 
         let shared = Arc::new(balancer);
@@ -110,9 +101,8 @@ where
 struct PingBalancerInner<C> {
     servers: Vec<Arc<C>>,
     best_idx: AtomicUsize,
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     server_type: ServerType,
-    connect_opts: Arc<ConnectOpts>,
 }
 
 impl<C> PingBalancerInner<C> {
@@ -150,7 +140,6 @@ where
                     server: server.clone(),
                     server_type: self.server_type,
                     context: self.context.clone(),
-                    connect_opts: self.connect_opts.clone(),
                 };
                 vfut.push(checker.check_update_score());
             }
@@ -225,8 +214,7 @@ where
 struct PingChecker<C> {
     server: Arc<C>,
     server_type: ServerType,
-    context: SharedContext,
-    connect_opts: Arc<ConnectOpts>,
+    context: Arc<ServiceContext>,
 }
 
 impl<C> PingChecker<C>
@@ -257,10 +245,10 @@ where
         let addr = Address::DomainNameAddress("clients3.google.com".to_owned(), 80);
 
         let mut stream = ProxyClientStream::connect_with_opts(
-            self.context.clone(),
+            self.context.context(),
             self.server.server_config(),
             &addr,
-            &self.connect_opts,
+            self.context.connect_opts(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -297,10 +285,10 @@ where
         let addr = Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80);
 
         let mut stream = ProxyClientStream::connect_with_opts(
-            self.context.clone(),
+            self.context.context(),
             self.server.server_config(),
             &addr,
-            &self.connect_opts,
+            self.context.connect_opts(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -345,9 +333,12 @@ where
 
         let addr = Address::SocketAddress(SocketAddr::new(Ipv4Addr::new(8, 8, 8, 8).into(), 53));
 
-        let client =
-            ProxySocket::connect_with_opts(self.context.clone(), self.server.server_config(), &self.connect_opts)
-                .await?;
+        let client = ProxySocket::connect_with_opts(
+            self.context.context(),
+            self.server.server_config(),
+            self.context.connect_opts(),
+        )
+        .await?;
         client.send(&addr, DNS_QUERY).await?;
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];

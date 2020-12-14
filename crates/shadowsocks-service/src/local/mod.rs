@@ -7,6 +7,8 @@ use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType, ProtocolType};
 
+use self::context::ServiceContext;
+
 pub mod acl;
 pub mod context;
 #[cfg(feature = "local-http")]
@@ -26,7 +28,8 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     trace!("{:?}", config);
 
-    let connect_opts = Arc::new(ConnectOpts {
+    let mut context = ServiceContext::new();
+    context.set_connect_opts(ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
@@ -37,21 +40,24 @@ pub async fn run(config: Config) -> io::Result<()> {
     });
 
     #[cfg(feature = "trust-dns")]
-    let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
+    context.set_dns_resolver(Arc::new(
+        DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?,
+    ));
+
+    if let Some(acl) = config.acl {
+        context.set_acl(acl);
+    }
 
     let client_config = config.local_addr.expect("local server requires local address");
-    let acl = config.acl.map(Arc::new);
+
+    let context = Arc::new(context);
 
     match config.local_protocol {
         ProtocolType::Socks => {
             use self::socks::Socks;
 
-            let mut server = Socks::new(client_config, config.server);
+            let mut server = Socks::with_context(context, client_config, config.server);
 
-            #[cfg(feature = "trust-dns")]
-            server.set_dns_resolver(resolver);
-
-            server.set_connect_opts(connect_opts);
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);
             }
@@ -60,9 +66,6 @@ pub async fn run(config: Config) -> io::Result<()> {
             }
             if config.no_delay {
                 server.set_nodelay(true);
-            }
-            if let Some(acl) = acl {
-                server.set_acl(acl);
             }
 
             server.run().await
@@ -73,12 +76,8 @@ pub async fn run(config: Config) -> io::Result<()> {
 
             let forward_addr = config.forward.expect("tunnel requires forward address");
 
-            let mut server = Tunnel::new(client_config, config.server, forward_addr);
+            let mut server = Tunnel::with_context(context, client_config, config.server, forward_addr);
 
-            #[cfg(feature = "trust-dns")]
-            server.set_dns_resolver(resolver);
-
-            server.set_connect_opts(connect_opts);
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);
             }
@@ -93,16 +92,10 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.run().await
         }
         #[cfg(feature = "local-http")]
-        ProtocolType::Http | ProtocolType::Https => {
+        ProtocolType::Http => {
             use self::http::Http;
 
-            let mut server = Http::new(client_config, config.server);
-
-            #[cfg(feature = "trust-dns")]
-            server.set_dns_resolver(resolver);
-
-            server.set_connect_opts(connect_opts);
-
+            let server = Http::with_context(context, client_config, config.server);
             server.run().await
         }
         #[cfg(feature = "local-dns")]

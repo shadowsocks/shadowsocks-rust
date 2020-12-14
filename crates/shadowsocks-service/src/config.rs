@@ -530,11 +530,6 @@ pub enum ProtocolType {
     Socks,
     #[cfg(feature = "local-http")]
     Http,
-    #[cfg(all(
-        feature = "local-http",
-        any(feature = "local-http-native-tls", feature = "local-http-rustls")
-    ))]
-    Https,
     #[cfg(feature = "local-tunnel")]
     Tunnel,
     #[cfg(feature = "local-redir")]
@@ -556,11 +551,6 @@ impl ProtocolType {
             ProtocolType::Socks => "socks",
             #[cfg(feature = "local-http")]
             ProtocolType::Http => "http",
-            #[cfg(all(
-                feature = "local-http",
-                any(feature = "local-http-native-tls", feature = "local-http-rustls")
-            ))]
-            ProtocolType::Https => "https",
             #[cfg(feature = "local-tunnel")]
             ProtocolType::Tunnel => "tunnel",
             #[cfg(feature = "local-redir")]
@@ -576,11 +566,6 @@ impl ProtocolType {
             "socks",
             #[cfg(feature = "local-http")]
             "http",
-            #[cfg(all(
-                feature = "local-http",
-                any(feature = "local-http-native-tls", feature = "local-http-rustls")
-            ))]
-            "https",
             #[cfg(feature = "local-tunnel")]
             "tunnel",
             #[cfg(feature = "local-redir")]
@@ -602,11 +587,6 @@ impl FromStr for ProtocolType {
             "socks" => Ok(ProtocolType::Socks),
             #[cfg(feature = "local-http")]
             "http" => Ok(ProtocolType::Http),
-            #[cfg(all(
-                feature = "local-http",
-                any(feature = "local-http-native-tls", feature = "local-http-rustls")
-            ))]
-            "https" => Ok(ProtocolType::Https),
             #[cfg(feature = "local-tunnel")]
             "tunnel" => Ok(ProtocolType::Tunnel),
             #[cfg(feature = "local-redir")]
@@ -693,18 +673,6 @@ pub struct Config {
     ///
     /// Set to `true` if you want to query IPv6 addresses before IPv4
     pub ipv6_first: bool,
-    /// TLS cryptographic identity (X509), PKCS #12 format
-    #[cfg(feature = "local-http-native-tls")]
-    pub tls_identity_path: Option<PathBuf>,
-    /// TLS cryptographic identity's password
-    #[cfg(feature = "local-http-native-tls")]
-    pub tls_identity_password: Option<String>,
-    /// TLS cryptographic identity, certificate file path (PEM)
-    #[cfg(feature = "local-http-rustls")]
-    pub tls_identity_certificate_path: Option<PathBuf>,
-    /// TLS cryptographic identity, private keys (PEM), RSA or PKCS #8
-    #[cfg(feature = "local-http-rustls")]
-    pub tls_identity_private_key_path: Option<PathBuf>,
 }
 
 /// Configuration parsing error kind
@@ -803,14 +771,6 @@ impl Config {
             #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
             ipv6_first: false,
-            #[cfg(feature = "local-http-native-tls")]
-            tls_identity_path: None,
-            #[cfg(feature = "local-http-native-tls")]
-            tls_identity_password: None,
-            #[cfg(feature = "local-http-rustls")]
-            tls_identity_certificate_path: None,
-            #[cfg(feature = "local-http-rustls")]
-            tls_identity_private_key_path: None,
         }
     }
 
@@ -1291,32 +1251,6 @@ impl Config {
                 let err = Error::new(
                     ErrorKind::MissingField,
                     "missing `local_dns_addr` or `remote_dns_addr` in configuration",
-                    None,
-                );
-                return Err(err);
-            }
-        }
-
-        #[cfg(all(
-            feature = "local-http",
-            any(feature = "local-http-native-tls", feature = "local-http-rustls")
-        ))]
-        if self.local_protocol == ProtocolType::Https {
-            #[cfg(feature = "local-http-rustls")]
-            if self.tls_identity_certificate_path.is_none() || self.tls_identity_private_key_path.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `tls_identity_certificate_path` or `tls_identity_private_key_path` in configuration",
-                    None,
-                );
-                return Err(err);
-            }
-
-            #[cfg(feature = "local-http-native-tls")]
-            if self.tls_identity_path.is_none() || self.tls_identity_password.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `tls_identity_path` or `tls_identity_password` in configuration",
                     None,
                 );
                 return Err(err);

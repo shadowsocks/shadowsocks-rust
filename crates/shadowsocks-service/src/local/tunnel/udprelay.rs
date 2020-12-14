@@ -8,9 +8,7 @@ use io::ErrorKind;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
-    context::SharedContext,
     lookup_then,
-    net::ConnectOpts,
     relay::{
         socks5::Address,
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -21,29 +19,22 @@ use tokio::{net::UdpSocket, sync::mpsc, time};
 
 use crate::{
     config::ClientConfig,
-    local::loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
-    net::{FlowStat, MonProxySocket},
+    local::{
+        context::ServiceContext,
+        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+    },
+    net::MonProxySocket,
 };
 
 pub struct UdpTunnel {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    context: Arc<ServiceContext>,
     assoc_map: LruCache<String, UdpAssociation>,
 }
 
 impl UdpTunnel {
-    pub fn new(
-        context: SharedContext,
-        flow_stat: Arc<FlowStat>,
-        connect_opts: Arc<ConnectOpts>,
-        time_to_live: Duration,
-        capacity: usize,
-    ) -> UdpTunnel {
+    pub fn new(context: Arc<ServiceContext>, time_to_live: Duration, capacity: usize) -> UdpTunnel {
         UdpTunnel {
             context,
-            flow_stat,
-            connect_opts,
             assoc_map: LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
         }
     }
@@ -57,7 +48,10 @@ impl UdpTunnel {
         let socket = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => UdpSocket::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
-                lookup_then!(&self.context, dname, port, |addr| { UdpSocket::bind(addr).await })?.1
+                lookup_then!(&self.context.context_ref(), dname, port, |addr| {
+                    UdpSocket::bind(addr).await
+                })?
+                .1
             }
         };
 
@@ -66,8 +60,7 @@ impl UdpTunnel {
             socket.local_addr().expect("listener.local_addr"),
         );
 
-        let mut balancer_builder =
-            PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp, self.connect_opts.clone());
+        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
 
         for server in servers {
             let server_ident = BasicServerIdent::new(server);
@@ -122,8 +115,10 @@ impl UdpTunnel {
         let assoc = match self.assoc_map.entry(cache_key) {
             Entry::Occupied(occ) => occ.into_mut(),
             Entry::Vacant(vac) => {
-                let socket = ProxySocket::connect_with_opts(self.context.clone(), svr_cfg, &self.connect_opts).await?;
-                let socket = MonProxySocket::from_socket(socket, self.flow_stat.clone());
+                let socket =
+                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
+                        .await?;
+                let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
                 let socket = Arc::new(socket);
 
                 // Pending packets 64 should be good enough for a server.
@@ -147,7 +142,9 @@ impl UdpTunnel {
 
                 debug!(
                     "established udp tunnel {} <-> {} with {:?}",
-                    peer_addr, forward_addr, self.connect_opts
+                    peer_addr,
+                    forward_addr,
+                    self.context.connect_opts()
                 );
 
                 vac.insert(UdpAssociation { sender, r2l_abortable })

@@ -13,9 +13,7 @@ use futures::future::{self, AbortHandle};
 use log::{debug, error, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
-    context::SharedContext,
     lookup_then,
-    net::ConnectOpts,
     relay::{
         socks5::{
             self,
@@ -41,37 +39,22 @@ use tokio::{
 use crate::{
     config::ClientConfig,
     local::{
-        acl::AccessControl,
+        context::ServiceContext,
         loadbalancing::{BasicServerIdent, ServerIdent},
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
-    net::{FlowStat, MonProxySocket},
+    net::MonProxySocket,
 };
 
 pub struct Socks5 {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    context: Arc<ServiceContext>,
     nodelay: bool,
-    acl: Option<Arc<AccessControl>>,
 }
 
 impl Socks5 {
-    pub fn new(
-        context: SharedContext,
-        flow_stat: Arc<FlowStat>,
-        connect_opts: Arc<ConnectOpts>,
-        nodelay: bool,
-        acl: Option<Arc<AccessControl>>,
-    ) -> Socks5 {
-        Socks5 {
-            context,
-            flow_stat,
-            connect_opts,
-            nodelay,
-            acl,
-        }
+    pub fn new(context: Arc<ServiceContext>, nodelay: bool) -> Socks5 {
+        Socks5 { context, nodelay }
     }
 
     pub async fn handle_socks5_client(
@@ -149,18 +132,8 @@ impl Socks5 {
         target_addr: Address,
     ) -> io::Result<()> {
         let svr_cfg = server.server_config();
-        let flow_stat = self.flow_stat;
 
-        let remote = match AutoProxyClientStream::connect_with_opts_acl_opt(
-            self.context,
-            server.as_ref(),
-            &target_addr,
-            &self.connect_opts,
-            flow_stat,
-            &self.acl,
-        )
-        .await
-        {
+        let remote = match AutoProxyClientStream::connect(self.context, server.as_ref(), &target_addr).await {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let header =
@@ -217,7 +190,7 @@ impl Socks5 {
         let listener = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => UdpSocket::bind(SocketAddr::new(saddr.ip(), 0)).await?,
             ClientConfig::DomainName(ref dname, port) => {
-                lookup_then!(&self.context, dname, port, |addr| {
+                lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     UdpSocket::bind(SocketAddr::new(addr.ip(), 0)).await
                 })?
                 .1
@@ -253,17 +226,14 @@ impl Socks5 {
             client_socket,
             client_addr,
             server: server.clone(),
-            connect_opts: self.connect_opts,
             remote_socket: None,
             remote_abortable: None,
             bypass_socket: None,
             bypass_abortable: None,
-            acl: self.acl,
             bypass_addr_cache: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
                 Duration::from_secs(5 * 60),
                 256,
             ))),
-            flow_stat: self.flow_stat,
         };
         let (relay_task, relay_abortable) = future::abortable(assoc.relay_task());
         tokio::spawn(relay_task);
@@ -303,18 +273,15 @@ impl Socks5 {
 }
 
 struct UdpAssociateRelayTask {
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     client_socket: Arc<UdpSocket>,
     client_addr: SocketAddr,
     server: Arc<BasicServerIdent>,
-    connect_opts: Arc<ConnectOpts>,
     remote_socket: Option<Arc<MonProxySocket>>,
     remote_abortable: Option<AbortHandle>,
     bypass_socket: Option<Arc<UdpSocket>>,
     bypass_abortable: Option<AbortHandle>,
-    acl: Option<Arc<AccessControl>>,
     bypass_addr_cache: Arc<Mutex<LruCache<SocketAddr, Address>>>,
-    flow_stat: Arc<FlowStat>,
 }
 
 impl Drop for UdpAssociateRelayTask {
@@ -369,10 +336,7 @@ impl UdpAssociateRelayTask {
                 payload.len()
             );
 
-            let is_bypassed = match self.acl {
-                None => false,
-                Some(ref acl) => acl.check_target_bypassed(&self.context, &header.address).await,
-            };
+            let is_bypassed = self.context.check_target_bypassed(&header.address).await;
 
             if is_bypassed {
                 if self.bypass_socket.is_none() {
@@ -416,7 +380,7 @@ impl UdpAssociateRelayTask {
                 let result = match header.address {
                     Address::SocketAddress(addr) => socket.send_to(payload, addr).await,
                     Address::DomainNameAddress(ref dname, port) => {
-                        match lookup_then!(&self.context, dname, port, |target| {
+                        match lookup_then!(self.context.context_ref(), dname, port, |target| {
                             socket.send_to(payload, target).await
                         }) {
                             Ok((resolved_addr, n)) => {
@@ -448,8 +412,9 @@ impl UdpAssociateRelayTask {
 
                     // Connect to remote server
                     let remote_socket =
-                        ProxySocket::connect_with_opts(self.context.clone(), svr_cfg, &self.connect_opts).await?;
-                    let remote_socket = MonProxySocket::from_socket(remote_socket, self.flow_stat.clone());
+                        ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
+                            .await?;
+                    let remote_socket = MonProxySocket::from_socket(remote_socket, self.context.flow_stat());
                     let remote_socket = Arc::new(remote_socket);
 
                     trace!(

@@ -134,22 +134,6 @@ fn main() {
         );
     }
 
-    #[cfg(feature = "local-http-native-tls")]
-    {
-        app = clap_app!(@app (app)
-            (@arg TLS_IDENTITY_PATH: --("tls-identity") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PASSWORD] "TLS identity file (PKCS #12) path for HTTPS server")
-            (@arg TLS_IDENTITY_PASSWORD: --("tls-identity-password") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PATH] "TLS identity file's password for HTTPS server")
-        );
-    }
-
-    #[cfg(feature = "local-http-rustls")]
-    {
-        app = clap_app!(@app (app)
-            (@arg TLS_IDENTITY_CERT_PATH: --("tls-identity-certificate") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_PRIVATE_KEY_PATH] "TLS identity certificate (PEM) path for HTTPS server")
-            (@arg TLS_IDENTITY_PRIVATE_KEY_PATH: --("tls-identity-private-key") +takes_value required_if("PROTOCOL", "https") requires[TLS_IDENTITY_CERT_PATH] "TLS identity private key (PEM), PKCS #8 or RSA syntax, for HTTPS server")
-        );
-    }
-
     #[cfg(unix)]
     {
         app = clap_app!(@app (app)
@@ -184,11 +168,6 @@ fn main() {
         Some("socks") => ProtocolType::Socks,
         #[cfg(feature = "local-http")]
         Some("http") => ProtocolType::Http,
-        #[cfg(all(
-            feature = "local-http",
-            any(feature = "local-http-native-tls", feature = "local-http-rustls")
-        ))]
-        Some("https") => ProtocolType::Https,
         #[cfg(feature = "local-tunnel")]
         Some("tunnel") => ProtocolType::Tunnel,
         #[cfg(feature = "local-redir")]
@@ -333,28 +312,6 @@ fn main() {
 
         if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
             config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
-        }
-    }
-
-    #[cfg(feature = "local-http-native-tls")]
-    {
-        if let Some(ipath) = matches.value_of("TLS_IDENTITY_PATH") {
-            config.tls_identity_path = Some(ipath.into());
-        }
-
-        if let Some(ipwd) = matches.value_of("TLS_IDENTITY_PASSWORD") {
-            config.tls_identity_password = Some(ipwd.into());
-        }
-    }
-
-    #[cfg(feature = "local-http-rustls")]
-    {
-        if let Some(cpath) = matches.value_of("TLS_IDENTITY_CERT_PATH") {
-            config.tls_identity_certificate_path = Some(cpath.into());
-        }
-
-        if let Some(kpath) = matches.value_of("TLS_IDENTITY_PRIVATE_KEY_PATH") {
-            config.tls_identity_private_key_path = Some(kpath.into());
         }
     }
 

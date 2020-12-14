@@ -7,47 +7,28 @@ use std::{
 };
 
 use log::{debug, trace, warn};
-use shadowsocks::{context::SharedContext, net::ConnectOpts};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::TcpStream,
 };
 
-use crate::{
-    local::{
-        acl::AccessControl,
-        loadbalancing::{BasicServerIdent, ServerIdent},
-        net::AutoProxyClientStream,
-        utils::establish_tcp_tunnel,
-    },
-    net::FlowStat,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::{BasicServerIdent, ServerIdent},
+    net::AutoProxyClientStream,
+    utils::establish_tcp_tunnel,
 };
 
 use super::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};
 
 pub struct Socks4 {
-    context: SharedContext,
-    flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    context: Arc<ServiceContext>,
     nodelay: bool,
-    acl: Option<Arc<AccessControl>>,
 }
 
 impl Socks4 {
-    pub fn new(
-        context: SharedContext,
-        flow_stat: Arc<FlowStat>,
-        connect_opts: Arc<ConnectOpts>,
-        nodelay: bool,
-        acl: Option<Arc<AccessControl>>,
-    ) -> Socks4 {
-        Socks4 {
-            context,
-            flow_stat,
-            connect_opts,
-            nodelay,
-            acl,
-        }
+    pub fn new(context: Arc<ServiceContext>, nodelay: bool) -> Socks4 {
+        Socks4 { context, nodelay }
     }
 
     pub async fn handle_socks4_client(
@@ -90,20 +71,9 @@ impl Socks4 {
         target_addr: Address,
     ) -> io::Result<()> {
         let svr_cfg = server.server_config();
-        let flow_stat = self.flow_stat;
-
         let target_addr = target_addr.into();
 
-        let mut remote = match AutoProxyClientStream::connect_with_opts_acl_opt(
-            self.context,
-            server.as_ref(),
-            &target_addr,
-            &self.connect_opts,
-            flow_stat,
-            &self.acl,
-        )
-        .await
-        {
+        let mut remote = match AutoProxyClientStream::connect(self.context, server.as_ref(), &target_addr).await {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let handshake_rsp = HandshakeResponse::new(ResultCode::RequestGranted);

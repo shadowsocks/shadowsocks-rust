@@ -5,11 +5,13 @@ use std::{io, net::SocketAddr, str::FromStr, sync::Arc};
 use http::uri::{Authority, Scheme};
 use hyper::{header::HeaderValue, upgrade, Body, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
 use log::{debug, error, trace};
-use shadowsocks::{context::SharedContext, net::ConnectOpts, relay::socks5::Address};
+use shadowsocks::relay::socks5::Address;
 
-use crate::{
-    local::{acl::AccessControl, loadbalancing::ServerIdent, net::AutoProxyClientStream, utils::establish_tcp_tunnel},
-    net::FlowStat,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::ServerIdent,
+    net::AutoProxyClientStream,
+    utils::establish_tcp_tunnel,
 };
 
 use super::{
@@ -19,26 +21,20 @@ use super::{
 };
 
 pub struct HttpDispatcher {
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     req: Request<Body>,
     server: Arc<HttpServerIdent>,
     client_addr: SocketAddr,
     bypass_client: BypassHttpClient,
-    connect_opts: Arc<ConnectOpts>,
-    flow_stat: Arc<FlowStat>,
-    acl: Option<Arc<AccessControl>>,
 }
 
 impl HttpDispatcher {
     pub fn new(
-        context: SharedContext,
+        context: Arc<ServiceContext>,
         req: Request<Body>,
         server: Arc<HttpServerIdent>,
         client_addr: SocketAddr,
         bypass_client: BypassHttpClient,
-        connect_opts: Arc<ConnectOpts>,
-        flow_stat: Arc<FlowStat>,
-        acl: Option<Arc<AccessControl>>,
     ) -> HttpDispatcher {
         HttpDispatcher {
             context,
@@ -46,9 +42,6 @@ impl HttpDispatcher {
             server,
             client_addr,
             bypass_client,
-            connect_opts,
-            flow_stat,
-            acl,
         }
     }
 
@@ -93,15 +86,7 @@ impl HttpDispatcher {
             // Connect to Shadowsocks' remote
             //
             // FIXME: What STATUS should I return for connection error?
-            let stream = AutoProxyClientStream::connect_with_opts_acl_opt(
-                self.context,
-                self.server.as_ref(),
-                &host,
-                &self.connect_opts,
-                self.flow_stat,
-                &self.acl,
-            )
-            .await?;
+            let stream = AutoProxyClientStream::connect(self.context, self.server.as_ref(), &host).await?;
 
             debug!("CONNECT relay connected {} <-> {}", self.client_addr, host);
 
@@ -162,7 +147,7 @@ impl HttpDispatcher {
             // Set keep-alive for connection with remote
             set_conn_keep_alive(version, self.req.headers_mut(), conn_keep_alive);
 
-            let mut res = if self.check_target_bypassed(&host).await {
+            let mut res = if self.context.check_target_bypassed(&host).await {
                 trace!("bypassed {} -> {} {:?}", self.client_addr, host, self.req);
 
                 // Keep connections in a global client instance
@@ -225,13 +210,6 @@ impl HttpDispatcher {
             debug!("HTTP {} relay {} <-> {} finished", method, self.client_addr, host);
 
             Ok(res)
-        }
-    }
-
-    async fn check_target_bypassed(&self, host: &Address) -> bool {
-        match self.acl {
-            None => false,
-            Some(ref acl) => acl.check_target_bypassed(&self.context, host).await,
         }
     }
 }

@@ -1,98 +1,16 @@
 //! TLS support by [native-tls](https://crates.io/crates/native-tls)
 
 use std::{
-    fs::File,
     future::Future,
-    io::{self, Read},
+    io,
     net::SocketAddr,
     pin::Pin,
-    sync::Arc,
     task::{self, Poll},
 };
 
-use futures::{ready, FutureExt};
-use hyper::server::{
-    accept::Accept,
-    conn::{AddrIncoming, AddrStream},
-};
-use log::trace;
-use native_tls::Identity;
-use pin_project::pin_project;
+use futures::ready;
+use hyper::server::conn::AddrStream;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use crate::config::Config;
-
-#[pin_project]
-pub struct TlsAcceptor {
-    acceptor: Arc<tokio_native_tls::TlsAcceptor>,
-    #[pin]
-    incoming: AddrIncoming,
-}
-
-impl TlsAcceptor {
-    pub fn bind(config: &Config, addr: &SocketAddr) -> io::Result<TlsAcceptor> {
-        let id_path = config.tls_identity_path.as_ref().expect("identity path");
-        let id_pwd = config.tls_identity_password.as_ref().expect("identify password");
-
-        trace!("creating TLS acceptor with identity: {}", id_path.display());
-
-        let mut id_file = File::open(id_path)?;
-        let mut id_buf = Vec::new();
-        id_file.read_to_end(&mut id_buf)?;
-
-        let identity = match Identity::from_pkcs12(&id_buf, &id_pwd) {
-            Ok(identity) => identity,
-            Err(err) => {
-                let err = io::Error::new(io::ErrorKind::Other, format!("load identity: {}", err));
-                return Err(err);
-            }
-        };
-
-        let acceptor = match native_tls::TlsAcceptor::new(identity) {
-            Ok(acceptor) => acceptor,
-            Err(err) => {
-                let err = io::Error::new(io::ErrorKind::Other, format!("create tls acceptor: {}", err));
-                return Err(err);
-            }
-        };
-
-        Ok(TlsAcceptor {
-            acceptor: Arc::new(From::from(acceptor)),
-            incoming: match AddrIncoming::bind(addr) {
-                Ok(incoming) => incoming,
-                Err(err) => {
-                    let err = io::Error::new(io::ErrorKind::Other, format!("hyper bind: {}", err));
-                    return Err(err);
-                }
-            },
-        })
-    }
-
-    pub fn local_addr(&self) -> SocketAddr {
-        self.incoming.local_addr()
-    }
-}
-
-impl Accept for TlsAcceptor {
-    type Conn = TlsStream;
-    type Error = io::Error;
-
-    fn poll_accept(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Option<Result<Self::Conn, Self::Error>>> {
-        let this = self.project();
-        match ready!(this.incoming.poll_accept(cx)) {
-            Some(Ok(stream)) => {
-                let acceptor = this.acceptor.clone();
-                let remote_addr = stream.remote_addr();
-                Poll::Ready(Some(Ok(TlsStream {
-                    state: TlsStreamState::Handshaking(async move { acceptor.accept(stream).await }.boxed()),
-                    remote_addr,
-                })))
-            }
-            Some(Err(e)) => Poll::Ready(Some(Err(e))),
-            None => Poll::Ready(None),
-        }
-    }
-}
 
 enum TlsStreamState {
     Handshaking(
