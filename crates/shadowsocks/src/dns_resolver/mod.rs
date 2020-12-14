@@ -1,22 +1,11 @@
 //! Asynchronous DNS resolver
 #![macro_use]
 
-use cfg_if::cfg_if;
+pub use self::resolver::{DnsResolve, DnsResolver};
 
-mod tokio_dns_resolver;
-
-cfg_if! {
-    if #[cfg(feature = "trust-dns")] {
-        mod trust_dns_resolver;
-
-        /// Use trust-dns DNS resolver (with DNS cache)
-        pub use self::trust_dns_resolver::{create_resolver, resolve};
-    } else {
-
-        /// Use tokio's builtin DNS resolver
-        pub use self::tokio_dns_resolver::resolve;
-    }
-}
+mod resolver;
+#[cfg(feature = "trust-dns")]
+mod trust_dns_resolver;
 
 /// Helper macro for resolving host and then process each addresses
 #[macro_export]

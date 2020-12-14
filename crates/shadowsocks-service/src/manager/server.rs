@@ -8,6 +8,7 @@ use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::{Context, SharedContext},
     crypto::v1::CipherKind,
+    dns_resolver::DnsResolver,
     manager::protocol::{
         self,
         AddRequest,
@@ -26,8 +27,6 @@ use shadowsocks::{
     ServerAddr,
 };
 use tokio::sync::Mutex;
-#[cfg(feature = "trust-dns")]
-use trust_dns_resolver::TokioAsyncResolver;
 
 use crate::{
     config::{ManagerConfig, ManagerServerHost, Mode},
@@ -103,8 +102,7 @@ impl Manager {
         self.nodelay = nodelay;
     }
 
-    #[cfg(feature = "trust-dns")]
-    pub fn set_dns_resolver(&mut self, resolver: Arc<TokioAsyncResolver>) {
+    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }

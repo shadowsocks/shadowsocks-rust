@@ -21,9 +21,9 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     #[cfg(feature = "trust-dns")]
     {
-        use shadowsocks::dns_resolver::create_resolver;
+        use shadowsocks::dns_resolver::DnsResolver;
 
-        let resolver = Arc::new(create_resolver(config.dns, config.ipv6_first).await?);
+        let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
         manager.set_dns_resolver(resolver);
     }
 

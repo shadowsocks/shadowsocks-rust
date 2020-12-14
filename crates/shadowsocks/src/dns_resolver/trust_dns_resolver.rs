@@ -1,19 +1,12 @@
 //! Asynchronous DNS resolver
 
-use std::{
-    io::{self, Error, ErrorKind},
-    net::SocketAddr,
-};
+use std::io;
 
 use log::{error, trace};
 use trust_dns_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     TokioAsyncResolver,
 };
-
-use crate::context::Context;
-
-use super::tokio_dns_resolver::resolve as tokio_resolve;
 
 /// Create a `trust-dns` asynchronous DNS resolver
 pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> io::Result<TokioAsyncResolver> {
@@ -79,57 +72,4 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
         }
     }
     .map_err(From::from)
-}
-
-// Resolved result
-enum EitherResolved<A, B> {
-    Tokio(A),
-    Trust(B),
-}
-
-impl<A, B> Iterator for EitherResolved<A, B>
-where
-    A: Iterator<Item = SocketAddr>,
-    B: Iterator<Item = SocketAddr>,
-{
-    type Item = SocketAddr;
-
-    fn next(&mut self) -> Option<SocketAddr> {
-        match *self {
-            EitherResolved::Tokio(ref mut a) => a.next(),
-            EitherResolved::Trust(ref mut b) => b.next(),
-        }
-    }
-}
-
-/// Perform a DNS resolution
-pub async fn resolve<'a>(
-    context: &Context,
-    addr: &'a str,
-    port: u16,
-) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
-    match context.dns_resolver() {
-        Some(resolver) => {
-            trace!("DNS resolving {}:{} with trust-dns", addr, port);
-
-            match resolver.lookup_ip(addr).await {
-                Ok(lookup_result) => Ok(EitherResolved::Trust(
-                    lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
-                )),
-                Err(err) => {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("dns resolve {}:{} error: {}", addr, port, err),
-                    );
-                    Err(err)
-                }
-            }
-        }
-        // Fallback to tokio's DNS resolver
-        None => {
-            trace!("DNS resolving {}:{} with tokio (fallback)", addr, port);
-
-            tokio_resolve(context, addr, port).await.map(EitherResolved::Tokio)
-        }
-    }
 }

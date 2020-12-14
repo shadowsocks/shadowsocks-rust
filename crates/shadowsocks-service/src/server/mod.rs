@@ -7,9 +7,7 @@ use std::{
 
 use futures::{future, FutureExt};
 use log::trace;
-#[cfg(feature = "trust-dns")]
-use shadowsocks::dns_resolver::create_resolver;
-use shadowsocks::net::ConnectOpts;
+use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
 
@@ -39,7 +37,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     });
 
     #[cfg(feature = "trust-dns")]
-    let resolver = Arc::new(create_resolver(config.dns, config.ipv6_first).await?);
+    let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
 
     let acl = config.acl.map(Arc::new);
 

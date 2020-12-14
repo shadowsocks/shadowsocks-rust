@@ -10,12 +10,12 @@ use futures::{future, FutureExt};
 use shadowsocks::{
     config::ServerType,
     context::{Context, SharedContext},
+    dns_resolver::DnsResolver,
     net::ConnectOpts,
     plugin::{Plugin, PluginMode},
     relay::socks5::Address,
     ServerConfig,
 };
-use trust_dns_resolver::TokioAsyncResolver;
 
 use crate::{
     config::{ClientConfig, Mode},
@@ -87,8 +87,7 @@ impl Tunnel {
         self.nodelay = nodelay;
     }
 
-    #[cfg(feature = "trust-dns")]
-    pub fn set_dns_resolver(&mut self, resolver: Arc<TokioAsyncResolver>) {
+    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }

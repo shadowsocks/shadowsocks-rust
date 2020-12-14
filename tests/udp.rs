@@ -90,16 +90,16 @@ async fn udp_relay() {
     // Wait until all server starts
     time::sleep(Duration::from_secs(1)).await;
 
-    let l = Socks5UdpClient::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+    let mut l = Socks5UdpClient::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
         .await
         .unwrap();
     l.associate(&get_client_addr()).await.unwrap();
 
     let payload = b"HEllo WORld";
-    l.send_to(payload, &remote_addr).await.unwrap();
+    l.send_to(0, payload, &remote_addr).await.unwrap();
 
     let mut buf = vec![0u8; 65536];
-    let (amt, recv_addr) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
+    let (amt, _, recv_addr) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
         .await
         .unwrap()
         .unwrap();

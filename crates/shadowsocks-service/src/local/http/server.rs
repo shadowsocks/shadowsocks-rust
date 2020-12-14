@@ -20,11 +20,11 @@ use log::{error, info};
 use shadowsocks::{
     config::{ServerAddr, ServerConfig, ServerType},
     context::{Context, SharedContext},
+    dns_resolver::DnsResolver,
     lookup_then,
     net::ConnectOpts,
     plugin::{Plugin, PluginMode},
 };
-use trust_dns_resolver::TokioAsyncResolver;
 
 use crate::{
     config::ClientConfig,
@@ -87,8 +87,7 @@ impl Http {
         self.connect_opts = opts;
     }
 
-    #[cfg(feature = "trust-dns")]
-    pub fn set_dns_resolver(&mut self, resolver: Arc<TokioAsyncResolver>) {
+    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }

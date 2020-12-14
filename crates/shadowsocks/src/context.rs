@@ -4,10 +4,8 @@ use std::{io, net::SocketAddr, sync::Arc};
 
 use bloomfilter::Bloom;
 use spin::Mutex as SpinMutex;
-#[cfg(feature = "trust-dns")]
-use trust_dns_resolver::TokioAsyncResolver;
 
-use crate::{config::ServerType, dns_resolver};
+use crate::{config::ServerType, dns_resolver::DnsResolver};
 
 // Entries for server's bloom filter
 //
@@ -98,8 +96,7 @@ pub struct Context {
     nonce_ppbloom: SpinMutex<PingPongBloom>,
 
     // trust-dns resolver, which supports REAL asynchronous resolving, and also customizable
-    #[cfg(feature = "trust-dns")]
-    dns_resolver: Option<Arc<TokioAsyncResolver>>,
+    dns_resolver: Arc<DnsResolver>,
 }
 
 pub type SharedContext = Arc<Context>;
@@ -109,8 +106,7 @@ impl Context {
         let nonce_ppbloom = SpinMutex::new(PingPongBloom::new(config_type));
         Context {
             nonce_ppbloom,
-            #[cfg(feature = "trust-dns")]
-            dns_resolver: None,
+            dns_resolver: Arc::new(DnsResolver::system_resolver()),
         }
     }
 
@@ -132,22 +128,20 @@ impl Context {
         ppbloom.check_and_set(nonce)
     }
 
-    /// Set a trust-dns resolver
+    /// Set a DNS resolver
     ///
     /// The resolver should be wrapped in an `Arc`, because it could be shared with the other servers
-    #[cfg(feature = "trust-dns")]
-    pub fn set_dns_resolver(&mut self, resolver: Arc<TokioAsyncResolver>) {
-        self.dns_resolver = Some(resolver);
+    pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
+        self.dns_resolver = resolver;
     }
 
-    /// Get an instance of trust-dns
-    #[cfg(feature = "trust-dns")]
-    pub fn dns_resolver(&self) -> Option<&TokioAsyncResolver> {
-        self.dns_resolver.as_deref()
+    /// Get the DNS resolver
+    pub fn dns_resolver(&self) -> &DnsResolver {
+        self.dns_resolver.as_ref()
     }
 
     /// Resolves DNS address to `SocketAddr`s
     pub async fn dns_resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
-        dns_resolver::resolve(self, addr, port).await
+        self.dns_resolver.resolve(addr, port).await
     }
 }
