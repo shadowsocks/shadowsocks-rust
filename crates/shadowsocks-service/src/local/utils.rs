@@ -12,21 +12,28 @@ use shadowsocks::{
     },
 };
 use tokio::{
-    io::{copy, AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    io::{copy, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     time,
 };
 
-use super::net::AutoProxyClientStream;
+use crate::local::net::AutoProxyIo;
 
-pub async fn establish_tcp_tunnel(
+pub async fn establish_tcp_tunnel<PR, PW, SR, SW>(
     svr_cfg: &ServerConfig,
-    plain: &mut TcpStream,
-    mut proxied: AutoProxyClientStream,
+    plain_reader: &mut PR,
+    plain_writer: &mut PW,
+    shadow_reader: &mut SR,
+    shadow_writer: &mut SW,
     peer_addr: SocketAddr,
     target_addr: &Address,
-) -> io::Result<()> {
-    if proxied.is_proxied() {
+) -> io::Result<()>
+where
+    PR: AsyncRead + Unpin,
+    PW: AsyncWrite + Unpin,
+    SR: AsyncRead + AutoProxyIo + Unpin,
+    SW: AsyncWrite + AutoProxyIo + Unpin,
+{
+    if shadow_reader.is_proxied() && shadow_writer.is_proxied() {
         debug!(
             "established tcp tunnel {} <-> {} through sever {} (outbound: {})",
             peer_addr,
@@ -36,7 +43,15 @@ pub async fn establish_tcp_tunnel(
         );
     } else {
         debug!("established tcp tunnel {} <-> {} bypassed", peer_addr, target_addr);
-        return establish_tcp_tunnel_bypassed(plain, proxied, peer_addr, target_addr).await;
+        return establish_tcp_tunnel_bypassed(
+            plain_reader,
+            plain_writer,
+            shadow_reader,
+            shadow_writer,
+            peer_addr,
+            target_addr,
+        )
+        .await;
     }
 
     // https://github.com/shadowsocks/shadowsocks-rust/issues/232
@@ -46,28 +61,25 @@ pub async fn establish_tcp_tunnel(
     // Wait at most 500ms, and then sends handshake packet to remote servers.
     {
         let mut buffer = [0u8; 8192];
-        match time::timeout(Duration::from_millis(500), plain.read(&mut buffer)).await {
+        match time::timeout(Duration::from_millis(500), plain_reader.read(&mut buffer)).await {
             Ok(Ok(0)) => {
                 // EOF. Just terminate right here.
                 return Ok(());
             }
             Ok(Ok(n)) => {
                 // Send the first packet.
-                proxied.write_all(&buffer[..n]).await?;
+                shadow_writer.write_all(&buffer[..n]).await?;
             }
             Ok(Err(err)) => return Err(err),
             Err(..) => {
                 // Timeout. Send handshake to server.
-                proxied.write(&[]).await?;
+                shadow_writer.write(&[]).await?;
             }
         }
     }
 
-    let (mut lr, mut lw) = plain.split();
-    let (mut rr, mut rw) = proxied.into_split();
-
-    let l2r = copy_to_encrypted(svr_cfg.method(), &mut lr, &mut rw);
-    let r2l = copy_from_encrypted(svr_cfg.method(), &mut rr, &mut lw);
+    let l2r = copy_to_encrypted(svr_cfg.method(), plain_reader, shadow_writer);
+    let r2l = copy_from_encrypted(svr_cfg.method(), shadow_reader, plain_writer);
 
     tokio::pin!(l2r);
     tokio::pin!(r2l);
@@ -90,17 +102,22 @@ pub async fn establish_tcp_tunnel(
     Ok(())
 }
 
-async fn establish_tcp_tunnel_bypassed(
-    plain: &mut TcpStream,
-    proxied: AutoProxyClientStream,
+async fn establish_tcp_tunnel_bypassed<PR, PW, SR, SW>(
+    plain_reader: &mut PR,
+    plain_writer: &mut PW,
+    shadow_reader: &mut SR,
+    shadow_writer: &mut SW,
     peer_addr: SocketAddr,
     target_addr: &Address,
-) -> io::Result<()> {
-    let (mut lr, mut lw) = plain.split();
-    let (mut rr, mut rw) = proxied.into_split();
-
-    let l2r = copy(&mut lr, &mut rw);
-    let r2l = copy(&mut rr, &mut lw);
+) -> io::Result<()>
+where
+    PR: AsyncRead + Unpin,
+    PW: AsyncWrite + Unpin,
+    SR: AsyncRead + Unpin,
+    SW: AsyncWrite + Unpin,
+{
+    let l2r = copy(plain_reader, shadow_writer);
+    let r2l = copy(shadow_reader, plain_writer);
 
     tokio::pin!(l2r);
     tokio::pin!(r2l);

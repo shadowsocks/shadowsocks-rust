@@ -19,6 +19,7 @@ impl MonProxySocket {
     }
 
     /// Send a UDP packet to addr through proxy
+    #[inline]
     pub async fn send(&self, addr: &Address, payload: &[u8]) -> io::Result<()> {
         let n = self.socket.send(addr, payload).await?;
         self.flow_stat.incr_tx(n as u64);
@@ -27,6 +28,7 @@ impl MonProxySocket {
     }
 
     /// Send a UDP packet to target from proxy
+    #[inline]
     pub async fn send_to<A: ToSocketAddrs>(&self, target: A, addr: &Address, payload: &[u8]) -> io::Result<()> {
         let n = self.socket.send_to(target, addr, payload).await?;
         self.flow_stat.incr_tx(n as u64);
@@ -39,6 +41,7 @@ impl MonProxySocket {
     /// This function will use `recv_buf` to store intermediate data, so it has to be big enough to store the whole shadowsocks' packet
     ///
     /// It is recommended to allocate a buffer to have at least 65536 bytes.
+    #[inline]
     pub async fn recv(&self, recv_buf: &mut [u8]) -> io::Result<(usize, Address)> {
         let (n, addr, recv_n) = self.socket.recv(recv_buf).await?;
         self.flow_stat.incr_rx(recv_n as u64);
@@ -51,6 +54,7 @@ impl MonProxySocket {
     /// This function will use `recv_buf` to store intermediate data, so it has to be big enough to store the whole shadowsocks' packet
     ///
     /// It is recommended to allocate a buffer to have at least 65536 bytes.
+    #[inline]
     pub async fn recv_from(&self, recv_buf: &mut [u8]) -> io::Result<(usize, SocketAddr, Address)> {
         let (n, peer_addr, addr, recv_n) = self.socket.recv_from(recv_buf).await?;
         self.flow_stat.incr_rx(recv_n as u64);
@@ -58,6 +62,7 @@ impl MonProxySocket {
         Ok((n, peer_addr, addr))
     }
 
+    #[inline]
     pub fn get_ref(&self) -> &ProxySocket {
         &self.socket
     }

@@ -2,10 +2,7 @@
 
 use std::{
     fmt::{self, Debug},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use shadowsocks::ServerConfig;
@@ -13,37 +10,17 @@ use tokio::sync::Mutex;
 
 use super::server_stat::{Score, ServerStat};
 
-pub struct ServerIdent<E = ()> {
-    svr_cfg: ServerConfig,
-    extra: E,
+pub struct ServerScore {
     stat_data: Mutex<ServerStat>,
     score: AtomicU64,
 }
 
-impl<E> ServerIdent<E> {
-    pub fn new(svr_cfg: ServerConfig, extra: E) -> ServerIdent<E> {
-        ServerIdent {
-            svr_cfg,
-            extra,
+impl ServerScore {
+    pub fn new() -> ServerScore {
+        ServerScore {
             stat_data: Mutex::new(ServerStat::new()),
             score: AtomicU64::new(0),
         }
-    }
-
-    pub fn extra(&self) -> &E {
-        &self.extra
-    }
-
-    pub fn extra_mut(&mut self) -> &mut E {
-        &mut self.extra
-    }
-
-    pub fn server_config(&self) -> &ServerConfig {
-        &self.svr_cfg
-    }
-
-    pub fn server_config_mut(&mut self) -> &mut ServerConfig {
-        &mut self.svr_cfg
     }
 
     pub fn score(&self) -> u64 {
@@ -64,17 +41,37 @@ impl<E> ServerIdent<E> {
     }
 }
 
-impl<E> Debug for ServerIdent<E>
-where
-    E: Debug,
-{
+impl Debug for ServerScore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ServerIdent")
-            .field("svr_cfg", &self.svr_cfg)
-            .field("score", &self.score())
-            .field("extra", &self.extra)
-            .finish()
+        f.debug_struct("ServerScore").field("score", &self.score()).finish()
     }
 }
 
-pub type SharedServerIdent<E> = Arc<ServerIdent<E>>;
+pub trait ServerIdent {
+    fn server_score<'a>(&'a self) -> &'a ServerScore;
+    fn server_config<'a>(&'a self) -> &'a ServerConfig;
+}
+
+pub struct BasicServerIdent {
+    score: ServerScore,
+    svr_cfg: ServerConfig,
+}
+
+impl BasicServerIdent {
+    pub fn new(svr_cfg: ServerConfig) -> BasicServerIdent {
+        BasicServerIdent {
+            score: ServerScore::new(),
+            svr_cfg,
+        }
+    }
+}
+
+impl ServerIdent for BasicServerIdent {
+    fn server_config<'a>(&'a self) -> &'a ServerConfig {
+        &self.svr_cfg
+    }
+
+    fn server_score<'a>(&'a self) -> &'a ServerScore {
+        &self.score
+    }
+}

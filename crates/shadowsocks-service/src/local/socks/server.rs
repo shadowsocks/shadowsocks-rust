@@ -27,7 +27,7 @@ use crate::{
     config::ClientConfig,
     local::{
         acl::AccessControl,
-        loadbalancing::{PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerType as BalancerServerType},
     },
     net::FlowStat,
 };
@@ -129,7 +129,7 @@ impl Socks {
             PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp, self.connect_opts.clone());
 
         for server in self.servers {
-            let server_ident = ServerIdent::new(server, ());
+            let server_ident = BasicServerIdent::new(server);
             balancer_builder.add_server(server_ident);
         }
 
@@ -178,7 +178,7 @@ impl Socks {
         context: SharedContext,
         client_config: Arc<ClientConfig>,
         stream: TcpStream,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
         connect_opts: Arc<ConnectOpts>,
         flow_stat: Arc<FlowStat>,

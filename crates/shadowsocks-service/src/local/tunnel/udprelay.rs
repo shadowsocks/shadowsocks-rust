@@ -21,7 +21,7 @@ use tokio::{net::UdpSocket, sync::mpsc, time};
 
 use crate::{
     config::ClientConfig,
-    local::loadbalancing::{PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+    local::loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
     net::{FlowStat, MonProxySocket},
 };
 
@@ -70,7 +70,7 @@ impl UdpTunnel {
             PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp, self.connect_opts.clone());
 
         for server in servers {
-            let server_ident = ServerIdent::new(server, ());
+            let server_ident = BasicServerIdent::new(server);
             balancer_builder.add_server(server_ident);
         }
 
@@ -112,7 +112,7 @@ impl UdpTunnel {
         &mut self,
         listener: &Arc<UdpSocket>,
         peer_addr: SocketAddr,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         forward_addr: &Address,
         data: &[u8],
     ) -> io::Result<()> {

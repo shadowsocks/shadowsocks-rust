@@ -30,7 +30,7 @@ use tokio::{
 };
 
 use super::{
-    server_data::{ServerIdent, SharedServerIdent},
+    server_data::ServerIdent,
     server_stat::{Score, DEFAULT_CHECK_INTERVAL_SEC, DEFAULT_CHECK_TIMEOUT_SEC},
 };
 
@@ -49,19 +49,25 @@ impl fmt::Display for ServerType {
     }
 }
 
-pub struct PingBalancerBuilder<E = ()> {
-    servers: Vec<SharedServerIdent<E>>,
+pub struct PingBalancerBuilder<C>
+where
+    C: ServerIdent,
+{
+    servers: Vec<Arc<C>>,
     context: SharedContext,
     server_type: ServerType,
     connect_opts: Arc<ConnectOpts>,
 }
 
-impl<E> PingBalancerBuilder<E> {
+impl<C> PingBalancerBuilder<C>
+where
+    C: ServerIdent,
+{
     pub fn new(
         context: SharedContext,
         server_type: ServerType,
         connect_opts: Arc<ConnectOpts>,
-    ) -> PingBalancerBuilder<E> {
+    ) -> PingBalancerBuilder<C> {
         PingBalancerBuilder {
             servers: Vec::new(),
             context,
@@ -70,11 +76,11 @@ impl<E> PingBalancerBuilder<E> {
         }
     }
 
-    pub fn add_server(&mut self, server: ServerIdent<E>) {
+    pub fn add_server(&mut self, server: C) {
         self.servers.push(Arc::new(server));
     }
 
-    pub fn build(self) -> (PingBalancer<E>, impl Future<Output = ()>) {
+    pub fn build(self) -> (PingBalancer<C>, impl Future<Output = ()>) {
         assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
 
         let balancer = PingBalancerInner {
@@ -93,24 +99,32 @@ impl<E> PingBalancerBuilder<E> {
             let _ = checker.await;
         };
 
-        let balancer = PingBalancer { inner, abortable };
+        let balancer = PingBalancer {
+            inner,
+            abortable: Arc::new(abortable),
+        };
         (balancer, checker)
     }
 }
 
-struct PingBalancerInner<E = ()> {
-    servers: Vec<SharedServerIdent<E>>,
+struct PingBalancerInner<C> {
+    servers: Vec<Arc<C>>,
     best_idx: AtomicUsize,
     context: SharedContext,
     server_type: ServerType,
     connect_opts: Arc<ConnectOpts>,
 }
 
-impl<E> PingBalancerInner<E> {
-    fn best_server(&self) -> SharedServerIdent<E> {
+impl<C> PingBalancerInner<C> {
+    fn best_server(&self) -> Arc<C> {
         self.servers[self.best_idx.load(Ordering::Relaxed)].clone()
     }
+}
 
+impl<C> PingBalancerInner<C>
+where
+    C: ServerIdent,
+{
     async fn checker_task(self: Arc<Self>) {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
@@ -148,9 +162,10 @@ impl<E> PingBalancerInner<E> {
             let mut best_idx = 0;
             let mut best_score = u64::MAX;
             for (idx, server) in self.servers.iter().enumerate() {
-                if server.score() < best_score {
+                let score = server.server_score().score();
+                if score < best_score {
                     best_idx = idx;
-                    best_score = server.score();
+                    best_score = score;
                 }
             }
             self.best_idx.store(best_idx, Ordering::Release);
@@ -169,26 +184,35 @@ impl<E> PingBalancerInner<E> {
     }
 }
 
-pub struct PingBalancer<E = ()> {
-    inner: Arc<PingBalancerInner<E>>,
-    abortable: AbortHandle,
+pub struct PingBalancer<C> {
+    inner: Arc<PingBalancerInner<C>>,
+    abortable: Arc<AbortHandle>,
 }
 
-impl<E> Drop for PingBalancer<E> {
+impl<C> Drop for PingBalancer<C> {
     fn drop(&mut self) {
         self.abortable.abort();
     }
 }
 
-impl<E> PingBalancer<E> {
-    pub fn best_server(&self) -> SharedServerIdent<E> {
+impl<C> PingBalancer<C> {
+    pub fn best_server(&self) -> Arc<C> {
         self.inner.best_server()
     }
 }
 
-impl<E> Debug for PingBalancer<E>
+impl<C> Clone for PingBalancer<C> {
+    fn clone(&self) -> Self {
+        PingBalancer {
+            inner: self.inner.clone(),
+            abortable: self.abortable.clone(),
+        }
+    }
+}
+
+impl<C> Debug for PingBalancer<C>
 where
-    E: Debug,
+    C: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PingBalancer")
@@ -198,19 +222,22 @@ where
     }
 }
 
-struct PingChecker<E> {
-    server: SharedServerIdent<E>,
+struct PingChecker<C> {
+    server: Arc<C>,
     server_type: ServerType,
     context: SharedContext,
     connect_opts: Arc<ConnectOpts>,
 }
 
-impl<E> PingChecker<E> {
-    /// Checks server's score and update into `ServerIdent<E>`
+impl<C> PingChecker<C>
+where
+    C: ServerIdent,
+{
+    /// Checks server's score and update into `ServerScore<E>`
     async fn check_update_score(self) {
         let score = match self.check_delay().await {
-            Ok(d) => self.server.push_score(Score::Latency(d)).await,
-            Err(..) => self.server.push_score(Score::Errored).await, // Penalty
+            Ok(d) => self.server.server_score().push_score(Score::Latency(d)).await,
+            Err(..) => self.server.server_score().push_score(Score::Errored).await, // Penalty
         };
 
         trace!(

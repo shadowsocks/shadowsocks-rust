@@ -30,6 +30,8 @@ use crate::{
     net::{FlowStat, MonProxyStream},
 };
 
+use super::auto_proxy_io::AutoProxyIo;
+
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
     Proxied(#[pin] ProxyClientStream<MonProxyStream<TokioTcpStream>>),
@@ -38,9 +40,9 @@ pub enum AutoProxyClientStream {
 
 impl AutoProxyClientStream {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_with_opts_acl<A, E>(
+    pub async fn connect_with_opts_acl<A, I>(
         context: SharedContext,
-        server: &ServerIdent<E>,
+        server: &I,
         addr: A,
         opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
@@ -48,27 +50,42 @@ impl AutoProxyClientStream {
     ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
+        I: ServerIdent,
     {
         let addr = addr.into();
         if acl.check_target_bypassed(&context, &addr).await {
-            // Connect directly.
-            let stream = TcpStream::connect_remote_with_opts(&context, &addr, opts).await?;
-            Ok(AutoProxyClientStream::Bypassed(stream.into()))
+            AutoProxyClientStream::connect_bypassed_with_opts(context, addr, opts).await
         } else {
-            AutoProxyClientStream::connect_with_opts(context, server, addr, opts, flow_stat).await
+            AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts, flow_stat).await
         }
     }
 
-    /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_with_opts<A, E>(
+    /// Connect directly to target `addr`
+    pub async fn connect_bypassed_with_opts<A>(
         context: SharedContext,
-        server: &ServerIdent<E>,
+        addr: A,
+        opts: &ConnectOpts,
+    ) -> io::Result<AutoProxyClientStream>
+    where
+        A: Into<Address>,
+    {
+        // Connect directly.
+        let addr = addr.into();
+        let stream = TcpStream::connect_remote_with_opts(&context, &addr, opts).await?;
+        Ok(AutoProxyClientStream::Bypassed(stream.into()))
+    }
+
+    /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
+    pub async fn connect_proxied_with_opts<A, I>(
+        context: SharedContext,
+        server: &I,
         addr: A,
         opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
     ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
+        I: ServerIdent,
     {
         let svr_cfg = server.server_config();
         let stream = match ProxyClientStream::connect_with_opts_map(context, svr_cfg, addr, opts, |stream| {
@@ -78,16 +95,16 @@ impl AutoProxyClientStream {
         {
             Ok(s) => s,
             Err(err) => {
-                server.report_failure().await;
+                server.server_score().report_failure().await;
                 return Err(err);
             }
         };
         Ok(AutoProxyClientStream::Proxied(stream))
     }
 
-    pub(crate) async fn connect_with_opts_acl_opt<A, E>(
+    pub(crate) async fn connect_with_opts_acl_opt<A, I>(
         context: SharedContext,
-        server: &ServerIdent<E>,
+        server: &I,
         addr: A,
         opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
@@ -95,9 +112,10 @@ impl AutoProxyClientStream {
     ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
+        I: ServerIdent,
     {
         match *acl {
-            None => AutoProxyClientStream::connect_with_opts(context, server, addr, opts, flow_stat).await,
+            None => AutoProxyClientStream::connect_proxied_with_opts(context, server, addr, opts, flow_stat).await,
             Some(ref acl) => {
                 AutoProxyClientStream::connect_with_opts_acl(context, server, addr, opts, flow_stat, acl).await
             }
@@ -117,13 +135,11 @@ impl AutoProxyClientStream {
             AutoProxyClientStream::Bypassed(ref s) => s.set_nodelay(nodelay),
         }
     }
+}
 
-    pub fn is_proxied(&self) -> bool {
+impl AutoProxyIo for AutoProxyClientStream {
+    fn is_proxied(&self) -> bool {
         matches!(*self, AutoProxyClientStream::Proxied(..))
-    }
-
-    pub fn is_bypassed(&self) -> bool {
-        matches!(*self, AutoProxyClientStream::Bypassed(..))
     }
 }
 
@@ -203,6 +219,12 @@ pub enum AutoProxyClientStreamReadHalf {
     Bypassed(#[pin] OwnedReadHalf),
 }
 
+impl AutoProxyIo for AutoProxyClientStreamReadHalf {
+    fn is_proxied(&self) -> bool {
+        matches!(*self, AutoProxyClientStreamReadHalf::Proxied(..))
+    }
+}
+
 impl AsyncRead for AutoProxyClientStreamReadHalf {
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         match self.project() {
@@ -216,6 +238,12 @@ impl AsyncRead for AutoProxyClientStreamReadHalf {
 pub enum AutoProxyClientStreamWriteHalf {
     Proxied(#[pin] ProxyClientStreamWriteHalf<MonProxyStream<TokioTcpStream>>),
     Bypassed(#[pin] OwnedWriteHalf),
+}
+
+impl AutoProxyIo for AutoProxyClientStreamWriteHalf {
+    fn is_proxied(&self) -> bool {
+        matches!(*self, AutoProxyClientStreamWriteHalf::Proxied(..))
+    }
 }
 
 impl AsyncWrite for AutoProxyClientStreamWriteHalf {

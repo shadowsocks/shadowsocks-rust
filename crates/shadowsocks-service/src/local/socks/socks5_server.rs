@@ -40,7 +40,12 @@ use tokio::{
 
 use crate::{
     config::ClientConfig,
-    local::{acl::AccessControl, loadbalancing::ServerIdent, net::AutoProxyClientStream, utils::establish_tcp_tunnel},
+    local::{
+        acl::AccessControl,
+        loadbalancing::{BasicServerIdent, ServerIdent},
+        net::AutoProxyClientStream,
+        utils::establish_tcp_tunnel,
+    },
     net::{FlowStat, MonProxySocket},
 };
 
@@ -73,7 +78,7 @@ impl Socks5 {
         self,
         client_config: &ClientConfig,
         mut stream: TcpStream,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
     ) -> io::Result<()> {
         // 1. Handshake
@@ -139,7 +144,7 @@ impl Socks5 {
     async fn handle_tcp_connect(
         self,
         mut stream: TcpStream,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
@@ -148,7 +153,7 @@ impl Socks5 {
 
         let remote = match AutoProxyClientStream::connect_with_opts_acl_opt(
             self.context,
-            &server,
+            server.as_ref(),
             &target_addr,
             &self.connect_opts,
             flow_stat,
@@ -185,14 +190,26 @@ impl Socks5 {
             remote.set_nodelay(true)?;
         }
 
-        establish_tcp_tunnel(svr_cfg, &mut stream, remote, peer_addr, &target_addr).await
+        let (mut plain_reader, mut plain_writer) = stream.split();
+        let (mut shadow_reader, mut shadow_writer) = remote.into_split();
+
+        establish_tcp_tunnel(
+            svr_cfg,
+            &mut plain_reader,
+            &mut plain_writer,
+            &mut shadow_reader,
+            &mut shadow_writer,
+            peer_addr,
+            &target_addr,
+        )
+        .await
     }
 
     async fn handle_udp_associate(
         self,
         client_config: &ClientConfig,
         mut stream: TcpStream,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         client_addr: Address,
     ) -> io::Result<()> {
         let svr_cfg = server.server_config();
@@ -289,7 +306,7 @@ struct UdpAssociateRelayTask {
     context: SharedContext,
     client_socket: Arc<UdpSocket>,
     client_addr: SocketAddr,
-    server: Arc<ServerIdent>,
+    server: Arc<BasicServerIdent>,
     connect_opts: Arc<ConnectOpts>,
     remote_socket: Option<Arc<MonProxySocket>>,
     remote_abortable: Option<AbortHandle>,

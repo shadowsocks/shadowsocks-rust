@@ -18,7 +18,7 @@ use tokio::{
 use crate::{
     config::ClientConfig,
     local::{
-        loadbalancing::{PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -66,7 +66,7 @@ impl TcpTunnel {
             PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp, self.connect_opts.clone());
 
         for server in servers {
-            let server_ident = ServerIdent::new(server, ());
+            let server_ident = BasicServerIdent::new(server);
             balancer_builder.add_server(server_ident);
         }
 
@@ -110,7 +110,7 @@ impl TcpTunnel {
     async fn handle_tcp_client(
         context: SharedContext,
         mut stream: TcpStream,
-        server: Arc<ServerIdent>,
+        server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
         forward_addr: Address,
         connect_opts: Arc<ConnectOpts>,
@@ -126,13 +126,31 @@ impl TcpTunnel {
             svr_cfg.addr(),
         );
 
-        let remote =
-            AutoProxyClientStream::connect_with_opts(context, &server, &forward_addr, &connect_opts, flow_stat).await?;
+        let remote = AutoProxyClientStream::connect_proxied_with_opts(
+            context,
+            server.as_ref(),
+            &forward_addr,
+            &connect_opts,
+            flow_stat,
+        )
+        .await?;
 
         if nodelay {
             remote.set_nodelay(true)?;
         }
 
-        establish_tcp_tunnel(svr_cfg, &mut stream, remote.into(), peer_addr, &forward_addr).await
+        let (mut plain_reader, mut plain_writer) = stream.split();
+        let (mut shadow_reader, mut shadow_writer) = remote.into_split();
+
+        establish_tcp_tunnel(
+            svr_cfg,
+            &mut plain_reader,
+            &mut plain_writer,
+            &mut shadow_reader,
+            &mut shadow_writer,
+            peer_addr,
+            &forward_addr,
+        )
+        .await
     }
 }

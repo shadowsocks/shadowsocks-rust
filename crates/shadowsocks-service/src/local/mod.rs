@@ -10,6 +10,7 @@ use shadowsocks::net::ConnectOpts;
 use crate::config::{Config, ConfigType, ProtocolType};
 
 pub mod acl;
+pub mod context;
 #[cfg(feature = "local-http")]
 pub mod http;
 pub mod loadbalancing;
@@ -94,7 +95,18 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.run().await
         }
         #[cfg(feature = "local-http")]
-        ProtocolType::Http | ProtocolType::Https => unimplemented!(),
+        ProtocolType::Http | ProtocolType::Https => {
+            use self::http::Http;
+
+            let mut server = Http::new(client_config, config.server);
+
+            #[cfg(feature = "trust-dns")]
+            server.set_dns_resolver(resolver);
+
+            server.set_connect_opts(connect_opts);
+
+            server.run().await
+        }
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => unimplemented!(),
     }
