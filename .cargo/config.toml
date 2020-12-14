@@ -3,11 +3,18 @@ rustflags = [
     # "--print", "native-static-libs",
 ]
 
-[target.'cfg(any(target_arch = "x86", target_arch = "x86_64"))']
+[target.'cfg(target_arch = "x86_64")']
 rustflags = [
     # "--print", "native-static-libs",
     # "-C", "target-cpu=native",
     "-C", "target-feature=+aes,+pclmul,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+avx,+avx2,+fma,adx",
+]
+
+[target.'cfg(target_arch = "x86")']
+rustflags = [
+    # "--print", "native-static-libs",
+    # "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+pclmul,+sse,+sse2,+sse3,+ssse3",
 ]
 
 [target.'cfg(target_arch = "arm")']
