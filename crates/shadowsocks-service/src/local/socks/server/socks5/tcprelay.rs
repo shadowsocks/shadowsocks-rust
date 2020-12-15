@@ -122,7 +122,7 @@ impl Socks5TcpHandler {
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
-        if self.mode.enable_tcp() {
+        if !self.mode.enable_tcp() {
             warn!("socks5 tcp is disabled. mode: {:?}", self.mode);
 
             let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, target_addr);
