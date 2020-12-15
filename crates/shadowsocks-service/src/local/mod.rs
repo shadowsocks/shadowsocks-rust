@@ -10,19 +10,19 @@ use crate::config::{Config, ConfigType, ProtocolType};
 use self::context::ServiceContext;
 
 pub mod acl;
-mod context;
+pub mod context;
 #[cfg(feature = "local-dns")]
-mod dns;
+pub mod dns;
 #[cfg(feature = "local-http")]
-mod http;
-mod loadbalancing;
-mod net;
+pub mod http;
+pub mod loadbalancing;
+pub mod net;
 #[cfg(feature = "local-redir")]
-mod redir;
-mod socks;
+pub mod redir;
+pub mod socks;
 #[cfg(feature = "local-tunnel")]
-mod tunnel;
-mod utils;
+pub mod tunnel;
+pub mod utils;
 
 pub async fn run(config: Config) -> io::Result<()> {
     assert!(config.config_type == ConfigType::Local && config.local_addr.is_some());
