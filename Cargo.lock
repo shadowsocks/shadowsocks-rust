@@ -1525,6 +1525,7 @@ dependencies = [
  "log",
  "log4rs",
  "lru_time_cache",
+ "mio",
  "native-tls",
  "nix",
  "pin-project 1.0.2",

@@ -12,10 +12,7 @@ use futures::{future::poll_fn, ready};
 use mio::net::UdpSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
-use crate::{
-    config::RedirType,
-    relay::{redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std},
-};
+use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std};
 
 pub fn check_support_tproxy() -> io::Result<()> {
     Ok(())

@@ -10,10 +10,8 @@ use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 use crate::{
     config::RedirType,
-    relay::{
-        redir::{TcpListenerRedirExt, TcpStreamRedirExt},
-        sys::sockaddr_to_std,
-    },
+    local::redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+    sys::sockaddr_to_std,
 };
 
 #[async_trait]

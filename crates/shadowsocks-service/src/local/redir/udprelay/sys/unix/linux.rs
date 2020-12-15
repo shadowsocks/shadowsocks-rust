@@ -14,10 +14,7 @@ use mio::net::UdpSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
-use crate::{
-    config::RedirType,
-    relay::{redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std},
-};
+use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std};
 
 pub struct UdpRedirSocket {
     io: AsyncFd<mio::net::UdpSocket>,
