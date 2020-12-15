@@ -99,7 +99,25 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.run().await
         }
         #[cfg(feature = "local-redir")]
-        ProtocolType::Redir => unimplemented!(),
+        ProtocolType::Redir => {
+            use self::redir::Redir;
+
+            let mut server = Redir::with_context(context, client_config, config.server);
+            if let Some(c) = config.udp_max_associations {
+                server.set_udp_capacity(c);
+            }
+            if let Some(d) = config.udp_timeout {
+                server.set_udp_expiry_duration(d);
+            }
+            server.set_mode(config.mode);
+            if config.no_delay {
+                server.set_nodelay(true);
+            }
+            server.set_tcp_redir(config.tcp_redir);
+            server.set_udp_redir(config.udp_redir);
+
+            server.run().await
+        }
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => unimplemented!(),
     }

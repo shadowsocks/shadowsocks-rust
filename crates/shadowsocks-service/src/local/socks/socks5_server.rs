@@ -30,7 +30,6 @@ use shadowsocks::{
     },
 };
 use tokio::{
-    io::AsyncReadExt,
     net::{TcpStream, UdpSocket},
     sync::Mutex,
     time,
@@ -44,7 +43,7 @@ use crate::{
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
-    net::MonProxySocket,
+    net::{utils::ignore_until_end, MonProxySocket},
 };
 
 pub struct Socks5 {
@@ -249,14 +248,7 @@ impl Socks5 {
         );
 
         // Hold connection until EOF
-        let mut buffer = [0u8; 2048];
-        loop {
-            match stream.read(&mut buffer).await {
-                Ok(0) => break,
-                Ok(..) => continue,
-                Err(..) => break,
-            }
-        }
+        let _ = ignore_until_end(&mut stream).await;
 
         // Kills the task, and close stream and socket
         relay_abortable.abort();

@@ -15,27 +15,40 @@ use shadowsocks::{
     },
     ServerConfig,
 };
-use tokio::{net::UdpSocket, sync::mpsc, time};
+use tokio::{
+    net::UdpSocket,
+    sync::{mpsc, Mutex},
+    time,
+};
 
 use crate::{
     config::ClientConfig,
     local::{
         context::ServiceContext,
-        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+        loadbalancing::{
+            BasicServerIdent,
+            PingBalancer,
+            PingBalancerBuilder,
+            ServerIdent,
+            ServerType as BalancerServerType,
+        },
     },
     net::MonProxySocket,
 };
 
 pub struct UdpTunnel {
     context: Arc<ServiceContext>,
-    assoc_map: LruCache<String, UdpAssociation>,
+    assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
 }
 
 impl UdpTunnel {
     pub fn new(context: Arc<ServiceContext>, time_to_live: Duration, capacity: usize) -> UdpTunnel {
         UdpTunnel {
             context,
-            assoc_map: LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+            assoc_map: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
+                time_to_live,
+                capacity,
+            ))),
         }
     }
 
@@ -83,11 +96,9 @@ impl UdpTunnel {
                 }
             };
 
-            let server = balancer.best_server();
-
             let data = &buffer[..n];
             if let Err(err) = self
-                .send_packet(&listener, peer_addr, server, &forward_addr, data)
+                .send_packet(&listener, peer_addr, &balancer, &forward_addr, data)
                 .await
             {
                 error!(
@@ -105,16 +116,17 @@ impl UdpTunnel {
         &mut self,
         listener: &Arc<UdpSocket>,
         peer_addr: SocketAddr,
-        server: Arc<BasicServerIdent>,
+        balancer: &PingBalancer<BasicServerIdent>,
         forward_addr: &Address,
         data: &[u8],
     ) -> io::Result<()> {
-        let svr_cfg = server.server_config();
-        let cache_key = format!("{}+{}", peer_addr, svr_cfg.addr());
-
-        let assoc = match self.assoc_map.entry(cache_key) {
+        let mut assoc_map = self.assoc_map.lock().await;
+        let assoc = match assoc_map.entry(peer_addr) {
             Entry::Occupied(occ) => occ.into_mut(),
             Entry::Vacant(vac) => {
+                let server = balancer.best_server();
+                let svr_cfg = server.server_config();
+
                 let socket =
                     ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
                         .await?;
@@ -131,6 +143,7 @@ impl UdpTunnel {
                     peer_addr,
                     socket.clone(),
                     forward_addr.clone(),
+                    self.assoc_map.clone(),
                 ));
 
                 // CLIENT <- REMOTE
@@ -192,11 +205,16 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         outbound: Arc<MonProxySocket>,
         target_addr: Address,
+        assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
     ) -> io::Result<()> {
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, _) = match outbound.recv(&mut buffer).await {
-                Ok(n) => n,
+                Ok(n) => {
+                    // Keep association alive in map
+                    let _ = assoc_map.lock().await.get(&peer_addr);
+                    n
+                }
                 Err(err) => {
                     error!(
                         "udp failed to receive from {} outbound socket, error: {}",

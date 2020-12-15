@@ -29,5 +29,5 @@ pub trait UdpSocketRedirExt {
     /// On success, the future resolves to the number of bytes read and the source, target address
     ///
     /// `(bytes read, source address, target address)`
-    async fn recv_from_redir(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)>;
+    async fn recv_from_redir(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)>;
 }

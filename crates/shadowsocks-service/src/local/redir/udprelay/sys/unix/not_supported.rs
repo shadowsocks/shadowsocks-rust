@@ -15,7 +15,7 @@ impl UdpRedirSocket {
     }
 
     /// Send data to the socket to the given target address
-    pub async fn send_to(&mut self, _buf: &[u8], _target: SocketAddr) -> io::Result<usize> {
+    pub async fn send_to(&self, _buf: &[u8], _target: SocketAddr) -> io::Result<usize> {
         unimplemented!("UDP transparent proxy is not supported on this platform")
     }
 
@@ -27,7 +27,7 @@ impl UdpRedirSocket {
 
 #[async_trait]
 impl UdpSocketRedirExt for UdpRedirSocket {
-    async fn recv_from_redir(&mut self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+    async fn recv_from_redir(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
         unimplemented!("UDP transparent proxy is not supported on this platform")
     }
 }
