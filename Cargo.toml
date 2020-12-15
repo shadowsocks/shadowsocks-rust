@@ -39,7 +39,6 @@ lto = "fat"
 codegen-units = 1
 incremental = false
 panic = "abort"
-opt-level = "z"
 
 [features]
 default = [
