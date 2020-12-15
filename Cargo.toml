@@ -71,6 +71,8 @@ local-http-rustls = ["shadowsocks-service/local-http-rustls"]
 local-redir = ["shadowsocks-service/local-redir"]
 # Enable tunnel protocol for sslocal
 local-tunnel = ["shadowsocks-service/local-tunnel"]
+# Enable socks4 protocol for sslocal
+local-socks4 = ["shadowsocks-service/local-socks4"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]

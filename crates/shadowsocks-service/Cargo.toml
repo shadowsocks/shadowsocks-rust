@@ -19,6 +19,7 @@ default = [
     "local-http",
     "local-http-rustls",
     "local-tunnel",
+    "local-socks4",
 ]
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
@@ -43,6 +44,8 @@ local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
 local-redir = ["strum", "strum_macros", "mio"]
 # Enable tunnel protocol for sslocal
 local-tunnel = []
+# Enable socks4 protocol for sslocal
+local-socks4 = []
 
 [dependencies]
 log = "0.4"

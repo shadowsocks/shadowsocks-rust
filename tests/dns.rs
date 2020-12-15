@@ -9,8 +9,8 @@ use tokio::{
     time,
 };
 
-use shadowsocks::{
-    config::{Config, ConfigType},
+use shadowsocks_service::{
+    config::{Config, ConfigType, ProtocolType},
     run_local,
     run_server,
 };
@@ -28,10 +28,10 @@ async fn dns_relay() {
             "password": "password",
             "method": "aes-256-gcm"
         }"#,
-        ConfigType::DnsLocal,
+        ConfigType::Local,
     )
     .unwrap();
-
+    local_config.local_protocol = ProtocolType::Dns;
     local_config.local_dns_addr = Some("114.114.114.114:53".parse().unwrap());
     local_config.remote_dns_addr = Some("8.8.8.8:53".parse().unwrap());
 

@@ -27,11 +27,11 @@ use crate::{
     },
 };
 
-use self::{
-    socks4::Socks4TcpHandler,
-    socks5::{Socks5TcpHandler, Socks5UdpServer},
-};
+#[cfg(feature = "local-socks4")]
+use self::socks4::Socks4TcpHandler;
+use self::socks5::{Socks5TcpHandler, Socks5UdpServer};
 
+#[cfg(feature = "local-socks4")]
 mod socks4;
 mod socks5;
 
@@ -163,6 +163,7 @@ impl Socks {
         }
     }
 
+    #[cfg(feature = "local-socks4")]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
         client_config: Arc<ClientConfig>,
@@ -195,6 +196,20 @@ impl Socks {
                 return Err(err);
             }
         }
+    }
+
+    #[cfg(not(feature = "local-socks4"))]
+    async fn handle_tcp_client(
+        context: Arc<ServiceContext>,
+        client_config: Arc<ClientConfig>,
+        mode: Mode,
+        stream: TcpStream,
+        server: Arc<BasicServerIdent>,
+        peer_addr: SocketAddr,
+        nodelay: bool,
+    ) -> io::Result<()> {
+        let handler = Socks5TcpHandler::new(context, client_config, mode, nodelay, server);
+        handler.handle_socks5_client(stream, peer_addr).await
     }
 
     async fn run_udp_server(&self) -> io::Result<()> {
