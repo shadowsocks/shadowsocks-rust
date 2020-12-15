@@ -166,7 +166,7 @@ impl Server {
         let manager_addr = self.manager_addr.as_ref().unwrap();
 
         loop {
-            match ManagerClient::connect(&self.context, manager_addr).await {
+            match ManagerClient::connect(&self.context, manager_addr, &self.connect_opts).await {
                 Err(err) => {
                     error!("failed to connect manager {}, error: {}", manager_addr, err);
                 }

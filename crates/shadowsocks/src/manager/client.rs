@@ -2,7 +2,7 @@
 
 use log::warn;
 
-use crate::{config::ManagerAddr, context::Context, relay::udprelay::MAXIMUM_UDP_PAYLOAD_SIZE};
+use crate::{config::ManagerAddr, context::Context, net::ConnectOpts, relay::udprelay::MAXIMUM_UDP_PAYLOAD_SIZE};
 
 use super::{
     datagram::ManagerDatagram,
@@ -44,8 +44,12 @@ impl ManagerClient {
     impl_command!(remote, RemoveRequest, RemoveResponse);
 
     /// Create a `ManagerDatagram` for sending data to manager
-    pub async fn connect(context: &Context, bind_addr: &ManagerAddr) -> Result<ManagerClient, Error> {
-        ManagerDatagram::connect(context, bind_addr)
+    pub async fn connect(
+        context: &Context,
+        bind_addr: &ManagerAddr,
+        connect_opts: &ConnectOpts,
+    ) -> Result<ManagerClient, Error> {
+        ManagerDatagram::connect(context, bind_addr, connect_opts)
             .await
             .map(|socket| ManagerClient { socket })
             .map_err(Into::into)

@@ -3,14 +3,19 @@
 use std::{
     fmt,
     io::{self, ErrorKind},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::SocketAddr,
 };
 
 use tokio::net::UdpSocket;
 #[cfg(unix)]
 use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 
-use crate::{config::ManagerAddr, context::Context, relay::sys::create_udp_socket};
+use crate::{
+    config::ManagerAddr,
+    context::Context,
+    net::ConnectOpts,
+    relay::sys::{create_outbound_udp_socket, create_udp_socket},
+};
 
 #[derive(Debug)]
 pub enum ManagerSocketAddr {
@@ -72,14 +77,18 @@ impl ManagerDatagram {
     }
 
     /// Create a `ManagerDatagram` for sending data to manager
-    pub async fn connect(context: &Context, bind_addr: &ManagerAddr) -> io::Result<ManagerDatagram> {
+    pub async fn connect(
+        context: &Context,
+        bind_addr: &ManagerAddr,
+        connect_opts: &ConnectOpts,
+    ) -> io::Result<ManagerDatagram> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(sa) => ManagerDatagram::connect_socket_addr(sa).await,
+            ManagerAddr::SocketAddr(sa) => ManagerDatagram::connect_socket_addr(sa, connect_opts).await,
 
             ManagerAddr::DomainName(ref dname, port) => {
                 // Try connect to all socket addresses
                 lookup_then!(context, dname, port, |addr| {
-                    ManagerDatagram::connect_socket_addr(addr).await
+                    ManagerDatagram::connect_socket_addr(addr, connect_opts).await
                 })
                 .map(|(_, d)| d)
             }
@@ -91,20 +100,8 @@ impl ManagerDatagram {
         }
     }
 
-    async fn connect_socket_addr(sa: SocketAddr) -> io::Result<ManagerDatagram> {
-        let socket = match sa {
-            SocketAddr::V4(..) => {
-                // Bind to 0.0.0.0 and let system allocate a port
-                let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                create_udp_socket(&local_addr).await?
-            }
-            SocketAddr::V6(..) => {
-                // Bind to :: and let system allocate a port
-                let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
-                create_udp_socket(&local_addr).await?
-            }
-        };
-
+    async fn connect_socket_addr(sa: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<ManagerDatagram> {
+        let socket = create_outbound_udp_socket(&sa, connect_opts).await?;
         socket.connect(sa).await?;
 
         Ok(ManagerDatagram::UdpDatagram(socket))
