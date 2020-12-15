@@ -2,6 +2,8 @@
 //!
 //! http://ftp.icm.edu.pl/packages/socks/socks4/SOCKS4.protocol
 
+#![allow(dead_code)]
+
 use std::{
     fmt,
     io::{self, Error, ErrorKind},

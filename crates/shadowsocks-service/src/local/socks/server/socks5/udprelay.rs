@@ -1,24 +1,26 @@
-//! UDP transparent proxy
+//! UDP Tunnel server
 
 use std::{
-    io::{self, ErrorKind},
+    io::{self, Cursor},
     net::SocketAddr,
     sync::Arc,
     time::Duration,
 };
 
-use bytes::Bytes;
+use byte_string::ByteStr;
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::future::{self, AbortHandle};
+use io::ErrorKind;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
-    config::ServerConfig,
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
     relay::{
-        socks5::Address,
+        socks5::{Address, UdpAssociateHeader},
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
+    ServerConfig,
 };
 use tokio::{
     net::UdpSocket,
@@ -27,7 +29,7 @@ use tokio::{
 };
 
 use crate::{
-    config::{ClientConfig, RedirType},
+    config::ClientConfig,
     local::{
         context::ServiceContext,
         loadbalancing::{
@@ -37,32 +39,25 @@ use crate::{
             ServerIdent,
             ServerType as BalancerServerType,
         },
-        redir::redir_ext::UdpSocketRedirExt,
     },
     net::MonProxySocket,
 };
 
-use self::sys::UdpRedirSocket;
-
-mod sys;
-
-#[derive(Hash, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
-struct RedirBound {
+#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd, Ord)]
+struct Socks5Bound {
     src: SocketAddr,
-    dst: SocketAddr,
+    dst: Address,
 }
 
-pub struct UdpRedir {
+pub struct Socks5UdpServer {
     context: Arc<ServiceContext>,
-    redir_ty: RedirType,
-    assoc_map: Arc<Mutex<LruCache<RedirBound, UdpAssociation>>>,
+    assoc_map: Arc<Mutex<LruCache<Socks5Bound, UdpAssociation>>>,
 }
 
-impl UdpRedir {
-    pub fn new(context: Arc<ServiceContext>, redir_ty: RedirType, time_to_live: Duration, capacity: usize) -> UdpRedir {
-        UdpRedir {
+impl Socks5UdpServer {
+    pub fn new(context: Arc<ServiceContext>, time_to_live: Duration, capacity: usize) -> Socks5UdpServer {
+        Socks5UdpServer {
             context,
-            redir_ty,
             assoc_map: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
                 time_to_live,
                 capacity,
@@ -71,18 +66,20 @@ impl UdpRedir {
     }
 
     pub async fn run(&mut self, client_config: &ClientConfig, servers: Vec<ServerConfig>) -> io::Result<()> {
-        let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::bind(self.redir_ty, *saddr)?,
+        let socket = match *client_config {
+            ClientConfig::SocketAddr(ref saddr) => UdpSocket::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
-                lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    UdpRedirSocket::bind(self.redir_ty, addr)
+                lookup_then!(&self.context.context_ref(), dname, port, |addr| {
+                    UdpSocket::bind(addr).await
                 })?
                 .1
             }
         };
 
-        let local_addr = listener.local_addr().expect("determine port bound to");
-        info!("shadowsocks UDP redirect listening on {}", local_addr);
+        info!(
+            "shadowsocks socks5 udp server listening on {}",
+            socket.local_addr().expect("listener.local_addr"),
+        );
 
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
 
@@ -94,47 +91,57 @@ impl UdpRedir {
         let (balancer, checker) = balancer_builder.build();
         tokio::spawn(checker);
 
-        let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let listener = Arc::new(socket);
+
+        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
-            let (recv_len, src, dst) = match listener.recv_from_redir(&mut pkt_buf).await {
-                Ok(o) => o,
+            let (n, peer_addr) = match listener.recv_from(&mut buffer).await {
+                Ok(s) => s,
                 Err(err) => {
-                    error!("recv_from_redir failed with err: {}", err);
+                    error!("udp server recv_from failed with error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };
 
-            // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-            // Copy bytes, because udp_associate runs in another tokio Task
-            let pkt = &pkt_buf[..recv_len];
+            let data = &buffer[..n];
 
-            trace!(
-                "received UDP packet from {}, destination {}, length {} bytes",
-                src,
-                dst,
-                recv_len
-            );
+            // PKT = UdpAssociateHeader + PAYLOAD
+            let mut cur = Cursor::new(data);
+            let header = match UdpAssociateHeader::read_from(&mut cur).await {
+                Ok(h) => h,
+                Err(..) => {
+                    error!("received invalid UDP associate packet: {:?}", ByteStr::new(data));
+                    continue;
+                }
+            };
 
-            if recv_len == 0 {
-                // For windows, it will generate a ICMP Port Unreachable Message
-                // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
-                // Which will result in recv_from return 0.
-                //
-                // It cannot be solved here, because `WSAGetLastError` is already set.
-                //
-                // See `relay::udprelay::utils::create_socket` for more detail.
+            if header.frag != 0 {
+                error!("received UDP associate with frag != 0, which is not supported by shadowsocks");
                 continue;
             }
 
-            // Check or (re)create an association
-            let assoc_key = RedirBound { src, dst };
+            let pos = cur.position() as usize;
+            let payload = &data[pos..];
 
-            if let Err(err) = self.send_packet(assoc_key, &balancer, pkt).await {
+            trace!(
+                "UDP ASSOCIATE {} -> {}, {} bytes",
+                peer_addr,
+                header.address,
+                payload.len()
+            );
+
+            let bound = Socks5Bound {
+                src: peer_addr,
+                dst: header.address,
+            };
+
+            if let Err(err) = self.send_packet(&listener, bound.clone(), &balancer, payload).await {
                 error!(
                     "udp packet relay {} -> {} with {} bytes failed, error: {}",
-                    assoc_key.src,
-                    assoc_key.dst,
-                    pkt.len(),
+                    bound.src,
+                    bound.dst,
+                    data.len(),
                     err
                 );
             }
@@ -143,29 +150,34 @@ impl UdpRedir {
 
     async fn send_packet(
         &mut self,
-        assoc_key: RedirBound,
+        listener: &Arc<UdpSocket>,
+        assoc_key: Socks5Bound,
         balancer: &PingBalancer<BasicServerIdent>,
         data: &[u8],
     ) -> io::Result<()> {
         let mut assoc_map = self.assoc_map.lock().await;
-        let assoc = match assoc_map.entry(assoc_key) {
+        let assoc = match assoc_map.entry(assoc_key.clone()) {
             Entry::Occupied(occ) => occ.into_mut(),
             Entry::Vacant(vac) => {
-                let target_addr = Address::from(assoc_key.dst);
+                let target_addr = &assoc_key.dst;
 
                 // Pending packets 64 should be good enough for a server.
                 // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
                 // being OOM.
                 let (sender, receiver) = mpsc::channel(64);
 
-                let r2l_abortable = if self.context.check_target_bypassed(&target_addr).await {
-                    let socket =
-                        ShadowUdpSocket::connect_with_opts(&assoc_key.dst, self.context.connect_opts()).await?;
+                let r2l_abortable = if self.context.check_target_bypassed(target_addr).await {
+                    let socket = ShadowUdpSocket::connect_remote_with_opts(
+                        self.context.context_ref(),
+                        target_addr,
+                        self.context.connect_opts(),
+                    )
+                    .await?;
                     let socket: Arc<UdpSocket> = Arc::new(socket.into());
 
                     let (r2l_fut, r2l_abortable) = future::abortable(UdpAssociation::copy_bypassed_r2l(
-                        self.redir_ty,
-                        assoc_key,
+                        listener.clone(),
+                        assoc_key.clone(),
                         socket.clone(),
                         self.assoc_map.clone(),
                     ));
@@ -174,7 +186,7 @@ impl UdpRedir {
                     tokio::spawn(r2l_fut);
 
                     // CLIENT -> REMOTE
-                    let l2r_fut = UdpAssociation::copy_bypassed_l2r(socket, assoc_key, receiver);
+                    let l2r_fut = UdpAssociation::copy_bypassed_l2r(socket, assoc_key.clone(), receiver);
                     tokio::spawn(l2r_fut);
 
                     debug!(
@@ -196,8 +208,8 @@ impl UdpRedir {
                     let socket = Arc::new(socket);
 
                     let (r2l_fut, r2l_abortable) = future::abortable(UdpAssociation::copy_proxied_r2l(
-                        self.redir_ty,
-                        assoc_key,
+                        listener.clone(),
+                        assoc_key.clone(),
                         socket.clone(),
                         self.assoc_map.clone(),
                     ));
@@ -206,7 +218,7 @@ impl UdpRedir {
                     tokio::spawn(r2l_fut);
 
                     // CLIENT -> REMOTE
-                    let l2r_fut = UdpAssociation::copy_proxied_l2r(socket, assoc_key, receiver);
+                    let l2r_fut = UdpAssociation::copy_proxied_l2r(socket, assoc_key.clone(), receiver);
                     tokio::spawn(l2r_fut);
 
                     debug!(
@@ -246,13 +258,11 @@ impl Drop for UdpAssociation {
 impl UdpAssociation {
     async fn copy_proxied_l2r(
         outbound: Arc<MonProxySocket>,
-        assoc_key: RedirBound,
+        assoc_key: Socks5Bound,
         mut receiver: mpsc::Receiver<Bytes>,
     ) {
-        let target_addr = Address::from(assoc_key.dst);
-
         while let Some(data) = receiver.recv().await {
-            if let Err(err) = outbound.send(&target_addr, &data).await {
+            if let Err(err) = outbound.send(&assoc_key.dst, &data).await {
                 error!(
                     "udp failed to send to {} outbound socket, error: {}",
                     assoc_key.dst, err
@@ -269,16 +279,13 @@ impl UdpAssociation {
     }
 
     async fn copy_proxied_r2l(
-        redir_ty: RedirType,
-        assoc_key: RedirBound,
+        inbound: Arc<UdpSocket>,
+        assoc_key: Socks5Bound,
         outbound: Arc<MonProxySocket>,
-        assoc_map: Arc<Mutex<LruCache<RedirBound, UdpAssociation>>>,
+        assoc_map: Arc<Mutex<LruCache<Socks5Bound, UdpAssociation>>>,
     ) -> io::Result<()> {
-        // Create a socket binds to destination addr
-        // This only works for systems that supports binding to non-local addresses
-        let inbound = UdpRedirSocket::bind(redir_ty, assoc_key.dst)?;
-
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut payload_buffer = BytesMut::new();
         loop {
             let (n, _) = match outbound.recv(&mut buffer).await {
                 Ok(n) => {
@@ -297,9 +304,17 @@ impl UdpAssociation {
             };
 
             let data = &buffer[..n];
+            payload_buffer.clear();
+
+            // Resssemble packet
+            let header = UdpAssociateHeader::new(0, assoc_key.dst.clone());
+            payload_buffer.reserve(header.serialized_len() + n);
+
+            header.write_to_buf(&mut payload_buffer);
+            payload_buffer.put_slice(data);
 
             // Send back to client
-            if let Err(err) = inbound.send_to(data, assoc_key.src).await {
+            if let Err(err) = inbound.send_to(&payload_buffer, assoc_key.src).await {
                 warn!(
                     "udp failed to send back to client {}, from target {}, error: {}",
                     assoc_key.src, assoc_key.dst, err
@@ -310,12 +325,12 @@ impl UdpAssociation {
                 "udp relay {} <- {} with {} bytes",
                 assoc_key.src,
                 assoc_key.dst,
-                data.len()
+                payload_buffer.len()
             );
         }
     }
 
-    async fn copy_bypassed_l2r(outbound: Arc<UdpSocket>, assoc_key: RedirBound, mut receiver: mpsc::Receiver<Bytes>) {
+    async fn copy_bypassed_l2r(outbound: Arc<UdpSocket>, assoc_key: Socks5Bound, mut receiver: mpsc::Receiver<Bytes>) {
         while let Some(data) = receiver.recv().await {
             if let Err(err) = outbound.send(&data).await {
                 error!(
@@ -334,15 +349,11 @@ impl UdpAssociation {
     }
 
     async fn copy_bypassed_r2l(
-        redir_ty: RedirType,
-        assoc_key: RedirBound,
+        inbound: Arc<UdpSocket>,
+        assoc_key: Socks5Bound,
         outbound: Arc<UdpSocket>,
-        assoc_map: Arc<Mutex<LruCache<RedirBound, UdpAssociation>>>,
+        assoc_map: Arc<Mutex<LruCache<Socks5Bound, UdpAssociation>>>,
     ) -> io::Result<()> {
-        // Create a socket binds to destination addr
-        // This only works for systems that supports binding to non-local addresses
-        let inbound = UdpRedirSocket::bind(redir_ty, assoc_key.dst)?;
-
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let n = match outbound.recv(&mut buffer).await {

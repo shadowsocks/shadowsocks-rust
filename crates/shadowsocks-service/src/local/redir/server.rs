@@ -117,11 +117,10 @@ impl Redir {
     async fn run_udp_tunnel(&self) -> io::Result<()> {
         let mut server = UdpRedir::new(
             self.context.clone(),
+            self.udp_redir,
             self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
             self.udp_capacity,
         );
-        server
-            .run(&self.client_config, self.servers.clone(), self.udp_redir)
-            .await
+        server.run(&self.client_config, self.servers.clone()).await
     }
 }

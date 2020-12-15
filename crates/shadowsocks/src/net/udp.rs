@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    net::SocketAddr,
     ops::{Deref, DerefMut},
 };
 
@@ -65,6 +66,13 @@ impl UdpSocket {
             }
         };
 
+        Ok(UdpSocket(socket))
+    }
+
+    /// Connects to shadowsocks server
+    pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+        let socket = create_outbound_udp_socket(addr, opts).await?;
+        socket.connect(addr).await?;
         Ok(UdpSocket(socket))
     }
 }

@@ -59,6 +59,7 @@ pub async fn run(config: Config) -> io::Result<()> {
             use self::socks::Socks;
 
             let mut server = Socks::with_context(context, client_config, config.server);
+            server.set_mode(config.mode);
 
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);

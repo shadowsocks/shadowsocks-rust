@@ -199,7 +199,7 @@ impl Error {
 }
 
 /// SOCKS5 address type
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Address {
     /// Socket address (IP Address)
     SocketAddress(SocketAddr),

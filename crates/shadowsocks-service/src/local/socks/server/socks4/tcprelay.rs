@@ -21,22 +21,22 @@ use crate::local::{
 
 use super::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};
 
-pub struct Socks4 {
+pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
     nodelay: bool,
+    server: Arc<BasicServerIdent>,
 }
 
-impl Socks4 {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool) -> Socks4 {
-        Socks4 { context, nodelay }
+impl Socks4TcpHandler {
+    pub fn new(context: Arc<ServiceContext>, nodelay: bool, server: Arc<BasicServerIdent>) -> Socks4TcpHandler {
+        Socks4TcpHandler {
+            context,
+            nodelay,
+            server,
+        }
     }
 
-    pub async fn handle_socks4_client(
-        self,
-        stream: TcpStream,
-        server: Arc<BasicServerIdent>,
-        peer_addr: SocketAddr,
-    ) -> io::Result<()> {
+    pub async fn handle_socks4_client(self, stream: TcpStream, peer_addr: SocketAddr) -> io::Result<()> {
         // 1. Handshake
 
         // NOTE: Wraps it with BufReader for reading NULL terminated informations in HandshakeRequest
@@ -49,8 +49,7 @@ impl Socks4 {
             Command::Connect => {
                 debug!("CONNECT {}", handshake_req.dst);
 
-                self.handle_socks4_connect(server, s, peer_addr, handshake_req.dst)
-                    .await
+                self.handle_socks4_connect(s, peer_addr, handshake_req.dst).await
             }
             Command::Bind => {
                 warn!("BIND is not supported");
@@ -65,15 +64,14 @@ impl Socks4 {
 
     async fn handle_socks4_connect(
         self,
-        server: Arc<BasicServerIdent>,
         mut stream: BufReader<TcpStream>,
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
-        let svr_cfg = server.server_config();
+        let svr_cfg = self.server.server_config();
         let target_addr = target_addr.into();
 
-        let mut remote = match AutoProxyClientStream::connect(self.context, server.as_ref(), &target_addr).await {
+        let mut remote = match AutoProxyClientStream::connect(self.context, self.server.as_ref(), &target_addr).await {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let handshake_rsp = HandshakeResponse::new(ResultCode::RequestGranted);
