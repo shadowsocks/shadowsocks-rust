@@ -47,7 +47,6 @@ default = [
     "local-http",
     "local-http-rustls",
     "local-tunnel",
-    "local-socks4"
 ]
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
@@ -57,23 +56,21 @@ dns-over-tls = ["shadowsocks-service/dns-over-tls"]
 dns-over-https = ["shadowsocks-service/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["trust-dns-proto"]
+local-dns = ["shadowsocks-service/local-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
 local-flow-stat = []
 # Enable HTTP protocol for sslocal
-local-http = []
-local-http-native-tls = []
-local-http-rustls = []
+local-http = ["shadowsocks-service/local-http"]
+local-http-native-tls = ["shadowsocks-service/local-http-native-tls"]
+local-http-rustls = ["shadowsocks-service/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["strum", "strum_macros"]
+local-redir = ["shadowsocks-service/local-redir"]
 # Enable tunnel protocol for sslocal
-local-tunnel = []
-# Enable SOCKS4/4a protocol for sslocal
-local-socks4 = []
+local-tunnel = ["shadowsocks-service/local-tunnel"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
@@ -87,28 +84,15 @@ log4rs = "0.13"
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
-pin-project = "1.0"
 
 futures = "0.3"
 tokio = { version = "0.3.1", features = ["full"] }
-
-trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
-
-ipnet = "2.3"
-iprange = "0.6"
-regex = "1.4"
-
-serde = { version = "1.0", features = ["derive"] }
-json5 = "0.3"
 
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
 
 shadowsocks-service = { version = "1.9", path = "./crates/shadowsocks-service" }
-
-strum = { version = "0.20", optional = true }
-strum_macros = { version = "0.20", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.4"
@@ -117,6 +101,3 @@ daemonize = "0.4"
 byteorder = "1.3"
 env_logger = "0.8"
 byte_string = "1.0"
-
-[patch.crates-io]
-h2 = { git = "https://github.com/hyperium/h2.git" }

@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future::{self, Either};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use shadowsocks::{
     context::SharedContext,
     crypto::v1::CipherKind,
@@ -22,7 +22,7 @@ use tokio::{net::TcpStream as TokioTcpStream, time};
 
 use crate::{
     local::acl::AccessControl,
-    net::{FlowStat, MonProxyStream},
+    net::{utils::ignore_until_end, FlowStat, MonProxyStream},
 };
 
 pub struct TcpServer {
@@ -108,7 +108,20 @@ struct TcpServerClient {
 
 impl TcpServerClient {
     async fn serve(mut self) -> io::Result<()> {
-        let target_addr = Address::read_from(&mut self.stream).await?;
+        let target_addr = match Address::read_from(&mut self.stream).await {
+            Ok(a) => a,
+            Err(err) => {
+                // https://github.com/shadowsocks/shadowsocks-rust/issues/292
+                //
+                // Keep connection open.
+                warn!(
+                    "handshake failed, maybe wrong method or key, or under reply attacks. peer: {}, error: {}",
+                    self.peer_addr, err
+                );
+                let _ = ignore_until_end(&mut self.stream).await;
+                return Ok(());
+            }
+        };
 
         trace!(
             "accepted tcp client connection {}, establishing tunnel to {}",

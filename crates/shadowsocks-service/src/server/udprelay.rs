@@ -66,7 +66,6 @@ impl UdpServer {
                 Ok(s) => s,
                 Err(err) => {
                     error!("udp server recv_from failed with error: {}", err);
-                    time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };

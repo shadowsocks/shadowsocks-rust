@@ -98,6 +98,8 @@ pub async fn run(config: Config) -> io::Result<()> {
             let server = Http::with_context(context, client_config, config.server);
             server.run().await
         }
+        #[cfg(feature = "local-redir")]
+        ProtocolType::Redir => unimplemented!(),
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => unimplemented!(),
     }
