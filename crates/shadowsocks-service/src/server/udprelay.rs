@@ -26,7 +26,7 @@ use crate::{
 pub struct UdpServer {
     context: SharedContext,
     flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    connect_opts: ConnectOpts,
     assoc_map: LruCache<String, UdpAssociation>,
     acl: Option<Arc<AccessControl>>,
 }
@@ -35,7 +35,7 @@ impl UdpServer {
     pub fn new(
         context: SharedContext,
         flow_stat: Arc<FlowStat>,
-        connect_opts: Arc<ConnectOpts>,
+        connect_opts: ConnectOpts,
         time_to_live: Duration,
         capacity: usize,
         acl: Option<Arc<AccessControl>>,

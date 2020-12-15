@@ -16,7 +16,7 @@ use tokio::io::unix::AsyncFd;
 
 use crate::{
     config::RedirType,
-    relay::{redir::UdpSocketRedirExt, sys::sockaddr_to_std},
+    relay::{redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std},
 };
 
 pub struct UdpRedirSocket {

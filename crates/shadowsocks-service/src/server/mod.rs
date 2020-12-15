@@ -7,7 +7,7 @@ use std::{
 
 use futures::{future, FutureExt};
 use log::trace;
-use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
+use shadowsocks::{config::ServerAddr, dns_resolver::DnsResolver, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
 
@@ -26,15 +26,26 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut servers = Vec::new();
 
-    let connect_opts = Arc::new(ConnectOpts {
+    let connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
+        bind_local_addr: match config.local_addr {
+            None => None,
+            Some(ServerAddr::SocketAddr(sa)) => Some(sa.ip()),
+            Some(ServerAddr::DomainName(..)) => {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "local_addr must be a SocketAddr",
+                ));
+            }
+        },
+
         ..Default::default()
-    });
+    };
 
     #[cfg(feature = "trust-dns")]
     let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);

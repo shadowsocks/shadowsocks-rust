@@ -29,34 +29,13 @@ impl UdpSocket {
     ) -> io::Result<UdpSocket> {
         let socket = match *addr {
             ServerAddr::SocketAddr(ref remote_addr) => {
-                let socket = match remote_addr.ip() {
-                    IpAddr::V4(..) => {
-                        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                        create_outbound_udp_socket(&local_addr, opts).await?
-                    }
-                    IpAddr::V6(..) => {
-                        let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
-                        create_outbound_udp_socket(&local_addr, opts).await?
-                    }
-                };
-
+                let socket = create_outbound_udp_socket(remote_addr, opts).await?;
                 socket.connect(remote_addr).await?;
-
                 socket
             }
             ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(&context, dname, port, |remote_addr| {
-                    let s = match remote_addr.ip() {
-                        IpAddr::V4(..) => {
-                            let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                            create_outbound_udp_socket(&local_addr, opts).await?
-                        }
-                        IpAddr::V6(..) => {
-                            let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
-                            create_outbound_udp_socket(&local_addr, opts).await?
-                        }
-                    };
-
+                    let s = create_outbound_udp_socket(&remote_addr, opts).await?;
                     s.connect(remote_addr).await.map(|_| s)
                 })?
                 .1
@@ -74,34 +53,13 @@ impl UdpSocket {
     ) -> io::Result<UdpSocket> {
         let socket = match *addr {
             Address::SocketAddress(ref remote_addr) => {
-                let socket = match remote_addr.ip() {
-                    IpAddr::V4(..) => {
-                        let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                        create_outbound_udp_socket(&local_addr, opts).await?
-                    }
-                    IpAddr::V6(..) => {
-                        let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
-                        create_outbound_udp_socket(&local_addr, opts).await?
-                    }
-                };
-
+                let socket = create_outbound_udp_socket(remote_addr, opts).await?;
                 socket.connect(remote_addr).await?;
-
                 socket
             }
             Address::DomainNameAddress(ref dname, port) => {
                 lookup_then!(&context, dname, port, |remote_addr| {
-                    let s = match remote_addr.ip() {
-                        IpAddr::V4(..) => {
-                            let local_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                            create_outbound_udp_socket(&local_addr, opts).await?
-                        }
-                        IpAddr::V6(..) => {
-                            let local_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0);
-                            create_outbound_udp_socket(&local_addr, opts).await?
-                        }
-                    };
-
+                    let s = create_outbound_udp_socket(&remote_addr, opts).await?;
                     s.connect(remote_addr).await.map(|_| s)
                 })?
                 .1

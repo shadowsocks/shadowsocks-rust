@@ -14,7 +14,7 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
 use crate::{
     config::RedirType,
-    relay::{redir::UdpSocketRedirExt, sys::sockaddr_to_std},
+    relay::{redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std},
 };
 
 pub fn check_support_tproxy() -> io::Result<()> {

@@ -3,7 +3,7 @@ use std::os::unix::io::AsRawFd;
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 #[cfg(any(target_os = "android"))]
 use std::{os::unix::io::RawFd, path::Path};
@@ -100,15 +100,35 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &ConnectOpts) -> io:
         }
     }
 
+    // Binds to IP address
+    if let Some(ip) = config.bind_local_addr {
+        match (ip, saddr.ip()) {
+            (IpAddr::V4(..), IpAddr::V4(..)) => {
+                socket.bind(SocketAddr::new(ip, 0))?;
+            }
+            (IpAddr::V6(..), IpAddr::V6(..)) => {
+                socket.bind(SocketAddr::new(ip, 0))?;
+            }
+            _ => {}
+        }
+    }
+
     // it's important that the socket is protected before connecting
     socket.connect(*saddr).await
 }
 
-/// Create a `UdpSocket` binded to `addr`
+/// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
 #[allow(unused_variables)]
 pub async fn create_outbound_udp_socket(addr: &SocketAddr, config: &ConnectOpts) -> io::Result<UdpSocket> {
-    let socket = UdpSocket::bind(addr).await?;
+    let bind_addr = match (addr.ip(), config.bind_local_addr) {
+        (IpAddr::V4(..), Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
+        (IpAddr::V6(..), Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
+        (IpAddr::V4(..), ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+        (IpAddr::V6(..), ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+    };
+
+    let socket = UdpSocket::bind(bind_addr).await?;
 
     // Any traffic to localhost should be protected
     // This is a workaround for VPNService

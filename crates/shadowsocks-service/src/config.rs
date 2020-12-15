@@ -1236,7 +1236,7 @@ impl Config {
         }
 
         #[cfg(feature = "local-dns")]
-        if self.config_type == ConfigType::DnsLocal {
+        if self.local_protocol == ProtocolType::Dns {
             if self.dns_bind_addr.is_none() || self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
                 let err = Error::new(
                     ErrorKind::MissingField,

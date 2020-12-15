@@ -52,7 +52,7 @@ pub struct Manager {
     servers: Mutex<HashMap<u16, ServerInstance>>,
     svr_cfg: ManagerConfig,
     mode: Mode,
-    connect_opts: Arc<ConnectOpts>,
+    connect_opts: ConnectOpts,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     nodelay: bool,
@@ -70,7 +70,7 @@ impl Manager {
             servers: Mutex::new(HashMap::new()),
             svr_cfg,
             mode: Mode::TcpOnly,
-            connect_opts: Arc::new(ConnectOpts::default()),
+            connect_opts: ConnectOpts::default(),
             udp_expiry_duration: None,
             udp_capacity: None,
             nodelay: false,
@@ -78,7 +78,7 @@ impl Manager {
         }
     }
 
-    pub fn set_connect_opts(&mut self, opts: Arc<ConnectOpts>) {
+    pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
         self.connect_opts = opts;
     }
 

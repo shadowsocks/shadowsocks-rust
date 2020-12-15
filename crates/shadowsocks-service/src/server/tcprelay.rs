@@ -28,7 +28,7 @@ use crate::{
 pub struct TcpServer {
     context: SharedContext,
     flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    connect_opts: ConnectOpts,
     nodelay: bool,
     acl: Option<Arc<AccessControl>>,
 }
@@ -37,7 +37,7 @@ impl TcpServer {
     pub fn new(
         context: SharedContext,
         flow_stat: Arc<FlowStat>,
-        connect_opts: Arc<ConnectOpts>,
+        connect_opts: ConnectOpts,
         nodelay: bool,
         acl: Option<Arc<AccessControl>>,
     ) -> TcpServer {
@@ -98,7 +98,7 @@ impl TcpServer {
 
 struct TcpServerClient {
     context: SharedContext,
-    connect_opts: Arc<ConnectOpts>,
+    connect_opts: ConnectOpts,
     nodelay: bool,
     acl: Option<Arc<AccessControl>>,
     method: CipherKind,

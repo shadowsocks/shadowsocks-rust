@@ -2,9 +2,12 @@
 //!
 //! Service for managing multiple relay servers. [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
 
-use std::{io, sync::Arc};
+use std::{
+    io::{self, ErrorKind},
+    sync::Arc,
+};
 
-use shadowsocks::net::ConnectOpts;
+use shadowsocks::{config::ServerAddr, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
 
@@ -27,15 +30,26 @@ pub async fn run(config: Config) -> io::Result<()> {
         manager.set_dns_resolver(resolver);
     }
 
-    let connect_opts = Arc::new(ConnectOpts {
+    let connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
+        bind_local_addr: match config.local_addr {
+            None => None,
+            Some(ServerAddr::SocketAddr(sa)) => Some(sa.ip()),
+            Some(ServerAddr::DomainName(..)) => {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "local_addr must be a SocketAddr",
+                ));
+            }
+        },
+
         ..Default::default()
-    });
+    };
     manager.set_connect_opts(connect_opts);
 
     if let Some(c) = config.udp_max_associations {

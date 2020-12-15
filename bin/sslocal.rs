@@ -58,7 +58,7 @@ fn main() {
         (@group SERVER_CONFIG =>
             (@attributes +multiple arg[SERVER_ADDR URL]))
 
-        (@arg PROTOCOL: --protocol +takes_value default_value("socks5") possible_values(ProtocolType::available_protocols()) +next_line_help "Protocol that for communicating with clients")
+        (@arg PROTOCOL: --protocol +takes_value default_value("socks") possible_values(ProtocolType::available_protocols()) +next_line_help "Protocol that for communicating with clients")
 
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")

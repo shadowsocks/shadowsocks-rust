@@ -28,7 +28,7 @@ dns-over-tls = ["trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-
 dns-over-https = ["trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["trust-dns-proto"]
+local-dns = ["trust-dns-proto", "trust-dns-client"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
@@ -76,6 +76,7 @@ tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
 
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true, features = ["serde-config"] }
 trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
+trust-dns-client = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
 
 ipnet = "2.3"
 iprange = "0.6"

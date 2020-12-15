@@ -19,16 +19,21 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{config::Mode, local::acl::AccessControl, net::FlowStat};
+use crate::{
+    config::{ClientConfig, Mode},
+    local::acl::AccessControl,
+    net::FlowStat,
+};
 
 use super::{tcprelay::TcpServer, udprelay::UdpServer};
 
 pub struct Server {
     context: SharedContext,
     svr_cfg: ServerConfig,
+    client_config: Option<ClientConfig>,
     mode: Mode,
     flow_stat: Arc<FlowStat>,
-    connect_opts: Arc<ConnectOpts>,
+    connect_opts: ConnectOpts,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
     manager_addr: Option<ManagerAddr>,
@@ -45,9 +50,10 @@ impl Server {
         Server {
             context,
             svr_cfg,
+            client_config: None,
             mode: Mode::TcpOnly,
             flow_stat: Arc::new(FlowStat::new()),
-            connect_opts: Arc::new(ConnectOpts::default()),
+            connect_opts: ConnectOpts::default(),
             udp_expiry_duration: None,
             udp_capacity: 512,
             manager_addr: None,
@@ -60,7 +66,11 @@ impl Server {
         &self.flow_stat
     }
 
-    pub fn set_connect_opts(&mut self, opts: Arc<ConnectOpts>) {
+    pub fn set_client_config(&mut self, client_config: ClientConfig) {
+        self.client_config = Some(client_config);
+    }
+
+    pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
         self.connect_opts = opts;
     }
 
