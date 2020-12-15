@@ -181,7 +181,7 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4TcpHandler::new(context, nodelay, server);
+                let handler = Socks4TcpHandler::new(context, mode, nodelay, server);
                 handler.handle_socks4_client(stream, peer_addr).await
             }
 
