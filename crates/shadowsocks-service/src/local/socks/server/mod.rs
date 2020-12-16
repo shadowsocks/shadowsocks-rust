@@ -137,8 +137,14 @@ impl Socks {
         let (balancer, checker) = balancer_builder.build();
         tokio::spawn(checker);
 
-        let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(&self.client_config);
-        let udp_bind_addr = Arc::new(udp_bind_addr.clone());
+        // If UDP is enabled, SOCK5 UDP_ASSOCIATE command will let client client to send requests to this address
+        let udp_bind_addr = if self.mode.enable_udp() {
+            let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(&self.client_config);
+            let udp_bind_addr = Arc::new(udp_bind_addr.clone());
+            Some(udp_bind_addr)
+        } else {
+            None
+        };
 
         loop {
             let (stream, peer_addr) = match listener.accept().await {
@@ -158,12 +164,10 @@ impl Socks {
             let context = self.context.clone();
             let nodelay = self.nodelay;
             let udp_bind_addr = udp_bind_addr.clone();
-            let mode = self.mode;
 
             tokio::spawn(Socks::handle_tcp_client(
                 context,
                 udp_bind_addr,
-                mode,
                 stream,
                 server,
                 peer_addr,
@@ -175,8 +179,7 @@ impl Socks {
     #[cfg(feature = "local-socks4")]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        udp_bind_addr: Arc<ClientConfig>,
-        mode: Mode,
+        udp_bind_addr: Option<Arc<ClientConfig>>,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
@@ -190,12 +193,12 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4TcpHandler::new(context, mode, nodelay, server);
+                let handler = Socks4TcpHandler::new(context, nodelay, server);
                 handler.handle_socks4_client(stream, peer_addr).await
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, mode, nodelay, server);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
@@ -210,7 +213,7 @@ impl Socks {
     #[cfg(not(feature = "local-socks4"))]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        udp_bind_addr: Arc<ClientConfig>,
+        udp_bind_addr: Option<Arc<ClientConfig>>,
         mode: Mode,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
@@ -227,6 +230,8 @@ impl Socks {
             self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
             self.udp_capacity,
         );
-        server.run(&self.client_config, self.servers.clone()).await
+
+        let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(&self.client_config);
+        server.run(udp_bind_addr, self.servers.clone()).await
     }
 }
