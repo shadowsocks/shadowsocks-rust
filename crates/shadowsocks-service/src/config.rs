@@ -1235,6 +1235,11 @@ impl Config {
             }
         }
 
+        if self.local_protocol == ProtocolType::Socks && !self.mode.enable_tcp() {
+            let err = Error::new(ErrorKind::Malformed, "socks protocol must enable tcp mode", None);
+            return Err(err);
+        }
+
         #[cfg(feature = "local-dns")]
         if self.local_protocol == ProtocolType::Dns {
             if self.dns_bind_addr.is_none() || self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {

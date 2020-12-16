@@ -37,11 +37,12 @@ mod socks5;
 
 pub struct Socks {
     context: Arc<ServiceContext>,
-    client_config: Arc<ClientConfig>,
+    client_config: ClientConfig,
     servers: Vec<ServerConfig>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
+    udp_bind_addr: Option<ClientConfig>,
     nodelay: bool,
 }
 
@@ -58,11 +59,12 @@ impl Socks {
     ) -> Socks {
         Socks {
             context,
-            client_config: Arc::new(client_config),
+            client_config,
             servers,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: 256,
+            udp_bind_addr: None,
             nodelay: false,
         }
     }
@@ -79,24 +81,28 @@ impl Socks {
         self.udp_capacity = c;
     }
 
+    pub fn set_udp_bind_addr(&mut self, a: ClientConfig) {
+        self.udp_bind_addr = Some(a);
+    }
+
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
     pub async fn run(mut self) -> io::Result<()> {
+        assert!(self.mode.enable_tcp(), "tcp cannot be disabled in socks");
+
         let mut vfut = Vec::new();
 
-        if self.mode.enable_tcp() {
-            for server in &mut self.servers {
-                if let Some(c) = server.plugin() {
-                    let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
-                    server.set_plugin_addr(plugin.local_addr().into());
-                    vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
-                }
+        for server in &mut self.servers {
+            if let Some(c) = server.plugin() {
+                let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
+                server.set_plugin_addr(plugin.local_addr().into());
+                vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
             }
-
-            vfut.push(self.run_tcp_server().boxed());
         }
+
+        vfut.push(self.run_tcp_server().boxed());
 
         if self.mode.enable_udp() {
             vfut.push(self.run_udp_server().boxed());
@@ -109,7 +115,7 @@ impl Socks {
     }
 
     async fn run_tcp_server(&self) -> io::Result<()> {
-        let listener = match *self.client_config {
+        let listener = match self.client_config {
             ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
@@ -131,6 +137,9 @@ impl Socks {
         let (balancer, checker) = balancer_builder.build();
         tokio::spawn(checker);
 
+        let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(&self.client_config);
+        let udp_bind_addr = Arc::new(udp_bind_addr.clone());
+
         loop {
             let (stream, peer_addr) = match listener.accept().await {
                 Ok(s) => s,
@@ -148,12 +157,12 @@ impl Socks {
             let server = balancer.best_server();
             let context = self.context.clone();
             let nodelay = self.nodelay;
-            let client_config = self.client_config.clone();
+            let udp_bind_addr = udp_bind_addr.clone();
             let mode = self.mode;
 
             tokio::spawn(Socks::handle_tcp_client(
                 context,
-                client_config,
+                udp_bind_addr,
                 mode,
                 stream,
                 server,
@@ -166,7 +175,7 @@ impl Socks {
     #[cfg(feature = "local-socks4")]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        client_config: Arc<ClientConfig>,
+        udp_bind_addr: Arc<ClientConfig>,
         mode: Mode,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
@@ -186,7 +195,7 @@ impl Socks {
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, client_config, mode, nodelay, server);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, mode, nodelay, server);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
@@ -201,14 +210,14 @@ impl Socks {
     #[cfg(not(feature = "local-socks4"))]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        client_config: Arc<ClientConfig>,
+        udp_bind_addr: Arc<ClientConfig>,
         mode: Mode,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
         nodelay: bool,
     ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, client_config, mode, nodelay, server);
+        let handler = Socks5TcpHandler::new(context, udp_bind_addr, mode, nodelay, server);
         handler.handle_socks5_client(stream, peer_addr).await
     }
 

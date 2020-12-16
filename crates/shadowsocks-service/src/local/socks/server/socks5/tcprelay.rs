@@ -20,7 +20,7 @@ use shadowsocks::relay::socks5::{
 use tokio::net::TcpStream;
 
 use crate::{
-    config::{ClientConfig, Mode},
+    config::ClientConfig,
     local::{
         context::ServiceContext,
         loadbalancing::{BasicServerIdent, ServerIdent},
@@ -32,8 +32,7 @@ use crate::{
 
 pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
-    client_config: Arc<ClientConfig>,
-    mode: Mode,
+    udp_bind_addr: Option<Arc<ClientConfig>>,
     nodelay: bool,
     server: Arc<BasicServerIdent>,
 }
@@ -41,15 +40,13 @@ pub struct Socks5TcpHandler {
 impl Socks5TcpHandler {
     pub fn new(
         context: Arc<ServiceContext>,
-        client_config: Arc<ClientConfig>,
-        mode: Mode,
+        udp_bind_addr: Option<Arc<ClientConfig>>,
         nodelay: bool,
         server: Arc<BasicServerIdent>,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
-            client_config,
-            mode,
+            udp_bind_addr,
             nodelay,
             server,
         }
@@ -122,14 +119,6 @@ impl Socks5TcpHandler {
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
-        if !self.mode.enable_tcp() {
-            warn!("socks5 tcp is disabled. mode: {:?}", self.mode);
-
-            let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, target_addr);
-            rh.write_to(&mut stream).await?;
-            return Ok(());
-        }
-
         let svr_cfg = self.server.server_config();
 
         let remote =
@@ -179,22 +168,26 @@ impl Socks5TcpHandler {
     }
 
     async fn handle_udp_associate(self, mut stream: TcpStream, client_addr: Address) -> io::Result<()> {
-        if !self.mode.enable_udp() {
-            warn!("socks5 udp is disabled. mode: {:?}", self.mode);
+        match self.udp_bind_addr {
+            None => {
+                warn!("socks5 udp is disabled");
 
-            let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, client_addr);
-            rh.write_to(&mut stream).await?;
-            return Ok(());
+                let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, client_addr);
+                rh.write_to(&mut stream).await?;
+
+                Ok(())
+            }
+            Some(bind_addr) => {
+                // shadowsocks accepts both TCP and UDP from the same address
+
+                let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, bind_addr.as_ref().into());
+                rh.write_to(&mut stream).await?;
+
+                // Hold connection until EOF.
+                let _ = ignore_until_end(&mut stream).await;
+
+                Ok(())
+            }
         }
-
-        // shadowsocks accepts both TCP and UDP from the same address
-
-        let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.client_config.as_ref().into());
-        rh.write_to(&mut stream).await?;
-
-        // Hold connection until EOF.
-        let _ = ignore_until_end(&mut stream).await;
-
-        Ok(())
     }
 }

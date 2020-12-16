@@ -67,6 +67,9 @@ pub async fn run(config: Config) -> io::Result<()> {
             if let Some(d) = config.udp_timeout {
                 server.set_udp_expiry_duration(d);
             }
+            if let Some(b) = config.udp_bind_addr {
+                server.set_udp_bind_addr(b);
+            }
             if config.no_delay {
                 server.set_nodelay(true);
             }
