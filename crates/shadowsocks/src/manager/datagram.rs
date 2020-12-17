@@ -1,10 +1,8 @@
 //! Shadowsocks manager connecting interface
 
-use std::{
-    fmt,
-    io::{self, ErrorKind},
-    net::SocketAddr,
-};
+#[cfg(unix)]
+use std::io::ErrorKind;
+use std::{fmt, io, net::SocketAddr};
 
 use tokio::net::UdpSocket;
 #[cfg(unix)]

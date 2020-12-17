@@ -1,7 +1,7 @@
 use std::{
     io,
     mem,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::windows::io::AsRawSocket,
     ptr,
 };
@@ -15,7 +15,7 @@ use winapi::{
     },
 };
 
-use crate::config::ConnectOpts;
+use crate::net::ConnectOpts;
 
 /// Create a `UdpSocket` binded to `addr`
 ///
@@ -72,16 +72,14 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, opts: &ConnectOpts) -> io::R
         };
 
         // Binds to IP address
-        if let Some(ip) = config.bind_local_addr {
-            match (ip, saddr.ip()) {
-                (IpAddr::V4(..), IpAddr::V4(..)) => {
-                    socket.bind(SocketAddr::new(ip, 0))?;
-                }
-                (IpAddr::V6(..), IpAddr::V6(..)) => {
-                    socket.bind(SocketAddr::new(ip, 0))?;
-                }
-                _ => {}
+        match (ip, saddr.ip()) {
+            (IpAddr::V4(..), IpAddr::V4(..)) => {
+                socket.bind(SocketAddr::new(ip, 0))?;
             }
+            (IpAddr::V6(..), IpAddr::V6(..)) => {
+                socket.bind(SocketAddr::new(ip, 0))?;
+            }
+            _ => {}
         }
 
         // it's important that the socket is binded before connecting

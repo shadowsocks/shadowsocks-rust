@@ -16,7 +16,6 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     process::ExitStatus,
-    time::{Duration, Instant},
 };
 
 use log::{debug, error};
@@ -128,6 +127,8 @@ impl Drop for Plugin {
 
     #[cfg(unix)]
     fn drop(&mut self) {
+        use std::time::{Duration, Instant};
+
         debug!(
             "terminating plugin process {:?}, local_addr: {}",
             self.process.id(),
