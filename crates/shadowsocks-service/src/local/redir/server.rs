@@ -7,10 +7,7 @@ use std::{
 };
 
 use futures::{future, FutureExt};
-use shadowsocks::{
-    plugin::{Plugin, PluginMode},
-    ServerConfig,
-};
+use shadowsocks::ServerConfig;
 
 use crate::{
     config::{ClientConfig, Mode, RedirType},
@@ -21,8 +18,6 @@ use super::{tcprelay::run_tcp_redir, udprelay::UdpRedir};
 
 pub struct Redir {
     context: Arc<ServiceContext>,
-    client_config: ClientConfig,
-    servers: Vec<ServerConfig>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
@@ -32,20 +27,14 @@ pub struct Redir {
 }
 
 impl Redir {
-    pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>) -> Redir {
+    pub fn new() -> Redir {
         let context = ServiceContext::new();
-        Redir::with_context(Arc::new(context), client_config, servers)
+        Redir::with_context(Arc::new(context))
     }
 
-    pub fn with_context(
-        context: Arc<ServiceContext>,
-        client_config: ClientConfig,
-        servers: Vec<ServerConfig>,
-    ) -> Redir {
+    pub fn with_context(context: Arc<ServiceContext>) -> Redir {
         Redir {
             context,
-            client_config,
-            servers,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: 256,
@@ -79,22 +68,15 @@ impl Redir {
         self.udp_redir = ty;
     }
 
-    pub async fn run(mut self) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            for server in &mut self.servers {
-                if let Some(c) = server.plugin() {
-                    let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
-                    server.set_plugin_addr(plugin.local_addr().into());
-                    vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
-                }
-            }
-            vfut.push(self.run_tcp_tunnel().boxed());
+            vfut.push(self.run_tcp_tunnel(client_config, servers).boxed());
         }
 
         if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel().boxed());
+            vfut.push(self.run_udp_tunnel(client_config, servers).boxed());
         }
 
         let _ = future::select_all(vfut).await;
@@ -103,24 +85,24 @@ impl Redir {
         Err(err)
     }
 
-    async fn run_tcp_tunnel(&self) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         run_tcp_redir(
             self.context.clone(),
-            &self.client_config,
-            self.servers.clone(),
+            client_config,
+            servers,
             self.tcp_redir,
             self.nodelay,
         )
         .await
     }
 
-    async fn run_udp_tunnel(&self) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut server = UdpRedir::new(
             self.context.clone(),
             self.udp_redir,
             self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
             self.udp_capacity,
         );
-        server.run(&self.client_config, self.servers.clone()).await
+        server.run(client_config, servers).await
     }
 }

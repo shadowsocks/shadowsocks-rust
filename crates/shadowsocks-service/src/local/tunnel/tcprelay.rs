@@ -22,7 +22,7 @@ use crate::{
 pub async fn run_tcp_tunnel(
     context: Arc<ServiceContext>,
     client_config: &ClientConfig,
-    servers: Vec<ServerConfig>,
+    servers: &[ServerConfig],
     forward_addr: &Address,
     nodelay: bool,
 ) -> io::Result<()> {
@@ -36,12 +36,12 @@ pub async fn run_tcp_tunnel(
         }
     };
 
-    info!("shadowsocks TCP tunnel listening on {}", client_config);
+    info!("shadowsocks TCP tunnel listening on {}", listener.local_addr()?);
 
     let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
 
     for server in servers {
-        let server_ident = BasicServerIdent::new(server);
+        let server_ident = BasicServerIdent::new(server.clone());
         balancer_builder.add_server(server_ident);
     }
 

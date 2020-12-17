@@ -2,8 +2,13 @@
 
 use std::{io, sync::Arc};
 
+use futures::{future, FutureExt};
 use log::{trace, warn};
-use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
+use shadowsocks::{
+    dns_resolver::DnsResolver,
+    net::ConnectOpts,
+    plugin::{Plugin, PluginMode},
+};
 
 use crate::config::{Config, ConfigType, Mode, ProtocolType};
 
@@ -26,7 +31,7 @@ pub mod socks;
 pub mod tunnel;
 pub mod utils;
 
-pub async fn run(config: Config) -> io::Result<()> {
+pub async fn run(mut config: Config) -> io::Result<()> {
     assert!(config.config_type == ConfigType::Local && config.local_addr.is_some());
     assert!(config.server.len() > 0);
 
@@ -44,10 +49,10 @@ pub async fn run(config: Config) -> io::Result<()> {
     });
 
     #[cfg(feature = "local-dns")]
-    if let Some(ns) = config.local_dns_addr {
+    if let Some(ref ns) = config.local_dns_addr {
         trace!("initializing direct DNS resolver for {}", ns);
 
-        let mut resolver = LocalDnsResolver::new(ns);
+        let mut resolver = LocalDnsResolver::new(ns.clone());
         resolver.set_mode(Mode::TcpAndUdp);
         resolver.set_ipv6_first(config.ipv6_first);
         resolver.set_connect_opts(context.connect_opts_ref().clone());
@@ -77,11 +82,54 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let context = Arc::new(context);
 
+    let mut vfut = Vec::new();
+
+    let enable_tcp = match config.local_protocol {
+        ProtocolType::Socks => config.mode.enable_tcp(),
+        #[cfg(feature = "local-tunnel")]
+        ProtocolType::Tunnel => config.mode.enable_tcp(),
+        #[cfg(feature = "local-http")]
+        ProtocolType::Http => true,
+        #[cfg(feature = "local-redir")]
+        ProtocolType::Redir => config.mode.enable_tcp(),
+        #[cfg(feature = "local-dns")]
+        ProtocolType::Dns => config.mode.enable_tcp(),
+    };
+
+    if enable_tcp {
+        // Start plugins for TCP proxies
+        for server in &mut config.server {
+            if let Some(c) = server.plugin() {
+                let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
+                server.set_plugin_addr(plugin.local_addr().into());
+                vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
+            }
+        }
+    }
+
+    #[cfg(feature = "local-dns")]
+    if matches!(config.local_protocol, ProtocolType::Dns) || config.dns_bind_addr.is_some() {
+        use self::dns::Dns;
+
+        let local_addr = config.local_dns_addr.expect("missing local_dns_addr");
+        let remote_addr = config.remote_dns_addr.expect("missing remote_dns_addr");
+
+        let bind_addr = config.dns_bind_addr.as_ref().unwrap_or_else(|| &client_config);
+
+        let mut server = Dns::with_context(context.clone(), local_addr, remote_addr);
+        server.set_mode(config.mode);
+        if config.no_delay {
+            server.set_nodelay(true);
+        }
+
+        vfut.push(server.run(bind_addr, &config.server).boxed());
+    }
+
     match config.local_protocol {
         ProtocolType::Socks => {
             use self::socks::Socks;
 
-            let mut server = Socks::with_context(context, client_config, config.server);
+            let mut server = Socks::with_context(context);
             server.set_mode(config.mode);
 
             if let Some(c) = config.udp_max_associations {
@@ -97,7 +145,7 @@ pub async fn run(config: Config) -> io::Result<()> {
                 server.set_nodelay(true);
             }
 
-            server.run().await
+            vfut.push(server.run(&client_config, &config.server).boxed());
         }
         #[cfg(feature = "local-tunnel")]
         ProtocolType::Tunnel => {
@@ -105,7 +153,7 @@ pub async fn run(config: Config) -> io::Result<()> {
 
             let forward_addr = config.forward.expect("tunnel requires forward address");
 
-            let mut server = Tunnel::with_context(context, client_config, config.server, forward_addr);
+            let mut server = Tunnel::with_context(context, forward_addr);
 
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);
@@ -118,20 +166,20 @@ pub async fn run(config: Config) -> io::Result<()> {
                 server.set_nodelay(true);
             }
 
-            server.run().await
+            vfut.push(server.run(&client_config, &config.server).boxed());
         }
         #[cfg(feature = "local-http")]
         ProtocolType::Http => {
             use self::http::Http;
 
-            let server = Http::with_context(context, client_config, config.server);
-            server.run().await
+            let server = Http::with_context(context);
+            vfut.push(server.run(&client_config, &config.server).boxed());
         }
         #[cfg(feature = "local-redir")]
         ProtocolType::Redir => {
             use self::redir::Redir;
 
-            let mut server = Redir::with_context(context, client_config, config.server);
+            let mut server = Redir::with_context(context, config.server);
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);
             }
@@ -145,9 +193,13 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.set_tcp_redir(config.tcp_redir);
             server.set_udp_redir(config.udp_redir);
 
-            server.run().await
+            vfut.push(server.run(&client_config, &config.server).boxed());
         }
         #[cfg(feature = "local-dns")]
-        ProtocolType::Dns => unimplemented!(),
+        ProtocolType::Dns => {}
     }
+
+    let _ = future::select_all(vfut).await;
+
+    Ok(())
 }

@@ -70,7 +70,7 @@ impl UdpRedir {
         }
     }
 
-    pub async fn run(&mut self, client_config: &ClientConfig, servers: Vec<ServerConfig>) -> io::Result<()> {
+    pub async fn run(&mut self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let listener = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::bind(self.redir_ty, *saddr)?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -87,7 +87,7 @@ impl UdpRedir {
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
 
         for server in servers {
-            let server_ident = BasicServerIdent::new(server);
+            let server_ident = BasicServerIdent::new(server.clone());
             balancer_builder.add_server(server_ident);
         }
 

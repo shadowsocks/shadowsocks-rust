@@ -9,6 +9,7 @@ use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
     lookup_then,
+    net::UdpSocket as ShadowUdpSocket,
     relay::{
         socks5::Address,
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -55,28 +56,26 @@ impl UdpTunnel {
     pub async fn run(
         &mut self,
         client_config: &ClientConfig,
-        servers: Vec<ServerConfig>,
+        servers: &[ServerConfig],
         forward_addr: &Address,
     ) -> io::Result<()> {
         let socket = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => UdpSocket::bind(saddr).await?,
+            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::bind(&saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(&self.context.context_ref(), dname, port, |addr| {
-                    UdpSocket::bind(addr).await
+                    ShadowUdpSocket::bind(&addr).await
                 })?
                 .1
             }
         };
+        let socket: UdpSocket = socket.into();
 
-        info!(
-            "shadowsocks UDP tunnel listening on {}",
-            socket.local_addr().expect("listener.local_addr"),
-        );
+        info!("shadowsocks UDP tunnel listening on {}", socket.local_addr()?);
 
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
 
         for server in servers {
-            let server_ident = BasicServerIdent::new(server);
+            let server_ident = BasicServerIdent::new(server.clone());
             balancer_builder.add_server(server_ident);
         }
 

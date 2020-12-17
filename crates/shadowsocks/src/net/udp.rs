@@ -10,7 +10,10 @@ use pin_project::pin_project;
 
 use crate::{
     context::Context,
-    relay::{socks5::Address, sys::create_outbound_udp_socket},
+    relay::{
+        socks5::Address,
+        sys::{create_outbound_udp_socket, create_udp_socket},
+    },
     ServerAddr,
 };
 
@@ -73,6 +76,12 @@ impl UdpSocket {
     pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
         let socket = create_outbound_udp_socket(addr, opts).await?;
         socket.connect(addr).await?;
+        Ok(UdpSocket(socket))
+    }
+
+    /// Binds to a specific address
+    pub async fn bind(addr: &SocketAddr) -> io::Result<UdpSocket> {
+        let socket = create_udp_socket(addr).await?;
         Ok(UdpSocket(socket))
     }
 }

@@ -7,11 +7,7 @@ use std::{
 };
 
 use futures::{future, FutureExt};
-use shadowsocks::{
-    plugin::{Plugin, PluginMode},
-    relay::socks5::Address,
-    ServerConfig,
-};
+use shadowsocks::{relay::socks5::Address, ServerConfig};
 
 use crate::{
     config::{ClientConfig, Mode},
@@ -22,8 +18,6 @@ use super::{tcprelay::run_tcp_tunnel, udprelay::UdpTunnel};
 
 pub struct Tunnel {
     context: Arc<ServiceContext>,
-    client_config: ClientConfig,
-    servers: Vec<ServerConfig>,
     forward_addr: Address,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
@@ -32,21 +26,14 @@ pub struct Tunnel {
 }
 
 impl Tunnel {
-    pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>, forward_addr: Address) -> Tunnel {
+    pub fn new(forward_addr: Address) -> Tunnel {
         let context = ServiceContext::new();
-        Tunnel::with_context(Arc::new(context), client_config, servers, forward_addr)
+        Tunnel::with_context(Arc::new(context), forward_addr)
     }
 
-    pub fn with_context(
-        context: Arc<ServiceContext>,
-        client_config: ClientConfig,
-        servers: Vec<ServerConfig>,
-        forward_addr: Address,
-    ) -> Tunnel {
+    pub fn with_context(context: Arc<ServiceContext>, forward_addr: Address) -> Tunnel {
         Tunnel {
             context,
-            client_config,
-            servers,
             forward_addr,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
@@ -71,22 +58,15 @@ impl Tunnel {
         self.nodelay = nodelay;
     }
 
-    pub async fn run(mut self) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            for server in &mut self.servers {
-                if let Some(c) = server.plugin() {
-                    let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
-                    server.set_plugin_addr(plugin.local_addr().into());
-                    vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
-                }
-            }
-            vfut.push(self.run_tcp_tunnel().boxed());
+            vfut.push(self.run_tcp_tunnel(client_config, servers).boxed());
         }
 
         if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel().boxed());
+            vfut.push(self.run_udp_tunnel(client_config, servers).boxed());
         }
 
         let _ = future::select_all(vfut).await;
@@ -95,25 +75,23 @@ impl Tunnel {
         Err(err)
     }
 
-    async fn run_tcp_tunnel(&self) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         run_tcp_tunnel(
             self.context.clone(),
-            &self.client_config,
-            self.servers.clone(),
+            client_config,
+            servers,
             &self.forward_addr,
             self.nodelay,
         )
         .await
     }
 
-    async fn run_udp_tunnel(&self) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut server = UdpTunnel::new(
             self.context.clone(),
             self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
             self.udp_capacity,
         );
-        server
-            .run(&self.client_config, self.servers.clone(), &self.forward_addr)
-            .await
+        server.run(client_config, servers, &self.forward_addr).await
     }
 }

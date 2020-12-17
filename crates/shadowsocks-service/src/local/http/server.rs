@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use futures::future::{self, FutureExt};
 use hyper::{
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
@@ -19,7 +18,6 @@ use log::{error, info};
 use shadowsocks::{
     config::{ServerAddr, ServerConfig},
     lookup_then,
-    plugin::{Plugin, PluginMode},
 };
 
 use crate::{
@@ -34,48 +32,23 @@ use super::{connector::BypassConnector, dispatcher::HttpDispatcher, server_ident
 
 pub struct Http {
     context: Arc<ServiceContext>,
-    client_config: ClientConfig,
-    servers: Vec<ServerConfig>,
 }
 
 impl Http {
-    pub fn new(client_config: ClientConfig, servers: Vec<ServerConfig>) -> Http {
+    pub fn new() -> Http {
         let context = ServiceContext::new();
-        Http::with_context(Arc::new(context), client_config, servers)
+        Http::with_context(Arc::new(context))
     }
 
-    pub fn with_context(context: Arc<ServiceContext>, client_config: ClientConfig, servers: Vec<ServerConfig>) -> Http {
-        Http {
-            context,
-            client_config,
-            servers,
-        }
+    pub fn with_context(context: Arc<ServiceContext>) -> Http {
+        Http { context }
     }
 
-    pub async fn run(mut self) -> io::Result<()> {
-        let mut vfut = Vec::new();
-
-        for server in &mut self.servers {
-            if let Some(c) = server.plugin() {
-                let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
-                server.set_plugin_addr(plugin.local_addr().into());
-                vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
-            }
-        }
-
-        vfut.push(self.run_http_server().boxed());
-
-        let _ = future::select_all(vfut).await;
-
-        let err = io::Error::new(ErrorKind::Other, "http server exited unexpectly");
-        Err(err)
-    }
-
-    async fn run_http_server(self) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
 
-        for server in self.servers {
-            let server_ident = HttpServerIdent::new(self.context.clone(), server);
+        for server in servers {
+            let server_ident = HttpServerIdent::new(self.context.clone(), server.clone());
             balancer_builder.add_server(server_ident);
         }
 
@@ -99,7 +72,7 @@ impl Http {
             }
         });
 
-        let bind_result = match self.client_config {
+        let bind_result = match *client_config {
             ServerAddr::SocketAddr(sa) => Server::try_bind(&sa),
             ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
                 Server::try_bind(&addr)
