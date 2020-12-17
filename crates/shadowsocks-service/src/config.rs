@@ -68,6 +68,8 @@ use shadowsocks::{
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 
 use crate::local::acl::AccessControl;
+#[cfg(feature = "local-dns")]
+pub use crate::local::dns::config::NameServerAddr;
 
 #[cfg(feature = "trust-dns")]
 #[derive(Serialize, Deserialize, Debug)]
@@ -145,68 +147,6 @@ struct SSServerExtConfig {
     remarks: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
-}
-
-cfg_if! {
-    if #[cfg(feature = "local-dns")] {
-        /// Parse `LocalDnsAddr` error
-        #[derive(Debug)]
-        pub struct LocalDnsAddrError;
-
-        /// Address for Manager server
-        #[derive(Debug, Clone)]
-        pub enum LocalDnsAddr {
-            /// IP address
-            SocketAddr(SocketAddr),
-            /// Unix socket path
-            #[cfg(unix)]
-            UnixSocketAddr(PathBuf),
-        }
-
-        impl FromStr for LocalDnsAddr {
-            type Err = LocalDnsAddrError;
-
-            fn from_str(s: &str) -> Result<LocalDnsAddr, LocalDnsAddrError> {
-                match s.parse::<SocketAddr>() {
-                    Ok(socket_addr) => Ok(LocalDnsAddr::SocketAddr(socket_addr)),
-                    #[cfg(unix)]
-                    Err(..) => Ok(LocalDnsAddr::UnixSocketAddr(PathBuf::from(s))),
-                    #[cfg(not(unix))]
-                    Err(..) => Err(LocalDnsAddrError),
-                }
-            }
-        }
-
-        impl Display for LocalDnsAddr {
-            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-                match *self {
-                    LocalDnsAddr::SocketAddr(ref saddr) => fmt::Display::fmt(saddr, f),
-                    #[cfg(unix)]
-                    LocalDnsAddr::UnixSocketAddr(ref path) => fmt::Display::fmt(&path.display(), f),
-                }
-            }
-        }
-
-        impl From<SocketAddr> for LocalDnsAddr {
-            fn from(addr: SocketAddr) -> LocalDnsAddr {
-                LocalDnsAddr::SocketAddr(addr)
-            }
-        }
-
-        #[cfg(unix)]
-        impl From<PathBuf> for LocalDnsAddr {
-            fn from(p: PathBuf) -> LocalDnsAddr {
-                LocalDnsAddr::UnixSocketAddr(p)
-            }
-        }
-
-        #[cfg(unix)]
-        impl From<&str> for LocalDnsAddr {
-            fn from(p: &str) -> LocalDnsAddr {
-                LocalDnsAddr::UnixSocketAddr(PathBuf::from(p))
-            }
-        }
-    }
 }
 
 /// Listening address
@@ -663,7 +603,7 @@ pub struct Config {
     ///
     /// Sending DNS query directly to this address
     #[cfg(feature = "local-dns")]
-    pub local_dns_addr: Option<LocalDnsAddr>,
+    pub local_dns_addr: Option<NameServerAddr>,
     /// Remote DNS's address
     ///
     /// Sending DNS query through proxy to this address
@@ -1277,12 +1217,6 @@ impl Config {
         }
 
         Ok(())
-    }
-
-    /// Check if DNS Relay is enabled
-    #[cfg(feature = "local-dns")]
-    pub(crate) fn is_local_dns_relay(&self) -> bool {
-        self.local_protocol == ProtocolType::Dns || self.dns_bind_addr.is_some()
     }
 }
 

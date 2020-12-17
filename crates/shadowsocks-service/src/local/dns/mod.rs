@@ -1,3 +1,6 @@
 //! Customized DNS resolver
 
-mod upstream;
+pub mod client_cache;
+pub mod config;
+pub mod dns_resolver;
+pub mod upstream;

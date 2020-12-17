@@ -5,7 +5,7 @@
 use std::net::SocketAddr;
 
 #[cfg(feature = "local-dns")]
-use shadowsocks_service::config::LocalDnsAddr;
+use shadowsocks_service::config::NameServerAddr;
 use shadowsocks_service::shadowsocks::{relay::socks5::Address, ManagerAddr, ServerAddr, ServerConfig};
 
 macro_rules! validate_type {
@@ -33,8 +33,8 @@ validate_type!(
 );
 #[cfg(feature = "local-dns")]
 validate_type!(
-    validate_local_dns_addr,
-    LocalDnsAddr,
+    validate_name_server_addr,
+    NameServerAddr,
     "should be either ip:port, domain:port or /path/to/unix.sock"
 );
 validate_type!(validate_u64, u64, "should be unsigned integer");

@@ -43,7 +43,7 @@ impl ServiceContext {
         self.connect_opts = connect_opts;
     }
 
-    pub fn connect_opts(&self) -> &ConnectOpts {
+    pub fn connect_opts_ref(&self) -> &ConnectOpts {
         &self.connect_opts
     }
 
@@ -62,6 +62,10 @@ impl ServiceContext {
     pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
+    }
+
+    pub fn dns_resolver(&self) -> &DnsResolver {
+        self.context.dns_resolver()
     }
 
     pub async fn check_target_bypassed(&self, addr: &Address) -> bool {

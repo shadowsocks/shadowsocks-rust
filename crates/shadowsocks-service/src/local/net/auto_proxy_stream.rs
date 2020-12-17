@@ -59,7 +59,8 @@ impl AutoProxyClientStream {
     {
         // Connect directly.
         let addr = addr.into();
-        let stream = TcpStream::connect_remote_with_opts(context.context_ref(), &addr, context.connect_opts()).await?;
+        let stream =
+            TcpStream::connect_remote_with_opts(context.context_ref(), &addr, context.connect_opts_ref()).await?;
         Ok(AutoProxyClientStream::Bypassed(stream.into()))
     }
 
@@ -79,7 +80,7 @@ impl AutoProxyClientStream {
             context.context(),
             svr_cfg,
             addr,
-            context.connect_opts(),
+            context.connect_opts_ref(),
             |stream| MonProxyStream::from_stream(stream, flow_stat),
         )
         .await

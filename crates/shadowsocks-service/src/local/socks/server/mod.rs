@@ -125,7 +125,7 @@ impl Socks {
             }
         };
 
-        info!("shadowsocks socks listening on {}", self.client_config);
+        info!("shadowsocks socks TCP listening on {}", self.client_config);
 
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
 

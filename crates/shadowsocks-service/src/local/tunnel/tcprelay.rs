@@ -36,7 +36,7 @@ pub async fn run_tcp_tunnel(
         }
     };
 
-    info!("shadowsocks tcp tunnel listening on {}", client_config);
+    info!("shadowsocks TCP tunnel listening on {}", client_config);
 
     let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
 

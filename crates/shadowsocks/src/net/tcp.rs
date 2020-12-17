@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    net::SocketAddr,
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{self, Poll},
@@ -23,6 +24,11 @@ use super::connect_opt::ConnectOpts;
 pub struct TcpStream(#[pin] tokio::net::TcpStream);
 
 impl TcpStream {
+    /// Connects to address
+    pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+        tcp_stream_connect(addr, opts).await.map(TcpStream)
+    }
+
     /// Connects shadowsocks server
     pub async fn connect_server_with_opts(
         context: &Context,

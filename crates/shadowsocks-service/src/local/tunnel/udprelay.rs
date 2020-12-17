@@ -69,7 +69,7 @@ impl UdpTunnel {
         };
 
         info!(
-            "shadowsocks udp server listening on {}",
+            "shadowsocks UDP tunnel listening on {}",
             socket.local_addr().expect("listener.local_addr"),
         );
 
@@ -128,7 +128,7 @@ impl UdpTunnel {
                 let svr_cfg = server.server_config();
 
                 let socket =
-                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
+                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts_ref())
                         .await?;
                 let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
                 let socket = Arc::new(socket);
@@ -157,7 +157,7 @@ impl UdpTunnel {
                     "established udp tunnel {} <-> {} with {:?}",
                     peer_addr,
                     forward_addr,
-                    self.context.connect_opts()
+                    self.context.connect_opts_ref()
                 );
 
                 vac.insert(UdpAssociation { sender, r2l_abortable })

@@ -248,7 +248,7 @@ where
             self.context.context(),
             self.server.server_config(),
             &addr,
-            self.context.connect_opts(),
+            self.context.connect_opts_ref(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -288,7 +288,7 @@ where
             self.context.context(),
             self.server.server_config(),
             &addr,
-            self.context.connect_opts(),
+            self.context.connect_opts_ref(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -336,7 +336,7 @@ where
         let client = ProxySocket::connect_with_opts(
             self.context.context(),
             self.server.server_config(),
-            self.context.connect_opts(),
+            self.context.connect_opts_ref(),
         )
         .await?;
         client.send(&addr, DNS_QUERY).await?;

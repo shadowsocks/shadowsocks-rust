@@ -29,7 +29,7 @@ dns-over-tls = ["trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-
 dns-over-https = ["trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["trust-dns-proto", "trust-dns-client"]
+local-dns = ["trust-dns-proto", "trust-dns-client", "rand"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
@@ -55,11 +55,13 @@ cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
 pin-project = "1.0"
 lazy_static = "1"
+thiserror = "1.0"
 
 lru_time_cache = "0.11"
 bytes = "0.6"
 byte_string = "1.0"
 byteorder = "1.3"
+rand = { version = "0.7", optional = true }
 
 futures = "0.3"
 tokio = { version = "0.3.1", features = ["full"] }

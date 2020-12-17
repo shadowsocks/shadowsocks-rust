@@ -77,7 +77,7 @@ impl Socks5UdpServer {
         };
 
         info!(
-            "shadowsocks socks5 udp server listening on {}",
+            "shadowsocks socks5 UDP listening on {}",
             socket.local_addr().expect("listener.local_addr"),
         );
 
@@ -170,7 +170,7 @@ impl Socks5UdpServer {
                     let socket = ShadowUdpSocket::connect_remote_with_opts(
                         self.context.context_ref(),
                         target_addr,
-                        self.context.connect_opts(),
+                        self.context.connect_opts_ref(),
                     )
                     .await?;
                     let socket: Arc<UdpSocket> = Arc::new(socket.into());
@@ -193,7 +193,7 @@ impl Socks5UdpServer {
                         "established udp tunnel {} <-> {} (bypassed) with {:?}",
                         assoc_key.src,
                         assoc_key.dst,
-                        self.context.connect_opts()
+                        self.context.connect_opts_ref()
                     );
 
                     r2l_abortable
@@ -201,9 +201,12 @@ impl Socks5UdpServer {
                     let server = balancer.best_server();
                     let svr_cfg = server.server_config();
 
-                    let socket =
-                        ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
-                            .await?;
+                    let socket = ProxySocket::connect_with_opts(
+                        self.context.context(),
+                        svr_cfg,
+                        self.context.connect_opts_ref(),
+                    )
+                    .await?;
                     let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
                     let socket = Arc::new(socket);
 
@@ -225,7 +228,7 @@ impl Socks5UdpServer {
                         "established udp tunnel {} <-> {} (proxied) with {:?}",
                         assoc_key.src,
                         assoc_key.dst,
-                        self.context.connect_opts()
+                        self.context.connect_opts_ref()
                     );
 
                     r2l_abortable

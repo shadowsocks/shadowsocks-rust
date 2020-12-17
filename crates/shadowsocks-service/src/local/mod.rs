@@ -2,12 +2,14 @@
 
 use std::{io, sync::Arc};
 
-use log::trace;
+use log::{trace, warn};
 use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
 
-use crate::config::{Config, ConfigType, ProtocolType};
+use crate::config::{Config, ConfigType, Mode, ProtocolType};
 
 use self::context::ServiceContext;
+#[cfg(feature = "local-dns")]
+use self::dns::dns_resolver::DnsResolver as LocalDnsResolver;
 
 pub mod acl;
 pub mod context;
@@ -41,10 +43,31 @@ pub async fn run(config: Config) -> io::Result<()> {
         ..Default::default()
     });
 
+    #[cfg(feature = "local-dns")]
+    if let Some(ns) = config.local_dns_addr {
+        trace!("initializing direct DNS resolver for {}", ns);
+
+        let mut resolver = LocalDnsResolver::new(ns);
+        resolver.set_mode(Mode::TcpAndUdp);
+        resolver.set_ipv6_first(config.ipv6_first);
+        resolver.set_connect_opts(context.connect_opts_ref().clone());
+        context.set_dns_resolver(Arc::new(DnsResolver::custom_resolver(resolver)));
+    }
+
     #[cfg(feature = "trust-dns")]
-    context.set_dns_resolver(Arc::new(
-        DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?,
-    ));
+    if matches!(context.dns_resolver(), DnsResolver::System) {
+        match DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await {
+            Ok(r) => {
+                context.set_dns_resolver(Arc::new(r));
+            }
+            Err(err) => {
+                warn!(
+                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
+                    err
+                );
+            }
+        }
+    }
 
     if let Some(acl) = config.acl {
         context.set_acl(acl);

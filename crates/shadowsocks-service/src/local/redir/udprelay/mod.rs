@@ -160,7 +160,7 @@ impl UdpRedir {
 
                 let r2l_abortable = if self.context.check_target_bypassed(&target_addr).await {
                     let socket =
-                        ShadowUdpSocket::connect_with_opts(&assoc_key.dst, self.context.connect_opts()).await?;
+                        ShadowUdpSocket::connect_with_opts(&assoc_key.dst, self.context.connect_opts_ref()).await?;
                     let socket: Arc<UdpSocket> = Arc::new(socket.into());
 
                     let (r2l_fut, r2l_abortable) = future::abortable(UdpAssociation::copy_bypassed_r2l(
@@ -181,7 +181,7 @@ impl UdpRedir {
                         "established udp tunnel {} <-> {} (bypassed) with {:?}",
                         assoc_key.src,
                         assoc_key.dst,
-                        self.context.connect_opts()
+                        self.context.connect_opts_ref()
                     );
 
                     r2l_abortable
@@ -189,9 +189,12 @@ impl UdpRedir {
                     let server = balancer.best_server();
                     let svr_cfg = server.server_config();
 
-                    let socket =
-                        ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts())
-                            .await?;
+                    let socket = ProxySocket::connect_with_opts(
+                        self.context.context(),
+                        svr_cfg,
+                        self.context.connect_opts_ref(),
+                    )
+                    .await?;
                     let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
                     let socket = Arc::new(socket);
 
@@ -213,7 +216,7 @@ impl UdpRedir {
                         "established udp tunnel {} <-> {} (proxied) with {:?}",
                         assoc_key.src,
                         assoc_key.dst,
-                        self.context.connect_opts()
+                        self.context.connect_opts_ref()
                     );
 
                     r2l_abortable
