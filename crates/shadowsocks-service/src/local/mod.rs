@@ -192,7 +192,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         ProtocolType::Redir => {
             use self::redir::Redir;
 
-            let mut server = Redir::with_context(context, config.server);
+            let mut server = Redir::with_context(context);
             if let Some(c) = config.udp_max_associations {
                 server.set_udp_capacity(c);
             }
