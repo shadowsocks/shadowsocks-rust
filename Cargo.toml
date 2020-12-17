@@ -61,7 +61,7 @@ local-dns = ["shadowsocks-service/local-dns"]
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = []
+local-flow-stat = ["shadowsocks-service/local-flow-stat"]
 # Enable HTTP protocol for sslocal
 local-http = ["shadowsocks-service/local-http"]
 local-http-native-tls = ["shadowsocks-service/local-http-native-tls"]

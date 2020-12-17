@@ -1,5 +1,7 @@
 //! Shadowsocks Local Server
 
+#[cfg(feature = "local-flow-stat")]
+use std::path::PathBuf;
 use std::{io, sync::Arc};
 
 use futures::{future, FutureExt};
@@ -11,6 +13,8 @@ use shadowsocks::{
 };
 
 use crate::config::{Config, ConfigType, ProtocolType};
+#[cfg(feature = "local-flow-stat")]
+use crate::net::FlowStat;
 
 use self::context::ServiceContext;
 #[cfg(feature = "local-dns")]
@@ -138,6 +142,14 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         vfut.push(server.run(bind_addr, &config.server).boxed());
     }
 
+    #[cfg(feature = "local-flow-stat")]
+    if let Some(stat_path) = config.stat_path {
+        // For Android's flow statistic
+
+        let report_fut = flow_report_task(stat_path, context.flow_stat());
+        vfut.push(report_fut.boxed());
+    }
+
     match config.local_protocol {
         ProtocolType::Socks => {
             use self::socks::Socks;
@@ -215,4 +227,47 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     let _ = future::select_all(vfut).await;
 
     Ok(())
+}
+
+#[cfg(feature = "local-flow-stat")]
+async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::Result<()> {
+    use std::{slice, time::Duration};
+
+    use log::debug;
+    use tokio::{io::AsyncWriteExt, net::UnixStream, time};
+
+    // Android's flow statistic report RPC
+    let timeout = Duration::from_secs(1);
+
+    loop {
+        // keep it as libev's default, 0.5 seconds
+        time::sleep(Duration::from_millis(500)).await;
+        let mut stream = match time::timeout(timeout, UnixStream::connect(&stat_path)).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(err)) => {
+                debug!("send client flow statistic error: {}", err);
+                continue;
+            }
+            Err(..) => {
+                debug!("send client flow statistic error: timeout");
+                continue;
+            }
+        };
+
+        let tx = flow_stat.tx();
+        let rx = flow_stat.rx();
+
+        let buf: [u64; 2] = [tx as u64, rx as u64];
+        let buf = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 16) };
+
+        match time::timeout(timeout, stream.write_all(buf)).await {
+            Ok(Ok(..)) => {}
+            Ok(Err(err)) => {
+                debug!("send client flow statistic error: {}", err);
+            }
+            Err(..) => {
+                debug!("send client flow statistic error: timeout");
+            }
+        }
+    }
 }
