@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures::{future, FutureExt};
-use log::trace;
+use log::{trace, warn};
 use shadowsocks::{config::ServerAddr, dns_resolver::DnsResolver, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
@@ -22,7 +22,15 @@ pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Server);
     assert!(config.server.len() > 0);
 
-    trace!("starting shadowsocks server with config: {:?}", config);
+    trace!("{:?}", config);
+
+    #[cfg(unix)]
+    if let Some(nofile) = config.nofile {
+        use crate::sys::set_nofile;
+        if let Err(err) = set_nofile(nofile) {
+            warn!("set_nofile {} failed, error: {}", nofile, err);
+        }
+    }
 
     let mut servers = Vec::new();
 
@@ -43,6 +51,9 @@ pub async fn run(config: Config) -> io::Result<()> {
                 ));
             }
         },
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
     };

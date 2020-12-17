@@ -41,6 +41,8 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::ffi::OsString;
 use std::{
     convert::{From, Infallible},
     default::Default,
@@ -566,6 +568,9 @@ pub struct Config {
     /// Set `SO_MARK` socket option for outbound sockets
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub outbound_fwmark: Option<u32>,
+    /// Set `SO_BINDTODEVICE` socket option for outbound sockets
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub outbound_bind_interface: Option<OsString>,
     /// Manager's configuration
     pub manager: Option<ManagerConfig>,
     /// Config is for Client or Server
@@ -688,6 +693,8 @@ impl Config {
             no_delay: false,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            outbound_bind_interface: None,
             manager: None,
             config_type,
             local_protocol: ProtocolType::default(),

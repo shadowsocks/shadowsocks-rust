@@ -22,3 +22,26 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
         }
     }
 }
+
+#[cfg(not(target_os = "android"))]
+pub fn set_nofile(nofile: u64) -> io::Result<()> {
+    unsafe {
+        // set both soft and hard limit
+        let lim = libc::rlimit {
+            rlim_cur: nofile as libc::rlim_t,
+            rlim_max: nofile as libc::rlim_t,
+        };
+
+        if libc::setrlimit(libc::RLIMIT_NOFILE, &lim as *const _) < 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+pub fn set_nofile(nofile: u64) -> io::Result<()> {
+    // Android doesn't have this API
+    Ok(())
+}

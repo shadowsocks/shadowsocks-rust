@@ -7,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use log::{trace, warn};
 use shadowsocks::{config::ServerAddr, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
@@ -17,6 +18,16 @@ pub mod server;
 
 pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Manager);
+
+    trace!("{:?}", config);
+
+    #[cfg(unix)]
+    if let Some(nofile) = config.nofile {
+        use crate::sys::set_nofile;
+        if let Err(err) = set_nofile(nofile) {
+            warn!("set_nofile {} failed, error: {}", nofile, err);
+        }
+    }
 
     let mut manager = Manager::new(config.manager.expect("missing manager config"));
     manager.set_mode(config.mode);
@@ -47,6 +58,9 @@ pub async fn run(config: Config) -> io::Result<()> {
                 ));
             }
         },
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
     };

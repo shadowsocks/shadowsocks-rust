@@ -42,6 +42,7 @@ impl ServiceContext {
             connect_opts: ConnectOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
+            #[cfg(feature = "local-dns")]
             reverse_lookup_cache: Mutex::new(LruCache::with_expiry_duration(Duration::from_secs(3 * 24 * 60 * 60))),
         }
     }

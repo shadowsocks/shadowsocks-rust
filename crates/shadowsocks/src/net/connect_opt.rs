@@ -1,5 +1,7 @@
 //! Options for connecting to remote server
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::ffi::OsString;
 use std::net::IpAddr;
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,10 @@ pub struct ConnectOpts {
     ///
     /// It only affects sockets that trying to connect to addresses with the same family
     pub bind_local_addr: Option<IpAddr>,
+
+    /// Outbound socket binds to interface
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub bind_interface: Option<OsString>,
 }
 
 impl Default for ConnectOpts {
@@ -28,6 +34,8 @@ impl Default for ConnectOpts {
             #[cfg(target_os = "android")]
             vpn_protect_path: None,
             bind_local_addr: None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            bind_interface: None,
         }
     }
 }

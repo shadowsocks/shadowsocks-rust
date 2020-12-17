@@ -10,7 +10,7 @@ use shadowsocks::{
     plugin::{Plugin, PluginMode},
 };
 
-use crate::config::{Config, ConfigType, Mode, ProtocolType};
+use crate::config::{Config, ConfigType, ProtocolType};
 
 use self::context::ServiceContext;
 #[cfg(feature = "local-dns")]
@@ -37,6 +37,14 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
     trace!("{:?}", config);
 
+    #[cfg(unix)]
+    if let Some(nofile) = config.nofile {
+        use crate::sys::set_nofile;
+        if let Err(err) = set_nofile(nofile) {
+            warn!("set_nofile {} failed, error: {}", nofile, err);
+        }
+    }
+
     let mut context = ServiceContext::new();
     context.set_connect_opts(ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -45,11 +53,16 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        bind_interface: config.outbound_bind_interface,
+
         ..Default::default()
     });
 
     #[cfg(feature = "local-dns")]
     if let Some(ref ns) = config.local_dns_addr {
+        use crate::config::Mode;
+
         trace!("initializing direct DNS resolver for {}", ns);
 
         let mut resolver = LocalDnsResolver::new(ns.clone());

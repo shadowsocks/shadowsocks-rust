@@ -100,6 +100,18 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &ConnectOpts) -> io:
         }
     }
 
+    // Set SO_BINDTODEVICE for binding to a specific interface
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(ref iface) = config.bind_interface {
+        use nix::sys::socket::{setsockopt, sockopt::BindToDevice};
+        if let Err(err) = setsockopt::<BindToDevice>(socket.as_raw_fd(), BindToDevice, iface) {
+            return match err.as_errno() {
+                Some(errno) => Err(errno.into()),
+                None => Err(Error::new(ErrorKind::Other, err)),
+            };
+        }
+    }
+
     // Binds to IP address
     if let Some(ip) = config.bind_local_addr {
         match (ip, saddr.ip()) {
@@ -154,6 +166,18 @@ pub async fn create_outbound_udp_socket(addr: &SocketAddr, config: &ConnectOpts)
         };
         if ret != 0 {
             return Err(Error::last_os_error());
+        }
+    }
+
+    // Set SO_BINDTODEVICE for binding to a specific interface
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(ref iface) = config.bind_interface {
+        use nix::sys::socket::{setsockopt, sockopt::BindToDevice};
+        if let Err(err) = setsockopt::<BindToDevice>(socket.as_raw_fd(), BindToDevice, iface) {
+            return match err.as_errno() {
+                Some(errno) => Err(errno.into()),
+                None => Err(Error::new(ErrorKind::Other, err)),
+            };
         }
     }
 
