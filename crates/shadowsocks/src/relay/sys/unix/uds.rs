@@ -28,18 +28,23 @@ impl UnixStream {
         let uds = MioUnixStream::connect(path)?;
         let io = AsyncFd::new(uds)?;
 
-        future::poll_fn(|cx| io.poll_write_ready(cx)).await?;
+        let mut ready = future::poll_fn(|cx| io.poll_write_ready(cx)).await?;
+        ready.retain_ready();
         Ok(UnixStream { io })
     }
 
     fn poll_send_with_fd(&self, cx: &mut Context, buf: &[u8], fds: &[RawFd]) -> Poll<io::Result<usize>> {
-        ready!(self.io.poll_write_ready(cx))?;
+        let mut ready = ready!(self.io.poll_write_ready(cx))?;
 
         let fd = self.io.get_ref().as_raw_fd();
-        match send_with_fd(fd, buf, fds) {
+        ready.with_poll(|| match send_with_fd(fd, buf, fds) {
+            // self.io.poll_write_ready indicates that writable event have been received by tokio,
+            // so it is not a common case that sendto returns EAGAIN.
+            //
+            // Just for double check. If EAGAIN actually returns, clear the readness state.
             Err(ref err) if err.kind() == ErrorKind::WouldBlock => Poll::Pending,
             x => Poll::Ready(x),
-        }
+        })
     }
 
     /// Send data with file descriptors

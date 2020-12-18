@@ -41,7 +41,7 @@ pub fn set_nofile(nofile: u64) -> io::Result<()> {
 }
 
 #[cfg(target_os = "android")]
-pub fn set_nofile(nofile: u64) -> io::Result<()> {
+pub fn set_nofile(_nofile: u64) -> io::Result<()> {
     // Android doesn't have this API
     Ok(())
 }

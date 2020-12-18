@@ -249,7 +249,7 @@ fn main() {
     if matches.is_present("VPN_MODE") {
         // A socket `protect_path` in CWD
         // Same as shadowsocks-libev's android.c
-        config.protect_path = Some(From::from("protect_path"));
+        config.outbound_vpn_protect_path = Some(From::from("protect_path"));
 
         // Set default config.local_dns_addr
         #[cfg(feature = "local-dns")]
