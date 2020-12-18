@@ -82,7 +82,6 @@ tower = { git = "https://github.com/tower-rs/tower.git", optional = true }
 
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true, features = ["serde-config"] }
 trust-dns-proto = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
-trust-dns-client = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
 
 ipnet = "2.3"
 iprange = "0.6"
