@@ -442,6 +442,7 @@ struct DnsClient {
     mode: Mode,
     tcp_balancer: Option<PingBalancer<BasicServerIdent>>,
     udp_balancer: Option<PingBalancer<BasicServerIdent>>,
+    attempts: usize,
 }
 
 impl DnsClient {
@@ -484,6 +485,7 @@ impl DnsClient {
             mode,
             tcp_balancer,
             udp_balancer,
+            attempts: 2,
         }
     }
 
@@ -587,6 +589,19 @@ impl DnsClient {
     }
 
     async fn lookup_remote(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
+        let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+
+        for _ in 0..self.attempts {
+            match self.lookup_remote_inner(query, remote_addr).await {
+                Ok(m) => return Ok(m),
+                Err(err) => last_err = err,
+            }
+        }
+
+        Err(last_err)
+    }
+
+    async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(thread_rng().gen());
         message.set_recursion_desired(true);
@@ -629,6 +644,19 @@ impl DnsClient {
     }
 
     async fn lookup_local(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
+        let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+
+        for _ in 0..self.attempts {
+            match self.lookup_local_inner(query, local_addr).await {
+                Ok(m) => return Ok(m),
+                Err(err) => last_err = err,
+            }
+        }
+
+        Err(last_err)
+    }
+
+    async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(thread_rng().gen());
         message.set_recursion_desired(true);
