@@ -12,11 +12,14 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::{BasicServerIdent, ServerIdent},
-    net::AutoProxyClientStream,
-    utils::establish_tcp_tunnel,
+use crate::{
+    config::Mode,
+    local::{
+        context::ServiceContext,
+        loadbalancing::{BasicServerIdent, ServerIdent},
+        net::AutoProxyClientStream,
+        utils::establish_tcp_tunnel,
+    },
 };
 
 use super::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};
@@ -25,14 +28,21 @@ pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
     nodelay: bool,
     server: Arc<BasicServerIdent>,
+    mode: Mode,
 }
 
 impl Socks4TcpHandler {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool, server: Arc<BasicServerIdent>) -> Socks4TcpHandler {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        nodelay: bool,
+        server: Arc<BasicServerIdent>,
+        mode: Mode,
+    ) -> Socks4TcpHandler {
         Socks4TcpHandler {
             context,
             nodelay,
             server,
+            mode,
         }
     }
 
@@ -68,6 +78,15 @@ impl Socks4TcpHandler {
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
+        if self.mode.enable_tcp() {
+            warn!("TCP CONNECT is disabled");
+
+            let handshake_rsp = HandshakeResponse::new(ResultCode::RequestRejectedOrFailed);
+            handshake_rsp.write_to(&mut stream).await?;
+
+            return Ok(());
+        }
+
         let svr_cfg = self.server.server_config();
         let target_addr = target_addr.into();
 

@@ -20,7 +20,7 @@ use shadowsocks::relay::socks5::{
 use tokio::net::TcpStream;
 
 use crate::{
-    config::ClientConfig,
+    config::{ClientConfig, Mode},
     local::{
         context::ServiceContext,
         loadbalancing::{BasicServerIdent, ServerIdent},
@@ -35,6 +35,7 @@ pub struct Socks5TcpHandler {
     udp_bind_addr: Option<Arc<ClientConfig>>,
     nodelay: bool,
     server: Arc<BasicServerIdent>,
+    mode: Mode,
 }
 
 impl Socks5TcpHandler {
@@ -43,12 +44,14 @@ impl Socks5TcpHandler {
         udp_bind_addr: Option<Arc<ClientConfig>>,
         nodelay: bool,
         server: Arc<BasicServerIdent>,
+        mode: Mode,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
             udp_bind_addr,
             nodelay,
             server,
+            mode,
         }
     }
 
@@ -119,6 +122,15 @@ impl Socks5TcpHandler {
         peer_addr: SocketAddr,
         target_addr: Address,
     ) -> io::Result<()> {
+        if !self.mode.enable_tcp() {
+            warn!("TCP CONNECT is disabled");
+
+            let rh = TcpResponseHeader::new(socks5::Reply::CommandNotSupported, target_addr);
+            rh.write_to(&mut stream).await?;
+
+            return Ok(());
+        }
+
         let svr_cfg = self.server.server_config();
 
         let remote =

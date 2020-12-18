@@ -78,10 +78,9 @@ impl Socks {
     }
 
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
-        assert!(self.mode.enable_tcp(), "tcp cannot be disabled in socks");
-
         let mut vfut = Vec::new();
 
+        // TCP should always start for handshaking
         vfut.push(self.run_tcp_server(client_config, servers).boxed());
 
         if self.mode.enable_udp() {
@@ -144,6 +143,7 @@ impl Socks {
             let context = self.context.clone();
             let nodelay = self.nodelay;
             let udp_bind_addr = udp_bind_addr.clone();
+            let mode = self.mode;
 
             tokio::spawn(Socks::handle_tcp_client(
                 context,
@@ -151,6 +151,7 @@ impl Socks {
                 stream,
                 server,
                 peer_addr,
+                mode,
                 nodelay,
             ));
         }
@@ -163,6 +164,7 @@ impl Socks {
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
+        mode: Mode,
         nodelay: bool,
     ) -> io::Result<()> {
         let mut version_buffer = [0u8; 1];
@@ -173,12 +175,12 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4TcpHandler::new(context, nodelay, server);
+                let handler = Socks4TcpHandler::new(context, nodelay, server, mode);
                 handler.handle_socks4_client(stream, peer_addr).await
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server, mode);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
@@ -198,9 +200,10 @@ impl Socks {
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,
+        mode: Mode,
         nodelay: bool,
     ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, udp_bind_addr, mode, nodelay, server);
+        let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server, mode);
         handler.handle_socks5_client(stream, peer_addr).await
     }
 

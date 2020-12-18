@@ -28,7 +28,7 @@ fn get_svr_config() -> Config {
         PASSWORD.to_owned(),
         METHOD,
     )];
-    cfg.mode = Mode::TcpAndUdp;
+    cfg.mode = Mode::UdpOnly;
     cfg
 }
 
@@ -40,7 +40,7 @@ fn get_cli_config() -> Config {
         PASSWORD.to_owned(),
         METHOD,
     )];
-    cfg.mode = Mode::TcpAndUdp;
+    cfg.mode = Mode::UdpOnly;
     cfg.local_protocol = ProtocolType::Socks;
     cfg
 }
