@@ -43,17 +43,22 @@ panic = "abort"
 
 [features]
 default = [
+    "logging",
     "trust-dns",
     "local-http",
     "local-http-rustls",
     "local-tunnel",
 ]
-# Uses single-threaded scheduler instead of default multi-threaded
+# Uses single-threaded scheduler instead of default multi-threaded scheduler
 single-threaded = []
+
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
 dns-over-tls = ["shadowsocks-service/dns-over-tls"]
 dns-over-https = ["shadowsocks-service/dns-over-https"]
+
+# Enable logging output
+logging = ["log4rs"]
 
 # Enable DNS-relay
 local-dns = ["shadowsocks-service/local-dns"]
@@ -81,7 +86,7 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 
 [dependencies]
 log = "0.4"
-log4rs = "0.13"
+log4rs = { version = "0.13", optional = true }
 
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"

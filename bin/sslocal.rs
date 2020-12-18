@@ -26,7 +26,9 @@ use shadowsocks_service::{
     },
 };
 
-use self::common::{logging, monitor, validator};
+#[cfg(feature = "logging")]
+use self::common::logging;
+use self::common::{monitor, validator};
 
 mod common;
 
@@ -37,7 +39,7 @@ fn main() {
     let mut app = clap_app!(shadowsocks =>
         (version: VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
-        (@arg VERBOSE: -v ... "Set the level of debug")
+
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U "Server mode TCP_AND_UDP")
 
@@ -64,9 +66,6 @@ fn main() {
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
 
-        (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
-        (@arg LOG_CONFIG: --("log-config") +takes_value "log4rs configuration file")
-
         (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
 
@@ -79,6 +78,15 @@ fn main() {
             .short("6")
             .help("Resolve hostname to IPv6 address first"),
     );
+
+    #[cfg(feature = "logging")]
+    {
+        app = clap_app!(@app (app)
+            (@arg VERBOSE: -v ... "Set log level")
+            (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
+            (@arg LOG_CONFIG: --("log-config") +takes_value "log4rs configuration file")
+        );
+    }
 
     #[cfg(feature = "local-tunnel")]
     {
@@ -144,8 +152,8 @@ fn main() {
     }
 
     let matches = app.get_matches();
-    // drop(available_ciphers);
 
+    #[cfg(feature = "logging")]
     match matches.value_of("LOG_CONFIG") {
         Some(path) => {
             logging::init_with_file(path);
