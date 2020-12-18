@@ -1,4 +1,4 @@
-# shadowsocks-core
+# shadowsocks
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
