@@ -518,6 +518,7 @@ impl ProtocolType {
     }
 }
 
+/// Error while parsing `ProtocolType` from string
 #[derive(Debug)]
 pub struct ProtocolTypeError;
 
@@ -583,7 +584,7 @@ pub struct Config {
     pub udp_max_associations: Option<usize>,
     /// UDP relay's bind address, it uses `local_addr` by default
     ///
-    /// Resolving Android's issue: https://github.com/shadowsocks/shadowsocks-android/issues/2571
+    /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
     pub udp_bind_addr: Option<ClientConfig>,
     /// `RLIMIT_NOFILE` option for *nix systems
     pub nofile: Option<u64>,

@@ -1,6 +1,6 @@
 //! Socks4a Protocol Definition
 //!
-//! http://ftp.icm.edu.pl/packages/socks/socks4/SOCKS4.protocol
+//! <http://ftp.icm.edu.pl/packages/socks/socks4/SOCKS4.protocol>
 
 #![allow(dead_code)]
 

@@ -101,6 +101,7 @@ impl DnsClient {
     }
 
     /// Make a DNS lookup
+    #[allow(dead_code)]
     pub async fn lookup(&mut self, mut msg: Message) -> Result<Message, LookupError> {
         match self.inner_lookup(&mut msg).await {
             Ok(msg) => Ok(msg),

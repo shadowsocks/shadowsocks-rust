@@ -47,6 +47,7 @@ impl Drop for ServerInstance {
     }
 }
 
+/// Manager server
 pub struct Manager {
     context: SharedContext,
     servers: Mutex<HashMap<u16, ServerInstance>>,
@@ -60,10 +61,12 @@ pub struct Manager {
 }
 
 impl Manager {
+    /// Create a new manager server from configuration
     pub fn new(svr_cfg: ManagerConfig) -> Manager {
         Manager::with_context(svr_cfg, Context::new_shared(ServerType::Server))
     }
 
+    /// Create a new manager server with context and configuration
     pub(crate) fn with_context(svr_cfg: ManagerConfig, context: SharedContext) -> Manager {
         Manager {
             context,
@@ -78,39 +81,48 @@ impl Manager {
         }
     }
 
+    /// Set `ConnectOpts`
     pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
         self.connect_opts = opts;
     }
 
+    /// Set UDP association's expiry duration
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
         self.udp_expiry_duration = Some(d);
     }
 
+    /// Set total UDP associations to be kept in one server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = Some(c);
     }
 
+    /// Set server's default mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Get the manager's configuration
     pub fn config(&self) -> &ManagerConfig {
         &self.svr_cfg
     }
 
+    /// Set `TCP_NODELAY` for TCP relays
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Get customized DNS resolver
     pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }
 
+    /// Set access control list
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
         self.acl = Some(acl);
     }
 
+    /// Start serving
     pub async fn run(self) -> io::Result<()> {
         let mut listener = ManagerListener::bind(&self.context, &self.svr_cfg.addr).await?;
 

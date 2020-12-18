@@ -27,11 +27,13 @@ pub struct Tunnel {
 }
 
 impl Tunnel {
+    /// Create a new Tunnel server forwarding to `forward_addr`
     pub fn new(forward_addr: Address) -> Tunnel {
         let context = ServiceContext::new();
         Tunnel::with_context(Arc::new(context), forward_addr)
     }
 
+    /// Create a new Tunnel server with context
     pub fn with_context(context: Arc<ServiceContext>, forward_addr: Address) -> Tunnel {
         Tunnel {
             context,
@@ -43,22 +45,27 @@ impl Tunnel {
         }
     }
 
+    /// Set UDP association's expiry duration
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
         self.udp_expiry_duration = Some(d);
     }
 
+    /// Set total UDP association to be kept simutaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = c;
     }
 
+    /// Set server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Set `TCP_NODELAY`
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Start serving
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 

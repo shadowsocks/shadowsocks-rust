@@ -2,8 +2,11 @@
 
 use std::collections::VecDeque;
 
+/// Interval of active probing
 pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
+/// Timeout of each probing
 pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 2 secs, that's too long
+
 const MAX_SERVER_RTT: u64 = DEFAULT_CHECK_TIMEOUT_SEC * 1000;
 const MAX_LATENCY_QUEUE_SIZE: usize = 99;
 

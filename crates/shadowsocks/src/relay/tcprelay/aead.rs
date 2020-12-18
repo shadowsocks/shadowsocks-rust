@@ -1,6 +1,6 @@
 //! AEAD packet I/O facilities
 //!
-//! AEAD protocol is defined in https://shadowsocks.org/en/spec/AEAD.html.
+//! AEAD protocol is defined in <https://shadowsocks.org/en/spec/AEAD.html>.
 //!
 //! ```plain
 //! TCP request (before encryption)

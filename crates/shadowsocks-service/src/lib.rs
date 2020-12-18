@@ -1,6 +1,6 @@
 //! Shadowsocks Service
 //!
-//! https://shadowsocks.org/
+//! <https://shadowsocks.org/>
 //!
 //! shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 //!

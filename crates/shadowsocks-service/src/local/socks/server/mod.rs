@@ -42,11 +42,13 @@ pub struct Socks {
 }
 
 impl Socks {
+    /// Create a new SOCKS server with default configuration
     pub fn new() -> Socks {
         let context = ServiceContext::new();
         Socks::with_context(Arc::new(context))
     }
 
+    /// Create a new SOCKS server with context
     pub fn with_context(context: Arc<ServiceContext>) -> Socks {
         Socks {
             context,
@@ -58,26 +60,35 @@ impl Socks {
         }
     }
 
+    /// Set server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Set UDP association's expiry duration
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
         self.udp_expiry_duration = Some(d);
     }
 
+    /// Set total UDP association to be kept simutaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = c;
     }
 
+    /// UDP server's bind address
+    ///
+    /// * If `mode` is `tcp_only`, then it will still return this address for `UDP_ASSOCIATE` command
+    /// * Otherwise, UDP relay will bind to this address
     pub fn set_udp_bind_addr(&mut self, a: ClientConfig) {
         self.udp_bind_addr = Some(a);
     }
 
+    /// Set `TCP_NODELAY`
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Start serving
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 

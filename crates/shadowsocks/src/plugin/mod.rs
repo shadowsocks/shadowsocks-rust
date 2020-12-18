@@ -37,9 +37,21 @@ pub struct PluginConfig {
 /// Mode of Plugin
 #[derive(Debug, Clone, Copy)]
 pub enum PluginMode {
-    /// -> PLUGIN -> SERVER -> REMOTE TARGET
+    /// Server's Plugin
+    ///
+    /// ```plain
+    /// LOCAL -> PLUGIN -> SERVER -> REMOTE
+    /// ```
+    ///
+    /// Plugin listens to the inbound address of server
     Server,
-    /// CLIENT -> PLUGIN -> SERVER
+    /// Local's Plugin
+    ///
+    /// ```plain
+    /// CLIENT -> LOCAL -> PLUGIN -> SERVER -> ...
+    /// ```
+    ///
+    /// Plugin sends data to the outbound address of server
     Client,
 }
 

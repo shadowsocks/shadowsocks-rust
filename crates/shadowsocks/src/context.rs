@@ -100,6 +100,7 @@ pub struct Context {
     dns_resolver: Arc<DnsResolver>,
 }
 
+/// `Context` for sharing between services
 pub type SharedContext = Arc<Context>;
 
 impl Context {

@@ -19,11 +19,7 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{
-    config::{ClientConfig, Mode},
-    local::acl::AccessControl,
-    net::FlowStat,
-};
+use crate::{config::Mode, local::acl::AccessControl, net::FlowStat};
 
 use super::{tcprelay::TcpServer, udprelay::UdpServer};
 
@@ -31,7 +27,6 @@ use super::{tcprelay::TcpServer, udprelay::UdpServer};
 pub struct Server {
     context: SharedContext,
     svr_cfg: ServerConfig,
-    client_config: Option<ClientConfig>,
     mode: Mode,
     flow_stat: Arc<FlowStat>,
     connect_opts: ConnectOpts,
@@ -43,6 +38,7 @@ pub struct Server {
 }
 
 impl Server {
+    /// Create a new server from configuration
     pub fn new(svr_cfg: ServerConfig) -> Server {
         Server::with_context(Context::new_shared(ServerType::Server), svr_cfg)
     }
@@ -51,7 +47,6 @@ impl Server {
         Server {
             context,
             svr_cfg,
-            client_config: None,
             mode: Mode::TcpOnly,
             flow_stat: Arc::new(FlowStat::new()),
             connect_opts: ConnectOpts::default(),
@@ -63,51 +58,58 @@ impl Server {
         }
     }
 
+    /// Get flow statistic
     pub fn flow_stat(&self) -> &Arc<FlowStat> {
         &self.flow_stat
     }
 
-    pub fn set_client_config(&mut self, client_config: ClientConfig) {
-        self.client_config = Some(client_config);
-    }
-
+    /// Set `ConnectOpts`
     pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
         self.connect_opts = opts;
     }
 
+    /// Set UDP association's expiry duration
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
         self.udp_expiry_duration = Some(d);
     }
 
+    /// Set total UDP associations to be kept in one server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = c;
     }
 
+    /// Set server's mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Set manager's address to report `stat`
     pub fn set_manager_addr(&mut self, manager_addr: ManagerAddr) {
         self.manager_addr = Some(manager_addr);
     }
 
+    /// Get server's configuration
     pub fn config(&self) -> &ServerConfig {
         &self.svr_cfg
     }
 
+    /// Set `TCP_NODELAY`
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Set customized DNS resolver
     pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }
 
+    /// Set access control list
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
         self.acl = Some(acl);
     }
 
+    /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
         let mut vfut = Vec::new();
 

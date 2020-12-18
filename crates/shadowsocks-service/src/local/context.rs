@@ -20,6 +20,7 @@ use crate::net::FlowStat;
 
 use super::acl::AccessControl;
 
+/// Local Service Context
 pub struct ServiceContext {
     context: SharedContext,
     connect_opts: ConnectOpts,
@@ -36,6 +37,7 @@ pub struct ServiceContext {
 }
 
 impl ServiceContext {
+    /// Create a new `ServiceContext`
     pub fn new() -> ServiceContext {
         ServiceContext {
             context: Context::new_shared(ServerType::Local),
@@ -47,47 +49,58 @@ impl ServiceContext {
         }
     }
 
+    /// Get cloned `shadowsocks` Context
     pub fn context(&self) -> SharedContext {
         self.context.clone()
     }
 
+    /// Get `shadowsocks` Context reference
     pub fn context_ref(&self) -> &Context {
         self.context.as_ref()
     }
 
+    /// Set `ConnectOpts`
     pub fn set_connect_opts(&mut self, connect_opts: ConnectOpts) {
         self.connect_opts = connect_opts;
     }
 
+    /// Get `ConnectOpts` reference
     pub fn connect_opts_ref(&self) -> &ConnectOpts {
         &self.connect_opts
     }
 
+    /// Set Access Control List
     pub fn set_acl(&mut self, acl: AccessControl) {
         self.acl = Some(acl);
     }
 
+    /// Get Access Control List reference
     pub fn acl(&self) -> Option<&AccessControl> {
         self.acl.as_ref()
     }
 
+    /// Get cloned flow statistic
     pub fn flow_stat(&self) -> Arc<FlowStat> {
         self.flow_stat.clone()
     }
 
+    /// Get flow statistic reference
     pub fn flow_stat_ref(&self) -> &FlowStat {
         self.flow_stat.as_ref()
     }
 
+    /// Set customized DNS resolver
     pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
         context.set_dns_resolver(resolver)
     }
 
+    /// Get reference of DNS resolver
     pub fn dns_resolver(&self) -> &DnsResolver {
         self.context.dns_resolver()
     }
 
+    /// Check if target should be bypassed
     pub async fn check_target_bypassed(&self, addr: &Address) -> bool {
         match self.acl {
             None => false,

@@ -28,11 +28,13 @@ pub struct Redir {
 }
 
 impl Redir {
+    /// Create a new transparent proxy server with default configuration
     pub fn new() -> Redir {
         let context = ServiceContext::new();
         Redir::with_context(Arc::new(context))
     }
 
+    /// Create a new transparent proxy server with context
     pub fn with_context(context: Arc<ServiceContext>) -> Redir {
         Redir {
             context,
@@ -45,30 +47,37 @@ impl Redir {
         }
     }
 
+    /// Set UDP association's expiry duration
     pub fn set_udp_expiry_duration(&mut self, d: Duration) {
         self.udp_expiry_duration = Some(d);
     }
 
+    /// Set total UDP association to be kept simutaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = c;
     }
 
+    /// Set server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Set `TCP_NODELAY`
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Set transparent proxy type of TCP relay, which is platform dependent
     pub fn set_tcp_redir(&mut self, ty: RedirType) {
         self.tcp_redir = ty;
     }
 
+    /// Set transparent proxy type of UDP relay, which is platform dependent
     pub fn set_udp_redir(&mut self, ty: RedirType) {
         self.udp_redir = ty;
     }
 
+    /// Start serving
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 
