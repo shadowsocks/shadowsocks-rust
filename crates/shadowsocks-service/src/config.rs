@@ -1209,12 +1209,6 @@ impl Config {
             }
         }
 
-        #[cfg(feature = "local-flow-stat")]
-        if self.stat_path.is_none() {
-            let err = Error::new(ErrorKind::MissingField, "missing `stat_path` in configuration", None);
-            return Err(err);
-        }
-
         #[cfg(feature = "local-tunnel")]
         if self.local_protocol == ProtocolType::Tunnel {
             if self.forward.is_none() {

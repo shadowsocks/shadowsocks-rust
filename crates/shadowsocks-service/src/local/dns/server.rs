@@ -12,7 +12,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use futures::future::{self, FutureExt};
+use futures::future;
 use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
@@ -81,23 +81,20 @@ impl Dns {
     }
 
     pub async fn run(self, bind_addr: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
-        let mut vfut = Vec::new();
+        let client = Arc::new(DnsClient::new(self.context.clone(), servers, self.mode));
 
-        if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_server(bind_addr, servers).boxed());
-        }
+        let tcp_fut = self.run_tcp_server(bind_addr, client.clone());
+        let udp_fut = self.run_udp_server(bind_addr, client);
 
-        if self.mode.enable_udp() {
-            vfut.push(self.run_udp_server(bind_addr, servers).boxed());
-        }
+        tokio::pin!(tcp_fut, udp_fut);
 
-        let _ = future::select_all(vfut).await;
+        let _ = future::select(tcp_fut, udp_fut).await;
 
         let err = io::Error::new(ErrorKind::Other, "dns server exited unexpectly");
         Err(err)
     }
 
-    pub async fn run_tcp_server(&self, bind_addr: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_tcp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
         let listener = match *bind_addr {
             ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -108,20 +105,12 @@ impl Dns {
             }
         };
 
-        info!("shadowsocks dns TCP listening on {}", listener.local_addr()?);
-
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
-
-        let balancer = Arc::new(balancer);
-        let client = Arc::new(DnsClient::new(self.context.clone(), self.mode));
+        info!(
+            "shadowsocks dns TCP listening on {}, local: {}, remote: {}",
+            listener.local_addr()?,
+            self.local_addr,
+            self.remote_addr
+        );
 
         loop {
             let (stream, peer_addr) = match listener.accept().await {
@@ -141,7 +130,6 @@ impl Dns {
                 client.clone(),
                 stream,
                 peer_addr,
-                balancer.clone(),
                 self.local_addr.clone(),
                 self.remote_addr.clone(),
             ));
@@ -152,7 +140,6 @@ impl Dns {
         client: Arc<DnsClient>,
         mut stream: TcpStream,
         peer_addr: SocketAddr,
-        balancer: Arc<PingBalancer<BasicServerIdent>>,
         local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
     ) -> io::Result<()> {
@@ -194,7 +181,7 @@ impl Dns {
                 }
             };
 
-            let respond_message = match client.resolve(&balancer, message, &local_addr, &remote_addr).await {
+            let respond_message = match client.resolve(message, &local_addr, &remote_addr).await {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} lookup error: {}", peer_addr, err);
@@ -216,7 +203,7 @@ impl Dns {
         Ok(())
     }
 
-    pub async fn run_udp_server(&self, bind_addr: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_udp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
         let socket = match *bind_addr {
             ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::bind(&saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -228,21 +215,14 @@ impl Dns {
         };
         let socket: UdpSocket = socket.into();
 
-        info!("shadowsocks dns UDP listening on {}", socket.local_addr()?);
+        info!(
+            "shadowsocks dns UDP listening on {}, local: {}, remote: {}",
+            socket.local_addr()?,
+            self.local_addr,
+            self.remote_addr
+        );
 
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
-
-        let balancer = Arc::new(balancer);
         let listener = Arc::new(socket);
-        let client = Arc::new(DnsClient::new(self.context.clone(), self.mode));
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
@@ -270,7 +250,6 @@ impl Dns {
                 listener.clone(),
                 peer_addr,
                 message,
-                balancer.clone(),
                 self.local_addr.clone(),
                 self.remote_addr.clone(),
             ));
@@ -282,11 +261,10 @@ impl Dns {
         listener: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         message: Message,
-        balancer: Arc<PingBalancer<BasicServerIdent>>,
         local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
     ) -> io::Result<()> {
-        let respond_message = match client.resolve(&balancer, message, &local_addr, &remote_addr).await {
+        let respond_message = match client.resolve(message, &local_addr, &remote_addr).await {
             Ok(m) => m,
             Err(err) => {
                 error!("dns udp {} lookup failed, error: {}", peer_addr, err);
@@ -462,20 +440,55 @@ struct DnsClient {
     context: Arc<ServiceContext>,
     client_cache: DnsClientCache,
     mode: Mode,
+    tcp_balancer: Option<PingBalancer<BasicServerIdent>>,
+    udp_balancer: Option<PingBalancer<BasicServerIdent>>,
 }
 
 impl DnsClient {
-    fn new(context: Arc<ServiceContext>, mode: Mode) -> DnsClient {
+    fn new(context: Arc<ServiceContext>, servers: &[ServerConfig], mode: Mode) -> DnsClient {
+        let tcp_balancer = if mode.enable_tcp() {
+            let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
+
+            for server in servers {
+                let server_ident = BasicServerIdent::new(server.clone());
+                balancer_builder.add_server(server_ident);
+            }
+
+            let (balancer, checker) = balancer_builder.build();
+            tokio::spawn(checker);
+
+            Some(balancer)
+        } else {
+            None
+        };
+
+        let udp_balancer = if mode.enable_tcp() {
+            let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Udp);
+
+            for server in servers {
+                let server_ident = BasicServerIdent::new(server.clone());
+                balancer_builder.add_server(server_ident);
+            }
+
+            let (balancer, checker) = balancer_builder.build();
+            tokio::spawn(checker);
+
+            Some(balancer)
+        } else {
+            None
+        };
+
         DnsClient {
             context,
             client_cache: DnsClientCache::new(5),
             mode,
+            tcp_balancer,
+            udp_balancer,
         }
     }
 
     async fn resolve(
         &self,
-        balancer: &PingBalancer<BasicServerIdent>,
         request: Message,
         local_addr: &NameServerAddr,
         remote_addr: &Address,
@@ -491,9 +504,7 @@ impl DnsClient {
         } else if request.op_code() != OpCode::Query || request.message_type() != MessageType::Query {
             message.set_response_code(ResponseCode::NotImp);
         } else if request.query_count() > 0 {
-            let (r, forward) = self
-                .acl_lookup(balancer, &request.queries()[0], local_addr, remote_addr)
-                .await;
+            let (r, forward) = self.acl_lookup(&request.queries()[0], local_addr, remote_addr).await;
             if let Ok(result) = r {
                 for rec in result.answers() {
                     trace!("dns answer: {:?}", rec);
@@ -514,7 +525,6 @@ impl DnsClient {
 
     async fn acl_lookup(
         &self,
-        balancer: &PingBalancer<BasicServerIdent>,
         query: &Query,
         local_addr: &NameServerAddr,
         remote_addr: &Address,
@@ -524,7 +534,7 @@ impl DnsClient {
 
         match should_forward_by_query(self.context.acl(), query) {
             Some(true) => {
-                let remote_response = self.lookup_remote(balancer, query, remote_addr).await;
+                let remote_response = self.lookup_remote(query, remote_addr).await;
                 trace!("pick remote response (query): {:?}", remote_response);
                 return (remote_response, true);
             }
@@ -545,7 +555,7 @@ impl DnsClient {
             }
         };
 
-        let remote_response_fut = self.lookup_remote(balancer, query, remote_addr);
+        let remote_response_fut = self.lookup_remote(query, remote_addr);
         tokio::pin!(remote_response_fut, decider);
 
         let mut use_remote = false;
@@ -576,23 +586,18 @@ impl DnsClient {
         }
     }
 
-    async fn lookup_remote(
-        &self,
-        balancer: &PingBalancer<BasicServerIdent>,
-        query: &Query,
-        remote_addr: &Address,
-    ) -> io::Result<Message> {
+    async fn lookup_remote(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(thread_rng().gen());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
-        let server = balancer.best_server();
-
         // Query UDP then TCP
         let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
 
-        if self.mode.enable_udp() {
+        if let Some(ref balancer) = self.udp_balancer {
+            let server = balancer.best_server();
+
             match self
                 .client_cache
                 .lookup_udp_remote(&self.context, server.server_config(), remote_addr, message.clone())
@@ -605,7 +610,9 @@ impl DnsClient {
             }
         }
 
-        if self.mode.enable_tcp() {
+        if let Some(ref balancer) = self.tcp_balancer {
+            let server = balancer.best_server();
+
             match self
                 .client_cache
                 .lookup_tcp_remote(&self.context, server.server_config(), remote_addr, message)
