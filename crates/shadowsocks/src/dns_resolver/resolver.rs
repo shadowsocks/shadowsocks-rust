@@ -13,16 +13,21 @@ use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
+/// Abstract DNS resolver
 #[async_trait]
 pub trait DnsResolve {
     /// Resolves `addr:port` to a list of `SocketAddr`
     async fn resolve(&self, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>>;
 }
 
+/// Collections of DNS resolver
 pub enum DnsResolver {
+    /// System Resolver, which is tokio's builtin resolver
     System,
     #[cfg(feature = "trust-dns")]
+    /// Trust-DNS resolver
     TrustDns(TokioAsyncResolver),
+    /// Customized Resolver
     Custom(Box<dyn DnsResolve + Send + Sync>),
 }
 

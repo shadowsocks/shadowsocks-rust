@@ -31,6 +31,7 @@ use self::socks5::{Socks5TcpHandler, Socks5UdpServer};
 mod socks4;
 mod socks5;
 
+/// SOCKS4/4a, SOCKS5 Local Server
 pub struct Socks {
     context: Arc<ServiceContext>,
     mode: Mode,

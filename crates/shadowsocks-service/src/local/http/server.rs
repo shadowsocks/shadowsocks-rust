@@ -30,20 +30,24 @@ use crate::{
 
 use super::{connector::BypassConnector, dispatcher::HttpDispatcher, server_ident::HttpServerIdent};
 
+/// HTTP Local server
 pub struct Http {
     context: Arc<ServiceContext>,
 }
 
 impl Http {
+    /// Create a new HTTP Local server
     pub fn new() -> Http {
         let context = ServiceContext::new();
         Http::with_context(Arc::new(context))
     }
 
+    /// Create with an existed context
     pub fn with_context(context: Arc<ServiceContext>) -> Http {
         Http { context }
     }
 
+    /// Run server
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
 

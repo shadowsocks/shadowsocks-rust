@@ -2,6 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// Connection flow statistic
 pub struct FlowStat {
     tx: AtomicU64,
     rx: AtomicU64,

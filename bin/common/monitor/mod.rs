@@ -1,3 +1,5 @@
+//! Signal monitor
+
 #[cfg(unix)]
 #[path = "unix.rs"]
 mod imp;

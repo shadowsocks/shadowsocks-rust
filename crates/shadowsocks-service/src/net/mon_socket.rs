@@ -7,6 +7,7 @@ use tokio::net::ToSocketAddrs;
 
 use super::flow::FlowStat;
 
+/// Monitored `ProxySocket`
 pub struct MonProxySocket {
     socket: ProxySocket,
     flow_stat: Arc<FlowStat>,

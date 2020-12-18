@@ -16,6 +16,7 @@ use crate::{
 
 use super::{tcprelay::run_tcp_tunnel, udprelay::UdpTunnel};
 
+/// Tunnel Server
 pub struct Tunnel {
     context: Arc<ServiceContext>,
     forward_addr: Address,

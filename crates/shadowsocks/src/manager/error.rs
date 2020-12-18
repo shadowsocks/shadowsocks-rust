@@ -6,6 +6,7 @@ use thiserror::Error;
 
 use super::protocol::Error as ProtocolError;
 
+/// Manager Error
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("{0}")]

@@ -17,7 +17,7 @@ pub mod server;
 mod tcprelay;
 mod udprelay;
 
-/// Run all servers in `Config`
+/// Starts a shadowsocks server
 pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Server);
     assert!(config.server.len() > 0);

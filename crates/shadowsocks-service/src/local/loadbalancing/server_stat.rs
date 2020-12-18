@@ -7,12 +7,16 @@ pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 
 const MAX_SERVER_RTT: u64 = DEFAULT_CHECK_TIMEOUT_SEC * 1000;
 const MAX_LATENCY_QUEUE_SIZE: usize = 99;
 
+/// Statistic score
 #[derive(Debug, Copy, Clone)]
 pub enum Score {
+    /// Unified latency
     Latency(u64),
+    /// Request error
     Errored,
 }
 
+/// Statistic of a remote server
 #[derive(Debug)]
 pub struct ServerStat {
     /// Median of latency time (in millisec)

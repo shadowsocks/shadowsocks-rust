@@ -32,6 +32,7 @@ use super::{
     server_stat::{Score, DEFAULT_CHECK_INTERVAL_SEC, DEFAULT_CHECK_TIMEOUT_SEC},
 };
 
+/// Remote Server Type
 #[derive(Debug, Clone, Copy)]
 pub enum ServerType {
     Tcp,
@@ -47,6 +48,7 @@ impl fmt::Display for ServerType {
     }
 }
 
+/// Build a `PingBalancer`
 pub struct PingBalancerBuilder<C>
 where
     C: ServerIdent,
@@ -173,6 +175,7 @@ where
     }
 }
 
+/// Balancer with active probing
 pub struct PingBalancer<C> {
     inner: Arc<PingBalancerInner<C>>,
     abortable: Arc<AbortHandle>,

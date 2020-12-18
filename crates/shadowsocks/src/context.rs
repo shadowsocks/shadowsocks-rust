@@ -90,6 +90,7 @@ impl PingPongBloom {
     }
 }
 
+/// Service context
 pub struct Context {
     // Check for duplicated IV/Nonce, for prevent replay attack
     // https://github.com/shadowsocks/shadowsocks-org/issues/44
@@ -102,6 +103,7 @@ pub struct Context {
 pub type SharedContext = Arc<Context>;
 
 impl Context {
+    /// Create a new `Context` for `Client` or `Server`
     pub fn new(config_type: ServerType) -> Context {
         let nonce_ppbloom = SpinMutex::new(PingPongBloom::new(config_type));
         Context {
@@ -110,6 +112,7 @@ impl Context {
         }
     }
 
+    /// Create a new `Context` shared
     pub fn new_shared(config_type: ServerType) -> SharedContext {
         SharedContext::new(Context::new(config_type))
     }

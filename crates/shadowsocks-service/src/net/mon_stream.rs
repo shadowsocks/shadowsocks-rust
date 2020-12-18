@@ -12,6 +12,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::flow::FlowStat;
 
+/// Monitored `ProxyStream`
 #[pin_project]
 pub struct MonProxyStream<S> {
     #[pin]

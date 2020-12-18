@@ -21,6 +21,7 @@ use super::{
     },
 };
 
+/// Client for communicating with Manager
 pub struct ManagerClient {
     socket: ManagerDatagram,
 }

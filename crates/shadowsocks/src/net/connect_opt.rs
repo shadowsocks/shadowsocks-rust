@@ -4,6 +4,7 @@
 use std::ffi::OsString;
 use std::net::IpAddr;
 
+/// Options for connecting to remote server
 #[derive(Debug, Clone)]
 pub struct ConnectOpts {
     /// Linux mark based routing, going to set by `setsockopt` with `SO_MARK` option

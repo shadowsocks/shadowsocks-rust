@@ -15,6 +15,7 @@ use crate::{
     relay::sys::{create_outbound_udp_socket, create_udp_socket},
 };
 
+/// Address accepted from Manager
 #[derive(Debug)]
 pub enum ManagerSocketAddr {
     SocketAddr(SocketAddr),

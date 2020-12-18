@@ -1,3 +1,5 @@
+//! Loggin facilities
+
 use std::path::Path;
 
 use clap::ArgMatches;

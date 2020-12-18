@@ -35,6 +35,7 @@ pub mod socks;
 pub mod tunnel;
 pub mod utils;
 
+/// Starts a shadowsocks local server
 pub async fn run(mut config: Config) -> io::Result<()> {
     assert!(config.config_type == ConfigType::Local && config.local_addr.is_some());
     assert!(config.server.len() > 0);

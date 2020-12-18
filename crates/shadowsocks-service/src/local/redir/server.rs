@@ -16,6 +16,7 @@ use crate::{
 
 use super::{tcprelay::run_tcp_redir, udprelay::UdpRedir};
 
+/// Transparent Proxy
 pub struct Redir {
     context: Arc<ServiceContext>,
     mode: Mode,

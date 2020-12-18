@@ -27,6 +27,7 @@ use crate::{
 
 use super::{tcprelay::TcpServer, udprelay::UdpServer};
 
+/// Shadowsocks Server
 pub struct Server {
     context: SharedContext,
     svr_cfg: ServerConfig,

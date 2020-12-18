@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 
 use super::server_stat::{Score, ServerStat};
 
+/// Server's identifier
 pub struct ServerScore {
     stat_data: Mutex<ServerStat>,
     score: AtomicU64,

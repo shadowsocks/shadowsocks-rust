@@ -48,6 +48,7 @@ use crate::{
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
 
+/// DNS Relay server
 pub struct Dns {
     context: Arc<ServiceContext>,
     mode: Mode,
@@ -57,11 +58,13 @@ pub struct Dns {
 }
 
 impl Dns {
+    /// Create a new DNS Relay server
     pub fn new(local_addr: NameServerAddr, remote_addr: Address) -> Dns {
         let context = ServiceContext::new();
         Dns::with_context(Arc::new(context), local_addr, remote_addr)
     }
 
+    /// Create with an existed `context`
     pub fn with_context(context: Arc<ServiceContext>, local_addr: NameServerAddr, remote_addr: Address) -> Dns {
         Dns {
             context,
@@ -72,14 +75,17 @@ impl Dns {
         }
     }
 
+    /// Set remote server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
     }
 
+    /// Set `TCP_NODELAY`
     pub fn set_nodelay(&mut self, nodelay: bool) {
         self.nodelay = nodelay;
     }
 
+    /// Run server
     pub async fn run(self, bind_addr: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let client = Arc::new(DnsClient::new(self.context.clone(), servers, self.mode));
 

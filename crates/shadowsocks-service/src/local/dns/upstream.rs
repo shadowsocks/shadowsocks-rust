@@ -1,3 +1,5 @@
+//! DNS Relay Upstream
+
 #[cfg(unix)]
 use std::path::Path;
 use std::{
@@ -182,6 +184,7 @@ where
     Message::from_vec(&rsp_bytes).map_err(From::from)
 }
 
+/// DNS Resolve Error
 #[derive(Error, Debug)]
 pub enum ResolveError {
     #[error("{0}")]
@@ -199,6 +202,7 @@ impl From<ResolveError> for io::Error {
     }
 }
 
+/// `lookup` Error
 #[derive(Debug)]
 pub struct LookupError {
     pub error: ResolveError,

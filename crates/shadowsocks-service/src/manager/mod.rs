@@ -16,6 +16,7 @@ pub use self::server::Manager;
 
 pub mod server;
 
+/// Starts a manager server
 pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Manager);
 

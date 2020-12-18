@@ -12,6 +12,7 @@ use super::{
     protocol::{ManagerProtocol, ManagerRequest},
 };
 
+/// Manager server Listener
 pub struct ManagerListener {
     socket: ManagerDatagram,
 }
