@@ -208,7 +208,6 @@ impl Socks {
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
-        mode: Mode,
         stream: TcpStream,
         server: Arc<BasicServerIdent>,
         peer_addr: SocketAddr,

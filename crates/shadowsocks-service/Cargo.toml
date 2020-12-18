@@ -14,10 +14,12 @@ edition = "2018"
 maintenance = { status = "passively-maintained" }
 
 [features]
-default = [
+full = [
     "trust-dns",
+    "local-dns",
     "local-http",
     "local-http-rustls",
+    "local-redir",
     "local-tunnel",
     "local-socks4",
 ]
@@ -29,7 +31,7 @@ dns-over-tls = ["trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-
 dns-over-https = ["trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["trust-dns-proto", "trust-dns-client", "rand"]
+local-dns = ["trust-dns-proto", "rand"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report

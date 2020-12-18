@@ -45,9 +45,11 @@ panic = "abort"
 default = [
     "logging",
     "trust-dns",
+    "local-dns",
     "local-http",
     "local-http-rustls",
     "local-tunnel",
+    "local-socks4",
 ]
 # Uses single-threaded scheduler instead of default multi-threaded scheduler
 single-threaded = []

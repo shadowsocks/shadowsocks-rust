@@ -6,12 +6,13 @@
 
 use std::{
     fmt,
-    io::{self, Error, ErrorKind},
+    io::{self, ErrorKind},
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
 };
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
+use thiserror::Error;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use shadowsocks::relay::socks5;
@@ -153,6 +154,12 @@ impl From<(String, u16)> for Address {
     }
 }
 
+impl From<(&str, u16)> for Address {
+    fn from((dn, port): (&str, u16)) -> Address {
+        Address::DomainNameAddress(dn.to_owned(), port)
+    }
+}
+
 impl From<&Address> for Address {
     fn from(addr: &Address) -> Address {
         addr.clone()
@@ -194,7 +201,7 @@ pub struct HandshakeRequest {
 
 impl HandshakeRequest {
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> io::Result<HandshakeRequest>
+    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeRequest, Error>
     where
         R: AsyncBufRead + Unpin,
     {
@@ -203,16 +210,14 @@ impl HandshakeRequest {
 
         let vn = buf[0];
         if vn != consts::SOCKS4_VERSION {
-            let err = Error::new(ErrorKind::InvalidData, format!("unsupported socks version {:#x}", vn));
-            return Err(err);
+            return Err(Error::UnsupportedSocksVersion(vn));
         }
 
         let cd = buf[1];
         let command = match Command::from_u8(cd) {
             Some(c) => c,
             None => {
-                let err = Error::new(ErrorKind::InvalidData, format!("unsupported command {:#x}", cd));
-                return Err(err);
+                return Err(Error::UnsupportedSocksVersion(cd));
             }
         };
 
@@ -221,7 +226,7 @@ impl HandshakeRequest {
         let mut user_id = Vec::new();
         let _ = r.read_until(b'\0', &mut user_id).await?;
         if user_id.is_empty() || user_id.last() != Some(&b'\0') {
-            return Err(ErrorKind::UnexpectedEof.into());
+            return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
         }
         user_id.pop(); // Pops the last b'\0'
 
@@ -230,15 +235,14 @@ impl HandshakeRequest {
             let mut host = Vec::new();
             let _ = r.read_until(b'\0', &mut host).await?;
             if host.is_empty() || host.last() != Some(&b'\0') {
-                return Err(ErrorKind::UnexpectedEof.into());
+                return Err(io::Error::from(ErrorKind::UnexpectedEof).into());
             }
             host.pop(); // Pops the last b'\0'
 
             match String::from_utf8(host) {
                 Ok(host) => Address::DomainNameAddress(host, port),
                 Err(..) => {
-                    let err = Error::new(ErrorKind::InvalidData, "invalid host encoding");
-                    return Err(err);
+                    return Err(Error::AddressHostInvalidEncoding);
                 }
             }
         } else {
@@ -251,6 +255,16 @@ impl HandshakeRequest {
             dst,
             user_id,
         })
+    }
+
+    /// Writes to writer
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
+        self.write_to_buf(&mut buf);
+        w.write_all(&buf).await
     }
 
     /// Writes to buffer
@@ -318,7 +332,7 @@ impl HandshakeResponse {
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> io::Result<HandshakeResponse>
+    pub async fn read_from<R>(r: &mut R) -> Result<HandshakeResponse, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -327,11 +341,7 @@ impl HandshakeResponse {
 
         let vn = buf[0];
         if vn != 0 {
-            let err = Error::new(
-                ErrorKind::InvalidData,
-                format!("unsupported socks4 response version {:#x}", vn),
-            );
-            return Err(err);
+            return Err(Error::UnsupportedSocksVersion(vn));
         }
 
         let cd = buf[1];
@@ -376,5 +386,30 @@ impl HandshakeResponse {
     #[inline]
     pub fn serialized_len(&self) -> usize {
         1 + 1 + 2 + 4
+    }
+}
+
+/// SOCKS 4/4a Error
+#[derive(Error, Debug)]
+pub enum Error {
+    // I/O Error
+    #[error("{0}")]
+    IoError(#[from] io::Error),
+    #[error("host must be UTF-8 encoding")]
+    AddressHostInvalidEncoding,
+    #[error("unsupported socks version {0:#x}")]
+    UnsupportedSocksVersion(u8),
+    #[error("unsupported command {0:#x}")]
+    UnsupportedCommand(u8),
+    #[error("{0}")]
+    Result(ResultCode),
+}
+
+impl From<Error> for io::Error {
+    fn from(err: Error) -> io::Error {
+        match err {
+            Error::IoError(err) => err,
+            e => io::Error::new(ErrorKind::Other, e),
+        }
     }
 }
