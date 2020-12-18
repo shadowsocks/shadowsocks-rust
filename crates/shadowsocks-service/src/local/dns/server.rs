@@ -469,7 +469,7 @@ impl DnsClient {
             None
         };
 
-        let udp_balancer = if mode.enable_tcp() {
+        let udp_balancer = if mode.enable_udp() {
             let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Udp);
 
             for server in servers {
