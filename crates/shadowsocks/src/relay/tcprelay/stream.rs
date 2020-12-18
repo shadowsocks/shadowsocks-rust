@@ -201,8 +201,9 @@ impl EncryptedWriter {
         loop {
             match self.state {
                 EncryptWriteState::AssemblePacket => {
+                    let n = self.buffer.len();
                     self.buffer.put_slice(buf);
-                    self.cipher.encrypt_packet(self.buffer.as_mut());
+                    self.cipher.encrypt_packet(&mut self.buffer[n..]);
                     self.state = EncryptWriteState::Writing { pos: 0 };
                 }
                 EncryptWriteState::Writing { ref mut pos } => {
