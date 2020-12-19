@@ -232,10 +232,6 @@ where
     S: AsyncWrite + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        if buf.is_empty() {
-            return Ok(0).into();
-        }
-
         if self.addr.is_none() {
             // For all subsequence calls, just proxy it to self.writer
             return self.writer.poll_write_encrypted(cx, buf);
@@ -249,6 +245,15 @@ where
         buffer.put_slice(buf);
 
         ready!(self.writer.poll_write_encrypted(cx, &buffer))?;
+
+        // NOTE:
+        // poll_write will return Ok(0) if buf.len() == 0
+        // But for the first call, this function will eventually send the handshake packet (IV/Salt + ADDR) to the remote address.
+        //
+        // https://github.com/shadowsocks/shadowsocks-rust/issues/232
+        //
+        // For protocols that requires *Server Hello* message, like FTP, clients won't send anything to the server until server sends handshake messages.
+        // This could be achieved by calling poll_write with an empty input buffer.
 
         Ok(buf.len()).into()
     }

@@ -74,6 +74,12 @@ where
             Err(..) => {
                 // Timeout. Send handshake to server.
                 shadow_writer.write(&[]).await?;
+
+                trace!(
+                    "tcp tunnel {} -> {} sent handshake without data",
+                    peer_addr,
+                    target_addr
+                );
             }
         }
     }
