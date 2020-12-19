@@ -107,7 +107,7 @@ fn main() {
             logging::init_with_file(path);
         }
         None => {
-            logging::init_with_config("sslocal", &matches);
+            logging::init_with_config("ssserver", &matches);
         }
     }
 
