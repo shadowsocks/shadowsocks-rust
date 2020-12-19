@@ -21,7 +21,7 @@ pub struct Redir {
     context: Arc<ServiceContext>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
-    udp_capacity: usize,
+    udp_capacity: Option<usize>,
     nodelay: bool,
     tcp_redir: RedirType,
     udp_redir: RedirType,
@@ -40,7 +40,7 @@ impl Redir {
             context,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
-            udp_capacity: 256,
+            udp_capacity: None,
             nodelay: false,
             tcp_redir: RedirType::tcp_default(),
             udp_redir: RedirType::udp_default(),
@@ -54,7 +54,7 @@ impl Redir {
 
     /// Set total UDP association to be kept simutaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
-        self.udp_capacity = c;
+        self.udp_capacity = Some(c);
     }
 
     /// Set server mode
@@ -110,7 +110,7 @@ impl Redir {
         let mut server = UdpRedir::new(
             self.context.clone(),
             self.udp_redir,
-            self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
+            self.udp_expiry_duration,
             self.udp_capacity,
         );
         server.run(client_config, servers).await

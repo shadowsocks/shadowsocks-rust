@@ -28,7 +28,7 @@ pub struct Server {
     svr_cfg: ServerConfig,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
-    udp_capacity: usize,
+    udp_capacity: Option<usize>,
     manager_addr: Option<ManagerAddr>,
     nodelay: bool,
 }
@@ -46,7 +46,7 @@ impl Server {
             svr_cfg,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
-            udp_capacity: 512,
+            udp_capacity: None,
             manager_addr: None,
             nodelay: false,
         }
@@ -75,7 +75,7 @@ impl Server {
 
     /// Set total UDP associations to be kept in one server
     pub fn set_udp_capacity(&mut self, c: usize) {
-        self.udp_capacity = c;
+        self.udp_capacity = Some(c);
     }
 
     /// Set server's mode
@@ -147,9 +147,7 @@ impl Server {
     }
 
     async fn run_udp_server(&self) -> io::Result<()> {
-        let udp_expiry_duration = self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60));
-
-        let server = UdpServer::new(self.context.clone(), udp_expiry_duration, self.udp_capacity);
+        let server = UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
         server.run(&self.svr_cfg).await
     }
 

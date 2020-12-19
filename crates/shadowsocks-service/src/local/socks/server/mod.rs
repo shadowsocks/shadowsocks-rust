@@ -36,7 +36,7 @@ pub struct Socks {
     context: Arc<ServiceContext>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
-    udp_capacity: usize,
+    udp_capacity: Option<usize>,
     udp_bind_addr: Option<ClientConfig>,
     nodelay: bool,
 }
@@ -54,7 +54,7 @@ impl Socks {
             context,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
-            udp_capacity: 256,
+            udp_capacity: None,
             udp_bind_addr: None,
             nodelay: false,
         }
@@ -72,7 +72,7 @@ impl Socks {
 
     /// Set total UDP association to be kept simutaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
-        self.udp_capacity = c;
+        self.udp_capacity = Some(c);
     }
 
     /// UDP server's bind address
@@ -223,11 +223,7 @@ impl Socks {
     }
 
     async fn run_udp_server(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
-        let mut server = Socks5UdpServer::new(
-            self.context.clone(),
-            self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60)),
-            self.udp_capacity,
-        );
+        let mut server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
 
         let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
         server.run(udp_bind_addr, servers).await

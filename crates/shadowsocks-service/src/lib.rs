@@ -48,6 +48,8 @@
 //!
 //! Of course, you can also use `cargo install` to install binaries.
 
+use std::time::Duration;
+
 pub use self::{local::run as run_local, manager::run as run_manager, server::run as run_server};
 pub use shadowsocks;
 
@@ -58,3 +60,6 @@ pub mod manager;
 pub mod net;
 pub mod server;
 mod sys;
+
+/// Default UDP association's expire duration
+const DEFAULT_UDP_EXPIRY_DURATION: Duration = Duration::from_secs(5 * 60);

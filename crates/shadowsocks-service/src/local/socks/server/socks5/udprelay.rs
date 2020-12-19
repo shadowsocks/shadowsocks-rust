@@ -50,13 +50,19 @@ pub struct Socks5UdpServer {
 }
 
 impl Socks5UdpServer {
-    pub fn new(context: Arc<ServiceContext>, time_to_live: Duration, capacity: usize) -> Socks5UdpServer {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+    ) -> Socks5UdpServer {
+        let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
+
         Socks5UdpServer {
             context,
-            assoc_map: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
-                time_to_live,
-                capacity,
-            ))),
+            assoc_map: Arc::new(Mutex::new(match capacity {
+                Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+                None => LruCache::with_expiry_duration(time_to_live),
+            })),
         }
     }
 

@@ -54,14 +54,21 @@ pub struct UdpRedir {
 }
 
 impl UdpRedir {
-    pub fn new(context: Arc<ServiceContext>, redir_ty: RedirType, time_to_live: Duration, capacity: usize) -> UdpRedir {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        redir_ty: RedirType,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+    ) -> UdpRedir {
+        let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
+
         UdpRedir {
             context,
             redir_ty,
-            assoc_map: Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
-                time_to_live,
-                capacity,
-            ))),
+            assoc_map: Arc::new(Mutex::new(match capacity {
+                Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+                None => LruCache::with_expiry_duration(time_to_live),
+            })),
         }
     }
 
