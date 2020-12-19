@@ -99,8 +99,6 @@ pub async fn run(config: Config) -> io::Result<()> {
         vfut.push(server.run().boxed());
     }
 
-    let _ = future::select_all(vfut).await;
-
-    let err = io::Error::new(ErrorKind::Other, "one of the servers exited unexpectly");
-    Err(err)
+    let (res, ..) = future::select_all(vfut).await;
+    res
 }

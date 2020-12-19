@@ -1,10 +1,6 @@
 //! Shadowsocks Local Tunnel Server
 
-use std::{
-    io::{self, ErrorKind},
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use shadowsocks::{relay::socks5::Address, ServerConfig};
@@ -77,10 +73,8 @@ impl Tunnel {
             vfut.push(self.run_udp_tunnel(client_config, servers).boxed());
         }
 
-        let _ = future::select_all(vfut).await;
-
-        let err = io::Error::new(ErrorKind::Other, "tunnel server exited unexpectly");
-        Err(err)
+        let (res, ..) = future::select_all(vfut).await;
+        res
     }
 
     async fn run_tcp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {

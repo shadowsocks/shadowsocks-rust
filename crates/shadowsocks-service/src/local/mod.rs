@@ -224,9 +224,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         ProtocolType::Dns => {}
     }
 
-    let _ = future::select_all(vfut).await;
-
-    Ok(())
+    let (res, ..) = future::select_all(vfut).await;
+    res
 }
 
 #[cfg(feature = "local-flow-stat")]
