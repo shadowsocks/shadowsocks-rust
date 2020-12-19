@@ -51,6 +51,7 @@
 pub use self::{local::run as run_local, manager::run as run_manager, server::run as run_server};
 pub use shadowsocks;
 
+pub mod acl;
 pub mod config;
 pub mod local;
 pub mod manager;

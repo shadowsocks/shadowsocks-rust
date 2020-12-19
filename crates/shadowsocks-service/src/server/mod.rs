@@ -15,6 +15,7 @@ use crate::config::{Config, ConfigType};
 
 pub use self::server::Server;
 
+pub mod context;
 pub mod server;
 mod tcprelay;
 mod udprelay;

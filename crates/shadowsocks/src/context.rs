@@ -140,8 +140,8 @@ impl Context {
     }
 
     /// Get the DNS resolver
-    pub fn dns_resolver(&self) -> &DnsResolver {
-        self.dns_resolver.as_ref()
+    pub fn dns_resolver(&self) -> &Arc<DnsResolver> {
+        &self.dns_resolver
     }
 
     /// Resolves DNS address to `SocketAddr`s

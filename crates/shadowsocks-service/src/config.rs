@@ -69,7 +69,7 @@ use shadowsocks::{
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 
-use crate::local::acl::AccessControl;
+use crate::acl::AccessControl;
 #[cfg(feature = "local-dns")]
 pub use crate::local::dns::config::NameServerAddr;
 

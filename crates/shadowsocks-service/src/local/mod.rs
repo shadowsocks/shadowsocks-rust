@@ -20,7 +20,6 @@ use self::context::ServiceContext;
 #[cfg(feature = "local-dns")]
 use self::dns::dns_resolver::DnsResolver as LocalDnsResolver;
 
-pub mod acl;
 pub mod context;
 #[cfg(feature = "local-dns")]
 pub mod dns;

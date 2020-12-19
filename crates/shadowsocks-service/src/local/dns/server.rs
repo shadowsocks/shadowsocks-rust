@@ -32,9 +32,9 @@ use trust_dns_proto::{
 };
 
 use crate::{
+    acl::AccessControl,
     config::{ClientConfig, Mode},
     local::{
-        acl::AccessControl,
         context::ServiceContext,
         loadbalancing::{
             BasicServerIdent,

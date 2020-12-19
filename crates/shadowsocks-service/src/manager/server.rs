@@ -29,10 +29,10 @@ use shadowsocks::{
 use tokio::sync::Mutex;
 
 use crate::{
+    acl::AccessControl,
     config::{ManagerConfig, ManagerServerHost, Mode},
-    local::acl::AccessControl,
     net::FlowStat,
-    server::Server,
+    server::{context::ServiceContext, Server},
 };
 
 struct ServerInstance {
@@ -167,7 +167,18 @@ impl Manager {
     }
 
     pub async fn add_server(&self, svr_cfg: ServerConfig, mode: Option<Mode>) {
-        let mut server = Server::with_context(self.context.clone(), svr_cfg.clone());
+        // Each server should use a separate Context, but shares
+        //
+        // * AccessControlList
+        // * DNS Resolver
+        let mut context = ServiceContext::new();
+        if let Some(ref acl) = self.acl {
+            context.set_acl(acl.clone());
+        }
+        context.set_connect_opts(self.connect_opts.clone());
+        context.set_dns_resolver(self.context.dns_resolver().clone());
+
+        let mut server = Server::with_context(Arc::new(context), svr_cfg.clone());
 
         server.set_connect_opts(self.connect_opts.clone());
 

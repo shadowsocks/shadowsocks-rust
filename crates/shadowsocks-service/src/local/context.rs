@@ -16,9 +16,7 @@ use shadowsocks::{
 #[cfg(feature = "local-dns")]
 use tokio::sync::Mutex;
 
-use crate::net::FlowStat;
-
-use super::acl::AccessControl;
+use crate::{acl::AccessControl, net::FlowStat};
 
 /// Local Service Context
 pub struct ServiceContext {

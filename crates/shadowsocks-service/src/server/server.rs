@@ -10,8 +10,7 @@ use std::{
 use futures::{future, FutureExt};
 use log::{error, trace};
 use shadowsocks::{
-    config::{ManagerAddr, ServerConfig, ServerType},
-    context::{Context, SharedContext},
+    config::{ManagerAddr, ServerConfig},
     dns_resolver::DnsResolver,
     net::ConnectOpts,
     plugin::{Plugin, PluginMode},
@@ -19,53 +18,54 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{config::Mode, local::acl::AccessControl, net::FlowStat};
+use crate::{acl::AccessControl, config::Mode, net::FlowStat};
 
-use super::{tcprelay::TcpServer, udprelay::UdpServer};
+use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 
 /// Shadowsocks Server
 pub struct Server {
-    context: SharedContext,
+    context: Arc<ServiceContext>,
     svr_cfg: ServerConfig,
     mode: Mode,
-    flow_stat: Arc<FlowStat>,
-    connect_opts: ConnectOpts,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: usize,
     manager_addr: Option<ManagerAddr>,
     nodelay: bool,
-    acl: Option<Arc<AccessControl>>,
 }
 
 impl Server {
     /// Create a new server from configuration
     pub fn new(svr_cfg: ServerConfig) -> Server {
-        Server::with_context(Context::new_shared(ServerType::Server), svr_cfg)
+        Server::with_context(Arc::new(ServiceContext::new()), svr_cfg)
     }
 
-    pub(crate) fn with_context(context: SharedContext, svr_cfg: ServerConfig) -> Server {
+    /// Create a new server with context
+    pub fn with_context(context: Arc<ServiceContext>, svr_cfg: ServerConfig) -> Server {
         Server {
             context,
             svr_cfg,
             mode: Mode::TcpOnly,
-            flow_stat: Arc::new(FlowStat::new()),
-            connect_opts: ConnectOpts::default(),
             udp_expiry_duration: None,
             udp_capacity: 512,
             manager_addr: None,
             nodelay: false,
-            acl: None,
         }
     }
 
     /// Get flow statistic
-    pub fn flow_stat(&self) -> &Arc<FlowStat> {
-        &self.flow_stat
+    pub fn flow_stat(&self) -> Arc<FlowStat> {
+        self.context.flow_stat()
+    }
+
+    /// Get flow statistic reference
+    pub fn flow_stat_ref(&self) -> &FlowStat {
+        self.context.flow_stat_ref()
     }
 
     /// Set `ConnectOpts`
     pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
-        self.connect_opts = opts;
+        let context = Arc::get_mut(&mut self.context).expect("cannot set ConnectOpts on a shared context");
+        context.set_connect_opts(opts)
     }
 
     /// Set UDP association's expiry duration
@@ -106,7 +106,8 @@ impl Server {
 
     /// Set access control list
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
-        self.acl = Some(acl);
+        let context = Arc::get_mut(&mut self.context).expect("cannot set ACL on a shared context");
+        context.set_acl(acl);
     }
 
     /// Start serving
@@ -141,27 +142,14 @@ impl Server {
     }
 
     async fn run_tcp_server(&self) -> io::Result<()> {
-        let server = TcpServer::new(
-            self.context.clone(),
-            self.flow_stat.clone(),
-            self.connect_opts.clone(),
-            self.nodelay,
-            self.acl.clone(),
-        );
+        let server = TcpServer::new(self.context.clone(), self.nodelay);
         server.run(&self.svr_cfg).await
     }
 
     async fn run_udp_server(&self) -> io::Result<()> {
         let udp_expiry_duration = self.udp_expiry_duration.unwrap_or(Duration::from_secs(5 * 60));
 
-        let server = UdpServer::new(
-            self.context.clone(),
-            self.flow_stat.clone(),
-            self.connect_opts.clone(),
-            udp_expiry_duration,
-            self.udp_capacity,
-            self.acl.clone(),
-        );
+        let server = UdpServer::new(self.context.clone(), udp_expiry_duration, self.udp_capacity);
         server.run(&self.svr_cfg).await
     }
 
@@ -169,7 +157,13 @@ impl Server {
         let manager_addr = self.manager_addr.as_ref().unwrap();
 
         loop {
-            match ManagerClient::connect(&self.context, manager_addr, &self.connect_opts).await {
+            match ManagerClient::connect(
+                self.context.context_ref(),
+                manager_addr,
+                self.context.connect_opts_ref(),
+            )
+            .await
+            {
                 Err(err) => {
                     error!("failed to connect manager {}, error: {}", manager_addr, err);
                 }
@@ -177,7 +171,8 @@ impl Server {
                     use shadowsocks::manager::protocol::StatRequest;
 
                     let mut stat = HashMap::new();
-                    stat.insert(self.svr_cfg.addr().port(), self.flow_stat.tx() + self.flow_stat.rx());
+                    let flow = self.flow_stat_ref();
+                    stat.insert(self.svr_cfg.addr().port(), flow.tx() + flow.rx());
 
                     let req = StatRequest { stat };
 
