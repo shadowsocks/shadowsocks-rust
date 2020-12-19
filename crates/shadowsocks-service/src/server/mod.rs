@@ -73,12 +73,8 @@ pub async fn run(config: Config) -> io::Result<()> {
         server.set_dns_resolver(resolver.clone());
 
         server.set_connect_opts(connect_opts.clone());
-        if let Some(c) = config.udp_max_associations {
-            server.set_udp_capacity(c);
-        }
-        if let Some(d) = config.udp_timeout {
-            server.set_udp_expiry_duration(d);
-        }
+        server.set_udp_capacity(config.udp_max_associations);
+        server.set_udp_expiry_duration(config.udp_timeout);
         server.set_mode(config.mode);
         if let Some(ref m) = config.manager {
             server.set_manager_addr(m.addr.clone());

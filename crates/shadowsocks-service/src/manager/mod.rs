@@ -65,14 +65,8 @@ pub async fn run(config: Config) -> io::Result<()> {
         ..Default::default()
     };
     manager.set_connect_opts(connect_opts);
-
-    if let Some(c) = config.udp_max_associations {
-        manager.set_udp_capacity(c);
-    }
-
-    if let Some(d) = config.udp_timeout {
-        manager.set_udp_expiry_duration(d);
-    }
+    manager.set_udp_capacity(config.udp_max_associations);
+    manager.set_udp_expiry_duration(config.udp_timeout);
 
     for svr_cfg in config.server {
         manager.add_server(svr_cfg, None).await;

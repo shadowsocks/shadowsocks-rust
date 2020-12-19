@@ -210,11 +210,11 @@ fn main() {
     }
 
     if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
-        config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+        config.udp_timeout = Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout"));
     }
 
     if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
-        config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
+        config.udp_max_associations = udp_max_assoc.parse::<usize>().expect("udp-max-associations");
     }
 
     // DONE READING options
