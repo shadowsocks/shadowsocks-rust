@@ -84,6 +84,11 @@ impl UdpSocket {
         let socket = create_udp_socket(addr).await?;
         Ok(UdpSocket(socket))
     }
+
+    /// Binds to a specific address with opts
+    pub async fn bind_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+        create_outbound_udp_socket(addr, opts).await.map(UdpSocket)
+    }
 }
 
 impl Deref for UdpSocket {

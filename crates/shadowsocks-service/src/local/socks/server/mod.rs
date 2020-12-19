@@ -92,10 +92,14 @@ impl Socks {
     pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
         let mut vfut = Vec::new();
 
-        // TCP should always start for handshaking
-        vfut.push(self.run_tcp_server(client_config, servers).boxed());
+        if self.mode.enable_tcp() {
+            vfut.push(self.run_tcp_server(client_config, servers).boxed());
+        }
 
         if self.mode.enable_udp() {
+            // NOTE: SOCKS 5 RFC requires TCP handshake for UDP ASSOCIATE command
+            // But here we can start a standalone UDP SOCKS 5 relay server, for special use cases
+
             vfut.push(self.run_udp_server(client_config, servers).boxed());
         }
 

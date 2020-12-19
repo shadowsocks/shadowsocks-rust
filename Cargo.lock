@@ -1511,6 +1511,7 @@ dependencies = [
  "serde",
  "shadowsocks",
  "socket2",
+ "spin 0.7.0",
  "strum",
  "strum_macros",
  "thiserror",

@@ -59,6 +59,7 @@ pin-project = "1.0"
 lazy_static = "1"
 thiserror = "1.0"
 
+spin = "0.7"
 lru_time_cache = "0.11"
 bytes = "0.6"
 byte_string = "1.0"
