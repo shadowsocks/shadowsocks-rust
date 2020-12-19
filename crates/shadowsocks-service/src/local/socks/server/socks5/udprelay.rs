@@ -211,7 +211,7 @@ impl UdpAssociation {
         // being OOM.
         let (sender, receiver) = mpsc::channel(64);
 
-        let mut assoc = Arc::new(UdpAssociation {
+        let assoc = Arc::new(UdpAssociation {
             context,
             inbound,
             peer_addr,
@@ -230,11 +230,7 @@ impl UdpAssociation {
         };
         tokio::spawn(l2r_task);
 
-        {
-            let assoc = Arc::get_mut(&mut assoc).unwrap();
-            assoc.abortables.lock().push(l2r_abortable);
-        }
-
+        assoc.abortables.lock().push(l2r_abortable);
         assoc
     }
 

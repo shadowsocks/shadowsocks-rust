@@ -144,7 +144,7 @@ impl UdpAssociation {
         // being OOM.
         let (sender, receiver) = mpsc::channel(64);
 
-        let mut assoc = Arc::new(UdpAssociation {
+        let assoc = Arc::new(UdpAssociation {
             context,
             inbound,
             peer_addr,
@@ -166,11 +166,7 @@ impl UdpAssociation {
         };
         tokio::spawn(l2r_task);
 
-        {
-            let assoc = Arc::get_mut(&mut assoc).unwrap();
-            assoc.abortables.lock().push(l2r_abortable);
-        }
-
+        assoc.abortables.lock().push(l2r_abortable);
         assoc
     }
 
@@ -203,13 +199,18 @@ impl UdpAssociation {
                 SocketAddr::V6(..) => self.copy_ipv6_l2r_dispatch(sa, data).await,
             },
             Address::DomainNameAddress(ref dname, port) => {
-                lookup_then!(self.context.context_ref(), dname, port, |sa| {
+                let sa = lookup_then!(self.context.context_ref(), dname, port, |sa| {
                     match sa {
                         SocketAddr::V4(..) => self.clone().copy_ipv4_l2r_dispatch(sa, data).await,
                         SocketAddr::V6(..) => self.clone().copy_ipv6_l2r_dispatch(sa, data).await,
                     }
-                })
-                .map(|_| ())
+                })?
+                .0;
+
+                // Record resolved address as reverse index
+                self.target_cache.lock().await.insert(sa, target_addr.clone());
+
+                Ok(())
             }
         }
     }
@@ -317,10 +318,7 @@ impl UdpAssociation {
 
             let target_addr = match self.target_cache.lock().await.get(&addr) {
                 Some(a) => a.clone(),
-                None => {
-                    debug!("received from unknown target {}, peer_addr: {}", addr, self.peer_addr);
-                    Address::from(addr)
-                }
+                None => Address::from(addr),
             };
 
             // Send back to client
