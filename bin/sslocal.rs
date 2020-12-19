@@ -16,8 +16,8 @@ use shadowsocks_service::config::RedirType;
 #[cfg(any(feature = "local-dns", feature = "local-tunnel"))]
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
+    acl::AccessControl,
     config::{Config, ConfigType, Mode, ProtocolType},
-    local::acl::AccessControl,
     run_local,
     shadowsocks::{
         config::{ServerAddr, ServerConfig},

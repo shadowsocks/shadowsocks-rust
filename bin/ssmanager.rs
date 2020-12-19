@@ -18,8 +18,8 @@ use log::info;
 use tokio::{self, runtime::Builder};
 
 use shadowsocks_service::{
+    acl::AccessControl,
     config::{Config, ConfigType, ManagerConfig, ManagerServerHost, Mode},
-    local::acl::AccessControl,
     run_manager,
     shadowsocks::{
         config::{ManagerAddr, ServerAddr},
