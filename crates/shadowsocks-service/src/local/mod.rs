@@ -156,12 +156,19 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
             let mut server = Socks::with_context(context);
             server.set_mode(config.mode);
-            server.set_udp_capacity(config.udp_max_associations);
-            server.set_udp_expiry_duration(config.udp_timeout);
+
+            if let Some(c) = config.udp_max_associations {
+                server.set_udp_capacity(c);
+            }
+            if let Some(d) = config.udp_timeout {
+                server.set_udp_expiry_duration(d);
+            }
             if let Some(b) = config.udp_bind_addr {
                 server.set_udp_bind_addr(b);
             }
-            server.set_nodelay(config.no_delay);
+            if config.no_delay {
+                server.set_nodelay(true);
+            }
 
             vfut.push(server.run(&client_config, &config.server).boxed());
         }
@@ -173,10 +180,16 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
             let mut server = Tunnel::with_context(context, forward_addr);
 
-            server.set_udp_capacity(config.udp_max_associations);
-            server.set_udp_expiry_duration(config.udp_timeout);
+            if let Some(c) = config.udp_max_associations {
+                server.set_udp_capacity(c);
+            }
+            if let Some(d) = config.udp_timeout {
+                server.set_udp_expiry_duration(d);
+            }
             server.set_mode(config.mode);
-            server.set_nodelay(config.no_delay);
+            if config.no_delay {
+                server.set_nodelay(true);
+            }
 
             vfut.push(server.run(&client_config, &config.server).boxed());
         }
@@ -192,10 +205,16 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             use self::redir::Redir;
 
             let mut server = Redir::with_context(context);
-            server.set_udp_capacity(config.udp_max_associations);
-            server.set_udp_expiry_duration(config.udp_timeout);
+            if let Some(c) = config.udp_max_associations {
+                server.set_udp_capacity(c);
+            }
+            if let Some(d) = config.udp_timeout {
+                server.set_udp_expiry_duration(d);
+            }
             server.set_mode(config.mode);
-            server.set_nodelay(config.no_delay);
+            if config.no_delay {
+                server.set_nodelay(true);
+            }
             server.set_tcp_redir(config.tcp_redir);
             server.set_udp_redir(config.udp_redir);
 

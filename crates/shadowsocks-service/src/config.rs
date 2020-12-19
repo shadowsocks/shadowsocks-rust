@@ -578,10 +578,10 @@ pub struct Config {
     pub config_type: ConfigType,
     /// Protocol for local server
     pub local_protocol: ProtocolType,
-    /// Timeout for UDP Associations
-    pub udp_timeout: Duration,
-    /// Maximum number of UDP Associations
-    pub udp_max_associations: usize,
+    /// Timeout for UDP Associations, default is 5 minutes
+    pub udp_timeout: Option<Duration>,
+    /// Maximum number of UDP Associations, default is unconfigured
+    pub udp_max_associations: Option<usize>,
     /// UDP relay's bind address, it uses `local_addr` by default
     ///
     /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
@@ -699,11 +699,8 @@ impl Config {
             manager: None,
             config_type,
             local_protocol: ProtocolType::default(),
-            udp_timeout: Duration::from_secs(5 * 60),
-            udp_max_associations: match config_type {
-                ConfigType::Local => 256,
-                ConfigType::Server | ConfigType::Manager => 512,
-            },
+            udp_timeout: None,
+            udp_max_associations: None,
             udp_bind_addr: None,
             nofile: None,
             acl: None,
@@ -1025,14 +1022,10 @@ impl Config {
         }
 
         // UDP
-        if let Some(t) = config.udp_timeout {
-            nconfig.udp_timeout = Duration::from_secs(t);
-        }
+        nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
         // Maximum associations to be kept simultaneously
-        if let Some(s) = config.udp_max_associations {
-            nconfig.udp_max_associations = s;
-        }
+        nconfig.udp_max_associations = config.udp_max_associations;
 
         // RLIMIT_NOFILE
         nconfig.nofile = config.nofile;
@@ -1332,9 +1325,9 @@ impl fmt::Display for Config {
             jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
         }
 
-        jconf.udp_timeout = Some(self.udp_timeout.as_secs());
+        jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
 
-        jconf.udp_max_associations = Some(self.udp_max_associations);
+        jconf.udp_max_associations = self.udp_max_associations;
 
         jconf.nofile = self.nofile;
 
