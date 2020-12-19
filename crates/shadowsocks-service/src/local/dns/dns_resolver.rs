@@ -24,6 +24,7 @@ pub struct DnsResolver {
     mode: Mode,
     ipv6_first: bool,
     connect_opts: ConnectOpts,
+    attempts: usize,
 }
 
 impl DnsResolver {
@@ -34,6 +35,7 @@ impl DnsResolver {
             mode: Mode::UdpOnly,
             ipv6_first: false,
             connect_opts: ConnectOpts::default(),
+            attempts: 2,
         }
     }
 
@@ -50,6 +52,19 @@ impl DnsResolver {
     }
 
     pub async fn lookup(&self, msg: Message) -> io::Result<Message> {
+        let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+
+        for _ in 0..self.attempts {
+            match self.lookup_inner(msg.clone()).await {
+                Ok(m) => return Ok(m),
+                Err(err) => last_err = err,
+            }
+        }
+
+        Err(last_err)
+    }
+
+    async fn lookup_inner(&self, msg: Message) -> io::Result<Message> {
         match self.ns {
             NameServerAddr::SocketAddr(ns) => {
                 let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
