@@ -32,7 +32,7 @@ use crate::{
     acl::AccessControl,
     config::{ManagerConfig, ManagerServerHost, Mode},
     net::FlowStat,
-    server::{context::ServiceContext, Server},
+    server::Server,
 };
 
 struct ServerInstance {
@@ -171,16 +171,10 @@ impl Manager {
         //
         // * AccessControlList
         // * DNS Resolver
-        let mut context = ServiceContext::new();
-        if let Some(ref acl) = self.acl {
-            context.set_acl(acl.clone());
-        }
-        context.set_connect_opts(self.connect_opts.clone());
-        context.set_dns_resolver(self.context.dns_resolver().clone());
-
-        let mut server = Server::with_context(Arc::new(context), svr_cfg.clone());
+        let mut server = Server::new(svr_cfg.clone());
 
         server.set_connect_opts(self.connect_opts.clone());
+        server.set_dns_resolver(self.context.dns_resolver().clone());
 
         if let Some(d) = self.udp_expiry_duration {
             server.set_udp_expiry_duration(d);
