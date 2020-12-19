@@ -7,7 +7,9 @@ use std::{
 
 use futures::{future, FutureExt};
 use log::{trace, warn};
-use shadowsocks::{config::ServerAddr, dns_resolver::DnsResolver, net::ConnectOpts};
+#[cfg(feature = "trust-dns")]
+use shadowsocks::dns_resolver::DnsResolver;
+use shadowsocks::{config::ServerAddr, net::ConnectOpts};
 
 use crate::config::{Config, ConfigType};
 

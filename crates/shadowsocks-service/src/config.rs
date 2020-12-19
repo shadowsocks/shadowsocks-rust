@@ -59,7 +59,7 @@ use std::{
 
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "local-tunnel")]
+#[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{ManagerAddr, ServerAddr, ServerConfig},
@@ -1181,11 +1181,6 @@ impl Config {
                     }
                 }
             }
-        }
-
-        if self.local_protocol == ProtocolType::Socks && !self.mode.enable_tcp() {
-            let err = Error::new(ErrorKind::Malformed, "socks protocol must enable tcp mode", None);
-            return Err(err);
         }
 
         #[cfg(feature = "local-dns")]

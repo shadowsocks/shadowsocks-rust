@@ -2,10 +2,9 @@
 //!
 //! Service for managing multiple relay servers. [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
 
-use std::{
-    io::{self, ErrorKind},
-    sync::Arc,
-};
+use std::io::{self, ErrorKind};
+#[cfg(feature = "trust-dns")]
+use std::sync::Arc;
 
 use log::{trace, warn};
 use shadowsocks::{config::ServerAddr, net::ConnectOpts};
