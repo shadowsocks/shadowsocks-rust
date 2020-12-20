@@ -1,16 +1,17 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
+#![cfg(all(feature = "local", feature = "server"))]
 
 use std::net::SocketAddr;
 
 use log::debug;
 use tokio::time::{self, Duration};
 
-use shadowsocks::{
-    config::{Config, ConfigType, Mode, ServerConfig},
-    crypto::v1::CipherKind,
-    relay::{socks5::Address, udprelay::client::Socks5Client},
+use shadowsocks_service::{
+    config::{Config, ConfigType, Mode, ProtocolType},
+    local::socks::client::socks5::Socks5UdpClient,
     run_local,
     run_server,
+    shadowsocks::{crypto::v1::CipherKind, relay::socks5::Address, ServerConfig},
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
@@ -23,24 +24,25 @@ const METHOD: CipherKind = CipherKind::AES_128_GCM;
 
 fn get_svr_config() -> Config {
     let mut cfg = Config::new(ConfigType::Server);
-    cfg.server = vec![ServerConfig::basic(
-        SERVER_ADDR.parse().unwrap(),
+    cfg.server = vec![ServerConfig::new(
+        SERVER_ADDR.parse::<SocketAddr>().unwrap(),
         PASSWORD.to_owned(),
         METHOD,
     )];
-    cfg.mode = Mode::UdpOnly;
+    cfg.mode = Mode::TcpAndUdp;
     cfg
 }
 
 fn get_cli_config() -> Config {
-    let mut cfg = Config::new(ConfigType::Socks5Local);
+    let mut cfg = Config::new(ConfigType::Local);
     cfg.local_addr = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![ServerConfig::basic(
-        SERVER_ADDR.parse().unwrap(),
+    cfg.server = vec![ServerConfig::new(
+        SERVER_ADDR.parse::<SocketAddr>().unwrap(),
         PASSWORD.to_owned(),
         METHOD,
     )];
-    cfg.mode = Mode::UdpOnly;
+    cfg.mode = Mode::TcpAndUdp;
+    cfg.local_protocol = ProtocolType::Socks;
     cfg
 }
 
@@ -89,13 +91,16 @@ async fn udp_relay() {
     // Wait until all server starts
     time::sleep(Duration::from_secs(1)).await;
 
-    let l = Socks5Client::associate(&get_client_addr()).await.unwrap();
+    let mut l = Socks5UdpClient::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap())
+        .await
+        .unwrap();
+    l.associate(&get_client_addr()).await.unwrap();
 
     let payload = b"HEllo WORld";
-    l.send_to(payload, &remote_addr).await.unwrap();
+    l.send_to(0, payload, &remote_addr).await.unwrap();
 
     let mut buf = vec![0u8; 65536];
-    let (amt, recv_addr) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
+    let (amt, _, recv_addr) = time::timeout(Duration::from_secs(5), l.recv_from(&mut buf))
         .await
         .unwrap()
         .unwrap();

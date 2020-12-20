@@ -1,4 +1,4 @@
-#![cfg(feature = "local-socks4")]
+#![cfg(all(feature = "local-socks4", feature = "server"))]
 
 use std::{
     net::{SocketAddr, ToSocketAddrs},
@@ -6,17 +6,19 @@ use std::{
 };
 
 use tokio::{
-    net::TcpStream,
     prelude::*,
     time::{self, Duration},
 };
 
-use shadowsocks::{
-    config::{Config, ConfigType, ServerAddr, ServerConfig},
-    crypto::v1::CipherKind,
-    relay::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode},
+use shadowsocks_service::{
+    config::{Config, ConfigType, ProtocolType},
+    local::socks::client::Socks4TcpClient,
     run_local,
     run_server,
+    shadowsocks::{
+        config::{ServerAddr, ServerConfig},
+        crypto::v1::CipherKind,
+    },
 };
 
 pub struct Socks4TestServer {
@@ -38,13 +40,14 @@ impl Socks4TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg
             },
             cli_config: {
-                let mut cfg = Config::new(ConfigType::Socks4Local);
+                let mut cfg = Config::new(ConfigType::Local);
                 cfg.local_addr = Some(ServerAddr::from(local_addr));
-                cfg.server = vec![ServerConfig::basic(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
+                cfg.local_protocol = ProtocolType::Socks;
                 cfg
             },
         }
@@ -80,22 +83,9 @@ async fn socks4_relay_connect() {
 
     static HTTP_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
 
-    let mut c = TcpStream::connect(LOCAL_ADDR).await.unwrap();
-
-    let req = HandshakeRequest {
-        cd: Command::Connect,
-        dst: Address::from(("www.example.com".to_owned(), 80)),
-        user_id: Vec::new(),
-    };
-
-    let mut handshake_buf = Vec::new();
-    req.write_to_buf(&mut handshake_buf);
-
-    c.write_all(&handshake_buf).await.unwrap();
-    c.flush().await.unwrap();
-
-    let rsp = HandshakeResponse::read_from(&mut c).await.unwrap();
-    assert_eq!(rsp.cd, ResultCode::RequestGranted);
+    let mut c = Socks4TcpClient::connect(("www.example.com", 80), LOCAL_ADDR, Vec::new())
+        .await
+        .unwrap();
 
     c.write_all(HTTP_REQUEST).await.unwrap();
     c.flush().await.unwrap();

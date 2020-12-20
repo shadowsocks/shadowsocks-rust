@@ -15,23 +15,28 @@ maintenance = { status = "passively-maintained" }
 
 [[bin]]
 name = "sslocal"
-path = "bin/local.rs"
+path = "bin/sslocal.rs"
+required-features = ["local"]
 
 [[bin]]
 name = "ssserver"
-path = "bin/server.rs"
+path = "bin/ssserver.rs"
+required-features = ["server"]
 
 [[bin]]
 name = "ssurl"
 path = "bin/ssurl.rs"
+required-features = ["utilities"]
 
 [[bin]]
 name = "ssmanager"
-path = "bin/manager.rs"
+path = "bin/ssmanager.rs"
+required-features = ["manager"]
 
 [workspace]
 members = [
-    "shadowsocks"
+    "crates/shadowsocks",
+    "crates/shadowsocks-service",
 ]
 
 [profile.release]
@@ -42,36 +47,57 @@ panic = "abort"
 
 [features]
 default = [
+    "logging",
     "trust-dns",
+    "local",
+    "server",
+    "manager",
+    "utilities",
+    "local-dns",
     "local-http",
     "local-http-rustls",
     "local-tunnel",
-    "local-socks4"
+    "local-socks4",
 ]
-# Uses single-threaded scheduler instead of default multi-threaded
+# Uses single-threaded scheduler instead of default multi-threaded scheduler
 single-threaded = []
+
+# Enable local server
+local = ["shadowsocks-service/local"]
+# Enable remote server
+server = ["shadowsocks-service/server"]
+# Enable manager server
+manager = ["shadowsocks-service/manager"]
+# Enable utilities
+utilities = []
+
 # Enables trust-dns for replacing tokio's builtin DNS resolver
-trust-dns = ["shadowsocks/trust-dns"]
-dns-over-tls = ["shadowsocks/dns-over-tls"]
-dns-over-https = ["shadowsocks/dns-over-https"]
+trust-dns = ["shadowsocks-service/trust-dns"]
+dns-over-tls = ["shadowsocks-service/dns-over-tls"]
+dns-over-https = ["shadowsocks-service/dns-over-https"]
+
+# Enable logging output
+logging = ["log4rs"]
+
 # Enable DNS-relay
-local-dns = ["shadowsocks/local-dns"]
+local-dns = ["local", "shadowsocks-service/local-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = ["shadowsocks/local-flow-stat"]
+local-flow-stat = ["local", "shadowsocks-service/local-flow-stat"]
 # Enable HTTP protocol for sslocal
-local-http = ["shadowsocks/local-http"]
-local-http-native-tls = ["shadowsocks/local-http-native-tls"]
-local-http-rustls = ["shadowsocks/local-http-rustls"]
+local-http = ["local", "shadowsocks-service/local-http"]
+local-http-native-tls = ["local-http", "shadowsocks-service/local-http-native-tls"]
+local-http-rustls = ["local-http", "shadowsocks-service/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["shadowsocks/local-redir"]
+local-redir = ["local", "shadowsocks-service/local-redir"]
 # Enable tunnel protocol for sslocal
-local-tunnel = ["shadowsocks/local-tunnel"]
-# Enable SOCKS4/4a protocol for sslocal
-local-socks4 = ["shadowsocks/local-socks4"]
+local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
+# Enable socks4 protocol for sslocal
+local-socks4 = ["local", "shadowsocks-service/local-socks4"]
+
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
@@ -79,20 +105,20 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 
 [dependencies]
 log = "0.4"
-log4rs = "0.13"
+log4rs = { version = "0.13", optional = true }
 
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
 
 futures = "0.3"
-tokio = { version = "0.3.1", features = [ "full" ] }
+tokio = { version = "0.3.1", features = ["full"] }
 
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
 
-shadowsocks = { path = "shadowsocks" }
+shadowsocks-service = { version = "1.9", path = "./crates/shadowsocks-service" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.4"
@@ -101,6 +127,3 @@ daemonize = "0.4"
 byteorder = "1.3"
 env_logger = "0.8"
 byte_string = "1.0"
-
-[patch.crates-io]
-h2 = { git = "https://github.com/hyperium/h2.git" }
