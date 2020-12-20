@@ -4,7 +4,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, info};
-use shadowsocks::{lookup_then, ServerConfig};
+use shadowsocks::lookup_then;
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -14,7 +14,7 @@ use crate::{
     config::{ClientConfig, Mode},
     local::{
         context::ServiceContext,
-        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerType as BalancerServerType},
+        loadbalancing::{PingBalancer, ServerIdent},
     },
 };
 
@@ -84,25 +84,25 @@ impl Socks {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_server(client_config, servers).boxed());
+            vfut.push(self.run_tcp_server(client_config, balancer.clone()).boxed());
         }
 
         if self.mode.enable_udp() {
             // NOTE: SOCKS 5 RFC requires TCP handshake for UDP ASSOCIATE command
             // But here we can start a standalone UDP SOCKS 5 relay server, for special use cases
 
-            vfut.push(self.run_udp_server(client_config, servers).boxed());
+            vfut.push(self.run_udp_server(client_config, balancer).boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;
         res
     }
 
-    async fn run_tcp_server(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_tcp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -114,16 +114,6 @@ impl Socks {
         };
 
         info!("shadowsocks socks TCP listening on {}", listener.local_addr()?);
-
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
 
         // If UDP is enabled, SOCK5 UDP_ASSOCIATE command will let client to send requests to this address
         let udp_bind_addr = if self.mode.enable_udp() {
@@ -148,7 +138,7 @@ impl Socks {
                 let _ = stream.set_nodelay(true);
             }
 
-            let server = balancer.best_server();
+            let server = balancer.best_tcp_server();
             let context = self.context.clone();
             let nodelay = self.nodelay;
             let udp_bind_addr = udp_bind_addr.clone();
@@ -171,7 +161,7 @@ impl Socks {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         stream: TcpStream,
-        server: Arc<BasicServerIdent>,
+        server: Arc<ServerIdent>,
         peer_addr: SocketAddr,
         mode: Mode,
         nodelay: bool,
@@ -208,7 +198,7 @@ impl Socks {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         stream: TcpStream,
-        server: Arc<BasicServerIdent>,
+        server: Arc<ServerIdent>,
         peer_addr: SocketAddr,
         mode: Mode,
         nodelay: bool,
@@ -217,10 +207,10 @@ impl Socks {
         handler.handle_socks5_client(stream, peer_addr).await
     }
 
-    async fn run_udp_server(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_udp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
 
         let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
-        server.run(udp_bind_addr, servers).await
+        server.run(udp_bind_addr, balancer).await
     }
 }

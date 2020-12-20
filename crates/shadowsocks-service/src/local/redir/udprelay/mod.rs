@@ -12,7 +12,6 @@ use futures::future::{self, AbortHandle};
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
-    config::ServerConfig,
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
     relay::{
@@ -29,17 +28,7 @@ use tokio::{
 
 use crate::{
     config::{ClientConfig, RedirType},
-    local::{
-        context::ServiceContext,
-        loadbalancing::{
-            BasicServerIdent,
-            PingBalancer,
-            PingBalancerBuilder,
-            ServerIdent,
-            ServerType as BalancerServerType,
-        },
-        redir::redir_ext::UdpSocketRedirExt,
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer, redir::redir_ext::UdpSocketRedirExt},
     net::MonProxySocket,
 };
 
@@ -72,7 +61,7 @@ impl UdpRedir {
         }
     }
 
-    pub async fn run(&mut self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    pub async fn run(&mut self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::bind(self.redir_ty, *saddr)?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -85,18 +74,6 @@ impl UdpRedir {
 
         let local_addr = listener.local_addr().expect("determine port bound to");
         info!("shadowsocks UDP redirect listening on {}", local_addr);
-
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
-
-        let balancer = Arc::new(balancer);
 
         let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
@@ -146,7 +123,7 @@ impl UdpRedir {
         &mut self,
         peer_addr: SocketAddr,
         target_addr: SocketAddr,
-        balancer: &Arc<PingBalancer<BasicServerIdent>>,
+        balancer: &PingBalancer,
         data: &[u8],
     ) -> io::Result<()> {
         // Check or (re)create an association
@@ -183,7 +160,7 @@ struct UdpAssociation {
     bypassed_ipv6_socket: SpinMutex<Option<Arc<UdpSocket>>>,
     proxied_socket: SpinMutex<Option<Arc<MonProxySocket>>>,
     assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-    balancer: Arc<PingBalancer<BasicServerIdent>>,
+    balancer: PingBalancer,
     abortables: SpinMutex<Vec<AbortHandle>>,
 }
 
@@ -201,7 +178,7 @@ impl UdpAssociation {
         redir_ty: RedirType,
         peer_addr: SocketAddr,
         assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-        balancer: Arc<PingBalancer<BasicServerIdent>>,
+        balancer: PingBalancer,
     ) -> Arc<UdpAssociation> {
         // Pending packets 64 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
@@ -362,7 +339,7 @@ impl UdpAssociation {
         if proxied_socket.is_none() {
             // Initialize proxied socket
 
-            let server = self.balancer.best_server();
+            let server = self.balancer.best_udp_server();
             let svr_cfg = server.server_config();
 
             let socket =

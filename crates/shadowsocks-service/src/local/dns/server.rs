@@ -16,7 +16,6 @@ use futures::future;
 use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
-    config::ServerConfig,
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
     relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
@@ -34,16 +33,7 @@ use trust_dns_proto::{
 use crate::{
     acl::AccessControl,
     config::{ClientConfig, Mode},
-    local::{
-        context::ServiceContext,
-        loadbalancing::{
-            BasicServerIdent,
-            PingBalancer,
-            PingBalancerBuilder,
-            ServerIdent,
-            ServerType as BalancerServerType,
-        },
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
@@ -86,8 +76,8 @@ impl Dns {
     }
 
     /// Run server
-    pub async fn run(self, bind_addr: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
-        let client = Arc::new(DnsClient::new(self.context.clone(), servers, self.mode));
+    pub async fn run(self, bind_addr: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+        let client = Arc::new(DnsClient::new(self.context.clone(), balancer, self.mode));
 
         let tcp_fut = self.run_tcp_server(bind_addr, client.clone());
         let udp_fut = self.run_udp_server(bind_addr, client);
@@ -446,51 +436,17 @@ struct DnsClient {
     context: Arc<ServiceContext>,
     client_cache: DnsClientCache,
     mode: Mode,
-    tcp_balancer: Option<PingBalancer<BasicServerIdent>>,
-    udp_balancer: Option<PingBalancer<BasicServerIdent>>,
+    balancer: PingBalancer,
     attempts: usize,
 }
 
 impl DnsClient {
-    fn new(context: Arc<ServiceContext>, servers: &[ServerConfig], mode: Mode) -> DnsClient {
-        let tcp_balancer = if mode.enable_tcp() {
-            let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
-
-            for server in servers {
-                let server_ident = BasicServerIdent::new(server.clone());
-                balancer_builder.add_server(server_ident);
-            }
-
-            let (balancer, checker) = balancer_builder.build();
-            tokio::spawn(checker);
-
-            Some(balancer)
-        } else {
-            None
-        };
-
-        let udp_balancer = if mode.enable_udp() {
-            let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Udp);
-
-            for server in servers {
-                let server_ident = BasicServerIdent::new(server.clone());
-                balancer_builder.add_server(server_ident);
-            }
-
-            let (balancer, checker) = balancer_builder.build();
-            tokio::spawn(checker);
-
-            Some(balancer)
-        } else {
-            None
-        };
-
+    fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> DnsClient {
         DnsClient {
             context,
             client_cache: DnsClientCache::new(5),
             mode,
-            tcp_balancer,
-            udp_balancer,
+            balancer,
             attempts: 2,
         }
     }
@@ -616,8 +572,8 @@ impl DnsClient {
         // Query UDP then TCP
         let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
 
-        if let Some(ref balancer) = self.udp_balancer {
-            let server = balancer.best_server();
+        if self.mode.enable_udp() {
+            let server = self.balancer.best_udp_server();
 
             match self
                 .client_cache
@@ -631,8 +587,8 @@ impl DnsClient {
             }
         }
 
-        if let Some(ref balancer) = self.tcp_balancer {
-            let server = balancer.best_server();
+        if self.mode.enable_tcp() {
+            let server = self.balancer.best_tcp_server();
 
             match self
                 .client_cache

@@ -15,24 +15,19 @@ use hyper::{
     Server,
 };
 use log::{error, info};
-use shadowsocks::{
-    config::{ServerAddr, ServerConfig},
-    lookup_then,
-};
+use shadowsocks::{config::ServerAddr, lookup_then};
 
 use crate::{
     config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::{PingBalancerBuilder, ServerType as BalancerServerType},
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
-use super::{connector::BypassConnector, dispatcher::HttpDispatcher, server_ident::HttpServerIdent};
+use super::{client_cache::ProxyClientCache, connector::BypassConnector, dispatcher::HttpDispatcher};
 
 /// HTTP Local server
 pub struct Http {
     context: Arc<ServiceContext>,
+    proxy_client_cache: Arc<ProxyClientCache>,
 }
 
 impl Http {
@@ -44,34 +39,38 @@ impl Http {
 
     /// Create with an existed context
     pub fn with_context(context: Arc<ServiceContext>) -> Http {
-        Http { context }
+        let proxy_client_cache = Arc::new(ProxyClientCache::new(context.clone()));
+        Http {
+            context,
+            proxy_client_cache,
+        }
     }
 
     /// Run server
-    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Tcp);
-
-        for server in servers {
-            let server_ident = HttpServerIdent::new(self.context.clone(), server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
-
+    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let bypass_client = Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone()));
 
         let context = self.context.clone();
+        let proxy_client_cache = self.proxy_client_cache.clone();
         let make_service = make_service_fn(|socket: &AddrStream| {
             let client_addr = socket.remote_addr();
             let balancer = balancer.clone();
             let bypass_client = bypass_client.clone();
             let context = context.clone();
+            let proxy_client_cache = proxy_client_cache.clone();
 
             async move {
                 Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let server = balancer.best_server();
-                    HttpDispatcher::new(context.clone(), req, server, client_addr, bypass_client.clone()).dispatch()
+                    let server = balancer.best_tcp_server();
+                    HttpDispatcher::new(
+                        context.clone(),
+                        req,
+                        server,
+                        client_addr,
+                        bypass_client.clone(),
+                        proxy_client_cache.clone(),
+                    )
+                    .dispatch()
                 }))
             }
         });

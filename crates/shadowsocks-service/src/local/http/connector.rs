@@ -14,7 +14,7 @@ use log::error;
 use pin_project::pin_project;
 use tower::Service;
 
-use crate::local::{context::ServiceContext, loadbalancing::BasicServerIdent, net::AutoProxyClientStream};
+use crate::local::{context::ServiceContext, loadbalancing::ServerIdent, net::AutoProxyClientStream};
 
 use super::{http_stream::ProxyHttpStream, utils::host_addr};
 
@@ -88,11 +88,11 @@ impl Future for BypassConnecting {
 #[derive(Clone)]
 pub struct ProxyConnector {
     context: Arc<ServiceContext>,
-    server: Arc<BasicServerIdent>,
+    server: Arc<ServerIdent>,
 }
 
 impl ProxyConnector {
-    pub fn new(context: Arc<ServiceContext>, server: Arc<BasicServerIdent>) -> ProxyConnector {
+    pub fn new(context: Arc<ServiceContext>, server: Arc<ServerIdent>) -> ProxyConnector {
         ProxyConnector { context, server }
     }
 }

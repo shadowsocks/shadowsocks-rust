@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{config::ServerConfig, lookup_then, relay::socks5::Address};
+use shadowsocks::{lookup_then, relay::socks5::Address};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -13,7 +13,7 @@ use crate::{
     config::ClientConfig,
     local::{
         context::ServiceContext,
-        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+        loadbalancing::{PingBalancer, ServerIdent},
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -22,7 +22,7 @@ use crate::{
 pub async fn run_tcp_tunnel(
     context: Arc<ServiceContext>,
     client_config: &ClientConfig,
-    servers: &[ServerConfig],
+    balancer: PingBalancer,
     forward_addr: &Address,
     nodelay: bool,
 ) -> io::Result<()> {
@@ -38,16 +38,6 @@ pub async fn run_tcp_tunnel(
 
     info!("shadowsocks TCP tunnel listening on {}", listener.local_addr()?);
 
-    let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
-
-    for server in servers {
-        let server_ident = BasicServerIdent::new(server.clone());
-        balancer_builder.add_server(server_ident);
-    }
-
-    let (balancer, checker) = balancer_builder.build();
-    tokio::spawn(checker);
-
     loop {
         let (stream, peer_addr) = match listener.accept().await {
             Ok(s) => s,
@@ -62,7 +52,7 @@ pub async fn run_tcp_tunnel(
             let _ = stream.set_nodelay(true);
         }
 
-        let server = balancer.best_server();
+        let server = balancer.best_tcp_server();
         let forward_addr = forward_addr.clone();
 
         tokio::spawn(handle_tcp_client(
@@ -79,7 +69,7 @@ pub async fn run_tcp_tunnel(
 async fn handle_tcp_client(
     context: Arc<ServiceContext>,
     mut stream: TcpStream,
-    server: Arc<BasicServerIdent>,
+    server: Arc<ServerIdent>,
     peer_addr: SocketAddr,
     forward_addr: Address,
     nodelay: bool,
@@ -93,7 +83,7 @@ async fn handle_tcp_client(
         svr_cfg.addr(),
     );
 
-    let remote = AutoProxyClientStream::connect_proxied(context, server.as_ref(), &forward_addr).await?;
+    let remote = AutoProxyClientStream::connect_proxied(context, &server, &forward_addr).await?;
 
     if nodelay {
         remote.set_nodelay(true)?;

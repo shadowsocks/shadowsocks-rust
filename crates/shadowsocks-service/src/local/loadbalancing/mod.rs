@@ -2,7 +2,7 @@
 
 pub use self::{
     ping_balancer::{PingBalancer, PingBalancerBuilder, ServerType},
-    server_data::{BasicServerIdent, ServerIdent, ServerScore},
+    server_data::{ServerIdent, ServerScore},
 };
 
 pub mod ping_balancer;

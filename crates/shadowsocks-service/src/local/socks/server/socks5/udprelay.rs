@@ -20,7 +20,6 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
-    ServerConfig,
 };
 use spin::Mutex as SpinMutex;
 use tokio::{
@@ -31,16 +30,7 @@ use tokio::{
 
 use crate::{
     config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::{
-            BasicServerIdent,
-            PingBalancer,
-            PingBalancerBuilder,
-            ServerIdent,
-            ServerType as BalancerServerType,
-        },
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::MonProxySocket,
 };
 
@@ -66,7 +56,7 @@ impl Socks5UdpServer {
         }
     }
 
-    pub async fn run(&mut self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    pub async fn run(&mut self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let socket = match *client_config {
             ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::bind(&saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
@@ -80,18 +70,7 @@ impl Socks5UdpServer {
 
         info!("shadowsocks socks5 UDP listening on {}", socket.local_addr()?);
 
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
-
         let listener = Arc::new(socket);
-        let balancer = Arc::new(balancer);
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
@@ -150,7 +129,7 @@ impl Socks5UdpServer {
         listener: &Arc<UdpSocket>,
         peer_addr: SocketAddr,
         target_addr: Address,
-        balancer: &Arc<PingBalancer<BasicServerIdent>>,
+        balancer: &PingBalancer,
         data: &[u8],
     ) -> io::Result<()> {
         let assoc = match self.assoc_map.lock().await.entry(peer_addr) {
@@ -186,7 +165,7 @@ struct UdpAssociation {
     bypassed_ipv6_socket: SpinMutex<Option<Arc<UdpSocket>>>,
     proxied_socket: SpinMutex<Option<Arc<MonProxySocket>>>,
     assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-    balancer: Arc<PingBalancer<BasicServerIdent>>,
+    balancer: PingBalancer,
     abortables: SpinMutex<Vec<AbortHandle>>,
 }
 
@@ -204,7 +183,7 @@ impl UdpAssociation {
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-        balancer: Arc<PingBalancer<BasicServerIdent>>,
+        balancer: PingBalancer,
     ) -> Arc<UdpAssociation> {
         // Pending packets 64 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
@@ -376,7 +355,7 @@ impl UdpAssociation {
         if proxied_socket.is_none() {
             // Initialize proxied socket
 
-            let server = self.balancer.best_server();
+            let server = self.balancer.best_udp_server();
             let svr_cfg = server.server_config();
 
             let socket =

@@ -15,26 +15,28 @@ use crate::local::{
 };
 
 use super::{
+    client_cache::ProxyClientCache,
     http_client::BypassHttpClient,
-    server_ident::HttpServerIdent,
     utils::{authority_addr, host_addr},
 };
 
 pub struct HttpDispatcher {
     context: Arc<ServiceContext>,
     req: Request<Body>,
-    server: Arc<HttpServerIdent>,
+    server: Arc<ServerIdent>,
     client_addr: SocketAddr,
     bypass_client: BypassHttpClient,
+    proxy_client_cache: Arc<ProxyClientCache>,
 }
 
 impl HttpDispatcher {
     pub fn new(
         context: Arc<ServiceContext>,
         req: Request<Body>,
-        server: Arc<HttpServerIdent>,
+        server: Arc<ServerIdent>,
         client_addr: SocketAddr,
         bypass_client: BypassHttpClient,
+        proxy_client_cache: Arc<ProxyClientCache>,
     ) -> HttpDispatcher {
         HttpDispatcher {
             context,
@@ -42,6 +44,7 @@ impl HttpDispatcher {
             server,
             client_addr,
             bypass_client,
+            proxy_client_cache,
         }
     }
 
@@ -171,7 +174,7 @@ impl HttpDispatcher {
                 // Keep connections for clients in ServerScore::client
                 //
                 // client instance is kept for Keep-Alive connections
-                let client = self.server.proxy_client();
+                let client = self.proxy_client_cache.get_connected(&self.server).await;
 
                 match client.request(self.req).await {
                     Ok(res) => res,

@@ -52,36 +52,33 @@ impl Debug for ServerScore {
     }
 }
 
-/// Identifier of a remote server
-pub trait ServerIdent {
-    /// Get server's score
-    fn server_score<'a>(&'a self) -> &'a ServerScore;
-    /// Get server's configuration
-    fn server_config<'a>(&'a self) -> &'a ServerConfig;
-}
-
-/// Basic default identifer for a server
-pub struct BasicServerIdent {
-    score: ServerScore,
+/// Identifer for a server
+#[derive(Debug)]
+pub struct ServerIdent {
+    tcp_score: ServerScore,
+    udp_score: ServerScore,
     svr_cfg: ServerConfig,
 }
 
-impl BasicServerIdent {
-    /// Create a `BasicServerIdent`
-    pub fn new(svr_cfg: ServerConfig) -> BasicServerIdent {
-        BasicServerIdent {
-            score: ServerScore::new(),
+impl ServerIdent {
+    /// Create a  ServerIdent`
+    pub fn new(svr_cfg: ServerConfig) -> ServerIdent {
+        ServerIdent {
+            tcp_score: ServerScore::new(),
+            udp_score: ServerScore::new(),
             svr_cfg,
         }
     }
-}
 
-impl ServerIdent for BasicServerIdent {
-    fn server_config<'a>(&'a self) -> &'a ServerConfig {
+    pub fn server_config(&self) -> &ServerConfig {
         &self.svr_cfg
     }
 
-    fn server_score<'a>(&'a self) -> &'a ServerScore {
-        &self.score
+    pub fn tcp_score(&self) -> &ServerScore {
+        &self.tcp_score
+    }
+
+    pub fn udp_score(&self) -> &ServerScore {
+        &self.udp_score
     }
 }

@@ -23,7 +23,7 @@ use crate::{
     config::{ClientConfig, Mode},
     local::{
         context::ServiceContext,
-        loadbalancing::{BasicServerIdent, ServerIdent},
+        loadbalancing::ServerIdent,
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -34,7 +34,7 @@ pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
     udp_bind_addr: Option<Arc<ClientConfig>>,
     nodelay: bool,
-    server: Arc<BasicServerIdent>,
+    server: Arc<ServerIdent>,
     mode: Mode,
 }
 
@@ -43,7 +43,7 @@ impl Socks5TcpHandler {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         nodelay: bool,
-        server: Arc<BasicServerIdent>,
+        server: Arc<ServerIdent>,
         mode: Mode,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
@@ -133,32 +133,31 @@ impl Socks5TcpHandler {
 
         let svr_cfg = self.server.server_config();
 
-        let remote =
-            match AutoProxyClientStream::connect(self.context.clone(), self.server.as_ref(), &target_addr).await {
-                Ok(remote) => {
-                    // Tell the client that we are ready
-                    let header =
-                        TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(remote.local_addr()?));
-                    header.write_to(&mut stream).await?;
+        let remote = match AutoProxyClientStream::connect(self.context.clone(), &self.server, &target_addr).await {
+            Ok(remote) => {
+                // Tell the client that we are ready
+                let header =
+                    TcpResponseHeader::new(socks5::Reply::Succeeded, Address::SocketAddress(remote.local_addr()?));
+                header.write_to(&mut stream).await?;
 
-                    trace!("sent header: {:?}", header);
+                trace!("sent header: {:?}", header);
 
-                    remote
-                }
-                Err(err) => {
-                    let reply = match err.kind() {
-                        ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
-                        ErrorKind::ConnectionAborted => Reply::HostUnreachable,
-                        _ => Reply::NetworkUnreachable,
-                    };
+                remote
+            }
+            Err(err) => {
+                let reply = match err.kind() {
+                    ErrorKind::ConnectionRefused => Reply::ConnectionRefused,
+                    ErrorKind::ConnectionAborted => Reply::HostUnreachable,
+                    _ => Reply::NetworkUnreachable,
+                };
 
-                    let dummy_address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
-                    let header = TcpResponseHeader::new(reply, Address::SocketAddress(dummy_address));
-                    header.write_to(&mut stream).await?;
+                let dummy_address = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0);
+                let header = TcpResponseHeader::new(reply, Address::SocketAddress(dummy_address));
+                header.write_to(&mut stream).await?;
 
-                    return Err(err);
-                }
-            };
+                return Err(err);
+            }
+        };
 
         if self.nodelay {
             remote.set_nodelay(true)?;

@@ -358,7 +358,7 @@ impl FromStr for ServerConfig {
 }
 
 /// Server address
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ServerAddr {
     /// IP Address
     SocketAddr(SocketAddr),

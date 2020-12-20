@@ -3,11 +3,11 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use shadowsocks::{relay::socks5::Address, ServerConfig};
+use shadowsocks::relay::socks5::Address;
 
 use crate::{
     config::{ClientConfig, Mode},
-    local::context::ServiceContext,
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
 use super::{tcprelay::run_tcp_tunnel, udprelay::UdpTunnel};
@@ -62,34 +62,34 @@ impl Tunnel {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_tunnel(client_config, servers).boxed());
+            vfut.push(self.run_tcp_tunnel(client_config, balancer.clone()).boxed());
         }
 
         if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel(client_config, servers).boxed());
+            vfut.push(self.run_udp_tunnel(client_config, balancer).boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;
         res
     }
 
-    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         run_tcp_tunnel(
             self.context.clone(),
             client_config,
-            servers,
+            balancer,
             &self.forward_addr,
             self.nodelay,
         )
         .await
     }
 
-    async fn run_udp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut server = UdpTunnel::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
-        server.run(client_config, servers, &self.forward_addr).await
+        server.run(client_config, balancer, &self.forward_addr).await
     }
 }

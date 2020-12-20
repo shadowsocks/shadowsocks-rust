@@ -25,7 +25,7 @@ use tokio::{
     time,
 };
 
-use crate::local::context::ServiceContext;
+use crate::{config::Mode, local::context::ServiceContext};
 
 use super::{
     server_data::ServerIdent,
@@ -49,39 +49,34 @@ impl fmt::Display for ServerType {
 }
 
 /// Build a `PingBalancer`
-pub struct PingBalancerBuilder<C>
-where
-    C: ServerIdent,
-{
-    servers: Vec<Arc<C>>,
+pub struct PingBalancerBuilder {
+    servers: Vec<Arc<ServerIdent>>,
     context: Arc<ServiceContext>,
-    server_type: ServerType,
+    mode: Mode,
 }
 
-impl<C> PingBalancerBuilder<C>
-where
-    C: ServerIdent,
-{
-    pub fn new(context: Arc<ServiceContext>, server_type: ServerType) -> PingBalancerBuilder<C> {
+impl PingBalancerBuilder {
+    pub fn new(context: Arc<ServiceContext>, mode: Mode) -> PingBalancerBuilder {
         PingBalancerBuilder {
             servers: Vec::new(),
             context,
-            server_type,
+            mode,
         }
     }
 
-    pub fn add_server(&mut self, server: C) {
+    pub fn add_server(&mut self, server: ServerIdent) {
         self.servers.push(Arc::new(server));
     }
 
-    pub fn build(self) -> (PingBalancer<C>, impl Future<Output = ()>) {
+    pub fn build(self) -> (PingBalancer, impl Future<Output = ()>) {
         assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
 
         let balancer = PingBalancerInner {
             servers: self.servers,
-            best_idx: AtomicUsize::new(0),
+            best_tcp_idx: AtomicUsize::new(0),
+            best_udp_idx: AtomicUsize::new(0),
             context: self.context,
-            server_type: self.server_type,
+            mode: self.mode,
         };
 
         let shared = Arc::new(balancer);
@@ -100,23 +95,25 @@ where
     }
 }
 
-struct PingBalancerInner<C> {
-    servers: Vec<Arc<C>>,
-    best_idx: AtomicUsize,
+struct PingBalancerInner {
+    servers: Vec<Arc<ServerIdent>>,
+    best_tcp_idx: AtomicUsize,
+    best_udp_idx: AtomicUsize,
     context: Arc<ServiceContext>,
-    server_type: ServerType,
+    mode: Mode,
 }
 
-impl<C> PingBalancerInner<C> {
-    fn best_server(&self) -> Arc<C> {
-        self.servers[self.best_idx.load(Ordering::Relaxed)].clone()
+impl PingBalancerInner {
+    fn best_tcp_server(&self) -> Arc<ServerIdent> {
+        self.servers[self.best_tcp_idx.load(Ordering::Relaxed)].clone()
+    }
+
+    fn best_udp_server(&self) -> Arc<ServerIdent> {
+        self.servers[self.best_udp_idx.load(Ordering::Relaxed)].clone()
     }
 }
 
-impl<C> PingBalancerInner<C>
-where
-    C: ServerIdent,
-{
+impl PingBalancerInner {
     async fn checker_task(self: Arc<Self>) {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
@@ -138,36 +135,71 @@ where
             let mut vfut = Vec::with_capacity(self.servers.len());
 
             for server in self.servers.iter() {
-                let checker = PingChecker {
-                    server: server.clone(),
-                    server_type: self.server_type,
-                    context: self.context.clone(),
-                };
-                vfut.push(checker.check_update_score());
+                if self.mode.enable_tcp() {
+                    let checker = PingChecker {
+                        server: server.clone(),
+                        server_type: ServerType::Tcp,
+                        context: self.context.clone(),
+                    };
+                    vfut.push(checker.check_update_score());
+                }
+
+                if self.mode.enable_udp() {
+                    let checker = PingChecker {
+                        server: server.clone(),
+                        server_type: ServerType::Udp,
+                        context: self.context.clone(),
+                    };
+                    vfut.push(checker.check_update_score());
+                }
             }
 
             future::join_all(vfut).await;
 
-            let old_best_idx = self.best_idx.load(Ordering::Acquire);
+            if self.mode.enable_tcp() {
+                let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
 
-            let mut best_idx = 0;
-            let mut best_score = u64::MAX;
-            for (idx, server) in self.servers.iter().enumerate() {
-                let score = server.server_score().score();
-                if score < best_score {
-                    best_idx = idx;
-                    best_score = score;
+                let mut best_idx = 0;
+                let mut best_score = u64::MAX;
+                for (idx, server) in self.servers.iter().enumerate() {
+                    let score = server.tcp_score().score();
+                    if score < best_score {
+                        best_idx = idx;
+                        best_score = score;
+                    }
+                }
+                self.best_tcp_idx.store(best_idx, Ordering::Release);
+
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best TCP server from {} to {}",
+                        self.servers[old_best_idx].server_config().addr(),
+                        self.servers[best_idx].server_config().addr()
+                    );
                 }
             }
-            self.best_idx.store(best_idx, Ordering::Release);
 
-            if best_idx != old_best_idx {
-                info!(
-                    "switched best {} server from {} to {}",
-                    self.server_type,
-                    self.servers[old_best_idx].server_config().addr(),
-                    self.servers[best_idx].server_config().addr()
-                );
+            if self.mode.enable_udp() {
+                let old_best_idx = self.best_udp_idx.load(Ordering::Acquire);
+
+                let mut best_idx = 0;
+                let mut best_score = u64::MAX;
+                for (idx, server) in self.servers.iter().enumerate() {
+                    let score = server.tcp_score().score();
+                    if score < best_score {
+                        best_idx = idx;
+                        best_score = score;
+                    }
+                }
+                self.best_udp_idx.store(best_idx, Ordering::Release);
+
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best UDP server from {} to {}",
+                        self.servers[old_best_idx].server_config().addr(),
+                        self.servers[best_idx].server_config().addr()
+                    );
+                }
             }
 
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
@@ -176,59 +208,69 @@ where
 }
 
 /// Balancer with active probing
-pub struct PingBalancer<C> {
-    inner: Arc<PingBalancerInner<C>>,
+#[derive(Clone)]
+pub struct PingBalancer {
+    inner: Arc<PingBalancerInner>,
     abortable: Arc<AbortHandle>,
 }
 
-impl<C> Drop for PingBalancer<C> {
+impl Drop for PingBalancer {
     fn drop(&mut self) {
         self.abortable.abort();
     }
 }
 
-impl<C> PingBalancer<C> {
-    pub fn best_server(&self) -> Arc<C> {
-        self.inner.best_server()
+impl PingBalancer {
+    /// Get service context
+    pub fn context(&self) -> Arc<ServiceContext> {
+        self.inner.context.clone()
+    }
+
+    /// Get reference of the service context
+    pub fn context_ref(&self) -> &ServiceContext {
+        self.inner.context.as_ref()
+    }
+
+    /// Pick the best TCP server
+    pub fn best_tcp_server(&self) -> Arc<ServerIdent> {
+        self.inner.best_tcp_server()
+    }
+
+    /// Pick the best UDP server
+    pub fn best_udp_server(&self) -> Arc<ServerIdent> {
+        self.inner.best_udp_server()
     }
 }
 
-impl<C> Clone for PingBalancer<C> {
-    fn clone(&self) -> Self {
-        PingBalancer {
-            inner: self.inner.clone(),
-            abortable: self.abortable.clone(),
-        }
-    }
-}
-
-impl<C> Debug for PingBalancer<C>
-where
-    C: Debug,
-{
+impl Debug for PingBalancer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PingBalancer")
             .field("servers", &self.inner.servers)
-            .field("best_idx", &self.inner.best_idx.load(Ordering::Relaxed))
+            .field("best_tcp_idx", &self.inner.best_tcp_idx.load(Ordering::Relaxed))
+            .field("best_udp_idx", &self.inner.best_udp_idx.load(Ordering::Relaxed))
             .finish()
     }
 }
 
-struct PingChecker<C> {
-    server: Arc<C>,
+struct PingChecker {
+    server: Arc<ServerIdent>,
     server_type: ServerType,
     context: Arc<ServiceContext>,
 }
 
-impl<C> PingChecker<C>
-where
-    C: ServerIdent,
-{
+impl PingChecker {
     /// Checks server's score and update into `ServerScore<E>`
     async fn check_update_score(self) {
         let score = match self.check_delay().await {
-            Ok(d) => self.server.server_score().push_score(Score::Latency(d)).await,
-            Err(..) => self.server.server_score().push_score(Score::Errored).await, // Penalty
+            Ok(d) => match self.server_type {
+                ServerType::Tcp => self.server.tcp_score().push_score(Score::Latency(d)).await,
+                ServerType::Udp => self.server.udp_score().push_score(Score::Latency(d)).await,
+            },
+            // Penalty
+            Err(..) => match self.server_type {
+                ServerType::Tcp => self.server.tcp_score().push_score(Score::Errored).await,
+                ServerType::Udp => self.server.udp_score().push_score(Score::Errored).await,
+            },
         };
 
         trace!(

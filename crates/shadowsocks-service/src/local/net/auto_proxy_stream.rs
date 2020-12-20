@@ -40,10 +40,13 @@ pub enum AutoProxyClientStream {
 
 impl AutoProxyClientStream {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect<A, I>(context: Arc<ServiceContext>, server: &I, addr: A) -> io::Result<AutoProxyClientStream>
+    pub async fn connect<A>(
+        context: Arc<ServiceContext>,
+        server: &ServerIdent,
+        addr: A,
+    ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
-        I: ServerIdent,
     {
         let addr = addr.into();
         if context.check_target_bypassed(&addr).await {
@@ -66,20 +69,18 @@ impl AutoProxyClientStream {
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
-    pub async fn connect_proxied<A, I>(
+    pub async fn connect_proxied<A>(
         context: Arc<ServiceContext>,
-        server: &I,
+        server: &ServerIdent,
         addr: A,
     ) -> io::Result<AutoProxyClientStream>
     where
         A: Into<Address>,
-        I: ServerIdent,
     {
-        let svr_cfg = server.server_config();
         let flow_stat = context.flow_stat();
         let stream = match ProxyClientStream::connect_with_opts_map(
             context.context(),
-            svr_cfg,
+            server.server_config(),
             addr,
             context.connect_opts_ref(),
             |stream| MonProxyStream::from_stream(stream, flow_stat),
@@ -88,7 +89,7 @@ impl AutoProxyClientStream {
         {
             Ok(s) => s,
             Err(err) => {
-                server.server_score().report_failure().await;
+                server.tcp_score().report_failure().await;
                 return Err(err);
             }
         };

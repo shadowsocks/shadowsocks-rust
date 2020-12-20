@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{debug, error, info, trace};
-use shadowsocks::{config::ServerConfig, lookup_then, relay::socks5::Address};
+use shadowsocks::{lookup_then, relay::socks5::Address};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -13,7 +13,7 @@ use crate::{
     config::{ClientConfig, RedirType},
     local::{
         context::ServiceContext,
-        loadbalancing::{BasicServerIdent, PingBalancerBuilder, ServerIdent, ServerType as BalancerServerType},
+        loadbalancing::{PingBalancer, ServerIdent},
         net::AutoProxyClientStream,
         redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
         utils::establish_tcp_tunnel,
@@ -27,7 +27,7 @@ mod sys;
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
 async fn establish_client_tcp_redir<'a>(
     context: Arc<ServiceContext>,
-    server: &BasicServerIdent,
+    server: &ServerIdent,
     mut stream: TcpStream,
     peer_addr: SocketAddr,
     addr: &Address,
@@ -42,7 +42,7 @@ async fn establish_client_tcp_redir<'a>(
         svr_cfg.addr(),
     );
 
-    let remote = AutoProxyClientStream::connect_proxied(context, server, addr).await?;
+    let remote = AutoProxyClientStream::connect_proxied(context, &server, addr).await?;
 
     if nodelay {
         remote.set_nodelay(true)?;
@@ -65,7 +65,7 @@ async fn establish_client_tcp_redir<'a>(
 
 async fn handle_redir_client(
     context: Arc<ServiceContext>,
-    server: &BasicServerIdent,
+    server: &ServerIdent,
     s: TcpStream,
     peer_addr: SocketAddr,
     daddr: SocketAddr,
@@ -91,7 +91,7 @@ async fn handle_redir_client(
 pub async fn run_tcp_redir(
     context: Arc<ServiceContext>,
     client_config: &ClientConfig,
-    servers: &[ServerConfig],
+    balancer: PingBalancer,
     redir_ty: RedirType,
     nodelay: bool,
 ) -> io::Result<()> {
@@ -109,16 +109,6 @@ pub async fn run_tcp_redir(
 
     info!("shadowsocks TCP redirect listening on {}", actual_local_addr);
 
-    let mut balancer_builder = PingBalancerBuilder::new(context.clone(), BalancerServerType::Tcp);
-
-    for server in servers {
-        let server_ident = BasicServerIdent::new(server.clone());
-        balancer_builder.add_server(server_ident);
-    }
-
-    let (balancer, checker) = balancer_builder.build();
-    tokio::spawn(checker);
-
     loop {
         let (socket, peer_addr) = match listener.accept().await {
             Ok(s) => s,
@@ -128,7 +118,7 @@ pub async fn run_tcp_redir(
                 continue;
             }
         };
-        let server = balancer.best_server();
+        let server = balancer.best_tcp_server();
 
         trace!("got connection {}", peer_addr);
         trace!("picked proxy server: {:?}", server.server_config());

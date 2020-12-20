@@ -3,11 +3,10 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use shadowsocks::ServerConfig;
 
 use crate::{
     config::{ClientConfig, Mode, RedirType},
-    local::context::ServiceContext,
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
 use super::{tcprelay::run_tcp_redir, udprelay::UdpRedir};
@@ -74,39 +73,39 @@ impl Redir {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_tunnel(client_config, servers).boxed());
+            vfut.push(self.run_tcp_tunnel(client_config, balancer.clone()).boxed());
         }
 
         if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel(client_config, servers).boxed());
+            vfut.push(self.run_udp_tunnel(client_config, balancer).boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;
         res
     }
 
-    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         run_tcp_redir(
             self.context.clone(),
             client_config,
-            servers,
+            balancer,
             self.tcp_redir,
             self.nodelay,
         )
         .await
     }
 
-    async fn run_udp_tunnel(&self, client_config: &ClientConfig, servers: &[ServerConfig]) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let mut server = UdpRedir::new(
             self.context.clone(),
             self.udp_redir,
             self.udp_expiry_duration,
             self.udp_capacity,
         );
-        server.run(client_config, servers).await
+        server.run(client_config, balancer).await
     }
 }

@@ -16,9 +16,12 @@ use crate::config::{Config, ConfigType, ProtocolType};
 #[cfg(feature = "local-flow-stat")]
 use crate::net::FlowStat;
 
-use self::context::ServiceContext;
 #[cfg(feature = "local-dns")]
 use self::dns::dns_resolver::DnsResolver as LocalDnsResolver;
+use self::{
+    context::ServiceContext,
+    loadbalancing::{PingBalancerBuilder, ServerIdent},
+};
 
 pub mod context;
 #[cfg(feature = "local-dns")]
@@ -124,6 +127,20 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         }
     }
 
+    // Create a service balancer for choosing between multiple servers
+    //
+    // XXX: This have to be called after allocating plugins' addresses
+    let balancer = {
+        let mut balancer_builder = PingBalancerBuilder::new(context.clone(), config.mode);
+        for server in config.server {
+            balancer_builder.add_server(ServerIdent::new(server));
+        }
+        let (balancer, checker) = balancer_builder.build();
+        tokio::spawn(checker);
+
+        balancer
+    };
+
     #[cfg(feature = "local-dns")]
     if matches!(config.local_protocol, ProtocolType::Dns) || config.dns_bind_addr.is_some() {
         use self::dns::Dns;
@@ -139,7 +156,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             server.set_nodelay(true);
         }
 
-        vfut.push(server.run(bind_addr, &config.server).boxed());
+        vfut.push(server.run(bind_addr, balancer.clone()).boxed());
     }
 
     #[cfg(feature = "local-flow-stat")]
@@ -170,7 +187,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 server.set_nodelay(true);
             }
 
-            vfut.push(server.run(&client_config, &config.server).boxed());
+            vfut.push(server.run(&client_config, balancer).boxed());
         }
         #[cfg(feature = "local-tunnel")]
         ProtocolType::Tunnel => {
@@ -191,14 +208,14 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 server.set_nodelay(true);
             }
 
-            vfut.push(server.run(&client_config, &config.server).boxed());
+            vfut.push(server.run(&client_config, balancer).boxed());
         }
         #[cfg(feature = "local-http")]
         ProtocolType::Http => {
             use self::http::Http;
 
             let server = Http::with_context(context);
-            vfut.push(server.run(&client_config, &config.server).boxed());
+            vfut.push(server.run(&client_config, balancer).boxed());
         }
         #[cfg(feature = "local-redir")]
         ProtocolType::Redir => {
@@ -218,7 +235,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             server.set_tcp_redir(config.tcp_redir);
             server.set_udp_redir(config.udp_redir);
 
-            vfut.push(server.run(&client_config, &config.server).boxed());
+            vfut.push(server.run(&client_config, balancer).boxed());
         }
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => {}

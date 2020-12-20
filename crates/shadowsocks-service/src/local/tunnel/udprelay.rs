@@ -14,7 +14,6 @@ use shadowsocks::{
         socks5::Address,
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
-    ServerConfig,
 };
 use tokio::{
     net::UdpSocket,
@@ -24,16 +23,7 @@ use tokio::{
 
 use crate::{
     config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::{
-            BasicServerIdent,
-            PingBalancer,
-            PingBalancerBuilder,
-            ServerIdent,
-            ServerType as BalancerServerType,
-        },
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::MonProxySocket,
 };
 
@@ -58,7 +48,7 @@ impl UdpTunnel {
     pub async fn run(
         &mut self,
         client_config: &ClientConfig,
-        servers: &[ServerConfig],
+        balancer: PingBalancer,
         forward_addr: &Address,
     ) -> io::Result<()> {
         let socket = match *client_config {
@@ -73,16 +63,6 @@ impl UdpTunnel {
         let socket: UdpSocket = socket.into();
 
         info!("shadowsocks UDP tunnel listening on {}", socket.local_addr()?);
-
-        let mut balancer_builder = PingBalancerBuilder::new(self.context.clone(), BalancerServerType::Udp);
-
-        for server in servers {
-            let server_ident = BasicServerIdent::new(server.clone());
-            balancer_builder.add_server(server_ident);
-        }
-
-        let (balancer, checker) = balancer_builder.build();
-        tokio::spawn(checker);
 
         let listener = Arc::new(socket);
 
@@ -117,7 +97,7 @@ impl UdpTunnel {
         &mut self,
         listener: &Arc<UdpSocket>,
         peer_addr: SocketAddr,
-        balancer: &PingBalancer<BasicServerIdent>,
+        balancer: &PingBalancer,
         forward_addr: &Address,
         data: &[u8],
     ) -> io::Result<()> {
@@ -125,7 +105,7 @@ impl UdpTunnel {
         let assoc = match assoc_map.entry(peer_addr) {
             Entry::Occupied(occ) => occ.into_mut(),
             Entry::Vacant(vac) => {
-                let server = balancer.best_server();
+                let server = balancer.best_udp_server();
                 let svr_cfg = server.server_config();
 
                 let socket =
