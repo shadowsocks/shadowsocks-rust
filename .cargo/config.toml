@@ -32,3 +32,10 @@ rustflags = [
     # "-C", "target-cpu=native",
     "-C", "target-feature=+aes,+crypto,+neon",
 ]
+
+# NOTE:
+#    mips are commonly used in routers, so binary size is more important than speed
+[target.'cfg(target_arch = "mips")']
+rustflags = [
+    "-C", "opt-level=z"
+]
