@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::{io, sync::Arc};
 
 use futures::{future, FutureExt};
-use log::{trace, warn};
+use log::{error, trace, warn};
 use shadowsocks::{
     dns_resolver::DnsResolver,
     net::ConnectOpts,
@@ -122,7 +122,21 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             if let Some(c) = server.plugin() {
                 let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
                 server.set_plugin_addr(plugin.local_addr().into());
-                vfut.push(async move { plugin.join().map(|r| r.map(|_| ())).await }.boxed());
+                vfut.push(
+                    async move {
+                        match plugin.join().await {
+                            Ok(status) => {
+                                error!("plugin exited with status: {}", status);
+                                Ok(())
+                            }
+                            Err(err) => {
+                                error!("plugin exited with error: {}", err);
+                                Err(err)
+                            }
+                        }
+                    }
+                    .boxed(),
+                );
             }
         }
     }
