@@ -1,4 +1,5 @@
 #![cfg_attr(clippy, allow(blacklisted_name))]
+#![cfg(all(feature = "local", feature = "server"))]
 
 use std::net::SocketAddr;
 

@@ -1,3 +1,5 @@
+#![cfg(all(feature = "local", feature = "server"))]
+
 use std::{
     net::{SocketAddr, ToSocketAddrs},
     str,

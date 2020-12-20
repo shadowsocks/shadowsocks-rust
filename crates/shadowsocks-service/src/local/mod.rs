@@ -6,8 +6,9 @@ use std::{io, sync::Arc};
 
 use futures::{future, FutureExt};
 use log::{error, trace, warn};
+#[cfg(any(feature = "local-dns", feature = "trust-dns"))]
+use shadowsocks::dns_resolver::DnsResolver;
 use shadowsocks::{
-    dns_resolver::DnsResolver,
     net::ConnectOpts,
     plugin::{Plugin, PluginMode},
 };

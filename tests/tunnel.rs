@@ -1,4 +1,4 @@
-#![cfg(feature = "local-tunnel")]
+#![cfg(all(feature = "local-tunnel", feature = "server"))]
 
 use std::str;
 

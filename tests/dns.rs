@@ -1,4 +1,4 @@
-#![cfg(feature = "local-dns")]
+#![cfg(all(feature = "local-dns", feature = "server"))]
 
 use std::time::Duration;
 

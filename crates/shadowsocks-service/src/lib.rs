@@ -50,14 +50,22 @@
 
 use std::time::Duration;
 
-pub use self::{local::run as run_local, manager::run as run_manager, server::run as run_server};
+#[cfg(feature = "local")]
+pub use self::local::run as run_local;
+#[cfg(feature = "manager")]
+pub use self::manager::run as run_manager;
+#[cfg(feature = "server")]
+pub use self::server::run as run_server;
 pub use shadowsocks;
 
 pub mod acl;
 pub mod config;
+#[cfg(feature = "local")]
 pub mod local;
+#[cfg(feature = "manager")]
 pub mod manager;
 pub mod net;
+#[cfg(feature = "server")]
 pub mod server;
 mod sys;
 

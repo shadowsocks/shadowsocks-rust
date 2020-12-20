@@ -15,6 +15,9 @@ maintenance = { status = "passively-maintained" }
 
 [features]
 full = [
+    "local",
+    "server",
+    "manager",
     "trust-dns",
     "local-dns",
     "local-http",
@@ -25,29 +28,37 @@ full = [
 ]
 # Uses single-threaded scheduler instead of default multi-threaded
 single-threaded = []
+
+# Enable local server
+local = []
+# Enable remote server
+server = []
+# Enable manager server
+manager = ["server"]
+
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver", "shadowsocks/trust-dns"]
-dns-over-tls = ["trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-rustls"]
-dns-over-https = ["trust-dns-resolver/dns-over-https"]
+dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-rustls"]
+dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["trust-dns-proto", "rand"]
+local-dns = ["local", "trust-dns-proto", "rand"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = []
+local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
-local-http = ["hyper", "http", "tower"]
-local-http-native-tls = ["tokio-native-tls", "native-tls"]
-local-http-rustls = ["tokio-rustls", "webpki-roots", "rustls-native-certs"]
+local-http = ["local", "hyper", "http", "tower"]
+local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
+local-http-rustls = ["local-http", "tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["strum", "strum_macros", "mio"]
+local-redir = ["local", "strum", "strum_macros", "mio"]
 # Enable tunnel protocol for sslocal
-local-tunnel = []
+local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
-local-socks4 = []
+local-socks4 = ["local"]
 
 [dependencies]
 log = "0.4"

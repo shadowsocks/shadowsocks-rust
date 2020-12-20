@@ -1,4 +1,4 @@
-#![cfg(feature = "local-socks4")]
+#![cfg(all(feature = "local-socks4", feature = "server"))]
 
 use std::{
     net::{SocketAddr, ToSocketAddrs},

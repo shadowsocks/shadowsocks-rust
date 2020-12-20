@@ -16,18 +16,22 @@ maintenance = { status = "passively-maintained" }
 [[bin]]
 name = "sslocal"
 path = "bin/sslocal.rs"
+required-features = ["local"]
 
 [[bin]]
 name = "ssserver"
 path = "bin/ssserver.rs"
+required-features = ["server"]
 
 [[bin]]
 name = "ssurl"
 path = "bin/ssurl.rs"
+required-features = ["utilities"]
 
 [[bin]]
 name = "ssmanager"
 path = "bin/ssmanager.rs"
+required-features = ["manager"]
 
 [workspace]
 members = [
@@ -45,6 +49,10 @@ panic = "abort"
 default = [
     "logging",
     "trust-dns",
+    "local",
+    "server",
+    "manager",
+    "utilities",
     "local-dns",
     "local-http",
     "local-http-rustls",
@@ -53,6 +61,15 @@ default = [
 ]
 # Uses single-threaded scheduler instead of default multi-threaded scheduler
 single-threaded = []
+
+# Enable local server
+local = ["shadowsocks-service/local"]
+# Enable remote server
+server = ["shadowsocks-service/server"]
+# Enable manager server
+manager = ["shadowsocks-service/manager"]
+# Enable utilities
+utilities = []
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
@@ -63,23 +80,23 @@ dns-over-https = ["shadowsocks-service/dns-over-https"]
 logging = ["log4rs"]
 
 # Enable DNS-relay
-local-dns = ["shadowsocks-service/local-dns"]
+local-dns = ["local", "shadowsocks-service/local-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
-local-flow-stat = ["shadowsocks-service/local-flow-stat"]
+local-flow-stat = ["local", "shadowsocks-service/local-flow-stat"]
 # Enable HTTP protocol for sslocal
-local-http = ["shadowsocks-service/local-http"]
-local-http-native-tls = ["shadowsocks-service/local-http-native-tls"]
-local-http-rustls = ["shadowsocks-service/local-http-rustls"]
+local-http = ["local", "shadowsocks-service/local-http"]
+local-http-native-tls = ["local-http", "shadowsocks-service/local-http-native-tls"]
+local-http-rustls = ["local-http", "shadowsocks-service/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["shadowsocks-service/local-redir"]
+local-redir = ["local", "shadowsocks-service/local-redir"]
 # Enable tunnel protocol for sslocal
-local-tunnel = ["shadowsocks-service/local-tunnel"]
+local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 # Enable socks4 protocol for sslocal
-local-socks4 = ["shadowsocks-service/local-socks4"]
+local-socks4 = ["local", "shadowsocks-service/local-socks4"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]

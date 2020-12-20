@@ -1,4 +1,4 @@
-#![cfg(feature = "local-http")]
+#![cfg(all(feature = "local-http", feature = "server"))]
 
 use std::time::Duration;
 
