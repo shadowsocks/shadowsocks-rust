@@ -1,11 +1,6 @@
 //! Shadowsocks SOCKS Local Server
 
-use std::{
-    io::{self, ErrorKind},
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, info};
@@ -181,6 +176,8 @@ impl Socks {
         mode: Mode,
         nodelay: bool,
     ) -> io::Result<()> {
+        use std::io::ErrorKind;
+
         let mut version_buffer = [0u8; 1];
         let n = stream.peek(&mut version_buffer).await?;
         if n == 0 {
