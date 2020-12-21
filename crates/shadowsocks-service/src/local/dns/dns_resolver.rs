@@ -7,7 +7,7 @@ use std::{
 
 use async_trait::async_trait;
 use futures::future;
-use log::debug;
+use log::{debug, trace};
 use shadowsocks::{dns_resolver::DnsResolve, net::ConnectOpts};
 use trust_dns_proto::{
     op::{Message, Query},
@@ -147,8 +147,8 @@ impl DnsResolve for DnsResolver {
                         match *record.rdata() {
                             RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
                             RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            _ => {
-                                return Err(io::Error::new(ErrorKind::InvalidData, "unexpected rdata section"));
+                            ref rdata => {
+                                trace!("skipped rdata {:?}", rdata);
                             }
                         }
                     }
@@ -164,8 +164,8 @@ impl DnsResolve for DnsResolver {
                         match *record.rdata() {
                             RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
                             RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            _ => {
-                                return Err(io::Error::new(ErrorKind::InvalidData, "unexpected rdata section"));
+                            ref rdata => {
+                                trace!("skipped rdata {:?}", rdata);
                             }
                         }
                     }
@@ -181,8 +181,8 @@ impl DnsResolve for DnsResolver {
                         match *record.rdata() {
                             RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
                             RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            _ => {
-                                return Err(io::Error::new(ErrorKind::InvalidData, "unexpected rdata section"));
+                            ref rdata => {
+                                trace!("skipped rdata {:?}", rdata);
                             }
                         }
                     }
@@ -198,8 +198,8 @@ impl DnsResolve for DnsResolver {
                         match *record.rdata() {
                             RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
                             RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            _ => {
-                                return Err(io::Error::new(ErrorKind::InvalidData, "unexpected rdata section"));
+                            ref rdata => {
+                                trace!("skipped rdata {:?}", rdata);
                             }
                         }
                     }
