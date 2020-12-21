@@ -165,7 +165,11 @@ impl UdpTunnel {
                     self.context.connect_opts_ref()
                 );
 
-                vac.insert(UdpAssociation { sender, r2l_abortable })
+                vac.insert(UdpAssociation {
+                    sender,
+                    peer_addr,
+                    r2l_abortable,
+                })
             }
         };
 
@@ -180,12 +184,14 @@ impl UdpTunnel {
 
 struct UdpAssociation {
     sender: mpsc::Sender<Bytes>,
+    peer_addr: SocketAddr,
     r2l_abortable: AbortHandle,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
         self.r2l_abortable.abort();
+        trace!("udp tunnel for {} is closed", self.peer_addr);
     }
 }
 

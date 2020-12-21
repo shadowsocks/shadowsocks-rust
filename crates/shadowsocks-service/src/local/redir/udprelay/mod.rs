@@ -161,6 +161,7 @@ impl UdpRedir {
                     self.assoc_map.clone(),
                     balancer.clone(),
                 );
+                trace!("created udp association for {}", peer_addr);
                 vac.insert(assoc.clone());
                 assoc
             }
@@ -193,6 +194,7 @@ impl Drop for UdpAssociation {
         for ab in self.abortables.lock().iter() {
             ab.abort();
         }
+        trace!("udp association for {} is closed", self.peer_addr);
     }
 }
 

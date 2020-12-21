@@ -26,7 +26,7 @@ required-features = ["server"]
 [[bin]]
 name = "ssurl"
 path = "bin/ssurl.rs"
-required-features = ["utilities"]
+required-features = ["utility"]
 
 [[bin]]
 name = "ssmanager"
@@ -52,7 +52,7 @@ default = [
     "local",
     "server",
     "manager",
-    "utilities",
+    "utility",
     "local-dns",
     "local-http",
     "local-http-rustls",
@@ -68,8 +68,8 @@ local = ["shadowsocks-service/local"]
 server = ["shadowsocks-service/server"]
 # Enable manager server
 manager = ["shadowsocks-service/manager"]
-# Enable utilities
-utilities = []
+# Enable utility
+utility = []
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
