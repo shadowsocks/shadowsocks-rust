@@ -42,7 +42,7 @@ async fn establish_client_tcp_redir<'a>(
         svr_cfg.addr(),
     );
 
-    let remote = AutoProxyClientStream::connect_proxied(context, &server, addr).await?;
+    let remote = AutoProxyClientStream::connect(context, &server, addr).await?;
 
     if nodelay {
         remote.set_nodelay(true)?;
