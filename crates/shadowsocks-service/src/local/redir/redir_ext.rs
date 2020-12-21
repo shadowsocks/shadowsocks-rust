@@ -34,7 +34,7 @@ pub trait UdpSocketRedir {
     /// On success, the future resolves to the number of bytes read and the source, target address
     ///
     /// `(bytes read, source address, target address)`
-    fn poll_recv_from_with_destination(
+    fn poll_recv_dest_from(
         &self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
@@ -42,28 +42,28 @@ pub trait UdpSocketRedir {
 }
 
 pub trait UdpSocketRedirExt {
-    fn recv_from_with_destination<'a>(&'a self, buf: &'a mut [u8]) -> RecvFromWithDestination<'a, Self>
+    fn recv_dest_from<'a>(&'a self, buf: &'a mut [u8]) -> RecvDestFrom<'a, Self>
     where
         Self: Sized,
     {
-        RecvFromWithDestination { socket: self, buf }
+        RecvDestFrom { socket: self, buf }
     }
 }
 
 impl<S> UdpSocketRedirExt for S where S: UdpSocketRedir {}
 
-pub struct RecvFromWithDestination<'a, S: 'a> {
+pub struct RecvDestFrom<'a, S: 'a> {
     socket: &'a S,
     buf: &'a mut [u8],
 }
 
-impl<'a, S: 'a> Future for RecvFromWithDestination<'a, S>
+impl<'a, S: 'a> Future for RecvDestFrom<'a, S>
 where
     S: UdpSocketRedir,
 {
     type Output = io::Result<(usize, SocketAddr, SocketAddr)>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.socket.poll_recv_from_with_destination(cx, self.buf)
+        self.socket.poll_recv_dest_from(cx, self.buf)
     }
 }

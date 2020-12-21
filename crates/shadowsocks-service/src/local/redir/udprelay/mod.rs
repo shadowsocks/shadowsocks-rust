@@ -101,10 +101,10 @@ impl UdpRedir {
 
         let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
-            let (recv_len, src, dst) = match listener.recv_from_with_destination(&mut pkt_buf).await {
+            let (recv_len, src, dst) = match listener.recv_dest_from(&mut pkt_buf).await {
                 Ok(o) => o,
                 Err(err) => {
-                    error!("recv_from_redir failed with err: {}", err);
+                    error!("recv_dest_from failed with err: {}", err);
                     continue;
                 }
             };

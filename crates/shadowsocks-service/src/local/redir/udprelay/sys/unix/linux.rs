@@ -71,7 +71,7 @@ impl UdpRedirSocket {
 }
 
 impl UdpSocketRedir for UdpRedirSocket {
-    fn poll_recv_from_with_destination(
+    fn poll_recv_dest_from(
         &self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
@@ -79,7 +79,7 @@ impl UdpSocketRedir for UdpRedirSocket {
         loop {
             let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-            match recv_from_with_destination(self.io.get_ref(), buf) {
+            match recv_dest_from(self.io.get_ref(), buf) {
                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                     read_guard.clear_ready();
                 }
@@ -177,7 +177,7 @@ fn get_destination_addr(msg: &libc::msghdr) -> Option<libc::sockaddr_storage> {
     None
 }
 
-pub fn recv_from_with_destination(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+pub fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
     unsafe {
         let mut control_buf = [0u8; 64];
         let mut src_addr: libc::sockaddr_storage = mem::zeroed();

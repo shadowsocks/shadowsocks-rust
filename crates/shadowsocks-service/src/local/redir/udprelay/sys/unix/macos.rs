@@ -28,7 +28,7 @@ impl UdpRedirSocket {
 }
 
 impl UdpSocketRedir for UdpRedirSocket {
-    fn poll_recv_from_with_destination(
+    fn poll_recv_dest_from(
         &self,
         _cx: &mut Context<'_>,
         _buf: &mut [u8],
