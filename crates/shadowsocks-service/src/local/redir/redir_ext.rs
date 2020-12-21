@@ -1,6 +1,12 @@
 //! Extension trait for `TcpListener` and `UdpSocket`
 
-use std::{io, net::SocketAddr};
+use std::{
+    future::Future,
+    io,
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use async_trait::async_trait;
 use tokio::net::TcpListener;
@@ -22,12 +28,42 @@ pub trait TcpStreamRedirExt {
     fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr>;
 }
 
-#[async_trait]
-pub trait UdpSocketRedirExt {
+pub trait UdpSocketRedir {
     /// Receive a single datagram from the socket.
     ///
     /// On success, the future resolves to the number of bytes read and the source, target address
     ///
     /// `(bytes read, source address, target address)`
-    async fn recv_from_redir(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)>;
+    fn poll_recv_from_with_destination(
+        &self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<(usize, SocketAddr, SocketAddr)>>;
+}
+
+pub trait UdpSocketRedirExt {
+    fn recv_from_with_destination<'a>(&'a self, buf: &'a mut [u8]) -> RecvFromWithDestination<'a, Self>
+    where
+        Self: Sized,
+    {
+        RecvFromWithDestination { socket: self, buf }
+    }
+}
+
+impl<S> UdpSocketRedirExt for S where S: UdpSocketRedir {}
+
+pub struct RecvFromWithDestination<'a, S: 'a> {
+    socket: &'a S,
+    buf: &'a mut [u8],
+}
+
+impl<'a, S: 'a> Future for RecvFromWithDestination<'a, S>
+where
+    S: UdpSocketRedir,
+{
+    type Output = io::Result<(usize, SocketAddr, SocketAddr)>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.socket.poll_recv_from_with_destination(cx, self.buf)
+    }
 }

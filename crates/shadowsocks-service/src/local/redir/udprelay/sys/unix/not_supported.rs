@@ -1,8 +1,6 @@
 use std::{io, net::SocketAddr};
 
-use async_trait::async_trait;
-
-use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedirExt};
+use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedir};
 
 pub struct UdpRedirSocket;
 
@@ -25,9 +23,12 @@ impl UdpRedirSocket {
     }
 }
 
-#[async_trait]
-impl UdpSocketRedirExt for UdpRedirSocket {
-    async fn recv_from_redir(&self, _buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+impl UdpSocketRedir for UdpRedirSocket {
+    fn poll_recv_from_with_destination(
+        &self,
+        _cx: &mut Context<'_>,
+        _buf: &mut [u8],
+    ) -> Poll<io::Result<(usize, SocketAddr, SocketAddr)>> {
         unimplemented!("UDP transparent proxy is not supported on this platform")
     }
 }

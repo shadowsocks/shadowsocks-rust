@@ -1,7 +1,7 @@
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::SocketAddr,
+    net::{SocketAddr, UdpSocket},
     os::unix::io::AsRawFd,
     ptr,
     task::{Context, Poll},
@@ -9,7 +9,6 @@ use std::{
 
 use async_trait::async_trait;
 use futures::{future::poll_fn, ready};
-use mio::net::UdpSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
@@ -20,7 +19,7 @@ pub fn check_support_tproxy() -> io::Result<()> {
 }
 
 pub struct UdpRedirSocket {
-    io: AsyncFd<mio::net::UdpSocket>,
+    io: AsyncFd<UdpSocket>,
 }
 
 impl UdpRedirSocket {
@@ -47,25 +46,37 @@ impl UdpRedirSocket {
 
         socket.bind(&SockAddr::from(addr))?;
 
-        let msock = mio::net::UdpSocket::from_socket(socket.into_udp_socket())?;
-        let io = AsyncFd::new(msock)?;
+        let io = AsyncFd::new(socket.into_udp_socket())?;
         Ok(UdpRedirSocket { io })
     }
 
     /// Send data to the socket to the given target address
     pub async fn send_to(&mut self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
-        poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
+        // poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
+
+        loop {
+            let mut write_guard = self.io.writable().await?;
+
+            match self.io.get_ref().send_to(buf, target) {
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                    write_guard.clear_ready();
+                    // false positive
+                }
+                x => return x,
+            }
+        }
     }
 
     fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
-        let mut write_guard = ready!(self.io.poll_write_ready(cx))?;
+        loop {
+            let mut write_guard = ready!(self.io.poll_write_ready(cx))?;
 
-        match self.io.get_ref().send_to(buf, target) {
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                write_guard.clear_ready();
-                Poll::Pending
+            match self.io.get_ref().send_to(buf, target) {
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                    write_guard.clear_ready();
+                }
+                x => return Poll::Ready(x),
             }
-            x => Poll::Ready(x),
         }
     }
 
@@ -73,28 +84,24 @@ impl UdpRedirSocket {
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.io.get_ref().local_addr()
     }
+}
 
-    fn poll_recv_from(
+impl UdpSocketRedir for UdpRedirSocket {
+    fn poll_recv_from_with_destination(
         &self,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<(usize, SocketAddr, SocketAddr)>> {
-        let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
+        loop {
+            let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-        match recv_from_with_destination(self.io.get_ref(), buf) {
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                read_guard.clear_ready();
-                Poll::Pending
+            match recv_from_with_destination(self.io.get_ref(), buf) {
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                    read_guard.clear_ready();
+                }
+                x => return Poll::Ready(x),
             }
-            x => Poll::Ready(x),
         }
-    }
-}
-
-#[async_trait]
-impl UdpSocketRedirExt for UdpRedirSocket {
-    async fn recv_from_redir(&mut self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
-        poll_fn(|cx| self.poll_recv_from(cx, buf)).await
     }
 }
 
