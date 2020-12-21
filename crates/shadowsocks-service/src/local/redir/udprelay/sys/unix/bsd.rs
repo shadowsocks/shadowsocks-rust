@@ -52,19 +52,7 @@ impl UdpRedirSocket {
 
     /// Send data to the socket to the given target address
     pub async fn send_to(&mut self, buf: &[u8], target: SocketAddr) -> io::Result<usize> {
-        // poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
-
-        loop {
-            let mut write_guard = self.io.writable().await?;
-
-            match self.io.get_ref().send_to(buf, target) {
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                    write_guard.clear_ready();
-                    // false positive
-                }
-                x => return x,
-            }
-        }
+        poll_fn(|cx| self.poll_send_to(cx, buf, target)).await
     }
 
     fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {

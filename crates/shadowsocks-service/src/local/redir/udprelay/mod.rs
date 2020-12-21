@@ -40,6 +40,13 @@ pub struct UdpRedir {
     context: Arc<ServiceContext>,
     redir_ty: RedirType,
     assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
+    cleanup_abortable: AbortHandle,
+}
+
+impl Drop for UdpRedir {
+    fn drop(&mut self) {
+        self.cleanup_abortable.abort();
+    }
 }
 
 impl UdpRedir {
@@ -50,14 +57,31 @@ impl UdpRedir {
         capacity: Option<usize>,
     ) -> UdpRedir {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
+        let assoc_map = Arc::new(Mutex::new(match capacity {
+            Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+            None => LruCache::with_expiry_duration(time_to_live),
+        }));
+
+        let cleanup_abortable = {
+            let assoc_map = assoc_map.clone();
+            let (cleanup_task, cleanup_abortable) = future::abortable(async move {
+                let mut interval = time::interval(time_to_live);
+                loop {
+                    interval.tick().await;
+
+                    // iter() will trigger a cleanup of expired associations
+                    let _ = assoc_map.lock().await.iter();
+                }
+            });
+            tokio::spawn(cleanup_task);
+            cleanup_abortable
+        };
 
         UdpRedir {
             context,
             redir_ty,
-            assoc_map: Arc::new(Mutex::new(match capacity {
-                Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
-                None => LruCache::with_expiry_duration(time_to_live),
-            })),
+            assoc_map,
+            cleanup_abortable,
         }
     }
 

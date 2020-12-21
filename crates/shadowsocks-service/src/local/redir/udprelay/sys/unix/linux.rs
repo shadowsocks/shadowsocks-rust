@@ -8,7 +8,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures::ready;
+use futures::{future::poll_fn, ready};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
