@@ -65,9 +65,8 @@ impl UdpRedir {
         let cleanup_abortable = {
             let assoc_map = assoc_map.clone();
             let (cleanup_task, cleanup_abortable) = future::abortable(async move {
-                let mut interval = time::interval(time_to_live);
                 loop {
-                    interval.tick().await;
+                    time::sleep(time_to_live).await;
 
                     // iter() will trigger a cleanup of expired associations
                     let _ = assoc_map.lock().await.iter();
