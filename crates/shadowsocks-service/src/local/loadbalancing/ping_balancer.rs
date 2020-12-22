@@ -120,7 +120,7 @@ impl PingBalancerInner {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
         if self.servers.len() > 1 {
-            self.check_once().await;
+            self.check_once(false).await;
         }
     }
 
@@ -140,7 +140,7 @@ impl PingBalancerInner {
     }
 
     /// Check each servers' score and update the best server's index
-    async fn check_once(&self) {
+    async fn check_once(&self, print_switch: bool) {
         let mut vfut = Vec::with_capacity(self.servers.len());
 
         for server in self.servers.iter() {
@@ -179,7 +179,7 @@ impl PingBalancerInner {
             }
             self.best_tcp_idx.store(best_idx, Ordering::Release);
 
-            if best_idx != old_best_idx {
+            if print_switch && best_idx != old_best_idx {
                 info!(
                     "switched best TCP server from {} to {}",
                     self.servers[old_best_idx].server_config().addr(),
@@ -202,7 +202,7 @@ impl PingBalancerInner {
             }
             self.best_udp_idx.store(best_idx, Ordering::Release);
 
-            if best_idx != old_best_idx {
+            if print_switch && best_idx != old_best_idx {
                 info!(
                     "switched best UDP server from {} to {}",
                     self.servers[old_best_idx].server_config().addr(),
@@ -214,7 +214,7 @@ impl PingBalancerInner {
 
     async fn checker_task_real(&self) {
         loop {
-            self.check_once().await;
+            self.check_once(true).await;
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
         }
     }
