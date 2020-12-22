@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, time::Duration};
 
 use futures::future::{self, Either};
-use log::{debug, trace};
+use log::trace;
 use shadowsocks::{
     config::ServerConfig,
     relay::{
@@ -34,7 +34,7 @@ where
     SW: AsyncWrite + AutoProxyIo + Unpin,
 {
     if shadow_reader.is_proxied() && shadow_writer.is_proxied() {
-        debug!(
+        trace!(
             "established tcp tunnel {} <-> {} through sever {} (outbound: {})",
             peer_addr,
             target_addr,
@@ -42,7 +42,7 @@ where
             svr_cfg.addr(),
         );
     } else {
-        debug!("established tcp tunnel {} <-> {} bypassed", peer_addr, target_addr);
+        trace!("established tcp tunnel {} <-> {} bypassed", peer_addr, target_addr);
         return establish_tcp_tunnel_bypassed(
             plain_reader,
             plain_writer,

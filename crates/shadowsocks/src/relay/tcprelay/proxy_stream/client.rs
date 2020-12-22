@@ -9,6 +9,7 @@ use std::{
 use bytes::{BufMut, BytesMut};
 use futures::ready;
 use lazy_static::lazy_static;
+use log::trace;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
@@ -95,6 +96,14 @@ where
         F: FnOnce(TcpStream) -> S,
     {
         let stream = OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts).await?;
+
+        trace!(
+            "connected tcp remote {} (outbound: {}) with {:?}",
+            svr_cfg.addr(),
+            svr_cfg.external_addr(),
+            opts
+        );
+
         Ok(ProxyClientStream::from_stream(
             context,
             map_fn(stream.into()),

@@ -34,7 +34,7 @@ async fn establish_client_tcp_redir<'a>(
     nodelay: bool,
 ) -> io::Result<()> {
     let svr_cfg = server.server_config();
-    trace!(
+    debug!(
         "establishing tcp redir tunnel {} <-> {} through sever {} (outbound: {})",
         peer_addr,
         addr,

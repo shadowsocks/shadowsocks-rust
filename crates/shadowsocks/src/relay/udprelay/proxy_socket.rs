@@ -48,6 +48,9 @@ impl ProxySocket {
         // Note: Plugins doesn't support UDP relay
 
         let socket = OutboundUdpSocket::connect_server_with_opts(&context, svr_cfg.addr(), opts).await?;
+
+        trace!("connected udp remote {} with {:?}", svr_cfg.addr(), opts);
+
         Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))
     }
 
