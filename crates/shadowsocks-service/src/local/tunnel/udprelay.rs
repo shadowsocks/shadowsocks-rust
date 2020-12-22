@@ -138,10 +138,10 @@ impl UdpTunnel {
                 let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
                 let socket = Arc::new(socket);
 
-                // Pending packets 64 should be good enough for a server.
+                // Pending packets 1024 should be good enough for a server.
                 // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
                 // being OOM.
-                let (sender, receiver) = mpsc::channel(64);
+                let (sender, receiver) = mpsc::channel(1024);
 
                 let (r2l_fut, r2l_abortable) = future::abortable(UdpAssociation::copy_r2l(
                     listener.clone(),

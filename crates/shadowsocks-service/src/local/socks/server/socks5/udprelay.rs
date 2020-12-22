@@ -211,10 +211,10 @@ impl UdpAssociation {
         assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
         balancer: PingBalancer,
     ) -> Arc<UdpAssociation> {
-        // Pending packets 64 should be good enough for a server.
+        // Pending packets 1024 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
         // being OOM.
-        let (sender, receiver) = mpsc::channel(64);
+        let (sender, receiver) = mpsc::channel(1024);
 
         let assoc = Arc::new(UdpAssociation {
             context,
