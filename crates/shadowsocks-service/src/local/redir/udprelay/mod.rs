@@ -489,7 +489,16 @@ impl UdpAssociationContext {
 
             // Create a socket binds to destination addr
             // This only works for systems that supports binding to non-local addresses
-            let inbound = UdpRedirSocket::bind(self.redir_ty, addr)?;
+            let inbound = match UdpRedirSocket::bind(self.redir_ty, addr) {
+                Ok(s) => s,
+                Err(err) => {
+                    error!(
+                        "failed to bind to dest {} for sending back to {}, error: {}",
+                        addr, self.peer_addr, err
+                    );
+                    continue;
+                }
+            };
 
             // Send back to client
             if let Err(err) = inbound.send_to(data, self.peer_addr).await {
@@ -497,6 +506,7 @@ impl UdpAssociationContext {
                     "udp failed to send back to client {}, from target {}, error: {}",
                     self.peer_addr, addr, err
                 );
+                continue;
             }
 
             trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
