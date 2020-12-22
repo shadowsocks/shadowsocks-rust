@@ -185,7 +185,7 @@ impl PingBalancerInner {
                 let mut best_idx = 0;
                 let mut best_score = u64::MAX;
                 for (idx, server) in self.servers.iter().enumerate() {
-                    let score = server.tcp_score().score();
+                    let score = server.udp_score().score();
                     if score < best_score {
                         best_idx = idx;
                         best_score = score;

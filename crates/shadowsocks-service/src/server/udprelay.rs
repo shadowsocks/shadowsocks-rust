@@ -153,6 +153,7 @@ impl Drop for UdpAssociation {
         for ab in self.abortables.lock().iter() {
             ab.abort();
         }
+        trace!("udp association for {} is closed", self.peer_addr);
     }
 }
 
