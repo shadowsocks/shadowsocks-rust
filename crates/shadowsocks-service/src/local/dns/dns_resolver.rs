@@ -210,6 +210,11 @@ impl DnsResolve for DnsResolver {
             }
         }
 
+        if vaddr.is_empty() {
+            let err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+            return Err(err);
+        }
+
         Ok(vaddr)
     }
 }

@@ -1184,17 +1184,7 @@ impl Config {
         }
 
         #[cfg(feature = "local-dns")]
-        if self.local_protocol == ProtocolType::Dns {
-            if self.dns_bind_addr.is_none() || self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `dns_bind_addr`, `local_dns_addr` or `remote_dns_addr` in configuration",
-                    None,
-                );
-                return Err(err);
-            }
-        } else if self.dns_bind_addr.is_some() {
-            // Run a DNS server in the same process
+        if self.local_protocol == ProtocolType::Dns || self.dns_bind_addr.is_some() {
             if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
                 let err = Error::new(
                     ErrorKind::MissingField,
