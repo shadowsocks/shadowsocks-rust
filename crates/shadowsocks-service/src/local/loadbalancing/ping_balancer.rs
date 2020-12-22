@@ -68,7 +68,7 @@ impl PingBalancerBuilder {
         self.servers.push(Arc::new(server));
     }
 
-    pub fn build(self) -> (PingBalancer, impl Future<Output = ()>) {
+    pub async fn build(self) -> (PingBalancer, impl Future<Output = ()>) {
         assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
 
         let balancer = PingBalancerInner {
@@ -78,6 +78,8 @@ impl PingBalancerBuilder {
             context: self.context,
             mode: self.mode,
         };
+
+        balancer.init_score().await;
 
         let shared = Arc::new(balancer);
         let inner = shared.clone();
@@ -114,6 +116,14 @@ impl PingBalancerInner {
 }
 
 impl PingBalancerInner {
+    async fn init_score(&self) {
+        assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
+
+        if self.servers.len() > 1 {
+            self.check_once().await;
+        }
+    }
+
     async fn checker_task(self: Arc<Self>) {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
@@ -130,78 +140,81 @@ impl PingBalancerInner {
     }
 
     /// Check each servers' score and update the best server's index
-    async fn checker_task_real(self: Arc<Self>) {
-        loop {
-            let mut vfut = Vec::with_capacity(self.servers.len());
+    async fn check_once(&self) {
+        let mut vfut = Vec::with_capacity(self.servers.len());
 
-            for server in self.servers.iter() {
-                if self.mode.enable_tcp() {
-                    let checker = PingChecker {
-                        server: server.clone(),
-                        server_type: ServerType::Tcp,
-                        context: self.context.clone(),
-                    };
-                    vfut.push(checker.check_update_score());
-                }
-
-                if self.mode.enable_udp() {
-                    let checker = PingChecker {
-                        server: server.clone(),
-                        server_type: ServerType::Udp,
-                        context: self.context.clone(),
-                    };
-                    vfut.push(checker.check_update_score());
-                }
-            }
-
-            future::join_all(vfut).await;
-
+        for server in self.servers.iter() {
             if self.mode.enable_tcp() {
-                let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
-
-                let mut best_idx = 0;
-                let mut best_score = u64::MAX;
-                for (idx, server) in self.servers.iter().enumerate() {
-                    let score = server.tcp_score().score();
-                    if score < best_score {
-                        best_idx = idx;
-                        best_score = score;
-                    }
-                }
-                self.best_tcp_idx.store(best_idx, Ordering::Release);
-
-                if best_idx != old_best_idx {
-                    info!(
-                        "switched best TCP server from {} to {}",
-                        self.servers[old_best_idx].server_config().addr(),
-                        self.servers[best_idx].server_config().addr()
-                    );
-                }
+                let checker = PingChecker {
+                    server: server.clone(),
+                    server_type: ServerType::Tcp,
+                    context: self.context.clone(),
+                };
+                vfut.push(checker.check_update_score());
             }
 
             if self.mode.enable_udp() {
-                let old_best_idx = self.best_udp_idx.load(Ordering::Acquire);
+                let checker = PingChecker {
+                    server: server.clone(),
+                    server_type: ServerType::Udp,
+                    context: self.context.clone(),
+                };
+                vfut.push(checker.check_update_score());
+            }
+        }
 
-                let mut best_idx = 0;
-                let mut best_score = u64::MAX;
-                for (idx, server) in self.servers.iter().enumerate() {
-                    let score = server.udp_score().score();
-                    if score < best_score {
-                        best_idx = idx;
-                        best_score = score;
-                    }
-                }
-                self.best_udp_idx.store(best_idx, Ordering::Release);
+        future::join_all(vfut).await;
 
-                if best_idx != old_best_idx {
-                    info!(
-                        "switched best UDP server from {} to {}",
-                        self.servers[old_best_idx].server_config().addr(),
-                        self.servers[best_idx].server_config().addr()
-                    );
+        if self.mode.enable_tcp() {
+            let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
+
+            let mut best_idx = 0;
+            let mut best_score = u64::MAX;
+            for (idx, server) in self.servers.iter().enumerate() {
+                let score = server.tcp_score().score();
+                if score < best_score {
+                    best_idx = idx;
+                    best_score = score;
                 }
             }
+            self.best_tcp_idx.store(best_idx, Ordering::Release);
 
+            if best_idx != old_best_idx {
+                info!(
+                    "switched best TCP server from {} to {}",
+                    self.servers[old_best_idx].server_config().addr(),
+                    self.servers[best_idx].server_config().addr()
+                );
+            }
+        }
+
+        if self.mode.enable_udp() {
+            let old_best_idx = self.best_udp_idx.load(Ordering::Acquire);
+
+            let mut best_idx = 0;
+            let mut best_score = u64::MAX;
+            for (idx, server) in self.servers.iter().enumerate() {
+                let score = server.udp_score().score();
+                if score < best_score {
+                    best_idx = idx;
+                    best_score = score;
+                }
+            }
+            self.best_udp_idx.store(best_idx, Ordering::Release);
+
+            if best_idx != old_best_idx {
+                info!(
+                    "switched best UDP server from {} to {}",
+                    self.servers[old_best_idx].server_config().addr(),
+                    self.servers[best_idx].server_config().addr()
+                );
+            }
+        }
+    }
+
+    async fn checker_task_real(&self) {
+        loop {
+            self.check_once().await;
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
         }
     }

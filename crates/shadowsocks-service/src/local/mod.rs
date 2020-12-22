@@ -2,7 +2,7 @@
 
 #[cfg(feature = "local-flow-stat")]
 use std::path::PathBuf;
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, trace, warn};
@@ -119,26 +119,49 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
     if enable_tcp {
         // Start plugins for TCP proxies
+
+        let mut plugins = Vec::with_capacity(config.server.len());
+
         for server in &mut config.server {
             if let Some(c) = server.plugin() {
                 let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
                 server.set_plugin_addr(plugin.local_addr().into());
-                vfut.push(
-                    async move {
-                        match plugin.join().await {
-                            Ok(status) => {
-                                error!("plugin exited with status: {}", status);
-                                Ok(())
-                            }
-                            Err(err) => {
-                                error!("plugin exited with error: {}", err);
-                                Err(err)
-                            }
+                plugins.push(plugin);
+            }
+        }
+
+        // Load balancer will check all servers' score before server's actual start.
+        // So we have to ensure all plugins have been started before that.
+        if config.server.len() > 1 && !plugins.is_empty() {
+            let mut check_fut = Vec::with_capacity(plugins.len());
+
+            for plugin in &plugins {
+                // 3 seconds is not a carefully selected value
+                // I choose that because any values bigger will make me fell too long.
+                check_fut.push(plugin.wait_started(Duration::from_secs(3)));
+            }
+
+            // Run all of them simutaneously
+            let _ = future::join_all(check_fut).await;
+        }
+
+        // Join all of them
+        for plugin in plugins {
+            vfut.push(
+                async move {
+                    match plugin.join().await {
+                        Ok(status) => {
+                            error!("plugin exited with status: {}", status);
+                            Ok(())
+                        }
+                        Err(err) => {
+                            error!("plugin exited with error: {}", err);
+                            Err(err)
                         }
                     }
-                    .boxed(),
-                );
-            }
+                }
+                .boxed(),
+            );
         }
     }
 
@@ -150,7 +173,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         for server in config.server {
             balancer_builder.add_server(ServerIdent::new(server));
         }
-        let (balancer, checker) = balancer_builder.build();
+        let (balancer, checker) = balancer_builder.build().await;
         tokio::spawn(checker);
 
         balancer
@@ -262,7 +285,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
 #[cfg(feature = "local-flow-stat")]
 async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::Result<()> {
-    use std::{slice, time::Duration};
+    use std::slice;
 
     use log::debug;
     use tokio::{io::AsyncWriteExt, net::UnixStream, time};

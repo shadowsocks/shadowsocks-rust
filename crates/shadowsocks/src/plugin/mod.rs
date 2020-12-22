@@ -16,10 +16,11 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     process::ExitStatus,
+    time::{Duration, Instant},
 };
 
 use log::{debug, error};
-use tokio::process::Child;
+use tokio::{net::TcpStream, process::Child, time};
 
 use crate::config::ServerAddr;
 
@@ -117,6 +118,30 @@ impl Plugin {
         self.process.wait().await
     }
 
+    /// Check if plugin have been started
+    pub async fn wait_started(&self, timeout: Duration) -> bool {
+        let start_time = Instant::now();
+
+        loop {
+            let now_time = Instant::now();
+            let elapsed_time = now_time - start_time;
+            if elapsed_time >= timeout {
+                return false;
+            }
+
+            let remain_time = timeout - elapsed_time;
+            match time::timeout(remain_time, TcpStream::connect(self.local_addr)).await {
+                Ok(Ok(..)) => {
+                    return true;
+                }
+                Ok(Err(..)) => {}
+                Err(..) => {
+                    return false;
+                }
+            }
+        }
+    }
+
     /// Get listen address of plugin
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
@@ -139,8 +164,6 @@ impl Drop for Plugin {
 
     #[cfg(unix)]
     fn drop(&mut self) {
-        use std::time::{Duration, Instant};
-
         debug!(
             "terminating plugin process {:?}, local_addr: {}",
             self.process.id(),
