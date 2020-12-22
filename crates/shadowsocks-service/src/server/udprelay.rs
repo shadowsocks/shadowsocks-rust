@@ -28,7 +28,7 @@ use super::context::ServiceContext;
 
 pub struct UdpServer {
     context: Arc<ServiceContext>,
-    assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
+    assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
     cleanup_abortable: AbortHandle,
 }
 
@@ -112,47 +112,32 @@ impl UdpServer {
         target_addr: Address,
         data: &[u8],
     ) -> io::Result<()> {
-        let assoc = match self.assoc_map.lock().await.entry(peer_addr) {
-            Entry::Occupied(occ) => occ.into_mut().clone(),
+        match self.assoc_map.lock().await.entry(peer_addr) {
+            Entry::Occupied(occ) => {
+                let assoc = occ.into_mut();
+                assoc.try_send((target_addr, Bytes::copy_from_slice(data)))
+            }
             Entry::Vacant(vac) => {
-                let assoc = UdpAssociation::new(
+                let assoc = vac.insert(UdpAssociation::new(
                     self.context.clone(),
                     listener.clone(),
                     peer_addr,
                     self.assoc_map.clone(),
-                );
-                vac.insert(assoc.clone());
-                assoc
+                ));
+                trace!("created udp association for {}", peer_addr);
+                assoc.try_send((target_addr, Bytes::copy_from_slice(data)))
             }
-        };
-
-        if let Err(..) = assoc.sender.try_send((target_addr, Bytes::copy_from_slice(data))) {
-            let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
-            return Err(err);
         }
-
-        Ok(())
     }
 }
 
 struct UdpAssociation {
-    context: Arc<ServiceContext>,
-    inbound: Arc<MonProxySocket>,
-    peer_addr: SocketAddr,
-    sender: mpsc::Sender<(Address, Bytes)>,
-    outbound_ipv4_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
-    outbound_ipv6_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
-    assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-    abortables: SpinMutex<Vec<AbortHandle>>,
-    target_cache: Mutex<LruCache<SocketAddr, Address>>,
+    assoc: Arc<UdpAssociationContext>,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
-        for ab in self.abortables.lock().iter() {
-            ab.abort();
-        }
-        trace!("udp association for {} is closed", self.peer_addr);
+        self.assoc.abortables.lock().abort_all();
     }
 }
 
@@ -161,14 +146,84 @@ impl UdpAssociation {
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
-        assoc_map: Arc<Mutex<LruCache<SocketAddr, Arc<UdpAssociation>>>>,
-    ) -> Arc<UdpAssociation> {
+        assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+    ) -> UdpAssociation {
+        UdpAssociation {
+            assoc: UdpAssociationContext::new(context, inbound, peer_addr, assoc_map),
+        }
+    }
+
+    fn try_send(&self, data: (Address, Bytes)) -> io::Result<()> {
+        if let Err(..) = self.assoc.sender.try_send(data) {
+            let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
+            return Err(err);
+        }
+        Ok(())
+    }
+}
+
+struct UdpAssociationTaskHandle {
+    abortables: Vec<AbortHandle>,
+    finished: bool,
+}
+
+impl UdpAssociationTaskHandle {
+    fn new() -> UdpAssociationTaskHandle {
+        UdpAssociationTaskHandle {
+            abortables: Vec::new(),
+            finished: false,
+        }
+    }
+
+    fn push_abortable(&mut self, abortable: AbortHandle) {
+        if self.finished {
+            // Association is already finished. Kill it immediately.
+            abortable.abort();
+        } else {
+            self.abortables.push(abortable);
+        }
+    }
+
+    fn abort_all(&mut self) {
+        self.finished = true;
+        for abortable in &self.abortables {
+            abortable.abort();
+        }
+        self.abortables.clear();
+    }
+}
+
+struct UdpAssociationContext {
+    context: Arc<ServiceContext>,
+    inbound: Arc<MonProxySocket>,
+    peer_addr: SocketAddr,
+    sender: mpsc::Sender<(Address, Bytes)>,
+    outbound_ipv4_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
+    outbound_ipv6_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
+    assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+    abortables: SpinMutex<UdpAssociationTaskHandle>,
+    target_cache: Mutex<LruCache<SocketAddr, Address>>,
+}
+
+impl Drop for UdpAssociationContext {
+    fn drop(&mut self) {
+        trace!("udp association for {} is closed", self.peer_addr);
+    }
+}
+
+impl UdpAssociationContext {
+    fn new(
+        context: Arc<ServiceContext>,
+        inbound: Arc<MonProxySocket>,
+        peer_addr: SocketAddr,
+        assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+    ) -> Arc<UdpAssociationContext> {
         // Pending packets 1024 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
         // being OOM.
         let (sender, receiver) = mpsc::channel(1024);
 
-        let assoc = Arc::new(UdpAssociation {
+        let assoc = Arc::new(UdpAssociationContext {
             context,
             inbound,
             peer_addr,
@@ -176,7 +231,7 @@ impl UdpAssociation {
             outbound_ipv4_socket: SpinMutex::new(None),
             outbound_ipv6_socket: SpinMutex::new(None),
             assoc_map,
-            abortables: SpinMutex::new(Vec::new()),
+            abortables: SpinMutex::new(UdpAssociationTaskHandle::new()),
             // Cache for remembering the original Address of target,
             // when recv_from a SocketAddr, we have to know whch Address that client was originally requested.
             //
@@ -190,7 +245,7 @@ impl UdpAssociation {
         };
         tokio::spawn(l2r_task);
 
-        assoc.abortables.lock().push(l2r_abortable);
+        assoc.abortables.lock().push_abortable(l2r_abortable);
         assoc
     }
 
@@ -261,7 +316,7 @@ impl UdpAssociation {
                 self.context.connect_opts_ref()
             );
             *outbound = Some(socket);
-            self.abortables.lock().push(r2l_abortable);
+            self.abortables.lock().push_abortable(r2l_abortable);
         }
 
         let socket = outbound.as_ref().unwrap();
@@ -301,7 +356,7 @@ impl UdpAssociation {
                 self.context.connect_opts_ref()
             );
             *outbound = Some(socket);
-            self.abortables.lock().push(r2l_abortable);
+            self.abortables.lock().push_abortable(r2l_abortable);
         }
 
         let socket = outbound.as_ref().unwrap();
