@@ -51,7 +51,7 @@ impl DnsResolver {
         self.connect_opts = connect_opts;
     }
 
-    pub async fn lookup(&self, msg: Message) -> io::Result<Message> {
+    async fn lookup(&self, msg: Message) -> io::Result<Message> {
         let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
 
         for _ in 0..self.attempts {

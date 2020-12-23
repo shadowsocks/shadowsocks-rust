@@ -2,12 +2,7 @@
 
 #[cfg(unix)]
 use std::path::Path;
-use std::{
-    io::{self, ErrorKind},
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
@@ -19,7 +14,6 @@ use shadowsocks::{
     net::{ConnectOpts, TcpStream as ShadowTcpStream, UdpSocket as ShadowUdpSocket},
     relay::{tcprelay::ProxyClientStream, udprelay::ProxySocket, Address},
 };
-use thiserror::Error;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 use tokio::{
@@ -27,7 +21,10 @@ use tokio::{
     net::{TcpStream, UdpSocket},
     time,
 };
-use trust_dns_proto::{error::ProtoError, op::Message};
+use trust_dns_proto::{
+    error::{ProtoError, ProtoErrorKind},
+    op::Message,
+};
 
 use crate::net::{FlowStat, MonProxySocket, MonProxyStream};
 
@@ -102,29 +99,20 @@ impl DnsClient {
 
     /// Make a DNS lookup
     #[allow(dead_code)]
-    pub async fn lookup(&mut self, mut msg: Message) -> Result<Message, LookupError> {
-        match self.inner_lookup(&mut msg).await {
-            Ok(msg) => Ok(msg),
-            Err(error) => Err(LookupError { error, msg }),
-        }
+    pub async fn lookup(&mut self, mut msg: Message) -> Result<Message, ProtoError> {
+        self.inner_lookup(&mut msg).await
     }
 
     /// Make a DNS lookup with timeout
-    pub async fn lookup_timeout(&mut self, mut msg: Message, timeout: Duration) -> Result<Message, LookupError> {
+    pub async fn lookup_timeout(&mut self, mut msg: Message, timeout: Duration) -> Result<Message, ProtoError> {
         match time::timeout(timeout, self.inner_lookup(&mut msg)).await {
             Ok(Ok(msg)) => Ok(msg),
-            Ok(Err(error)) => Err(LookupError { error, msg }),
-            Err(..) => {
-                let error: io::Error = ErrorKind::TimedOut.into();
-                Err(LookupError {
-                    error: error.into(),
-                    msg,
-                })
-            }
+            Ok(Err(error)) => Err(error),
+            Err(..) => Err(ProtoErrorKind::Timeout.into()),
         }
     }
 
-    async fn inner_lookup(&mut self, msg: &mut Message) -> Result<Message, ResolveError> {
+    async fn inner_lookup(&mut self, msg: &mut Message) -> Result<Message, ProtoError> {
         // Make a random ID
         msg.set_id(thread_rng().gen());
 
@@ -139,7 +127,7 @@ impl DnsClient {
                 let mut recv_buf = [0u8; 256];
                 let n = socket.recv(&mut recv_buf).await?;
 
-                Message::from_vec(&recv_buf[..n]).map_err(From::from)
+                Message::from_vec(&recv_buf[..n])
             }
             #[cfg(unix)]
             DnsClient::UnixStream { ref mut stream } => stream_query(stream, msg).await,
@@ -151,13 +139,13 @@ impl DnsClient {
                 let mut recv_buf = [0u8; 256];
                 let (n, _) = socket.recv(&mut recv_buf).await?;
 
-                Message::from_vec(&recv_buf[..n]).map_err(From::from)
+                Message::from_vec(&recv_buf[..n])
             }
         }
     }
 }
 
-pub async fn stream_query<S>(stream: &mut S, r: &Message) -> Result<Message, ResolveError>
+pub async fn stream_query<S>(stream: &mut S, r: &Message) -> Result<Message, ProtoError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -182,30 +170,5 @@ where
     }
     stream.read_exact(&mut rsp_bytes).await?;
 
-    Message::from_vec(&rsp_bytes).map_err(From::from)
-}
-
-/// DNS Resolve Error
-#[derive(Error, Debug)]
-pub enum ResolveError {
-    #[error("{0}")]
-    IoError(#[from] io::Error),
-    #[error("{0}")]
-    ProtoError(#[from] ProtoError),
-}
-
-impl From<ResolveError> for io::Error {
-    fn from(e: ResolveError) -> io::Error {
-        match e {
-            ResolveError::IoError(e) => e,
-            ResolveError::ProtoError(e) => From::from(e),
-        }
-    }
-}
-
-/// `lookup` Error
-#[derive(Debug)]
-pub struct LookupError {
-    pub error: ResolveError,
-    pub msg: Message,
+    Message::from_vec(&rsp_bytes)
 }

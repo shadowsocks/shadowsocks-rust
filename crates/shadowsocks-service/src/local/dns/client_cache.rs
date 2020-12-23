@@ -13,11 +13,11 @@ use std::{
 use log::trace;
 use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 use tokio::sync::Mutex;
-use trust_dns_proto::op::Message;
+use trust_dns_proto::{error::ProtoError, op::Message};
 
 use crate::local::context::ServiceContext;
 
-use super::upstream::{DnsClient, LookupError, ResolveError};
+use super::upstream::DnsClient;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 enum DnsClientKey {
@@ -49,9 +49,9 @@ impl DnsClientCache {
     pub async fn lookup_tcp_local(
         &self,
         ns: SocketAddr,
-        mut msg: Message,
+        msg: Message,
         connect_opts: &ConnectOpts,
-    ) -> Result<Message, ResolveError> {
+    ) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
         for _ in 0..self.retry_count {
@@ -67,10 +67,9 @@ impl DnsClientCache {
                 }
             };
 
-            let res = match client.lookup_timeout(msg, self.timeout).await {
+            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
                 Ok(msg) => msg,
-                Err(LookupError { error, msg: omsg }) => {
-                    msg = omsg;
+                Err(error) => {
                     last_err = Some(error);
                     continue;
                 }
@@ -87,9 +86,9 @@ impl DnsClientCache {
     pub async fn lookup_udp_local(
         &self,
         ns: SocketAddr,
-        mut msg: Message,
+        msg: Message,
         connect_opts: &ConnectOpts,
-    ) -> Result<Message, ResolveError> {
+    ) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
         for _ in 0..self.retry_count {
@@ -105,10 +104,9 @@ impl DnsClientCache {
                 }
             };
 
-            let res = match client.lookup_timeout(msg, self.timeout).await {
+            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
                 Ok(msg) => msg,
-                Err(LookupError { error, msg: omsg }) => {
-                    msg = omsg;
+                Err(error) => {
                     last_err = Some(error);
                     continue;
                 }
@@ -123,7 +121,7 @@ impl DnsClientCache {
     }
 
     #[cfg(unix)]
-    pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, mut msg: Message) -> Result<Message, ResolveError> {
+    pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
         let key = DnsClientKey::UnixStream(ns.as_ref().to_path_buf());
@@ -139,10 +137,9 @@ impl DnsClientCache {
                 }
             };
 
-            let res = match client.lookup_timeout(msg, self.timeout).await {
+            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
                 Ok(msg) => msg,
-                Err(LookupError { error, msg: omsg }) => {
-                    msg = omsg;
+                Err(error) => {
                     last_err = Some(error);
                     continue;
                 }
@@ -161,8 +158,8 @@ impl DnsClientCache {
         context: &ServiceContext,
         svr_cfg: &ServerConfig,
         ns: &Address,
-        mut msg: Message,
-    ) -> Result<Message, ResolveError> {
+        msg: Message,
+    ) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
         let key = DnsClientKey::UdpRemote(ns.clone());
@@ -187,10 +184,9 @@ impl DnsClientCache {
                 }
             };
 
-            let res = match client.lookup_timeout(msg, self.timeout).await {
+            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
                 Ok(msg) => msg,
-                Err(LookupError { error, msg: omsg }) => {
-                    msg = omsg;
+                Err(error) => {
                     last_err = Some(error);
                     continue;
                 }
@@ -209,8 +205,8 @@ impl DnsClientCache {
         context: &ServiceContext,
         svr_cfg: &ServerConfig,
         ns: &Address,
-        mut msg: Message,
-    ) -> Result<Message, ResolveError> {
+        msg: Message,
+    ) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
         let key = DnsClientKey::TcpRemote(ns.clone());
@@ -235,10 +231,9 @@ impl DnsClientCache {
                 }
             };
 
-            let res = match client.lookup_timeout(msg, self.timeout).await {
+            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
                 Ok(msg) => msg,
-                Err(LookupError { error, msg: omsg }) => {
-                    msg = omsg;
+                Err(error) => {
                     last_err = Some(error);
                     continue;
                 }

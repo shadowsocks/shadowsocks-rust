@@ -12,7 +12,7 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use futures::future;
+use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
@@ -555,7 +555,9 @@ impl DnsClient {
 
         for _ in 0..self.attempts {
             match self.lookup_remote_inner(query, remote_addr).await {
-                Ok(m) => return Ok(m),
+                Ok(m) => {
+                    return Ok(m);
+                }
                 Err(err) => last_err = err,
             }
         }
@@ -563,46 +565,110 @@ impl DnsClient {
         Err(last_err)
     }
 
+    // async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
+    //     let mut message = Message::new();
+    //     message.set_id(thread_rng().gen());
+    //     message.set_recursion_desired(true);
+    //     message.add_query(query.clone());
+
+    //     // Query UDP then TCP
+    //     let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+
+    //     if self.mode.enable_udp() {
+    //         let server = self.balancer.best_udp_server();
+
+    //         match self
+    //             .client_cache
+    //             .lookup_udp_remote(&self.context, server.server_config(), remote_addr, message.clone())
+    //             .await
+    //         {
+    //             Ok(msg) => return Ok(msg),
+    //             Err(err) => {
+    //                 last_err = err.into();
+    //             }
+    //         }
+    //     }
+
+    //     if self.mode.enable_tcp() {
+    //         let server = self.balancer.best_tcp_server();
+
+    //         match self
+    //             .client_cache
+    //             .lookup_tcp_remote(&self.context, server.server_config(), remote_addr, message)
+    //             .await
+    //         {
+    //             Ok(msg) => return Ok(msg),
+    //             Err(err) => {
+    //                 last_err = err.into();
+    //             }
+    //         }
+    //     }
+
+    //     Err(last_err)
+    // }
+
     async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(thread_rng().gen());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
-        // Query UDP then TCP
-        let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+        // Query UDP and TCP
 
-        if self.mode.enable_udp() {
-            let server = self.balancer.best_udp_server();
+        match self.mode {
+            Mode::TcpOnly => {
+                let server = self.balancer.best_tcp_server();
+                self.client_cache
+                    .lookup_tcp_remote(&self.context, server.server_config(), remote_addr, message)
+                    .await
+                    .map_err(From::from)
+            }
+            Mode::UdpOnly => {
+                let server = self.balancer.best_udp_server();
+                self.client_cache
+                    .lookup_udp_remote(&self.context, server.server_config(), remote_addr, message)
+                    .await
+                    .map_err(From::from)
+            }
+            Mode::TcpAndUdp => {
+                // Query TCP & UDP simutaneously
 
-            match self
-                .client_cache
-                .lookup_udp_remote(&self.context, server.server_config(), remote_addr, message.clone())
-                .await
-            {
-                Ok(msg) => return Ok(msg),
-                Err(err) => {
-                    last_err = err.into();
+                let message2 = message.clone();
+                let tcp_fut = async {
+                    // For most cases UDP query will return in 1s,
+                    // Then this future will be disabled and have no effect
+                    //
+                    // Randomly choose from 500ms ~ 1.5s for preventing obvious request pattern
+                    let sleep_time = thread_rng().gen_range(500, 1500);
+                    time::sleep(Duration::from_millis(sleep_time)).await;
+
+                    let server = self.balancer.best_tcp_server();
+                    self.client_cache
+                        .lookup_tcp_remote(&self.context, server.server_config(), remote_addr, message2)
+                        .await
+                };
+                let udp_fut = async {
+                    let server = self.balancer.best_udp_server();
+                    self.client_cache
+                        .lookup_udp_remote(&self.context, server.server_config(), remote_addr, message)
+                        .await
+                };
+
+                tokio::pin!(tcp_fut);
+                tokio::pin!(udp_fut);
+
+                match future::select(tcp_fut, udp_fut).await {
+                    Either::Left((res, next)) => match res {
+                        Ok(o) => Ok(o),
+                        Err(..) => next.await.map_err(From::from),
+                    },
+                    Either::Right((res, next)) => match res {
+                        Ok(o) => Ok(o),
+                        Err(..) => next.await.map_err(From::from),
+                    },
                 }
             }
         }
-
-        if self.mode.enable_tcp() {
-            let server = self.balancer.best_tcp_server();
-
-            match self
-                .client_cache
-                .lookup_tcp_remote(&self.context, server.server_config(), remote_addr, message)
-                .await
-            {
-                Ok(msg) => return Ok(msg),
-                Err(err) => {
-                    last_err = err.into();
-                }
-            }
-        }
-
-        Err(last_err)
     }
 
     async fn lookup_local(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
@@ -610,7 +676,9 @@ impl DnsClient {
 
         for _ in 0..self.attempts {
             match self.lookup_local_inner(query, local_addr).await {
-                Ok(m) => return Ok(m),
+                Ok(m) => {
+                    return Ok(m);
+                }
                 Err(err) => last_err = err,
             }
         }
