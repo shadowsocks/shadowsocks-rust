@@ -15,7 +15,7 @@ use winapi::{
     },
 };
 
-use crate::net::ConnectOpts;
+use crate::net::{AddrFamily, ConnectOpts};
 
 /// Create a `UdpSocket` binded to `addr`
 ///
@@ -98,7 +98,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, opts: &ConnectOpts) -> io::R
 /// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
 pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-    let bind_addr = match (af, config.bind_local_addr) {
+    let bind_addr = match (af, opts.bind_local_addr) {
         (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
         (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),

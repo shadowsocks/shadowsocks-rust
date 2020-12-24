@@ -193,7 +193,7 @@ fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
+fn setsockopt_with_opt<F: AsRawSocket>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
     let socket = unsafe { Socket::from_raw_socket(f.as_raw_socket()) };
 
     if let Some(buf_size) = opts.tcp.send_buffer_size {
