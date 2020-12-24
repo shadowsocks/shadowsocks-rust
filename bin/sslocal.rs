@@ -142,7 +142,7 @@ fn main() {
     #[cfg(feature = "local-dns")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_name_server_addr} "Specify the address of local DNS server, send queries directly")
+            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_socket_addr} "Specify the address of local DNS server, send queries directly")
             (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
             (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
         );
@@ -240,10 +240,10 @@ fn main() {
 
     #[cfg(feature = "local-dns")]
     {
-        use shadowsocks_service::config::NameServerAddr;
+        use std::net::SocketAddr;
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-            let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
+            let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
         }
 
@@ -263,12 +263,6 @@ fn main() {
         // A socket `protect_path` in CWD
         // Same as shadowsocks-libev's android.c
         config.outbound_vpn_protect_path = Some(From::from("protect_path"));
-
-        // Set default config.local_dns_addr
-        #[cfg(feature = "local-dns")]
-        if config.local_dns_addr.is_none() {
-            config.local_dns_addr = Some(From::from("local_dns_path"));
-        }
     }
 
     if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {

@@ -42,7 +42,7 @@ dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-tls", "trust-dns-resol
 dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https"]
 
 # Enable DNS-relay
-local-dns = ["local", "trust-dns-proto", "rand"]
+local-dns = ["local", "trust-dns", "trust-dns-proto", "rand"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report

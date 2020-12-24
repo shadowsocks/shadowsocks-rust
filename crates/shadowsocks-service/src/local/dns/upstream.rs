@@ -37,6 +37,7 @@ pub enum DnsClient {
         socket: UdpSocket,
     },
     #[cfg(unix)]
+    #[allow(dead_code)]
     UnixStream {
         stream: UnixStream,
     },

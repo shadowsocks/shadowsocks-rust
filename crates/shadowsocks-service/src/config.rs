@@ -70,8 +70,6 @@ use shadowsocks::{
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 
 use crate::acl::AccessControl;
-#[cfg(feature = "local-dns")]
-pub use crate::local::dns::config::NameServerAddr;
 
 #[cfg(feature = "trust-dns")]
 #[derive(Serialize, Deserialize, Debug)]
@@ -576,7 +574,7 @@ pub struct Config {
     ///
     /// Sending DNS query directly to this address
     #[cfg(feature = "local-dns")]
-    pub local_dns_addr: Option<NameServerAddr>,
+    pub local_dns_addr: Option<SocketAddr>,
     /// Remote DNS's address
     ///
     /// Sending DNS query through proxy to this address
