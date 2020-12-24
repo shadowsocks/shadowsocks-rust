@@ -130,7 +130,7 @@ impl UnixStream {
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                     write_guard.clear_ready();
                 }
-                x => Poll::Ready(x),
+                x => return Poll::Ready(x),
             }
         }
     }

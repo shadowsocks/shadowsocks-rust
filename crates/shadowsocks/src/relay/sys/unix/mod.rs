@@ -158,10 +158,10 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
 
     let socket = UdpSocket::bind(bind_addr).await?;
 
-    // Any traffic to localhost should be protected
+    // Any traffic except localhost should be protected
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
-    if !addr.ip().is_loopback() {
+    {
         if let Some(ref path) = config.vpn_protect_path {
             protect(path, socket.as_raw_fd()).await?;
         }
