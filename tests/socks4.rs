@@ -6,7 +6,7 @@ use std::{
 };
 
 use tokio::{
-    prelude::*,
+    io::{AsyncReadExt, AsyncWriteExt},
     time::{self, Duration},
 };
 

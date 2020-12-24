@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use byteorder::{BigEndian, ByteOrder};
 use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
-    prelude::*,
     time,
 };
 

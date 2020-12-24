@@ -2,7 +2,11 @@
 
 use std::time::Duration;
 
-use tokio::{net::TcpStream, prelude::*, time};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    time,
+};
 
 use shadowsocks_service::{
     config::{Config, ConfigType, ProtocolType},
