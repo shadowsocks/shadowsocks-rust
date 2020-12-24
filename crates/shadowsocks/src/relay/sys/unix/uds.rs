@@ -46,7 +46,7 @@ impl UnixStream {
                 Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
                     ready.clear_ready();
                 }
-                x => Poll::Ready(x),
+                x => return Poll::Ready(x),
             }
         }
     }
