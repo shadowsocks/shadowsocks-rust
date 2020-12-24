@@ -548,9 +548,11 @@ pub struct Config {
     pub server: Vec<ServerConfig>,
     /// Local server's bind address, or ShadowSocks server's outbound address
     pub local_addr: Option<ClientConfig>,
+
     /// Destination address for tunnel
     #[cfg(feature = "local-tunnel")]
     pub forward: Option<Address>,
+
     /// DNS configuration, uses system-wide DNS configuration by default
     ///
     /// Value could be a `IpAddr`, uses UDP DNS protocol with port `53`. For example: `8.8.8.8`
@@ -562,46 +564,11 @@ pub struct Config {
     /// - `quad9`, `quad9_tls`
     #[cfg(feature = "trust-dns")]
     pub dns: Option<ResolverConfig>,
-    /// Server mode, `tcp_only`, `tcp_and_udp`, and `udp_only`
-    pub mode: Mode,
-    /// Set `TCP_NODELAY` socket option
-    pub no_delay: bool,
-    /// Set `SO_MARK` socket option for outbound sockets
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub outbound_fwmark: Option<u32>,
-    /// Set `SO_BINDTODEVICE` socket option for outbound sockets
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub outbound_bind_interface: Option<OsString>,
-    /// Manager's configuration
-    pub manager: Option<ManagerConfig>,
-    /// Config is for Client or Server
-    pub config_type: ConfigType,
-    /// Protocol for local server
-    pub local_protocol: ProtocolType,
-    /// Timeout for UDP Associations, default is 5 minutes
-    pub udp_timeout: Option<Duration>,
-    /// Maximum number of UDP Associations, default is unconfigured
-    pub udp_max_associations: Option<usize>,
-    /// UDP relay's bind address, it uses `local_addr` by default
+    /// Uses IPv6 addresses first
     ///
-    /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
-    pub udp_bind_addr: Option<ClientConfig>,
-    /// `RLIMIT_NOFILE` option for *nix systems
-    pub nofile: Option<u64>,
-    /// ACL configuration
-    pub acl: Option<AccessControl>,
-    /// TCP Transparent Proxy type
-    #[cfg(feature = "local-redir")]
-    pub tcp_redir: RedirType,
-    /// UDP Transparent Proxy type
-    #[cfg(feature = "local-redir")]
-    pub udp_redir: RedirType,
-    /// Flow statistic report Unix socket path (only for Android)
-    #[cfg(feature = "local-flow-stat")]
-    pub stat_path: Option<PathBuf>,
-    /// Path to protect callback unix address, only for Android
-    #[cfg(target_os = "android")]
-    pub outbound_vpn_protect_path: Option<PathBuf>,
+    /// Set to `true` if you want to query IPv6 addresses before IPv4
+    pub ipv6_first: bool,
+
     /// Internal DNS's bind address
     #[cfg(feature = "local-dns")]
     pub dns_bind_addr: Option<ClientConfig>,
@@ -615,10 +582,63 @@ pub struct Config {
     /// Sending DNS query through proxy to this address
     #[cfg(feature = "local-dns")]
     pub remote_dns_addr: Option<Address>,
-    /// Uses IPv6 addresses first
+
+    /// Set `TCP_NODELAY` socket option
+    pub no_delay: bool,
+    /// `RLIMIT_NOFILE` option for *nix systems
+    pub nofile: Option<u64>,
+
+    /// Set `SO_MARK` socket option for outbound sockets
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub outbound_fwmark: Option<u32>,
+    /// Set `SO_BINDTODEVICE` socket option for outbound sockets
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub outbound_bind_interface: Option<OsString>,
+    /// Path to protect callback unix address, only for Android
+    #[cfg(target_os = "android")]
+    pub outbound_vpn_protect_path: Option<PathBuf>,
+
+    /// Set `SO_SNDBUF` for inbound sockets
+    pub inbound_send_buffer_size: Option<u32>,
+    /// Set `SO_RCVBUF` for inbound sockets
+    pub inbound_recv_buffer_size: Option<u32>,
+    /// Set `SO_SNDBUF` for outbound sockets
+    pub outbound_send_buffer_size: Option<u32>,
+    /// Set `SO_RCVBUF` for outbound sockets
+    pub outbound_recv_buffer_size: Option<u32>,
+
+    /// Manager's configuration
+    pub manager: Option<ManagerConfig>,
+
+    /// Server mode, `tcp_only`, `tcp_and_udp`, and `udp_only`
+    pub mode: Mode,
+    /// Config is for Client or Server
+    pub config_type: ConfigType,
+    /// Protocol for local server
+    pub local_protocol: ProtocolType,
+
+    /// Timeout for UDP Associations, default is 5 minutes
+    pub udp_timeout: Option<Duration>,
+    /// Maximum number of UDP Associations, default is unconfigured
+    pub udp_max_associations: Option<usize>,
+    /// UDP relay's bind address, it uses `local_addr` by default
     ///
-    /// Set to `true` if you want to query IPv6 addresses before IPv4
-    pub ipv6_first: bool,
+    /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
+    pub udp_bind_addr: Option<ClientConfig>,
+
+    /// ACL configuration
+    pub acl: Option<AccessControl>,
+
+    /// TCP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    pub tcp_redir: RedirType,
+    /// UDP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    pub udp_redir: RedirType,
+    /// Flow statistic report Unix socket path (only for Android)
+
+    #[cfg(feature = "local-flow-stat")]
+    pub stat_path: Option<PathBuf>,
 }
 
 /// Configuration parsing error kind
@@ -686,39 +706,55 @@ impl Config {
         Config {
             server: Vec::new(),
             local_addr: None,
+
             #[cfg(feature = "local-tunnel")]
             forward: None,
+
             #[cfg(feature = "trust-dns")]
             dns: None,
-            mode: Mode::TcpOnly,
-            no_delay: false,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            outbound_fwmark: None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            outbound_bind_interface: None,
-            manager: None,
-            config_type,
-            local_protocol: ProtocolType::default(),
-            udp_timeout: None,
-            udp_max_associations: None,
-            udp_bind_addr: None,
-            nofile: None,
-            acl: None,
-            #[cfg(feature = "local-redir")]
-            tcp_redir: RedirType::tcp_default(),
-            #[cfg(feature = "local-redir")]
-            udp_redir: RedirType::udp_default(),
-            #[cfg(feature = "local-flow-stat")]
-            stat_path: None,
-            #[cfg(target_os = "android")]
-            outbound_vpn_protect_path: None,
+            ipv6_first: false,
+
             #[cfg(feature = "local-dns")]
             dns_bind_addr: None,
             #[cfg(feature = "local-dns")]
             local_dns_addr: None,
             #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
-            ipv6_first: false,
+
+            no_delay: false,
+            nofile: None,
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            outbound_fwmark: None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            outbound_bind_interface: None,
+            #[cfg(target_os = "android")]
+            outbound_vpn_protect_path: None,
+
+            inbound_send_buffer_size: None,
+            inbound_recv_buffer_size: None,
+            outbound_send_buffer_size: None,
+            outbound_recv_buffer_size: None,
+
+            manager: None,
+
+            mode: Mode::TcpOnly,
+            config_type,
+            local_protocol: ProtocolType::default(),
+
+            udp_timeout: None,
+            udp_max_associations: None,
+            udp_bind_addr: None,
+
+            acl: None,
+
+            #[cfg(feature = "local-redir")]
+            tcp_redir: RedirType::tcp_default(),
+            #[cfg(feature = "local-redir")]
+            udp_redir: RedirType::udp_default(),
+
+            #[cfg(feature = "local-flow-stat")]
+            stat_path: None,
         }
     }
 

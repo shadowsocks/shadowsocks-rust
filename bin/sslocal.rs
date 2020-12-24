@@ -70,6 +70,11 @@ fn main() {
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
 
         (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
+
+        (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
+        (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
+        (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
+        (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
     );
 
     // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
@@ -339,6 +344,19 @@ fn main() {
 
     if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
         config.udp_bind_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
+    }
+
+    if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
+        config.inbound_send_buffer_size = Some(bs.parse::<u32>().expect("inbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("INBOUND_RECV_BUFFER_SIZE") {
+        config.inbound_recv_buffer_size = Some(bs.parse::<u32>().expect("inbound-recv-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_SEND_BUFFER_SIZE") {
+        config.outbound_send_buffer_size = Some(bs.parse::<u32>().expect("outbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
+        config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
     }
 
     // DONE READING options

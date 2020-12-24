@@ -2,15 +2,17 @@
 
 use std::{io, net::SocketAddr};
 
+use lazy_static::lazy_static;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
+    net::TcpStream,
 };
 
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
     crypto::v1::CipherKind,
+    net::{AcceptOpts, TcpListener},
     relay::tcprelay::proxy_stream::server::ProxyServerStream,
 };
 
@@ -25,10 +27,25 @@ pub struct ProxyListener {
 impl ProxyListener {
     /// Create a `ProxyListener` binding to a specific address
     pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxyListener> {
+        lazy_static! {
+            static ref DEFAULT_ACCEPT_OPTS: AcceptOpts = AcceptOpts::default();
+        };
+        ProxyListener::bind_with_opts(context, svr_cfg, DEFAULT_ACCEPT_OPTS.clone()).await
+    }
+
+    /// Create a `ProxyListener` binding to a specific address with opts
+    pub async fn bind_with_opts(
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+        accept_opts: AcceptOpts,
+    ) -> io::Result<ProxyListener> {
         let listener = match svr_cfg.external_addr() {
-            ServerAddr::SocketAddr(sa) => TcpListener::bind(sa).await?,
+            ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(sa, accept_opts).await?,
             ServerAddr::DomainName(domain, port) => {
-                lookup_then!(&context, &domain, *port, |addr| { TcpListener::bind(addr).await })?.1
+                lookup_then!(&context, &domain, *port, |addr| {
+                    TcpListener::bind_with_opts(&addr, accept_opts.clone()).await
+                })?
+                .1
             }
         };
         Ok(ProxyListener::from_listener(context, listener, svr_cfg))

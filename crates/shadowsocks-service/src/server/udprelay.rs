@@ -300,7 +300,8 @@ impl UdpAssociationContext {
         if outbound.is_none() {
             // Initialize bypass task
 
-            let socket = OutboundUdpSocket::bind_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
+            let socket =
+                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
             let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
 
             let (r2l_fut, r2l_abortable) = {
@@ -340,7 +341,8 @@ impl UdpAssociationContext {
         if outbound.is_none() {
             // Initialize bypass task
 
-            let socket = OutboundUdpSocket::bind_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
+            let socket =
+                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
             let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
 
             let (r2l_fut, r2l_abortable) = {

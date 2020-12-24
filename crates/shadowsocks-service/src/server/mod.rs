@@ -9,7 +9,10 @@ use futures::{future, FutureExt};
 use log::{trace, warn};
 #[cfg(feature = "trust-dns")]
 use shadowsocks::dns_resolver::DnsResolver;
-use shadowsocks::{config::ServerAddr, net::ConnectOpts};
+use shadowsocks::{
+    config::ServerAddr,
+    net::{AcceptOpts, ConnectOpts},
+};
 
 use crate::config::{Config, ConfigType};
 
@@ -37,7 +40,7 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut servers = Vec::new();
 
-    let connect_opts = ConnectOpts {
+    let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
@@ -61,6 +64,15 @@ pub async fn run(config: Config) -> io::Result<()> {
         ..Default::default()
     };
 
+    connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
+    connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
+    connect_opts.tcp.nodelay = config.no_delay;
+
+    let mut accept_opts = AcceptOpts::default();
+    accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
+    accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
+    accept_opts.tcp.nodelay = config.no_delay;
+
     #[cfg(feature = "trust-dns")]
     let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
 
@@ -73,6 +85,8 @@ pub async fn run(config: Config) -> io::Result<()> {
         server.set_dns_resolver(resolver.clone());
 
         server.set_connect_opts(connect_opts.clone());
+        server.set_accept_opts(accept_opts.clone());
+
         if let Some(c) = config.udp_max_associations {
             server.set_udp_capacity(c);
         }
@@ -82,9 +96,6 @@ pub async fn run(config: Config) -> io::Result<()> {
         server.set_mode(config.mode);
         if let Some(ref m) = config.manager {
             server.set_manager_addr(m.addr.clone());
-        }
-        if config.no_delay {
-            server.set_nodelay(true);
         }
 
         if let Some(ref acl) = acl {

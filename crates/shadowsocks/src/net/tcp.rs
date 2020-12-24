@@ -8,8 +8,13 @@ use std::{
     task::{self, Poll},
 };
 
+use futures::{future, ready};
 use pin_project::pin_project;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use socket2::Socket;
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream},
+};
 
 use crate::{
     context::Context,
@@ -17,11 +22,11 @@ use crate::{
     ServerAddr,
 };
 
-use super::connect_opt::ConnectOpts;
+use super::{AcceptOpts, ConnectOpts};
 
 /// TcpStream for outbound connections
 #[pin_project]
-pub struct TcpStream(#[pin] tokio::net::TcpStream);
+pub struct TcpStream(#[pin] TokioTcpStream);
 
 impl TcpStream {
     /// Connects to address
@@ -69,7 +74,7 @@ impl TcpStream {
 }
 
 impl Deref for TcpStream {
-    type Target = tokio::net::TcpStream;
+    type Target = TokioTcpStream;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -102,14 +107,107 @@ impl AsyncWrite for TcpStream {
     }
 }
 
-impl From<tokio::net::TcpStream> for TcpStream {
-    fn from(s: tokio::net::TcpStream) -> TcpStream {
+impl From<TokioTcpStream> for TcpStream {
+    fn from(s: TokioTcpStream) -> TcpStream {
         TcpStream(s)
     }
 }
 
-impl Into<tokio::net::TcpStream> for TcpStream {
-    fn into(self) -> tokio::net::TcpStream {
+impl Into<TokioTcpStream> for TcpStream {
+    fn into(self) -> TokioTcpStream {
         self.0
     }
+}
+
+/// `TcpListener` for accepting inbound connections
+pub struct TcpListener {
+    inner: TokioTcpListener,
+    accept_opts: AcceptOpts,
+}
+
+impl TcpListener {
+    /// Creates a new TcpListener, which will be bound to the specified address.
+    pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
+        let inner = TokioTcpListener::bind(addr).await?;
+        Ok(TcpListener { inner, accept_opts })
+    }
+
+    /// Create a `TcpListener` from tokio's `TcpListener`
+    pub fn from_listener(listener: TokioTcpListener, accept_opts: AcceptOpts) -> TcpListener {
+        TcpListener {
+            inner: listener,
+            accept_opts,
+        }
+    }
+
+    /// Polls to accept a new incoming connection to this listener.
+    pub fn poll_accept(&self, cx: &mut task::Context<'_>) -> Poll<io::Result<(TokioTcpStream, SocketAddr)>> {
+        let (stream, peer_addr) = ready!(self.inner.poll_accept(cx))?;
+        setsockopt_with_opt(&stream, &self.accept_opts)?;
+        Poll::Ready(Ok((stream, peer_addr)))
+    }
+
+    /// Accept a new incoming connection to this listener
+    pub async fn accept(&self) -> io::Result<(TokioTcpStream, SocketAddr)> {
+        future::poll_fn(|cx| self.poll_accept(cx)).await
+    }
+}
+
+impl Deref for TcpListener {
+    type Target = TokioTcpListener;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for TcpListener {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket};
+
+#[cfg(unix)]
+fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
+    let socket = unsafe { Socket::from_raw_fd(f.as_raw_fd()) };
+
+    if let Some(buf_size) = opts.tcp.send_buffer_size {
+        socket.set_send_buffer_size(buf_size as usize)?;
+    }
+
+    if let Some(buf_size) = opts.tcp.recv_buffer_size {
+        socket.set_recv_buffer_size(buf_size as usize)?;
+    }
+
+    if opts.tcp.nodelay {
+        socket.set_nodelay(true)?;
+    }
+
+    let _ = socket.into_raw_fd();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
+    let socket = unsafe { Socket::from_raw_socket(f.as_raw_socket()) };
+
+    if let Some(buf_size) = opts.tcp.send_buffer_size {
+        socket.set_send_buffer_size(buf_size as usize)?;
+    }
+
+    if let Some(buf_size) = opts.tcp.recv_buffer_size {
+        socket.set_recv_buffer_size(buf_size as usize)?;
+    }
+
+    if opts.tcp.nodelay {
+        socket.set_nodelay(true)?;
+    }
+
+    let _ = socket.into_raw_socket();
+    Ok(())
 }

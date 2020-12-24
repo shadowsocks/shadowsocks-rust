@@ -23,7 +23,7 @@ pub trait DnsResolve {
 /// Collections of DNS resolver
 pub enum DnsResolver {
     /// System Resolver, which is tokio's builtin resolver
-    System,
+    System(AtomicBool),
     #[cfg(feature = "trust-dns")]
     /// Trust-DNS resolver
     TrustDns(TokioAsyncResolver),
@@ -33,14 +33,14 @@ pub enum DnsResolver {
 
 impl Default for DnsResolver {
     fn default() -> DnsResolver {
-        DnsResolver::System
+        DnsResolver::system_resolver()
     }
 }
 
 impl Debug for DnsResolver {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            DnsResolver::System => f.write_str("System"),
+            DnsResolver::System(..) => f.write_str("System"),
             #[cfg(feature = "trust-dns")]
             DnsResolver::TrustDns(..) => f.write_str("TrustDns(..)"),
             DnsResolver::Custom(..) => f.write_str("Custom(..)"),
@@ -85,7 +85,7 @@ where
 impl DnsResolver {
     /// Use system DNS resolver. Tokio will call `getaddrinfo` in blocking pool.
     pub fn system_resolver() -> DnsResolver {
-        DnsResolver::System
+        DnsResolver::System(AtomicBool::new(false))
     }
 
     /// Use trust-dns DNS resolver (with DNS cache)
@@ -106,9 +106,8 @@ impl DnsResolver {
     /// Resolve address into `SocketAddr`s
     pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
         match *self {
-            DnsResolver::System => {
-                static TOKIO_USED: AtomicBool = AtomicBool::new(false);
-                if !TOKIO_USED.swap(true, Ordering::Relaxed) {
+            DnsResolver::System(ref warned) => {
+                if !warned.swap(true, Ordering::Relaxed) {
                     warn!("Tokio resolver is used. Performance might deteriorate.");
                 }
 
@@ -157,5 +156,10 @@ impl DnsResolver {
                 }
             }
         }
+    }
+
+    /// Check if currently using system resolver
+    pub fn is_system_resolver(&self) -> bool {
+        matches!(*self, DnsResolver::System(..))
     }
 }

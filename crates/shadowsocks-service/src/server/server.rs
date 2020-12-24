@@ -12,7 +12,7 @@ use log::{error, trace};
 use shadowsocks::{
     config::{ManagerAddr, ServerConfig},
     dns_resolver::DnsResolver,
-    net::ConnectOpts,
+    net::{AcceptOpts, ConnectOpts},
     plugin::{Plugin, PluginMode},
     ManagerClient,
 };
@@ -30,7 +30,7 @@ pub struct Server {
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     manager_addr: Option<ManagerAddr>,
-    nodelay: bool,
+    accept_opts: AcceptOpts,
 }
 
 impl Server {
@@ -48,7 +48,7 @@ impl Server {
             udp_expiry_duration: None,
             udp_capacity: None,
             manager_addr: None,
-            nodelay: false,
+            accept_opts: AcceptOpts::default(),
         }
     }
 
@@ -93,11 +93,6 @@ impl Server {
         &self.svr_cfg
     }
 
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
-    }
-
     /// Set customized DNS resolver
     pub fn set_dns_resolver(&mut self, resolver: Arc<DnsResolver>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set DNS resolver on a shared context");
@@ -108,6 +103,11 @@ impl Server {
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set ACL on a shared context");
         context.set_acl(acl);
+    }
+
+    /// Set `AcceptOpts` for accepting new connections
+    pub fn set_accept_opts(&mut self, opts: AcceptOpts) {
+        self.accept_opts = opts;
     }
 
     /// Start serving
@@ -156,7 +156,7 @@ impl Server {
     }
 
     async fn run_tcp_server(&self) -> io::Result<()> {
-        let server = TcpServer::new(self.context.clone(), self.nodelay);
+        let server = TcpServer::new(self.context.clone(), self.accept_opts.clone());
         server.run(&self.svr_cfg).await
     }
 

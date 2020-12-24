@@ -17,12 +17,12 @@ use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
     lookup_then,
-    net::UdpSocket as ShadowUdpSocket,
+    net::{TcpListener, UdpSocket as ShadowUdpSocket},
     relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpStream, UdpSocket},
     time,
 };
 use trust_dns_proto::{
@@ -44,7 +44,6 @@ pub struct Dns {
     mode: Mode,
     local_addr: Arc<NameServerAddr>,
     remote_addr: Arc<Address>,
-    nodelay: bool,
 }
 
 impl Dns {
@@ -61,18 +60,12 @@ impl Dns {
             mode: Mode::UdpOnly,
             local_addr: Arc::new(local_addr),
             remote_addr: Arc::new(remote_addr),
-            nodelay: false,
         }
     }
 
     /// Set remote server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
-    }
-
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
     }
 
     /// Run server
@@ -92,10 +85,12 @@ impl Dns {
 
     async fn run_tcp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
         let listener = match *bind_addr {
-            ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
+            ClientConfig::SocketAddr(ref saddr) => {
+                TcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
+            }
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    TcpListener::bind(addr).await
+                    TcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
                 })?
                 .1
             }
@@ -117,10 +112,6 @@ impl Dns {
                     continue;
                 }
             };
-
-            if self.nodelay {
-                let _ = stream.set_nodelay(true);
-            }
 
             tokio::spawn(Dns::handle_tcp_stream(
                 client.clone(),

@@ -6,7 +6,7 @@ use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
     crypto::v1::CipherKind,
-    net::TcpStream as OutboundTcpStream,
+    net::{AcceptOpts, TcpStream as OutboundTcpStream},
     relay::{
         socks5::Address,
         tcprelay::{
@@ -25,16 +25,16 @@ use super::context::ServiceContext;
 
 pub struct TcpServer {
     context: Arc<ServiceContext>,
-    nodelay: bool,
+    accept_opts: AcceptOpts,
 }
 
 impl TcpServer {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool) -> TcpServer {
-        TcpServer { context, nodelay }
+    pub fn new(context: Arc<ServiceContext>, accept_opts: AcceptOpts) -> TcpServer {
+        TcpServer { context, accept_opts }
     }
 
     pub async fn run(self, svr_cfg: &ServerConfig) -> io::Result<()> {
-        let listener = ProxyListener::bind(self.context.context(), svr_cfg).await?;
+        let listener = ProxyListener::bind_with_opts(self.context.context(), svr_cfg, self.accept_opts).await?;
 
         info!(
             "shadowsocks tcp server listening on {}, inbound address {}",
@@ -43,26 +43,20 @@ impl TcpServer {
         );
 
         loop {
-            let (local_stream, peer_addr) = match listener
-                .accept_map(|s| MonProxyStream::from_stream(s, self.context.flow_stat()))
-                .await
-            {
-                Ok(s) => s,
-                Err(err) => {
-                    error!("tcp server accept failed with error: {}", err);
-                    time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
+            let flow_stat = self.context.flow_stat();
 
-            if self.nodelay {
-                let stream = local_stream.get_ref().get_ref();
-                stream.set_nodelay(true)?;
-            }
+            let (local_stream, peer_addr) =
+                match listener.accept_map(|s| MonProxyStream::from_stream(s, flow_stat)).await {
+                    Ok(s) => s,
+                    Err(err) => {
+                        error!("tcp server accept failed with error: {}", err);
+                        time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
 
             let client = TcpServerClient {
                 context: self.context.clone(),
-                nodelay: self.nodelay,
                 method: svr_cfg.method(),
                 peer_addr,
                 stream: local_stream,
@@ -79,7 +73,6 @@ impl TcpServer {
 
 struct TcpServerClient {
     context: Arc<ServiceContext>,
-    nodelay: bool,
     method: CipherKind,
     peer_addr: SocketAddr,
     stream: ProxyServerStream<MonProxyStream<TokioTcpStream>>,
@@ -122,10 +115,6 @@ impl TcpServerClient {
             self.context.connect_opts_ref(),
         )
         .await?;
-
-        if self.nodelay {
-            remote_stream.set_nodelay(true)?;
-        }
 
         let (mut lr, mut lw) = self.stream.into_split();
         let (mut rr, mut rw) = remote_stream.split();

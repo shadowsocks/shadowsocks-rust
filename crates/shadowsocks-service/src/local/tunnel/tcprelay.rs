@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{lookup_then, relay::socks5::Address};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -35,6 +35,7 @@ pub async fn run_tcp_tunnel(
             .1
         }
     };
+    let listener = ShadowTcpListener::from_listener(listener, context.accept_opts());
 
     info!("shadowsocks TCP tunnel listening on {}", listener.local_addr()?);
 
