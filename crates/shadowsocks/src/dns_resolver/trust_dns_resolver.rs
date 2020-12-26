@@ -63,7 +63,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> R
                 } else {
                     use trust_dns_resolver::error::ResolveError;
 
-                    Err(ResolveError::from("current platform doesn't support trust-dns".to_owned()))
+                    Err(ResolveError::from("current platform doesn't support trust-dns resolver with system configured".to_owned()))
                 }
             }
         }

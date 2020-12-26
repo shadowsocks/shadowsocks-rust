@@ -74,7 +74,13 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.nodelay = config.no_delay;
 
     #[cfg(feature = "trust-dns")]
-    let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
+    let resolver = if config.dns.is_some() || crate::hint_support_default_system_resolver() {
+        Some(Arc::new(
+            DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?,
+        ))
+    } else {
+        None
+    };
 
     let acl = config.acl.map(Arc::new);
 
@@ -82,7 +88,9 @@ pub async fn run(config: Config) -> io::Result<()> {
         let mut server = Server::new(svr_cfg);
 
         #[cfg(feature = "trust-dns")]
-        server.set_dns_resolver(resolver.clone());
+        if let Some(ref r) = resolver {
+            server.set_dns_resolver(r.clone());
+        }
 
         server.set_connect_opts(connect_opts.clone());
         server.set_accept_opts(accept_opts.clone());

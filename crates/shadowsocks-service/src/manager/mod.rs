@@ -37,7 +37,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     manager.set_nodelay(config.no_delay);
 
     #[cfg(feature = "trust-dns")]
-    {
+    if config.dns.is_some() || crate::hint_support_default_system_resolver() {
         use shadowsocks::dns_resolver::DnsResolver;
 
         let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);

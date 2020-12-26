@@ -71,3 +71,15 @@ mod sys;
 
 /// Default UDP association's expire duration
 const DEFAULT_UDP_EXPIRY_DURATION: Duration = Duration::from_secs(5 * 60);
+
+#[cfg(feature = "trust-dns")]
+fn hint_support_default_system_resolver() -> bool {
+    // Nearly all *nix system have /etc/resolv.conf, except Android.
+    // macOS have to use system provided resolver.
+    cfg!(all(
+        unix,
+        not(target_os = "android"),
+        not(target_os = "macos"),
+        not(target_os = "ios")
+    ))
+}
