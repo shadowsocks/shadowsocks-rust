@@ -19,7 +19,6 @@ full = [
     "server",
     "manager",
     "trust-dns",
-    "local-dns",
     "local-http",
     "local-http-rustls",
     "local-redir",
