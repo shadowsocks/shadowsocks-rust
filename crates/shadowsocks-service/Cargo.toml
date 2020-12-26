@@ -61,7 +61,7 @@ local-socks4 = ["local"]
 
 [dependencies]
 log = "0.4"
-log4rs = "0.13"
+log4rs = "1.0"
 
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
@@ -74,7 +74,7 @@ lru_time_cache = "0.11"
 bytes = "1.0"
 byte_string = "1.0"
 byteorder = "1.3"
-rand = { version = "0.7", optional = true }
+rand = { version = "0.8", optional = true }
 
 futures = "0.3"
 tokio = { version = "1.0", features = ["full"] }
