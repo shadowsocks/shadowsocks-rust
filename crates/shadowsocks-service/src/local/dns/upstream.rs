@@ -21,7 +21,7 @@ use tokio::{
     net::{TcpStream, UdpSocket},
     time,
 };
-use trust_dns_proto::{
+use trust_dns_resolver::proto::{
     error::{ProtoError, ProtoErrorKind},
     op::Message,
 };

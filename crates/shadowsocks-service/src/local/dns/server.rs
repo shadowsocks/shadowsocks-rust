@@ -25,7 +25,7 @@ use tokio::{
     net::{TcpStream, UdpSocket},
     time,
 };
-use trust_dns_proto::{
+use trust_dns_resolver::proto::{
     op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
     rr::{DNSClass, Name, RData, RecordType},
 };

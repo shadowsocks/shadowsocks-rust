@@ -167,12 +167,6 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 
 [[package]]
 name = "bytes"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0dcbc35f504eb6fc275a6d20e4ebcda18cf50d40ba6fabff8c711fa16cb3b16"
-
-[[package]]
-name = "bytes"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad1f8e949d755f9d79112b5bb46938e0ef9d3804a0b16dfab13aafcaa5f0fa72"
@@ -1577,9 +1571,8 @@ dependencies = [
  "thiserror",
  "tokio 1.0.1",
  "tokio-native-tls",
- "tokio-rustls 0.22.0",
+ "tokio-rustls",
  "tower",
- "trust-dns-proto",
  "trust-dns-resolver",
  "webpki-roots",
 ]
@@ -1807,22 +1800,6 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "720ba21c25078711bf456d607987d95bce90f7c3bea5abe1db587862e7a1e87c"
-dependencies = [
- "autocfg",
- "bytes 0.6.0",
- "libc",
- "memchr",
- "mio",
- "num_cpus",
- "pin-project-lite 0.2.0",
- "slab",
-]
-
-[[package]]
-name = "tokio"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d258221f566b6c803c7b4714abadc080172b272090cdc5e244a6d4dd13c3a6bd"
@@ -1860,17 +1837,6 @@ checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
  "native-tls",
  "tokio 1.0.1",
-]
-
-[[package]]
-name = "tokio-rustls"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "609ada6f5bf21315925c6e43d78dc51fba5c5968a995f95345b4781cc06f37eb"
-dependencies = [
- "rustls",
- "tokio 0.3.6",
- "webpki",
 ]
 
 [[package]]
@@ -2095,7 +2061,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#0662ab66acf5ce40a20df72ed82766236245c0ef"
+source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#29c8cf960fdc994cf5bf0f6ed228b292091b59ad"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -2112,14 +2078,14 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
- "tokio 0.3.6",
+ "tokio 1.0.1",
  "url",
 ]
 
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#0662ab66acf5ce40a20df72ed82766236245c0ef"
+source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#29c8cf960fdc994cf5bf0f6ed228b292091b59ad"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -2133,8 +2099,8 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
- "tokio 0.3.6",
- "tokio-rustls 0.21.1",
+ "tokio 1.0.1",
+ "tokio-rustls",
  "trust-dns-proto",
  "trust-dns-rustls",
  "webpki-roots",
@@ -2143,15 +2109,15 @@ dependencies = [
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#0662ab66acf5ce40a20df72ed82766236245c0ef"
+source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#29c8cf960fdc994cf5bf0f6ed228b292091b59ad"
 dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
  "log",
  "rustls",
- "tokio 0.3.6",
- "tokio-rustls 0.21.1",
+ "tokio 1.0.1",
+ "tokio-rustls",
  "trust-dns-proto",
  "webpki",
 ]

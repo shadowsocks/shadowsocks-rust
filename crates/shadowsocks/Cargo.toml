@@ -47,7 +47,7 @@ mio = "0.7"
 socket2 = "0.3"
 tokio = { version = "1.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt"] }
 
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
+trust-dns-resolver = { git = "https://github.com/messense/trust-dns.git", branch = "tokio-1", optional = true }
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 shadowsocks-crypto = { version = "0.1", features = ["ring"] }
