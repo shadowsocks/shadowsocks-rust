@@ -45,7 +45,7 @@ async-trait = "0.1"
 
 mio = "0.7"
 socket2 = "0.3"
-tokio = { version = "0.3.1", features = ["io-util", "macros", "net", "parking_lot", "process", "rt"] }
+tokio = { version = "1.0.1", features = ["io-util", "macros", "net", "parking_lot", "process", "rt"] }
 
 trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", branch = "main", optional = true }
 
