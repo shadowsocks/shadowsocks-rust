@@ -233,7 +233,7 @@ impl DecryptedReader {
 
         while self.buffer.len() < size {
             let remaining = size - self.buffer.len();
-            let buffer = &mut self.buffer.bytes_mut()[..remaining];
+            let buffer = &mut self.buffer.chunk_mut()[..remaining];
 
             let mut read_buf =
                 ReadBuf::uninit(unsafe { slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut _, remaining) });
@@ -330,7 +330,7 @@ impl EncryptedWriter {
                     let length_size = 2 + self.cipher.tag_len();
                     self.buffer.reserve(length_size);
 
-                    let mbuf = &mut self.buffer.bytes_mut()[..length_size];
+                    let mbuf = &mut self.buffer.chunk_mut()[..length_size];
                     let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
 
                     self.buffer.put_u16(buf.len() as u16);
@@ -341,7 +341,7 @@ impl EncryptedWriter {
                     let data_size = buf.len() + self.cipher.tag_len();
                     self.buffer.reserve(data_size);
 
-                    let mbuf = &mut self.buffer.bytes_mut()[..data_size];
+                    let mbuf = &mut self.buffer.chunk_mut()[..data_size];
                     let mbuf = unsafe { slice::from_raw_parts_mut(mbuf.as_mut_ptr(), mbuf.len()) };
 
                     self.buffer.put_slice(buf);

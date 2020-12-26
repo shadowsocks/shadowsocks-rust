@@ -25,7 +25,7 @@ trust-dns = ["trust-dns-resolver"]
 log = "0.4"
 
 libc = "0.2"
-bytes = "0.6"
+bytes = "1.0"
 cfg-if = "1"
 byte_string = "1.0"
 base64 = "0.13"
