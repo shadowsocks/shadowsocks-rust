@@ -639,7 +639,7 @@ impl DnsClient {
                     // Then this future will be disabled and have no effect
                     //
                     // Randomly choose from 500ms ~ 1.5s for preventing obvious request pattern
-                    let sleep_time = thread_rng().gen_range(500, 1500);
+                    let sleep_time = thread_rng().gen_range(500..=1500);
                     time::sleep(Duration::from_millis(sleep_time)).await;
 
                     let server = self.balancer.best_tcp_server();
