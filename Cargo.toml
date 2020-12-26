@@ -105,7 +105,7 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 
 [dependencies]
 log = "0.4"
-log4rs = { version = "0.13", optional = true }
+log4rs = { version = "1.0", optional = true }
 
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
