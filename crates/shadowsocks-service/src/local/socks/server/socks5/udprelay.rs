@@ -579,6 +579,12 @@ impl UdpAssociationContext {
                     n
                 }
                 Err(err) => {
+                    // Socket that connected to remote server returns an error, it should be ECONNREFUSED in most cases.
+                    // That indicates that the association on the server side have been dropped.
+                    //
+                    // There is no point to keep this socket. Drop it immediately.
+                    self.proxied_socket.lock().reset();
+
                     error!(
                         "udp failed to receive from proxied outbound socket, peer_addr: {}, error: {}",
                         self.peer_addr, err

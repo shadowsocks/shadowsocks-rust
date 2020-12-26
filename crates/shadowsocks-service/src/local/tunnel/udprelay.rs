@@ -372,11 +372,17 @@ impl UdpAssociationContext {
                     n
                 }
                 Err(err) => {
+                    // Socket that connected to remote server returns an error, it should be ECONNREFUSED in most cases.
+                    // That indicates that the association on the server side have been dropped.
+                    //
+                    // There is no point to keep this socket. Drop it immediately.
+                    self.proxied_socket.lock().reset();
+
                     error!(
                         "udp failed to receive from {} outbound socket, error: {}",
                         self.forward_addr, err
                     );
-                    time::sleep(Duration::from_secs(0)).await;
+                    time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };
