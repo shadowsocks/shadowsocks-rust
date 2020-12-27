@@ -14,7 +14,7 @@ use std::{
 
 use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
-use log::{debug, info, trace};
+use log::{debug, log, trace, Level};
 use shadowsocks::relay::{
     socks5::Address,
     tcprelay::proxy_stream::ProxyClientStream,
@@ -179,11 +179,17 @@ impl PingBalancerInner {
             }
             self.best_tcp_idx.store(best_idx, Ordering::Release);
 
-            if print_switch && best_idx != old_best_idx {
-                info!(
+            if best_idx != old_best_idx {
+                log!(
+                    if print_switch { Level::Info } else { Level::Debug },
                     "switched best TCP server from {} to {}",
                     self.servers[old_best_idx].server_config().addr(),
                     self.servers[best_idx].server_config().addr()
+                );
+            } else {
+                debug!(
+                    "kept best TCP server {}",
+                    self.servers[old_best_idx].server_config().addr()
                 );
             }
         }
@@ -202,11 +208,17 @@ impl PingBalancerInner {
             }
             self.best_udp_idx.store(best_idx, Ordering::Release);
 
-            if print_switch && best_idx != old_best_idx {
-                info!(
+            if best_idx != old_best_idx {
+                log!(
+                    if print_switch { Level::Info } else { Level::Debug },
                     "switched best UDP server from {} to {}",
                     self.servers[old_best_idx].server_config().addr(),
                     self.servers[best_idx].server_config().addr()
+                );
+            } else {
+                debug!(
+                    "kept best UDP server {}",
+                    self.servers[old_best_idx].server_config().addr()
                 );
             }
         }
