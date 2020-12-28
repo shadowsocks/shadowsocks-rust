@@ -293,9 +293,9 @@ dependencies = [
 
 [[package]]
 name = "dtoa"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "134951f4028bdadb9b84baf4232681efbf277da25144b9b0ad65df75946c422b"
+checksum = "88d7ed2934d741c6b37e33e3832298e8850b53fd2d2bea03873375596c7cea4e"
 
 [[package]]
 name = "enum-as-inner"
@@ -668,9 +668,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "0.4.6"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6f3ad7b9d11a0c00842ff8de1b60ee58661048eb8049ed33c73594f359d7e6"
+checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 
 [[package]]
 name = "jemalloc-sys"
@@ -2061,7 +2061,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#5a4ff9c393bcf9a18d6c00118990a1624c29e6fe"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -2074,7 +2074,7 @@ dependencies = [
  "ipnet",
  "lazy_static",
  "log",
- "rand 0.7.3",
+ "rand 0.8.0",
  "serde",
  "smallvec",
  "thiserror",
@@ -2085,7 +2085,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#5a4ff9c393bcf9a18d6c00118990a1624c29e6fe"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -2109,7 +2109,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/messense/trust-dns.git?branch=tokio-1#5a4ff9c393bcf9a18d6c00118990a1624c29e6fe"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
 dependencies = [
  "futures-channel",
  "futures-io",
