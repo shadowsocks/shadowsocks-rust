@@ -1,15 +1,15 @@
 //! Asynchronous DNS resolver
 
-use std::io;
-
+use cfg_if::cfg_if;
 use log::{error, trace};
 use trust_dns_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
+    error::ResolveResult,
     TokioAsyncResolver,
 };
 
 /// Create a `trust-dns` asynchronous DNS resolver
-pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> io::Result<TokioAsyncResolver> {
+pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> ResolveResult<TokioAsyncResolver> {
     let mut resolver_opts = ResolverOpts::default();
 
     if ipv6_first {
@@ -28,48 +28,44 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> i
         }
 
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
-        #[cfg(any(unix, windows))]
+        // Android doesn't have /etc/resolv.conf.
         None => {
-            use trust_dns_resolver::{name_server::TokioHandle, system_conf::read_system_conf};
+            cfg_if! {
+                if #[cfg(any(all(unix, not(target_os = "android")), windows))] {
+                    use trust_dns_resolver::{name_server::TokioHandle, system_conf::read_system_conf};
 
-            // use the system resolver configuration
-            let (config, mut opts) = match read_system_conf() {
-                Ok(o) => o,
-                Err(err) => {
-                    error!("failed to initialize DNS resolver with system-config, error: {}", err);
+                    // use the system resolver configuration
+                    let (config, mut opts) = match read_system_conf() {
+                        Ok(o) => o,
+                        Err(err) => {
+                            error!("failed to initialize DNS resolver with system-config, error: {}", err);
 
-                    // From::from is required because on error type is different on Windows
-                    #[allow(clippy::useless_conversion)]
-                    return Err(From::from(err));
+                            // From::from is required because on error type is different on Windows
+                            #[allow(clippy::useless_conversion)]
+                            return Err(From::from(err));
+                        }
+                    };
+
+                    // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
+                    //
+                    // Only ip_strategy should be changed
+                    if ipv6_first {
+                        opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
+                    }
+
+                    trace!(
+                        "initializing DNS resolver with system-config {:?} opts {:?}",
+                        config,
+                        opts
+                    );
+
+                    TokioAsyncResolver::new(config, opts, TokioHandle)
+                } else {
+                    use trust_dns_resolver::error::ResolveError;
+
+                    Err(ResolveError::from("current platform doesn't support trust-dns resolver with system configured".to_owned()))
                 }
-            };
-
-            // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
-            //
-            // Only ip_strategy should be changed
-            if ipv6_first {
-                opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
             }
-
-            trace!(
-                "initializing DNS resolver with system-config {:?} opts {:?}",
-                config,
-                opts
-            );
-
-            TokioAsyncResolver::new(config, opts, TokioHandle)
-        }
-
-        #[cfg(not(any(unix, windows)))]
-        None => {
-            // Get a new resolver with the google nameservers as the upstream recursive resolvers
-            trace!(
-                "initializing DNS resolver with google-config {:?} opts {:?}",
-                ResolverConfig::google(),
-                resolver_opts
-            );
-            TokioAsyncResolver::tokio(ResolverConfig::google(), resolver_opts)
         }
     }
-    .map_err(From::from)
 }

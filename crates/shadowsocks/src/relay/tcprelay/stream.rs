@@ -138,7 +138,7 @@ impl DecryptedReader {
 
         while self.buffer.len() < size {
             let remaining = size - self.buffer.len();
-            let buffer = &mut self.buffer.bytes_mut()[..remaining];
+            let buffer = &mut self.buffer.chunk_mut()[..remaining];
 
             let mut read_buf =
                 ReadBuf::uninit(unsafe { slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut _, remaining) });

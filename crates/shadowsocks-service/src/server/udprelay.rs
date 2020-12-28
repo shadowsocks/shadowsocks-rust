@@ -133,11 +133,13 @@ impl UdpServer {
 
 struct UdpAssociation {
     assoc: Arc<UdpAssociationContext>,
+    sender: mpsc::Sender<(Address, Bytes)>,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
-        self.assoc.abortables.lock().abort_all();
+        self.assoc.outbound_ipv4_socket.lock().abort();
+        self.assoc.outbound_ipv6_socket.lock().abort();
     }
 }
 
@@ -148,13 +150,12 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
     ) -> UdpAssociation {
-        UdpAssociation {
-            assoc: UdpAssociationContext::new(context, inbound, peer_addr, assoc_map),
-        }
+        let (assoc, sender) = UdpAssociationContext::new(context, inbound, peer_addr, assoc_map);
+        UdpAssociation { assoc, sender }
     }
 
     fn try_send(&self, data: (Address, Bytes)) -> io::Result<()> {
-        if let Err(..) = self.assoc.sender.try_send(data) {
+        if let Err(..) = self.sender.try_send(data) {
             let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
             return Err(err);
         }
@@ -162,34 +163,34 @@ impl UdpAssociation {
     }
 }
 
-struct UdpAssociationTaskHandle {
-    abortables: Vec<AbortHandle>,
-    finished: bool,
+enum UdpAssociationState {
+    Empty,
+    Connected {
+        socket: Arc<OutboundUdpSocket>,
+        abortable: AbortHandle,
+    },
+    Aborted,
 }
 
-impl UdpAssociationTaskHandle {
-    fn new() -> UdpAssociationTaskHandle {
-        UdpAssociationTaskHandle {
-            abortables: Vec::new(),
-            finished: false,
-        }
-    }
-
-    fn push_abortable(&mut self, abortable: AbortHandle) {
-        if self.finished {
-            // Association is already finished. Kill it immediately.
-            abortable.abort();
-        } else {
-            self.abortables.push(abortable);
-        }
-    }
-
-    fn abort_all(&mut self) {
-        self.finished = true;
-        for abortable in &self.abortables {
+impl Drop for UdpAssociationState {
+    fn drop(&mut self) {
+        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
             abortable.abort();
         }
-        self.abortables.clear();
+    }
+}
+
+impl UdpAssociationState {
+    fn empty() -> UdpAssociationState {
+        UdpAssociationState::Empty
+    }
+
+    fn set_connected(&mut self, socket: Arc<OutboundUdpSocket>, abortable: AbortHandle) {
+        *self = UdpAssociationState::Connected { socket, abortable };
+    }
+
+    fn abort(&mut self) {
+        *self = UdpAssociationState::Aborted;
     }
 }
 
@@ -197,11 +198,9 @@ struct UdpAssociationContext {
     context: Arc<ServiceContext>,
     inbound: Arc<MonProxySocket>,
     peer_addr: SocketAddr,
-    sender: mpsc::Sender<(Address, Bytes)>,
-    outbound_ipv4_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
-    outbound_ipv6_socket: SpinMutex<Option<Arc<OutboundUdpSocket>>>,
+    outbound_ipv4_socket: SpinMutex<UdpAssociationState>,
+    outbound_ipv6_socket: SpinMutex<UdpAssociationState>,
     assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
-    abortables: SpinMutex<UdpAssociationTaskHandle>,
     target_cache: Mutex<LruCache<SocketAddr, Address>>,
 }
 
@@ -217,7 +216,7 @@ impl UdpAssociationContext {
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
         assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
-    ) -> Arc<UdpAssociationContext> {
+    ) -> (Arc<UdpAssociationContext>, mpsc::Sender<(Address, Bytes)>) {
         // Pending packets 1024 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
         // being OOM.
@@ -227,11 +226,9 @@ impl UdpAssociationContext {
             context,
             inbound,
             peer_addr,
-            sender,
-            outbound_ipv4_socket: SpinMutex::new(None),
-            outbound_ipv6_socket: SpinMutex::new(None),
+            outbound_ipv4_socket: SpinMutex::new(UdpAssociationState::empty()),
+            outbound_ipv6_socket: SpinMutex::new(UdpAssociationState::empty()),
             assoc_map,
-            abortables: SpinMutex::new(UdpAssociationTaskHandle::new()),
             // Cache for remembering the original Address of target,
             // when recv_from a SocketAddr, we have to know whch Address that client was originally requested.
             //
@@ -239,14 +236,13 @@ impl UdpAssociationContext {
             target_cache: Mutex::new(LruCache::with_capacity(64)),
         });
 
-        let (l2r_task, l2r_abortable) = {
+        let l2r_task = {
             let assoc = assoc.clone();
-            future::abortable(assoc.copy_l2r(receiver))
+            assoc.copy_l2r(receiver)
         };
         tokio::spawn(l2r_task);
 
-        assoc.abortables.lock().push_abortable(l2r_abortable);
-        assoc
+        (assoc, sender)
     }
 
     async fn copy_l2r(self: Arc<Self>, mut receiver: mpsc::Receiver<(Address, Bytes)>) {
@@ -295,32 +291,47 @@ impl UdpAssociationContext {
     }
 
     async fn copy_ipv4_l2r_dispatch(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        let mut outbound = self.outbound_ipv4_socket.lock();
+        let outbound = {
+            let mut handle = self.outbound_ipv4_socket.lock();
 
-        if outbound.is_none() {
-            // Initialize bypass task
+            match *handle {
+                UdpAssociationState::Empty => {
+                    // Create a new connection to proxy server
 
-            let socket = OutboundUdpSocket::bind_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-            let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
+                    let socket =
+                        OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
+                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
 
-            let (r2l_fut, r2l_abortable) = {
-                let assoc = self.clone();
-                future::abortable(assoc.copy_r2l(socket.clone()))
-            };
+                    let (r2l_fut, r2l_abortable) = {
+                        let assoc = self.clone();
+                        future::abortable(assoc.copy_r2l(socket.clone()))
+                    };
 
-            // CLIENT <- REMOTE
-            tokio::spawn(r2l_fut);
-            debug!(
-                "created udp association for {} with {:?}",
-                self.peer_addr,
-                self.context.connect_opts_ref()
-            );
-            *outbound = Some(socket);
-            self.abortables.lock().push_abortable(r2l_abortable);
-        }
+                    // CLIENT <- REMOTE
+                    tokio::spawn(r2l_fut);
+                    debug!(
+                        "created udp association for {} with {:?}",
+                        self.peer_addr,
+                        self.context.connect_opts_ref()
+                    );
 
-        let socket = outbound.as_ref().unwrap();
-        let n = socket.send_to(data, target_addr).await?;
+                    handle.set_connected(socket.clone(), r2l_abortable);
+                    socket
+                }
+                UdpAssociationState::Connected { ref socket, .. } => socket.clone(),
+                UdpAssociationState::Aborted => {
+                    debug!(
+                        "udp association for {} (bypassed) have been aborted, dropped packet {} bytes to {}",
+                        self.peer_addr,
+                        data.len(),
+                        target_addr
+                    );
+                    return Ok(());
+                }
+            }
+        };
+
+        let n = outbound.send_to(data, target_addr).await?;
         if n != data.len() {
             warn!(
                 "{} -> {} sent {} bytes != expected {} bytes",
@@ -335,32 +346,47 @@ impl UdpAssociationContext {
     }
 
     async fn copy_ipv6_l2r_dispatch(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        let mut outbound = self.outbound_ipv6_socket.lock();
+        let outbound = {
+            let mut handle = self.outbound_ipv6_socket.lock();
 
-        if outbound.is_none() {
-            // Initialize bypass task
+            match *handle {
+                UdpAssociationState::Empty => {
+                    // Create a new connection to proxy server
 
-            let socket = OutboundUdpSocket::bind_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-            let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
+                    let socket =
+                        OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
+                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
 
-            let (r2l_fut, r2l_abortable) = {
-                let assoc = self.clone();
-                future::abortable(assoc.copy_r2l(socket.clone()))
-            };
+                    let (r2l_fut, r2l_abortable) = {
+                        let assoc = self.clone();
+                        future::abortable(assoc.copy_r2l(socket.clone()))
+                    };
 
-            // CLIENT <- REMOTE
-            tokio::spawn(r2l_fut);
-            debug!(
-                "created udp association for {} with {:?}",
-                self.peer_addr,
-                self.context.connect_opts_ref()
-            );
-            *outbound = Some(socket);
-            self.abortables.lock().push_abortable(r2l_abortable);
-        }
+                    // CLIENT <- REMOTE
+                    tokio::spawn(r2l_fut);
+                    debug!(
+                        "created udp association for {} with {:?}",
+                        self.peer_addr,
+                        self.context.connect_opts_ref()
+                    );
 
-        let socket = outbound.as_ref().unwrap();
-        let n = socket.send_to(data, target_addr).await?;
+                    handle.set_connected(socket.clone(), r2l_abortable);
+                    socket
+                }
+                UdpAssociationState::Connected { ref socket, .. } => socket.clone(),
+                UdpAssociationState::Aborted => {
+                    debug!(
+                        "udp association for {} (bypassed) have been aborted, dropped packet {} bytes to {}",
+                        self.peer_addr,
+                        data.len(),
+                        target_addr
+                    );
+                    return Ok(());
+                }
+            }
+        };
+
+        let n = outbound.send_to(data, target_addr).await?;
         if n != data.len() {
             warn!(
                 "{} -> {} sent {} bytes != expected {} bytes",

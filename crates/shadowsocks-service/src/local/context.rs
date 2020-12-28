@@ -10,7 +10,7 @@ use shadowsocks::{
     config::ServerType,
     context::{Context, SharedContext},
     dns_resolver::DnsResolver,
-    net::ConnectOpts,
+    net::{AcceptOpts, ConnectOpts},
     relay::Address,
 };
 #[cfg(feature = "local-dns")]
@@ -22,6 +22,7 @@ use crate::{acl::AccessControl, net::FlowStat};
 pub struct ServiceContext {
     context: SharedContext,
     connect_opts: ConnectOpts,
+    accept_opts: AcceptOpts,
 
     // Access Control
     acl: Option<AccessControl>,
@@ -40,6 +41,7 @@ impl ServiceContext {
         ServiceContext {
             context: Context::new_shared(ServerType::Local),
             connect_opts: ConnectOpts::default(),
+            accept_opts: AcceptOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
             #[cfg(feature = "local-dns")]
@@ -65,6 +67,16 @@ impl ServiceContext {
     /// Get `ConnectOpts` reference
     pub fn connect_opts_ref(&self) -> &ConnectOpts {
         &self.connect_opts
+    }
+
+    /// Set `AcceptOpts`
+    pub fn set_accept_opts(&mut self, accept_opts: AcceptOpts) {
+        self.accept_opts = accept_opts;
+    }
+
+    /// Get `AcceptOpts` cloned
+    pub fn accept_opts(&self) -> AcceptOpts {
+        self.accept_opts.clone()
     }
 
     /// Set Access Control List

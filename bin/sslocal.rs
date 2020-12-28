@@ -70,6 +70,11 @@ fn main() {
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
 
         (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
+
+        (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
+        (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
+        (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
+        (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
     );
 
     // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
@@ -137,7 +142,7 @@ fn main() {
     #[cfg(feature = "local-dns")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_name_server_addr} "Specify the address of local DNS server, send queries directly")
+            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_socket_addr} "Specify the address of local DNS server, send queries directly")
             (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
             (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
         );
@@ -235,10 +240,10 @@ fn main() {
 
     #[cfg(feature = "local-dns")]
     {
-        use shadowsocks_service::config::NameServerAddr;
+        use std::net::SocketAddr;
 
         if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-            let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
+            let addr = local_dns_addr.parse::<SocketAddr>().expect("local dns address");
             config.local_dns_addr = Some(addr);
         }
 
@@ -258,12 +263,6 @@ fn main() {
         // A socket `protect_path` in CWD
         // Same as shadowsocks-libev's android.c
         config.outbound_vpn_protect_path = Some(From::from("protect_path"));
-
-        // Set default config.local_dns_addr
-        #[cfg(feature = "local-dns")]
-        if config.local_dns_addr.is_none() {
-            config.local_dns_addr = Some(From::from("local_dns_path"));
-        }
     }
 
     if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {
@@ -339,6 +338,19 @@ fn main() {
 
     if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
         config.udp_bind_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
+    }
+
+    if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
+        config.inbound_send_buffer_size = Some(bs.parse::<u32>().expect("inbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("INBOUND_RECV_BUFFER_SIZE") {
+        config.inbound_recv_buffer_size = Some(bs.parse::<u32>().expect("inbound-recv-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_SEND_BUFFER_SIZE") {
+        config.outbound_send_buffer_size = Some(bs.parse::<u32>().expect("outbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
+        config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
     }
 
     // DONE READING options

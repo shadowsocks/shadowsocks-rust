@@ -21,7 +21,7 @@ use shadowsocks::{
         RemoveResponse,
         StatRequest,
     },
-    net::ConnectOpts,
+    net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
     ManagerListener,
     ServerAddr,
@@ -54,6 +54,7 @@ pub struct Manager {
     svr_cfg: ManagerConfig,
     mode: Mode,
     connect_opts: ConnectOpts,
+    accept_opts: AcceptOpts,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     nodelay: bool,
@@ -74,6 +75,7 @@ impl Manager {
             svr_cfg,
             mode: Mode::TcpOnly,
             connect_opts: ConnectOpts::default(),
+            accept_opts: AcceptOpts::default(),
             udp_expiry_duration: None,
             udp_capacity: None,
             nodelay: false,
@@ -84,6 +86,11 @@ impl Manager {
     /// Set `ConnectOpts`
     pub fn set_connect_opts(&mut self, opts: ConnectOpts) {
         self.connect_opts = opts;
+    }
+
+    /// Set `AcceptOpts`
+    pub fn set_accept_opts(&mut self, opts: AcceptOpts) {
+        self.accept_opts = opts;
     }
 
     /// Set UDP association's expiry duration
@@ -174,6 +181,7 @@ impl Manager {
         let mut server = Server::new(svr_cfg.clone());
 
         server.set_connect_opts(self.connect_opts.clone());
+        server.set_accept_opts(self.accept_opts.clone());
         server.set_dns_resolver(self.context.dns_resolver().clone());
 
         if let Some(d) = self.udp_expiry_duration {
@@ -182,10 +190,6 @@ impl Manager {
 
         if let Some(c) = self.udp_capacity {
             server.set_udp_capacity(c);
-        }
-
-        if self.nodelay {
-            server.set_nodelay(true);
         }
 
         server.set_mode(mode.unwrap_or(self.mode));

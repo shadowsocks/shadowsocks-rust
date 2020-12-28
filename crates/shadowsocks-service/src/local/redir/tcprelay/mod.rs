@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{debug, error, info, trace};
-use shadowsocks::{lookup_then, relay::socks5::Address};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -109,6 +109,8 @@ pub async fn run_tcp_redir(
             .1
         }
     };
+
+    let listener = ShadowTcpListener::from_listener(listener, context.accept_opts());
 
     let actual_local_addr = listener.local_addr().expect("determine port bound to");
 

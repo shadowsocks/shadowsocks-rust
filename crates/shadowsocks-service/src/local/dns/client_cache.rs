@@ -13,7 +13,7 @@ use std::{
 use log::trace;
 use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 use tokio::sync::Mutex;
-use trust_dns_proto::{error::ProtoError, op::Message};
+use trust_dns_resolver::proto::{error::ProtoError, op::Message};
 
 use crate::local::context::ServiceContext;
 
@@ -121,6 +121,7 @@ impl DnsClientCache {
     }
 
     #[cfg(unix)]
+    #[allow(dead_code)]
     pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> Result<Message, ProtoError> {
         let mut last_err = None;
 

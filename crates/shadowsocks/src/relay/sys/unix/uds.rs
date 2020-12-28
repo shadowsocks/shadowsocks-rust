@@ -34,17 +34,21 @@ impl UnixStream {
     }
 
     fn poll_send_with_fd(&self, cx: &mut Context, buf: &[u8], fds: &[RawFd]) -> Poll<io::Result<usize>> {
-        let mut ready = ready!(self.io.poll_write_ready(cx))?;
+        loop {
+            let mut ready = ready!(self.io.poll_write_ready(cx))?;
 
-        let fd = self.io.get_ref().as_raw_fd();
-        ready.with_poll(|| match send_with_fd(fd, buf, fds) {
-            // self.io.poll_write_ready indicates that writable event have been received by tokio,
-            // so it is not a common case that sendto returns EAGAIN.
-            //
-            // Just for double check. If EAGAIN actually returns, clear the readness state.
-            Err(ref err) if err.kind() == ErrorKind::WouldBlock => Poll::Pending,
-            x => Poll::Ready(x),
-        })
+            let fd = self.io.get_ref().as_raw_fd();
+            match send_with_fd(fd, buf, fds) {
+                // self.io.poll_write_ready indicates that writable event have been received by tokio,
+                // so it is not a common case that sendto returns EAGAIN.
+                //
+                // Just for double check. If EAGAIN actually returns, clear the readness state.
+                Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
+                    ready.clear_ready();
+                }
+                x => return Poll::Ready(x),
+            }
+        }
     }
 
     /// Send data with file descriptors
@@ -96,36 +100,38 @@ impl UnixStream {
     // notifications and tasks hanging.
 
     pub(crate) fn poll_read_priv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
+        loop {
+            let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-        let b = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
-        match self.io.get_ref().read(b) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                read_guard.clear_ready();
-                Poll::Pending
-            }
-            Ok(n) => {
-                // Safety: We trust `UnixStream::read` to have filled up `n` bytes
-                // in the buffer.
-                unsafe {
-                    buf.assume_init(n);
+            let b = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+            match self.io.get_ref().read(b) {
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    read_guard.clear_ready();
                 }
-                buf.advance(n);
-                return Poll::Ready(Ok(()));
+                Ok(n) => {
+                    // Safety: We trust `UnixStream::read` to have filled up `n` bytes
+                    // in the buffer.
+                    unsafe {
+                        buf.assume_init(n);
+                    }
+                    buf.advance(n);
+                    return Poll::Ready(Ok(()));
+                }
+                Err(e) => return Poll::Ready(Err(e)),
             }
-            Err(e) => return Poll::Ready(Err(e)),
         }
     }
 
     pub(crate) fn poll_write_priv(&self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let mut write_guard = ready!(self.io.poll_write_ready(cx))?;
+        loop {
+            let mut write_guard = ready!(self.io.poll_write_ready(cx))?;
 
-        match self.io.get_ref().write(buf) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                write_guard.clear_ready();
-                Poll::Pending
+            match self.io.get_ref().write(buf) {
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    write_guard.clear_ready();
+                }
+                x => return Poll::Ready(x),
             }
-            x => Poll::Ready(x),
         }
     }
 }

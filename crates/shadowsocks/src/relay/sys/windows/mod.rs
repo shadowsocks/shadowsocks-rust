@@ -15,7 +15,7 @@ use winapi::{
     },
 };
 
-use crate::net::ConnectOpts;
+use crate::net::{AddrFamily, ConnectOpts};
 
 /// Create a `UdpSocket` binded to `addr`
 ///
@@ -65,7 +65,7 @@ pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
 /// create a new TCP stream
 #[inline(always)]
 pub async fn tcp_stream_connect(saddr: &SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
-    if let Some(ip) = opts.bind_local_addr {
+    let stream = if let Some(ip) = opts.bind_local_addr {
         let socket = match *saddr {
             SocketAddr::V4(..) => TcpSocket::new_v4()?,
             SocketAddr::V6(..) => TcpSocket::new_v6()?,
@@ -83,20 +83,26 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, opts: &ConnectOpts) -> io::R
         }
 
         // it's important that the socket is binded before connecting
-        socket.connect(*saddr).await
+        socket.connect(*saddr).await?
     } else {
-        TcpStream::connect(saddr).await
+        TcpStream::connect(saddr).await?
+    };
+
+    if opts.tcp.nodelay {
+        stream.set_nodelay(true)?;
     }
+
+    Ok(stream)
 }
 
 /// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
-pub async fn create_outbound_udp_socket(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-    let bind_addr = match (addr.ip(), opts.bind_local_addr) {
-        (IpAddr::V4(..), Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
-        (IpAddr::V6(..), Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
-        (IpAddr::V4(..), ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
-        (IpAddr::V6(..), ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+    let bind_addr = match (af, opts.bind_local_addr) {
+        (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+        (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
     create_udp_socket(&bind_addr).await
 }

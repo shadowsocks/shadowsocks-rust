@@ -9,7 +9,7 @@ use log::{error, trace, warn};
 #[cfg(any(feature = "local-dns", feature = "trust-dns"))]
 use shadowsocks::dns_resolver::DnsResolver;
 use shadowsocks::{
-    net::ConnectOpts,
+    net::{AcceptOpts, ConnectOpts},
     plugin::{Plugin, PluginMode},
 };
 
@@ -17,8 +17,6 @@ use crate::config::{Config, ConfigType, ProtocolType};
 #[cfg(feature = "local-flow-stat")]
 use crate::net::FlowStat;
 
-#[cfg(feature = "local-dns")]
-use self::dns::dns_resolver::DnsResolver as LocalDnsResolver;
 use self::{
     context::ServiceContext,
     loadbalancing::{PingBalancerBuilder, ServerIdent},
@@ -54,7 +52,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     }
 
     let mut context = ServiceContext::new();
-    context.set_connect_opts(ConnectOpts {
+
+    let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
@@ -65,32 +64,68 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
-    });
+    };
+    connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
+    connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
+    context.set_connect_opts(connect_opts);
 
-    #[cfg(feature = "local-dns")]
-    if let Some(ref ns) = config.local_dns_addr {
-        use crate::config::Mode;
+    let mut accept_opts = AcceptOpts::default();
+    accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
+    accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
+    accept_opts.tcp.nodelay = config.no_delay;
 
-        trace!("initializing direct DNS resolver for {}", ns);
+    #[cfg(all(feature = "local-dns", feature = "trust-dns"))]
+    if let Some(socket_addr) = config.local_dns_addr {
+        use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 
-        let mut resolver = LocalDnsResolver::new(ns.clone());
-        resolver.set_mode(Mode::TcpAndUdp);
-        resolver.set_ipv6_first(config.ipv6_first);
-        resolver.set_connect_opts(context.connect_opts_ref().clone());
-        context.set_dns_resolver(Arc::new(DnsResolver::custom_resolver(resolver)));
-    }
+        trace!("initializing direct DNS resolver for {}", socket_addr);
 
-    #[cfg(feature = "trust-dns")]
-    if matches!(context.dns_resolver(), DnsResolver::System) {
-        match DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await {
+        let mut resolver_config = ResolverConfig::new();
+
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr,
+            protocol: Protocol::Udp,
+            tls_dns_name: None,
+            trust_nx_responses: false,
+            #[cfg(feature = "dns-over-tls")]
+            tls_config: None,
+        });
+        resolver_config.add_name_server(NameServerConfig {
+            socket_addr,
+            protocol: Protocol::Tcp,
+            tls_dns_name: None,
+            trust_nx_responses: false,
+            #[cfg(feature = "dns-over-tls")]
+            tls_config: None,
+        });
+
+        match DnsResolver::trust_dns_resolver(Some(resolver_config), config.ipv6_first).await {
             Ok(r) => {
                 context.set_dns_resolver(Arc::new(r));
             }
             Err(err) => {
-                warn!(
-                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
-                    err
+                error!(
+                    "initialize DNS resolver failed, nameserver: {}, error: {}",
+                    socket_addr, err
                 );
+                return Err(err);
+            }
+        }
+    }
+
+    #[cfg(feature = "trust-dns")]
+    if context.dns_resolver().is_system_resolver() {
+        if config.dns.is_some() || crate::hint_support_default_system_resolver() {
+            match DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await {
+                Ok(r) => {
+                    context.set_dns_resolver(Arc::new(r));
+                }
+                Err(err) => {
+                    warn!(
+                        "initialize DNS resolver failed, fallback to system resolver, error: {}",
+                        err
+                    );
+                }
             }
         }
     }
@@ -190,9 +225,6 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
         let mut server = Dns::with_context(context.clone(), local_addr, remote_addr);
         server.set_mode(config.mode);
-        if config.no_delay {
-            server.set_nodelay(true);
-        }
 
         vfut.push(server.run(bind_addr, balancer.clone()).boxed());
     }

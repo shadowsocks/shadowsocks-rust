@@ -4,11 +4,11 @@ use std::{
     fmt::{self, Debug},
     io::{self, Error, ErrorKind},
     net::SocketAddr,
-    sync::atomic::{AtomicBool, Ordering},
+    time::Instant,
 };
 
 use async_trait::async_trait;
-use log::{trace, warn};
+use log::{log_enabled, trace, Level};
 use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
@@ -33,7 +33,7 @@ pub enum DnsResolver {
 
 impl Default for DnsResolver {
     fn default() -> DnsResolver {
-        DnsResolver::System
+        DnsResolver::system_resolver()
     }
 }
 
@@ -105,57 +105,122 @@ impl DnsResolver {
 
     /// Resolve address into `SocketAddr`s
     pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
-        match *self {
-            DnsResolver::System => {
-                static TOKIO_USED: AtomicBool = AtomicBool::new(false);
-                if !TOKIO_USED.swap(true, Ordering::Relaxed) {
-                    warn!("Tokio resolver is used. Performance might deteriorate.");
-                }
+        struct ResolverLogger<'x, 'y> {
+            resolver: &'x DnsResolver,
+            addr: &'y str,
+            port: u16,
+            start_time: Option<Instant>,
+        }
 
-                trace!("DNS resolving {}:{} with tokio", addr, port);
+        impl<'x, 'y> ResolverLogger<'x, 'y> {
+            fn new(resolver: &'x DnsResolver, addr: &'y str, port: u16) -> ResolverLogger<'x, 'y> {
+                let start_time = if log_enabled!(Level::Trace) {
+                    Some(Instant::now())
+                } else {
+                    None
+                };
 
-                match lookup_host((addr, port)).await {
-                    Ok(v) => Ok(EitherResolved::Tokio(v)),
-                    Err(err) => {
-                        let err = Error::new(
-                            ErrorKind::Other,
-                            format!("dns resolve {}:{} error: {}", addr, port, err),
-                        );
-                        Err(err)
-                    }
-                }
-            }
-            #[cfg(feature = "trust-dns")]
-            DnsResolver::TrustDns(ref resolver) => {
-                trace!("DNS resolving {}:{} with trust-dns", addr, port);
-
-                match resolver.lookup_ip(addr).await {
-                    Ok(lookup_result) => Ok(EitherResolved::TrustDns(
-                        lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
-                    )),
-                    Err(err) => {
-                        let err = Error::new(
-                            ErrorKind::Other,
-                            format!("dns resolve {}:{} error: {}", addr, port, err),
-                        );
-                        Err(err)
-                    }
-                }
-            }
-            DnsResolver::Custom(ref resolver) => {
-                trace!("DNS resolving {}:{} with customized", addr, port);
-
-                match resolver.resolve(addr, port).await {
-                    Ok(v) => Ok(EitherResolved::Custom(v.into_iter())),
-                    Err(err) => {
-                        let err = Error::new(
-                            ErrorKind::Other,
-                            format!("dns resolve {}:{} error: {}", addr, port, err),
-                        );
-                        Err(err)
-                    }
+                ResolverLogger {
+                    resolver,
+                    addr,
+                    port,
+                    start_time,
                 }
             }
         }
+
+        impl<'x, 'y> Drop for ResolverLogger<'x, 'y> {
+            fn drop(&mut self) {
+                match self.start_time {
+                    Some(start_time) => {
+                        let end_time = Instant::now();
+                        let elapsed = end_time - start_time;
+
+                        match *self.resolver {
+                            DnsResolver::System => {
+                                trace!(
+                                    "DNS resolved {}:{} with tokio {}s",
+                                    self.addr,
+                                    self.port,
+                                    elapsed.as_secs_f32()
+                                );
+                            }
+                            #[cfg(feature = "trust-dns")]
+                            DnsResolver::TrustDns(..) => {
+                                trace!(
+                                    "DNS resolved {}:{} with trust-dns {}s",
+                                    self.addr,
+                                    self.port,
+                                    elapsed.as_secs_f32()
+                                );
+                            }
+                            DnsResolver::Custom(..) => {
+                                trace!(
+                                    "DNS resolved {}:{} with customized {}s",
+                                    self.addr,
+                                    self.port,
+                                    elapsed.as_secs_f32()
+                                );
+                            }
+                        }
+                    }
+                    None => match *self.resolver {
+                        DnsResolver::System => {
+                            trace!("DNS resolved {}:{} with tokio", self.addr, self.port);
+                        }
+                        #[cfg(feature = "trust-dns")]
+                        DnsResolver::TrustDns(..) => {
+                            trace!("DNS resolved {}:{} with trust-dns", self.addr, self.port);
+                        }
+                        DnsResolver::Custom(..) => {
+                            trace!("DNS resolved {}:{} with customized", self.addr, self.port);
+                        }
+                    },
+                }
+            }
+        }
+
+        let _log_guard = ResolverLogger::new(self, addr, port);
+
+        match *self {
+            DnsResolver::System => match lookup_host((addr, port)).await {
+                Ok(v) => Ok(EitherResolved::Tokio(v)),
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                    );
+                    Err(err)
+                }
+            },
+            #[cfg(feature = "trust-dns")]
+            DnsResolver::TrustDns(ref resolver) => match resolver.lookup_ip(addr).await {
+                Ok(lookup_result) => Ok(EitherResolved::TrustDns(
+                    lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
+                )),
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                    );
+                    Err(err)
+                }
+            },
+            DnsResolver::Custom(ref resolver) => match resolver.resolve(addr, port).await {
+                Ok(v) => Ok(EitherResolved::Custom(v.into_iter())),
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                    );
+                    Err(err)
+                }
+            },
+        }
+    }
+
+    /// Check if currently using system resolver
+    pub fn is_system_resolver(&self) -> bool {
+        matches!(*self, DnsResolver::System)
     }
 }

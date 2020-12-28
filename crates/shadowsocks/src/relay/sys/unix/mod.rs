@@ -11,7 +11,7 @@ use std::{os::unix::io::RawFd, path::Path};
 use cfg_if::cfg_if;
 use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 
-use crate::net::ConnectOpts;
+use crate::net::{AddrFamily, ConnectOpts};
 
 /// Convert `sockaddr_storage` to `SocketAddr`
 #[allow(dead_code)]
@@ -125,27 +125,43 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &ConnectOpts) -> io:
         }
     }
 
+    // Set `SO_SNDBUF`
+    if let Some(buf_size) = config.tcp.send_buffer_size {
+        socket.set_send_buffer_size(buf_size)?;
+    }
+
+    // Set `SO_RCVBUF`
+    if let Some(buf_size) = config.tcp.recv_buffer_size {
+        socket.set_recv_buffer_size(buf_size)?;
+    }
+
     // it's important that the socket is protected before connecting
-    socket.connect(*saddr).await
+    let stream = socket.connect(*saddr).await?;
+
+    if config.tcp.nodelay {
+        stream.set_nodelay(true)?;
+    }
+
+    Ok(stream)
 }
 
 /// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
 #[allow(unused_variables)]
-pub async fn create_outbound_udp_socket(addr: &SocketAddr, config: &ConnectOpts) -> io::Result<UdpSocket> {
-    let bind_addr = match (addr.ip(), config.bind_local_addr) {
-        (IpAddr::V4(..), Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
-        (IpAddr::V6(..), Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
-        (IpAddr::V4(..), ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
-        (IpAddr::V6(..), ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
+    let bind_addr = match (af, config.bind_local_addr) {
+        (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+        (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
 
     let socket = UdpSocket::bind(bind_addr).await?;
 
-    // Any traffic to localhost should be protected
+    // Any traffic except localhost should be protected
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
-    if !addr.ip().is_loopback() {
+    {
         if let Some(ref path) = config.vpn_protect_path {
             protect(path, socket.as_raw_fd()).await?;
         }

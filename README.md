@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
+[![Dependabot Status](https://api.dependabot.com/badges/status?host=github&repo=shadowsocks%2fshadowsocks-rust)](https://dependabot.com)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 

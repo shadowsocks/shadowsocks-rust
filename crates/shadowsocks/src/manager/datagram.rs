@@ -11,8 +11,7 @@ use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 use crate::{
     config::ManagerAddr,
     context::Context,
-    net::ConnectOpts,
-    relay::sys::{create_outbound_udp_socket, create_udp_socket},
+    net::{ConnectOpts, UdpSocket as ShadowUdpSocket},
 };
 
 /// Address accepted from Manager
@@ -57,11 +56,13 @@ impl ManagerDatagram {
     /// Create a `ManagerDatagram` binding to requested `bind_addr`
     pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<ManagerDatagram> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(create_udp_socket(saddr).await?)),
+            ManagerAddr::SocketAddr(ref saddr) => {
+                Ok(ManagerDatagram::UdpDatagram(ShadowUdpSocket::bind(saddr).await?.into()))
+            }
             ManagerAddr::DomainName(ref dname, port) => {
-                let (_, socket) = lookup_then!(context, dname, port, |saddr| { create_udp_socket(&saddr).await })?;
+                let (_, socket) = lookup_then!(context, dname, port, |saddr| { ShadowUdpSocket::bind(&saddr).await })?;
 
-                Ok(ManagerDatagram::UdpDatagram(socket))
+                Ok(ManagerDatagram::UdpDatagram(socket.into()))
             }
             #[cfg(unix)]
             ManagerAddr::UnixSocketAddr(ref path) => {
@@ -100,10 +101,8 @@ impl ManagerDatagram {
     }
 
     async fn connect_socket_addr(sa: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<ManagerDatagram> {
-        let socket = create_outbound_udp_socket(&sa, connect_opts).await?;
-        socket.connect(sa).await?;
-
-        Ok(ManagerDatagram::UdpDatagram(socket))
+        let socket = ShadowUdpSocket::connect_with_opts(&sa, connect_opts).await?;
+        Ok(ManagerDatagram::UdpDatagram(socket.into()))
     }
 
     /// Receives data from the socket.

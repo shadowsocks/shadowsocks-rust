@@ -76,8 +76,8 @@ impl ServerStat {
         let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
             / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT);
 
-        // Times 1000 converts to u64, for 0.001 precision
-        (score * 1000.0) as u64
+        // Times 10000 converts to u64, for 0.0001 precision
+        (score * 10000.0) as u64
     }
 
     pub fn push_score(&mut self, score: Score) -> u64 {

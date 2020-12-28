@@ -5,8 +5,8 @@ use std::str;
 use byte_string::ByteStr;
 use tokio::{
     self,
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
-    prelude::*,
     time::{self, Duration},
 };
 

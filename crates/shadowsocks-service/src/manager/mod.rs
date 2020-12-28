@@ -7,7 +7,10 @@ use std::io::{self, ErrorKind};
 use std::sync::Arc;
 
 use log::{trace, warn};
-use shadowsocks::{config::ServerAddr, net::ConnectOpts};
+use shadowsocks::{
+    config::ServerAddr,
+    net::{AcceptOpts, ConnectOpts},
+};
 
 use crate::config::{Config, ConfigType};
 
@@ -34,14 +37,14 @@ pub async fn run(config: Config) -> io::Result<()> {
     manager.set_nodelay(config.no_delay);
 
     #[cfg(feature = "trust-dns")]
-    {
+    if config.dns.is_some() || crate::hint_support_default_system_resolver() {
         use shadowsocks::dns_resolver::DnsResolver;
 
         let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
         manager.set_dns_resolver(resolver);
     }
 
-    let connect_opts = ConnectOpts {
+    let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
 
@@ -64,7 +67,18 @@ pub async fn run(config: Config) -> io::Result<()> {
 
         ..Default::default()
     };
+
+    connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
+    connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
+    connect_opts.tcp.nodelay = config.no_delay;
+
+    let mut accept_opts = AcceptOpts::default();
+    accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
+    accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
+    accept_opts.tcp.nodelay = config.no_delay;
+
     manager.set_connect_opts(connect_opts);
+    manager.set_accept_opts(accept_opts);
 
     if let Some(c) = config.udp_max_associations {
         manager.set_udp_capacity(c);

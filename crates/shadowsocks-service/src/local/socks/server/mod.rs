@@ -4,7 +4,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, info};
-use shadowsocks::lookup_then;
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
@@ -112,6 +112,7 @@ impl Socks {
                 .1
             }
         };
+        let listener = ShadowTcpListener::from_listener(listener, self.context.accept_opts());
 
         info!("shadowsocks socks TCP listening on {}", listener.local_addr()?);
 

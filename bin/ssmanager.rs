@@ -61,6 +61,11 @@ fn main() {
 
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+
+        (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
+        (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
+        (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
+        (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-redv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
     );
 
     #[cfg(feature = "logging")]
@@ -189,6 +194,19 @@ fn main() {
 
     if matches.is_present("IPV6_FIRST") {
         config.ipv6_first = true;
+    }
+
+    if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
+        config.inbound_send_buffer_size = Some(bs.parse::<u32>().expect("inbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("INBOUND_RECV_BUFFER_SIZE") {
+        config.inbound_recv_buffer_size = Some(bs.parse::<u32>().expect("inbound-recv-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_SEND_BUFFER_SIZE") {
+        config.outbound_send_buffer_size = Some(bs.parse::<u32>().expect("outbound-send-buffer-size"));
+    }
+    if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
+        config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
     }
 
     // DONE reading options

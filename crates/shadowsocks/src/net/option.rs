@@ -4,6 +4,29 @@
 use std::ffi::OsString;
 use std::net::IpAddr;
 
+/// Options for connecting to TCP remote server
+#[derive(Debug, Clone)]
+pub struct TcpSocketOpts {
+    /// TCP socket's `SO_SNDBUF`
+    pub send_buffer_size: Option<u32>,
+
+    /// TCP socket's `SO_RCVBUF`
+    pub recv_buffer_size: Option<u32>,
+
+    /// `TCP_NODELAY`
+    pub nodelay: bool,
+}
+
+impl Default for TcpSocketOpts {
+    fn default() -> TcpSocketOpts {
+        TcpSocketOpts {
+            send_buffer_size: None,
+            recv_buffer_size: None,
+            nodelay: false,
+        }
+    }
+}
+
 /// Options for connecting to remote server
 #[derive(Debug, Clone)]
 pub struct ConnectOpts {
@@ -25,6 +48,9 @@ pub struct ConnectOpts {
     /// Outbound socket binds to interface
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub bind_interface: Option<OsString>,
+
+    /// TCP options
+    pub tcp: TcpSocketOpts,
 }
 
 impl Default for ConnectOpts {
@@ -37,6 +63,22 @@ impl Default for ConnectOpts {
             bind_local_addr: None,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             bind_interface: None,
+            tcp: TcpSocketOpts::default(),
+        }
+    }
+}
+
+/// Inbound connection options
+#[derive(Clone, Debug)]
+pub struct AcceptOpts {
+    /// TCP options
+    pub tcp: TcpSocketOpts,
+}
+
+impl Default for AcceptOpts {
+    fn default() -> AcceptOpts {
+        AcceptOpts {
+            tcp: TcpSocketOpts::default(),
         }
     }
 }
