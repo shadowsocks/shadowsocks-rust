@@ -678,36 +678,28 @@ impl DnsClient {
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
-        let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
-
         // Query UDP then TCP
 
-        if self.mode.enable_udp() {
-            match self
-                .client_cache
-                .lookup_udp_local(local_addr, message.clone(), self.context.connect_opts_ref())
-                .await
-            {
-                Ok(msg) => return Ok(msg),
-                Err(err) => {
-                    last_err = err.into();
-                }
-            }
-        }
+        let udp_query =
+            self.client_cache
+                .lookup_udp_local(local_addr, message.clone(), self.context.connect_opts_ref());
+        let tcp_query = async move {
+            // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simutaneously
+            time::sleep(Duration::from_millis(500)).await;
 
-        if self.mode.enable_tcp() {
-            match self
-                .client_cache
+            self.client_cache
                 .lookup_tcp_local(local_addr, message, self.context.connect_opts_ref())
                 .await
-            {
-                Ok(msg) => return Ok(msg),
-                Err(err) => {
-                    last_err = err.into();
-                }
-            }
-        }
+        };
 
-        Err(last_err)
+        tokio::pin!(udp_query);
+        tokio::pin!(tcp_query);
+
+        match future::select(udp_query, tcp_query).await {
+            Either::Left((Ok(m), ..)) => Ok(m),
+            Either::Left((Err(..), next)) => next.await.map_err(From::from),
+            Either::Right((Ok(m), ..)) => Ok(m),
+            Either::Right((Err(..), next)) => next.await.map_err(From::from),
+        }
     }
 }

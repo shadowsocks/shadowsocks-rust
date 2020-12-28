@@ -2061,7 +2061,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 [[package]]
 name = "trust-dns-proto"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#57245de7d73008c9f960ba8c952e2dbcee54bb84"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.0",
@@ -2085,7 +2085,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-resolver"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#57245de7d73008c9f960ba8c952e2dbcee54bb84"
 dependencies = [
  "cfg-if 1.0.0",
  "futures-util",
@@ -2109,7 +2109,7 @@ dependencies = [
 [[package]]
 name = "trust-dns-rustls"
 version = "0.20.0-alpha.3"
-source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#540906be77b03dc59494aef453b2dbcc875a2a0a"
+source = "git+https://github.com/bluejekyll/trust-dns.git?branch=main#57245de7d73008c9f960ba8c952e2dbcee54bb84"
 dependencies = [
  "futures-channel",
  "futures-io",
