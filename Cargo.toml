@@ -54,7 +54,6 @@ default = [
     "manager",
     "utility",
     "local-http",
-    "local-http-rustls",
     "local-tunnel",
     "local-socks4",
 ]

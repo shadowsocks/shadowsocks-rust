@@ -20,7 +20,6 @@ full = [
     "manager",
     "trust-dns",
     "local-http",
-    "local-http-rustls",
     "local-redir",
     "local-tunnel",
     "local-socks4",

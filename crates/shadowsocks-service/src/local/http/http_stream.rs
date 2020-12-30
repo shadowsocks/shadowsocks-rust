@@ -113,7 +113,7 @@ impl ProxyHttpStream {
     }
 
     #[cfg(not(any(feature = "local-http-native-tls", feature = "local-http-rustls")))]
-    pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
+    pub async fn connect_https(_stream: AutoProxyClientStream, _domain: &str) -> io::Result<ProxyHttpStream> {
         let err = io::Error::new(
             ErrorKind::Other,
             "https is not supported, consider enable it by feature \"local-http-native-tls\" or \"local-http-rustls\"",

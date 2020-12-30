@@ -16,6 +16,7 @@ jobs:
           - x86_64-pc-windows-gnu
           - x86_64-unknown-linux-musl
           - x86_64-unknown-linux-gnu
+          - arm-unknown-linux-gnueabi
           - arm-unknown-linux-gnueabihf
           - arm-unknown-linux-musleabi
           - arm-unknown-linux-musleabihf
@@ -64,8 +65,7 @@ jobs:
       - name: Install Rust nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
-          override: true
+          profile: minimal
 
       - name: Build release
         shell: bash
@@ -91,8 +91,7 @@ jobs:
       - name: Install Rust nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
-          override: true
+          profile: minimal
 
       - name: Build release
         run: |
