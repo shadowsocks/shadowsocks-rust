@@ -539,22 +539,6 @@ impl FromStr for ProtocolType {
     }
 }
 
-/// Configuration for `tun` device, enabled by `local-tun`
-#[cfg(feature = "local-tun")]
-#[derive(Clone, Debug)]
-pub struct TunConfig {
-    /// Name of tun device. System will allocate one for you if set to empty
-    pub name: String,
-    /// MTU of the device
-    pub mtu: Option<i32>,
-    /// IPv4 address of device
-    pub address: Option<Ipv4Addr>,
-    /// IPv4 destination of device
-    pub destination: Option<Ipv4Addr>,
-    /// IPv4 netmark address of device
-    pub netmask: Option<Ipv4Addr>,
-}
-
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -653,10 +637,6 @@ pub struct Config {
     /// Flow statistic report Unix socket path (only for Android)
     #[cfg(feature = "local-flow-stat")]
     pub stat_path: Option<PathBuf>,
-
-    /// tun device configuration
-    #[cfg(feature = "local-tun")]
-    pub tun: Option<TunConfig>,
 }
 
 /// Configuration parsing error kind
@@ -773,9 +753,6 @@ impl Config {
 
             #[cfg(feature = "local-flow-stat")]
             stat_path: None,
-
-            #[cfg(feature = "local-tun")]
-            tun: None,
         }
     }
 

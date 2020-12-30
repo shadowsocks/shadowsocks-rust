@@ -27,8 +27,7 @@ jobs:
       - name: Install Rust nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
-          override: true
+          profile: minimal
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
@@ -51,8 +50,7 @@ jobs:
       - name: Install Rust nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
-          override: true
+          profile: minimal
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
@@ -80,8 +78,7 @@ jobs:
       - name: Install Rust nightly
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
-          override: true
+          profile: minimal
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
