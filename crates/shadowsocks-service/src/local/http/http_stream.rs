@@ -30,7 +30,7 @@ impl ProxyHttpStream {
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use native_tls::TlsConnector;
 
-        let cx = match TlsConnector::builder().build() {
+        let cx = match TlsConnector::builder().request_alpns(&["h2", "http/1.1"]).build() {
             Ok(c) => c,
             Err(err) => {
                 return Err(io::Error::new(ErrorKind::Other, format!("tls build: {}", err)));
@@ -40,9 +40,16 @@ impl ProxyHttpStream {
 
         match cx.connect(domain, stream).await {
             Ok(s) => {
-                // FIXME: There is no API to set ALPN for negociating H2
-                // https://github.com/sfackler/rust-native-tls/issues/49
-                Ok(ProxyHttpStream::Https(s, false))
+                let negociated_h2 = match s.get_ref().negotiated_alpn() {
+                    Ok(Some(alpn)) => alpn == b"h2",
+                    Ok(None) => false,
+                    Err(err) => {
+                        let ierr = io::Error::new(ErrorKind::Other, format!("tls alpn negociate: {}", err));
+                        return Err(ierr);
+                    }
+                };
+
+                Ok(ProxyHttpStream::Https(s, negociated_h2))
             }
             Err(err) => {
                 let ierr = io::Error::new(ErrorKind::Other, format!("tls connect: {}", err));
