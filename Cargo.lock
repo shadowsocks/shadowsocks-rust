@@ -2059,6 +2059,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
+name = "trust-dns-https"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2663f69cd36a5e99a93825d1f3aff834de2bb3cca2989316f3c9504a63a0c0a5"
+dependencies = [
+ "bytes 1.0.0",
+ "cfg-if 1.0.0",
+ "data-encoding",
+ "futures-util",
+ "h2",
+ "http",
+ "log",
+ "rustls",
+ "thiserror",
+ "tokio 1.0.1",
+ "tokio-rustls",
+ "trust-dns-proto",
+ "trust-dns-rustls",
+ "webpki",
+ "webpki-roots",
+]
+
+[[package]]
 name = "trust-dns-proto"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2103,6 +2126,7 @@ dependencies = [
  "thiserror",
  "tokio 1.0.1",
  "tokio-rustls",
+ "trust-dns-https",
  "trust-dns-proto",
  "trust-dns-rustls",
  "webpki-roots",

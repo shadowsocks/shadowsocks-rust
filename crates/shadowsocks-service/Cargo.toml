@@ -37,7 +37,7 @@ manager = ["server"]
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver", "shadowsocks/trust-dns"]
 dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-rustls"]
-dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https"]
+dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https", "trust-dns-resolver/dns-over-https-rustls"]
 
 # Enable DNS-relay
 local-dns = ["local", "trust-dns", "rand"]

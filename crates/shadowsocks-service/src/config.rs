@@ -1009,7 +1009,7 @@ impl Config {
                                     protocol: Protocol::Udp,
                                     tls_dns_name: None,
                                     trust_nx_responses: false,
-                                    #[cfg(feature = "dns-over-tls")]
+                                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
                                     tls_config: None,
                                 });
                                 c.add_name_server(NameServerConfig {
@@ -1017,7 +1017,7 @@ impl Config {
                                     protocol: Protocol::Tcp,
                                     tls_dns_name: None,
                                     trust_nx_responses: false,
-                                    #[cfg(feature = "dns-over-tls")]
+                                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
                                     tls_config: None,
                                 });
                             }
