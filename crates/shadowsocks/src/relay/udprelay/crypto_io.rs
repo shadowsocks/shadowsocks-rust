@@ -219,6 +219,10 @@ async fn decrypt_payload_aead(
     let mut cipher = Cipher::new(method, &key, &salt);
     let tag_len = cipher.tag_len();
 
+    if data.len() < tag_len {
+        return Err(io::Error::new(io::ErrorKind::Other, "udp packet too short for tag"));
+    }
+
     if !cipher.decrypt_packet(data) {
         return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
     }
