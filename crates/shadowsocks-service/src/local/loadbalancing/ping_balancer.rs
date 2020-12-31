@@ -176,7 +176,7 @@ impl PingBalancerContext {
             let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
 
             let mut best_idx = 0;
-            let mut best_score = u64::MAX;
+            let mut best_score = u32::MAX;
             for (idx, server) in self.servers.iter().enumerate() {
                 let score = server.tcp_score().score();
                 if score < best_score {
@@ -205,7 +205,7 @@ impl PingBalancerContext {
             let old_best_idx = self.best_udp_idx.load(Ordering::Acquire);
 
             let mut best_idx = 0;
-            let mut best_score = u64::MAX;
+            let mut best_score = u32::MAX;
             for (idx, server) in self.servers.iter().enumerate() {
                 let score = server.udp_score().score();
                 if score < best_score {
@@ -448,7 +448,7 @@ impl PingChecker {
         }
     }
 
-    async fn check_delay(&self) -> io::Result<u64> {
+    async fn check_delay(&self) -> io::Result<u32> {
         let start = Instant::now();
 
         // Send HTTP GET and read the first byte
@@ -456,7 +456,7 @@ impl PingChecker {
         let res = time::timeout(timeout, self.check_request()).await;
 
         let elapsed = Instant::now() - start;
-        let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
+        let elapsed = elapsed.as_secs() as u32 * 1000 + elapsed.subsec_millis(); // Converted to ms
         match res {
             Ok(Ok(..)) => {
                 // Got the result ... record its time

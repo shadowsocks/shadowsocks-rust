@@ -2,7 +2,7 @@
 
 use std::{
     fmt::{self, Debug},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 use shadowsocks::ServerConfig;
@@ -13,7 +13,7 @@ use super::server_stat::{Score, ServerStat};
 /// Server's statistic score
 pub struct ServerScore {
     stat_data: Mutex<ServerStat>,
-    score: AtomicU64,
+    score: AtomicU32,
 }
 
 impl ServerScore {
@@ -21,17 +21,17 @@ impl ServerScore {
     pub fn new() -> ServerScore {
         ServerScore {
             stat_data: Mutex::new(ServerStat::new()),
-            score: AtomicU64::new(0),
+            score: AtomicU32::new(0),
         }
     }
 
     /// Get server's current statistic scores
-    pub fn score(&self) -> u64 {
+    pub fn score(&self) -> u32 {
         self.score.load(Ordering::Acquire)
     }
 
     /// Append a `Score` into statistic and recalculate score of the server
-    pub async fn push_score(&self, score: Score) -> u64 {
+    pub async fn push_score(&self, score: Score) -> u32 {
         let updated_score = {
             let mut stat = self.stat_data.lock().await;
             stat.push_score(score)
@@ -41,7 +41,7 @@ impl ServerScore {
     }
 
     /// Report request failure of this server, which will eventually records an `Errored` score
-    pub async fn report_failure(&self) -> u64 {
+    pub async fn report_failure(&self) -> u32 {
         self.push_score(Score::Errored).await
     }
 }

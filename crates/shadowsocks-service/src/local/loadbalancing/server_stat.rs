@@ -7,14 +7,14 @@ pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
 /// Timeout of each probing
 pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 2 secs, that's too long
 
-const MAX_SERVER_RTT: u64 = DEFAULT_CHECK_TIMEOUT_SEC * 1000;
+const MAX_SERVER_RTT: u32 = DEFAULT_CHECK_TIMEOUT_SEC as u32 * 1000;
 const MAX_LATENCY_QUEUE_SIZE: usize = 99;
 
 /// Statistic score
 #[derive(Debug, Copy, Clone)]
 pub enum Score {
     /// Unified latency
-    Latency(u64),
+    Latency(u32),
     /// Request error
     Errored,
 }
@@ -26,7 +26,7 @@ pub struct ServerStat {
     ///
     /// Use median instead of average time,
     /// because probing result may have some really bad cases
-    rtt: u64,
+    rtt: u32,
     /// Total_Fail / Total_Probe
     fail_rate: f64,
     /// Recently probe data
@@ -57,7 +57,7 @@ impl ServerStat {
         }
     }
 
-    fn score(&self) -> u64 {
+    fn score(&self) -> u32 {
         // Normalize rtt
         let nrtt = self.rtt as f64 / MAX_SERVER_RTT as f64;
 
@@ -76,11 +76,11 @@ impl ServerStat {
         let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
             / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT);
 
-        // Times 10000 converts to u64, for 0.0001 precision
-        (score * 10000.0) as u64
+        // Times 10000 converts to u32, for 0.0001 precision
+        (score * 10000.0) as u32
     }
 
-    pub fn push_score(&mut self, score: Score) -> u64 {
+    pub fn push_score(&mut self, score: Score) -> u32 {
         self.latency_queue.push_back(score);
 
         // Only records recently MAX_LATENCY_QUEUE_SIZE probe data
@@ -91,7 +91,7 @@ impl ServerStat {
         self.recalculate_score()
     }
 
-    fn recalculate_score(&mut self) -> u64 {
+    fn recalculate_score(&mut self) -> u32 {
         if self.latency_queue.is_empty() {
             return self.score();
         }
