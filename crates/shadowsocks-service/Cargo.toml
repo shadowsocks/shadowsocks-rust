@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.9.0"
+version = "1.9.0-alpha.2"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -101,7 +101,7 @@ regex = "1.4"
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.3"
 
-shadowsocks = { version = "1.9", path = "../shadowsocks" }
+shadowsocks = { version = "1.9.0-alpha.2", path = "../shadowsocks" }
 
 strum = { version = "0.20", optional = true }
 strum_macros = { version = "0.20", optional = true }
