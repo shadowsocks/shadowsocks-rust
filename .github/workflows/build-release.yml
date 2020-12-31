@@ -10,6 +10,8 @@ env:
 jobs:
   build-cross:
     runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: full
     strategy:
       matrix:
         target:
@@ -48,6 +50,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       BUILD_EXTRA_FEATURES: "local-redir"
+      RUST_BACKTRACE: full
     strategy:
       matrix:
         # os: [ubuntu-latest, macos-latest]
@@ -85,6 +88,7 @@ jobs:
     runs-on: windows-latest
     env:
       RUSTFLAGS: "-Ctarget-feature=+crt-static"
+      RUST_BACKTRACE: full
     steps:
       - uses: actions/checkout@v2
 
