@@ -236,7 +236,7 @@ cfg_if! {
 
             /// For Linux-like systems' Netfilter `REDIRECT`. Only for TCP connections.
             ///
-            /// This is supported from Linux 2.4 Kernel. Document: https://www.netfilter.org/documentation/index.html#documentation-howto
+            /// This is supported from Linux 2.4 Kernel. Document: <https://www.netfilter.org/documentation/index.html#documentation-howto>
             ///
             /// NOTE: Filter rule `REDIRECT` can only be applied to TCP connections.
             #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -252,7 +252,7 @@ cfg_if! {
             ///
             /// Supported by OpenBSD 3.0+, FreeBSD 5.3+, NetBSD 3.0+, Solaris 11.3+, macOS 10.7+, iOS, QNX
             ///
-            /// Document: https://www.freebsd.org/doc/handbook/firewalls-pf.html
+            /// Document: <https://www.freebsd.org/doc/handbook/firewalls-pf.html>
             #[cfg(any(
                 target_os = "openbsd",
                 target_os = "freebsd",

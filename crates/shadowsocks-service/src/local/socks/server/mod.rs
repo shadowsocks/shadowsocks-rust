@@ -209,7 +209,7 @@ impl Socks {
     }
 
     async fn run_udp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
-        let mut server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
+        let server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
 
         let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
         server.run(udp_bind_addr, balancer).await

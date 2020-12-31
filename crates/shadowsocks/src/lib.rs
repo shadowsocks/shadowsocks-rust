@@ -1,3 +1,5 @@
+//! Shadowsocks Core Library
+
 #![crate_type = "lib"]
 
 pub use self::{

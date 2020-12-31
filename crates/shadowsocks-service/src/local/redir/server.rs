@@ -100,7 +100,7 @@ impl Redir {
     }
 
     async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
-        let mut server = UdpRedir::new(
+        let server = UdpRedir::new(
             self.context.clone(),
             self.udp_redir,
             self.udp_expiry_duration,

@@ -13,6 +13,7 @@ use tokio::net::TcpListener;
 
 use crate::config::RedirType;
 
+/// Extension function for `TcpListener` for setting extra options before `bind()`
 #[async_trait]
 pub trait TcpListenerRedirExt {
     // Create a TcpListener for transparent proxy
@@ -21,6 +22,7 @@ pub trait TcpListenerRedirExt {
     async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener>;
 }
 
+/// Extension function for `TcpStream` for reading original destination address
 pub trait TcpStreamRedirExt {
     // Read destination address for TcpStream
     //
@@ -28,6 +30,7 @@ pub trait TcpStreamRedirExt {
     fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr>;
 }
 
+/// `UdpSocket` that support transparent proxy
 pub trait UdpSocketRedir {
     /// Receive a single datagram from the socket.
     ///
@@ -41,6 +44,7 @@ pub trait UdpSocketRedir {
     ) -> Poll<io::Result<(usize, SocketAddr, SocketAddr)>>;
 }
 
+/// Extension functions for `UdpSocket` to receive data with original destination address
 pub trait UdpSocketRedirExt {
     fn recv_dest_from<'a>(&'a self, buf: &'a mut [u8]) -> RecvDestFrom<'a, Self>
     where
@@ -52,6 +56,7 @@ pub trait UdpSocketRedirExt {
 
 impl<S> UdpSocketRedirExt for S where S: UdpSocketRedir {}
 
+/// Future for `recv_dest_from`
 pub struct RecvDestFrom<'a, S: 'a> {
     socket: &'a S,
     buf: &'a mut [u8],
