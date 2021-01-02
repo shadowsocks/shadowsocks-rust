@@ -12,10 +12,7 @@ use tokio::{
 
 use crate::{
     config::{ClientConfig, Mode},
-    local::{
-        context::ServiceContext,
-        loadbalancing::{PingBalancer, ServerIdent},
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
 #[cfg(feature = "local-socks4")]
@@ -139,7 +136,7 @@ impl Socks {
                 let _ = stream.set_nodelay(true);
             }
 
-            let server = balancer.best_tcp_server();
+            let balancer = balancer.clone();
             let context = self.context.clone();
             let nodelay = self.nodelay;
             let udp_bind_addr = udp_bind_addr.clone();
@@ -149,7 +146,7 @@ impl Socks {
                 context,
                 udp_bind_addr,
                 stream,
-                server,
+                balancer,
                 peer_addr,
                 mode,
                 nodelay,
@@ -162,7 +159,7 @@ impl Socks {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         stream: TcpStream,
-        server: Arc<ServerIdent>,
+        balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
         nodelay: bool,
@@ -177,12 +174,12 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4TcpHandler::new(context, nodelay, server, mode);
+                let handler = Socks4TcpHandler::new(context, nodelay, balancer, mode);
                 handler.handle_socks4_client(stream, peer_addr).await
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server, mode);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, balancer, mode);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
@@ -199,12 +196,12 @@ impl Socks {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         stream: TcpStream,
-        server: Arc<ServerIdent>,
+        balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
         nodelay: bool,
     ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, server, mode);
+        let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, balancer, mode);
         handler.handle_socks5_client(stream, peer_addr).await
     }
 

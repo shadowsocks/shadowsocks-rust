@@ -9,7 +9,7 @@ use shadowsocks::relay::socks5::Address;
 
 use crate::local::{
     context::ServiceContext,
-    loadbalancing::ServerIdent,
+    loadbalancing::PingBalancer,
     net::AutoProxyClientStream,
     utils::establish_tcp_tunnel,
 };
@@ -23,7 +23,7 @@ use super::{
 pub struct HttpDispatcher {
     context: Arc<ServiceContext>,
     req: Request<Body>,
-    server: Arc<ServerIdent>,
+    balancer: PingBalancer,
     client_addr: SocketAddr,
     bypass_client: BypassHttpClient,
     proxy_client_cache: Arc<ProxyClientCache>,
@@ -33,7 +33,7 @@ impl HttpDispatcher {
     pub fn new(
         context: Arc<ServiceContext>,
         req: Request<Body>,
-        server: Arc<ServerIdent>,
+        balancer: PingBalancer,
         client_addr: SocketAddr,
         bypass_client: BypassHttpClient,
         proxy_client_cache: Arc<ProxyClientCache>,
@@ -41,7 +41,7 @@ impl HttpDispatcher {
         HttpDispatcher {
             context,
             req,
-            server,
+            balancer,
             client_addr,
             bypass_client,
             proxy_client_cache,
@@ -89,7 +89,8 @@ impl HttpDispatcher {
             // Connect to Shadowsocks' remote
             //
             // FIXME: What STATUS should I return for connection error?
-            let stream = AutoProxyClientStream::connect(self.context, self.server.as_ref(), &host).await?;
+            let server = self.balancer.best_tcp_server();
+            let stream = AutoProxyClientStream::connect(self.context, server.as_ref(), &host).await?;
 
             debug!("CONNECT relay connected {} <-> {}", self.client_addr, host);
 
@@ -100,7 +101,6 @@ impl HttpDispatcher {
             // `on_upgrade` future.
             let req = self.req;
             let client_addr = self.client_addr;
-            let server = self.server;
             tokio::spawn(async move {
                 match upgrade::on(req).await {
                     Ok(upgraded) => {
@@ -174,7 +174,8 @@ impl HttpDispatcher {
                 // Keep connections for clients in ServerScore::client
                 //
                 // client instance is kept for Keep-Alive connections
-                let client = self.proxy_client_cache.get_connected(&self.server).await;
+                let server = self.balancer.best_tcp_server();
+                let client = self.proxy_client_cache.get_connected(&server).await;
 
                 match client.request(self.req).await {
                     Ok(res) => res,

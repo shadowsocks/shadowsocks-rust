@@ -13,7 +13,7 @@ use crate::{
     config::{ClientConfig, RedirType},
     local::{
         context::ServiceContext,
-        loadbalancing::{PingBalancer, ServerIdent},
+        loadbalancing::PingBalancer,
         net::{AutoProxyClientStream, AutoProxyIo},
         redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
         utils::establish_tcp_tunnel,
@@ -27,12 +27,13 @@ mod sys;
 /// This method must be called after handshaking with client (for example, socks5 handshaking)
 async fn establish_client_tcp_redir<'a>(
     context: Arc<ServiceContext>,
-    server: &ServerIdent,
+    balancer: PingBalancer,
     mut stream: TcpStream,
     peer_addr: SocketAddr,
     addr: &Address,
     nodelay: bool,
 ) -> io::Result<()> {
+    let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
 
     let remote = AutoProxyClientStream::connect(context, &server, addr).await?;
@@ -70,7 +71,7 @@ async fn establish_client_tcp_redir<'a>(
 
 async fn handle_redir_client(
     context: Arc<ServiceContext>,
-    server: &ServerIdent,
+    balancer: PingBalancer,
     s: TcpStream,
     peer_addr: SocketAddr,
     daddr: SocketAddr,
@@ -90,7 +91,7 @@ async fn handle_redir_client(
 
     // Get forward address from socket
     let target_addr = Address::from(daddr);
-    establish_client_tcp_redir(context, server, s, peer_addr, &target_addr, nodelay).await
+    establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr, nodelay).await
 }
 
 pub async fn run_tcp_redir(
@@ -125,12 +126,11 @@ pub async fn run_tcp_redir(
                 continue;
             }
         };
-        let server = balancer.best_tcp_server();
 
         trace!("got connection {}", peer_addr);
-        trace!("picked proxy server: {:?}", server.server_config());
 
         let context = context.clone();
+        let balancer = balancer.clone();
         tokio::spawn(async move {
             let dst_addr = match socket.destination_addr(redir_ty) {
                 Ok(d) => d,
@@ -143,7 +143,7 @@ pub async fn run_tcp_redir(
                 }
             };
 
-            if let Err(err) = handle_redir_client(context, &server, socket, peer_addr, dst_addr, nodelay).await {
+            if let Err(err) = handle_redir_client(context, balancer, socket, peer_addr, dst_addr, nodelay).await {
                 debug!("TCP redirect client, error: {:?}", err);
             }
         });

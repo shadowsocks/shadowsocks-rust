@@ -23,7 +23,7 @@ use crate::{
     config::{ClientConfig, Mode},
     local::{
         context::ServiceContext,
-        loadbalancing::ServerIdent,
+        loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -34,7 +34,7 @@ pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
     udp_bind_addr: Option<Arc<ClientConfig>>,
     nodelay: bool,
-    server: Arc<ServerIdent>,
+    balancer: PingBalancer,
     mode: Mode,
 }
 
@@ -43,14 +43,14 @@ impl Socks5TcpHandler {
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ClientConfig>>,
         nodelay: bool,
-        server: Arc<ServerIdent>,
+        balancer: PingBalancer,
         mode: Mode,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
             udp_bind_addr,
             nodelay,
-            server,
+            balancer,
             mode,
         }
     }
@@ -131,9 +131,10 @@ impl Socks5TcpHandler {
             return Ok(());
         }
 
-        let svr_cfg = self.server.server_config();
+        let server = self.balancer.best_tcp_server();
+        let svr_cfg = server.server_config();
 
-        let remote = match AutoProxyClientStream::connect(self.context.clone(), &self.server, &target_addr).await {
+        let remote = match AutoProxyClientStream::connect(self.context.clone(), &server, &target_addr).await {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let header =

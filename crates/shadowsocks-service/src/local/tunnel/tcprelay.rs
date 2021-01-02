@@ -13,7 +13,7 @@ use crate::{
     config::ClientConfig,
     local::{
         context::ServiceContext,
-        loadbalancing::{PingBalancer, ServerIdent},
+        loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -53,13 +53,13 @@ pub async fn run_tcp_tunnel(
             let _ = stream.set_nodelay(true);
         }
 
-        let server = balancer.best_tcp_server();
+        let balancer = balancer.clone();
         let forward_addr = forward_addr.clone();
 
         tokio::spawn(handle_tcp_client(
             context.clone(),
             stream,
-            server,
+            balancer,
             peer_addr,
             forward_addr,
             nodelay,
@@ -70,11 +70,12 @@ pub async fn run_tcp_tunnel(
 async fn handle_tcp_client(
     context: Arc<ServiceContext>,
     mut stream: TcpStream,
-    server: Arc<ServerIdent>,
+    balancer: PingBalancer,
     peer_addr: SocketAddr,
     forward_addr: Address,
     nodelay: bool,
 ) -> io::Result<()> {
+    let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
     trace!(
         "establishing tcp tunnel {} <-> {} through sever {} (outbound: {})",

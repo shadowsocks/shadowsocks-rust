@@ -16,7 +16,7 @@ use crate::{
     config::Mode,
     local::{
         context::ServiceContext,
-        loadbalancing::ServerIdent,
+        loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         utils::establish_tcp_tunnel,
     },
@@ -27,16 +27,16 @@ use crate::local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeR
 pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
     nodelay: bool,
-    server: Arc<ServerIdent>,
+    balancer: PingBalancer,
     mode: Mode,
 }
 
 impl Socks4TcpHandler {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool, server: Arc<ServerIdent>, mode: Mode) -> Socks4TcpHandler {
+    pub fn new(context: Arc<ServiceContext>, nodelay: bool, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
         Socks4TcpHandler {
             context,
             nodelay,
-            server,
+            balancer,
             mode,
         }
     }
@@ -82,10 +82,11 @@ impl Socks4TcpHandler {
             return Ok(());
         }
 
-        let svr_cfg = self.server.server_config();
+        let server = self.balancer.best_tcp_server();
+        let svr_cfg = server.server_config();
         let target_addr = target_addr.into();
 
-        let mut remote = match AutoProxyClientStream::connect(self.context, &self.server, &target_addr).await {
+        let mut remote = match AutoProxyClientStream::connect(self.context, &server, &target_addr).await {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let handshake_rsp = HandshakeResponse::new(ResultCode::RequestGranted);

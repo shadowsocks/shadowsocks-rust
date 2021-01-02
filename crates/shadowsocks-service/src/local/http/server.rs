@@ -61,11 +61,10 @@ impl Http {
 
             async move {
                 Ok::<_, Infallible>(service_fn(move |req: Request<Body>| {
-                    let server = balancer.best_tcp_server();
                     HttpDispatcher::new(
                         context.clone(),
                         req,
-                        server,
+                        balancer.clone(),
                         client_addr,
                         bypass_client.clone(),
                         proxy_client_cache.clone(),
