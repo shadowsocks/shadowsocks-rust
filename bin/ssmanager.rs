@@ -66,6 +66,8 @@ fn main() {
         (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
         (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
         (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
+
+        (@arg SINGLE_THREADED: --("single-threaded") "Run the program all in one thread")
     );
 
     #[cfg(feature = "logging")]
@@ -234,7 +236,7 @@ fn main() {
 
     info!("shadowsocks {}", VERSION);
 
-    let mut builder = if cfg!(feature = "single-threaded") {
+    let mut builder = if matches.is_present("SINGLE_THREADED") {
         Builder::new_current_thread()
     } else {
         Builder::new_multi_thread()

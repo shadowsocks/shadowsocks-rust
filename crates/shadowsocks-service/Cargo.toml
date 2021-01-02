@@ -24,8 +24,6 @@ full = [
     "local-tunnel",
     "local-socks4",
 ]
-# Uses single-threaded scheduler instead of default multi-threaded
-single-threaded = []
 
 # Enable local server
 local = []

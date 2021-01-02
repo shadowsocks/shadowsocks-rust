@@ -57,8 +57,6 @@ default = [
     "local-tunnel",
     "local-socks4",
 ]
-# Uses single-threaded scheduler instead of default multi-threaded scheduler
-single-threaded = []
 
 # Enable local server
 local = ["shadowsocks-service/local"]
