@@ -55,7 +55,7 @@ impl FlowStat {
     /// Received bytes count
     #[cfg(any(target_arch = "mips", target_arch = "powerpc"))]
     pub fn rx(&self) -> u64 {
-        self.rx.load(Ordering::Relaxed) as u32
+        self.rx.load(Ordering::Relaxed) as u64
     }
 
     /// Increase received bytes
