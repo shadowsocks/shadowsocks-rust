@@ -248,7 +248,11 @@ impl AccessControl {
             }
         };
 
-        let bypass_regex = match RegexSetBuilder::new(bypass_rules).size_limit(REGEX_SIZE_LIMIT).build() {
+        let bypass_regex = match RegexSetBuilder::new(bypass_rules)
+            .case_insensitive(true)
+            .size_limit(REGEX_SIZE_LIMIT)
+            .build()
+        {
             Ok(r) => r,
             Err(err) => {
                 let err = Error::new(
@@ -259,7 +263,11 @@ impl AccessControl {
             }
         };
 
-        let proxy_regex = match RegexSetBuilder::new(proxy_rules).size_limit(REGEX_SIZE_LIMIT).build() {
+        let proxy_regex = match RegexSetBuilder::new(proxy_rules)
+            .case_insensitive(true)
+            .size_limit(REGEX_SIZE_LIMIT)
+            .build()
+        {
             Ok(r) => r,
             Err(err) => {
                 let err = Error::new(
