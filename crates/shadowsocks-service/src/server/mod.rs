@@ -30,6 +30,14 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     trace!("{:?}", config);
 
+    // Warning for Stream Ciphers
+    for server in config.server.iter() {
+        if server.method().is_stream() {
+            warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
+                    DO NOT USE. It will be removed in the future.", server.method(), server.addr());
+        }
+    }
+
     #[cfg(unix)]
     if let Some(nofile) = config.nofile {
         use crate::sys::set_nofile;
