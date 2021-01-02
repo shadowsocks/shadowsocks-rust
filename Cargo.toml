@@ -56,6 +56,7 @@ default = [
     "local-http",
     "local-tunnel",
     "local-socks4",
+    "multi-threaded",
 ]
 
 # Enable local server
@@ -99,6 +100,12 @@ jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
 tcmalloc-vendored = ["tcmalloc/bundled"]
 
+# Enable tokio's multi-threaded runtime
+multi-threaded = ["tokio/rt-multi-thread"]
+# Enable tokio's single-threaded
+# DEPRECATED. Uses multi-threaded instead
+single-threaded = []
+
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.0", optional = true }
@@ -108,7 +115,7 @@ cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
 
 futures = "0.3"
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "signal"] }
+tokio = { version = "1.0", features = ["rt", "signal"] }
 
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }

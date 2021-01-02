@@ -100,6 +100,13 @@ fn main() {
         );
     }
 
+    #[cfg(feature = "multi-threaded")]
+    {
+        app = clap_app!(@app (app)
+            (@arg SINGLE_THREADED: --("single-threaded") "Run the program all in one thread")
+        );
+    }
+
     let matches = app
         .arg(
             Arg::with_name("IPV6_FIRST")
@@ -263,11 +270,15 @@ fn main() {
 
     info!("shadowsocks {}", VERSION);
 
-    let mut builder = if matches.is_present("SINGLE_THREADED") {
+    #[cfg(feature = "multi-threaded")]
+    let mut builder = if matches.is_present("SINGLE_THREADED") || cfg!(feature = "single-threaded") {
         Builder::new_current_thread()
     } else {
         Builder::new_multi_thread()
     };
+    #[cfg(not(feature = "multi-threaded"))]
+    let mut builder = Builder::new_current_thread();
+
     let runtime = builder.enable_all().build().expect("create tokio Runtime");
     runtime.block_on(async move {
         let abort_signal = monitor::create_signal_monitor();
