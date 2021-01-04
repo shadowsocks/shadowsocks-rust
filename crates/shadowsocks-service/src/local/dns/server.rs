@@ -36,29 +36,29 @@ use crate::{
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
-use super::client_cache::DnsClientCache;
+use super::{client_cache::DnsClientCache, config::NameServerAddr};
 
 /// DNS Relay server
 pub struct Dns {
     context: Arc<ServiceContext>,
     mode: Mode,
-    local_addr: SocketAddr,
+    local_addr: Arc<NameServerAddr>,
     remote_addr: Arc<Address>,
 }
 
 impl Dns {
     /// Create a new DNS Relay server
-    pub fn new(local_addr: SocketAddr, remote_addr: Address) -> Dns {
+    pub fn new(local_addr: NameServerAddr, remote_addr: Address) -> Dns {
         let context = ServiceContext::new();
         Dns::with_context(Arc::new(context), local_addr, remote_addr)
     }
 
     /// Create with an existed `context`
-    pub fn with_context(context: Arc<ServiceContext>, local_addr: SocketAddr, remote_addr: Address) -> Dns {
+    pub fn with_context(context: Arc<ServiceContext>, local_addr: NameServerAddr, remote_addr: Address) -> Dns {
         Dns {
             context,
             mode: Mode::UdpOnly,
-            local_addr: local_addr,
+            local_addr: Arc::new(local_addr),
             remote_addr: Arc::new(remote_addr),
         }
     }
@@ -117,7 +117,7 @@ impl Dns {
                 client.clone(),
                 stream,
                 peer_addr,
-                self.local_addr,
+                self.local_addr.clone(),
                 self.remote_addr.clone(),
             ));
         }
@@ -127,7 +127,7 @@ impl Dns {
         client: Arc<DnsClient>,
         mut stream: TcpStream,
         peer_addr: SocketAddr,
-        local_addr: SocketAddr,
+        local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
     ) -> io::Result<()> {
         let mut length_buf = [0u8; 2];
@@ -168,7 +168,7 @@ impl Dns {
                 }
             };
 
-            let respond_message = match client.resolve(message, local_addr, &remote_addr).await {
+            let respond_message = match client.resolve(message, &local_addr, &remote_addr).await {
                 Ok(m) => m,
                 Err(err) => {
                     error!("dns tcp {} lookup error: {}", peer_addr, err);
@@ -237,7 +237,7 @@ impl Dns {
                 listener.clone(),
                 peer_addr,
                 message,
-                self.local_addr,
+                self.local_addr.clone(),
                 self.remote_addr.clone(),
             ));
         }
@@ -248,10 +248,10 @@ impl Dns {
         listener: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         message: Message,
-        local_addr: SocketAddr,
+        local_addr: Arc<NameServerAddr>,
         remote_addr: Arc<Address>,
     ) -> io::Result<()> {
-        let respond_message = match client.resolve(message, local_addr, &remote_addr).await {
+        let respond_message = match client.resolve(message, &local_addr, &remote_addr).await {
             Ok(m) => m,
             Err(err) => {
                 error!("dns udp {} lookup failed, error: {}", peer_addr, err);
@@ -442,7 +442,12 @@ impl DnsClient {
         }
     }
 
-    async fn resolve(&self, request: Message, local_addr: SocketAddr, remote_addr: &Address) -> io::Result<Message> {
+    async fn resolve(
+        &self,
+        request: Message,
+        local_addr: &NameServerAddr,
+        remote_addr: &Address,
+    ) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(request.id());
         message.set_recursion_desired(true);
@@ -476,7 +481,7 @@ impl DnsClient {
     async fn acl_lookup(
         &self,
         query: &Query,
-        local_addr: SocketAddr,
+        local_addr: &NameServerAddr,
         remote_addr: &Address,
     ) -> (io::Result<Message>, bool) {
         // Start querying name servers
@@ -657,7 +662,7 @@ impl DnsClient {
         }
     }
 
-    async fn lookup_local(&self, query: &Query, local_addr: SocketAddr) -> io::Result<Message> {
+    async fn lookup_local(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
 
         for _ in 0..self.attempts {
@@ -672,34 +677,44 @@ impl DnsClient {
         Err(last_err)
     }
 
-    async fn lookup_local_inner(&self, query: &Query, local_addr: SocketAddr) -> io::Result<Message> {
+    async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut message = Message::new();
         message.set_id(thread_rng().gen());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
-        // Query UDP then TCP
+        match *local_addr {
+            NameServerAddr::SocketAddr(ns) => {
+                // Query UDP then TCP
 
-        let udp_query =
-            self.client_cache
-                .lookup_udp_local(local_addr, message.clone(), self.context.connect_opts_ref());
-        let tcp_query = async move {
-            // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simutaneously
-            time::sleep(Duration::from_millis(500)).await;
+                let udp_query =
+                    self.client_cache
+                        .lookup_udp_local(ns, message.clone(), self.context.connect_opts_ref());
+                let tcp_query = async move {
+                    // Send TCP query after 500ms, because UDP will always return faster than TCP, there is no need to send queries simutaneously
+                    time::sleep(Duration::from_millis(500)).await;
 
-            self.client_cache
-                .lookup_tcp_local(local_addr, message, self.context.connect_opts_ref())
+                    self.client_cache
+                        .lookup_tcp_local(ns, message, self.context.connect_opts_ref())
+                        .await
+                };
+
+                tokio::pin!(udp_query);
+                tokio::pin!(tcp_query);
+
+                match future::select(udp_query, tcp_query).await {
+                    Either::Left((Ok(m), ..)) => Ok(m),
+                    Either::Left((Err(..), next)) => next.await.map_err(From::from),
+                    Either::Right((Ok(m), ..)) => Ok(m),
+                    Either::Right((Err(..), next)) => next.await.map_err(From::from),
+                }
+            }
+            #[cfg(unix)]
+            NameServerAddr::UnixSocketAddr(ref path) => self
+                .client_cache
+                .lookup_unix_stream(path, message)
                 .await
-        };
-
-        tokio::pin!(udp_query);
-        tokio::pin!(tcp_query);
-
-        match future::select(udp_query, tcp_query).await {
-            Either::Left((Ok(m), ..)) => Ok(m),
-            Either::Left((Err(..), next)) => next.await.map_err(From::from),
-            Either::Right((Ok(m), ..)) => Ok(m),
-            Either::Right((Err(..), next)) => next.await.map_err(From::from),
+                .map_err(From::from),
         }
     }
 }

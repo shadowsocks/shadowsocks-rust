@@ -121,7 +121,6 @@ impl DnsClientCache {
     }
 
     #[cfg(unix)]
-    #[allow(dead_code)]
     pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> Result<Message, ProtoError> {
         let mut last_err = None;
 

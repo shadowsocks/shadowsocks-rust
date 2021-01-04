@@ -82,44 +82,44 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
 
-    #[cfg(all(feature = "local-dns", feature = "trust-dns"))]
-    if let Some(socket_addr) = config.local_dns_addr {
-        use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
-
-        trace!("initializing direct DNS resolver for {}", socket_addr);
-
-        let mut resolver_config = ResolverConfig::new();
-
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr,
-            protocol: Protocol::Udp,
-            tls_dns_name: None,
-            trust_nx_responses: false,
-            #[cfg(feature = "dns-over-tls")]
-            tls_config: None,
-        });
-        resolver_config.add_name_server(NameServerConfig {
-            socket_addr,
-            protocol: Protocol::Tcp,
-            tls_dns_name: None,
-            trust_nx_responses: false,
-            #[cfg(feature = "dns-over-tls")]
-            tls_config: None,
-        });
-
-        match DnsResolver::trust_dns_resolver(Some(resolver_config), config.ipv6_first).await {
-            Ok(r) => {
-                context.set_dns_resolver(Arc::new(r));
-            }
-            Err(err) => {
-                error!(
-                    "initialize DNS resolver failed, nameserver: {}, error: {}",
-                    socket_addr, err
-                );
-                return Err(err);
-            }
-        }
-    }
+    // #[cfg(all(feature = "local-dns", feature = "trust-dns"))]
+    // if let Some(socket_addr) = config.local_dns_addr {
+    //     use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
+    //
+    //     trace!("initializing direct DNS resolver for {}", socket_addr);
+    //
+    //     let mut resolver_config = ResolverConfig::new();
+    //
+    //     resolver_config.add_name_server(NameServerConfig {
+    //         socket_addr,
+    //         protocol: Protocol::Udp,
+    //         tls_dns_name: None,
+    //         trust_nx_responses: false,
+    //         #[cfg(feature = "dns-over-tls")]
+    //         tls_config: None,
+    //     });
+    //     resolver_config.add_name_server(NameServerConfig {
+    //         socket_addr,
+    //         protocol: Protocol::Tcp,
+    //         tls_dns_name: None,
+    //         trust_nx_responses: false,
+    //         #[cfg(feature = "dns-over-tls")]
+    //         tls_config: None,
+    //     });
+    //
+    //     match DnsResolver::trust_dns_resolver(Some(resolver_config), config.ipv6_first).await {
+    //         Ok(r) => {
+    //             context.set_dns_resolver(Arc::new(r));
+    //         }
+    //         Err(err) => {
+    //             error!(
+    //                 "initialize DNS resolver failed, nameserver: {}, error: {}",
+    //                 socket_addr, err
+    //             );
+    //             return Err(err);
+    //         }
+    //     }
+    // }
 
     #[cfg(feature = "trust-dns")]
     if context.dns_resolver().is_system_resolver() {
