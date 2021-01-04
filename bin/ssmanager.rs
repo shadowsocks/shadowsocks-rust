@@ -242,7 +242,7 @@ fn main() {
     info!("shadowsocks {}", VERSION);
 
     #[cfg(feature = "multi-threaded")]
-    let mut builder = if matches.is_present("SINGLE_THREADED") || cfg!(feature = "single-threaded") {
+    let mut builder = if matches.is_present("SINGLE_THREADED") {
         Builder::new_current_thread()
     } else {
         Builder::new_multi_thread()

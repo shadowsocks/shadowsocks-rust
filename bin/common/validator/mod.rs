@@ -31,6 +31,7 @@ validate_type!(
     ManagerAddr,
     "should be either ip:port, domain:port or /path/to/unix.sock"
 );
+#[cfg(feature = "local-dns")]
 validate_type!(
     validate_name_server_addr,
     NameServerAddr,

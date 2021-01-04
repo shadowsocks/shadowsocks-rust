@@ -78,8 +78,6 @@ logging = ["log4rs"]
 
 # Enable DNS-relay
 local-dns = ["local", "shadowsocks-service/local-dns"]
-# Backward compatibility, DO NOT USE
-local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
 # Currently is only used in Android
 local-flow-stat = ["local", "shadowsocks-service/local-flow-stat"]
@@ -102,9 +100,6 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 
 # Enable tokio's multi-threaded runtime
 multi-threaded = ["tokio/rt-multi-thread"]
-# Enable tokio's single-threaded
-# DEPRECATED. Uses multi-threaded instead
-single-threaded = []
 
 [dependencies]
 log = "0.4"
