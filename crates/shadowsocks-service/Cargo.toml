@@ -56,6 +56,12 @@ local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
 
+# Enable Stream Cipher Protocol
+# WARN: Stream Cipher Protocol is proved to be insecured
+# https://github.com/shadowsocks/shadowsocks-rust/issues/373
+# Users should always avoid using these ciphers in practice
+stream-cipher = ["shadowsocks/stream-cipher"]
+
 [dependencies]
 log = "0.4"
 log4rs = "1.0"

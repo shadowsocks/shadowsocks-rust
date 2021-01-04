@@ -16,15 +16,15 @@ use crate::{
     crypto::v1::{random_iv_or_salt, CipherCategory, CipherKind},
 };
 
-use super::{
-    aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter},
-    stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter},
-};
+use super::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
+#[cfg(feature = "stream-cipher")]
+use super::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
 /// Reader for reading encrypted data stream from shadowsocks' tunnel
 pub enum DecryptedReader {
     None,
     Aead(AeadDecryptedReader),
+    #[cfg(feature = "stream-cipher")]
     Stream(StreamDecryptedReader),
 }
 
@@ -32,6 +32,7 @@ impl DecryptedReader {
     /// Create a new reader for reading encrypted data
     pub fn new(method: CipherKind, key: &[u8]) -> DecryptedReader {
         match method.category() {
+            #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => DecryptedReader::Stream(StreamDecryptedReader::new(method, key)),
             CipherCategory::Aead => DecryptedReader::Aead(AeadDecryptedReader::new(method, key)),
             CipherCategory::None => DecryptedReader::None,
@@ -51,6 +52,7 @@ impl DecryptedReader {
         S: AsyncRead + Unpin + ?Sized,
     {
         match *self {
+            #[cfg(feature = "stream-cipher")]
             DecryptedReader::Stream(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
             DecryptedReader::Aead(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
             DecryptedReader::None => Pin::new(stream).poll_read(cx, buf),
@@ -62,6 +64,7 @@ impl DecryptedReader {
 pub enum EncryptedWriter {
     None,
     Aead(AeadEncryptedWriter),
+    #[cfg(feature = "stream-cipher")]
     Stream(StreamEncryptedWriter),
 }
 
@@ -69,6 +72,7 @@ impl EncryptedWriter {
     /// Create a new writer for writing encrypted data
     pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
         match method.category() {
+            #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, key, nonce)),
             CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, key, nonce)),
             CipherCategory::None => EncryptedWriter::None,
@@ -87,6 +91,7 @@ impl EncryptedWriter {
         S: AsyncWrite + Unpin + ?Sized,
     {
         match *self {
+            #[cfg(feature = "stream-cipher")]
             EncryptedWriter::Stream(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf),
             EncryptedWriter::Aead(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf),
             EncryptedWriter::None => Pin::new(stream).poll_write(cx, buf),
@@ -113,12 +118,14 @@ impl<S> CryptoStream<S> {
         }
 
         let prev_len = match category {
+            #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => method.iv_len(),
             CipherCategory::Aead => method.salt_len(),
             CipherCategory::None => 0,
         };
 
         let iv = match category {
+            #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => {
                 let local_iv = loop {
                     let mut iv = vec![0u8; prev_len];

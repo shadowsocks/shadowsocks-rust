@@ -116,7 +116,9 @@ where
 pub fn alloc_encrypted_read_buffer(method: CipherKind) -> Box<[u8]> {
     match method.category() {
         CipherCategory::Aead => vec![0u8; super::aead::MAX_PACKET_SIZE + method.tag_len()].into_boxed_slice(),
-        CipherCategory::Stream | CipherCategory::None => vec![0u8; 1 << 14].into_boxed_slice(),
+        #[cfg(feature = "stream-cipher")]
+        CipherCategory::Stream => vec![0u8; 1 << 14].into_boxed_slice(),
+        CipherCategory::None => vec![0u8; 1 << 14].into_boxed_slice(),
     }
 }
 
@@ -124,6 +126,8 @@ pub fn alloc_encrypted_read_buffer(method: CipherKind) -> Box<[u8]> {
 pub fn alloc_plain_read_buffer(method: CipherKind) -> Box<[u8]> {
     match method.category() {
         CipherCategory::Aead => vec![0u8; super::aead::MAX_PACKET_SIZE].into_boxed_slice(),
-        CipherCategory::Stream | CipherCategory::None => vec![0u8; 1 << 14].into_boxed_slice(),
+        #[cfg(feature = "stream-cipher")]
+        CipherCategory::Stream => vec![0u8; 1 << 14].into_boxed_slice(),
+        CipherCategory::None => vec![0u8; 1 << 14].into_boxed_slice(),
     }
 }

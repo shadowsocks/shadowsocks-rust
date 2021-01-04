@@ -46,11 +46,13 @@ pub fn encrypt_payload(
             addr.write_to_buf(dst);
             dst.put_slice(payload);
         }
+        #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => encrypt_payload_stream(context, method, key, addr, payload, dst),
         CipherCategory::Aead => encrypt_payload_aead(context, method, key, addr, payload, dst),
     }
 }
 
+#[cfg(feature = "stream-cipher")]
 fn encrypt_payload_stream(
     context: &Context,
     method: CipherKind,
@@ -157,10 +159,13 @@ pub async fn decrypt_payload(
                 }
             }
         }
+        #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload).await,
         CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload).await,
     }
 }
+
+#[cfg(feature = "stream-cipher")]
 async fn decrypt_payload_stream(
     context: &Context,
     method: CipherKind,

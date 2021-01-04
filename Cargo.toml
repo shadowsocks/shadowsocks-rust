@@ -101,6 +101,12 @@ tcmalloc-vendored = ["tcmalloc/bundled"]
 # Enable tokio's multi-threaded runtime
 multi-threaded = ["tokio/rt-multi-thread"]
 
+# Enable Stream Cipher Protocol
+# WARN: Stream Cipher Protocol is proved to be insecured
+# https://github.com/shadowsocks/shadowsocks-rust/issues/373
+# Users should always avoid using these ciphers in practice
+stream-cipher = ["shadowsocks-service/stream-cipher"]
+
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.0", optional = true }

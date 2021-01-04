@@ -33,7 +33,7 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-redir local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher"
 
   build-windows:
     runs-on: windows-latest
@@ -56,7 +56,7 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-dns dns-over-tls dns-over-https stream-cipher"
 
   build-macos:
     runs-on: macos-latest
@@ -84,4 +84,4 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-redir local-dns dns-over-tls"
+        run: cargo build --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher"

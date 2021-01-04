@@ -44,6 +44,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     trace!("{:?}", config);
 
     // Warning for Stream Ciphers
+    #[cfg(feature = "stream-cipher")]
     for server in config.server.iter() {
         if server.method().is_stream() {
             warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \

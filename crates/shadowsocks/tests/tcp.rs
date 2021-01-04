@@ -163,6 +163,7 @@ async fn tcp_tunnel_aead() {
         .unwrap();
 }
 
+#[cfg(feature = "stream-cipher")]
 #[tokio::test]
 async fn tcp_tunnel_stream() {
     let _ = env_logger::try_init();

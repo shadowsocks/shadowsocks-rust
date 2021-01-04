@@ -71,6 +71,7 @@ impl Socks5TestServer {
     }
 }
 
+#[cfg(feature = "stream-cipher")]
 #[tokio::test]
 async fn socks5_relay_stream() {
     let _ = env_logger::try_init();
