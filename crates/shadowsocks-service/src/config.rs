@@ -58,7 +58,6 @@ use std::{
 };
 
 use cfg_if::cfg_if;
-use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
@@ -73,82 +72,496 @@ use crate::acl::AccessControl;
 #[cfg(feature = "local-dns")]
 use crate::local::dns::NameServerAddr;
 
+macro_rules! get_obj_string_val {
+    ($obj:tt, $key:tt) => {
+        match $obj.get_mut($key) {
+            Some(val) => {
+                let mut new_val = val.take();
+                if !new_val.is_string() {
+                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                } else {
+                    new_val.take_string()
+                }
+            }
+            None => None,
+        }
+    };
+}
+
+macro_rules! get_obj_bool_val {
+    ($obj:tt, $key:tt) => {
+        match $obj.get_mut($key) {
+            Some(val) => {
+                let new_val = val.take();
+                if !new_val.is_boolean() {
+                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                } else {
+                    new_val.as_bool()
+                }
+            }
+            None => None,
+        }
+    };
+}
+
 #[cfg(feature = "trust-dns")]
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(untagged)]
+#[derive(Debug)]
 enum SSDnsConfig {
     Simple(String),
     TrustDns(ResolverConfig),
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[cfg(feature = "trust-dns")]
+impl SSDnsConfig {
+    pub fn from_json_value(mut json_value: json::JsonValue) -> Result<Self, Error> {
+        use trust_dns_resolver::Name;
+
+        if json_value.is_string() {
+            // Simple
+            // { "dns": "ip,ip,ip,ip" }
+            // { "dns": "ip:port,ip:port,ip:port" }
+            return Ok(Self::Simple(json_value.take_string().unwrap()));
+        }
+
+        let mut obj = match json_value {
+            json::JsonValue::Object(obj) => obj,
+            _ => return Err(Error::new(ErrorKind::Malformed, "Malformed json", None)),
+        };
+        // TrustDNS ResolverConfig
+        // {
+        //     "dns": {
+        //         "domain": null, // Option<String>
+        //         "search": [],   // Vec<String>
+        //         "name_servers": [
+        //             {"socket_addr": "8.8.8.8:53", "protocol": "tcp", "tls_dns_name": Option<String>, "trust_nx_responses": true },
+        //             {"socket_addr": "4.4.4.4:53", "protocol": "udp", "tls_dns_name": Option<String>, "trust_nx_responses": true }
+        //         ]
+        //     }
+        // }
+        let mut resolver_config = ResolverConfig::new();
+
+        // domain: Option<String>
+        if let Some(domain) = get_obj_string_val!(obj, "domain") {
+            let name =
+                Name::from_str_relaxed(domain).map_err(|_| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+            resolver_config.set_domain(name);
+        }
+
+        // search: Vec<String>
+        if let Some(val) = obj.get_mut("search") {
+            let mut new_val = val.take();
+            if !new_val.is_array() {
+                return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+            }
+            while new_val.len() > 0 {
+                let mut v = new_val.array_remove(0);
+                if !v.is_string() {
+                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                }
+
+                let search = v.take_string().unwrap();
+                let search_name = Name::from_str_relaxed(search)
+                    .map_err(|_| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                resolver_config.add_search(search_name);
+            }
+        };
+
+        // name_servers
+        match obj.get_mut("name_servers") {
+            None => return Err(Error::new(ErrorKind::MissingField, "json MissingField", None)),
+            Some(val) => {
+                let mut new_val = val.take();
+                if !new_val.is_array() || new_val.len() == 0 {
+                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                }
+
+                while new_val.len() > 0 {
+                    let v = new_val.array_remove(0);
+                    let mut obj = match v {
+                        json::JsonValue::Object(obj) => obj,
+                        _ => return Err(Error::new(ErrorKind::Malformed, "Malformed json", None)),
+                    };
+
+                    // Format:
+                    //
+                    // {"socket_addr": "8.8.8.8:53", "protocol": "tcp", "tls_dns_name": Option<String>, "trust_nx_responses": true },
+                    let s_socket_addr = get_obj_string_val!(obj, "socket_addr")
+                        .ok_or_else(|| Error::new(ErrorKind::MissingField, "json MissingField", None))?;
+                    let s_protocol = get_obj_string_val!(obj, "protocol").unwrap_or_else(|| "udp".to_string());
+                    let tls_dns_name = get_obj_string_val!(obj, "tls_dns_name");
+                    let trust_nx_responses = get_obj_bool_val!(obj, "trust_nx_responses").unwrap_or_default();
+
+                    let socket_addr = s_socket_addr
+                        .parse::<std::net::SocketAddr>()
+                        .map_err(|_| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                    let protocol = match s_protocol.as_str() {
+                        "tcp" => Protocol::Tcp,
+                        "udp" => Protocol::Udp,
+                        #[cfg(feature = "dns-over-tls")]
+                        "tls" => Protocol::Tls,
+                        #[cfg(feature = "dns-over-https")]
+                        "https" => Protocol::Https,
+                        _ => return Err(Error::new(ErrorKind::Malformed, "Malformed json", None)),
+                    };
+
+                    let name_server_config = NameServerConfig {
+                        socket_addr,
+                        protocol,
+                        tls_dns_name,
+                        trust_nx_responses,
+                        // #[cfg(feature = "dns-over-rustls")]
+                        #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
+                        tls_config: None,
+                    };
+
+                    resolver_config.add_name_server(name_server_config);
+                }
+            }
+        }
+
+        Ok(Self::TrustDns(resolver_config))
+    }
+
+    pub fn to_json_value(&self) -> json::JsonValue {
+        use json::{object::Object, JsonValue};
+
+        match self {
+            Self::Simple(s) => JsonValue::String(s.clone()),
+            Self::TrustDns(ref resolver_config) => {
+                let mut obj = Object::new();
+
+                if let Some(domain) = resolver_config.domain() {
+                    obj.insert("domain", domain.to_string().into());
+                }
+
+                let search = resolver_config.search();
+                if !search.is_empty() {
+                    let mut arr = JsonValue::new_array();
+                    for search_elem in search.iter() {
+                        arr.push(search_elem.to_string()).unwrap();
+                    }
+                    obj.insert("search", arr);
+                }
+
+                let name_servers = resolver_config.name_servers();
+                if !name_servers.is_empty() {
+                    let mut arr = JsonValue::new_array();
+                    for name_server_config in name_servers.iter() {
+                        let mut obj = Object::new();
+                        obj.insert("socket_addr", name_server_config.socket_addr.to_string().into());
+                        obj.insert("protocol", name_server_config.protocol.to_string().into());
+
+                        if let Some(tls_dns_name) = &name_server_config.tls_dns_name {
+                            obj.insert("tls_dns_name", tls_dns_name.clone().into());
+                        }
+
+                        obj.insert("trust_nx_responses", name_server_config.trust_nx_responses.into());
+
+                        arr.push(obj).unwrap();
+                    }
+                    obj.insert("name_servers", arr);
+                }
+
+                JsonValue::Object(obj)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct SSConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
     server: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     server_port: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     local_address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     manager_address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     manager_port: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     method: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     udp_max_associations: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
     #[cfg(feature = "trust-dns")]
-    #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<SSDnsConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug)]
 struct SSServerExtConfig {
     // SIP008 https://github.com/shadowsocks/shadowsocks-org/issues/89
     //
     // `address` and `port` are non-standard field name only for shadowsocks-rust
-    #[serde(alias = "address")]
     server: String,
-    #[serde(alias = "port")]
     server_port: u16,
     password: String,
     method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     remarks: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
+}
+
+impl SSConfig {
+    pub fn from_str(source: &str) -> Result<Self, Error> {
+        match json::parse(source) {
+            Ok(json_value) => Self::from_json_value(json_value),
+            Err(e) => Err(Error::new(
+                ErrorKind::JsonParsingError,
+                "json parse error",
+                Some(format!("{:?}", e)),
+            )),
+        }
+    }
+
+    pub fn to_json_value(&self) -> json::JsonValue {
+        use json::{object::Object, JsonValue};
+
+        let mut obj = Object::new();
+
+        macro_rules! insert_ignore_none {
+            ($config:expr, $name:tt, $key:tt) => {
+                match &$config.$name {
+                    Some(v) => {
+                        let val = v.clone().into();
+                        obj.insert($key, val);
+                    }
+                    None => {}
+                }
+            };
+        }
+
+        insert_ignore_none!(&self, server, "server");
+        insert_ignore_none!(&self, server_port, "server_port");
+        insert_ignore_none!(&self, local_address, "local_address");
+        insert_ignore_none!(&self, local_port, "local_port");
+        insert_ignore_none!(&self, manager_address, "manager_address");
+        insert_ignore_none!(&self, manager_port, "manager_port");
+        insert_ignore_none!(&self, password, "password");
+        insert_ignore_none!(&self, method, "method");
+        insert_ignore_none!(&self, plugin, "plugin");
+        insert_ignore_none!(&self, plugin_opts, "plugin_opts");
+        insert_ignore_none!(&self, plugin_args, "plugin_args");
+        insert_ignore_none!(&self, timeout, "timeout");
+        insert_ignore_none!(&self, udp_timeout, "udp_timeout");
+        insert_ignore_none!(&self, udp_max_associations, "udp_max_associations");
+
+        match &self.servers {
+            Some(v) => {
+                let mut arr = Vec::new();
+                for ext_config in v.iter() {
+                    let mut obj = Object::new();
+
+                    // #[serde(alias = "address")]
+                    obj.insert("address", ext_config.server.clone().into());
+                    // #[serde(alias = "port")]
+                    obj.insert("port", ext_config.server_port.clone().into());
+                    obj.insert("password", ext_config.password.clone().into());
+                    obj.insert("method", ext_config.method.clone().into());
+
+                    insert_ignore_none!(&ext_config, plugin, "plugin");
+                    insert_ignore_none!(&ext_config, plugin_opts, "plugin_opts");
+                    insert_ignore_none!(&ext_config, plugin_args, "plugin_args");
+                    insert_ignore_none!(&ext_config, timeout, "timeout");
+                    insert_ignore_none!(&ext_config, remarks, "remarks");
+                    insert_ignore_none!(&ext_config, id, "id");
+
+                    arr.push(JsonValue::Object(obj));
+                }
+
+                obj.insert("servers", JsonValue::Array(arr));
+            }
+            None => {}
+        }
+
+        #[cfg(feature = "trust-dns")]
+        if let Some(dns) = &self.dns {
+            obj.insert("dns", dns.to_json_value());
+        }
+
+        insert_ignore_none!(&self, mode, "mode");
+        insert_ignore_none!(&self, no_delay, "no_delay");
+        insert_ignore_none!(&self, nofile, "nofile");
+        insert_ignore_none!(&self, ipv6_first, "ipv6_first");
+
+        JsonValue::Object(obj)
+    }
+
+    pub fn from_json_value(json_value: json::JsonValue) -> Result<Self, Error> {
+        use json::JsonValue;
+
+        match json_value {
+            JsonValue::Object(mut obj) => {
+                macro_rules! get_obj_number_val {
+                    ($key:tt, $as_kind:tt) => {
+                        match obj.get_mut($key) {
+                            Some(val) => {
+                                let new_val = val.take();
+                                if !new_val.is_number() {
+                                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                                } else {
+                                    match new_val.$as_kind() {
+                                        Some(n) => Some(n),
+                                        None => {
+                                            return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                                        }
+                                    }
+                                }
+                            }
+                            None => None,
+                        }
+                    };
+                }
+
+                let server = get_obj_string_val!(obj, "server");
+                let server_port = get_obj_number_val!("server_port", as_u16);
+                let local_address = get_obj_string_val!(obj, "local_address");
+                let local_port = get_obj_number_val!("local_port", as_u16);
+                let manager_address = get_obj_string_val!(obj, "manager_address");
+                let manager_port = get_obj_number_val!("manager_port", as_u16);
+                let password = get_obj_string_val!(obj, "password");
+                let method = get_obj_string_val!(obj, "method");
+                let plugin = get_obj_string_val!(obj, "plugin");
+                let plugin_opts = get_obj_string_val!(obj, "plugin_opts");
+                let plugin_args = match obj.get_mut("plugin_args") {
+                    Some(val) => {
+                        let mut new_val = val.take();
+                        if !new_val.is_array() {
+                            return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                        }
+                        let mut out = Vec::new();
+                        while new_val.len() > 0 {
+                            let mut v = new_val.array_remove(0);
+                            if !v.is_string() {
+                                return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                            }
+                            out.push(v.take_string().unwrap());
+                        }
+
+                        Some(out)
+                    }
+                    None => None,
+                };
+                let timeout = get_obj_number_val!("timeout", as_u64);
+                let udp_timeout = get_obj_number_val!("udp_timeout", as_u64);
+                let udp_max_associations = get_obj_number_val!("udp_max_associations", as_usize);
+                // Option<Vec<SSServerExtConfig>>
+                let servers = match obj.get_mut("servers") {
+                    Some(val) => {
+                        let mut new_val = val.take();
+                        if !new_val.is_array() {
+                            return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                        }
+
+                        let mut out = Vec::new();
+                        while new_val.len() > 0 {
+                            let mut obj = match new_val.array_remove(0) {
+                                JsonValue::Object(v) => v,
+                                _ => {
+                                    return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                                }
+                            };
+
+                            let address = get_obj_string_val!(obj, "address")
+                                .ok_or_else(|| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                            let port = get_obj_number_val!("port", as_u16)
+                                .ok_or_else(|| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                            let password = get_obj_string_val!(obj, "password")
+                                .ok_or_else(|| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                            let method = get_obj_string_val!(obj, "method")
+                                .ok_or_else(|| Error::new(ErrorKind::Malformed, "Malformed json", None))?;
+                            let plugin = get_obj_string_val!(obj, "plugin");
+                            let plugin_opts = get_obj_string_val!(obj, "plugin_opts");
+                            let plugin_args = match obj.get_mut("plugin_args") {
+                                Some(val) => {
+                                    let mut new_val = val.take();
+                                    if !new_val.is_array() {
+                                        return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                                    }
+                                    let mut out = Vec::new();
+                                    while new_val.len() > 0 {
+                                        let mut v = new_val.array_remove(0);
+                                        if !v.is_string() {
+                                            return Err(Error::new(ErrorKind::Malformed, "Malformed json", None));
+                                        }
+                                        out.push(v.take_string().unwrap());
+                                    }
+
+                                    Some(out)
+                                }
+                                None => None,
+                            };
+                            let timeout = get_obj_number_val!("timeout", as_u64);
+                            let remarks = get_obj_string_val!(obj, "remarks");
+                            let id = get_obj_string_val!(obj, "id");
+
+                            let ext_config = SSServerExtConfig {
+                                server: address,   // #[serde(alias = "address")]
+                                server_port: port, // #[serde(alias = "port")]
+                                password,
+                                method,
+                                plugin,
+                                plugin_opts,
+                                plugin_args,
+                                timeout,
+                                remarks,
+                                id,
+                            };
+
+                            out.push(ext_config);
+                        }
+
+                        Some(out)
+                    }
+                    None => None,
+                };
+
+                #[cfg(feature = "trust-dns")]
+                let dns = match obj.get_mut("dns") {
+                    Some(val) => Some(SSDnsConfig::from_json_value(val.take())?),
+                    None => None,
+                };
+
+                let mode = get_obj_string_val!(obj, "mode");
+                let no_delay = get_obj_bool_val!(obj, "no_delay");
+                let nofile = get_obj_number_val!("nofile", as_u64);
+                let ipv6_first = get_obj_bool_val!(obj, "ipv6_first");
+
+                Ok(Self {
+                    server,
+                    server_port,
+                    local_address,
+                    local_port,
+                    manager_address,
+                    manager_port,
+                    password,
+                    method,
+                    plugin,
+                    plugin_opts,
+                    plugin_args,
+                    timeout,
+                    udp_timeout,
+                    udp_max_associations,
+                    servers,
+                    mode,
+                    no_delay,
+                    nofile,
+                    ipv6_first,
+                    #[cfg(feature = "trust-dns")]
+                    dns,
+                })
+            }
+            _ => Err(Error::new(ErrorKind::Invalid, "invalid json", None)),
+        }
+    }
 }
 
 /// Listening address
@@ -680,7 +1093,6 @@ macro_rules! impl_from {
 }
 
 impl_from!(::std::io::Error, ErrorKind::IoError, "error while reading file");
-impl_from!(json5::Error, ErrorKind::JsonParsingError, "json parse error");
 
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -1076,7 +1488,7 @@ impl Config {
 
     /// Load Config from a `str`
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let c = json5::from_str::<SSConfig>(s)?;
+        let c = SSConfig::from_str(s)?;
         Config::load_from_ssconfig(c, config_type)
     }
 
@@ -1361,6 +1773,7 @@ impl fmt::Display for Config {
             jconf.ipv6_first = Some(self.ipv6_first);
         }
 
-        write!(f, "{}", json5::to_string(&jconf).unwrap())
+        let jval = jconf.to_json_value();
+        write!(f, "{}", json::stringify(jval))
     }
 }
