@@ -97,6 +97,7 @@ fn main() {
     {
         app = clap_app!(@app (app)
             (@arg SINGLE_THREADED: --("single-threaded") "Run the program all in one thread")
+            (@arg WORKER_THREADS: --("worker-threads") +takes_value {validator::validate_usize} "Sets the number of worker threads the `Runtime` will use")
         );
     }
 
@@ -245,7 +246,11 @@ fn main() {
     let mut builder = if matches.is_present("SINGLE_THREADED") {
         Builder::new_current_thread()
     } else {
-        Builder::new_multi_thread()
+        let mut builder = Builder::new_multi_thread();
+        if let Some(worker_threads) = matches.value_of("WORKER_THREADS") {
+            builder.worker_threads(worker_threads.parse::<usize>().expect("worker-threads"));
+        }
+        builder
     };
     #[cfg(not(feature = "multi-threaded"))]
     let mut builder = Builder::new_current_thread();

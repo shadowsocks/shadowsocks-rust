@@ -39,6 +39,7 @@ validate_type!(
 );
 validate_type!(validate_u64, u64, "should be unsigned integer");
 validate_type!(validate_u32, u32, "should be unsigned integer");
+validate_type!(validate_usize, usize, "should be unsigned integer");
 
 pub fn validate_server_url(v: String) -> Result<(), String> {
     match ServerConfig::from_url(&v) {
