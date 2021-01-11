@@ -122,6 +122,19 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     //     }
     // }
 
+    #[cfg(feature = "local-dns")]
+    if let Some(ref ns) = config.local_dns_addr {
+        use crate::{config::Mode, local::dns::dns_resolver::DnsResolver as LocalDnsResolver};
+
+        trace!("initializing direct DNS resolver for {}", ns);
+
+        let mut resolver = LocalDnsResolver::new(ns.clone());
+        resolver.set_mode(Mode::TcpAndUdp);
+        resolver.set_ipv6_first(config.ipv6_first);
+        resolver.set_connect_opts(context.connect_opts_ref().clone());
+        context.set_dns_resolver(Arc::new(DnsResolver::custom_resolver(resolver)));
+    }
+
     #[cfg(feature = "trust-dns")]
     if context.dns_resolver().is_system_resolver() {
         if config.dns.is_some() || crate::hint_support_default_system_resolver() {
