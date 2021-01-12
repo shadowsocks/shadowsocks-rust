@@ -94,7 +94,7 @@ libc = "0.2"
 
 http = { version = "0.2", optional = true }
 hyper = { version = "0.14", optional = true, features = ["full"] }
-tower = { version = "0.3", optional = true }
+tower = { version = "0.4", optional = true }
 
 trust-dns-resolver = { version = "0.20", optional = true, features = ["serde-config"] }
 
