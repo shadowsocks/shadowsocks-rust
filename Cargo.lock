@@ -574,7 +574,7 @@ dependencies = [
  "httparse",
  "httpdate",
  "itoa",
- "pin-project 1.0.3",
+ "pin-project 1.0.4",
  "socket2",
  "tokio",
  "tower-service",
@@ -1043,11 +1043,11 @@ dependencies = [
 
 [[package]]
 name = "pin-project"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a83804639aad6ba65345661744708855f9fbcb71176ea8d28d05aeb11d975e7"
+checksum = "95b70b68509f17aa2857863b6fa00bf21fc93674c7a8893de2f469f6aa7ca2f2"
 dependencies = [
- "pin-project-internal 1.0.3",
+ "pin-project-internal 1.0.4",
 ]
 
 [[package]]
@@ -1063,9 +1063,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-internal"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7bcc46b8f73443d15bc1c5fecbb315718491fa9187fa483f0e359323cde8b3a"
+checksum = "caa25a6393f22ce819b0f50e0be89287292fda8d425be38ee0ca14c4931d9e71"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1454,7 +1454,7 @@ dependencies = [
  "log",
  "mio",
  "nix",
- "pin-project 1.0.3",
+ "pin-project 1.0.4",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1524,7 +1524,7 @@ dependencies = [
  "mio",
  "native-tls",
  "nix",
- "pin-project 1.0.3",
+ "pin-project 1.0.4",
  "qrcode",
  "rand 0.8.1",
  "regex",
