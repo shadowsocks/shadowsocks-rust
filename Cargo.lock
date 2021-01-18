@@ -1460,7 +1460,7 @@ dependencies = [
  "serde_urlencoded",
  "shadowsocks-crypto",
  "socket2",
- "spin 0.7.0",
+ "spin 0.7.1",
  "thiserror",
  "tokio",
  "trust-dns-resolver",
@@ -1532,7 +1532,7 @@ dependencies = [
  "serde",
  "shadowsocks",
  "socket2",
- "spin 0.7.0",
+ "spin 0.7.1",
  "strum",
  "strum_macros",
  "thiserror",
@@ -1590,9 +1590,9 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "652ac3743312871a5fb703f0337e68ffa3cdc28c863efad0b8dc858fa10c991b"
+checksum = "13287b4da9d1207a4f4929ac390916d64eacfe236a487e9a9f5b3be392be5162"
 
 [[package]]
 name = "strsim"
@@ -1754,9 +1754,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d258221f566b6c803c7b4714abadc080172b272090cdc5e244a6d4dd13c3a6bd"
+checksum = "0ca04cec6ff2474c638057b65798f60ac183e5e79d3448bb7163d36a39cff6ec"
 dependencies = [
  "autocfg",
  "bytes",
