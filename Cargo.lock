@@ -1156,9 +1156,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c24fcd450d3fa2b592732565aa4f17a27a61c65ece4726353e000939b0edee34"
+checksum = "18519b42a40024d661e1714153e9ad0c3de27cd495760ceb09710920f1098b1e"
 dependencies = [
  "libc",
  "rand_chacha 0.3.0",
@@ -1475,7 +1475,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01ecc6d22f07b98e272641a08fbfa30aa04578669bfa49254d6fa73ac56ddc62"
 dependencies = [
  "crypto2",
- "rand 0.8.1",
+ "rand 0.8.2",
  "ring",
 ]
 
@@ -1526,7 +1526,7 @@ dependencies = [
  "nix",
  "pin-project 1.0.4",
  "qrcode",
- "rand 0.8.1",
+ "rand 0.8.2",
  "regex",
  "rustls-native-certs",
  "serde",
@@ -1944,7 +1944,7 @@ dependencies = [
  "ipnet",
  "lazy_static",
  "log",
- "rand 0.8.1",
+ "rand 0.8.2",
  "serde",
  "smallvec",
  "thiserror",
