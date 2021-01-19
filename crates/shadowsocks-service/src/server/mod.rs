@@ -84,9 +84,21 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     #[cfg(feature = "trust-dns")]
     let resolver = if config.dns.is_some() || crate::hint_support_default_system_resolver() {
-        Some(Arc::new(
-            DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?,
-        ))
+        let r = match config.dns {
+            None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
+            Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
+        };
+
+        match r {
+            Ok(r) => Some(Arc::new(r)),
+            Err(err) => {
+                warn!(
+                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
+                    err
+                );
+                None
+            }
+        }
     } else {
         None
     };

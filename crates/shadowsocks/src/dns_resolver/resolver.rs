@@ -1,5 +1,7 @@
 //! Resolver Alternatives
 
+#[cfg(feature = "trust-dns")]
+use std::sync::Arc;
 use std::{
     fmt::{self, Debug},
     io::{self, Error, ErrorKind},
@@ -7,8 +9,14 @@ use std::{
     time::Instant,
 };
 
+#[cfg(feature = "trust-dns")]
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use log::{log_enabled, trace, Level};
+#[cfg(feature = "trust-dns")]
+use futures::future::{self, AbortHandle};
+use log::{error, log_enabled, trace, Level};
+#[cfg(feature = "trust-dns")]
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
 use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
@@ -20,10 +28,22 @@ pub trait DnsResolve {
     async fn resolve(&self, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>>;
 }
 
+#[cfg(feature = "trust-dns")]
+pub struct TrustDnsSystemResolver {
+    resolver: ArcSwap<TokioAsyncResolver>,
+    ipv6_first: bool,
+}
+
 /// Collections of DNS resolver
 pub enum DnsResolver {
     /// System Resolver, which is tokio's builtin resolver
     System,
+    /// Trust-DNS's system resolver
+    #[cfg(feature = "trust-dns")]
+    TrustDnsSystem {
+        inner: Arc<TrustDnsSystemResolver>,
+        abortable: AbortHandle,
+    },
     #[cfg(feature = "trust-dns")]
     /// Trust-DNS resolver
     TrustDns(TokioAsyncResolver),
@@ -42,8 +62,19 @@ impl Debug for DnsResolver {
         match *self {
             DnsResolver::System => f.write_str("System"),
             #[cfg(feature = "trust-dns")]
+            DnsResolver::TrustDnsSystem { .. } => f.write_str("TrustDnsSystem(..)"),
+            #[cfg(feature = "trust-dns")]
             DnsResolver::TrustDns(..) => f.write_str("TrustDns(..)"),
             DnsResolver::Custom(..) => f.write_str("Custom(..)"),
+        }
+    }
+}
+
+#[cfg(feature = "trust-dns")]
+impl Drop for DnsResolver {
+    fn drop(&mut self) {
+        if let DnsResolver::TrustDnsSystem { ref abortable, .. } = *self {
+            abortable.abort();
         }
     }
 }
@@ -59,27 +90,82 @@ impl Iterator for EmptyResolveResult {
 }
 
 // Resolved result
-enum EitherResolved<A = EmptyResolveResult, B = EmptyResolveResult, C = EmptyResolveResult> {
+enum EitherResolved<A = EmptyResolveResult, B = EmptyResolveResult, C = EmptyResolveResult, D = EmptyResolveResult> {
     Tokio(A),
-    TrustDns(B),
-    Custom(C),
+    TrustDnsSystem(B),
+    TrustDns(C),
+    Custom(D),
 }
 
-impl<A, B, C> Iterator for EitherResolved<A, B, C>
+impl<A, B, C, D> Iterator for EitherResolved<A, B, C, D>
 where
     A: Iterator<Item = SocketAddr>,
     B: Iterator<Item = SocketAddr>,
     C: Iterator<Item = SocketAddr>,
+    D: Iterator<Item = SocketAddr>,
 {
     type Item = SocketAddr;
 
     fn next(&mut self) -> Option<SocketAddr> {
         match *self {
             EitherResolved::Tokio(ref mut a) => a.next(),
-            EitherResolved::TrustDns(ref mut b) => b.next(),
-            EitherResolved::Custom(ref mut c) => c.next(),
+            EitherResolved::TrustDnsSystem(ref mut b) => b.next(),
+            EitherResolved::TrustDns(ref mut c) => c.next(),
+            EitherResolved::Custom(ref mut d) => d.next(),
         }
     }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> NotifyResult<()> {
+    use log::debug;
+    use tokio::sync::watch;
+
+    use super::trust_dns_resolver::create_resolver;
+
+    let (tx, mut rx) = watch::channel::<Event>(Event::default());
+
+    let mut watcher: RecommendedWatcher =
+        Watcher::new_immediate(move |ev_result: NotifyResult<Event>| match ev_result {
+            Ok(ev) => {
+                trace!("received event {:?}", ev);
+
+                if let EventKind::Modify(..) = ev.kind {
+                    tx.send(ev).expect("watcher.send");
+                }
+            }
+            Err(err) => {
+                error!("watching /etc/resolv.conf error: {}", err);
+            }
+        })?;
+
+    // NOTE: It is an undefined behavior if this file get renamed or removed.
+    watcher.watch("/etc/resolv.conf", RecursiveMode::NonRecursive)?;
+
+    while rx.changed().await.is_ok() {
+        trace!("received notify /etc/resolv.conf changed");
+
+        let new_resolver = match create_resolver(None, resolver.ipv6_first).await {
+            Ok(r) => r,
+            Err(err) => {
+                error!("failed to reload /etc/resolv.conf, error: {}", err);
+                continue;
+            }
+        };
+
+        debug!("auto-reload /etc/resolv.conf");
+
+        resolver.resolver.store(Arc::new(new_resolver));
+    }
+
+    error!("auto-reload /etc/resolv.conf task exited unexpectly");
+
+    Ok(())
+}
+
+#[cfg(any(not(unix), target_os = "android"))]
+async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> NotifyResult<()> {
+    future::pending().await
 }
 
 impl DnsResolver {
@@ -88,11 +174,38 @@ impl DnsResolver {
         DnsResolver::System
     }
 
+    /// Use trust-dns DNS system resolver (with DNS cache)
+    ///
+    /// On *nix system, it will try to read configurations from `/etc/resolv.conf`.
+    #[cfg(feature = "trust-dns")]
+    pub async fn trust_dns_system_resolver(ipv6_first: bool) -> io::Result<DnsResolver> {
+        use super::trust_dns_resolver::create_resolver;
+
+        let resolver = create_resolver(None, ipv6_first).await?;
+
+        let inner = Arc::new(TrustDnsSystemResolver {
+            resolver: ArcSwap::from(Arc::new(resolver)),
+            ipv6_first,
+        });
+
+        let (notify_task, abortable) = {
+            let inner = inner.clone();
+            future::abortable(async {
+                if let Err(err) = trust_dns_notify_update_dns(inner).await {
+                    error!("failed to watch DNS system configuration changes, error: {}", err);
+                }
+            })
+        };
+        tokio::spawn(notify_task);
+
+        Ok(DnsResolver::TrustDnsSystem { inner, abortable })
+    }
+
     /// Use trust-dns DNS resolver (with DNS cache)
     #[cfg(feature = "trust-dns")]
-    pub async fn trust_dns_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> io::Result<DnsResolver> {
+    pub async fn trust_dns_resolver(dns: ResolverConfig, ipv6_first: bool) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
-        Ok(DnsResolver::TrustDns(create_resolver(dns, ipv6_first).await?))
+        Ok(DnsResolver::TrustDns(create_resolver(Some(dns), ipv6_first).await?))
     }
 
     /// Custom DNS resolver
@@ -146,7 +259,7 @@ impl DnsResolver {
                                 );
                             }
                             #[cfg(feature = "trust-dns")]
-                            DnsResolver::TrustDns(..) => {
+                            DnsResolver::TrustDnsSystem { .. } | DnsResolver::TrustDns(..) => {
                                 trace!(
                                     "DNS resolved {}:{} with trust-dns {}s",
                                     self.addr,
@@ -169,7 +282,7 @@ impl DnsResolver {
                             trace!("DNS resolved {}:{} with tokio", self.addr, self.port);
                         }
                         #[cfg(feature = "trust-dns")]
-                        DnsResolver::TrustDns(..) => {
+                        DnsResolver::TrustDnsSystem { .. } | DnsResolver::TrustDns(..) => {
                             trace!("DNS resolved {}:{} with trust-dns", self.addr, self.port);
                         }
                         DnsResolver::Custom(..) => {
@@ -185,6 +298,19 @@ impl DnsResolver {
         match *self {
             DnsResolver::System => match lookup_host((addr, port)).await {
                 Ok(v) => Ok(EitherResolved::Tokio(v)),
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Other,
+                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                    );
+                    Err(err)
+                }
+            },
+            #[cfg(feature = "trust-dns")]
+            DnsResolver::TrustDnsSystem { ref inner, .. } => match inner.resolver.load().lookup_ip(addr).await {
+                Ok(lookup_result) => Ok(EitherResolved::TrustDnsSystem(
+                    lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
+                )),
                 Err(err) => {
                     let err = Error::new(
                         ErrorKind::Other,

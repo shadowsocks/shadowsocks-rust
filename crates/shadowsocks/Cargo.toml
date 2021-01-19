@@ -19,7 +19,7 @@ default = [
 ]
 
 # Uses trust-dns instead of tokio's builtin DNS resolver
-trust-dns = ["trust-dns-resolver"]
+trust-dns = ["trust-dns-resolver", "arc-swap", "notify"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecured
@@ -54,13 +54,14 @@ socket2 = "0.3"
 tokio = { version = "1.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt"] }
 
 trust-dns-resolver = { version = "0.20", optional = true }
+arc-swap = { version = "1.2", optional = true }
+notify = { version = "5.0.0-alpha", optional = true }
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 shadowsocks-crypto = { version = "0.1.2", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
 shadowsocks-crypto = { version = "0.1.2", features = [] }
-
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

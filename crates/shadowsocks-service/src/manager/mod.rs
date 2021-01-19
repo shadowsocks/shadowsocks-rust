@@ -40,8 +40,22 @@ pub async fn run(config: Config) -> io::Result<()> {
     if config.dns.is_some() || crate::hint_support_default_system_resolver() {
         use shadowsocks::dns_resolver::DnsResolver;
 
-        let resolver = Arc::new(DnsResolver::trust_dns_resolver(config.dns, config.ipv6_first).await?);
-        manager.set_dns_resolver(resolver);
+        let r = match config.dns {
+            None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
+            Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
+        };
+
+        match r {
+            Ok(r) => {
+                manager.set_dns_resolver(Arc::new(r));
+            }
+            Err(err) => {
+                warn!(
+                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
+                    err
+                );
+            }
+        }
     }
 
     let mut connect_opts = ConnectOpts {
