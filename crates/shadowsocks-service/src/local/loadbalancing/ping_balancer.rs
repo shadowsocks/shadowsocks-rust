@@ -480,6 +480,8 @@ impl PingChecker {
                 Err(err)
             }
             Err(..) => {
+                use std::io::{Error, ErrorKind};
+
                 // Timeout
                 trace!(
                     "checked remote {} server {} latency timeout, elapsed {} ms",
@@ -488,8 +490,9 @@ impl PingChecker {
                     elapsed
                 );
 
-                // NOTE: timeout is still available, but server is too slow
-                Ok(elapsed)
+                // NOTE: timeout exceeded. Count as error.
+                let err = Error::new(ErrorKind::TimedOut, "Request timed out");
+                Err(err)
             }
         }
     }
