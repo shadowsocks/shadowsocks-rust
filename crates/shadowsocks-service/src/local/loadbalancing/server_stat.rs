@@ -2,13 +2,13 @@
 
 use std::collections::VecDeque;
 
-/// Interval of active probing
-pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
-/// Timeout of each probing
-pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 2; // Latency shouldn't greater than 2 secs, that's too long
+/// Interval between each check
+pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 10;
+/// Timeout of each check
+pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5; // A common connection timeout of 5 seconds.
 
 const MAX_SERVER_RTT: u32 = DEFAULT_CHECK_TIMEOUT_SEC as u32 * 1000;
-const MAX_LATENCY_QUEUE_SIZE: usize = 99;
+const MAX_LATENCY_QUEUE_SIZE: usize = 59; // Account for the last 10 minutes.
 
 /// Statistic score
 #[derive(Debug, Copy, Clone)]
