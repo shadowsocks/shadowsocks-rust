@@ -480,7 +480,7 @@ impl PingChecker {
                 Err(err)
             }
             Err(..) => {
-                use std::io::{Error, ErrorKind};
+                use std::io::ErrorKind;
 
                 // Timeout
                 trace!(
@@ -491,8 +491,7 @@ impl PingChecker {
                 );
 
                 // NOTE: timeout exceeded. Count as error.
-                let err = Error::new(ErrorKind::TimedOut, "Request timed out");
-                Err(err)
+                Err(ErrorKind::TimedOut.into())
             }
         }
     }
