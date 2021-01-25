@@ -2048,9 +2048,9 @@ dependencies = [
 
 [[package]]
 name = "tower"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "855703d368d4c9321ccc1efe1b0fe436c3f20b102b25060707ebe6b4502bdefb"
+checksum = "5fd7b451959622e21de79261673d658a0944b835012c58c51878ea55957fb51a"
 dependencies = [
  "futures-core",
  "pin-project 1.0.4",
