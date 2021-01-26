@@ -77,10 +77,10 @@ impl Dns {
 
         tokio::pin!(tcp_fut, udp_fut);
 
-        let _ = future::select(tcp_fut, udp_fut).await;
-
-        let err = io::Error::new(ErrorKind::Other, "dns server exited unexpectly");
-        Err(err)
+        match future::select(tcp_fut, udp_fut).await {
+            Either::Left((res, ..)) => res,
+            Either::Right((res, ..)) => res,
+        }
     }
 
     async fn run_tcp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
