@@ -125,7 +125,7 @@ Create a ShadowSocks' configuration file. Example
 
 Detailed explanation could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki).
 
-In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one servers:
+In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one server. You can also disable individual servers.
 
 ```json
 {
@@ -141,6 +141,13 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
             "address": "127.0.0.1",
             "port": 1081,
             "password": "hello-kitty",
+            "method": "chacha20-ietf-poly1305"
+        },
+        {
+            "disable": true,
+            "address": "eg.disable.me",
+            "port": 1080,
+            "password": "hello-internet",
             "method": "chacha20-ietf-poly1305"
         }
     ],
@@ -304,6 +311,9 @@ Example configuration:
     "servers": [
         {
             // Fields are the same as the single server's configuration
+            
+            // Individual server can be disabled
+            // "disable": true,
             "address": "0.0.0.0",
             "port": 8389,
             "method": "aes-256-gcm",

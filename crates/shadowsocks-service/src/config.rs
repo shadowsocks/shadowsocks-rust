@@ -138,6 +138,8 @@ struct SSServerExtConfig {
     password: String,
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    disable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
@@ -873,6 +875,11 @@ impl Config {
         // Ext servers
         if let Some(servers) = config.servers {
             for svr in servers {
+                // Skip if server is disabled
+                if svr.disable.unwrap_or(false) {
+                    continue;
+                }
+
                 let address = svr.server;
                 let port = svr.server_port;
 
@@ -1263,9 +1270,9 @@ impl fmt::Display for Config {
         }
 
         // Servers
-        // For 1 servers, uses standard configure format
         match self.server.len() {
             0 => {}
+            // For 1 server, uses standard configure format
             1 if self.server[0].id().is_none() && self.server[0].remarks().is_none() => {
                 let svr = &self.server[0];
 
@@ -1290,6 +1297,7 @@ impl fmt::Display for Config {
                 });
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
             }
+            // For >1 servers, uses extended multiple server format
             _ => {
                 let mut vsvr = Vec::new();
 
@@ -1305,6 +1313,7 @@ impl fmt::Display for Config {
                         },
                         password: svr.password().to_string(),
                         method: svr.method().to_string(),
+                        disable: None,
                         plugin: svr.plugin().map(|p| p.plugin.to_string()),
                         plugin_opts: svr.plugin().and_then(|p| p.plugin_opts.clone()),
                         plugin_args: svr.plugin().and_then(|p| {
