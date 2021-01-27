@@ -311,6 +311,9 @@ Example configuration:
     "servers": [
         {
             // Fields are the same as the single server's configuration
+            
+            // Individual server can be disabled
+            // "disable": true,
             "address": "0.0.0.0",
             "port": 8389,
             "method": "aes-256-gcm",
