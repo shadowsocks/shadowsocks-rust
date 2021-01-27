@@ -874,16 +874,12 @@ impl Config {
 
         // Ext servers
         if let Some(servers) = config.servers {
-            // Filter out disabled servers
-            let enabled_servers = servers
-                .into_iter()
-                .filter(|ext_cfg| match ext_cfg.disable {
-                    Some(true) => false,
-                    _ => true,
-                })
-                .collect::<Vec<_>>();
+            for svr in servers {
+                // Skip if server is disabled
+                if svr.disable.unwrap_or(false) {
+                    continue;
+                }
 
-            for svr in enabled_servers {
                 let address = svr.server;
                 let port = svr.server_port;
 
