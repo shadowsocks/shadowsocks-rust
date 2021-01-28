@@ -138,7 +138,7 @@ struct SSServerExtConfig {
     password: String,
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    disable: Option<bool>,
+    disabled: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -876,7 +876,7 @@ impl Config {
         if let Some(servers) = config.servers {
             for svr in servers {
                 // Skip if server is disabled
-                if svr.disable.unwrap_or(false) {
+                if svr.disabled.unwrap_or(false) {
                     continue;
                 }
 
@@ -1313,7 +1313,7 @@ impl fmt::Display for Config {
                         },
                         password: svr.password().to_string(),
                         method: svr.method().to_string(),
-                        disable: None,
+                        disabled: None,
                         plugin: svr.plugin().map(|p| p.plugin.to_string()),
                         plugin_opts: svr.plugin().and_then(|p| p.plugin_opts.clone()),
                         plugin_args: svr.plugin().and_then(|p| {

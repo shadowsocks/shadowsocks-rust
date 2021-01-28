@@ -144,7 +144,7 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
             "method": "chacha20-ietf-poly1305"
         },
         {
-            "disable": true,
+            "disabled": true,
             "address": "eg.disable.me",
             "port": 1080,
             "password": "hello-internet",
@@ -313,7 +313,7 @@ Example configuration:
             // Fields are the same as the single server's configuration
             
             // Individual server can be disabled
-            // "disable": true,
+            // "disabled": true,
             "address": "0.0.0.0",
             "port": 8389,
             "method": "aes-256-gcm",
