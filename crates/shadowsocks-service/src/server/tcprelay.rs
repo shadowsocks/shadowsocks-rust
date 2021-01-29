@@ -1,6 +1,11 @@
 //! Shadowsocks TCP server
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    io::{self, ErrorKind},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
@@ -60,6 +65,7 @@ impl TcpServer {
                 method: svr_cfg.method(),
                 peer_addr,
                 stream: local_stream,
+                timeout: svr_cfg.timeout(),
             };
 
             tokio::spawn(async move {
@@ -76,6 +82,7 @@ struct TcpServerClient {
     method: CipherKind,
     peer_addr: SocketAddr,
     stream: ProxyServerStream<MonProxyStream<TokioTcpStream>>,
+    timeout: Option<Duration>,
 }
 
 impl TcpServerClient {
@@ -109,12 +116,37 @@ impl TcpServerClient {
             return Ok(());
         }
 
-        let mut remote_stream = OutboundTcpStream::connect_remote_with_opts(
-            self.context.context_ref(),
-            &target_addr,
-            self.context.connect_opts_ref(),
-        )
-        .await?;
+        let mut remote_stream = match self.timeout {
+            Some(d) => {
+                match time::timeout(
+                    d,
+                    OutboundTcpStream::connect_remote_with_opts(
+                        self.context.context_ref(),
+                        &target_addr,
+                        self.context.connect_opts_ref(),
+                    ),
+                )
+                .await
+                {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(e)) => return Err(e),
+                    Err(..) => {
+                        return Err(io::Error::new(
+                            ErrorKind::TimedOut,
+                            format!("connect {} timeout", target_addr),
+                        ))
+                    }
+                }
+            }
+            None => {
+                OutboundTcpStream::connect_remote_with_opts(
+                    self.context.context_ref(),
+                    &target_addr,
+                    self.context.connect_opts_ref(),
+                )
+                .await?
+            }
+        };
 
         let (mut lr, mut lw) = self.stream.into_split();
         let (mut rr, mut rw) = remote_stream.split();

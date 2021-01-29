@@ -86,7 +86,7 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &ConnectOpts) -> io:
             match time::timeout(Duration::from_secs(3), protect(path, socket.as_raw_fd())).await {
                 Ok(Ok(..)) => {}
                 Ok(Err(err)) => return Err(err),
-                Err(..) => return Err(ErrorKind::TimedOut.into()),
+                Err(..) => return Err(Error::new(ErrorKind::TimedOut, "protect() timeout")),
             }
         }
     }

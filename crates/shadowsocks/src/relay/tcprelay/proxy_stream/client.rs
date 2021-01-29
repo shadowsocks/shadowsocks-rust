@@ -1,7 +1,7 @@
 //! TCP stream for communicating with shadowsocks' proxy server
 
 use std::{
-    io,
+    io::{self, ErrorKind},
     pin::Pin,
     task::{self, Poll},
 };
@@ -13,6 +13,7 @@ use log::trace;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
+    time,
 };
 
 use crate::{
@@ -95,7 +96,26 @@ where
         A: Into<Address>,
         F: FnOnce(TcpStream) -> S,
     {
-        let stream = OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts).await?;
+        let stream = match svr_cfg.timeout() {
+            Some(d) => {
+                match time::timeout(
+                    d,
+                    OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts),
+                )
+                .await
+                {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(e)) => return Err(e),
+                    Err(..) => {
+                        return Err(io::Error::new(
+                            ErrorKind::TimedOut,
+                            format!("connect {} timeout", svr_cfg.addr()),
+                        ))
+                    }
+                }
+            }
+            None => OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts).await?,
+        };
 
         trace!(
             "connected tcp remote {} (outbound: {}) with {:?}",
