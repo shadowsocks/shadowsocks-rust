@@ -15,8 +15,6 @@ use async_trait::async_trait;
 #[cfg(feature = "trust-dns")]
 use futures::future::{self, AbortHandle};
 use log::{error, log_enabled, trace, Level};
-#[cfg(feature = "trust-dns")]
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
 use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
@@ -116,9 +114,10 @@ where
     }
 }
 
-#[cfg(all(unix, not(target_os = "android")))]
-async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> NotifyResult<()> {
+#[cfg(all(feature = "trust-dns", unix, not(target_os = "android")))]
+async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> notify::Result<()> {
     use log::debug;
+    use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
     use tokio::sync::watch;
 
     use super::trust_dns_resolver::create_resolver;
@@ -163,8 +162,9 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> N
     Ok(())
 }
 
-#[cfg(any(not(unix), target_os = "android"))]
-async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> NotifyResult<()> {
+#[cfg(all(feature = "trust-dns", any(not(unix), target_os = "android")))]
+async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> notify::Result<()> {
+    let _ = resolver.ipv6_first; // use it for supressing warning
     future::pending().await
 }
 
