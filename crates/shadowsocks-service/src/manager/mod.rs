@@ -34,7 +34,6 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let mut manager = Manager::new(config.manager.expect("missing manager config"));
     manager.set_mode(config.mode);
-    manager.set_nodelay(config.no_delay);
 
     #[cfg(feature = "trust-dns")]
     if config.dns.is_some() || crate::hint_support_default_system_resolver() {

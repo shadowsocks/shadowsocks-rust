@@ -57,7 +57,6 @@ pub struct Manager {
     accept_opts: AcceptOpts,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
-    nodelay: bool,
     acl: Option<Arc<AccessControl>>,
 }
 
@@ -78,7 +77,6 @@ impl Manager {
             accept_opts: AcceptOpts::default(),
             udp_expiry_duration: None,
             udp_capacity: None,
-            nodelay: false,
             acl: None,
         }
     }
@@ -111,11 +109,6 @@ impl Manager {
     /// Get the manager's configuration
     pub fn config(&self) -> &ManagerConfig {
         &self.svr_cfg
-    }
-
-    /// Set `TCP_NODELAY` for TCP relays
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
     }
 
     /// Get customized DNS resolver
