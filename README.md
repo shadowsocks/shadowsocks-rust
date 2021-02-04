@@ -29,6 +29,8 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
 
+* `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
+
 #### Memory Allocators
 
 This project uses system (libc) memory allocator (Rust's default). But it also allows you to use other famous allocators by features:
@@ -36,8 +38,6 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 * `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
 * `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
 * `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
-
-Default features: `["trust-dns", "local-http", "local-http-native-tls", "local-tunnel", "local-socks4"]`.
 
 ### **crates.io**
 
@@ -51,14 +51,7 @@ then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
 ### **Download release**
 
-Requirements:
-
-* Linux x86\_64
-* Windows x86\_64
-
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
-
-Nightly builds could be downloaded from [CircleCI](https://app.circleci.com/pipelines/github/shadowsocks/shadowsocks-rust). [HOW TO](https://github.com/shadowsocks/shadowsocks-rust/issues/251#issuecomment-628692564)
 
 * `build-windows`: Build for `x86_64-pc-windows-msvc`
 * `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
@@ -66,7 +59,7 @@ Nightly builds could be downloaded from [CircleCI](https://app.circleci.com/pipe
 
 ### **Build from source**
 
-Use cargo to build.
+Use cargo to build. NOTE: **RAM >= 2GiB**
 
 ```bash
 cargo build --release
