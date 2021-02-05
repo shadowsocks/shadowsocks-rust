@@ -69,7 +69,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()

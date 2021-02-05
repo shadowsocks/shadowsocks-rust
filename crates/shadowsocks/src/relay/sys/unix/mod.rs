@@ -1,10 +1,11 @@
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
 use std::{
     io::{self, Error, ErrorKind},
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    os::unix::prelude::OsStrExt,
 };
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+use std::{os::unix::io::AsRawFd, ptr};
 #[cfg(any(target_os = "android"))]
 use std::{os::unix::io::RawFd, path::Path};
 
@@ -121,6 +122,48 @@ pub async fn tcp_stream_connect(saddr: &SocketAddr, config: &ConnectOpts) -> io:
         }
     }
 
+    // Set IP_BOUND_IF for BSD-like
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    if let Some(ref iface) = config.bind_interface {
+        const IP_BOUND_IF: libc::c_int = 25; // bsd/netinet/in.h
+        const IPV6_BOUND_IF: libc::c_int = 125; // bsd/netinet6/in6.h
+
+        unsafe {
+            let mut ciface = [0u8; libc::IFNAMSIZ];
+            if iface.len() >= ciface.len() {
+                return Err(ErrorKind::InvalidInput.into());
+            }
+
+            ptr::copy_nonoverlapping(iface.as_bytes().as_ptr(), ciface.as_mut_ptr(), iface.len());
+
+            let index = libc::if_nametoindex(ciface.as_ptr() as *const libc::c_char);
+            if index == 0 {
+                return Err(Error::last_os_error());
+            }
+
+            let ret = match *saddr {
+                SocketAddr::V4(..) => libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IP,
+                    IP_BOUND_IF,
+                    &index as *const _ as *const _,
+                    mem::size_of_val(&index) as libc::socklen_t,
+                ),
+                SocketAddr::V6(..) => libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IPV6,
+                    IPV6_BOUND_IF,
+                    &index as *const _ as *const _,
+                    mem::size_of_val(&index) as libc::socklen_t,
+                ),
+            };
+
+            if ret < 0 {
+                return Err(Error::last_os_error());
+            }
+        }
+    }
+
     // Binds to IP address
     if let Some(ip) = config.bind_local_addr {
         match (ip, saddr.ip()) {
@@ -212,6 +255,48 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
                 Some(errno) => Err(errno.into()),
                 None => Err(Error::new(ErrorKind::Other, err)),
             };
+        }
+    }
+
+    // Set IP_BOUND_IF for BSD-like
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    if let Some(ref iface) = config.bind_interface {
+        const IP_BOUND_IF: libc::c_int = 25; // bsd/netinet/in.h
+        const IPV6_BOUND_IF: libc::c_int = 125; // bsd/netinet6/in6.h
+
+        unsafe {
+            let mut ciface = [0u8; libc::IFNAMSIZ];
+            if iface.len() >= ciface.len() {
+                return Err(ErrorKind::InvalidInput.into());
+            }
+
+            ptr::copy_nonoverlapping(iface.as_bytes().as_ptr(), ciface.as_mut_ptr(), iface.len());
+
+            let index = libc::if_nametoindex(ciface.as_ptr() as *const libc::c_char);
+            if index == 0 {
+                return Err(Error::last_os_error());
+            }
+
+            let ret = match bind_addr {
+                SocketAddr::V4(..) => libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IP,
+                    IP_BOUND_IF,
+                    &index as *const _ as *const _,
+                    mem::size_of_val(&index) as libc::socklen_t,
+                ),
+                SocketAddr::V6(..) => libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IPV6,
+                    IPV6_BOUND_IF,
+                    &index as *const _ as *const _,
+                    mem::size_of_val(&index) as libc::socklen_t,
+                ),
+            };
+
+            if ret < 0 {
+                return Err(Error::last_os_error());
+            }
         }
     }
 

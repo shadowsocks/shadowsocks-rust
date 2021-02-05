@@ -103,8 +103,15 @@ fn main() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         app = clap_app!(@app (app)
-            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
             (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set SO_BINDTODEVICE option for outbound socket")
+            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
+        );
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+    {
+        app = clap_app!(@app (app)
+            (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set IP_BOUND_IF option for outbound socket")
         );
     }
 
@@ -296,7 +303,7 @@ fn main() {
         config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
     if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
         config.outbound_bind_interface = Some(From::from(iface.to_owned()));
     }

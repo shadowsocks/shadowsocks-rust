@@ -1,6 +1,6 @@
 //! Options for connecting to remote server
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
 use std::ffi::OsString;
 use std::net::IpAddr;
 
@@ -46,7 +46,7 @@ pub struct ConnectOpts {
     pub bind_local_addr: Option<IpAddr>,
 
     /// Outbound socket binds to interface
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
     pub bind_interface: Option<OsString>,
 
     /// TCP options
@@ -61,7 +61,7 @@ impl Default for ConnectOpts {
             #[cfg(target_os = "android")]
             vpn_protect_path: None,
             bind_local_addr: None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
             bind_interface: None,
             tcp: TcpSocketOpts::default(),
         }

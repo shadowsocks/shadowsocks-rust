@@ -75,7 +75,7 @@ pub async fn run(config: Config) -> io::Result<()> {
             }
         },
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()

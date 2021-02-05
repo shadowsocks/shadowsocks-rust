@@ -41,7 +41,7 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
 use std::ffi::OsString;
 use std::{
     convert::{From, Infallible},
@@ -594,7 +594,7 @@ pub struct Config {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub outbound_fwmark: Option<u32>,
     /// Set `SO_BINDTODEVICE` socket option for outbound sockets
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
     pub outbound_bind_interface: Option<OsString>,
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
@@ -728,7 +728,7 @@ impl Config {
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
             outbound_bind_interface: None,
             #[cfg(target_os = "android")]
             outbound_vpn_protect_path: None,
