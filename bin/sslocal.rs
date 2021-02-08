@@ -108,7 +108,7 @@ fn main() {
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         app = clap_app!(@app (app)
             (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set IP_BOUND_IF option for outbound socket")
