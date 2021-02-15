@@ -854,9 +854,9 @@ dependencies = [
 
 [[package]]
 name = "lru_time_cache"
-version = "0.11.6"
+version = "0.11.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a559ce34615abd3145e6ca99df0e33ac069dc5298d1bfecfcc1ca821803f0cb2"
+checksum = "7ce7a913007f8d825242cd5017962f09bc3f19f91a382498c1e6756c842e3908"
 
 [[package]]
 name = "maplit"
