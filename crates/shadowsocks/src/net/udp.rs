@@ -12,7 +12,7 @@ use crate::{
     context::Context,
     relay::{
         socks5::Address,
-        sys::{create_outbound_udp_socket, create_udp_socket},
+        sys::{create_inbound_udp_socket, create_outbound_udp_socket},
     },
     ServerAddr,
 };
@@ -80,8 +80,8 @@ impl UdpSocket {
     }
 
     /// Binds to a specific address
-    pub async fn bind(addr: &SocketAddr) -> io::Result<UdpSocket> {
-        let socket = create_udp_socket(addr).await?;
+    pub async fn listen(addr: &SocketAddr) -> io::Result<UdpSocket> {
+        let socket = create_inbound_udp_socket(addr).await?;
         Ok(UdpSocket(socket))
     }
 

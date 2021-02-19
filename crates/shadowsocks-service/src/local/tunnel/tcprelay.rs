@@ -4,10 +4,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
 use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
-use tokio::{
-    net::{TcpListener, TcpStream},
-    time,
-};
+use tokio::{net::TcpStream, time};
 
 use crate::{
     config::ClientConfig,
@@ -27,15 +24,14 @@ pub async fn run_tcp_tunnel(
     nodelay: bool,
 ) -> io::Result<()> {
     let listener = match *client_config {
-        ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
+        ClientConfig::SocketAddr(ref saddr) => ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?,
         ClientConfig::DomainName(ref dname, port) => {
             lookup_then!(context.context_ref(), dname, port, |addr| {
-                TcpListener::bind(addr).await
+                ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
             })?
             .1
         }
     };
-    let listener = ShadowTcpListener::from_listener(listener, context.accept_opts());
 
     info!("shadowsocks TCP tunnel listening on {}", listener.local_addr()?);
 

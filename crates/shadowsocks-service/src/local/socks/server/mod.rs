@@ -5,10 +5,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use futures::{future, FutureExt};
 use log::{error, info};
 use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener};
-use tokio::{
-    net::{TcpListener, TcpStream},
-    time,
-};
+use tokio::{net::TcpStream, time};
 
 use crate::{
     config::{ClientConfig, Mode},
@@ -101,15 +98,16 @@ impl Socks {
 
     async fn run_tcp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => TcpListener::bind(saddr).await?,
+            ClientConfig::SocketAddr(ref saddr) => {
+                ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
+            }
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    TcpListener::bind(addr).await
+                    ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
                 })?
                 .1
             }
         };
-        let listener = ShadowTcpListener::from_listener(listener, self.context.accept_opts());
 
         info!("shadowsocks socks TCP listening on {}", listener.local_addr()?);
 

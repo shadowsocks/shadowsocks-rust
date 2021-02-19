@@ -76,10 +76,10 @@ impl UdpTunnel {
         forward_addr: &Address,
     ) -> io::Result<()> {
         let socket = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::bind(&saddr).await?,
+            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(&self.context.context_ref(), dname, port, |addr| {
-                    ShadowUdpSocket::bind(&addr).await
+                    ShadowUdpSocket::listen(&addr).await
                 })?
                 .1
             }

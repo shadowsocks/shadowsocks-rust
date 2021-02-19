@@ -1,7 +1,11 @@
 //! TcpStream wrappers that supports connecting with options
 
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket};
 use std::{
-    io,
+    io::{self, ErrorKind},
     net::SocketAddr,
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -9,11 +13,12 @@ use std::{
 };
 
 use futures::{future, ready};
+use log::{debug, warn};
 use pin_project::pin_project;
 use socket2::Socket;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream},
+    net::{TcpListener as TokioTcpListener, TcpSocket, TcpStream as TokioTcpStream},
 };
 
 use crate::{
@@ -128,8 +133,69 @@ pub struct TcpListener {
 impl TcpListener {
     /// Creates a new TcpListener, which will be bound to the specified address.
     pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
-        let inner = TokioTcpListener::bind(addr).await?;
-        Ok(TcpListener { inner, accept_opts })
+        let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {
+            v6.ip().is_unspecified()
+        } else {
+            false
+        };
+
+        if !set_dual_stack {
+            let inner = TokioTcpListener::bind(addr).await?;
+            Ok(TcpListener { inner, accept_opts })
+        } else {
+            let socket = match *addr {
+                SocketAddr::V4(..) => TcpSocket::new_v4()?,
+                SocketAddr::V6(..) => TcpSocket::new_v6()?,
+            };
+
+            // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+            #[cfg(not(windows))]
+            socket.set_reuseaddr(true)?;
+
+            // Set to DUAL STACK mode by default.
+            // WARNING: This would fail if you want to start another program listening on the same port.
+            //
+            // Should this behavior be configurable?
+            fn set_only_v6(socket: &TcpSocket, only_v6: bool) {
+                unsafe {
+                    // WARN: If the following code panics, FD will be closed twice.
+                    #[cfg(unix)]
+                    let s = Socket::from_raw_fd(socket.as_raw_fd());
+                    #[cfg(windows)]
+                    let s = Socket::from_raw_socket(socket.as_raw_socket());
+                    if let Err(err) = s.set_only_v6(only_v6) {
+                        warn!("failed to set IPV6_V6ONLY: {} for listener, error: {}", only_v6, err);
+
+                        // This is not a fatal error, just warn and skip
+                    }
+
+                    #[cfg(unix)]
+                    let _ = s.into_raw_fd();
+                    #[cfg(windows)]
+                    let _ = s.into_raw_socket();
+                }
+            }
+
+            set_only_v6(&socket, false);
+            match socket.bind(*addr) {
+                Ok(..) => {}
+                Err(ref err) if err.kind() == ErrorKind::AddrInUse => {
+                    // This is probably 0.0.0.0 with the same port has already been occupied
+                    debug!(
+                        "0.0.0.0:{} may have already been occupied, retry with IPV6_V6ONLY",
+                        addr.port()
+                    );
+
+                    set_only_v6(&socket, true);
+                    socket.bind(*addr)?;
+                }
+                Err(err) => return Err(err),
+            }
+
+            // mio's default backlog is 1024
+            let inner = socket.listen(1024)?;
+            Ok(TcpListener { inner, accept_opts })
+        }
     }
 
     /// Create a `TcpListener` from tokio's `TcpListener`
@@ -167,10 +233,11 @@ impl DerefMut for TcpListener {
     }
 }
 
-#[cfg(unix)]
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
-#[cfg(windows)]
-use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket};
+impl Into<TokioTcpListener> for TcpListener {
+    fn into(self) -> TokioTcpListener {
+        self.inner
+    }
+}
 
 #[cfg(unix)]
 fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {

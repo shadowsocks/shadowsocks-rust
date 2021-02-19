@@ -10,6 +10,8 @@ use std::{os::unix::io::AsRawFd, ptr};
 use std::{os::unix::io::RawFd, path::Path};
 
 use cfg_if::cfg_if;
+use log::{debug, warn};
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 
 use crate::net::{AddrFamily, ConnectOpts};
@@ -305,6 +307,48 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
 
 /// Create a `UdpSocket` binded to `addr`
 #[inline(always)]
-pub async fn create_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
-    UdpSocket::bind(addr).await
+pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
+    let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {
+        v6.ip().is_unspecified()
+    } else {
+        false
+    };
+
+    if !set_dual_stack {
+        UdpSocket::bind(addr).await
+    } else {
+        let socket = match *addr {
+            SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp()))?,
+            SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::dgram(), Some(Protocol::udp()))?,
+        };
+
+        if let Err(err) = socket.set_only_v6(false) {
+            warn!("failed to set IPV6_V6ONLY: false for listener, error: {}", err);
+
+            // This is not a fatal error, just warn and skip
+        }
+
+        let saddr = SockAddr::from(*addr);
+
+        match socket.bind(&saddr) {
+            Ok(..) => {}
+            Err(ref err) if err.kind() == ErrorKind::AddrInUse => {
+                // This is probably 0.0.0.0 with the same port has already been occupied
+                debug!(
+                    "0.0.0.0:{} may have already been occupied, retry with IPV6_V6ONLY",
+                    addr.port()
+                );
+
+                if let Err(err) = socket.set_only_v6(true) {
+                    warn!("failed to set IPV6_V6ONLY: true for listener, error: {}", err);
+
+                    // This is not a fatal error, just warn and skip
+                }
+                socket.bind(&saddr)?;
+            }
+            Err(err) => return Err(err),
+        }
+
+        UdpSocket::from_std(socket.into_udp_socket())
+    }
 }

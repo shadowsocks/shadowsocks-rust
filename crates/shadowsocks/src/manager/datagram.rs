@@ -56,11 +56,12 @@ impl ManagerDatagram {
     /// Create a `ManagerDatagram` binding to requested `bind_addr`
     pub async fn bind(context: &Context, bind_addr: &ManagerAddr) -> io::Result<ManagerDatagram> {
         match *bind_addr {
-            ManagerAddr::SocketAddr(ref saddr) => {
-                Ok(ManagerDatagram::UdpDatagram(ShadowUdpSocket::bind(saddr).await?.into()))
-            }
+            ManagerAddr::SocketAddr(ref saddr) => Ok(ManagerDatagram::UdpDatagram(
+                ShadowUdpSocket::listen(saddr).await?.into(),
+            )),
             ManagerAddr::DomainName(ref dname, port) => {
-                let (_, socket) = lookup_then!(context, dname, port, |saddr| { ShadowUdpSocket::bind(&saddr).await })?;
+                let (_, socket) =
+                    lookup_then!(context, dname, port, |saddr| { ShadowUdpSocket::listen(&saddr).await })?;
 
                 Ok(ManagerDatagram::UdpDatagram(socket.into()))
             }
