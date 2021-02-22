@@ -4,12 +4,19 @@
 ![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/workflows/Build%20Releases/badge.svg)
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
+[![docs.rs](https://img.shields.io/docsrs/shadowsocks-rust)](https://docs.rs/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 [![Dependabot Status](https://api.dependabot.com/badges/status?host=github&repo=shadowsocks%2fshadowsocks-rust)](https://dependabot.com)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
+
+| Library | Description |
+| ------- | ----------- |
+| **shadowsocks** | [![crates.io](https://img.shields.io/crates/v/shadowsocks.svg)](https://crates.io/crates/shadowsocks) [![docs.rs](https://img.shields.io/docsrs/shadowsocks)](https://docs.rs/shadowsocks) shadowsocks core protocol |
+| **shadowsocks-service** | [![crates.io](https://img.shields.io/crates/v/shadowsocks-service.svg)](https://crates.io/crates/shadowsocks-service) [![docs.rs](https://img.shields.io/docsrs/shadowsocks-service)](https://docs.rs/shadowsocks-service) Services for serving shadowsocks |
+| **shadowsocks-rust** | [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust) [![docs.rs](https://img.shields.io/docsrs/shadowsocks-rust)](https://docs.rs/shadowsocks-rust) Binaries running common shadowsocks services |
 
 ## Build & Install
 
@@ -71,7 +78,7 @@ Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it wor
 make install TARGET=release
 ```
 
-Then `sslocal`, `ssserver`, `sstunnel` and `ssurl` will be installed in `/usr/local/bin` (variable PREFIX).
+Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be installed to `/usr/local/bin` (variable PREFIX).
 
 For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
 

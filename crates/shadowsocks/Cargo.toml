@@ -51,7 +51,7 @@ async-trait = "0.1"
 
 mio = "0.7"
 socket2 = "0.3"
-tokio = { version = "1.2", features = ["io-util", "macros", "net", "parking_lot", "process", "rt"] }
+tokio = { version = "1.2", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync"] }
 
 trust-dns-resolver = { version = "0.20", optional = true }
 arc-swap = { version = "1.2", optional = true }
