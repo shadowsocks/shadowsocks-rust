@@ -112,7 +112,7 @@ strum_macros = { version = "0.20", optional = true }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
-nix = "0.19"
+nix = "0.20"
 
 [dev-dependencies]
 byteorder = "1.3"
