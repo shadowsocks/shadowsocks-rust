@@ -349,6 +349,8 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocke
             Err(err) => return Err(err),
         }
 
+        // UdpSocket::from_std requires socket to be non-blocked
+        socket.set_nonblocking(true)?;
         UdpSocket::from_std(socket.into_udp_socket())
     }
 }
