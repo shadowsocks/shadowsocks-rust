@@ -53,7 +53,8 @@ rustflags = [
 
 # NOTE:
 #    mips are commonly used in routers, so binary size is more important than speed
-[target.'cfg(target_arch = "mips")']
-rustflags = [
-    "-C", "opt-level=z"
-]
+# [target.'cfg(target_arch = "mips")']
+# rustflags = [
+#     "-C", "opt-level=z",
+#     "-C", "inline-threshold=225"
+# ]

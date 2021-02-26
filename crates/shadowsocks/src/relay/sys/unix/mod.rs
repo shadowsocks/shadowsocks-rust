@@ -1,13 +1,14 @@
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+use std::os::unix::io::AsRawFd;
 use std::{
     io::{self, Error, ErrorKind},
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
-    os::unix::prelude::OsStrExt,
 };
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-use std::{os::unix::io::AsRawFd, ptr};
 #[cfg(any(target_os = "android"))]
 use std::{os::unix::io::RawFd, path::Path};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use std::{os::unix::prelude::OsStrExt, ptr};
 
 use cfg_if::cfg_if;
 use log::{debug, warn};
