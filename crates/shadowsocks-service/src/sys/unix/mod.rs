@@ -23,6 +23,7 @@ pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr>
     }
 }
 
+#[allow(dead_code)]
 #[cfg(not(target_os = "android"))]
 pub fn set_nofile(nofile: u64) -> io::Result<()> {
     unsafe {
@@ -40,6 +41,7 @@ pub fn set_nofile(nofile: u64) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 #[cfg(target_os = "android")]
 pub fn set_nofile(_nofile: u64) -> io::Result<()> {
     // Android doesn't have this API

@@ -70,6 +70,7 @@ pub mod server;
 mod sys;
 
 /// Default UDP association's expire duration
+#[allow(dead_code)]
 const DEFAULT_UDP_EXPIRY_DURATION: Duration = Duration::from_secs(5 * 60);
 
 #[cfg(feature = "trust-dns")]
