@@ -13,7 +13,7 @@ rustflags = [
     # Common ISA that is supported by modern CPUs
     # https://en.wikipedia.org/wiki/SSE4
     # Disable this line if you find "Illegal Instructions" error when running the programs
-    "-C", "target-feature=+aes,+pclmul,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2,+avx",
+    "-C", "target-feature=+aes,+pclmul,+sse,+sse2,+sse3,+ssse3,+sse4.1,+sse4.2",
 ]
 
 [target.'cfg(target_arch = "x86")']
