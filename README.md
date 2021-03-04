@@ -118,7 +118,6 @@ Create a ShadowSocks' configuration file. Example
     "local_address": "127.0.0.1",
     "local_port": 1080,
     "password": "mypassword",
-    "timeout": 300,
     "method": "aes-256-gcm"
 }
 ```
@@ -132,34 +131,33 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
     "servers": [
         {
             "address": "127.0.0.1",
-            "port": 1080,
+            "port": 8388,
             "password": "hello-world",
             "method": "aes-256-gcm",
-            "timeout": 300
+            "timeout": 7200
         },
         {
             "address": "127.0.0.1",
-            "port": 1081,
+            "port": 8389,
             "password": "hello-kitty",
             "method": "chacha20-ietf-poly1305"
         },
         {
             "disabled": true,
             "address": "eg.disable.me",
-            "port": 1080,
+            "port": 8390,
             "password": "hello-internet",
             "method": "chacha20-ietf-poly1305"
         }
     ],
-    "local_port": 8388,
+    "local_port": 1080,
     "local_address": "127.0.0.1"
 }
 ```
 
-The `sslocal` will use a load balancing algorithm to dispatch packages to all servers.
+`sslocal` automatically selects the best server with the lowest latency and the highest availability.
 
-Start local and server ShadowSocks with
-If you Build it with Makefile:
+Start Shadowsocks client and server with:
 
 ```bash
 sslocal -c config.json
@@ -184,10 +182,10 @@ List all available arguments with `-h`.
 sslocal -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-local" --plugin-opts "obfs=tls"
+sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin" --plugin-opts "server;tls;host=github.com"
 
 # Pass server with SIP002 URL
-sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dtls"
+sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0.0.1:8388/?plugin=v2ray-plugin%3Bserver%3Btls%3Bhost%3Dgithub.com"
 ```
 
 ### HTTP Local client
@@ -228,7 +226,7 @@ Redirects connections with `iptables` configurations to the port that `sslocal` 
 ssserver -c /path/to/shadowsocks.json
 
 # Pass all parameters via command line
-ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "obfs-server" --plugin-opts "obfs=tls"
+ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin" --plugin-opts "server;tls;host=github.com"
 ```
 
 ### Server Manager
@@ -296,14 +294,19 @@ Example configuration:
     "local_address": "127.0.0.1",
     "local_port": 1080,
 
-    // Server's configuration
-    "server": "0.0.0.0",
+    // Server configuration
+    // listen on [::] for dual stack support
+    "server": "::",
+    // Change to use your custom port number
     "server_port": 8388,
     "method": "aes-256-gcm",
     "password": "your-password",
     "plugin": "v2ray-plugin",
-    "plugin_opts": "mode=quic;host=www.shadowsocks.com",
-    "timeout": 5, // Timeout for TCP relay server (in seconds)
+    "plugin_opts": "mode=quic;host=github.com",
+    // Server: TCP socket timeout in seconds.
+    // Client: TCP connection timeout in seconds.
+    // Omit this field if you don't have specific needs.
+    "timeout": 7200,
 
     // Extended multiple server configuration
     // LOCAL: Choosing the best server to connect dynamically
@@ -312,7 +315,7 @@ Example configuration:
         {
             // Fields are the same as the single server's configuration
             
-            // Individual server can be disabled
+            // Individual servers can be disabled
             // "disabled": true,
             "address": "0.0.0.0",
             "port": 8389,
@@ -320,12 +323,12 @@ Example configuration:
             "password": "your-password",
             "plugin": "...",
             "plugin_opts": "...",
-            "timeout": 5,
+            "timeout": 7200,
         }
     ],
 
     // Global configurations for UDP associations
-    "udp_timeout": 5, // Timeout for UDP associations (in seconds), 5 minutes by default
+    "udp_timeout": 300, // Timeout for UDP associations (in seconds), 5 minutes by default
     "udp_max_associations": 512, // Maximum UDP associations to be kept in one server, unlimited by default
 
     // Options for Manager
@@ -368,7 +371,17 @@ Example configuration:
 
 ## Supported Ciphers
 
+### AEAD Ciphers
+
+* `chacha20-ietf-poly1305`
+* `aes-128-gcm`, `aes-256-gcm`
+
 ### Stream Ciphers
+
+* `plain` or `none` (No encryption, only used for debugging or with plugins that ensure transport security)
+
+<details><summary>Deprecated</summary>
+<p>
 
 * `table`
 * `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
@@ -382,12 +395,9 @@ Example configuration:
 * `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
 * `rc4-md5`
 * `chacha20-ietf`
-* `plain` (No encryption, just for debugging)
 
-### AEAD Ciphers
-
-* `aes-128-gcm`, `aes-256-gcm`
-* `chacha20-ietf-poly1305`
+</p>
+</details>
 
 ## ACL
 
@@ -474,10 +484,8 @@ It supports the following features:
 * [x] Windows support.
 * [x] Build with stable `rustc`.
 * [x] Support HTTP Proxy protocol
-* [ ] One-time Auth. (Already deprecated according to Shadowsocks' community)
 * [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 * [x] Choose server based on delay #152
-* [ ] Support TCP Fast Open
 
 ## License
 
