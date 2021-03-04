@@ -49,7 +49,10 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
 
         // Create a socket binds to destination addr
         // This only works for systems that supports binding to non-local addresses
-        let inbound = UdpRedirSocket::bind(self.redir_ty, addr)?;
+        //
+        // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
+        // Outbound addresses could be connected from different source addresses.
+        let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr)?;
 
         // Send back to client
         inbound.send_to(data, peer_addr).await.map(|_| ())
@@ -80,10 +83,10 @@ impl UdpRedir {
 
     pub async fn run(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::bind(self.redir_ty, *saddr)?,
+            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::listen(self.redir_ty, *saddr)?,
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    UdpRedirSocket::bind(self.redir_ty, addr)
+                    UdpRedirSocket::listen(self.redir_ty, addr)
                 })?
                 .1
             }
