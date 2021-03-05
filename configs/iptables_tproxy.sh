@@ -37,31 +37,31 @@ iptables -t mangle -A PREROUTING -j SS
 #ip6tables -t mangle -A PREROUTING -j SS
 
 # OUTPUT rules
-iptables -t mangle -N SS-MASK
-#ip6tables -t mangle -N SS-MASK
+iptables -t mangle -N SS-MARK
+#ip6tables -t mangle -N SS-MARK
 # Reserved addresses
-iptables -t mangle -A SS-MASK -d 0/8 -j RETURN
-iptables -t mangle -A SS-MASK -d 127/8 -j RETURN
-iptables -t mangle -A SS-MASK -d 10/8 -j RETURN
-iptables -t mangle -A SS-MASK -d 169.254/16 -j RETURN
-iptables -t mangle -A SS-MASK -d 172.16/12 -j RETURN
-iptables -t mangle -A SS-MASK -d 192.168/16 -j RETURN
-iptables -t mangle -A SS-MASK -d 224/4 -j RETURN
-iptables -t mangle -A SS-MASK -d 240/4 -j RETURN
-#ip6tables -t mangle -A SS-MASK -d ::1/128 -j RETURN
-#ip6tables -t mangle -A SS-MASK -d fc00::/7 -j RETURN
-#ip6tables -t mangle -A SS-MASK -d fe80::/10 -j RETURN
+iptables -t mangle -A SS-MARK -d 0/8 -j RETURN
+iptables -t mangle -A SS-MARK -d 127/8 -j RETURN
+iptables -t mangle -A SS-MARK -d 10/8 -j RETURN
+iptables -t mangle -A SS-MARK -d 169.254/16 -j RETURN
+iptables -t mangle -A SS-MARK -d 172.16/12 -j RETURN
+iptables -t mangle -A SS-MARK -d 192.168/16 -j RETURN
+iptables -t mangle -A SS-MARK -d 224/4 -j RETURN
+iptables -t mangle -A SS-MARK -d 240/4 -j RETURN
+#ip6tables -t mangle -A SS-MARK -d ::1/128 -j RETURN
+#ip6tables -t mangle -A SS-MARK -d fc00::/7 -j RETURN
+#ip6tables -t mangle -A SS-MARK -d fe80::/10 -j RETURN
 
 # Bypass sslocal with mask 0xff (255)
-iptables -t mangle -A SS-MASK -j RETURN -m mark --mark 0xff
-#ip6tables -t mangle -A SS-MASK -j RETURN -m mark --mark 0xff
+iptables -t mangle -A SS-MARK -j RETURN -m mark --mark 0xff
+#ip6tables -t mangle -A SS-MARK -j RETURN -m mark --mark 0xff
 
 # Reroute
-iptables -t mangle -A SS-MASK -p udp -j MARK --set-mark 0x2333
-iptables -t mangle -A SS-MASK -p tcp -j MARK --set-mark 0x2333
-#ip6tables -t mangle -A SS-MASK -p udp -j MARK --set-mark 0x2333
-#ip6tables -t mangle -A SS-MASK -p tcp -j MARK --set-mark 0x2333
+iptables -t mangle -A SS-MARK -p udp -j MARK --set-mark 0x2333
+iptables -t mangle -A SS-MARK -p tcp -j MARK --set-mark 0x2333
+#ip6tables -t mangle -A SS-MARK -p udp -j MARK --set-mark 0x2333
+#ip6tables -t mangle -A SS-MARK -p tcp -j MARK --set-mark 0x2333
 
 # Apply
-iptables -t mangle -A OUTPUT -j SS-MASK
-#ip6tables -t mangle -A OUTPUT -j SS-MASK
+iptables -t mangle -A OUTPUT -j SS-MARK
+#ip6tables -t mangle -A OUTPUT -j SS-MARK
