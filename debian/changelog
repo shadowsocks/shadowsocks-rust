@@ -1,4 +1,16 @@
-shadowsocks-rust (1.9.0) unstable; urgency=medium
+shadowsocks-rust (1.9.2) unstable; urgency=medium
+
+  ## Features
+
+  * #442 Check repeated salt after first successful decryption
+
+  ## BUG Fixes
+
+  * Redir: setting SO_REUSEPORT, SO_MARK for UDP send-back sockets
+
+ -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 6 Mar 2021 01:15:00 +0800
+
+shadowsocks-rust (1.9.1) unstable; urgency=medium
 
   ## BUG Fixes
 
