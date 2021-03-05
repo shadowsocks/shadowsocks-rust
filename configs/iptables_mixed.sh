@@ -20,7 +20,7 @@ iptables -t nat -A shadowsocks-nat -d 240/4 -j RETURN
 # Bypass CN IPs
 iptables -t nat -A shadowsocks-nat -m set --match-set cn dst -j RETURN
 # Bypass sslocal's outbound data
-iptables -t nat -A shadowsocks-nat -m mark --mark 255 -j RETURN
+iptables -t nat -A shadowsocks-nat -m mark --mark 0xff/0xff -j RETURN
 # Redirect TCP to 60080
 iptables -t nat -A shadowsocks-nat -p tcp -j REDIRECT --to-ports 60080
 # Local TCP -> shadowsocks-nat
@@ -30,8 +30,8 @@ iptables -t nat -A PREROUTING -p tcp -j shadowsocks-nat
 
 ## UDP
 # Strategy Route
-ip rule add fwmark 1 table 233
-ip route add local 0.0.0.0/0 dev lo table 233
+ip rule add fwmark 0x1 table 100
+ip route add local 0.0.0.0/0 dev lo table 100
 
 # TPROXY for LAN
 iptables -t mangle -N shadowsocks-tproxy
@@ -47,12 +47,11 @@ iptables -t mangle -A shadowsocks-tproxy -d 240/4 -j RETURN
 # Bypass CN IPs
 iptables -t mangle -A shadowsocks-tproxy -m set --match-set cn dst -j RETURN
 # Bypass sslocal's outbound data
-iptables -t mangle -A shadowsocks-tproxy -m mark --mark 255 -j RETURN
+iptables -t mangle -A shadowsocks-tproxy -m mark --mark 0xff/0xff -j RETURN
 # TPROXY UDP to 60080
-iptables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-port 60080 --tproxy-mark 1/1
+iptables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-ip 0.0.0.0 --on-port 60080 --tproxy-mark 0x01/0x01
 #iptables -t mangle -A shadowsocks-tproxy -p tcp -j TPROXY --on-port 60080 --tproxy-mark 1/1
-# Apply TPROXY to LAN
-iptables -t mangle -A PREROUTING -p udp -j shadowsocks-tproxy
+
 
 # TPROXY for Local
 iptables -t mangle -N shadowsocks-tproxy-mark
@@ -67,10 +66,13 @@ iptables -t mangle -A shadowsocks-tproxy-mark -d 240/4 -j RETURN
 # Bypass CN IPs
 iptables -t mangle -A shadowsocks-tproxy-mark -m set --match-set cn dst -j RETURN
 # Bypass sslocal's outbound data
-iptables -t mangle -A shadowsocks-tproxy-mark -m mark --mark 255 -j RETURN
+iptables -t mangle -A shadowsocks-tproxy-mark -m mark --mark 0xff/0xff -j RETURN
 # Set MARK and reroute
-iptables -t mangle -A shadowsocks-tproxy-mark -p udp -j MARK --set-xmark 1
+iptables -t mangle -A shadowsocks-tproxy-mark -p udp -j MARK --set-xmark 0x01/0xffffffff
 #iptables -t mangle -A shadowsocks-tproxy-mark -p tcp -j MARK --set-xmark 1
+
+# Apply TPROXY to LAN
+iptables -t mangle -A PREROUTING -p udp -j shadowsocks-tproxy
 # Apply TPROXY for Local
 iptables -t mangle -A OUTPUT -p udp -j shadowsocks-tproxy-mark
 

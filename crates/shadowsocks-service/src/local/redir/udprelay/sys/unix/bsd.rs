@@ -12,7 +12,11 @@ use futures::{future::poll_fn, ready};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
-use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedirExt, sys::sockaddr_to_std};
+use crate::{
+    config::RedirType,
+    local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
+    sys::sockaddr_to_std,
+};
 
 pub fn check_support_tproxy() -> io::Result<()> {
     Ok(())
@@ -33,7 +37,7 @@ impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
+    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr, _: &RedirSocketOpts) -> io::Result<UdpRedirSocket> {
         UdpRedirSocket::bind(ty, addr, true)
     }
 

@@ -1,6 +1,9 @@
 use std::{io, net::SocketAddr};
 
-use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedir};
+use crate::{
+    config::RedirType,
+    local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedir},
+};
 
 pub struct UdpRedirSocket;
 
@@ -8,18 +11,18 @@ impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow listening to `addr` that is not in local host
-    pub fn listen(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
-        UdpRedirSocket::bind(ty, addr, false)
+    pub fn listen(_ty: RedirType, _addr: SocketAddr) -> io::Result<UdpRedirSocket> {
+        unimplemented!("UDP transparent proxy is not supported on this platform")
     }
 
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
-        UdpRedirSocket::bind(ty, addr, true)
-    }
-
-    fn bind(_ty: RedirType, _addr: SocketAddr, _reuse_port: bool) -> io::Result<UdpRedirSocket> {
+    pub fn bind_nonlocal(
+        _ty: RedirType,
+        _addr: SocketAddr,
+        _redir_opts: &RedirSocketOpts,
+    ) -> io::Result<UdpRedirSocket> {
         unimplemented!("UDP transparent proxy is not supported on this platform")
     }
 

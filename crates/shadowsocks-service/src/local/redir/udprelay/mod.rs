@@ -20,7 +20,7 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::{UdpAssociationManager, UdpInboundWrite},
-        redir::redir_ext::UdpSocketRedirExt,
+        redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
     },
 };
 
@@ -31,6 +31,7 @@ mod sys;
 #[derive(Clone)]
 struct UdpRedirInboundWriter {
     redir_ty: RedirType,
+    socket_opts: RedirSocketOpts,
 }
 
 #[async_trait]
@@ -52,7 +53,7 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
         //
         // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
         // Outbound addresses could be connected from different source addresses.
-        let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr)?;
+        let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
 
         // Send back to client
         inbound.send_to(data, peer_addr).await.map(|_| ())
@@ -99,6 +100,12 @@ impl UdpRedir {
             self.context.clone(),
             UdpRedirInboundWriter {
                 redir_ty: self.redir_ty,
+                socket_opts: RedirSocketOpts {
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    fwmark: self.context.connect_opts_ref().fwmark,
+
+                    ..Default::default()
+                },
             },
             self.time_to_live,
             self.capacity,
