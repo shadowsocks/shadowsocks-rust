@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use shadowsocks::{
     lookup_then,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -56,7 +56,25 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
         let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
 
         // Send back to client
-        inbound.send_to(data, peer_addr).await.map(|_| ())
+        inbound.send_to(data, peer_addr).await.map(|n| {
+            if n < data.len() {
+                warn!(
+                    "udp redir send back data (actual: {} bytes, sent: {} bytes), remote: {}, peer: {}",
+                    n,
+                    data.len(),
+                    remote_addr,
+                    peer_addr
+                );
+            }
+
+            trace!(
+                "udp redir send back data {} bytes, remote: {}, peer: {}, socket_opts: {:?}",
+                n,
+                remote_addr,
+                peer_addr,
+                self.socket_opts
+            );
+        })
     }
 }
 
