@@ -1,7 +1,7 @@
 //! Load Balancer chooses server by statistic latency data collected from active probing
 
 use std::{
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     future::Future,
     io,
     net::{Ipv4Addr, SocketAddr},
@@ -14,11 +14,14 @@ use std::{
 
 use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
-use log::{debug, log, trace, Level};
-use shadowsocks::relay::{
-    socks5::Address,
-    tcprelay::proxy_stream::ProxyClientStream,
-    udprelay::{proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+use log::{debug, info, trace};
+use shadowsocks::{
+    relay::{
+        socks5::Address,
+        tcprelay::proxy_stream::ProxyClientStream,
+        udprelay::{proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+    },
+    ServerConfig,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -124,7 +127,7 @@ impl PingBalancerContext {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
         if self.servers.len() > 1 {
-            self.check_once(false).await;
+            self.check_once(true).await;
         }
     }
 
@@ -144,7 +147,7 @@ impl PingBalancerContext {
     }
 
     /// Check each servers' score and update the best server's index
-    async fn check_once(&self, print_switch: bool) {
+    async fn check_once(&self, first_run: bool) {
         let mut vfut = match self.mode {
             Mode::TcpAndUdp => Vec::with_capacity(self.servers.len() * 2),
             Mode::TcpOnly | Mode::UdpOnly => Vec::with_capacity(self.servers.len()),
@@ -186,18 +189,24 @@ impl PingBalancerContext {
             }
             self.best_tcp_idx.store(best_idx, Ordering::Release);
 
-            if best_idx != old_best_idx {
-                log!(
-                    if print_switch { Level::Info } else { Level::Debug },
-                    "switched best TCP server from {} to {}",
-                    self.servers[old_best_idx].server_config().addr(),
-                    self.servers[best_idx].server_config().addr()
+            if first_run {
+                info!(
+                    "choosen best TCP server {}",
+                    ServerConfigFormatter::new(self.servers[best_idx].server_config())
                 );
             } else {
-                debug!(
-                    "kept best TCP server {}",
-                    self.servers[old_best_idx].server_config().addr()
-                );
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best TCP server from {} to {}",
+                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                    );
+                } else {
+                    debug!(
+                        "kept best TCP server {}",
+                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config())
+                    );
+                }
             }
         }
 
@@ -215,25 +224,31 @@ impl PingBalancerContext {
             }
             self.best_udp_idx.store(best_idx, Ordering::Release);
 
-            if best_idx != old_best_idx {
-                log!(
-                    if print_switch { Level::Info } else { Level::Debug },
-                    "switched best UDP server from {} to {}",
-                    self.servers[old_best_idx].server_config().addr(),
-                    self.servers[best_idx].server_config().addr()
+            if first_run {
+                info!(
+                    "choosen best UDP server {}",
+                    ServerConfigFormatter::new(self.servers[best_idx].server_config())
                 );
             } else {
-                debug!(
-                    "kept best UDP server {}",
-                    self.servers[old_best_idx].server_config().addr()
-                );
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best UDP server from {} to {}",
+                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                    );
+                } else {
+                    debug!(
+                        "kept best UDP server {}",
+                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config())
+                    );
+                }
             }
         }
     }
 
     async fn checker_task_real(&self) {
         loop {
-            self.check_once(true).await;
+            self.check_once(false).await;
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
         }
     }
@@ -492,6 +507,31 @@ impl PingChecker {
 
                 // NOTE: timeout exceeded. Count as error.
                 Err(ErrorKind::TimedOut.into())
+            }
+        }
+    }
+}
+
+struct ServerConfigFormatter<'a> {
+    server_config: &'a ServerConfig,
+}
+
+impl<'a> ServerConfigFormatter<'a> {
+    fn new(server_config: &'a ServerConfig) -> ServerConfigFormatter<'a> {
+        ServerConfigFormatter { server_config }
+    }
+}
+
+impl Display for ServerConfigFormatter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.server_config.remarks() {
+            None => Display::fmt(self.server_config.addr(), f),
+            Some(remarks) => {
+                if remarks.is_empty() {
+                    Display::fmt(self.server_config.addr(), f)
+                } else {
+                    write!(f, "{} ({})", self.server_config.addr(), remarks)
+                }
             }
         }
     }

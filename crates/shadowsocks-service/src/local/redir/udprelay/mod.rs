@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use shadowsocks::{
     lookup_then,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -20,7 +20,7 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::{UdpAssociationManager, UdpInboundWrite},
-        redir::redir_ext::UdpSocketRedirExt,
+        redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
     },
 };
 
@@ -31,6 +31,7 @@ mod sys;
 #[derive(Clone)]
 struct UdpRedirInboundWriter {
     redir_ty: RedirType,
+    socket_opts: RedirSocketOpts,
 }
 
 #[async_trait]
@@ -49,10 +50,31 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
 
         // Create a socket binds to destination addr
         // This only works for systems that supports binding to non-local addresses
-        let inbound = UdpRedirSocket::bind(self.redir_ty, addr)?;
+        //
+        // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
+        // Outbound addresses could be connected from different source addresses.
+        let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
 
         // Send back to client
-        inbound.send_to(data, peer_addr).await.map(|_| ())
+        inbound.send_to(data, peer_addr).await.map(|n| {
+            if n < data.len() {
+                warn!(
+                    "udp redir send back data (actual: {} bytes, sent: {} bytes), remote: {}, peer: {}",
+                    n,
+                    data.len(),
+                    remote_addr,
+                    peer_addr
+                );
+            }
+
+            trace!(
+                "udp redir send back data {} bytes, remote: {}, peer: {}, socket_opts: {:?}",
+                n,
+                remote_addr,
+                peer_addr,
+                self.socket_opts
+            );
+        })
     }
 }
 
@@ -80,10 +102,10 @@ impl UdpRedir {
 
     pub async fn run(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::bind(self.redir_ty, *saddr)?,
+            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::listen(self.redir_ty, *saddr)?,
             ClientConfig::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    UdpRedirSocket::bind(self.redir_ty, addr)
+                    UdpRedirSocket::listen(self.redir_ty, addr)
                 })?
                 .1
             }
@@ -96,6 +118,12 @@ impl UdpRedir {
             self.context.clone(),
             UdpRedirInboundWriter {
                 redir_ty: self.redir_ty,
+                socket_opts: RedirSocketOpts {
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    fwmark: self.context.connect_opts_ref().fwmark,
+
+                    ..Default::default()
+                },
             },
             self.time_to_live,
             self.capacity,

@@ -3,7 +3,7 @@ use std::{
     io::{self, Error, ErrorKind},
     mem,
     net::{SocketAddr, UdpSocket},
-    os::unix::io::AsRawFd,
+    os::unix::io::{AsRawFd, RawFd},
     ptr,
     task::{Context, Poll},
 };
@@ -12,7 +12,11 @@ use futures::{future::poll_fn, ready};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
-use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedir, sys::sockaddr_to_std};
+use crate::{
+    config::RedirType,
+    local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedir},
+    sys::sockaddr_to_std,
+};
 
 pub struct UdpRedirSocket {
     io: AsyncFd<UdpSocket>,
@@ -21,8 +25,36 @@ pub struct UdpRedirSocket {
 impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
+    /// This will allow listening to `addr` that is not in local host
+    pub fn listen(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
+        UdpRedirSocket::bind(ty, addr, false)
+    }
+
+    /// Create a new UDP socket binded to `addr`
+    ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
+    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr, redir_opts: &RedirSocketOpts) -> io::Result<UdpRedirSocket> {
+        let socket = UdpRedirSocket::bind(ty, addr, true)?;
+
+        if let Some(mark) = redir_opts.fwmark {
+            let ret = unsafe {
+                libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    libc::SO_MARK,
+                    &mark as *const _ as *const _,
+                    mem::size_of_val(&mark) as libc::socklen_t,
+                )
+            };
+            if ret != 0 {
+                return Err(Error::last_os_error());
+            }
+        }
+
+        Ok(socket)
+    }
+
+    fn bind(ty: RedirType, addr: SocketAddr, reuse_port: bool) -> io::Result<UdpRedirSocket> {
         if ty != RedirType::TProxy {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -39,6 +71,9 @@ impl UdpRedirSocket {
 
         socket.set_nonblocking(true)?;
         socket.set_reuse_address(true)?;
+        if reuse_port {
+            socket.set_reuse_port(true)?;
+        }
 
         socket.bind(&SockAddr::from(addr))?;
 
@@ -86,6 +121,12 @@ impl UdpSocketRedir for UdpRedirSocket {
                 x => return Poll::Ready(x),
             }
         }
+    }
+}
+
+impl AsRawFd for UdpRedirSocket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.io.as_raw_fd()
     }
 }
 
