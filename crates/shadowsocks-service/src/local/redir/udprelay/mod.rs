@@ -2,7 +2,7 @@
 
 use std::{
     io::{self, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -20,7 +20,10 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::{UdpAssociationManager, UdpInboundWrite},
-        redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
+        redir::{
+            redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
+            to_ipv4_mapped,
+        },
     },
 };
 
@@ -38,7 +41,16 @@ struct UdpRedirInboundWriter {
 impl UdpInboundWrite for UdpRedirInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let addr = match *remote_addr {
-            Address::SocketAddress(sa) => sa,
+            Address::SocketAddress(sa) => {
+                // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
+                match sa {
+                    SocketAddr::V4(..) => sa,
+                    SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
+                        Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
+                        None => sa,
+                    },
+                }
+            }
             Address::DomainNameAddress(..) => {
                 let err = io::Error::new(
                     ErrorKind::InvalidInput,
@@ -132,7 +144,7 @@ impl UdpRedir {
 
         let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
-            let (recv_len, src, dst) = match listener.recv_dest_from(&mut pkt_buf).await {
+            let (recv_len, src, mut dst) = match listener.recv_dest_from(&mut pkt_buf).await {
                 Ok(o) => o,
                 Err(err) => {
                     error!("recv_dest_from failed with err: {}", err);
@@ -160,6 +172,13 @@ impl UdpRedir {
                 //
                 // See `relay::udprelay::utils::create_socket` for more detail.
                 continue;
+            }
+
+            // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
+            if let SocketAddr::V6(ref a) = dst {
+                if let Some(v4) = to_ipv4_mapped(a.ip()) {
+                    dst = SocketAddr::new(IpAddr::from(v4), a.port());
+                }
             }
 
             if let Err(err) = manager.send_to(src, Address::from(dst), pkt).await {

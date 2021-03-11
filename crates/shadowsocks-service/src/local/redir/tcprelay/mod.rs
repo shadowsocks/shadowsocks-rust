@@ -1,6 +1,11 @@
 //! Shadowsocks TCP transparent proxy
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
 
 use log::{debug, error, info, trace};
 use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
@@ -15,7 +20,10 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::{AutoProxyClientStream, AutoProxyIo},
-        redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+        redir::{
+            redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+            to_ipv4_mapped,
+        },
         utils::establish_tcp_tunnel,
     },
 };
@@ -74,7 +82,7 @@ async fn handle_redir_client(
     balancer: PingBalancer,
     s: TcpStream,
     peer_addr: SocketAddr,
-    daddr: SocketAddr,
+    mut daddr: SocketAddr,
     nodelay: bool,
 ) -> io::Result<()> {
     // let svr_cfg = server.server_config();
@@ -90,6 +98,13 @@ async fn handle_redir_client(
     }
 
     // Get forward address from socket
+    //
+    // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
+    if let SocketAddr::V6(ref a) = daddr {
+        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+            daddr = SocketAddr::new(IpAddr::from(v4), a.port());
+        }
+    }
     let target_addr = Address::from(daddr);
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr, nodelay).await
 }
