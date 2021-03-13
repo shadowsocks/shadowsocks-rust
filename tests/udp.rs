@@ -7,7 +7,7 @@ use log::debug;
 use tokio::time::{self, Duration};
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, Mode, ProtocolType},
     local::socks::client::socks5::Socks5UdpClient,
     run_local,
     run_server,
@@ -35,14 +35,13 @@ fn get_svr_config() -> Config {
 
 fn get_cli_config() -> Config {
     let mut cfg = Config::new(ConfigType::Local);
-    cfg.local_addr = Some(LOCAL_ADDR.parse().unwrap());
+    cfg.local = vec![LocalConfig::new(LOCAL_ADDR.parse().unwrap(), ProtocolType::Socks)];
     cfg.server = vec![ServerConfig::new(
         SERVER_ADDR.parse::<SocketAddr>().unwrap(),
         PASSWORD.to_owned(),
         METHOD,
     )];
     cfg.mode = Mode::TcpAndUdp;
-    cfg.local_protocol = ProtocolType::Socks;
     cfg
 }
 

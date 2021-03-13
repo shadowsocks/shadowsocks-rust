@@ -3,29 +3,26 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::{
-    config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::AutoProxyClientStream,
-        utils::establish_tcp_tunnel,
-    },
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::AutoProxyClientStream,
+    utils::establish_tcp_tunnel,
 };
 
 pub async fn run_tcp_tunnel(
     context: Arc<ServiceContext>,
-    client_config: &ClientConfig,
+    client_config: &ServerAddr,
     balancer: PingBalancer,
     forward_addr: &Address,
     nodelay: bool,
 ) -> io::Result<()> {
     let listener = match *client_config {
-        ClientConfig::SocketAddr(ref saddr) => ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?,
-        ClientConfig::DomainName(ref dname, port) => {
+        ServerAddr::SocketAddr(ref saddr) => ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?,
+        ServerAddr::DomainName(ref dname, port) => {
             lookup_then!(context.context_ref(), dname, port, |addr| {
                 ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
             })?

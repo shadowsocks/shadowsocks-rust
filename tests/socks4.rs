@@ -11,7 +11,7 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, ProtocolType},
     local::socks::client::Socks4TcpClient,
     run_local,
     run_server,
@@ -45,9 +45,8 @@ impl Socks4TestServer {
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local_addr = Some(ServerAddr::from(local_addr));
+                cfg.local = vec![LocalConfig::new(ServerAddr::from(local_addr), ProtocolType::Socks)];
                 cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.local_protocol = ProtocolType::Socks;
                 cfg
             },
         }

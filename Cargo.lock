@@ -1471,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.9.2"
+version = "1.10.0"
 dependencies = [
  "arc-swap 1.2.0",
  "async-trait",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.9.2"
+version = "1.10.0"
 dependencies = [
  "byte_string",
  "byteorder",
@@ -1536,7 +1536,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.9.2"
+version = "1.10.0"
 dependencies = [
  "async-trait",
  "byte_string",

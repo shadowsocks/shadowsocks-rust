@@ -3,10 +3,10 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use shadowsocks::relay::socks5::Address;
+use shadowsocks::{relay::socks5::Address, ServerAddr};
 
 use crate::{
-    config::{ClientConfig, Mode},
+    config::Mode,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
@@ -62,7 +62,7 @@ impl Tunnel {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
@@ -77,7 +77,7 @@ impl Tunnel {
         res
     }
 
-    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         run_tcp_tunnel(
             self.context.clone(),
             client_config,
@@ -88,7 +88,7 @@ impl Tunnel {
         .await
     }
 
-    async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let mut server = UdpTunnel::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
         server.run(client_config, balancer, &self.forward_addr).await
     }

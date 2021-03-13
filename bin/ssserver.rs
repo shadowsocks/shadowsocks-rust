@@ -7,10 +7,7 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::{
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::{net::IpAddr, time::Duration};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -48,7 +45,7 @@ fn main() {
 
         (@arg CONFIG: -c --config +takes_value required_unless("SERVER_ADDR") "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
-        (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
+        (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
@@ -175,11 +172,7 @@ fn main() {
     }
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
-        let bind_addr = match bind_addr.parse::<IpAddr>() {
-            Ok(ip) => ServerAddr::from(SocketAddr::new(ip, 0)),
-            Err(..) => ServerAddr::from((bind_addr, 0)),
-        };
-
+        let bind_addr = bind_addr.parse::<IpAddr>().expect("bind-addr");
         config.local_addr = Some(bind_addr);
     }
 

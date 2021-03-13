@@ -4,18 +4,23 @@
 use std::path::PathBuf;
 use std::{io, sync::Arc, time::Duration};
 
-use futures::{future, FutureExt};
+use futures::{
+    future,
+    stream::{FuturesUnordered, StreamExt},
+    FutureExt,
+};
 use log::{error, trace, warn};
-#[cfg(any(feature = "local-dns", feature = "trust-dns"))]
-use shadowsocks::dns_resolver::DnsResolver;
 use shadowsocks::{
     net::{AcceptOpts, ConnectOpts},
     plugin::{Plugin, PluginMode},
 };
 
-use crate::config::{Config, ConfigType, ProtocolType};
 #[cfg(feature = "local-flow-stat")]
 use crate::net::FlowStat;
+use crate::{
+    config::{Config, ConfigType, ProtocolType},
+    dns::build_dns_resolver,
+};
 
 use self::{
     context::ServiceContext,
@@ -38,7 +43,7 @@ pub mod utils;
 
 /// Starts a shadowsocks local server
 pub async fn run(mut config: Config) -> io::Result<()> {
-    assert!(config.config_type == ConfigType::Local && config.local_addr.is_some());
+    assert!(config.config_type == ConfigType::Local && !config.local.is_empty());
     assert!(config.server.len() > 0);
 
     trace!("{:?}", config);
@@ -83,101 +88,34 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
 
-    // #[cfg(all(feature = "local-dns", feature = "trust-dns"))]
-    // if let Some(socket_addr) = config.local_dns_addr {
-    //     use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
-    //
-    //     trace!("initializing direct DNS resolver for {}", socket_addr);
-    //
-    //     let mut resolver_config = ResolverConfig::new();
-    //
-    //     resolver_config.add_name_server(NameServerConfig {
-    //         socket_addr,
-    //         protocol: Protocol::Udp,
-    //         tls_dns_name: None,
-    //         trust_nx_responses: false,
-    //         #[cfg(feature = "dns-over-tls")]
-    //         tls_config: None,
-    //     });
-    //     resolver_config.add_name_server(NameServerConfig {
-    //         socket_addr,
-    //         protocol: Protocol::Tcp,
-    //         tls_dns_name: None,
-    //         trust_nx_responses: false,
-    //         #[cfg(feature = "dns-over-tls")]
-    //         tls_config: None,
-    //     });
-    //
-    //     match DnsResolver::trust_dns_resolver(Some(resolver_config), config.ipv6_first).await {
-    //         Ok(r) => {
-    //             context.set_dns_resolver(Arc::new(r));
-    //         }
-    //         Err(err) => {
-    //             error!(
-    //                 "initialize DNS resolver failed, nameserver: {}, error: {}",
-    //                 socket_addr, err
-    //             );
-    //             return Err(err);
-    //         }
-    //     }
-    // }
-
-    #[cfg(feature = "local-dns")]
-    if let Some(ref ns) = config.local_dns_addr {
-        use crate::{config::Mode, local::dns::dns_resolver::DnsResolver as LocalDnsResolver};
-
-        trace!("initializing direct DNS resolver for {}", ns);
-
-        let mut resolver = LocalDnsResolver::new(ns.clone());
-        resolver.set_mode(Mode::TcpAndUdp);
-        resolver.set_ipv6_first(config.ipv6_first);
-        resolver.set_connect_opts(context.connect_opts_ref().clone());
-        context.set_dns_resolver(Arc::new(DnsResolver::custom_resolver(resolver)));
-    }
-
-    #[cfg(feature = "trust-dns")]
-    if context.dns_resolver().is_system_resolver() {
-        if config.dns.is_some() || crate::hint_support_default_system_resolver() {
-            let r = match config.dns {
-                None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
-                Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
-            };
-
-            match r {
-                Ok(r) => {
-                    context.set_dns_resolver(Arc::new(r));
-                }
-                Err(err) => {
-                    warn!(
-                        "initialize DNS resolver failed, fallback to system resolver, error: {}",
-                        err
-                    );
-                }
-            }
-        }
+    if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, context.connect_opts_ref()).await {
+        context.set_dns_resolver(Arc::new(resolver));
     }
 
     if let Some(acl) = config.acl {
         context.set_acl(acl);
     }
 
-    let client_config = config.local_addr.expect("local server requires local address");
+    assert!(!config.local.is_empty(), "no valid local server configuration");
 
     let context = Arc::new(context);
 
-    let mut vfut = Vec::new();
+    let vfut = FuturesUnordered::new();
 
-    let enable_tcp = match config.local_protocol {
-        ProtocolType::Socks => config.mode.enable_tcp(),
+    // Check if any of the local servers enable TCP connections
+
+    let mode = config.mode;
+    let enable_tcp = config.local.iter().any(|local_config| match local_config.protocol {
+        ProtocolType::Socks => mode.enable_tcp(),
         #[cfg(feature = "local-tunnel")]
-        ProtocolType::Tunnel => config.mode.enable_tcp(),
+        ProtocolType::Tunnel => mode.enable_tcp(),
         #[cfg(feature = "local-http")]
         ProtocolType::Http => true,
         #[cfg(feature = "local-redir")]
-        ProtocolType::Redir => config.mode.enable_tcp(),
+        ProtocolType::Redir => mode.enable_tcp(),
         #[cfg(feature = "local-dns")]
-        ProtocolType::Dns => config.mode.enable_tcp(),
-    };
+        ProtocolType::Dns => mode.enable_tcp(),
+    });
 
     if enable_tcp {
         // Start plugins for TCP proxies
@@ -241,20 +179,20 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         balancer
     };
 
-    #[cfg(feature = "local-dns")]
-    if matches!(config.local_protocol, ProtocolType::Dns) || config.dns_bind_addr.is_some() {
-        use self::dns::Dns;
+    // #[cfg(feature = "local-dns")]
+    // if matches!(config.local_protocol, ProtocolType::Dns) || config.dns_bind_addr.is_some() {
+    //     use self::dns::Dns;
 
-        let local_addr = config.local_dns_addr.expect("missing local_dns_addr");
-        let remote_addr = config.remote_dns_addr.expect("missing remote_dns_addr");
+    //     let local_addr = config.local_dns_addr.expect("missing local_dns_addr");
+    //     let remote_addr = config.remote_dns_addr.expect("missing remote_dns_addr");
 
-        let bind_addr = config.dns_bind_addr.as_ref().unwrap_or_else(|| &client_config);
+    //     let bind_addr = config.dns_bind_addr.as_ref().unwrap_or_else(|| &client_config);
 
-        let mut server = Dns::with_context(context.clone(), local_addr, remote_addr);
-        server.set_mode(config.mode);
+    //     let mut server = Dns::with_context(context.clone(), local_addr, remote_addr);
+    //     server.set_mode(config.mode);
 
-        vfut.push(server.run(bind_addr, balancer.clone()).boxed());
-    }
+    //     vfut.push(server.run(bind_addr, balancer.clone()).boxed());
+    // }
 
     #[cfg(feature = "local-flow-stat")]
     if let Some(stat_path) = config.stat_path {
@@ -264,82 +202,100 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         vfut.push(report_fut.boxed());
     }
 
-    match config.local_protocol {
-        ProtocolType::Socks => {
-            use self::socks::Socks;
+    for local_config in config.local {
+        let balancer = balancer.clone();
+        let client_addr = local_config.addr;
 
-            let mut server = Socks::with_context(context);
-            server.set_mode(config.mode);
+        match local_config.protocol {
+            ProtocolType::Socks => {
+                use self::socks::Socks;
 
-            if let Some(c) = config.udp_max_associations {
-                server.set_udp_capacity(c);
-            }
-            if let Some(d) = config.udp_timeout {
-                server.set_udp_expiry_duration(d);
-            }
-            if let Some(b) = config.udp_bind_addr {
-                server.set_udp_bind_addr(b);
-            }
-            if config.no_delay {
-                server.set_nodelay(true);
-            }
+                let mut server = Socks::with_context(context.clone());
+                server.set_mode(config.mode);
 
-            vfut.push(server.run(&client_config, balancer).boxed());
+                if let Some(c) = config.udp_max_associations {
+                    server.set_udp_capacity(c);
+                }
+                if let Some(d) = config.udp_timeout {
+                    server.set_udp_expiry_duration(d);
+                }
+                if let Some(b) = local_config.udp_addr {
+                    server.set_udp_bind_addr(b.clone());
+                }
+                if config.no_delay {
+                    server.set_nodelay(true);
+                }
+
+                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-tunnel")]
+            ProtocolType::Tunnel => {
+                use self::tunnel::Tunnel;
+
+                let forward_addr = local_config.forward_addr.expect("tunnel requires forward address");
+
+                let mut server = Tunnel::with_context(context.clone(), forward_addr.clone());
+
+                if let Some(c) = config.udp_max_associations {
+                    server.set_udp_capacity(c);
+                }
+                if let Some(d) = config.udp_timeout {
+                    server.set_udp_expiry_duration(d);
+                }
+                server.set_mode(config.mode);
+                if config.no_delay {
+                    server.set_nodelay(true);
+                }
+
+                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-http")]
+            ProtocolType::Http => {
+                use self::http::Http;
+
+                let server = Http::with_context(context.clone());
+                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-redir")]
+            ProtocolType::Redir => {
+                use self::redir::Redir;
+
+                let mut server = Redir::with_context(context.clone());
+                if let Some(c) = config.udp_max_associations {
+                    server.set_udp_capacity(c);
+                }
+                if let Some(d) = config.udp_timeout {
+                    server.set_udp_expiry_duration(d);
+                }
+                server.set_mode(config.mode);
+                if config.no_delay {
+                    server.set_nodelay(true);
+                }
+                server.set_tcp_redir(local_config.tcp_redir);
+                server.set_udp_redir(local_config.udp_redir);
+
+                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-dns")]
+            ProtocolType::Dns => {
+                use self::dns::Dns;
+
+                let mut server = {
+                    let local_addr = local_config.local_dns_addr.expect("missing local_dns_addr");
+                    let remote_addr = local_config.remote_dns_addr.expect("missing remote_dns_addr");
+
+                    Dns::with_context(context.clone(), local_addr.clone(), remote_addr.clone())
+                };
+                server.set_mode(config.mode);
+
+                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
         }
-        #[cfg(feature = "local-tunnel")]
-        ProtocolType::Tunnel => {
-            use self::tunnel::Tunnel;
-
-            let forward_addr = config.forward.expect("tunnel requires forward address");
-
-            let mut server = Tunnel::with_context(context, forward_addr);
-
-            if let Some(c) = config.udp_max_associations {
-                server.set_udp_capacity(c);
-            }
-            if let Some(d) = config.udp_timeout {
-                server.set_udp_expiry_duration(d);
-            }
-            server.set_mode(config.mode);
-            if config.no_delay {
-                server.set_nodelay(true);
-            }
-
-            vfut.push(server.run(&client_config, balancer).boxed());
-        }
-        #[cfg(feature = "local-http")]
-        ProtocolType::Http => {
-            use self::http::Http;
-
-            let server = Http::with_context(context);
-            vfut.push(server.run(&client_config, balancer).boxed());
-        }
-        #[cfg(feature = "local-redir")]
-        ProtocolType::Redir => {
-            use self::redir::Redir;
-
-            let mut server = Redir::with_context(context);
-            if let Some(c) = config.udp_max_associations {
-                server.set_udp_capacity(c);
-            }
-            if let Some(d) = config.udp_timeout {
-                server.set_udp_expiry_duration(d);
-            }
-            server.set_mode(config.mode);
-            if config.no_delay {
-                server.set_nodelay(true);
-            }
-            server.set_tcp_redir(config.tcp_redir);
-            server.set_udp_redir(config.udp_redir);
-
-            vfut.push(server.run(&client_config, balancer).boxed());
-        }
-        #[cfg(feature = "local-dns")]
-        ProtocolType::Dns => {}
     }
 
-    let (res, ..) = future::select_all(vfut).await;
-    res
+    // let (res, ..) = future::select_all(vfut).await;
+    let (res, _) = vfut.into_future().await;
+    res.unwrap()
 }
 
 #[cfg(feature = "local-flow-stat")]

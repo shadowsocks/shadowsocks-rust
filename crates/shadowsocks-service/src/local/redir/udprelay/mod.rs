@@ -12,10 +12,11 @@ use log::{error, info, trace, warn};
 use shadowsocks::{
     lookup_then,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
+    ServerAddr,
 };
 
 use crate::{
-    config::{ClientConfig, RedirType},
+    config::RedirType,
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
@@ -112,10 +113,10 @@ impl UdpRedir {
         }
     }
 
-    pub async fn run(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => UdpRedirSocket::listen(self.redir_ty, *saddr)?,
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::SocketAddr(ref saddr) => UdpRedirSocket::listen(self.redir_ty, *saddr)?,
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     UdpRedirSocket::listen(self.redir_ty, addr)
                 })?

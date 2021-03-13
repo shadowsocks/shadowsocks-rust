@@ -7,10 +7,7 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::{
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::{net::IpAddr, time::Duration};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -22,7 +19,7 @@ use shadowsocks_service::{
     config::{Config, ConfigType, ManagerConfig, ManagerServerHost, Mode},
     run_manager,
     shadowsocks::{
-        config::{ManagerAddr, ServerAddr},
+        config::ManagerAddr,
         crypto::v1::{available_ciphers, CipherKind},
     },
 };
@@ -50,7 +47,7 @@ fn main() {
                 the only required fields are \"manager_address\" and \"manager_port\". \
                 Servers defined will be created when process is started.")
 
-        (@arg BIND_ADDR: -b --("bind-addr") +takes_value "Bind address, outbound socket will bind this address")
+        (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
         (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
@@ -137,11 +134,7 @@ fn main() {
     };
 
     if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
-        let bind_addr = match bind_addr.parse::<IpAddr>() {
-            Ok(ip) => ServerAddr::from(SocketAddr::new(ip, 0)),
-            Err(..) => ServerAddr::from((bind_addr, 0)),
-        };
-
+        let bind_addr = bind_addr.parse::<IpAddr>().expect("bind-addr");
         config.local_addr = Some(bind_addr);
     }
 

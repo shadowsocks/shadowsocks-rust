@@ -1,20 +1,15 @@
 //! Shadowsocks server
 
-use std::{
-    io::{self, ErrorKind},
-    sync::Arc,
-};
+use std::{io, sync::Arc};
 
 use futures::{future, FutureExt};
 use log::{trace, warn};
-#[cfg(feature = "trust-dns")]
-use shadowsocks::dns_resolver::DnsResolver;
-use shadowsocks::{
-    config::ServerAddr,
-    net::{AcceptOpts, ConnectOpts},
-};
+use shadowsocks::net::{AcceptOpts, ConnectOpts};
 
-use crate::config::{Config, ConfigType};
+use crate::{
+    config::{Config, ConfigType},
+    dns::build_dns_resolver,
+};
 
 pub use self::server::Server;
 
@@ -56,16 +51,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        bind_local_addr: match config.local_addr {
-            None => None,
-            Some(ServerAddr::SocketAddr(sa)) => Some(sa.ip()),
-            Some(ServerAddr::DomainName(..)) => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    "local_addr must be a SocketAddr",
-                ));
-            }
-        },
+        bind_local_addr: config.local_addr,
 
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
@@ -82,25 +68,9 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
 
-    #[cfg(feature = "trust-dns")]
-    let resolver = if config.dns.is_some() || crate::hint_support_default_system_resolver() {
-        let r = match config.dns {
-            None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
-            Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
-        };
-
-        match r {
-            Ok(r) => Some(Arc::new(r)),
-            Err(err) => {
-                warn!(
-                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
-                    err
-                );
-                None
-            }
-        }
-    } else {
-        None
+    let resolver = match build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
+        Some(resolver) => Some(Arc::new(resolver)),
+        None => None,
     };
 
     let acl = config.acl.map(Arc::new);
@@ -108,7 +78,6 @@ pub async fn run(config: Config) -> io::Result<()> {
     for svr_cfg in config.server {
         let mut server = Server::new(svr_cfg);
 
-        #[cfg(feature = "trust-dns")]
         if let Some(ref r) = resolver {
             server.set_dns_resolver(r.clone());
         }

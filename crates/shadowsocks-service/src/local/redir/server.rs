@@ -3,9 +3,10 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
+use shadowsocks::ServerAddr;
 
 use crate::{
-    config::{ClientConfig, Mode, RedirType},
+    config::{Mode, RedirType},
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
@@ -73,7 +74,7 @@ impl Redir {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
@@ -88,7 +89,7 @@ impl Redir {
         res
     }
 
-    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_tcp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         run_tcp_redir(
             self.context.clone(),
             client_config,
@@ -99,7 +100,7 @@ impl Redir {
         .await
     }
 
-    async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_udp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let server = UdpRedir::new(
             self.context.clone(),
             self.udp_redir,

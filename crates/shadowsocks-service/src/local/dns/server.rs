@@ -19,6 +19,7 @@ use shadowsocks::{
     lookup_then,
     net::{TcpListener, UdpSocket as ShadowUdpSocket},
     relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
+    ServerAddr,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -32,7 +33,7 @@ use trust_dns_resolver::proto::{
 
 use crate::{
     acl::AccessControl,
-    config::{ClientConfig, Mode},
+    config::Mode,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
@@ -69,7 +70,7 @@ impl Dns {
     }
 
     /// Run server
-    pub async fn run(self, bind_addr: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, bind_addr: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let client = Arc::new(DnsClient::new(self.context.clone(), balancer, self.mode));
 
         let tcp_fut = self.run_tcp_server(bind_addr, client.clone());
@@ -83,12 +84,10 @@ impl Dns {
         }
     }
 
-    async fn run_tcp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
+    async fn run_tcp_server(&self, bind_addr: &ServerAddr, client: Arc<DnsClient>) -> io::Result<()> {
         let listener = match *bind_addr {
-            ClientConfig::SocketAddr(ref saddr) => {
-                TcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
-            }
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?,
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     TcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
                 })?
@@ -190,10 +189,10 @@ impl Dns {
         Ok(())
     }
 
-    async fn run_udp_server(&self, bind_addr: &ClientConfig, client: Arc<DnsClient>) -> io::Result<()> {
+    async fn run_udp_server(&self, bind_addr: &ServerAddr, client: Arc<DnsClient>) -> io::Result<()> {
         let socket = match *bind_addr {
-            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(&self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?

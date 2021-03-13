@@ -60,6 +60,7 @@ pub use shadowsocks;
 
 pub mod acl;
 pub mod config;
+mod dns;
 #[cfg(feature = "local")]
 pub mod local;
 #[cfg(feature = "manager")]

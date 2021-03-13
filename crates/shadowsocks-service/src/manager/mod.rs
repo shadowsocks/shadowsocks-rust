@@ -2,17 +2,15 @@
 //!
 //! Service for managing multiple relay servers. [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
 
-use std::io::{self, ErrorKind};
-#[cfg(feature = "trust-dns")]
-use std::sync::Arc;
+use std::{io, sync::Arc};
 
 use log::{trace, warn};
-use shadowsocks::{
-    config::ServerAddr,
-    net::{AcceptOpts, ConnectOpts},
-};
+use shadowsocks::net::{AcceptOpts, ConnectOpts};
 
-use crate::config::{Config, ConfigType};
+use crate::{
+    config::{Config, ConfigType},
+    dns::build_dns_resolver,
+};
 
 pub use self::server::Manager;
 
@@ -35,28 +33,6 @@ pub async fn run(config: Config) -> io::Result<()> {
     let mut manager = Manager::new(config.manager.expect("missing manager config"));
     manager.set_mode(config.mode);
 
-    #[cfg(feature = "trust-dns")]
-    if config.dns.is_some() || crate::hint_support_default_system_resolver() {
-        use shadowsocks::dns_resolver::DnsResolver;
-
-        let r = match config.dns {
-            None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
-            Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
-        };
-
-        match r {
-            Ok(r) => {
-                manager.set_dns_resolver(Arc::new(r));
-            }
-            Err(err) => {
-                warn!(
-                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
-                    err
-                );
-            }
-        }
-    }
-
     let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
@@ -64,16 +40,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        bind_local_addr: match config.local_addr {
-            None => None,
-            Some(ServerAddr::SocketAddr(sa)) => Some(sa.ip()),
-            Some(ServerAddr::DomainName(..)) => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    "local_addr must be a SocketAddr",
-                ));
-            }
-        },
+        bind_local_addr: config.local_addr,
 
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
@@ -89,6 +56,10 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
+
+    if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
+        manager.set_dns_resolver(Arc::new(resolver));
+    }
 
     manager.set_connect_opts(connect_opts);
     manager.set_accept_opts(accept_opts);

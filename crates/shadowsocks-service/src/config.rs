@@ -73,11 +73,11 @@ use crate::acl::AccessControl;
 #[cfg(feature = "local-dns")]
 use crate::local::dns::NameServerAddr;
 
-#[cfg(feature = "trust-dns")]
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 enum SSDnsConfig {
     Simple(String),
+    #[cfg(feature = "trust-dns")]
     TrustDns(ResolverConfig),
 }
 
@@ -113,7 +113,8 @@ struct SSConfig {
     udp_max_associations: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     servers: Option<Vec<SSServerExtConfig>>,
-    #[cfg(feature = "trust-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    locals: Option<Vec<SSLocalExtConfig>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<SSDnsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,6 +125,56 @@ struct SSConfig {
     nofile: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct SSLocalExtConfig {
+    local_address: Option<String>,
+    local_port: u16,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_udp_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_udp_port: Option<u16>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    protocol: Option<String>,
+
+    /// TCP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tcp_redir: Option<String>,
+    /// UDP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    udp_redir: Option<String>,
+
+    /// Local DNS's address
+    ///
+    /// Sending DNS query directly to this address
+    #[cfg(feature = "local-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_dns_address: Option<String>,
+    #[cfg(feature = "local-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_dns_port: Option<u16>,
+    /// Remote DNS's address
+    ///
+    /// Sending DNS query through proxy to this address
+    #[cfg(feature = "local-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remote_dns_address: Option<String>,
+    #[cfg(feature = "local-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remote_dns_port: Option<u16>,
+
+    /// Tunnel
+    #[cfg(feature = "local-tunnel")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    forward_address: Option<String>,
+    #[cfg(feature = "local-tunnel")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    forward_port: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -152,9 +203,6 @@ struct SSServerExtConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
 }
-
-/// Listening address
-pub type ClientConfig = ServerAddr;
 
 /// Server config type
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -543,37 +591,28 @@ impl FromStr for ProtocolType {
     }
 }
 
-/// Configuration
+/// Local server configuration
 #[derive(Clone, Debug)]
-pub struct Config {
-    /// Remote ShadowSocks server configurations
-    pub server: Vec<ServerConfig>,
-    /// Local server's bind address, or ShadowSocks server's outbound address
-    pub local_addr: Option<ClientConfig>,
+pub struct LocalConfig {
+    pub addr: ServerAddr,
+    pub protocol: ProtocolType,
+
+    /// UDP server bind address. Uses `addr` if not specified
+    ///
+    /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
+    pub udp_addr: Option<ServerAddr>,
 
     /// Destination address for tunnel
     #[cfg(feature = "local-tunnel")]
-    pub forward: Option<Address>,
+    pub forward_addr: Option<Address>,
 
-    /// DNS configuration, uses system-wide DNS configuration by default
-    ///
-    /// Value could be a `IpAddr`, uses UDP DNS protocol with port `53`. For example: `8.8.8.8`
-    ///
-    /// Also Value could be some pre-defined DNS server names:
-    ///
-    /// - `google`
-    /// - `cloudflare`, `cloudflare_tls`, `cloudflare_https`
-    /// - `quad9`, `quad9_tls`
-    #[cfg(feature = "trust-dns")]
-    pub dns: Option<ResolverConfig>,
-    /// Uses IPv6 addresses first
-    ///
-    /// Set to `true` if you want to query IPv6 addresses before IPv4
-    pub ipv6_first: bool,
+    /// TCP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    pub tcp_redir: RedirType,
+    /// UDP Transparent Proxy type
+    #[cfg(feature = "local-redir")]
+    pub udp_redir: RedirType,
 
-    /// Internal DNS's bind address
-    #[cfg(feature = "local-dns")]
-    pub dns_bind_addr: Option<ClientConfig>,
     /// Local DNS's address
     ///
     /// Sending DNS query directly to this address
@@ -584,6 +623,122 @@ pub struct Config {
     /// Sending DNS query through proxy to this address
     #[cfg(feature = "local-dns")]
     pub remote_dns_addr: Option<Address>,
+}
+
+impl LocalConfig {
+    /// Create a new `LocalConfig`
+    pub fn new(addr: ServerAddr, protocol: ProtocolType) -> LocalConfig {
+        LocalConfig {
+            addr,
+            protocol,
+            udp_addr: None,
+
+            #[cfg(feature = "local-tunnel")]
+            forward_addr: None,
+
+            #[cfg(feature = "local-redir")]
+            tcp_redir: RedirType::tcp_default(),
+            #[cfg(feature = "local-redir")]
+            udp_redir: RedirType::udp_default(),
+
+            #[cfg(feature = "local-dns")]
+            local_dns_addr: None,
+            #[cfg(feature = "local-dns")]
+            remote_dns_addr: None,
+        }
+    }
+
+    fn check_integrity(&self) -> Result<(), Error> {
+        match self.protocol {
+            #[cfg(feature = "local-dns")]
+            ProtocolType::Dns => {
+                if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
+                    let err = Error::new(
+                        ErrorKind::MissingField,
+                        "missing `local_dns_addr` or `remote_dns_addr` in configuration",
+                        None,
+                    );
+                    return Err(err);
+                }
+            }
+            #[cfg(feature = "local-tunnel")]
+            ProtocolType::Tunnel => {
+                if self.forward_addr.is_none() {
+                    let err = Error::new(ErrorKind::MissingField, "missing `forward_addr` in configuration", None);
+                    return Err(err);
+                }
+            }
+
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    // Check if it is a basic format of local
+    pub fn is_basic(&self) -> bool {
+        if self.protocol != ProtocolType::Socks || self.udp_addr.is_some() {
+            return false;
+        }
+
+        #[cfg(feature = "local-tunnel")]
+        if self.forward_addr.is_some() {
+            return false;
+        }
+
+        #[cfg(feature = "local-redir")]
+        if self.tcp_redir != RedirType::tcp_default() || self.udp_redir != RedirType::udp_default() {
+            return false;
+        }
+
+        #[cfg(feature = "local-dns")]
+        if self.local_dns_addr.is_some() || self.remote_dns_addr.is_some() {
+            return false;
+        }
+
+        true
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum DnsConfig {
+    System,
+    #[cfg(feature = "trust-dns")]
+    TrustDns(ResolverConfig),
+    #[cfg(feature = "local-dns")]
+    LocalDns(NameServerAddr),
+}
+
+impl Default for DnsConfig {
+    fn default() -> DnsConfig {
+        DnsConfig::System
+    }
+}
+
+/// Configuration
+#[derive(Clone, Debug)]
+pub struct Config {
+    /// Remote ShadowSocks server configurations
+    pub server: Vec<ServerConfig>,
+    /// Local server's bind address, or ShadowSocks server's outbound address
+    pub local_addr: Option<IpAddr>,
+    /// Local server configuration
+    pub local: Vec<LocalConfig>,
+
+    /// DNS configuration, uses system-wide DNS configuration by default
+    ///
+    /// Value could be a `IpAddr`, uses UDP DNS protocol with port `53`. For example: `8.8.8.8`
+    ///
+    /// Also Value could be some pre-defined DNS server names:
+    ///
+    /// - `google`
+    /// - `cloudflare`, `cloudflare_tls`, `cloudflare_https`
+    /// - `quad9`, `quad9_tls`
+    pub dns: DnsConfig,
+    /// Uses IPv6 addresses first
+    ///
+    /// Set to `true` if you want to query IPv6 addresses before IPv4
+    pub ipv6_first: bool,
 
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
@@ -616,27 +771,14 @@ pub struct Config {
     pub mode: Mode,
     /// Config is for Client or Server
     pub config_type: ConfigType,
-    /// Protocol for local server
-    pub local_protocol: ProtocolType,
 
     /// Timeout for UDP Associations, default is 5 minutes
     pub udp_timeout: Option<Duration>,
     /// Maximum number of UDP Associations, default is unconfigured
     pub udp_max_associations: Option<usize>,
-    /// UDP relay's bind address, it uses `local_addr` by default
-    ///
-    /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
-    pub udp_bind_addr: Option<ClientConfig>,
 
     /// ACL configuration
     pub acl: Option<AccessControl>,
-
-    /// TCP Transparent Proxy type
-    #[cfg(feature = "local-redir")]
-    pub tcp_redir: RedirType,
-    /// UDP Transparent Proxy type
-    #[cfg(feature = "local-redir")]
-    pub udp_redir: RedirType,
 
     /// Flow statistic report Unix socket path (only for Android)
     #[cfg(feature = "local-flow-stat")]
@@ -708,20 +850,10 @@ impl Config {
         Config {
             server: Vec::new(),
             local_addr: None,
+            local: Vec::new(),
 
-            #[cfg(feature = "local-tunnel")]
-            forward: None,
-
-            #[cfg(feature = "trust-dns")]
-            dns: None,
+            dns: DnsConfig::default(),
             ipv6_first: false,
-
-            #[cfg(feature = "local-dns")]
-            dns_bind_addr: None,
-            #[cfg(feature = "local-dns")]
-            local_dns_addr: None,
-            #[cfg(feature = "local-dns")]
-            remote_dns_addr: None,
 
             no_delay: false,
             nofile: None,
@@ -742,18 +874,11 @@ impl Config {
 
             mode: Mode::TcpOnly,
             config_type,
-            local_protocol: ProtocolType::default(),
 
             udp_timeout: None,
             udp_max_associations: None,
-            udp_bind_addr: None,
 
             acl: None,
-
-            #[cfg(feature = "local-redir")]
-            tcp_redir: RedirType::tcp_default(),
-            #[cfg(feature = "local-redir")]
-            udp_redir: RedirType::udp_default(),
 
             #[cfg(feature = "local-flow-stat")]
             stat_path: None,
@@ -763,58 +888,240 @@ impl Config {
     fn load_from_ssconfig(config: SSConfig, config_type: ConfigType) -> Result<Config, Error> {
         let mut nconfig = Config::new(config_type);
 
-        // Standard config
         // Client
         //
         // local_address is allowed to be NULL, which means to bind to ::1 or 127.0.0.1
         //
         // https://shadowsocks.org/en/config/quick-guide.html
-        match config.local_address {
-            Some(la) => {
-                let local_port = if config_type.is_local() {
-                    let local_port = config.local_port.unwrap_or(0);
-                    if local_port == 0 {
-                        let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
-                        return Err(err);
+        #[inline]
+        fn get_local_address(local_address: Option<String>, local_port: u16, ipv6_first: bool) -> ServerAddr {
+            match local_address {
+                Some(addr) => {
+                    match addr.parse::<IpAddr>() {
+                        Ok(ip) => ServerAddr::from(SocketAddr::new(ip, local_port)),
+                        Err(..) => {
+                            // treated as domain
+                            ServerAddr::from((addr, local_port))
+                        }
                     }
-                    local_port
-                } else if config_type.is_server() || config_type.is_manager() {
-                    // server's local_port is ignored
-                    0
-                } else {
-                    config.local_port.unwrap_or(0)
-                };
-
-                let local_addr = match la.parse::<IpAddr>() {
-                    Ok(ip) => ServerAddr::from(SocketAddr::new(ip, local_port)),
-                    Err(..) => {
-                        // treated as domain
-                        ServerAddr::from((la, local_port))
-                    }
-                };
-                nconfig.local_addr = Some(local_addr);
-            }
-            None => {
-                if config_type.is_local() && config.local_port.is_some() {
+                }
+                None => {
                     // Implementation note: This is not implemented like libev which will choose IPv6 or IPv6 LoopBack address
                     // by checking all its remote servers if all of them supports IPv6.
-                    let ip = if config.ipv6_first.unwrap_or(false) {
+                    let ip = if ipv6_first {
                         Ipv6Addr::LOCALHOST.into()
                     } else {
                         Ipv4Addr::LOCALHOST.into()
                     };
 
-                    let local_port = config.local_port.unwrap_or(0);
-                    if local_port == 0 {
-                        let err = Error::new(ErrorKind::MissingField, "`local_port` shouldn't be 0", None);
-                        return Err(err);
-                    }
-
-                    let local_addr = ServerAddr::from(SocketAddr::new(ip, local_port));
-                    nconfig.local_addr = Some(local_addr);
+                    ServerAddr::from(SocketAddr::new(ip, local_port))
                 }
             }
-        };
+        }
+
+        match config_type {
+            ConfigType::Local => {
+                // Standard config
+                if config.local_address.is_some() && config.local_port.unwrap_or(0) == 0 {
+                    let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
+                    return Err(err);
+                }
+
+                if let Some(local_port) = config.local_port {
+                    // local_port won't be 0, it was checked above
+                    assert_ne!(local_port, 0);
+
+                    let local_addr =
+                        get_local_address(config.local_address, local_port, config.ipv6_first.unwrap_or(false));
+
+                    // shadowsocks uses SOCKS5 by default
+                    nconfig.local.push(LocalConfig::new(local_addr, ProtocolType::Socks));
+                }
+
+                // Ext locals
+                // `locals` are only effective in local server
+                if let Some(locals) = config.locals {
+                    for local in locals {
+                        if local.local_port == 0 {
+                            let err = Error::new(ErrorKind::Malformed, "`local_port` cannot be 0", None);
+                            return Err(err);
+                        }
+
+                        let local_addr = get_local_address(
+                            local.local_address,
+                            local.local_port,
+                            config.ipv6_first.unwrap_or(false),
+                        );
+
+                        let protocol = match local.protocol {
+                            None => ProtocolType::Socks,
+                            Some(p) => match p.parse::<ProtocolType>() {
+                                Ok(p) => p,
+                                Err(..) => {
+                                    let err = Error::new(
+                                        ErrorKind::Malformed,
+                                        "`protocol` invalid",
+                                        Some(format!("unrecognized protocol {}", p)),
+                                    );
+                                    return Err(err);
+                                }
+                            },
+                        };
+
+                        let mut local_config = LocalConfig::new(local_addr, protocol);
+
+                        if let Some(local_udp_port) = local.local_udp_port {
+                            if local_udp_port == 0 {
+                                let err = Error::new(ErrorKind::Malformed, "`local_udp_port` cannot be 0", None);
+                                return Err(err);
+                            }
+
+                            let local_udp_addr = get_local_address(
+                                local.local_udp_address,
+                                local_udp_port,
+                                config.ipv6_first.unwrap_or(false),
+                            );
+
+                            local_config.udp_addr = Some(local_udp_addr);
+                        }
+
+                        #[cfg(feature = "local-tunnel")]
+                        if let Some(forward_address) = local.forward_address {
+                            let forward_port = match local.forward_port {
+                                None | Some(0) => {
+                                    let err =
+                                        Error::new(ErrorKind::Malformed, "`forward_port` cannot be missing or 0", None);
+                                    return Err(err);
+                                }
+                                Some(p) => p,
+                            };
+
+                            local_config.forward_addr = Some(match forward_address.parse::<IpAddr>() {
+                                Ok(ip) => Address::from(SocketAddr::new(ip, forward_port)),
+                                Err(..) => Address::from((forward_address, forward_port)),
+                            });
+                        }
+
+                        #[cfg(feature = "local-redir")]
+                        if let Some(tcp_redir) = local.tcp_redir {
+                            match tcp_redir.parse::<RedirType>() {
+                                Ok(r) => local_config.tcp_redir = r,
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "`tcp_redir` invalid", None);
+                                    return Err(err);
+                                }
+                            }
+                        }
+
+                        #[cfg(feature = "local-redir")]
+                        if let Some(udp_redir) = local.udp_redir {
+                            match udp_redir.parse::<RedirType>() {
+                                Ok(r) => local_config.udp_redir = r,
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "`udp_redir` invalid", None);
+                                    return Err(err);
+                                }
+                            }
+                        }
+
+                        #[cfg(feature = "local-dns")]
+                        if let Some(local_dns_address) = local.local_dns_address {
+                            match local_dns_address.parse::<IpAddr>() {
+                                Ok(ip) => {
+                                    local_config.local_dns_addr = Some(NameServerAddr::SocketAddr(SocketAddr::new(
+                                        ip,
+                                        local.local_dns_port.unwrap_or(53),
+                                    )));
+                                }
+                                #[cfg(unix)]
+                                Err(..) => {
+                                    local_config.local_dns_addr =
+                                        Some(NameServerAddr::UnixSocketAddr(PathBuf::from(local_dns_address)));
+                                }
+                                #[cfg(not(unix))]
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "`local_dns_address` invalid", None);
+                                    return Err(err);
+                                }
+                            }
+                        }
+
+                        #[cfg(feature = "local-dns")]
+                        if let Some(remote_dns_address) = local.remote_dns_address {
+                            let remote_dns_port = local.remote_dns_port.unwrap_or(53);
+                            local_config.remote_dns_addr = Some(match remote_dns_address.parse::<IpAddr>() {
+                                Ok(ip) => Address::from(SocketAddr::new(ip, remote_dns_port)),
+                                Err(..) => Address::from((remote_dns_address, remote_dns_port)),
+                            });
+                        }
+
+                        nconfig.local.push(local_config);
+                    }
+                }
+            }
+            ConfigType::Server | ConfigType::Manager => {
+                // servers only uses `local_address` for binding outbound interfaces
+
+                if let Some(local_address) = config.local_address {
+                    match local_address.parse::<IpAddr>() {
+                        Ok(ip) => {
+                            nconfig.local_addr = Some(ip);
+                        }
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Malformed, "`local_address` invalid", None);
+                            return Err(err);
+                        }
+                    }
+                }
+            }
+        }
+
+        // match config.local_address {
+        //     Some(la) => {
+        //         let local_port = if config_type.is_local() {
+        //             let local_port = config.local_port.unwrap_or(0);
+        //             if local_port == 0 {
+        //                 let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
+        //                 return Err(err);
+        //             }
+        //             local_port
+        //         } else if config_type.is_server() || config_type.is_manager() {
+        //             // server's local_port is ignored
+        //             0
+        //         } else {
+        //             config.local_port.unwrap_or(0)
+        //         };
+
+        //         let local_addr = match la.parse::<IpAddr>() {
+        //             Ok(ip) => ServerAddr::from(SocketAddr::new(ip, local_port)),
+        //             Err(..) => {
+        //                 // treated as domain
+        //                 ServerAddr::from((la, local_port))
+        //             }
+        //         };
+        //         nconfig.local_addr = Some(local_addr);
+        //     }
+        //     None => {
+        //         if config_type.is_local() && config.local_port.is_some() {
+        //             // Implementation note: This is not implemented like libev which will choose IPv6 or IPv6 LoopBack address
+        //             // by checking all its remote servers if all of them supports IPv6.
+        //             let ip = if config.ipv6_first.unwrap_or(false) {
+        //                 Ipv6Addr::LOCALHOST.into()
+        //             } else {
+        //                 Ipv4Addr::LOCALHOST.into()
+        //             };
+
+        //             let local_port = config.local_port.unwrap_or(0);
+        //             if local_port == 0 {
+        //                 let err = Error::new(ErrorKind::MissingField, "`local_port` shouldn't be 0", None);
+        //                 return Err(err);
+        //             }
+
+        //             let local_addr = ServerAddr::from(SocketAddr::new(ip, local_port));
+        //             nconfig.local_addr = Some(local_addr);
+        //         }
+        //     }
+        // };
 
         // Standard config
         // Server
@@ -971,76 +1278,29 @@ impl Config {
         }
 
         // DNS
-        #[cfg(feature = "trust-dns")]
         {
             nconfig.dns = match config.dns {
-                Some(SSDnsConfig::Simple(ds)) => {
-                    match &ds[..] {
-                        "google" => Some(ResolverConfig::google()),
+                Some(SSDnsConfig::Simple(ds)) => match &ds[..] {
+                    #[cfg(feature = "trust-dns")]
+                    "google" => DnsConfig::TrustDns(ResolverConfig::google()),
 
-                        "cloudflare" => Some(ResolverConfig::cloudflare()),
-                        #[cfg(feature = "dns-over-tls")]
-                        "cloudflare_tls" => Some(ResolverConfig::cloudflare_tls()),
-                        #[cfg(feature = "dns-over-https")]
-                        "cloudflare_https" => Some(ResolverConfig::cloudflare_https()),
+                    #[cfg(feature = "trust-dns")]
+                    "cloudflare" => DnsConfig::TrustDns(ResolverConfig::cloudflare()),
+                    #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
+                    "cloudflare_tls" => DnsConfig::TrustDns(ResolverConfig::cloudflare_tls()),
+                    #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
+                    "cloudflare_https" => DnsConfig::TrustDns(ResolverConfig::cloudflare_https()),
 
-                        "quad9" => Some(ResolverConfig::quad9()),
-                        #[cfg(feature = "dns-over-tls")]
-                        "quad9_tls" => Some(ResolverConfig::quad9_tls()),
+                    #[cfg(feature = "trust-dns")]
+                    "quad9" => DnsConfig::TrustDns(ResolverConfig::quad9()),
+                    #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
+                    "quad9_tls" => DnsConfig::TrustDns(ResolverConfig::quad9_tls()),
 
-                        nameservers => {
-                            // Set ips directly
-                            // Similar to shadowsocks-libev's `ares_set_servers_ports_csv`
-                            //
-                            // ```
-                            // host[:port][,host[:port]]...
-                            // ```
-                            //
-                            // For example:
-                            //     `192.168.1.100,192.168.1.101,3.4.5.6`
-                            let mut c = ResolverConfig::new();
-                            for part in nameservers.split(',') {
-                                let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
-                                    socket_addr
-                                } else if let Ok(ipaddr) = part.parse::<IpAddr>() {
-                                    SocketAddr::new(ipaddr, 53)
-                                } else {
-                                    let e = Error::new(
-                                        ErrorKind::Invalid,
-                                        "invalid `dns` value, can only be host[:port][,host[:port]]...",
-                                        None,
-                                    );
-                                    return Err(e);
-                                };
-
-                                c.add_name_server(NameServerConfig {
-                                    socket_addr,
-                                    protocol: Protocol::Udp,
-                                    tls_dns_name: None,
-                                    trust_nx_responses: false,
-                                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
-                                    tls_config: None,
-                                });
-                                c.add_name_server(NameServerConfig {
-                                    socket_addr,
-                                    protocol: Protocol::Tcp,
-                                    tls_dns_name: None,
-                                    trust_nx_responses: false,
-                                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
-                                    tls_config: None,
-                                });
-                            }
-
-                            if c.name_servers().is_empty() {
-                                None
-                            } else {
-                                Some(c)
-                            }
-                        }
-                    }
-                }
-                Some(SSDnsConfig::TrustDns(c)) => Some(c),
-                None => None,
+                    nameservers => Config::parse_dns_nameservers(nameservers)?,
+                },
+                #[cfg(feature = "trust-dns")]
+                Some(SSDnsConfig::TrustDns(c)) => DnsConfig::TrustDns(c),
+                None => DnsConfig::System,
             };
         }
 
@@ -1081,6 +1341,106 @@ impl Config {
         Ok(nconfig)
     }
 
+    #[cfg(any(feature = "trust-dns", feature = "local-dns"))]
+    fn parse_dns_nameservers(nameservers: &str) -> Result<DnsConfig, Error> {
+        #[cfg(all(unix, feature = "local-dns"))]
+        if nameservers.starts_with("unix://") {
+            // A special DNS server only for shadowsocks-android
+            // It serves like a TCP DNS server but using unix domain sockets
+
+            let nameservers = &nameservers[7..];
+            return Ok(DnsConfig::LocalDns(NameServerAddr::UnixSocketAddr(PathBuf::from(
+                nameservers,
+            ))));
+        }
+
+        enum DnsProtocol {
+            Tcp,
+            Udp,
+            Both,
+        }
+
+        impl DnsProtocol {
+            fn enable_tcp(&self) -> bool {
+                matches!(*self, DnsProtocol::Tcp | DnsProtocol::Both)
+            }
+
+            fn enable_udp(&self) -> bool {
+                matches!(*self, DnsProtocol::Udp | DnsProtocol::Both)
+            }
+        }
+
+        let mut protocol = DnsProtocol::Both;
+
+        let mut nameservers = nameservers;
+        if nameservers.starts_with("tcp://") {
+            protocol = DnsProtocol::Tcp;
+            nameservers = &nameservers[6..];
+        } else if nameservers.starts_with("udp://") {
+            protocol = DnsProtocol::Udp;
+            nameservers = &nameservers[6..];
+        }
+
+        // If enables Trust-DNS, then it supports multiple nameservers
+        //
+        // Set ips directly
+        // Similar to shadowsocks-libev's `ares_set_servers_ports_csv`
+        //
+        // ```
+        // host[:port][,host[:port]]...
+        // ```
+        //
+        // For example:
+        //     `192.168.1.100,192.168.1.101,3.4.5.6`
+        let mut c = ResolverConfig::new();
+        for part in nameservers.split(',') {
+            let socket_addr = if let Ok(socket_addr) = part.parse::<SocketAddr>() {
+                socket_addr
+            } else if let Ok(ipaddr) = part.parse::<IpAddr>() {
+                SocketAddr::new(ipaddr, 53)
+            } else {
+                let e = Error::new(
+                    ErrorKind::Invalid,
+                    "invalid `dns` value, can only be host[:port][,host[:port]]...",
+                    None,
+                );
+                return Err(e);
+            };
+
+            if protocol.enable_udp() {
+                c.add_name_server(NameServerConfig {
+                    socket_addr,
+                    protocol: Protocol::Udp,
+                    tls_dns_name: None,
+                    trust_nx_responses: false,
+                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
+                    tls_config: None,
+                });
+            }
+            if protocol.enable_tcp() {
+                c.add_name_server(NameServerConfig {
+                    socket_addr,
+                    protocol: Protocol::Tcp,
+                    tls_dns_name: None,
+                    trust_nx_responses: false,
+                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
+                    tls_config: None,
+                });
+            }
+        }
+
+        Ok(if c.name_servers().is_empty() {
+            DnsConfig::System
+        } else {
+            DnsConfig::TrustDns(c)
+        })
+    }
+
+    #[cfg(not(any(feature = "trust-dns", feature = "local-dns")))]
+    fn parse_dns_nameservers(_nameservers: &str) -> Result<DnsConfig, Error> {
+        Ok(DnsConfig::System)
+    }
+
     /// Load Config from a `str`
     pub fn load_from_str(s: &str, config_type: ConfigType) -> Result<Config, Error> {
         let c = json5::from_str::<SSConfig>(s)?;
@@ -1108,25 +1468,17 @@ impl Config {
     /// Check if all required fields are already set
     pub fn check_integrity(&self) -> Result<(), Error> {
         if self.config_type.is_local() {
-            match self.local_addr {
-                None => {
-                    let err = Error::new(
-                        ErrorKind::MissingField,
-                        "missing `local_address` and `local_port` for client configuration",
-                        None,
-                    );
-                    return Err(err);
-                }
-                Some(ref addr) => {
-                    if addr.port() == 0 {
-                        let err = Error::new(
-                            ErrorKind::Malformed,
-                            "`local_port` couldn't be 0 for client configuration",
-                            None,
-                        );
-                        return Err(err);
-                    }
-                }
+            if self.local.is_empty() {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing `locals` for client configuration",
+                    None,
+                );
+                return Err(err);
+            }
+
+            for local_config in &self.local {
+                local_config.check_integrity()?;
             }
 
             if self.server.is_empty() {
@@ -1148,17 +1500,6 @@ impl Config {
                 );
                 return Err(err);
             }
-
-            if let Some(ref addr) = self.local_addr {
-                if addr.port() != 0 {
-                    let err = Error::new(
-                        ErrorKind::Malformed,
-                        "`local_port` must be 0 for server configuration",
-                        None,
-                    );
-                    return Err(err);
-                }
-            }
         }
 
         if self.config_type.is_manager() {
@@ -1169,17 +1510,6 @@ impl Config {
                     None,
                 );
                 return Err(err);
-            }
-
-            if let Some(ref addr) = self.local_addr {
-                if addr.port() != 0 {
-                    let err = Error::new(
-                        ErrorKind::Malformed,
-                        "`local_port` must be 0 for server configuration",
-                        None,
-                    );
-                    return Err(err);
-                }
             }
         }
 
@@ -1226,26 +1556,6 @@ impl Config {
             }
         }
 
-        #[cfg(feature = "local-dns")]
-        if self.local_protocol == ProtocolType::Dns || self.dns_bind_addr.is_some() {
-            if self.local_dns_addr.is_none() || self.remote_dns_addr.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `local_dns_addr` or `remote_dns_addr` in configuration",
-                    None,
-                );
-                return Err(err);
-            }
-        }
-
-        #[cfg(feature = "local-tunnel")]
-        if self.local_protocol == ProtocolType::Tunnel {
-            if self.forward.is_none() {
-                let err = Error::new(ErrorKind::MissingField, "missing `forward` in configuration", None);
-                return Err(err);
-            }
-        }
-
         Ok(())
     }
 }
@@ -1257,15 +1567,119 @@ impl fmt::Display for Config {
         let mut jconf = SSConfig::default();
 
         if let Some(ref client) = self.local_addr {
-            match *client {
-                ServerAddr::SocketAddr(ref sa) => {
-                    jconf.local_address = Some(sa.ip().to_string());
-                    jconf.local_port = Some(sa.port());
+            jconf.local_address = Some(client.to_string());
+        }
+
+        // Locals
+        if !self.local.is_empty() {
+            if self.local.len() == 1 && self.local[0].is_basic() {
+                let local = &self.local[0];
+                jconf.local_address = Some(match local.addr {
+                    ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                    ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                });
+                jconf.local_port = Some(match local.addr {
+                    ServerAddr::SocketAddr(ref sa) => sa.port(),
+                    ServerAddr::DomainName(.., port) => port,
+                });
+            } else {
+                let mut jlocals = Vec::with_capacity(self.local.len());
+                for local in &self.local {
+                    let jlocal = SSLocalExtConfig {
+                        local_address: Some(match local.addr {
+                            ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                            ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                        }),
+                        local_port: match local.addr {
+                            ServerAddr::SocketAddr(ref sa) => sa.port(),
+                            ServerAddr::DomainName(.., port) => port,
+                        },
+                        local_udp_address: match local.udp_addr {
+                            None => None,
+                            Some(ref udp_addr) => Some(match udp_addr {
+                                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                            }),
+                        },
+                        local_udp_port: match local.udp_addr {
+                            None => None,
+                            Some(ref udp_addr) => Some(match udp_addr {
+                                ServerAddr::SocketAddr(ref sa) => sa.port(),
+                                ServerAddr::DomainName(.., port) => *port,
+                            }),
+                        },
+                        protocol: match local.protocol {
+                            ProtocolType::Socks => None,
+                            p => Some(p.as_str().to_owned()),
+                        },
+                        #[cfg(feature = "local-redir")]
+                        tcp_redir: if local.tcp_redir != RedirType::tcp_default() {
+                            Some(local.tcp_redir.to_string())
+                        } else {
+                            None
+                        },
+                        #[cfg(feature = "local-redir")]
+                        udp_redir: if local.udp_redir != RedirType::udp_default() {
+                            Some(local.udp_redir.to_string())
+                        } else {
+                            None
+                        },
+                        #[cfg(feature = "local-tunnel")]
+                        forward_address: match local.forward_addr {
+                            None => None,
+                            Some(ref forward_addr) => match forward_addr {
+                                Address::SocketAddress(ref sa) => Some(sa.ip().to_string()),
+                                Address::DomainNameAddress(ref dm, ..) => Some(dm.to_string()),
+                            },
+                        },
+                        #[cfg(feature = "local-tunnel")]
+                        forward_port: match local.forward_addr {
+                            None => None,
+                            Some(ref forward_addr) => match forward_addr {
+                                Address::SocketAddress(ref sa) => Some(sa.port()),
+                                Address::DomainNameAddress(.., port) => Some(*port),
+                            },
+                        },
+                        #[cfg(feature = "local-dns")]
+                        local_dns_address: match local.local_dns_addr {
+                            None => None,
+                            Some(ref local_dns_addr) => match local_dns_addr {
+                                NameServerAddr::SocketAddr(ref sa) => Some(sa.ip().to_string()),
+                                #[cfg(unix)]
+                                NameServerAddr::UnixSocketAddr(ref path) => {
+                                    Some(path.to_str().expect("path is not utf-8").to_owned())
+                                }
+                            },
+                        },
+                        #[cfg(feature = "local-dns")]
+                        local_dns_port: match local.local_dns_addr {
+                            None => None,
+                            Some(ref local_dns_addr) => match local_dns_addr {
+                                NameServerAddr::SocketAddr(ref sa) => Some(sa.port()),
+                                #[cfg(unix)]
+                                NameServerAddr::UnixSocketAddr(..) => None,
+                            },
+                        },
+                        #[cfg(feature = "local-dns")]
+                        remote_dns_address: match local.remote_dns_addr {
+                            None => None,
+                            Some(ref remote_dns_addr) => match remote_dns_addr {
+                                Address::SocketAddress(ref sa) => Some(sa.ip().to_string()),
+                                Address::DomainNameAddress(ref dm, ..) => Some(dm.to_string()),
+                            },
+                        },
+                        #[cfg(feature = "local-dns")]
+                        remote_dns_port: match local.remote_dns_addr {
+                            None => None,
+                            Some(ref remote_dns_addr) => match remote_dns_addr {
+                                Address::SocketAddress(ref sa) => Some(sa.port()),
+                                Address::DomainNameAddress(.., port) => Some(*port),
+                            },
+                        },
+                    };
+                    jlocals.push(jlocal);
                 }
-                ServerAddr::DomainName(ref dname, port) => {
-                    jconf.local_address = Some(dname.to_owned());
-                    jconf.local_port = Some(port);
-                }
+                jconf.locals = Some(jlocals);
             }
         }
 
@@ -1355,9 +1769,16 @@ impl fmt::Display for Config {
             jconf.no_delay = Some(self.no_delay);
         }
 
-        #[cfg(feature = "trust-dns")]
-        if let Some(ref dns) = self.dns {
-            jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
+        match self.dns {
+            DnsConfig::System => {}
+            #[cfg(feature = "trust-dns")]
+            DnsConfig::TrustDns(ref dns) => {
+                jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
+            }
+            #[cfg(feature = "local-dns")]
+            DnsConfig::LocalDns(ref ns) => {
+                jconf.dns = Some(SSDnsConfig::Simple(ns.to_string()));
+            }
         }
 
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());

@@ -17,7 +17,7 @@ use shadowsocks_service::config::RedirType;
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, Mode, ProtocolType},
     run_local,
     shadowsocks::{
         config::{ServerAddr, ServerConfig},
@@ -151,8 +151,15 @@ fn main() {
         app = clap_app!(@app (app)
             (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_name_server_addr} "Specify the address of local DNS server, send queries directly")
             (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
-            (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
+
         );
+
+        #[cfg(target_os = "android")]
+        {
+            app = clap_app!(@app (app)
+                (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -192,22 +199,6 @@ fn main() {
         },
         None => Config::new(ConfigType::Local),
     };
-
-    let protocol = match matches.value_of("PROTOCOL") {
-        Some("socks") => ProtocolType::Socks,
-        #[cfg(feature = "local-http")]
-        Some("http") => ProtocolType::Http,
-        #[cfg(feature = "local-tunnel")]
-        Some("tunnel") => ProtocolType::Tunnel,
-        #[cfg(feature = "local-redir")]
-        Some("redir") => ProtocolType::Redir,
-        #[cfg(feature = "local-dns")]
-        Some("dns") => ProtocolType::Dns,
-        Some(p) => panic!("not supported `protocol` \"{}\"", p),
-        None => ProtocolType::Socks,
-    };
-
-    config.local_protocol = protocol;
 
     if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
         let password = matches.value_of("PASSWORD").expect("password");
@@ -253,26 +244,6 @@ fn main() {
         }
     }
 
-    #[cfg(feature = "local-dns")]
-    {
-        use shadowsocks_service::local::dns::NameServerAddr;
-
-        if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-            let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
-            config.local_dns_addr = Some(addr);
-        }
-
-        if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-            let addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
-            config.remote_dns_addr = Some(addr);
-        }
-
-        if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
-            let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
-            config.dns_bind_addr = Some(addr);
-        }
-    }
-
     #[cfg(target_os = "android")]
     if matches.is_present("VPN_MODE") {
         // A socket `protect_path` in CWD
@@ -282,7 +253,78 @@ fn main() {
 
     if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {
         let local_addr = local_addr.parse::<ServerAddr>().expect("local bind addr");
-        config.local_addr = Some(local_addr);
+
+        let protocol = match matches.value_of("PROTOCOL") {
+            Some("socks") => ProtocolType::Socks,
+            #[cfg(feature = "local-http")]
+            Some("http") => ProtocolType::Http,
+            #[cfg(feature = "local-tunnel")]
+            Some("tunnel") => ProtocolType::Tunnel,
+            #[cfg(feature = "local-redir")]
+            Some("redir") => ProtocolType::Redir,
+            #[cfg(feature = "local-dns")]
+            Some("dns") => ProtocolType::Dns,
+            Some(p) => panic!("not supported `protocol` \"{}\"", p),
+            None => ProtocolType::Socks,
+        };
+
+        let mut local_config = LocalConfig::new(local_addr, protocol);
+
+        if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
+            local_config.udp_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
+        }
+
+        #[cfg(feature = "local-tunnel")]
+        if let Some(faddr) = matches.value_of("FORWARD_ADDR") {
+            let addr = faddr.parse::<Address>().expect("forward-addr");
+            local_config.forward_addr = Some(addr);
+        }
+
+        #[cfg(feature = "local-redir")]
+        {
+            if let Some(tcp_redir) = matches.value_of("TCP_REDIR") {
+                local_config.tcp_redir = tcp_redir.parse::<RedirType>().expect("TCP redir type");
+            }
+
+            if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
+                local_config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
+            }
+        }
+
+        #[cfg(feature = "local-dns")]
+        {
+            use shadowsocks_service::local::dns::NameServerAddr;
+
+            if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
+                let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
+                local_config.local_dns_addr = Some(addr);
+            }
+
+            if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
+                let addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
+                local_config.remote_dns_addr = Some(addr);
+            }
+        }
+
+        #[cfg(target_os = "android")]
+        if protocol != ProtocolType::Dns {
+            // Start a DNS local server binding to DNS_LOCAL_ADDR
+            //
+            // This is a special route only for shadowsocks-android
+            if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
+                let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
+
+                let mut local_dns_config = LocalConfig::new(addr, ProtocolType::Dns);
+
+                // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
+                local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
+                local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
+
+                config.local.push(local_dns_config);
+            }
+        }
+
+        config.local.push(local_config);
     }
 
     // override the config's mode if UDP_ONLY is set
@@ -326,33 +368,12 @@ fn main() {
         config.ipv6_first = true;
     }
 
-    #[cfg(feature = "local-tunnel")]
-    if let Some(faddr) = matches.value_of("FORWARD_ADDR") {
-        let addr = faddr.parse::<Address>().expect("forward-addr");
-        config.forward = Some(addr);
-    }
-
-    #[cfg(feature = "local-redir")]
-    {
-        if let Some(tcp_redir) = matches.value_of("TCP_REDIR") {
-            config.tcp_redir = tcp_redir.parse::<RedirType>().expect("TCP redir type");
-        }
-
-        if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
-            config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
-        }
-    }
-
     if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
         config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
     }
 
     if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
         config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
-    }
-
-    if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
-        config.udp_bind_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
     }
 
     if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
@@ -370,7 +391,7 @@ fn main() {
 
     // DONE READING options
 
-    if config.local_addr.is_none() {
+    if config.local.is_empty() {
         eprintln!(
             "missing `local_address`, consider specifying it by --local-addr command line option, \
              or \"local_address\" and \"local_port\" in configuration file"

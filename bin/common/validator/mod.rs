@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 #[cfg(feature = "local-dns")]
 use shadowsocks_service::local::dns::NameServerAddr;
@@ -24,6 +24,7 @@ validate_type!(
     ServerAddr,
     "should be either ip:port or domain:port"
 );
+validate_type!(validate_ip_addr, IpAddr, "should be a valid IPv4 or IPv6 address");
 validate_type!(validate_socket_addr, SocketAddr, "should be ip:port");
 validate_type!(validate_address, Address, "should be either ip:port or domain:port");
 validate_type!(

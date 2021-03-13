@@ -4,11 +4,11 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, info};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, ServerAddr};
 use tokio::{net::TcpStream, time};
 
 use crate::{
-    config::{ClientConfig, Mode},
+    config::Mode,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
@@ -26,7 +26,7 @@ pub struct Socks {
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
-    udp_bind_addr: Option<ClientConfig>,
+    udp_bind_addr: Option<ServerAddr>,
     nodelay: bool,
 }
 
@@ -68,7 +68,7 @@ impl Socks {
     ///
     /// * If `mode` is `tcp_only`, then it will still return this address for `UDP_ASSOCIATE` command
     /// * Otherwise, UDP relay will bind to this address
-    pub fn set_udp_bind_addr(&mut self, a: ClientConfig) {
+    pub fn set_udp_bind_addr(&mut self, a: ServerAddr) {
         self.udp_bind_addr = Some(a);
     }
 
@@ -78,7 +78,7 @@ impl Socks {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
@@ -96,12 +96,12 @@ impl Socks {
         res
     }
 
-    async fn run_tcp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_tcp_server(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let listener = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => {
+            ServerAddr::SocketAddr(ref saddr) => {
                 ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
             }
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
                 })?
@@ -157,7 +157,7 @@ impl Socks {
     #[cfg(feature = "local-socks4")]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        udp_bind_addr: Option<Arc<ClientConfig>>,
+        udp_bind_addr: Option<Arc<ServerAddr>>,
         stream: TcpStream,
         balancer: PingBalancer,
         peer_addr: SocketAddr,
@@ -194,7 +194,7 @@ impl Socks {
     #[cfg(not(feature = "local-socks4"))]
     async fn handle_tcp_client(
         context: Arc<ServiceContext>,
-        udp_bind_addr: Option<Arc<ClientConfig>>,
+        udp_bind_addr: Option<Arc<ServerAddr>>,
         stream: TcpStream,
         balancer: PingBalancer,
         peer_addr: SocketAddr,
@@ -205,7 +205,7 @@ impl Socks {
         handler.handle_socks5_client(stream, peer_addr).await
     }
 
-    async fn run_udp_server(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    async fn run_udp_server(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
 
         let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);

@@ -10,7 +10,7 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, ProtocolType},
+    config::{Config, ConfigType},
     run_local,
     run_server,
 };
@@ -19,10 +19,17 @@ use shadowsocks_service::{
 async fn dns_relay() {
     let _ = env_logger::try_init();
 
-    let mut local_config = Config::load_from_str(
+    let local_config = Config::load_from_str(
         r#"{
-            "local_port": 6110,
-            "local_address": "127.0.0.1",
+            "locals": [
+                {
+                    "local_address": "127.0.0.1",
+                    "local_port": 6110,
+                    "protocol": "dns",
+                    "local_dns_address": "114.114.114.114",
+                    "remote_dns_address": "8.8.8.8"
+                }
+            ],
             "server": "127.0.0.1",
             "server_port": 6120,
             "password": "password",
@@ -31,9 +38,6 @@ async fn dns_relay() {
         ConfigType::Local,
     )
     .unwrap();
-    local_config.local_protocol = ProtocolType::Dns;
-    local_config.local_dns_addr = Some("114.114.114.114:53".parse().unwrap());
-    local_config.remote_dns_addr = Some("8.8.8.8:53".parse().unwrap());
 
     let server_config = Config::load_from_str(
         r#"{

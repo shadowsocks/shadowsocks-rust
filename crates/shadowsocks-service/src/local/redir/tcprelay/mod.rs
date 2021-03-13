@@ -8,14 +8,14 @@ use std::{
 };
 
 use log::{debug, error, info, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
 use tokio::{
     net::{TcpListener, TcpStream},
     time,
 };
 
 use crate::{
-    config::{ClientConfig, RedirType},
+    config::RedirType,
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
@@ -111,14 +111,14 @@ async fn handle_redir_client(
 
 pub async fn run_tcp_redir(
     context: Arc<ServiceContext>,
-    client_config: &ClientConfig,
+    client_config: &ServerAddr,
     balancer: PingBalancer,
     redir_ty: RedirType,
     nodelay: bool,
 ) -> io::Result<()> {
     let listener = match *client_config {
-        ClientConfig::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr).await?,
-        ClientConfig::DomainName(ref dname, port) => {
+        ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr).await?,
+        ServerAddr::DomainName(ref dname, port) => {
             lookup_then!(context.context_ref(), dname, port, |addr| {
                 TcpListener::bind_redir(redir_ty, addr).await
             })?
