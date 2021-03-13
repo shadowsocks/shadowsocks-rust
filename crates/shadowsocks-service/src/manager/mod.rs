@@ -31,7 +31,6 @@ pub async fn run(config: Config) -> io::Result<()> {
     }
 
     let mut manager = Manager::new(config.manager.expect("missing manager config"));
-    manager.set_mode(config.mode);
 
     let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -73,7 +72,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     }
 
     for svr_cfg in config.server {
-        manager.add_server(svr_cfg, None).await;
+        manager.add_server(svr_cfg).await;
     }
 
     manager.run().await

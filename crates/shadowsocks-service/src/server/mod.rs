@@ -91,7 +91,6 @@ pub async fn run(config: Config) -> io::Result<()> {
         if let Some(d) = config.udp_timeout {
             server.set_udp_expiry_duration(d);
         }
-        server.set_mode(config.mode);
         if let Some(ref m) = config.manager {
             server.set_manager_addr(m.addr.clone());
         }

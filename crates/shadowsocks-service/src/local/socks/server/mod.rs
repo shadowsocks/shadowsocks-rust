@@ -4,13 +4,10 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::{error, info};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, ServerAddr};
+use shadowsocks::{config::Mode, lookup_then, net::TcpListener as ShadowTcpListener, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::{
-    config::Mode,
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
-};
+use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 #[cfg(feature = "local-socks4")]
 use self::socks4::Socks4TcpHandler;

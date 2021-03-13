@@ -8,6 +8,7 @@ use std::{
 
 use log::{debug, error, trace, warn};
 use shadowsocks::{
+    config::Mode,
     relay::socks5::{
         self,
         Address,
@@ -23,7 +24,6 @@ use shadowsocks::{
 use tokio::net::TcpStream;
 
 use crate::{
-    config::Mode,
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,

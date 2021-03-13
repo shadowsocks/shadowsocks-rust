@@ -5,7 +5,7 @@ use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 use futures::future::{self, AbortHandle};
 use log::{error, info};
 use shadowsocks::{
-    config::{ServerConfig, ServerType},
+    config::{Mode, ServerConfig, ServerType},
     context::{Context, SharedContext},
     crypto::v1::CipherKind,
     dns_resolver::DnsResolver,
@@ -30,7 +30,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     acl::AccessControl,
-    config::{ManagerConfig, ManagerServerHost, Mode},
+    config::{ManagerConfig, ManagerServerHost},
     net::FlowStat,
     server::Server,
 };
@@ -52,7 +52,6 @@ pub struct Manager {
     context: SharedContext,
     servers: Mutex<HashMap<u16, ServerInstance>>,
     svr_cfg: ManagerConfig,
-    mode: Mode,
     connect_opts: ConnectOpts,
     accept_opts: AcceptOpts,
     udp_expiry_duration: Option<Duration>,
@@ -72,7 +71,6 @@ impl Manager {
             context,
             servers: Mutex::new(HashMap::new()),
             svr_cfg,
-            mode: Mode::TcpOnly,
             connect_opts: ConnectOpts::default(),
             accept_opts: AcceptOpts::default(),
             udp_expiry_duration: None,
@@ -99,11 +97,6 @@ impl Manager {
     /// Set total UDP associations to be kept in one server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = Some(c);
-    }
-
-    /// Set server's default mode
-    pub fn set_mode(&mut self, mode: Mode) {
-        self.mode = mode;
     }
 
     /// Get the manager's configuration
@@ -166,7 +159,7 @@ impl Manager {
         }
     }
 
-    pub async fn add_server(&self, svr_cfg: ServerConfig, mode: Option<Mode>) {
+    pub async fn add_server(&self, svr_cfg: ServerConfig) {
         // Each server should use a separate Context, but shares
         //
         // * AccessControlList
@@ -184,8 +177,6 @@ impl Manager {
         if let Some(c) = self.udp_capacity {
             server.set_udp_capacity(c);
         }
-
-        server.set_mode(mode.unwrap_or(self.mode));
 
         if let Some(ref acl) = self.acl {
             server.set_acl(acl.clone());
@@ -261,7 +252,9 @@ impl Manager {
             },
         };
 
-        self.add_server(svr_cfg, mode).await;
+        svr_cfg.set_mode(mode.unwrap_or(self.svr_cfg.mode));
+
+        self.add_server(svr_cfg).await;
 
         Ok(AddResponse("ok".to_owned()))
     }

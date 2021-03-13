@@ -3,10 +3,10 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use shadowsocks::ServerAddr;
+use shadowsocks::{config::Mode, ServerAddr};
 
 use crate::{
-    config::{Mode, RedirType},
+    config::RedirType,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
@@ -74,15 +74,15 @@ impl Redir {
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, tcp_addr: &ServerAddr, udp_addr: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let mut vfut = Vec::new();
 
         if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_tunnel(client_config, balancer.clone()).boxed());
+            vfut.push(self.run_tcp_tunnel(tcp_addr, balancer.clone()).boxed());
         }
 
         if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel(client_config, balancer).boxed());
+            vfut.push(self.run_udp_tunnel(udp_addr, balancer).boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;

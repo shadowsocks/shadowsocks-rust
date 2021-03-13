@@ -7,19 +7,17 @@ use std::{
 };
 
 use log::{debug, trace, warn};
+use shadowsocks::config::Mode;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::TcpStream,
 };
 
-use crate::{
-    config::Mode,
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::AutoProxyClientStream,
-        utils::establish_tcp_tunnel,
-    },
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::AutoProxyClientStream,
+    utils::establish_tcp_tunnel,
 };
 
 use crate::local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};

@@ -17,10 +17,10 @@ use shadowsocks_service::config::RedirType;
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, LocalConfig, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, ProtocolType},
     run_local,
     shadowsocks::{
-        config::{ServerAddr, ServerConfig},
+        config::{Mode, ServerAddr, ServerConfig},
         crypto::v1::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
@@ -40,12 +40,11 @@ fn main() {
         (version: VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls.")
 
-        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
-        (@arg TCP_AND_UDP: -U "Server mode TCP_AND_UDP")
-
         (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
+        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
+        (@arg TCP_AND_UDP: -U requires[LOCAL_ADDR] "Server mode TCP_AND_UDP")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
@@ -324,16 +323,15 @@ fn main() {
             }
         }
 
+        if matches.is_present("UDP_ONLY") {
+            local_config.mode = Mode::UdpOnly;
+        }
+
+        if matches.is_present("TCP_AND_UDP") {
+            local_config.mode = Mode::TcpAndUdp;
+        }
+
         config.local.push(local_config);
-    }
-
-    // override the config's mode if UDP_ONLY is set
-    if matches.is_present("UDP_ONLY") {
-        config.mode = Mode::UdpOnly;
-    }
-
-    if matches.is_present("TCP_AND_UDP") {
-        config.mode = Mode::TcpAndUdp;
     }
 
     if matches.is_present("NO_DELAY") {

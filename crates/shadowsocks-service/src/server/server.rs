@@ -18,7 +18,7 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{acl::AccessControl, config::Mode, net::FlowStat};
+use crate::{acl::AccessControl, net::FlowStat};
 
 use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 
@@ -26,7 +26,6 @@ use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 pub struct Server {
     context: Arc<ServiceContext>,
     svr_cfg: ServerConfig,
-    mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     manager_addr: Option<ManagerAddr>,
@@ -44,7 +43,6 @@ impl Server {
         Server {
             context,
             svr_cfg,
-            mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: None,
             manager_addr: None,
@@ -78,11 +76,6 @@ impl Server {
         self.udp_capacity = Some(c);
     }
 
-    /// Set server's mode
-    pub fn set_mode(&mut self, mode: Mode) {
-        self.mode = mode;
-    }
-
     /// Set manager's address to report `stat`
     pub fn set_manager_addr(&mut self, manager_addr: ManagerAddr) {
         self.manager_addr = Some(manager_addr);
@@ -114,7 +107,7 @@ impl Server {
     pub async fn run(mut self) -> io::Result<()> {
         let vfut = FuturesUnordered::new();
 
-        if self.mode.enable_tcp() {
+        if self.svr_cfg.mode().enable_tcp() {
             if let Some(plugin_cfg) = self.svr_cfg.plugin() {
                 let plugin = Plugin::start(plugin_cfg, self.svr_cfg.addr(), PluginMode::Server)?;
                 self.svr_cfg.set_plugin_addr(plugin.local_addr().into());
@@ -139,7 +132,7 @@ impl Server {
             vfut.push(tcp_fut);
         }
 
-        if self.mode.enable_udp() {
+        if self.svr_cfg.mode().enable_udp() {
             let udp_fut = self.run_udp_server().boxed();
             vfut.push(udp_fut);
         }

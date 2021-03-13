@@ -11,12 +11,12 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, LocalConfig, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, ProtocolType},
     local::socks::client::socks5::Socks5TcpClient,
     run_local,
     run_server,
     shadowsocks::{
-        config::{ServerAddr, ServerConfig},
+        config::{Mode, ServerAddr, ServerConfig},
         crypto::v1::CipherKind,
         relay::socks5::Address,
     },
@@ -42,14 +42,14 @@ impl Socks5TestServer {
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
                 cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
+                cfg.server[0].set_mode(if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly });
                 cfg
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
                 cfg.local = vec![LocalConfig::new(ServerAddr::from(local_addr), ProtocolType::Socks)];
+                cfg.local[0].mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
                 cfg
             },
         }

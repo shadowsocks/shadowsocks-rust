@@ -16,10 +16,10 @@ use tokio::{self, runtime::Builder};
 
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, ManagerConfig, ManagerServerHost, Mode},
+    config::{Config, ConfigType, ManagerConfig, ManagerServerHost},
     run_manager,
     shadowsocks::{
-        config::ManagerAddr,
+        config::{ManagerAddr, Mode},
         crypto::v1::{available_ciphers, CipherKind},
     },
 };
@@ -138,16 +138,17 @@ fn main() {
         config.local_addr = Some(bind_addr);
     }
 
+    // Overrides
     if matches.is_present("UDP_ONLY") {
-        if config.mode.enable_tcp() {
-            config.mode = Mode::TcpAndUdp;
-        } else {
-            config.mode = Mode::UdpOnly;
+        if let Some(ref mut m) = config.manager {
+            m.mode = m.mode.merge(Mode::UdpOnly);
         }
     }
 
     if matches.is_present("TCP_AND_UDP") {
-        config.mode = Mode::TcpAndUdp;
+        if let Some(ref mut m) = config.manager {
+            m.mode = Mode::TcpAndUdp;
+        }
     }
 
     if matches.is_present("NO_DELAY") {
