@@ -371,6 +371,11 @@ impl ServerConfig {
 
         Ok(svrconfig)
     }
+
+    /// Check if it is a basic format server
+    pub fn is_basic(&self) -> bool {
+        self.remarks.is_none() && self.id.is_none()
+    }
 }
 
 /// Shadowsocks URL parsing Error

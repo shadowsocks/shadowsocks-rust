@@ -1638,7 +1638,7 @@ impl fmt::Display for Config {
         match self.server.len() {
             0 => {}
             // For 1 server, uses standard configure format
-            1 if self.server[0].id().is_none() && self.server[0].remarks().is_none() => {
+            1 if self.server[0].is_basic() => {
                 let svr = &self.server[0];
 
                 jconf.server = Some(match *svr.addr() {
