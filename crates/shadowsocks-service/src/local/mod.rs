@@ -11,6 +11,7 @@ use futures::{
 };
 use log::{error, trace, warn};
 use shadowsocks::{
+    config::Mode,
     net::{AcceptOpts, ConnectOpts},
     plugin::{Plugin, PluginMode},
 };
@@ -104,17 +105,16 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
     // Check if any of the local servers enable TCP connections
 
-    let mode = config.mode;
     let enable_tcp = config.local.iter().any(|local_config| match local_config.protocol {
-        ProtocolType::Socks => mode.enable_tcp(),
+        ProtocolType::Socks => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-tunnel")]
-        ProtocolType::Tunnel => mode.enable_tcp(),
+        ProtocolType::Tunnel => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-http")]
         ProtocolType::Http => true,
         #[cfg(feature = "local-redir")]
-        ProtocolType::Redir => mode.enable_tcp(),
+        ProtocolType::Redir => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-dns")]
-        ProtocolType::Dns => mode.enable_tcp(),
+        ProtocolType::Dns => local_config.mode.enable_tcp(),
     });
 
     if enable_tcp {
@@ -169,7 +169,13 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     //
     // XXX: This have to be called after allocating plugins' addresses
     let balancer = {
-        let mut balancer_builder = PingBalancerBuilder::new(context.clone(), config.mode);
+        let mut mode = Mode::TcpOnly;
+
+        for local in &config.local {
+            mode = mode.merge(local.mode);
+        }
+
+        let mut balancer_builder = PingBalancerBuilder::new(context.clone(), mode);
         for server in config.server {
             balancer_builder.add_server(ServerIdent::new(server));
         }
@@ -178,21 +184,6 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
         balancer
     };
-
-    // #[cfg(feature = "local-dns")]
-    // if matches!(config.local_protocol, ProtocolType::Dns) || config.dns_bind_addr.is_some() {
-    //     use self::dns::Dns;
-
-    //     let local_addr = config.local_dns_addr.expect("missing local_dns_addr");
-    //     let remote_addr = config.remote_dns_addr.expect("missing remote_dns_addr");
-
-    //     let bind_addr = config.dns_bind_addr.as_ref().unwrap_or_else(|| &client_config);
-
-    //     let mut server = Dns::with_context(context.clone(), local_addr, remote_addr);
-    //     server.set_mode(config.mode);
-
-    //     vfut.push(server.run(bind_addr, balancer.clone()).boxed());
-    // }
 
     #[cfg(feature = "local-flow-stat")]
     if let Some(stat_path) = config.stat_path {
@@ -211,7 +202,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 use self::socks::Socks;
 
                 let mut server = Socks::with_context(context.clone());
-                server.set_mode(config.mode);
+                server.set_mode(local_config.mode);
 
                 if let Some(c) = config.udp_max_associations {
                     server.set_udp_capacity(c);
@@ -242,12 +233,13 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(d) = config.udp_timeout {
                     server.set_udp_expiry_duration(d);
                 }
-                server.set_mode(config.mode);
+                server.set_mode(local_config.mode);
                 if config.no_delay {
                     server.set_nodelay(true);
                 }
 
-                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+                let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
+                vfut.push(async move { server.run(&client_addr, &udp_addr, balancer).await }.boxed());
             }
             #[cfg(feature = "local-http")]
             ProtocolType::Http => {
@@ -267,14 +259,15 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(d) = config.udp_timeout {
                     server.set_udp_expiry_duration(d);
                 }
-                server.set_mode(config.mode);
+                server.set_mode(local_config.mode);
                 if config.no_delay {
                     server.set_nodelay(true);
                 }
                 server.set_tcp_redir(local_config.tcp_redir);
                 server.set_udp_redir(local_config.udp_redir);
 
-                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+                let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
+                vfut.push(async move { server.run(&client_addr, &udp_addr, balancer).await }.boxed());
             }
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => {
@@ -286,7 +279,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
                     Dns::with_context(context.clone(), local_addr.clone(), remote_addr.clone())
                 };
-                server.set_mode(config.mode);
+                server.set_mode(local_config.mode);
 
                 vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
             }

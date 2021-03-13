@@ -62,7 +62,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
-    config::{ManagerAddr, ServerAddr, ServerConfig},
+    config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
     crypto::v1::CipherKind,
     plugin::PluginConfig,
 };
@@ -131,6 +131,9 @@ struct SSConfig {
 struct SSLocalExtConfig {
     local_address: Option<String>,
     local_port: u16,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     local_udp_address: Option<String>,
@@ -202,6 +205,8 @@ struct SSServerExtConfig {
     remarks: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
 }
 
 /// Server config type
@@ -231,47 +236,6 @@ impl ConfigType {
     /// Check if it is manager server type
     pub fn is_manager(self) -> bool {
         self == ConfigType::Manager
-    }
-}
-
-/// Server mode
-#[derive(Clone, Copy, Debug)]
-pub enum Mode {
-    TcpOnly,
-    TcpAndUdp,
-    UdpOnly,
-}
-
-impl Mode {
-    pub fn enable_udp(self) -> bool {
-        matches!(self, Mode::UdpOnly | Mode::TcpAndUdp)
-    }
-
-    pub fn enable_tcp(self) -> bool {
-        matches!(self, Mode::TcpOnly | Mode::TcpAndUdp)
-    }
-}
-
-impl fmt::Display for Mode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Mode::TcpOnly => f.write_str("tcp_only"),
-            Mode::TcpAndUdp => f.write_str("tcp_and_udp"),
-            Mode::UdpOnly => f.write_str("udp_only"),
-        }
-    }
-}
-
-impl FromStr for Mode {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "tcp_only" => Ok(Mode::TcpOnly),
-            "tcp_and_udp" => Ok(Mode::TcpAndUdp),
-            "udp_only" => Ok(Mode::UdpOnly),
-            _ => Err(()),
-        }
     }
 }
 
@@ -502,6 +466,8 @@ pub struct ManagerConfig {
     ///
     /// Note: Outbound address is defined in Config.local_addr
     pub server_host: ManagerServerHost,
+    /// Server's mode
+    pub mode: Mode,
 }
 
 impl ManagerConfig {
@@ -512,6 +478,7 @@ impl ManagerConfig {
             method: None,
             timeout: None,
             server_host: ManagerServerHost::default(),
+            mode: Mode::TcpOnly,
         }
     }
 }
@@ -597,6 +564,10 @@ pub struct LocalConfig {
     pub addr: ServerAddr,
     pub protocol: ProtocolType,
 
+    /// Mode
+    /// Uses global `mode` if not specified
+    pub mode: Mode,
+
     /// UDP server bind address. Uses `addr` if not specified
     ///
     /// Resolving Android's issue: [shadowsocks/shadowsocks-android#2571](https://github.com/shadowsocks/shadowsocks-android/issues/2571)
@@ -631,6 +602,8 @@ impl LocalConfig {
         LocalConfig {
             addr,
             protocol,
+
+            mode: Mode::TcpOnly,
             udp_addr: None,
 
             #[cfg(feature = "local-tunnel")]
@@ -767,8 +740,6 @@ pub struct Config {
     /// Manager's configuration
     pub manager: Option<ManagerConfig>,
 
-    /// Server mode, `tcp_only`, `tcp_and_udp`, and `udp_only`
-    pub mode: Mode,
     /// Config is for Client or Server
     pub config_type: ConfigType,
 
@@ -872,7 +843,6 @@ impl Config {
 
             manager: None,
 
-            mode: Mode::TcpOnly,
             config_type,
 
             udp_timeout: None,
@@ -915,6 +885,22 @@ impl Config {
                     };
 
                     ServerAddr::from(SocketAddr::new(ip, local_port))
+                }
+            }
+        }
+
+        // Mode
+        let mut global_mode = Mode::TcpOnly;
+        if let Some(m) = config.mode {
+            match m.parse::<Mode>() {
+                Ok(xm) => global_mode = xm,
+                Err(..) => {
+                    let e = Error::new(
+                        ErrorKind::Malformed,
+                        "malformed `mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
+                        None,
+                    );
+                    return Err(e);
                 }
             }
         }
@@ -983,6 +969,19 @@ impl Config {
                             );
 
                             local_config.udp_addr = Some(local_udp_addr);
+                        }
+
+                        match local.mode {
+                            Some(mode) => match mode.parse::<Mode>() {
+                                Ok(mode) => local_config.mode = mode,
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "invalid `mode`", None);
+                                    return Err(err);
+                                }
+                            },
+                            None => {
+                                local_config.mode = global_mode;
+                            }
                         }
 
                         #[cfg(feature = "local-tunnel")]
@@ -1076,53 +1075,6 @@ impl Config {
             }
         }
 
-        // match config.local_address {
-        //     Some(la) => {
-        //         let local_port = if config_type.is_local() {
-        //             let local_port = config.local_port.unwrap_or(0);
-        //             if local_port == 0 {
-        //                 let err = Error::new(ErrorKind::MissingField, "missing `local_port`", None);
-        //                 return Err(err);
-        //             }
-        //             local_port
-        //         } else if config_type.is_server() || config_type.is_manager() {
-        //             // server's local_port is ignored
-        //             0
-        //         } else {
-        //             config.local_port.unwrap_or(0)
-        //         };
-
-        //         let local_addr = match la.parse::<IpAddr>() {
-        //             Ok(ip) => ServerAddr::from(SocketAddr::new(ip, local_port)),
-        //             Err(..) => {
-        //                 // treated as domain
-        //                 ServerAddr::from((la, local_port))
-        //             }
-        //         };
-        //         nconfig.local_addr = Some(local_addr);
-        //     }
-        //     None => {
-        //         if config_type.is_local() && config.local_port.is_some() {
-        //             // Implementation note: This is not implemented like libev which will choose IPv6 or IPv6 LoopBack address
-        //             // by checking all its remote servers if all of them supports IPv6.
-        //             let ip = if config.ipv6_first.unwrap_or(false) {
-        //                 Ipv6Addr::LOCALHOST.into()
-        //             } else {
-        //                 Ipv4Addr::LOCALHOST.into()
-        //             };
-
-        //             let local_port = config.local_port.unwrap_or(0);
-        //             if local_port == 0 {
-        //                 let err = Error::new(ErrorKind::MissingField, "`local_port` shouldn't be 0", None);
-        //                 return Err(err);
-        //             }
-
-        //             let local_addr = ServerAddr::from(SocketAddr::new(ip, local_port));
-        //             nconfig.local_addr = Some(local_addr);
-        //         }
-        //     }
-        // };
-
         // Standard config
         // Server
         match (config.server, config.server_port, config.password, config.method) {
@@ -1148,6 +1100,7 @@ impl Config {
                 };
 
                 let mut nsvr = ServerConfig::new(addr, pwd, method);
+                nsvr.set_mode(global_mode);
 
                 if let Some(p) = config.plugin {
                     // SIP008 allows "plugin" to be an empty string
@@ -1212,6 +1165,17 @@ impl Config {
 
                 let mut nsvr = ServerConfig::new(addr, svr.password, method);
 
+                match svr.mode {
+                    Some(mode) => match mode.parse::<Mode>() {
+                        Ok(mode) => nsvr.set_mode(mode),
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Malformed, "invalid `mode`", None);
+                            return Err(err);
+                        }
+                    },
+                    None => nsvr.set_mode(global_mode),
+                }
+
                 if let Some(p) = svr.plugin {
                     // SIP008 allows "plugin" to be an empty string
                     // Empty string implies "no plugin"
@@ -1273,7 +1237,8 @@ impl Config {
                 }
             };
 
-            let manager_config = ManagerConfig::new(manager);
+            let mut manager_config = ManagerConfig::new(manager);
+            manager_config.mode = global_mode;
             nconfig.manager = Some(manager_config);
         }
 
@@ -1302,21 +1267,6 @@ impl Config {
                 Some(SSDnsConfig::TrustDns(c)) => DnsConfig::TrustDns(c),
                 None => DnsConfig::System,
             };
-        }
-
-        // Mode
-        if let Some(m) = config.mode {
-            match m.parse::<Mode>() {
-                Ok(xm) => nconfig.mode = xm,
-                Err(..) => {
-                    let e = Error::new(
-                        ErrorKind::Malformed,
-                        "malformed `mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
-                        None,
-                    );
-                    return Err(e);
-                }
-            }
         }
 
         // TCP nodelay
@@ -1608,6 +1558,7 @@ impl fmt::Display for Config {
                                 ServerAddr::DomainName(.., port) => *port,
                             }),
                         },
+                        mode: Some(local.mode.to_string()),
                         protocol: match local.protocol {
                             ProtocolType::Socks => None,
                             p => Some(p.as_str().to_owned()),
@@ -1710,6 +1661,7 @@ impl fmt::Display for Config {
                     }
                 });
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
+                jconf.mode = Some(svr.mode().to_string());
             }
             // For >1 servers, uses extended multiple server format
             _ => {
@@ -1740,6 +1692,7 @@ impl fmt::Display for Config {
                         timeout: svr.timeout().map(|t| t.as_secs()),
                         remarks: svr.remarks().map(ToOwned::to_owned),
                         id: svr.id().map(ToOwned::to_owned),
+                        mode: Some(svr.mode().to_string()),
                     });
                 }
 
@@ -1761,9 +1714,11 @@ impl fmt::Display for Config {
                 #[cfg(unix)]
                 ManagerAddr::UnixSocketAddr(..) => None,
             };
-        }
 
-        jconf.mode = Some(self.mode.to_string());
+            if jconf.mode.is_none() {
+                jconf.mode = Some(m.mode.to_string());
+            }
+        }
 
         if self.no_delay {
             jconf.no_delay = Some(self.no_delay);

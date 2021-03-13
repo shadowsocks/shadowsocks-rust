@@ -42,6 +42,61 @@ impl ServerType {
     }
 }
 
+/// Server mode
+#[derive(Clone, Copy, Debug)]
+pub enum Mode {
+    TcpOnly = 0x01,
+    TcpAndUdp = 0x03,
+    UdpOnly = 0x02,
+}
+
+impl Mode {
+    /// Check if UDP is enabled
+    pub fn enable_udp(self) -> bool {
+        matches!(self, Mode::UdpOnly | Mode::TcpAndUdp)
+    }
+
+    /// Check if TCP is enabled
+    pub fn enable_tcp(self) -> bool {
+        matches!(self, Mode::TcpOnly | Mode::TcpAndUdp)
+    }
+
+    /// Merge with another Mode
+    pub fn merge(&self, mode: Mode) -> Mode {
+        let me = *self as u8;
+        let fm = mode as u8;
+        match me | fm {
+            0x01 => Mode::TcpOnly,
+            0x02 => Mode::UdpOnly,
+            0x03 => Mode::TcpAndUdp,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Mode::TcpOnly => f.write_str("tcp_only"),
+            Mode::TcpAndUdp => f.write_str("tcp_and_udp"),
+            Mode::UdpOnly => f.write_str("udp_only"),
+        }
+    }
+}
+
+impl FromStr for Mode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "tcp_only" => Ok(Mode::TcpOnly),
+            "tcp_and_udp" => Ok(Mode::TcpAndUdp),
+            "udp_only" => Ok(Mode::UdpOnly),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -60,10 +115,14 @@ pub struct ServerConfig {
     plugin: Option<PluginConfig>,
     /// Plugin address
     plugin_addr: Option<ServerAddr>,
+
     /// Remark (Profile Name), normally used as an identifier of this erver
     remarks: Option<String>,
     /// ID (SIP008) is a random generated UUID
     id: Option<String>,
+
+    /// Mode
+    mode: Mode,
 }
 
 impl ServerConfig {
@@ -88,6 +147,7 @@ impl ServerConfig {
             plugin_addr: None,
             remarks: None,
             id: None,
+            mode: Mode::TcpOnly,
         }
     }
 
@@ -192,6 +252,16 @@ impl ServerConfig {
         S: Into<String>,
     {
         self.id = Some(id.into())
+    }
+
+    /// Get server's `Mode`
+    pub fn mode(&self) -> Mode {
+        self.mode
+    }
+
+    /// Set server's `Mode`
+    pub fn set_mode(&mut self, mode: Mode) {
+        self.mode = mode;
     }
 
     /// Get URL for QRCode

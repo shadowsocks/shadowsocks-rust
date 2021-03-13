@@ -41,8 +41,9 @@ pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: 
         },
         #[cfg(feature = "local-dns")]
         DnsConfig::LocalDns(ns) => {
-            use crate::{config::Mode, local::dns::dns_resolver::DnsResolver as LocalDnsResolver};
+            use crate::local::dns::dns_resolver::DnsResolver as LocalDnsResolver;
             use log::trace;
+            use shadowsocks::config::Mode;
 
             trace!("initializing direct DNS resolver for {}", ns);
 

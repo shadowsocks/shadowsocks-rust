@@ -8,13 +8,11 @@ use std::{
 use async_trait::async_trait;
 use futures::future;
 use log::{debug, trace};
-use shadowsocks::{dns_resolver::DnsResolve, net::ConnectOpts};
+use shadowsocks::{config::Mode, dns_resolver::DnsResolve, net::ConnectOpts};
 use trust_dns_resolver::proto::{
     op::{Message, Query},
     rr::{DNSClass, Name, RData, RecordType},
 };
-
-use crate::config::Mode;
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
 

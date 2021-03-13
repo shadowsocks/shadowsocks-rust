@@ -16,6 +16,7 @@ use byte_string::ByteStr;
 use futures::future::{self, AbortHandle};
 use log::{debug, info, trace};
 use shadowsocks::{
+    config::Mode,
     relay::{
         socks5::Address,
         tcprelay::proxy_stream::ProxyClientStream,
@@ -28,7 +29,7 @@ use tokio::{
     time,
 };
 
-use crate::{config::Mode, local::context::ServiceContext};
+use crate::local::context::ServiceContext;
 
 use super::{
     server_data::ServerIdent,

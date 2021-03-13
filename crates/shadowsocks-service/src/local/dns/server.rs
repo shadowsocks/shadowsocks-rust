@@ -16,6 +16,7 @@ use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
+    config::Mode,
     lookup_then,
     net::{TcpListener, UdpSocket as ShadowUdpSocket},
     relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
@@ -33,7 +34,6 @@ use trust_dns_resolver::proto::{
 
 use crate::{
     acl::AccessControl,
-    config::Mode,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
 };
 
