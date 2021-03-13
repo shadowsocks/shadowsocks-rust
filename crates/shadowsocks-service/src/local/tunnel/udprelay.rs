@@ -14,6 +14,7 @@ use shadowsocks::{
         socks5::Address,
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
+    ServerAddr,
 };
 use spin::Mutex as SpinMutex;
 use tokio::{
@@ -23,7 +24,6 @@ use tokio::{
 };
 
 use crate::{
-    config::ClientConfig,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::MonProxySocket,
 };
@@ -71,13 +71,13 @@ impl UdpTunnel {
 
     pub async fn run(
         &mut self,
-        client_config: &ClientConfig,
+        client_config: &ServerAddr,
         balancer: PingBalancer,
         forward_addr: &Address,
     ) -> io::Result<()> {
         let socket = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(&self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?

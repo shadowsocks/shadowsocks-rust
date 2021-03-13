@@ -11,20 +11,26 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, ProtocolType},
+    config::{Config, ConfigType},
     run_local,
     run_server,
-    shadowsocks::relay::socks5::Address,
 };
 
 #[tokio::test]
 async fn tcp_tunnel() {
     let _ = env_logger::try_init();
 
-    let mut local_config = Config::load_from_str(
+    let local_config = Config::load_from_str(
         r#"{
-            "local_port": 9110,
-            "local_address": "127.0.0.1",
+            "locals": [
+                {
+                    "local_port": 9110,
+                    "local_address": "127.0.0.1",
+                    "protocol": "tunnel",
+                    "forward_address": "www.example.com",
+                    "forward_port": 80
+                }
+            ],
             "server": "127.0.0.1",
             "server_port": 9120,
             "password": "password",
@@ -33,8 +39,6 @@ async fn tcp_tunnel() {
         ConfigType::Local,
     )
     .unwrap();
-    local_config.local_protocol = ProtocolType::Tunnel;
-    local_config.forward = Some("www.example.com:80".parse::<Address>().unwrap());
 
     let server_config = Config::load_from_str(
         r#"{
@@ -75,10 +79,17 @@ async fn udp_tunnel() {
 
     let _ = env_logger::try_init();
 
-    let mut local_config = Config::load_from_str(
+    let local_config = Config::load_from_str(
         r#"{
-            "local_port": 9210,
-            "local_address": "127.0.0.1",
+            "locals": [
+                {
+                    "local_port": 9210,
+                    "local_address": "127.0.0.1",
+                    "protocol": "tunnel",
+                    "forward_address": "8.8.8.8",
+                    "forward_port": 53
+                }
+            ],
             "server": "127.0.0.1",
             "server_port": 9220,
             "password": "password",
@@ -88,8 +99,6 @@ async fn udp_tunnel() {
         ConfigType::Local,
     )
     .unwrap();
-    local_config.local_protocol = ProtocolType::Tunnel;
-    local_config.forward = Some("8.8.8.8:53".parse::<Address>().unwrap());
 
     let server_config = Config::load_from_str(
         r#"{

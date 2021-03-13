@@ -11,7 +11,7 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, Mode, ProtocolType},
     local::socks::client::socks5::Socks5TcpClient,
     run_local,
     run_server,
@@ -47,10 +47,9 @@ impl Socks5TestServer {
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local_addr = Some(ServerAddr::from(local_addr));
+                cfg.local = vec![LocalConfig::new(ServerAddr::from(local_addr), ProtocolType::Socks)];
                 cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
-                cfg.local_protocol = ProtocolType::Socks;
                 cfg
             },
         }

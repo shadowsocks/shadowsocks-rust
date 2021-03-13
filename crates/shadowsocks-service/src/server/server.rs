@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{future, FutureExt};
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use log::{error, trace};
 use shadowsocks::{
     config::{ManagerAddr, ServerConfig},
@@ -112,7 +112,7 @@ impl Server {
 
     /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
-        let mut vfut = Vec::new();
+        let vfut = FuturesUnordered::new();
 
         if self.mode.enable_tcp() {
             if let Some(plugin_cfg) = self.svr_cfg.plugin() {
@@ -149,7 +149,10 @@ impl Server {
             vfut.push(manager_fut);
         }
 
-        let _ = future::select_all(vfut).await;
+        let (res, _) = vfut.into_future().await;
+        if let Some(Err(err)) = res {
+            error!("servers exited with error: {}", err);
+        }
 
         let err = io::Error::new(ErrorKind::Other, "server exited unexpectly");
         Err(err)

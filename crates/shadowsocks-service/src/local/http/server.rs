@@ -17,10 +17,7 @@ use hyper::{
 use log::{error, info};
 use shadowsocks::{config::ServerAddr, lookup_then};
 
-use crate::{
-    config::ClientConfig,
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
-};
+use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 use super::{client_cache::ProxyClientCache, connector::BypassConnector, dispatcher::HttpDispatcher};
 
@@ -47,7 +44,7 @@ impl Http {
     }
 
     /// Run server
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let bypass_client = Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone()));
 
         let context = self.context.clone();

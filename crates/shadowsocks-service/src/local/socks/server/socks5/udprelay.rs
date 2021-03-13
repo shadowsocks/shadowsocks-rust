@@ -18,16 +18,14 @@ use shadowsocks::{
         socks5::{Address, UdpAssociateHeader},
         udprelay::MAXIMUM_UDP_PAYLOAD_SIZE,
     },
+    ServerAddr,
 };
 use tokio::{net::UdpSocket, time};
 
-use crate::{
-    config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::{UdpAssociationManager, UdpInboundWrite},
-    },
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::{UdpAssociationManager, UdpInboundWrite},
 };
 
 #[derive(Clone)]
@@ -69,10 +67,10 @@ impl Socks5UdpServer {
         }
     }
 
-    pub async fn run(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let socket = match *client_config {
-            ClientConfig::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
-            ClientConfig::DomainName(ref dname, port) => {
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::DomainName(ref dname, port) => {
                 lookup_then!(&self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?
