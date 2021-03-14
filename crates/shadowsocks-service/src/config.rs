@@ -1244,29 +1244,12 @@ impl Config {
 
         // DNS
         {
-            nconfig.dns = match config.dns {
-                Some(SSDnsConfig::Simple(ds)) => match &ds[..] {
-                    #[cfg(feature = "trust-dns")]
-                    "google" => DnsConfig::TrustDns(ResolverConfig::google()),
-
-                    #[cfg(feature = "trust-dns")]
-                    "cloudflare" => DnsConfig::TrustDns(ResolverConfig::cloudflare()),
-                    #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
-                    "cloudflare_tls" => DnsConfig::TrustDns(ResolverConfig::cloudflare_tls()),
-                    #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
-                    "cloudflare_https" => DnsConfig::TrustDns(ResolverConfig::cloudflare_https()),
-
-                    #[cfg(feature = "trust-dns")]
-                    "quad9" => DnsConfig::TrustDns(ResolverConfig::quad9()),
-                    #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
-                    "quad9_tls" => DnsConfig::TrustDns(ResolverConfig::quad9_tls()),
-
-                    nameservers => Config::parse_dns_nameservers(nameservers)?,
-                },
+            match config.dns {
+                Some(SSDnsConfig::Simple(ds)) => nconfig.set_dns_formatted(&ds)?,
                 #[cfg(feature = "trust-dns")]
-                Some(SSDnsConfig::TrustDns(c)) => DnsConfig::TrustDns(c),
-                None => DnsConfig::System,
-            };
+                Some(SSDnsConfig::TrustDns(c)) => nconfig.dns = DnsConfig::TrustDns(c),
+                None => nconfig.dns = DnsConfig::System,
+            }
         }
 
         // TCP nodelay
@@ -1289,6 +1272,33 @@ impl Config {
         }
 
         Ok(nconfig)
+    }
+
+    /// Set DNS configuration in string format
+    ///
+    /// 1. `[(unix|tcp|udp)://]host[:port][,host[:port]]...`
+    /// 2. Pre-defined. Like `google`, `cloudflare`
+    pub fn set_dns_formatted(&mut self, dns: &str) -> Result<(), Error> {
+        self.dns = match dns {
+            #[cfg(feature = "trust-dns")]
+            "google" => DnsConfig::TrustDns(ResolverConfig::google()),
+
+            #[cfg(feature = "trust-dns")]
+            "cloudflare" => DnsConfig::TrustDns(ResolverConfig::cloudflare()),
+            #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
+            "cloudflare_tls" => DnsConfig::TrustDns(ResolverConfig::cloudflare_tls()),
+            #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
+            "cloudflare_https" => DnsConfig::TrustDns(ResolverConfig::cloudflare_https()),
+
+            #[cfg(feature = "trust-dns")]
+            "quad9" => DnsConfig::TrustDns(ResolverConfig::quad9()),
+            #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
+            "quad9_tls" => DnsConfig::TrustDns(ResolverConfig::quad9_tls()),
+
+            nameservers => Config::parse_dns_nameservers(nameservers)?,
+        };
+
+        Ok(())
     }
 
     #[cfg(any(feature = "trust-dns", feature = "local-dns"))]
@@ -1351,7 +1361,7 @@ impl Config {
             } else {
                 let e = Error::new(
                     ErrorKind::Invalid,
-                    "invalid `dns` value, can only be host[:port][,host[:port]]...",
+                    "invalid `dns` value, can only be [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"",
                     None,
                 );
                 return Err(e);

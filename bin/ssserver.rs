@@ -59,6 +59,7 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+        (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
 
         (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
@@ -213,6 +214,10 @@ fn main() {
             }
         };
         config.acl = Some(acl);
+    }
+
+    if let Some(dns) = matches.value_of("DNS") {
+        config.set_dns_formatted(dns).expect("dns");
     }
 
     if matches.is_present("IPV6_FIRST") {

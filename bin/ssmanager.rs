@@ -58,6 +58,7 @@ fn main() {
 
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
+        (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
 
         (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
         (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
@@ -199,6 +200,10 @@ fn main() {
             }
         };
         config.acl = Some(acl);
+    }
+
+    if let Some(dns) = matches.value_of("DNS") {
+        config.set_dns_formatted(dns).expect("dns");
     }
 
     if matches.is_present("IPV6_FIRST") {
