@@ -289,10 +289,72 @@ Example configuration:
 
 ```jsonc
 {
-    // LOCAL: Listen address
+    // LOCAL: Listen address. This is exactly the same as `locals[0]`
     // SERVER: Bind address for remote sockets, mostly used for choosing interface
     "local_address": "127.0.0.1",
     "local_port": 1080,
+
+    // Extended multiple local configuration
+    "locals": [
+      {
+        // Basic configuration, a SOCKS5 local server
+        "local_address": "127.0.0.1",
+        "local_port": 1080,
+        // OPTIONAL. Setting the `mode` for this specific local server instance.
+        // If not set, it will derive from the outer `mode`
+        "mode": "tcp_and_udp"
+      },
+      {
+        // SOCKS5, SOCKS4/4a local server
+        "protocol": "socks",
+        // Listen address
+        "local_address": "127.0.0.1",
+        "local_port": 1081,
+        // OPTIONAL. Enables UDP relay
+        "mode": "tcp_and_udp",
+        // OPTIONAL. Customizing the UDP's binding address. Depending on `mode`, if
+        // - TCP is enabled, then SOCKS5's UDP Association command will return this address
+        // - UDP is enabled, then SOCKS5's UDP server will listen to this address.
+        "local_udp_address": "127.0.0.1",
+        "local_udp_port": 2081
+      },
+      {
+        // Tunnel local server (feature = "local-tunnel")
+        "protocol": "tunnel",
+        // Listen address
+        "local_address": "127.0.0.1",
+        "local_port": 5353,
+        // Forward address, the target of this tunnel
+        // In this example, this will build a `127.0.0.1:5353` -> `8.8.8.8:53` tunnel
+        "forward_address": "8.8.8.8",
+        "forward_port": 53,
+        // OPTIONAL. Customizing whether to start TCP and UDP tunnel
+        "mode": "tcp_only"
+      },
+      {
+        // HTTP local server (feature = "local-http")
+        "protocol": "http",
+        // Listen address
+        "local_address": "127.0.0.1",
+        "local_port": 3128
+      },
+      {
+        // DNS local server (feature = "local-dns")
+        // This DNS works like China-DNS, it will send requests to `local_dns` and `remote_dns` and choose by ACL rules
+        "protocol": "dns",
+        // Listen address
+        "local_address": "127.0.0.1",
+        "local_port": 53,
+        // Local DNS address, DNS queries will be sent directly to this address
+        "local_dns_address": "114.114.114.114",
+        // OPTIONAL. Local DNS's port, 53 by default
+        "local_dns_port": 53,
+        // Remote DNS address, DNS queries will be sent through ssserver to this address
+        "remote_dns_address": "8.8.8.8",
+        // OPTIONAL. Remote DNS's port, 53 by default
+        "remote_dns_port": 53
+      }
+    ],
 
     // Server configuration
     // listen on [::] for dual stack support
