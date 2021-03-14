@@ -111,14 +111,16 @@ Read `Cargo.toml` for more details.
 
 Create a ShadowSocks' configuration file. Example
 
-```json
+```jsonc
 {
     "server": "my_server_ip",
     "server_port": 8388,
-    "local_address": "127.0.0.1",
-    "local_port": 1080,
     "password": "mypassword",
-    "method": "aes-256-gcm"
+    "method": "aes-256-gcm",
+    // ONLY FOR `sslocal`
+    // Delete these lines if you are running `ssserver` or `ssmanager`
+    "local_address": "127.0.0.1",
+    "local_port": 1080
 }
 ```
 
@@ -126,7 +128,7 @@ Detailed explanation could be found in [shadowsocks' documentation](https://gith
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one server. You can also disable individual servers.
 
-```json
+```jsonc
 {
     "servers": [
         {
@@ -150,6 +152,8 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
             "method": "chacha20-ietf-poly1305"
         }
     ],
+    // ONLY FOR `sslocal`
+    // Delete these lines if you are running `ssserver` or `ssmanager`
     "local_port": 1080,
     "local_address": "127.0.0.1"
 }
@@ -291,6 +295,7 @@ Example configuration:
 {
     // LOCAL: Listen address. This is exactly the same as `locals[0]`
     // SERVER: Bind address for remote sockets, mostly used for choosing interface
+    //         Don't set it if you don't know what's this for.
     "local_address": "127.0.0.1",
     "local_port": 1080,
 
