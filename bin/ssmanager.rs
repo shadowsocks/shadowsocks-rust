@@ -139,19 +139,6 @@ fn main() {
         config.local_addr = Some(bind_addr);
     }
 
-    // Overrides
-    if matches.is_present("UDP_ONLY") {
-        if let Some(ref mut m) = config.manager {
-            m.mode = m.mode.merge(Mode::UdpOnly);
-        }
-    }
-
-    if matches.is_present("TCP_AND_UDP") {
-        if let Some(ref mut m) = config.manager {
-            m.mode = Mode::TcpAndUdp;
-        }
-    }
-
     if matches.is_present("NO_DELAY") {
         config.no_delay = true;
     }
@@ -185,6 +172,19 @@ fn main() {
 
         if let Some(sh) = matches.value_of("SERVER_HOST") {
             manager_config.server_host = sh.parse::<ManagerServerHost>().unwrap();
+        }
+    }
+
+    // Overrides
+    if matches.is_present("UDP_ONLY") {
+        if let Some(ref mut m) = config.manager {
+            m.mode = m.mode.merge(Mode::UdpOnly);
+        }
+    }
+
+    if matches.is_present("TCP_AND_UDP") {
+        if let Some(ref mut m) = config.manager {
+            m.mode = Mode::TcpAndUdp;
         }
     }
 
