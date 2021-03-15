@@ -318,10 +318,7 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocke
     if !set_dual_stack {
         UdpSocket::bind(addr).await
     } else {
-        let socket = match *addr {
-            SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp()))?,
-            SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::dgram(), Some(Protocol::udp()))?,
-        };
+        let socket = Socket::new(Domain::for_address(*addr), Type::DGRAM, Some(Protocol::UDP))?;
 
         if let Err(err) = socket.set_only_v6(false) {
             warn!("failed to set IPV6_V6ONLY: false for listener, error: {}", err);
@@ -352,6 +349,6 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocke
 
         // UdpSocket::from_std requires socket to be non-blocked
         socket.set_nonblocking(true)?;
-        UdpSocket::from_std(socket.into_udp_socket())
+        UdpSocket::from_std(socket.into())
     }
 }

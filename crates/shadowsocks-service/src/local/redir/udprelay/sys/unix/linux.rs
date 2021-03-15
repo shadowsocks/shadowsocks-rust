@@ -62,11 +62,7 @@ impl UdpRedirSocket {
             ));
         }
 
-        let domain = match addr {
-            SocketAddr::V4(..) => Domain::ipv4(),
-            SocketAddr::V6(..) => Domain::ipv6(),
-        };
-        let socket = Socket::new(domain, Type::dgram(), Some(Protocol::udp()))?;
+        let socket = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))?;
         set_socket_before_bind(&addr, &socket)?;
 
         socket.set_nonblocking(true)?;
@@ -77,7 +73,7 @@ impl UdpRedirSocket {
 
         socket.bind(&SockAddr::from(addr))?;
 
-        let io = AsyncFd::new(socket.into_udp_socket())?;
+        let io = AsyncFd::new(socket.into())?;
         Ok(UdpRedirSocket { io })
     }
 

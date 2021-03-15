@@ -64,7 +64,7 @@ impl TcpStreamRedirExt for TcpStream {
                 let peer_addr = self.peer_addr()?;
                 let bind_addr = self.local_addr()?;
 
-                PF.natlook(&bind_addr, &peer_addr, Protocol::tcp())
+                PF.natlook(&bind_addr, &peer_addr, Protocol::TCP)
             }
             #[cfg(any(
                 target_os = "freebsd",
