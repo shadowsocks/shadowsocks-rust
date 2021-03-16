@@ -750,9 +750,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.88"
+version = "0.2.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03b07a082330a35e43f63177cc01689da34fbffa0105e1246cf0311472cac73a"
+checksum = "538c092e5586f4cdd7dd8078c4a79220e3e168880218124dcbce860f0ea938c6"
 
 [[package]]
 name = "libmimalloc-sys"
@@ -871,9 +871,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.7.9"
+version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5dede4e2065b3842b8b0af444119f3aa331cc7cc2dd20388bfb0f5d5a38823a"
+checksum = "2182a122f3b7f3f5329cb1972cee089ba2459a0a80a56935e6e674f096f8d839"
 dependencies = [
  "libc",
  "log",
@@ -1493,7 +1493,7 @@ dependencies = [
  "serde_urlencoded",
  "shadowsocks-crypto",
  "socket2 0.4.0",
- "spin 0.7.1",
+ "spin 0.8.0",
  "thiserror",
  "tokio",
  "trust-dns-resolver",
@@ -1565,7 +1565,7 @@ dependencies = [
  "serde",
  "shadowsocks",
  "socket2 0.4.0",
- "spin 0.7.1",
+ "spin 0.8.0",
  "strum",
  "strum_macros",
  "thiserror",
@@ -1633,9 +1633,9 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13287b4da9d1207a4f4929ac390916d64eacfe236a487e9a9f5b3be392be5162"
+checksum = "796bf9647cbb0a58af0c5dfa5999ea63bcf12ab6620fbcab8b6bbfe74298fce2"
 
 [[package]]
 name = "strsim"
@@ -1918,9 +1918,9 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
 name = "trust-dns-https"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2663f69cd36a5e99a93825d1f3aff834de2bb3cca2989316f3c9504a63a0c0a5"
+checksum = "94f5a85f9974174213ae487f27bad10485dd8336b20e1b45b1946d832a870c94"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -1941,9 +1941,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-proto"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98a0381b2864c2978db7f8e17c7b23cca5a3a5f99241076e13002261a8ecbabd"
+checksum = "8d57e219ba600dd96c2f6d82eb79645068e14edbc5c7e27514af40436b88150c"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -1960,15 +1960,16 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
+ "tinyvec",
  "tokio",
  "url",
 ]
 
 [[package]]
 name = "trust-dns-resolver"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3072d18c10bd621cb00507d59cfab5517862285c353160366e37fbf4c74856e4"
+checksum = "b0437eea3a6da51acc1e946545ff53d5b8fb2611ff1c3bed58522dde100536ae"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -1992,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-rustls"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "094ff0f3c89393b47a7bb6837a97b28688ef01e57a2400949db1bbb98c932502"
+checksum = "a5d327928ba8d8bdcf3fe9a7ee34d9b0e040b6ab2a5bd7c1cf8dfeabdaea696b"
 dependencies = [
  "futures-channel",
  "futures-io",

@@ -72,7 +72,7 @@ pin-project = "1.0"
 lazy_static = "1"
 thiserror = "1.0"
 
-spin = { version = "0.7", features = ["std"] }
+spin = { version = "0.8", features = ["std"] }
 lru_time_cache = "0.11"
 bytes = "1.0"
 byte_string = "1.0"
@@ -96,7 +96,7 @@ http = { version = "0.2", optional = true }
 hyper = { version = "0.14", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-trust-dns-resolver = { version = "0.20", optional = true, features = ["serde-config"] }
+trust-dns-resolver = { version = "0.20.1", optional = true, features = ["serde-config"] }
 
 ipnet = "2.3"
 iprange = "0.6"

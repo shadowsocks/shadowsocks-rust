@@ -1294,6 +1294,8 @@ impl Config {
             "quad9" => DnsConfig::TrustDns(ResolverConfig::quad9()),
             #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
             "quad9_tls" => DnsConfig::TrustDns(ResolverConfig::quad9_tls()),
+            #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
+            "quad9_https" => DnsConfig::TrustDns(ResolverConfig::quad9_https()),
 
             nameservers => Config::parse_dns_nameservers(nameservers)?,
         };
