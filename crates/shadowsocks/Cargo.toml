@@ -37,7 +37,7 @@ byte_string = "1.0"
 base64 = "0.13"
 url = "2.2"
 lazy_static = "1.4"
-spin = { version = "0.8", features = ["std"] }
+spin = { version = "0.9", features = ["std"] }
 pin-project = "1.0"
 bloomfilter = "1.0.2"
 thiserror = "1.0"
