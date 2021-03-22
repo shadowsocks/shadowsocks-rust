@@ -39,7 +39,7 @@ url = "2.2"
 lazy_static = "1.4"
 spin = { version = "0.9", features = ["std"] }
 pin-project = "1.0"
-bloomfilter = "1.0.2"
+bloomfilter = "1.0.5"
 thiserror = "1.0"
 
 serde = { version = "1.0", features = ["derive"] }
