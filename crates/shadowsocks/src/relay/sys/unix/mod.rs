@@ -3,7 +3,7 @@ use std::os::unix::io::AsRawFd;
 use std::{
     io::{self, Error, ErrorKind},
     mem,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 #[cfg(any(target_os = "android"))]
 use std::{os::unix::io::RawFd, path::Path};
@@ -16,25 +16,6 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::net::{TcpSocket, TcpStream, UdpSocket};
 
 use crate::net::{AddrFamily, ConnectOpts};
-
-/// Convert `sockaddr_storage` to `SocketAddr`
-#[allow(dead_code)]
-pub fn sockaddr_to_std(saddr: &libc::sockaddr_storage) -> io::Result<SocketAddr> {
-    match saddr.ss_family as libc::c_int {
-        libc::AF_INET => unsafe {
-            let addr: SocketAddrV4 = mem::transmute_copy(saddr);
-            Ok(SocketAddr::V4(addr))
-        },
-        libc::AF_INET6 => unsafe {
-            let addr: SocketAddrV6 = mem::transmute_copy(saddr);
-            Ok(SocketAddr::V6(addr))
-        },
-        _ => {
-            let err = Error::new(ErrorKind::InvalidData, "family must be either AF_INET or AF_INET6");
-            Err(err)
-        }
-    }
-}
 
 cfg_if! {
     if #[cfg(target_os = "android")] {

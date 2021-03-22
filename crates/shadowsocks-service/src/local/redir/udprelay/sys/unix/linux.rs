@@ -1,5 +1,4 @@
 use std::{
-    convert::TryFrom,
     io::{self, Error, ErrorKind},
     mem,
     net::{SocketAddr, UdpSocket},
@@ -15,7 +14,6 @@ use tokio::io::unix::AsyncFd;
 use crate::{
     config::RedirType,
     local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedir},
-    sys::sockaddr_to_std,
 };
 
 pub struct UdpRedirSocket {
@@ -177,44 +175,47 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
     Ok(())
 }
 
-fn get_destination_addr(msg: &libc::msghdr) -> Option<libc::sockaddr_storage> {
+fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
     unsafe {
-        let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
-        while !cmsg.is_null() {
-            let rcmsg = &*cmsg;
-            match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
-                (libc::SOL_IP, libc::IP_RECVORIGDSTADDR) => {
-                    let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
+        let (_, addr) = SockAddr::init(|dst_addr, dst_addr_len| {
+            let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
+            while !cmsg.is_null() {
+                let rcmsg = &*cmsg;
+                match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
+                    (libc::SOL_IP, libc::IP_RECVORIGDSTADDR) => {
+                        ptr::copy(
+                            libc::CMSG_DATA(cmsg),
+                            dst_addr as *mut _,
+                            mem::size_of::<libc::sockaddr_in>(),
+                        );
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
 
-                    ptr::copy(
-                        libc::CMSG_DATA(cmsg),
-                        &mut dst_addr as *mut _ as *mut _,
-                        mem::size_of::<libc::sockaddr_in>(),
-                    );
+                        return Ok(());
+                    }
+                    (libc::SOL_IPV6, libc::IPV6_RECVORIGDSTADDR) => {
+                        ptr::copy(
+                            libc::CMSG_DATA(cmsg),
+                            dst_addr as *mut _,
+                            mem::size_of::<libc::sockaddr_in6>(),
+                        );
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
 
-                    return Some(dst_addr);
+                        return Ok(());
+                    }
+                    _ => {}
                 }
-                (libc::SOL_IPV6, libc::IPV6_RECVORIGDSTADDR) => {
-                    let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
-
-                    ptr::copy(
-                        libc::CMSG_DATA(cmsg),
-                        &mut dst_addr as *mut _ as *mut _,
-                        mem::size_of::<libc::sockaddr_in6>(),
-                    );
-
-                    return Some(dst_addr);
-                }
-                _ => {}
+                cmsg = libc::CMSG_NXTHDR(msg, cmsg);
             }
-            cmsg = libc::CMSG_NXTHDR(msg, cmsg);
-        }
-    }
 
-    None
+            let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
+            Err(err)
+        })?;
+
+        Ok(addr.as_socket().expect("SocketAddr"))
+    }
 }
 
-pub fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
     unsafe {
         let mut control_buf = [0u8; 64];
         let mut src_addr: libc::sockaddr_storage = mem::zeroed();
@@ -231,8 +232,7 @@ pub fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, 
         msg.msg_iovlen = 1;
 
         msg.msg_control = control_buf.as_mut_ptr() as *mut _;
-        // This is f*** s***, some platform define msg_controllen as size_t, some define as u32
-        msg.msg_controllen = TryFrom::try_from(control_buf.len()).expect("failed to convert usize to msg_controllen");
+        msg.msg_controllen = control_buf.len() as libc::size_t;
 
         let fd = socket.as_raw_fd();
         let ret = libc::recvmsg(fd, &mut msg, 0);
@@ -240,14 +240,16 @@ pub fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, 
             return Err(Error::last_os_error());
         }
 
-        let dst_addr = match get_destination_addr(&msg) {
-            None => {
-                let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
-                return Err(err);
-            }
-            Some(d) => d,
-        };
+        let (_, src_saddr) = SockAddr::init(|a, l| {
+            ptr::copy_nonoverlapping(msg.msg_name, a as *mut _, msg.msg_namelen as usize);
+            *l = msg.msg_namelen;
+            Ok(())
+        })?;
 
-        Ok((ret as usize, sockaddr_to_std(&src_addr)?, sockaddr_to_std(&dst_addr)?))
+        Ok((
+            ret as usize,
+            src_saddr.as_socket().expect("SocketAddr"),
+            get_destination_addr(&msg)?,
+        ))
     }
 }

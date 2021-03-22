@@ -15,7 +15,6 @@ use tokio::io::unix::AsyncFd;
 use crate::{
     config::RedirType,
     local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
-    sys::sockaddr_to_std,
 };
 
 pub fn check_support_tproxy() -> io::Result<()> {
@@ -186,45 +185,44 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
     Ok(())
 }
 
-fn get_destination_addr(msg: &libc::msghdr) -> Option<libc::sockaddr_storage> {
+fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
     // https://www.freebsd.org/cgi/man.cgi?ip(4)
     //
     // Called `recvmsg` with `IP_ORIGDSTADDR` set
 
     unsafe {
-        let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
-        while !cmsg.is_null() {
-            let rcmsg = &*cmsg;
-            match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
-                (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR) => {
-                    let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
+        let (_, addr) = SockAddr::init(|dst_addr, dst_addr_len| {
+            let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
+            while !cmsg.is_null() {
+                let rcmsg = &*cmsg;
+                match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
+                    (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR) => {
+                        ptr::copy_nonoverlapping(libc::CMSG_DATA(cmsg), dst_addr, mem::size_of::<libc::sockaddr_in>());
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
 
-                    ptr::copy(
-                        libc::CMSG_DATA(cmsg),
-                        &mut dst_addr as *mut _ as *mut _,
-                        mem::size_of::<libc::sockaddr_in>(),
-                    );
+                        return Ok(());
+                    }
+                    (libc::IPPROTO_IPV6, libc::IPV6_ORIGDSTADDR) => {
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg),
+                            dst_addr as *mut _,
+                            mem::size_of::<libc::sockaddr_in6>(),
+                        );
+                        *dst_addr_len = mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
 
-                    return Some(dst_addr);
+                        return Ok(());
+                    }
+                    _ => {}
                 }
-                (libc::IPPROTO_IPV6, libc::IPV6_ORIGDSTADDR) => {
-                    let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
-
-                    ptr::copy(
-                        libc::CMSG_DATA(cmsg),
-                        &mut dst_addr as *mut _ as *mut _,
-                        mem::size_of::<libc::sockaddr_in6>(),
-                    );
-
-                    return Some(dst_addr);
-                }
-                _ => {}
+                cmsg = libc::CMSG_NXTHDR(msg, cmsg);
             }
-            cmsg = libc::CMSG_NXTHDR(msg, cmsg);
-        }
-    }
 
-    None
+            let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
+            Err(err)
+        })?;
+
+        Ok(addr.as_socket().expect("SocketAddr"))
+    }
 }
 
 fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr, SocketAddr)> {
@@ -252,14 +250,16 @@ fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, Sock
             return Err(Error::last_os_error());
         }
 
-        let dst_addr = match get_destination_addr(&msg) {
-            None => {
-                let err = Error::new(ErrorKind::InvalidData, "missing destination address in msghdr");
-                return Err(err);
-            }
-            Some(d) => d,
-        };
+        let (_, src_saddr) = SockAddr::init(|a, l| {
+            ptr::copy_nonoverlapping(msg.msg_name, a, msg.msg_namelen as usize);
+            *l = msg.msg_namelen;
+            Ok(())
+        })?;
 
-        Ok((ret as usize, sockaddr_to_std(&src_addr)?, sockaddr_to_std(&dst_addr)?))
+        Ok((
+            ret as usize,
+            src_saddr.as_socket().expect("SocketAddr"),
+            get_destination_addr(&msg)?,
+        ))
     }
 }

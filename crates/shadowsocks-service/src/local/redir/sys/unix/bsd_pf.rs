@@ -4,15 +4,13 @@ use std::{
     ffi::CString,
     io::{self, Error, ErrorKind},
     mem,
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::SocketAddr,
     ptr,
 };
 
 use lazy_static::lazy_static;
 use log::trace;
-use socket2::Protocol;
-
-use crate::sys::sockaddr_to_std;
+use socket2::{Protocol, SockAddr};
 
 mod ffi {
     use cfg_if::cfg_if;
@@ -161,7 +159,8 @@ impl PacketFilter {
                 SocketAddr::V4(ref v4) => {
                     pnl.af = libc::AF_INET as libc::sa_family_t;
 
-                    let sockaddr: *const libc::sockaddr_in = v4 as *const SocketAddrV4 as *const _;
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in;
 
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
@@ -172,7 +171,8 @@ impl PacketFilter {
                 SocketAddr::V6(ref v6) => {
                     pnl.af = libc::AF_INET6 as libc::sa_family_t;
 
-                    let sockaddr: *const libc::sockaddr_in6 = v6 as *const SocketAddrV6 as *const _;
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in6;
 
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
@@ -188,7 +188,8 @@ impl PacketFilter {
                         return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv4"));
                     }
 
-                    let sockaddr: *const libc::sockaddr_in = v4 as *const SocketAddrV4 as *const _;
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in;
 
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
@@ -201,7 +202,8 @@ impl PacketFilter {
                         return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv6"));
                     }
 
-                    let sockaddr: *const libc::sockaddr_in6 = v6 as *const SocketAddrV6 as *const _;
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in6;
 
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
@@ -222,31 +224,35 @@ impl PacketFilter {
                 return Err(nerr);
             }
 
-            let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
+            let (_, dst_addr) = SockAddr::init(|dst_addr, addr_len| {
+                if pnl.af == libc::AF_INET as libc::sa_family_t {
+                    let dst_addr: &mut libc::sockaddr_in = &mut *(dst_addr as *mut _);
+                    dst_addr.sin_family = pnl.af;
+                    dst_addr.sin_port = pnl.rdport();
+                    ptr::copy_nonoverlapping(
+                        &pnl.rdaddr.pfa.v4,
+                        &mut dst_addr.sin_addr,
+                        mem::size_of_val(&pnl.rdaddr.pfa.v4),
+                    );
+                    *addr_len = mem::size_of_val(&pnl.rdaddr.pfa.v4) as libc::socklen_t;
+                } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
+                    let dst_addr: &mut libc::sockaddr_in6 = &mut *(dst_addr as *mut _);
+                    dst_addr.sin6_family = pnl.af;
+                    dst_addr.sin6_port = pnl.rdport();
+                    ptr::copy_nonoverlapping(
+                        &pnl.rdaddr.pfa.v6,
+                        &mut dst_addr.sin6_addr,
+                        mem::size_of_val(&pnl.rdaddr.pfa.v6),
+                    );
+                    *addr_len = mem::size_of_val(&pnl.rdaddr.pfa.v6) as libc::socklen_t;
+                } else {
+                    unreachable!("sockaddr should be either ipv4 or ipv6");
+                }
 
-            if pnl.af == libc::AF_INET as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in = &mut *(&mut dst_addr as *mut _ as *mut _);
-                dst_addr.sin_family = pnl.af;
-                dst_addr.sin_port = pnl.rdport();
-                ptr::copy_nonoverlapping(
-                    &pnl.rdaddr.pfa.v4,
-                    &mut dst_addr.sin_addr,
-                    mem::size_of_val(&pnl.rdaddr.pfa.v4),
-                );
-            } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in6 = &mut *(&mut dst_addr as *mut _ as *mut _);
-                dst_addr.sin6_family = pnl.af;
-                dst_addr.sin6_port = pnl.rdport();
-                ptr::copy_nonoverlapping(
-                    &pnl.rdaddr.pfa.v6,
-                    &mut dst_addr.sin6_addr,
-                    mem::size_of_val(&pnl.rdaddr.pfa.v6),
-                );
-            } else {
-                unreachable!("sockaddr should be either ipv4 or ipv6");
-            }
+                Ok(())
+            })?;
 
-            sockaddr_to_std(&dst_addr)
+            Ok(dst_addr.as_socket().expect("SocketAddr"))
         }
     }
 }

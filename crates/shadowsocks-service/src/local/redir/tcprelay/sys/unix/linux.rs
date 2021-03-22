@@ -6,12 +6,12 @@ use std::{
 };
 
 use async_trait::async_trait;
+use socket2::SockAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 use crate::{
     config::RedirType,
     local::redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
-    sys::sockaddr_to_std,
 };
 
 #[async_trait]
@@ -51,41 +51,41 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     let fd = s.as_raw_fd();
 
     unsafe {
-        let mut target_addr: libc::sockaddr_storage = mem::zeroed();
-        let mut target_addr_len = mem::size_of_val(&target_addr) as libc::socklen_t;
+        let (_, target_addr) = SockAddr::init(|target_addr, target_addr_len| {
+            match s.local_addr()? {
+                SocketAddr::V4(..) => {
+                    let ret = libc::getsockopt(
+                        fd,
+                        libc::SOL_IP,
+                        libc::SO_ORIGINAL_DST,
+                        target_addr as *mut _,
+                        target_addr_len, // libc::socklen_t
+                    );
+                    if ret != 0 {
+                        let err = Error::last_os_error();
+                        return Err(err);
+                    }
+                }
+                SocketAddr::V6(..) => {
+                    let ret = libc::getsockopt(
+                        fd,
+                        libc::SOL_IPV6,
+                        libc::IP6T_SO_ORIGINAL_DST,
+                        target_addr as *mut _,
+                        target_addr_len, // libc::socklen_t
+                    );
 
-        match s.local_addr()? {
-            SocketAddr::V4(..) => {
-                let ret = libc::getsockopt(
-                    fd,
-                    libc::SOL_IP,
-                    libc::SO_ORIGINAL_DST,
-                    &mut target_addr as *mut _ as *mut _,
-                    &mut target_addr_len,
-                );
-                if ret != 0 {
-                    let err = Error::last_os_error();
-                    return Err(err);
+                    if ret != 0 {
+                        let err = Error::last_os_error();
+                        return Err(err);
+                    }
                 }
             }
-            SocketAddr::V6(..) => {
-                let ret = libc::getsockopt(
-                    fd,
-                    libc::SOL_IPV6,
-                    libc::IP6T_SO_ORIGINAL_DST,
-                    &mut target_addr as *mut _ as *mut _,
-                    &mut target_addr_len,
-                );
-
-                if ret != 0 {
-                    let err = Error::last_os_error();
-                    return Err(err);
-                }
-            }
-        }
+            Ok(())
+        })?;
 
         // Convert sockaddr_storage to SocketAddr
-        sockaddr_to_std(&target_addr)
+        Ok(target_addr.as_socket().expect("SocketAddr"))
     }
 }
 
