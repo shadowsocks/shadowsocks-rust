@@ -249,8 +249,11 @@ impl PingBalancerContext {
 
     async fn checker_task_real(&self) {
         loop {
-            self.check_once(false).await;
             time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
+
+            // Sleep before check.
+            // PingBalancer already checked once when constructing
+            self.check_once(false).await;
         }
     }
 }
