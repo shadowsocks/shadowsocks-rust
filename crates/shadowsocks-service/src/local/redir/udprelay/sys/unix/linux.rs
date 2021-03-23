@@ -7,6 +7,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
@@ -232,7 +233,13 @@ fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, Sock
         msg.msg_iovlen = 1;
 
         msg.msg_control = control_buf.as_mut_ptr() as *mut _;
-        msg.msg_controllen = control_buf.len() as libc::size_t;
+        cfg_if! {
+            if #[cfg(any(target_env = "musl", all(target_env = "uclibc", target_arch = "arm")))] {
+                msg.msg_controllen = control_buf.len() as libc::socklen_t;
+            } else {
+                msg.msg_controllen = control_buf.len() as libc::size_t;
+            }
+        }
 
         let fd = socket.as_raw_fd();
         let ret = libc::recvmsg(fd, &mut msg, 0);
