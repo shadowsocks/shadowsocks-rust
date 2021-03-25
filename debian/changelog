@@ -1,3 +1,27 @@
+shadowsocks-rust (1.10.0) unstable; urgency=medium
+
+  ## Features
+
+  - #452 `sslocal` supports starting multiple instances in the same process
+      - Add `locals` in extended configuration format for specifying multiple local server instances
+      - (Android Only) Support `unix://` schema in `dns` configuration
+      - Support `tcp://` and `udp://` in `dns`configuration for setting DNS protocol. Uses both TCP and UDP if not specified.
+  - Support `quad9_https` predefined DNS servers
+  - Updated `shadowsocks-crypto` to `v0.2`, which `Cipher` implementation uses `enum` static dispatch instead of `Box`ed Trait Object for dynamic dispatch
+
+  ## BUG Fixes
+
+  - PingBalancer 2nd check will be sent 10s after 1st initialization check.
+
+  ## Breaking Changes
+
+  - `sslocal`'s command line options are now for creating a new local instance:
+      - `--local-addr`, `--forward-addr`, `-U`, `-u`, `--protocol`, ... will only applied to the local instance specified by `--local-addr`
+  - `ssserver`'s command line options are now for creating a new server instance:
+      - `-U` and `-u` will only applied to the local instance specified by `--server-addr`
+
+  -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 25 Mar 2021 18:10:00 +0800
+
 shadowsocks-rust (1.9.2) unstable; urgency=medium
 
   ## Features
