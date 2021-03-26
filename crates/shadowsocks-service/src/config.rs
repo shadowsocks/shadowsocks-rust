@@ -1573,6 +1573,7 @@ impl fmt::Display for Config {
                         mode: Some(local.mode.to_string()),
                         protocol: match local.protocol {
                             ProtocolType::Socks => None,
+                            #[allow(unreachable_patterns)]
                             p => Some(p.as_str().to_owned()),
                         },
                         #[cfg(feature = "local-redir")]

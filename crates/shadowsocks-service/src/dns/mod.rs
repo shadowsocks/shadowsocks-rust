@@ -4,7 +4,7 @@ use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
 
 use crate::config::DnsConfig;
 
-#[allow(unused_variables)]
+#[allow(unused_variables, dead_code)]
 pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: &ConnectOpts) -> Option<DnsResolver> {
     match dns {
         DnsConfig::System => {
