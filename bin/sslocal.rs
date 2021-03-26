@@ -45,6 +45,8 @@ fn main() {
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U requires[LOCAL_ADDR] "Server mode TCP_AND_UDP")
+        (@arg PROTOCOL: --protocol +takes_value requires[LOCAL_ADDR] default_value("socks") possible_values(ProtocolType::available_protocols()) +next_line_help "Protocol that for communicating with clients")
+        (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value requires[LOCAL_ADDR] {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
@@ -59,7 +61,6 @@ fn main() {
         (@group SERVER_CONFIG =>
             (@attributes +multiple arg[SERVER_ADDR URL]))
 
-        (@arg PROTOCOL: --protocol +takes_value default_value("socks") possible_values(ProtocolType::available_protocols()) +next_line_help "Protocol that for communicating with clients")
 
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
@@ -69,7 +70,6 @@ fn main() {
         (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
         (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
 
-        (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
 
         (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
         (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
@@ -96,7 +96,7 @@ fn main() {
     #[cfg(feature = "local-tunnel")]
     {
         app = clap_app!(@app (app)
-            (@arg FORWARD_ADDR: -f --("forward-addr") +takes_value {validator::validate_address} required_if("PROTOCOL", "tunnel") "Forwarding data directly to this address (for tunnel)")
+            (@arg FORWARD_ADDR: -f --("forward-addr") +takes_value requires[LOCAL_ADDR] {validator::validate_address} required_if("PROTOCOL", "tunnel") "Forwarding data directly to this address (for tunnel)")
         );
     }
 
@@ -121,13 +121,13 @@ fn main() {
 
         if RedirType::tcp_default() != RedirType::NotSupported {
             app = clap_app!(@app (app)
-                (@arg TCP_REDIR: --("tcp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::tcp_default().name()) "TCP redir (transparent proxy) type")
+                (@arg TCP_REDIR: --("tcp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) default_value(RedirType::tcp_default().name()) "TCP redir (transparent proxy) type")
             );
         }
 
         if RedirType::udp_default() != RedirType::NotSupported {
             app = clap_app!(@app (app)
-                (@arg UDP_REDIR: --("udp-redir") +takes_value possible_values(&available_redir_types) default_value(RedirType::udp_default().name()) "UDP redir (transparent proxy) type")
+                (@arg UDP_REDIR: --("udp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) default_value(RedirType::udp_default().name()) "UDP redir (transparent proxy) type")
             );
         }
     }
@@ -149,15 +149,15 @@ fn main() {
     #[cfg(feature = "local-dns")]
     {
         app = clap_app!(@app (app)
-            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_name_server_addr} "Specify the address of local DNS server, send queries directly")
-            (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
+            (@arg LOCAL_DNS_ADDR: --("local-dns-addr") +takes_value required_if("PROTOCOL", "dns") requires[LOCAL_ADDR] {validator::validate_name_server_addr} "Specify the address of local DNS server, send queries directly")
+            (@arg REMOTE_DNS_ADDR: --("remote-dns-addr") +takes_value required_if("PROTOCOL", "dns") requires[LOCAL_ADDR] {validator::validate_address} "Specify the address of remote DNS server, send queries through shadowsocks' tunnel")
 
         );
 
         #[cfg(target_os = "android")]
         {
             app = clap_app!(@app (app)
-                (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
+                (@arg DNS_LOCAL_ADDR: --("dns-addr") +takes_value requires_all(&["LOCAL_ADDR", "REMOTE_DNS_ADDR"]) {validator::validate_server_addr} "DNS address, listen to this address if specified")
             );
         }
     }
