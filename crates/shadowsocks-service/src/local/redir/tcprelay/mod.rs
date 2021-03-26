@@ -130,7 +130,10 @@ pub async fn run_tcp_redir(
 
     let actual_local_addr = listener.local_addr().expect("determine port bound to");
 
-    info!("shadowsocks TCP redirect listening on {}", actual_local_addr);
+    info!(
+        "shadowsocks TCP redirect ({}) listening on {}",
+        redir_ty, actual_local_addr
+    );
 
     loop {
         let (socket, peer_addr) = match listener.accept().await {

@@ -42,7 +42,7 @@ fn main() {
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
 
-        (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDRESS") +next_line_help
+        (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDRESS")
             "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html), \
                 the only required fields are \"manager_address\" and \"manager_port\". \
                 Servers defined will be created when process is started.")
@@ -53,7 +53,7 @@ fn main() {
         (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(available_ciphers()) +next_line_help "Default encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(available_ciphers()) "Default encryption method")
         (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} "Default timeout seconds for TCP relay")
 
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")

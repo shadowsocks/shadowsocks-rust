@@ -45,12 +45,12 @@ fn main() {
         (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
         (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
         (@arg TCP_AND_UDP: -U requires[LOCAL_ADDR] "Server mode TCP_AND_UDP")
-        (@arg PROTOCOL: --protocol +takes_value requires[LOCAL_ADDR] default_value("socks") possible_values(ProtocolType::available_protocols()) +next_line_help "Protocol that for communicating with clients")
+        (@arg PROTOCOL: --protocol +takes_value requires[LOCAL_ADDR] possible_values(ProtocolType::available_protocols()) "Protocol for communicating with clients (SOCKS5 by default)")
         (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value requires[LOCAL_ADDR] {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
 
         (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
         (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] possible_values(available_ciphers()) +next_line_help "Server's encryption method")
+        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] possible_values(available_ciphers()) "Server's encryption method")
         (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
 
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
@@ -121,13 +121,13 @@ fn main() {
 
         if RedirType::tcp_default() != RedirType::NotSupported {
             app = clap_app!(@app (app)
-                (@arg TCP_REDIR: --("tcp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) default_value(RedirType::tcp_default().name()) "TCP redir (transparent proxy) type")
+                (@arg TCP_REDIR: --("tcp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) "TCP redir (transparent proxy) type")
             );
         }
 
         if RedirType::udp_default() != RedirType::NotSupported {
             app = clap_app!(@app (app)
-                (@arg UDP_REDIR: --("udp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) default_value(RedirType::udp_default().name()) "UDP redir (transparent proxy) type")
+                (@arg UDP_REDIR: --("udp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) "UDP redir (transparent proxy) type")
             );
         }
     }

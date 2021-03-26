@@ -125,7 +125,10 @@ impl UdpRedir {
         };
 
         let local_addr = listener.local_addr().expect("determine port bound to");
-        info!("shadowsocks UDP redirect listening on {}", local_addr);
+        info!(
+            "shadowsocks UDP redirect ({}) listening on {}",
+            self.redir_ty, local_addr
+        );
 
         let manager = UdpAssociationManager::new(
             self.context.clone(),
