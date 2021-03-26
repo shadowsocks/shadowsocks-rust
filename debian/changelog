@@ -1,3 +1,16 @@
+shadowsocks-rust (1.10.1) unstable; urgency=medium
+
+  ## BUG Fixed
+
+  - #469 Compilation error on Android
+
+  ## Miscellaneous
+
+  - `sslocal` checks new local instance's parameters dependency
+    - `--protocol`, `--forward-addr`, ... will require `--local-addr` to be specified
+
+  -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 27 Mar 2021 00:13:00 +0800
+
 shadowsocks-rust (1.10.0) unstable; urgency=medium
 
   ## Features
