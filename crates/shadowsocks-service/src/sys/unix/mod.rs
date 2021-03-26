@@ -1,8 +1,10 @@
-use std::io::{self, Error};
+use std::io;
 
 #[allow(dead_code)]
 #[cfg(not(target_os = "android"))]
 pub fn set_nofile(nofile: u64) -> io::Result<()> {
+    use std::io::Error;
+
     unsafe {
         // set both soft and hard limit
         let lim = libc::rlimit {

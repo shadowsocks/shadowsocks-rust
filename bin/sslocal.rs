@@ -306,7 +306,7 @@ fn main() {
             }
         }
 
-        #[cfg(target_os = "android")]
+        #[cfg(all(feature = "local-dns", target_os = "android"))]
         if protocol != ProtocolType::Dns {
             // Start a DNS local server binding to DNS_LOCAL_ADDR
             //
