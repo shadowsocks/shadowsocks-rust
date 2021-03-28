@@ -921,7 +921,9 @@ impl Config {
                         get_local_address(config.local_address, local_port, config.ipv6_first.unwrap_or(false));
 
                     // shadowsocks uses SOCKS5 by default
-                    nconfig.local.push(LocalConfig::new(local_addr, ProtocolType::Socks));
+                    let mut local_config = LocalConfig::new(local_addr, ProtocolType::Socks);
+                    local_config.mode = global_mode;
+                    nconfig.local.push(local_config);
                 }
 
                 // Ext locals
