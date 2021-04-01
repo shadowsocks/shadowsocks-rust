@@ -3,8 +3,8 @@
 use std::{io, net::SocketAddr, time::Duration};
 
 use bytes::BytesMut;
-use lazy_static::lazy_static;
 use log::{trace, warn};
+use once_cell::sync::Lazy;
 use tokio::{
     net::{ToSocketAddrs, UdpSocket},
     time,
@@ -20,6 +20,8 @@ use crate::{
 
 use super::crypto_io::{decrypt_payload, encrypt_payload};
 
+static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
+
 /// UDP client for communicating with ShadowSocks' server
 pub struct ProxySocket {
     socket: UdpSocket,
@@ -33,9 +35,6 @@ pub struct ProxySocket {
 impl ProxySocket {
     /// Create a client to communicate with Shadowsocks' UDP server
     pub async fn connect(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
-        lazy_static! {
-            static ref DEFAULT_CONNECT_OPTS: ConnectOpts = ConnectOpts::default();
-        }
         ProxySocket::connect_with_opts(context, svr_cfg, &DEFAULT_CONNECT_OPTS).await
     }
 

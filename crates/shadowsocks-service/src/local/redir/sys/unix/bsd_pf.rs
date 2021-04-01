@@ -8,8 +8,8 @@ use std::{
     ptr,
 };
 
-use lazy_static::lazy_static;
 use log::trace;
+use once_cell::sync::Lazy;
 use socket2::{Protocol, SockAddr};
 
 mod ffi {
@@ -265,16 +265,12 @@ impl Drop for PacketFilter {
     }
 }
 
-lazy_static! {
-    pub static ref PF: PacketFilter = {
-        match PacketFilter::open() {
-            Ok(pf) => pf,
-            Err(err) if err.kind() == ErrorKind::PermissionDenied => {
-                panic!("open /dev/pf permission denied, consider restart with root user");
-            }
-            Err(err) => {
-                panic!("open /dev/pf {}", err);
-            }
-        }
-    };
-}
+pub static PF: Lazy<PacketFilter> = Lazy::new(|| match PacketFilter::open() {
+    Ok(pf) => pf,
+    Err(err) if err.kind() == ErrorKind::PermissionDenied => {
+        panic!("open /dev/pf permission denied, consider restart with root user");
+    }
+    Err(err) => {
+        panic!("open /dev/pf {}", err);
+    }
+});

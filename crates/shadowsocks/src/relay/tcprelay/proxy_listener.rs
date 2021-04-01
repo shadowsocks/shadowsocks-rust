@@ -2,7 +2,7 @@
 
 use std::{io, net::SocketAddr};
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -24,12 +24,11 @@ pub struct ProxyListener {
     context: SharedContext,
 }
 
+static DEFAULT_ACCEPT_OPTS: Lazy<AcceptOpts> = Lazy::new(Default::default);
+
 impl ProxyListener {
     /// Create a `ProxyListener` binding to a specific address
     pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxyListener> {
-        lazy_static! {
-            static ref DEFAULT_ACCEPT_OPTS: AcceptOpts = AcceptOpts::default();
-        };
         ProxyListener::bind_with_opts(context, svr_cfg, DEFAULT_ACCEPT_OPTS.clone()).await
     }
 

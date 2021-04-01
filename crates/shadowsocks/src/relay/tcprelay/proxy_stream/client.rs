@@ -8,8 +8,8 @@ use std::{
 
 use bytes::{BufMut, BytesMut};
 use futures::ready;
-use lazy_static::lazy_static;
 use log::trace;
+use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
@@ -33,6 +33,8 @@ pub struct ProxyClientStream<S> {
     context: SharedContext,
 }
 
+static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
+
 impl ProxyClientStream<TcpStream> {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
     pub async fn connect<A>(
@@ -43,9 +45,6 @@ impl ProxyClientStream<TcpStream> {
     where
         A: Into<Address>,
     {
-        lazy_static! {
-            static ref DEFAULT_CONNECT_OPTS: ConnectOpts = ConnectOpts::default();
-        }
         ProxyClientStream::connect_with_opts(context, svr_cfg, addr, &DEFAULT_CONNECT_OPTS).await
     }
 
@@ -78,9 +77,6 @@ where
         A: Into<Address>,
         F: FnOnce(TcpStream) -> S,
     {
-        lazy_static! {
-            static ref DEFAULT_CONNECT_OPTS: ConnectOpts = ConnectOpts::default();
-        }
         ProxyClientStream::connect_with_opts_map(context, svr_cfg, addr, &DEFAULT_CONNECT_OPTS, map_fn).await
     }
 
