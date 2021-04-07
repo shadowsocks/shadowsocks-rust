@@ -1,8 +1,8 @@
 class ShadowsocksRust < Formula
     desc "shadowsocks is a fast tunnel proxy that helps you bypass firewalls"
     homepage "https://github.com/shadowsocks/shadowsocks-rust"
-    url "https://github.com/shadowsocks/shadowsocks-rust/archive/refs/tags/v1.10.2.tar.gz"
-    version "1.10.2"
+    url "https://github.com/shadowsocks/shadowsocks-rust/archive/refs/tags/v1.10.3.tar.gz"
+    version "1.10.3"
     sha256 "00fb90b6f80d01c6b40f6cfeb49d70fbec9f659bfa268d6834e79fe1f670d55e"
     license "MIT"
 

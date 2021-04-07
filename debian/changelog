@@ -1,3 +1,15 @@
+shadowsocks-rust (1.10.2) unstable; urgency=medium
+
+  ## BUG Fixed
+
+  - #472 Fixed `SO_INCOMING_CPU` when building on some Linux targets. rust-lang/socket2#213
+
+shadowsocks-rust (1.10.2) unstable; urgency=medium
+
+  ## BUG Fixed
+
+  - `mode` in basic configuration format doesn't work for local instance
+
 shadowsocks-rust (1.10.1) unstable; urgency=medium
 
   ## BUG Fixed
