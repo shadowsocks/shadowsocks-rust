@@ -92,6 +92,8 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     manager_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     manager_port: Option<u16>,
@@ -923,6 +925,20 @@ impl Config {
                     // shadowsocks uses SOCKS5 by default
                     let mut local_config = LocalConfig::new(local_addr, ProtocolType::Socks);
                     local_config.mode = global_mode;
+                    local_config.protocol = match config.protocol {
+                        None => ProtocolType::Socks,
+                        Some(p) => match p.parse::<ProtocolType>() {
+                            Ok(p) => p,
+                            Err(..) => {
+                                let err = Error::new(
+                                    ErrorKind::Malformed,
+                                    "`protocol` invalid",
+                                    Some(format!("unrecognized protocol {}", p)),
+                                );
+                                return Err(err);
+                            }
+                        },
+                    };
                     nconfig.local.push(local_config);
                 }
 
@@ -1546,6 +1562,9 @@ impl fmt::Display for Config {
                     ServerAddr::SocketAddr(ref sa) => sa.port(),
                     ServerAddr::DomainName(.., port) => port,
                 });
+                if local.protocol != ProtocolType::Socks {
+                    jconf.protocol = Some(local.protocol.as_str().to_owned());
+                }
             } else {
                 let mut jlocals = Vec::with_capacity(self.local.len());
                 for local in &self.local {
