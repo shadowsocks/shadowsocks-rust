@@ -12,9 +12,12 @@ use std::{
 #[cfg(feature = "trust-dns")]
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
+use cfg_if::cfg_if;
 #[cfg(feature = "trust-dns")]
 use futures::future::{self, AbortHandle};
-use log::{error, log_enabled, trace, Level};
+#[cfg(feature = "trust-dns")]
+use log::error;
+use log::{log_enabled, trace, Level};
 use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
@@ -78,39 +81,54 @@ impl Drop for DnsResolver {
     }
 }
 
-struct EmptyResolveResult;
+cfg_if! {
+    if #[cfg(feature = "trust-dns")] {
+        /// Resolved result
+        enum EitherResolved<A, B, C, D> {
+            Tokio(A),
+            TrustDnsSystem(B),
+            TrustDns(C),
+            Custom(D),
+        }
 
-impl Iterator for EmptyResolveResult {
-    type Item = SocketAddr;
+        impl<A, B, C, D> Iterator for EitherResolved<A, B, C, D>
+        where
+            A: Iterator<Item = SocketAddr>,
+            B: Iterator<Item = SocketAddr>,
+            C: Iterator<Item = SocketAddr>,
+            D: Iterator<Item = SocketAddr>,
+        {
+            type Item = SocketAddr;
 
-    fn next(&mut self) -> Option<SocketAddr> {
-        None
-    }
-}
+            fn next(&mut self) -> Option<SocketAddr> {
+                match *self {
+                    EitherResolved::Tokio(ref mut a) => a.next(),
+                    EitherResolved::TrustDnsSystem(ref mut b) => b.next(),
+                    EitherResolved::TrustDns(ref mut c) => c.next(),
+                    EitherResolved::Custom(ref mut d) => d.next(),
+                }
+            }
+        }
+    } else {
+        /// Resolved result
+        enum EitherResolved<A, D> {
+            Tokio(A),
+            Custom(D),
+        }
 
-// Resolved result
-enum EitherResolved<A = EmptyResolveResult, B = EmptyResolveResult, C = EmptyResolveResult, D = EmptyResolveResult> {
-    Tokio(A),
-    TrustDnsSystem(B),
-    TrustDns(C),
-    Custom(D),
-}
+        impl<A, D> Iterator for EitherResolved<A, D>
+        where
+            A: Iterator<Item = SocketAddr>,
+            D: Iterator<Item = SocketAddr>,
+        {
+            type Item = SocketAddr;
 
-impl<A, B, C, D> Iterator for EitherResolved<A, B, C, D>
-where
-    A: Iterator<Item = SocketAddr>,
-    B: Iterator<Item = SocketAddr>,
-    C: Iterator<Item = SocketAddr>,
-    D: Iterator<Item = SocketAddr>,
-{
-    type Item = SocketAddr;
-
-    fn next(&mut self) -> Option<SocketAddr> {
-        match *self {
-            EitherResolved::Tokio(ref mut a) => a.next(),
-            EitherResolved::TrustDnsSystem(ref mut b) => b.next(),
-            EitherResolved::TrustDns(ref mut c) => c.next(),
-            EitherResolved::Custom(ref mut d) => d.next(),
+            fn next(&mut self) -> Option<SocketAddr> {
+                match *self {
+                    EitherResolved::Tokio(ref mut a) => a.next(),
+                    EitherResolved::Custom(ref mut d) => d.next(),
+                }
+            }
         }
     }
 }

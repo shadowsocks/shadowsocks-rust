@@ -1,7 +1,5 @@
 //! Options for connecting to remote server
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-use std::ffi::OsString;
 use std::net::IpAddr;
 
 /// Options for connecting to TCP remote server
@@ -15,6 +13,9 @@ pub struct TcpSocketOpts {
 
     /// `TCP_NODELAY`
     pub nodelay: bool,
+
+    /// `TCP_FASTOPEN`, enables TFO
+    pub fastopen: bool,
 }
 
 impl Default for TcpSocketOpts {
@@ -23,6 +24,7 @@ impl Default for TcpSocketOpts {
             send_buffer_size: None,
             recv_buffer_size: None,
             nodelay: false,
+            fastopen: false,
         }
     }
 }
@@ -47,7 +49,7 @@ pub struct ConnectOpts {
 
     /// Outbound socket binds to interface
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-    pub bind_interface: Option<OsString>,
+    pub bind_interface: Option<String>,
 
     /// TCP options
     pub tcp: TcpSocketOpts,

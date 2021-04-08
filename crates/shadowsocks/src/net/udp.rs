@@ -8,16 +8,13 @@ use std::{
 
 use pin_project::pin_project;
 
-use crate::{
-    context::Context,
-    relay::{
-        socks5::Address,
-        sys::{create_inbound_udp_socket, create_outbound_udp_socket},
-    },
-    ServerAddr,
-};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
-use super::{AddrFamily, ConnectOpts};
+use super::{
+    sys::{create_inbound_udp_socket, create_outbound_udp_socket},
+    AddrFamily,
+    ConnectOpts,
+};
 
 /// Wrappers for outbound `UdpSocket`
 #[pin_project]

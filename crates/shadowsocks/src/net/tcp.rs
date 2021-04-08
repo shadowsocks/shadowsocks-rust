@@ -21,22 +21,23 @@ use tokio::{
     net::{TcpListener as TokioTcpListener, TcpSocket, TcpStream as TokioTcpStream},
 };
 
-use crate::{
-    context::Context,
-    relay::{socks5::Address, sys::tcp_stream_connect},
-    ServerAddr,
-};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
-use super::{AcceptOpts, ConnectOpts};
+use super::{
+    sys::{set_tcp_fastopen, TcpStream as SysTcpStream},
+    AcceptOpts,
+    ConnectOpts,
+};
 
 /// TcpStream for outbound connections
 #[pin_project]
-pub struct TcpStream(#[pin] TokioTcpStream);
+pub struct TcpStream(#[pin] SysTcpStream);
 
 impl TcpStream {
     /// Connects to address
     pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
-        tcp_stream_connect(addr, opts).await.map(TcpStream)
+        // tcp_stream_connect(addr, opts).await.map(TcpStream)
+        SysTcpStream::connect(*addr, opts).await.map(TcpStream)
     }
 
     /// Connects shadowsocks server
@@ -46,10 +47,10 @@ impl TcpStream {
         opts: &ConnectOpts,
     ) -> io::Result<TcpStream> {
         let stream = match *addr {
-            ServerAddr::SocketAddr(ref addr) => tcp_stream_connect(addr, opts).await?,
+            ServerAddr::SocketAddr(ref addr) => SysTcpStream::connect(*addr, opts).await?,
             ServerAddr::DomainName(ref domain, port) => {
                 lookup_then!(&context, &domain, port, |addr| {
-                    tcp_stream_connect(&addr, opts).await
+                    SysTcpStream::connect(addr, opts).await
                 })?
                 .1
             }
@@ -65,10 +66,10 @@ impl TcpStream {
         opts: &ConnectOpts,
     ) -> io::Result<TcpStream> {
         let stream = match *addr {
-            Address::SocketAddress(ref addr) => tcp_stream_connect(addr, opts).await?,
+            Address::SocketAddress(ref addr) => SysTcpStream::connect(*addr, opts).await?,
             Address::DomainNameAddress(ref domain, port) => {
                 lookup_then!(&context, &domain, port, |addr| {
-                    tcp_stream_connect(&addr, opts).await
+                    SysTcpStream::connect(addr, opts).await
                 })?
                 .1
             }
@@ -112,18 +113,6 @@ impl AsyncWrite for TcpStream {
     }
 }
 
-impl From<TokioTcpStream> for TcpStream {
-    fn from(s: TokioTcpStream) -> TcpStream {
-        TcpStream(s)
-    }
-}
-
-impl From<TcpStream> for TokioTcpStream {
-    fn from(s: TcpStream) -> TokioTcpStream {
-        s.0
-    }
-}
-
 /// `TcpListener` for accepting inbound connections
 pub struct TcpListener {
     inner: TokioTcpListener,
@@ -133,25 +122,28 @@ pub struct TcpListener {
 impl TcpListener {
     /// Creates a new TcpListener, which will be bound to the specified address.
     pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
+        let socket = match *addr {
+            SocketAddr::V4(..) => TcpSocket::new_v4()?,
+            SocketAddr::V6(..) => TcpSocket::new_v6()?,
+        };
+
+        // On platforms with Berkeley-derived sockets, this allows to quickly
+        // rebind a socket, without needing to wait for the OS to clean up the
+        // previous one.
+        //
+        // On Windows, this allows rebinding sockets which are actively in use,
+        // which allows “socket hijacking”, so we explicitly don't set it here.
+        // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+        #[cfg(not(windows))]
+        socket.set_reuseaddr(true)?;
+
         let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {
             v6.ip().is_unspecified()
         } else {
             false
         };
 
-        if !set_dual_stack {
-            let inner = TokioTcpListener::bind(addr).await?;
-            Ok(TcpListener { inner, accept_opts })
-        } else {
-            let socket = match *addr {
-                SocketAddr::V4(..) => TcpSocket::new_v4()?,
-                SocketAddr::V6(..) => TcpSocket::new_v6()?,
-            };
-
-            // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
-            #[cfg(not(windows))]
-            socket.set_reuseaddr(true)?;
-
+        if set_dual_stack {
             // Set to DUAL STACK mode by default.
             // WARNING: This would fail if you want to start another program listening on the same port.
             //
@@ -191,11 +183,20 @@ impl TcpListener {
                 }
                 Err(err) => return Err(err),
             }
-
-            // mio's default backlog is 1024
-            let inner = socket.listen(1024)?;
-            Ok(TcpListener { inner, accept_opts })
+        } else {
+            socket.bind(*addr)?;
         }
+
+        // mio's default backlog is 1024
+        let inner = socket.listen(1024)?;
+
+        // Enable TFO if supported
+        // macos requires TCP_FASTOPEN to be set after listen(), but other platform doesn't have this constraint
+        if accept_opts.tcp.fastopen {
+            set_tcp_fastopen(&inner)?;
+        }
+
+        Ok(TcpListener { inner, accept_opts })
     }
 
     /// Create a `TcpListener` from tokio's `TcpListener`

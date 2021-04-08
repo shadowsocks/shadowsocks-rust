@@ -16,13 +16,7 @@ use shadowsocks::{
         tcprelay::proxy_stream::{ProxyClientStream, ProxyClientStreamReadHalf, ProxyClientStreamWriteHalf},
     },
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-        TcpStream as TokioTcpStream,
-    },
-};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::ServerIdent},
@@ -34,8 +28,8 @@ use super::auto_proxy_io::AutoProxyIo;
 /// Unified stream for bypassed and proxied connections
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
-    Proxied(#[pin] ProxyClientStream<MonProxyStream<TokioTcpStream>>),
-    Bypassed(#[pin] TokioTcpStream),
+    Proxied(#[pin] ProxyClientStream<MonProxyStream<TcpStream>>),
+    Bypassed(#[pin] TcpStream),
 }
 
 impl AutoProxyClientStream {
@@ -160,8 +154,8 @@ impl AsyncWrite for AutoProxyClientStream {
     }
 }
 
-impl From<ProxyClientStream<MonProxyStream<TokioTcpStream>>> for AutoProxyClientStream {
-    fn from(s: ProxyClientStream<MonProxyStream<TokioTcpStream>>) -> Self {
+impl From<ProxyClientStream<MonProxyStream<TcpStream>>> for AutoProxyClientStream {
+    fn from(s: ProxyClientStream<MonProxyStream<TcpStream>>) -> Self {
         AutoProxyClientStream::Proxied(s)
     }
 }
@@ -177,7 +171,7 @@ impl AutoProxyClientStream {
                 )
             }
             AutoProxyClientStream::Bypassed(s) => {
-                let (r, w) = s.into_split();
+                let (r, w) = tokio::io::split(s);
                 (
                     AutoProxyClientStreamReadHalf::Bypassed(r),
                     AutoProxyClientStreamWriteHalf::Bypassed(w),
@@ -189,8 +183,8 @@ impl AutoProxyClientStream {
 
 #[pin_project(project = AutoProxyClientStreamReadHalfProj)]
 pub enum AutoProxyClientStreamReadHalf {
-    Proxied(#[pin] ProxyClientStreamReadHalf<MonProxyStream<TokioTcpStream>>),
-    Bypassed(#[pin] OwnedReadHalf),
+    Proxied(#[pin] ProxyClientStreamReadHalf<MonProxyStream<TcpStream>>),
+    Bypassed(#[pin] ReadHalf<TcpStream>),
 }
 
 impl AutoProxyIo for AutoProxyClientStreamReadHalf {
@@ -210,8 +204,8 @@ impl AsyncRead for AutoProxyClientStreamReadHalf {
 
 #[pin_project(project = AutoProxyClientStreamWriteHalfProj)]
 pub enum AutoProxyClientStreamWriteHalf {
-    Proxied(#[pin] ProxyClientStreamWriteHalf<MonProxyStream<TokioTcpStream>>),
-    Bypassed(#[pin] OwnedWriteHalf),
+    Proxied(#[pin] ProxyClientStreamWriteHalf<MonProxyStream<TcpStream>>),
+    Bypassed(#[pin] WriteHalf<TcpStream>),
 }
 
 impl AutoProxyIo for AutoProxyClientStreamWriteHalf {

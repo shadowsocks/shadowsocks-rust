@@ -18,7 +18,7 @@ use shadowsocks::{
 use tokio::net::UnixStream;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::{TcpStream, UdpSocket},
+    net::UdpSocket,
     time,
 };
 use trust_dns_resolver::proto::{
@@ -31,7 +31,7 @@ use crate::net::{FlowStat, MonProxySocket, MonProxyStream};
 /// Collection of various DNS connections
 pub enum DnsClient {
     TcpLocal {
-        stream: TcpStream,
+        stream: ShadowTcpStream,
     },
     UdpLocal {
         socket: UdpSocket,
@@ -42,7 +42,7 @@ pub enum DnsClient {
         stream: UnixStream,
     },
     TcpRemote {
-        stream: ProxyClientStream<MonProxyStream<TcpStream>>,
+        stream: ProxyClientStream<MonProxyStream<ShadowTcpStream>>,
     },
     UdpRemote {
         socket: MonProxySocket,
@@ -53,7 +53,7 @@ pub enum DnsClient {
 impl DnsClient {
     /// Connect to local provided TCP DNS server
     pub async fn connect_tcp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<DnsClient> {
-        let stream = ShadowTcpStream::connect_with_opts(&ns, connect_opts).await?.into();
+        let stream = ShadowTcpStream::connect_with_opts(&ns, connect_opts).await?;
         Ok(DnsClient::TcpLocal { stream })
     }
 

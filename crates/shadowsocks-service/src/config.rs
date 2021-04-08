@@ -41,8 +41,6 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-use std::ffi::OsString;
 #[cfg(any(unix, target_os = "android", feature = "local-flow-stat"))]
 use std::path::PathBuf;
 use std::{
@@ -130,6 +128,8 @@ struct SSConfig {
     nofile: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fast_open: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -720,6 +720,8 @@ pub struct Config {
 
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
+    /// Set `TCP_FASTOPEN` socket option
+    pub fast_open: bool,
     /// `RLIMIT_NOFILE` option for *nix systems
     #[cfg(all(unix, not(target_os = "android")))]
     pub nofile: Option<u64>,
@@ -729,7 +731,7 @@ pub struct Config {
     pub outbound_fwmark: Option<u32>,
     /// Set `SO_BINDTODEVICE` socket option for outbound sockets
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-    pub outbound_bind_interface: Option<OsString>,
+    pub outbound_bind_interface: Option<String>,
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
@@ -833,6 +835,7 @@ impl Config {
             ipv6_first: false,
 
             no_delay: false,
+            fast_open: false,
             #[cfg(all(unix, not(target_os = "android")))]
             nofile: None,
 
@@ -1278,6 +1281,11 @@ impl Config {
         // TCP nodelay
         if let Some(b) = config.no_delay {
             nconfig.no_delay = b;
+        }
+
+        // TCP fast open
+        if let Some(b) = config.fast_open {
+            nconfig.fast_open = b;
         }
 
         // UDP
@@ -1760,6 +1768,10 @@ impl fmt::Display for Config {
 
         if self.no_delay {
             jconf.no_delay = Some(self.no_delay);
+        }
+
+        if self.fast_open {
+            jconf.fast_open = Some(self.fast_open);
         }
 
         match self.dns {

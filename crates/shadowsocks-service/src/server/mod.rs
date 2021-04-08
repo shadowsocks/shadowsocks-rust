@@ -3,7 +3,7 @@
 use std::{io, sync::Arc};
 
 use futures::{future, FutureExt};
-use log::{trace, warn};
+use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts};
 
 use crate::{
@@ -30,7 +30,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     #[cfg(feature = "stream-cipher")]
     for server in config.server.iter() {
         if server.method().is_stream() {
-            warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
+            log::warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
                     DO NOT USE. It will be removed in the future.", server.method(), server.addr());
         }
     }
@@ -39,7 +39,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     if let Some(nofile) = config.nofile {
         use crate::sys::set_nofile;
         if let Err(err) = set_nofile(nofile) {
-            warn!("set_nofile {} failed, error: {}", nofile, err);
+            log::warn!("set_nofile {} failed, error: {}", nofile, err);
         }
     }
 
@@ -63,11 +63,13 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
     connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
     connect_opts.tcp.nodelay = config.no_delay;
+    connect_opts.tcp.fastopen = config.fast_open;
 
     let mut accept_opts = AcceptOpts::default();
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
+    accept_opts.tcp.fastopen = config.fast_open;
 
     let resolver = match build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
         Some(resolver) => Some(Arc::new(resolver)),

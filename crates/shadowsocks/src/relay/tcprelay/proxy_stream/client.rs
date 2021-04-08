@@ -13,7 +13,6 @@ use once_cell::sync::Lazy;
 use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::TcpStream,
     time,
 };
 
@@ -44,13 +43,13 @@ pub struct ProxyClientStream<S> {
 
 static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
 
-impl ProxyClientStream<TcpStream> {
+impl ProxyClientStream<OutboundTcpStream> {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
     pub async fn connect<A>(
         context: SharedContext,
         svr_cfg: &ServerConfig,
         addr: A,
-    ) -> io::Result<ProxyClientStream<TcpStream>>
+    ) -> io::Result<ProxyClientStream<OutboundTcpStream>>
     where
         A: Into<Address>,
     {
@@ -63,7 +62,7 @@ impl ProxyClientStream<TcpStream> {
         svr_cfg: &ServerConfig,
         addr: A,
         opts: &ConnectOpts,
-    ) -> io::Result<ProxyClientStream<TcpStream>>
+    ) -> io::Result<ProxyClientStream<OutboundTcpStream>>
     where
         A: Into<Address>,
     {
@@ -84,7 +83,7 @@ where
     ) -> io::Result<ProxyClientStream<S>>
     where
         A: Into<Address>,
-        F: FnOnce(TcpStream) -> S,
+        F: FnOnce(OutboundTcpStream) -> S,
     {
         ProxyClientStream::connect_with_opts_map(context, svr_cfg, addr, &DEFAULT_CONNECT_OPTS, map_fn).await
     }
@@ -99,7 +98,7 @@ where
     ) -> io::Result<ProxyClientStream<S>>
     where
         A: Into<Address>,
-        F: FnOnce(TcpStream) -> S,
+        F: FnOnce(OutboundTcpStream) -> S,
     {
         let stream = match svr_cfg.timeout() {
             Some(d) => {
@@ -129,12 +128,7 @@ where
             opts
         );
 
-        Ok(ProxyClientStream::from_stream(
-            context,
-            map_fn(stream.into()),
-            svr_cfg,
-            addr,
-        ))
+        Ok(ProxyClientStream::from_stream(context, map_fn(stream), svr_cfg, addr))
     }
 
     /// Create a `ProxyClientStream` with a connected `stream` to a shadowsocks' server
