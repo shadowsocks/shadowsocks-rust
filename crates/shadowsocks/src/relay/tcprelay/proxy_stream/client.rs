@@ -177,19 +177,25 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        if self.addr.is_none() {
-            // For all subsequence calls, just proxy it to self.stream
-            return self.stream.poll_write_encrypted(cx, buf);
+        match self.addr {
+            None => {
+                // For all subsequence calls, just proxy it to self.stream
+                return self.stream.poll_write_encrypted(cx, buf);
+            }
+            Some(ref addr) => {
+                let addr_length = addr.serialized_len();
+
+                let mut buffer = BytesMut::with_capacity(addr_length + buf.len());
+                addr.write_to_buf(&mut buffer);
+                buffer.put_slice(buf);
+
+                ready!(self.stream.poll_write_encrypted(cx, &buffer))?;
+
+                // fallthrough. take the self.addr out
+            }
         }
 
-        let addr = self.addr.take().unwrap();
-        let addr_length = addr.serialized_len();
-
-        let mut buffer = BytesMut::with_capacity(addr_length + buf.len());
-        addr.write_to_buf(&mut buffer);
-        buffer.put_slice(buf);
-
-        ready!(self.stream.poll_write_encrypted(cx, &buffer))?;
+        let _ = self.addr.take();
 
         // NOTE:
         // poll_write will return Ok(0) if buf.len() == 0
