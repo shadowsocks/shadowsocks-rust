@@ -6,6 +6,7 @@ use std::{
     task::{self, Poll},
 };
 
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
@@ -15,7 +16,9 @@ use crate::{
 };
 
 /// A stream for communicating with shadowsocks' proxy client
+#[pin_project]
 pub struct ProxyServerStream<S> {
+    #[pin]
     stream: CryptoStream<S>,
     context: SharedContext,
 }
@@ -71,9 +74,10 @@ impl<S> AsyncRead for ProxyServerStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let context = unsafe { &*(self.context.as_ref() as *const _) };
-        self.stream.poll_read_decrypted(cx, context, buf)
+    #[inline]
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        this.stream.poll_read_decrypted(cx, &this.context, buf)
     }
 }
 
@@ -81,20 +85,26 @@ impl<S> AsyncWrite for ProxyServerStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        self.stream.poll_write_encrypted(cx, buf)
+    #[inline]
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().stream.poll_write_encrypted(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.stream.poll_flush(cx)
+    #[inline]
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.stream.poll_shutdown(cx)
+    #[inline]
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_shutdown(cx)
     }
 }
 
+/// Owned read half produced by `ProxyServerStream::into_split`
+#[pin_project]
 pub struct ProxyServerStreamReadHalf<S> {
+    #[pin]
     reader: CryptoStreamReadHalf<S>,
     context: SharedContext,
 }
@@ -103,13 +113,17 @@ impl<S> AsyncRead for ProxyServerStreamReadHalf<S>
 where
     S: AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let context = unsafe { &*(self.context.as_ref() as *const _) };
-        self.reader.poll_read_decrypted(cx, context, buf)
+    #[inline]
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        this.reader.poll_read_decrypted(cx, &this.context, buf)
     }
 }
 
+/// Owned write half produced by `ProxyServerStream::into_split`
+#[pin_project]
 pub struct ProxyServerStreamWriteHalf<S> {
+    #[pin]
     writer: CryptoStreamWriteHalf<S>,
 }
 
@@ -117,15 +131,18 @@ impl<S> AsyncWrite for ProxyServerStreamWriteHalf<S>
 where
     S: AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        self.writer.poll_write_encrypted(cx, buf)
+    #[inline]
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        self.project().writer.poll_write_encrypted(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.writer.poll_flush(cx)
+    #[inline]
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().writer.poll_flush(cx)
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.writer.poll_shutdown(cx)
+    #[inline]
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().writer.poll_shutdown(cx)
     }
 }

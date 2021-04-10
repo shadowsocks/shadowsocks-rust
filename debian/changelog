@@ -1,3 +1,25 @@
+shadowsocks-rust (1.10.5) unstable; urgency=medium
+
+  ## BUG Fixed
+
+  - `ProxyClientStream` should keep the concatenated first packet buffer alive before asynchronous `write()` finishes
+
+shadowsocks-rust (1.10.4) unstable; urgency=medium
+
+  # Fixed BUG
+
+  - `ProxyClientStream::poll_write` may lose the `Address` in the packet to be sent if socket returns `EAGAIN`
+
+  # Features
+
+  - Support `protocol` in basic configuration format
+
+shadowsocks-rust (1.10.3) unstable; urgency=medium
+
+  ## BUG Fixed
+
+  - #472 Fixed `SO_INCOMING_CPU` when building on some Linux targets. rust-lang/socket2#213
+
 shadowsocks-rust (1.10.2) unstable; urgency=medium
 
   ## BUG Fixed
