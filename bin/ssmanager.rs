@@ -50,7 +50,6 @@ fn main() {
         (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
         (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
-        (@arg NO_DELAY: --("no-delay") !takes_value "Set TCP_NODELAY option for socket")
 
         (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
         (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(available_ciphers()) "Default encryption method")
@@ -59,6 +58,11 @@ fn main() {
         (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit (only for *nix systems)")
         (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
         (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
+
+        (@arg TCP_NO_DELAY: --("tcp-no-delay") !takes_value alias("no-delay") "Set TCP_NODELAY option for socket")
+
+        (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
+        (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
 
         (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
         (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
@@ -139,7 +143,7 @@ fn main() {
         config.local_addr = Some(bind_addr);
     }
 
-    if matches.is_present("NO_DELAY") {
+    if matches.is_present("TCP_NO_DELAY") {
         config.no_delay = true;
     }
 
@@ -208,6 +212,14 @@ fn main() {
 
     if matches.is_present("IPV6_FIRST") {
         config.ipv6_first = true;
+    }
+
+    if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
+        config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+    }
+
+    if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
+        config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
     }
 
     if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
