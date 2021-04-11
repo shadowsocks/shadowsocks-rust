@@ -123,6 +123,7 @@ struct SSConfig {
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
+    #[cfg(all(unix, not(target_os = "android")))]
     #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -718,6 +719,7 @@ pub struct Config {
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
     /// `RLIMIT_NOFILE` option for *nix systems
+    #[cfg(all(unix, not(target_os = "android")))]
     pub nofile: Option<u64>,
 
     /// Set `SO_MARK` socket option for outbound sockets
@@ -829,6 +831,7 @@ impl Config {
             ipv6_first: false,
 
             no_delay: false,
+            #[cfg(all(unix, not(target_os = "android")))]
             nofile: None,
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1282,7 +1285,10 @@ impl Config {
         nconfig.udp_max_associations = config.udp_max_associations;
 
         // RLIMIT_NOFILE
-        nconfig.nofile = config.nofile;
+        #[cfg(all(unix, not(target_os = "android")))]
+        {
+            nconfig.nofile = config.nofile;
+        }
 
         // Uses IPv6 first
         if let Some(f) = config.ipv6_first {
@@ -1774,7 +1780,10 @@ impl fmt::Display for Config {
 
         jconf.udp_max_associations = self.udp_max_associations;
 
-        jconf.nofile = self.nofile;
+        #[cfg(all(unix, not(target_os = "android")))]
+        {
+            jconf.nofile = self.nofile;
+        }
 
         if self.ipv6_first {
             jconf.ipv6_first = Some(self.ipv6_first);
