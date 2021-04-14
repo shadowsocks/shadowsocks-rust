@@ -58,10 +58,10 @@ arc-swap = { version = "1.2", optional = true }
 notify = { version = "5.0.0-pre.5", optional = true }
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.2", features = ["ring"] }
+shadowsocks-crypto = { version = "0.2", features = ["ring"], git = "https://github.com/DuckSoft/shadowsocks-crypto.git", branch = "workaround-crypto2-md5-fault" }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.2", features = [] }
+shadowsocks-crypto = { version = "0.2", features = [], git = "https://github.com/DuckSoft/shadowsocks-crypto.git", branch = "workaround-crypto2-md5-fault" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
