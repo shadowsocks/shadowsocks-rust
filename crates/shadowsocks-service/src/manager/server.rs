@@ -194,7 +194,7 @@ impl Manager {
             );
         }
 
-        let flow_stat = server.flow_stat().clone();
+        let flow_stat = server.flow_stat();
 
         let (server_fut, abortable) = future::abortable(async move { server.run().await });
         tokio::spawn(server_fut);

@@ -1332,11 +1332,10 @@ impl Config {
     #[cfg(any(feature = "trust-dns", feature = "local-dns"))]
     fn parse_dns_nameservers(nameservers: &str) -> Result<DnsConfig, Error> {
         #[cfg(all(unix, feature = "local-dns"))]
-        if nameservers.starts_with("unix://") {
+        if let Some(nameservers) = nameservers.strip_prefix("unix://") {
             // A special DNS server only for shadowsocks-android
             // It serves like a TCP DNS server but using unix domain sockets
 
-            let nameservers = &nameservers[7..];
             return Ok(DnsConfig::LocalDns(NameServerAddr::UnixSocketAddr(PathBuf::from(
                 nameservers,
             ))));
@@ -1581,20 +1580,14 @@ impl fmt::Display for Config {
                             ServerAddr::SocketAddr(ref sa) => sa.port(),
                             ServerAddr::DomainName(.., port) => port,
                         },
-                        local_udp_address: match local.udp_addr {
-                            None => None,
-                            Some(ref udp_addr) => Some(match udp_addr {
-                                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                            }),
-                        },
-                        local_udp_port: match local.udp_addr {
-                            None => None,
-                            Some(ref udp_addr) => Some(match udp_addr {
-                                ServerAddr::SocketAddr(ref sa) => sa.port(),
-                                ServerAddr::DomainName(.., port) => *port,
-                            }),
-                        },
+                        local_udp_address: local.udp_addr.as_ref().map(|udp_addr| match udp_addr {
+                            ServerAddr::SocketAddr(sa) => sa.ip().to_string(),
+                            ServerAddr::DomainName(dm, ..) => dm.to_string(),
+                        }),
+                        local_udp_port: local.udp_addr.as_ref().map(|udp_addr| match udp_addr {
+                            ServerAddr::SocketAddr(sa) => sa.port(),
+                            ServerAddr::DomainName(.., port) => *port,
+                        }),
                         mode: Some(local.mode.to_string()),
                         protocol: match local.protocol {
                             ProtocolType::Socks => None,

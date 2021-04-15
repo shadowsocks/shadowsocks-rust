@@ -130,6 +130,7 @@ impl UdpRedir {
             self.redir_ty, local_addr
         );
 
+        #[allow(clippy::needless_update)]
         let manager = UdpAssociationManager::new(
             self.context.clone(),
             UdpRedirInboundWriter {

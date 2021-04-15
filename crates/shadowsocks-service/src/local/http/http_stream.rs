@@ -12,6 +12,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::local::net::AutoProxyClientStream;
 
+#[allow(clippy::large_enum_variant)]
 #[pin_project(project = ProxyHttpStreamProj)]
 pub enum ProxyHttpStream {
     Http(#[pin] AutoProxyClientStream),

@@ -29,6 +29,7 @@ use trust_dns_resolver::proto::{
 use crate::net::{FlowStat, MonProxySocket, MonProxyStream};
 
 /// Collection of various DNS connections
+#[allow(clippy::large_enum_variant)]
 pub enum DnsClient {
     TcpLocal {
         stream: TcpStream,

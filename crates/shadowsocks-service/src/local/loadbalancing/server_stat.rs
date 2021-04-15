@@ -46,8 +46,8 @@ fn max_latency_stdev() -> f64 {
     (diff1 + diff2).sqrt()
 }
 
-impl ServerStat {
-    pub fn new() -> ServerStat {
+impl Default for ServerStat {
+    fn default() -> Self {
         ServerStat {
             rtt: MAX_SERVER_RTT,
             fail_rate: 1.0,
@@ -55,6 +55,12 @@ impl ServerStat {
             latency_stdev: 0.0,
             latency_mean: 0.0,
         }
+    }
+}
+
+impl ServerStat {
+    pub fn new() -> ServerStat {
+        ServerStat::default()
     }
 
     fn score(&self) -> u32 {
@@ -109,7 +115,7 @@ impl ServerStat {
         self.fail_rate = cerr as f64 / self.latency_queue.len() as f64;
 
         if !vlat.is_empty() {
-            vlat.sort();
+            vlat.sort_unstable();
 
             // Find median of latency
             let mid = vlat.len() / 2;

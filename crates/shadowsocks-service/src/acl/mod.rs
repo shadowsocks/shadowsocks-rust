@@ -93,7 +93,7 @@ impl Rules {
 
     /// Check if there are no rules for domain names
     fn is_host_empty(&self) -> bool {
-        self.rule.len() == 0
+        self.rule.is_empty()
     }
 }
 

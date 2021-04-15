@@ -96,7 +96,7 @@ impl Socks5UdpClient {
     fn check_associated(&self) -> io::Result<()> {
         if self.assoc_client.is_none() {
             let err = io::Error::new(ErrorKind::Other, "udp not associated");
-            return Err(err.into());
+            return Err(err);
         }
         Ok(())
     }

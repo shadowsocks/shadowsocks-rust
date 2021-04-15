@@ -254,7 +254,7 @@ impl Dns {
             Ok(m) => m,
             Err(err) => {
                 error!("dns udp {} lookup failed, error: {}", peer_addr, err);
-                return Err(err.into());
+                return Err(err);
             }
         };
 

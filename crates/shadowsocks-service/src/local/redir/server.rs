@@ -23,6 +23,12 @@ pub struct Redir {
     udp_redir: RedirType,
 }
 
+impl Default for Redir {
+    fn default() -> Self {
+        Redir::new()
+    }
+}
+
 impl Redir {
     /// Create a new transparent proxy server with default configuration
     pub fn new() -> Redir {

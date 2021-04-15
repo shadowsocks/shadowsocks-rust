@@ -126,93 +126,95 @@ impl DnsResolve for DnsResolver {
         msgv6.set_recursion_desired(true);
         msgv6.add_query(queryv6);
 
-        let (res_v4, res_v6) = future::join(self.lookup(msgv4), self.lookup(msgv6)).await;
+        match future::join(self.lookup(msgv4), self.lookup(msgv6)).await {
+            (Err(res_v4), Err(res_v6)) => {
+                if self.ipv6_first {
+                    Err(res_v6)
+                } else {
+                    Err(res_v4)
+                }
+            }
 
-        if res_v4.is_err() && res_v6.is_err() {
-            return if self.ipv6_first {
-                Err(res_v6.unwrap_err())
-            } else {
-                Err(res_v4.unwrap_err())
-            };
+            (res_v4, res_v6) => {
+                let mut vaddr = Vec::new();
+
+                if self.ipv6_first {
+                    match res_v6 {
+                        Ok(res) => {
+                            for record in res.answers() {
+                                match *record.rdata() {
+                                    RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    ref rdata => {
+                                        trace!("skipped rdata {:?}", rdata);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            debug!("failed to resolve AAAA records, error: {}", err);
+                        }
+                    }
+
+                    match res_v4 {
+                        Ok(res) => {
+                            for record in res.answers() {
+                                match *record.rdata() {
+                                    RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    ref rdata => {
+                                        trace!("skipped rdata {:?}", rdata);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            debug!("failed to resolve A records, error: {}", err);
+                        }
+                    }
+                } else {
+                    match res_v4 {
+                        Ok(res) => {
+                            for record in res.answers() {
+                                match *record.rdata() {
+                                    RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    ref rdata => {
+                                        trace!("skipped rdata {:?}", rdata);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            debug!("failed to resolve A records, error: {}", err);
+                        }
+                    }
+
+                    match res_v6 {
+                        Ok(res) => {
+                            for record in res.answers() {
+                                match *record.rdata() {
+                                    RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
+                                    ref rdata => {
+                                        trace!("skipped rdata {:?}", rdata);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            debug!("failed to resolve AAAA records, error: {}", err);
+                        }
+                    }
+                }
+
+                if vaddr.is_empty() {
+                    let err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+                    return Err(err);
+                }
+
+                Ok(vaddr)
+            }
         }
-
-        let mut vaddr = Vec::new();
-
-        if self.ipv6_first {
-            match res_v6 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve AAAA records, error: {}", err);
-                }
-            }
-
-            match res_v4 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve A records, error: {}", err);
-                }
-            }
-        } else {
-            match res_v4 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve A records, error: {}", err);
-                }
-            }
-
-            match res_v6 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve AAAA records, error: {}", err);
-                }
-            }
-        }
-
-        if vaddr.is_empty() {
-            let err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
-            return Err(err);
-        }
-
-        Ok(vaddr)
     }
 }

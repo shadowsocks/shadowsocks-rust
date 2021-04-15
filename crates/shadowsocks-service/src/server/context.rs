@@ -24,15 +24,21 @@ pub struct ServiceContext {
     flow_stat: Arc<FlowStat>,
 }
 
-impl ServiceContext {
-    /// Create a new `ServiceContext`
-    pub fn new() -> ServiceContext {
+impl Default for ServiceContext {
+    fn default() -> Self {
         ServiceContext {
             context: Context::new_shared(ServerType::Server),
             connect_opts: ConnectOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
         }
+    }
+}
+
+impl ServiceContext {
+    /// Create a new `ServiceContext`
+    pub fn new() -> ServiceContext {
+        ServiceContext::default()
     }
 
     /// Get cloned `shadowsocks` Context
