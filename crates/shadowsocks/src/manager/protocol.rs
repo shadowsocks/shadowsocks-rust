@@ -304,14 +304,14 @@ impl ManagerProtocol for ManagerRequest {
         let cmd = nsplit.next().expect("first element shouldn't be None");
         match str::from_utf8(cmd)?.trim() {
             "add" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Add(req))
                 }
             },
             "remove" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Remove(req))
@@ -330,7 +330,7 @@ impl ManagerProtocol for ManagerRequest {
                 Ok(ManagerRequest::Ping(PingRequest))
             }
             "stat" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Stat(req))

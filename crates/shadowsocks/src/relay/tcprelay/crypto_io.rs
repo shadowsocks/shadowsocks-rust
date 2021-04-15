@@ -21,6 +21,7 @@ use super::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as Aea
 use super::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
 /// Reader for reading encrypted data stream from shadowsocks' tunnel
+#[allow(clippy::large_enum_variant)]
 pub enum DecryptedReader {
     None,
     Aead(AeadDecryptedReader),

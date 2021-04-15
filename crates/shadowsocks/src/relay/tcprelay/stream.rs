@@ -146,7 +146,7 @@ impl DecryptedReader {
 
             let n = read_buf.filled().len();
             if n == 0 {
-                if self.buffer.len() > 0 {
+                if !self.buffer.is_empty() {
                     return Err(ErrorKind::UnexpectedEof.into()).into();
                 } else {
                     return Ok(0).into();

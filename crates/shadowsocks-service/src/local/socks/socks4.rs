@@ -186,7 +186,7 @@ impl From<Address> for socks5::Address {
 ///                 +----+----+----+----+----+----+----+----+----+----+....+----+
 ///                 | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
 ///                 +----+----+----+----+----+----+----+----+----+----+....+----+
-///  # of bytes:	   1    1      2              4           variable       1
+///  # of bytes:      1    1      2              4           variable       1
 ///
 /// VN is the SOCKS protocol version number and should be 4. CD is the
 /// SOCKS command code and should be 1 for CONNECT request, 2 for BIND request. NULL is a byte
@@ -318,7 +318,7 @@ impl HandshakeRequest {
 ///             +----+----+----+----+----+----+----+----+
 ///             | VN | CD | DSTPORT |      DSTIP        |
 ///             +----+----+----+----+----+----+----+----+
-/// # of bytes:	   1    1      2              4
+/// # of bytes:   1    1      2              4
 /// ```
 #[derive(Debug, Clone)]
 pub struct HandshakeResponse {

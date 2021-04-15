@@ -111,8 +111,8 @@ impl From<tokio::net::UdpSocket> for UdpSocket {
     }
 }
 
-impl Into<tokio::net::UdpSocket> for UdpSocket {
-    fn into(self) -> tokio::net::UdpSocket {
-        self.0
+impl From<UdpSocket> for tokio::net::UdpSocket {
+    fn from(s: UdpSocket) -> tokio::net::UdpSocket {
+        s.0
     }
 }

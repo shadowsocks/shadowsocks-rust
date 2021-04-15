@@ -118,9 +118,9 @@ impl From<TokioTcpStream> for TcpStream {
     }
 }
 
-impl Into<TokioTcpStream> for TcpStream {
-    fn into(self) -> TokioTcpStream {
-        self.0
+impl From<TcpStream> for TokioTcpStream {
+    fn from(s: TcpStream) -> TokioTcpStream {
+        s.0
     }
 }
 
@@ -233,9 +233,9 @@ impl DerefMut for TcpListener {
     }
 }
 
-impl Into<TokioTcpListener> for TcpListener {
-    fn into(self) -> TokioTcpListener {
-        self.inner
+impl From<TcpListener> for TokioTcpListener {
+    fn from(listener: TcpListener) -> TokioTcpListener {
+        listener.inner
     }
 }
 

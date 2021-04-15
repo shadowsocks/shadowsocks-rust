@@ -33,6 +33,7 @@ pub struct TrustDnsSystemResolver {
 }
 
 /// Collections of DNS resolver
+#[allow(clippy::large_enum_variant)]
 pub enum DnsResolver {
     /// System Resolver, which is tokio's builtin resolver
     System,
@@ -42,8 +43,8 @@ pub enum DnsResolver {
         inner: Arc<TrustDnsSystemResolver>,
         abortable: AbortHandle,
     },
-    #[cfg(feature = "trust-dns")]
     /// Trust-DNS resolver
+    #[cfg(feature = "trust-dns")]
     TrustDns(TokioAsyncResolver),
     /// Customized Resolver
     Custom(Box<dyn DnsResolve + Send + Sync>),
@@ -217,6 +218,7 @@ impl DnsResolver {
     }
 
     /// Resolve address into `SocketAddr`s
+    #[allow(clippy::needless_lifetimes)]
     pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
         struct ResolverLogger<'x, 'y> {
             resolver: &'x DnsResolver,

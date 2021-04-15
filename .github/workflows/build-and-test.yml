@@ -47,6 +47,7 @@ jobs:
           name: clippy-${{ matrix.platform }}
           token: ${{ secrets.GITHUB_TOKEN }}
           args: |
-            --all-features --verbose -- -Z macro-backtrace
+            --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher" -- -Z macro-backtrace
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
+            -A clippy::collapsible_else_if

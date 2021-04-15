@@ -1477,26 +1477,22 @@ impl Config {
             }
         }
 
-        if self.config_type.is_server() {
-            if self.server.is_empty() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing any valid servers in configuration",
-                    None,
-                );
-                return Err(err);
-            }
+        if self.config_type.is_server() && self.server.is_empty() {
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing any valid servers in configuration",
+                None,
+            );
+            return Err(err);
         }
 
-        if self.config_type.is_manager() {
-            if self.manager.is_none() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `manager_addr` and `manager_port` in configuration",
-                    None,
-                );
-                return Err(err);
-            }
+        if self.config_type.is_manager() && self.manager.is_none() {
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing `manager_addr` and `manager_port` in configuration",
+                None,
+            );
+            return Err(err);
         }
 
         for server in &self.server {
