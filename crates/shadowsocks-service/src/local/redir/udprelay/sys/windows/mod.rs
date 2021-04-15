@@ -1,6 +1,13 @@
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::SocketAddr,
+    task::{Context, Poll},
+};
 
-use crate::{config::RedirType, local::redir::redir_ext::UdpSocketRedir};
+use crate::{
+    config::RedirType,
+    local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedir},
+};
 
 pub struct UdpRedirSocket;
 
@@ -15,7 +22,7 @@ impl UdpRedirSocket {
     /// Create a new UDP socket binded to `addr`
     ///
     /// This will allow binding to `addr` that is not in local host
-    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr) -> io::Result<UdpRedirSocket> {
+    pub fn bind_nonlocal(ty: RedirType, addr: SocketAddr, _redir_opts: &RedirSocketOpts) -> io::Result<UdpRedirSocket> {
         UdpRedirSocket::bind(ty, addr, true)
     }
 
@@ -24,7 +31,7 @@ impl UdpRedirSocket {
     }
 
     /// Send data to the socket to the given target address
-    pub async fn send_to(&mut self, _buf: &[u8], _target: &SocketAddr) -> io::Result<usize> {
+    pub async fn send_to(&self, _buf: &[u8], _target: SocketAddr) -> io::Result<usize> {
         unimplemented!("UDP transparent proxy is not supported on Windows")
     }
 

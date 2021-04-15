@@ -4,7 +4,7 @@
 
 use std::{io, sync::Arc};
 
-use log::{trace, warn};
+use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts};
 
 use crate::{
@@ -26,7 +26,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     if let Some(nofile) = config.nofile {
         use crate::sys::set_nofile;
         if let Err(err) = set_nofile(nofile) {
-            warn!("set_nofile {} failed, error: {}", nofile, err);
+            log::warn!("set_nofile {} failed, error: {}", nofile, err);
         }
     }
 
