@@ -40,14 +40,14 @@ jobs:
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher"
+        run: cargo build --verbose --features "local-http-rustls local-redir local-dns dns-over-tls dns-over-https stream-cipher"
       - name: Clippy Check
         uses: actions-rs/clippy-check@v1
         with:
           name: clippy-${{ matrix.platform }}
           token: ${{ secrets.GITHUB_TOKEN }}
           args: |
-            --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher" -- -Z macro-backtrace
+            --verbose --features "local-http-rustls local-redir local-dns dns-over-tls dns-over-https stream-cipher" -- -Z macro-backtrace
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
             -A clippy::collapsible_else_if
