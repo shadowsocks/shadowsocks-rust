@@ -13,13 +13,19 @@ pub struct FlowStat {
     rx: FlowCounter,
 }
 
-impl FlowStat {
-    /// Create an empty flow statistic
-    pub fn new() -> FlowStat {
+impl Default for FlowStat {
+    fn default() -> Self {
         FlowStat {
             tx: FlowCounter::new(0),
             rx: FlowCounter::new(0),
         }
+    }
+}
+
+impl FlowStat {
+    /// Create an empty flow statistic
+    pub fn new() -> FlowStat {
+        FlowStat::default()
     }
 
     /// Transmitted bytes count

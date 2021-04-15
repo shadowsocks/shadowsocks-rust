@@ -165,6 +165,7 @@ impl PacketFilter {
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.daddr.pfa.v4, mem::size_of_val(&pnl.daddr.pfa.v4));
                     pnl.set_dport(port);
                 }
@@ -177,6 +178,7 @@ impl PacketFilter {
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.daddr.pfa.v6, mem::size_of_val(&pnl.daddr.pfa.v6));
                     pnl.set_dport(port);
                 }
@@ -194,6 +196,7 @@ impl PacketFilter {
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.saddr.pfa.v4, mem::size_of_val(&pnl.saddr.pfa.v4));
                     pnl.set_sport(port);
                 }
@@ -208,6 +211,7 @@ impl PacketFilter {
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.saddr.pfa.v6, mem::size_of_val(&pnl.saddr.pfa.v6));
                     pnl.set_sport(port);
                 }
@@ -229,6 +233,7 @@ impl PacketFilter {
                     let dst_addr: &mut libc::sockaddr_in = &mut *(dst_addr as *mut _);
                     dst_addr.sin_family = pnl.af;
                     dst_addr.sin_port = pnl.rdport();
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(
                         &pnl.rdaddr.pfa.v4,
                         &mut dst_addr.sin_addr,
@@ -239,6 +244,7 @@ impl PacketFilter {
                     let dst_addr: &mut libc::sockaddr_in6 = &mut *(dst_addr as *mut _);
                     dst_addr.sin6_family = pnl.af;
                     dst_addr.sin6_port = pnl.rdport();
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(
                         &pnl.rdaddr.pfa.v6,
                         &mut dst_addr.sin6_addr,

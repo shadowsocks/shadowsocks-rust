@@ -300,7 +300,7 @@ impl UdpAssociationContext {
 
                     let socket =
                         OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
+                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket);
 
                     let (r2l_fut, r2l_abortable) = {
                         let assoc = self.clone();
@@ -355,7 +355,7 @@ impl UdpAssociationContext {
 
                     let socket =
                         OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket.into());
+                    let socket: Arc<OutboundUdpSocket> = Arc::new(socket);
 
                     let (r2l_fut, r2l_abortable) = {
                         let assoc = self.clone();

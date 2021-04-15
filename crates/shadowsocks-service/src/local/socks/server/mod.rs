@@ -27,6 +27,12 @@ pub struct Socks {
     nodelay: bool,
 }
 
+impl Default for Socks {
+    fn default() -> Self {
+        Socks::new()
+    }
+}
+
 impl Socks {
     /// Create a new SOCKS server with default configuration
     pub fn new() -> Socks {
@@ -113,10 +119,8 @@ impl Socks {
             let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
             let udp_bind_addr = Arc::new(udp_bind_addr.clone());
             Some(udp_bind_addr)
-        } else if let Some(ref ua) = self.udp_bind_addr {
-            Some(Arc::new(ua.clone()))
         } else {
-            None
+            self.udp_bind_addr.clone().map(Arc::new)
         };
 
         loop {

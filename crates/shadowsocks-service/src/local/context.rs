@@ -35,6 +35,12 @@ pub struct ServiceContext {
     reverse_lookup_cache: Mutex<LruCache<IpAddr, bool>>,
 }
 
+impl Default for ServiceContext {
+    fn default() -> Self {
+        ServiceContext::new()
+    }
+}
+
 impl ServiceContext {
     /// Create a new `ServiceContext`
     pub fn new() -> ServiceContext {

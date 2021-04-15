@@ -45,7 +45,7 @@ pub mod utils;
 /// Starts a shadowsocks local server
 pub async fn run(mut config: Config) -> io::Result<()> {
     assert!(config.config_type == ConfigType::Local && !config.local.is_empty());
-    assert!(config.server.len() > 0);
+    assert!(!config.server.is_empty());
 
     trace!("{:?}", config);
 

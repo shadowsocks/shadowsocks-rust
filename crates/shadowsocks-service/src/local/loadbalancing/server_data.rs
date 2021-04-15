@@ -16,13 +16,19 @@ pub struct ServerScore {
     score: AtomicU32,
 }
 
-impl ServerScore {
-    /// Create a `ServerScore`
-    pub fn new() -> ServerScore {
+impl Default for ServerScore {
+    fn default() -> Self {
         ServerScore {
             stat_data: Mutex::new(ServerStat::new()),
             score: AtomicU32::new(0),
         }
+    }
+}
+
+impl ServerScore {
+    /// Create a `ServerScore`
+    pub fn new() -> ServerScore {
+        ServerScore::default()
     }
 
     /// Get server's current statistic scores

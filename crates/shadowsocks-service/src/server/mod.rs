@@ -22,7 +22,7 @@ mod udprelay;
 /// Starts a shadowsocks server
 pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Server);
-    assert!(config.server.len() > 0);
+    assert!(!config.server.is_empty());
 
     trace!("{:?}", config);
 
@@ -71,10 +71,9 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.nodelay = config.no_delay;
     accept_opts.tcp.fastopen = config.fast_open;
 
-    let resolver = match build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
-        Some(resolver) => Some(Arc::new(resolver)),
-        None => None,
-    };
+    let resolver = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts)
+        .await
+        .map(Arc::new);
 
     let acl = config.acl.map(Arc::new);
 

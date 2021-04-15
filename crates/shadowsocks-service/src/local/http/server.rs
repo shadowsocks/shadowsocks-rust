@@ -27,6 +27,12 @@ pub struct Http {
     proxy_client_cache: Arc<ProxyClientCache>,
 }
 
+impl Default for Http {
+    fn default() -> Self {
+        Http::new()
+    }
+}
+
 impl Http {
     /// Create a new HTTP Local server
     pub fn new() -> Http {
