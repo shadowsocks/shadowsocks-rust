@@ -6,7 +6,7 @@ shadowsocks-rust (1.10.7) unstable; urgency=medium
 shadowsocks-rust (1.10.6) unstable; urgency=medium
   ## Features
 
-  - [shadowsocks/shadowsocks-crypto#8](https://github.com/shadowsocks/shadowsocks-crypto/issues/8) Support non-standard AEAD ciphers with `crypto2`, could be enabled by feature `aead-ciphers-extra`
+  - [shadowsocks/shadowsocks-crypto#8](https://github.com/shadowsocks/shadowsocks-crypto/issues/8) Support non-standard AEAD ciphers with `crypto2`, could be enabled by feature `aead-cipher-extra`
     - `aes-128-ccm`, `aes-256-ccm`
     - `aes-128-gcm-siv`, `aes-256-gcm-siv`
     - `aes-128-ocb-taglen128`, `aes-192-ocb-taglen128`, `aes-256-ocb-taglen128`
