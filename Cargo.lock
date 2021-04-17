@@ -1503,9 +1503,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3671797b7826352e6a58757ad37ed534700d6b2cf00c11479d5f62646075c2f"
+checksum = "1e1d8bd9b6ad23e1ef301dabd8617c9c4b50e7ac191c256c1cf6e55577bd0fec"
 dependencies = [
  "crypto2",
  "rand",
@@ -1514,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.10.6"
+version = "1.10.7"
 dependencies = [
  "byte_string",
  "byteorder",
