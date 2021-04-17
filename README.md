@@ -21,17 +21,17 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 ### Optional Features
 
-* `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
+* `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin, enabled by default
 
-* `local-http` - Allow using HTTP protocol for `sslocal`
+* `local-http` - Allow using HTTP protocol for `sslocal`, enabled by default
 
   * `local-http-native-tls` - Support HTTPS with [`native-tls`](https://crates.io/crates/native-tls)
   
   * `local-http-rustls` - Support HTTPS with [`rustls`](https://crates.io/crates/rustls)
 
-* `local-tunnel` - Allow using tunnel protocol for `sslocal`
+* `local-tunnel` - Allow using tunnel protocol for `sslocal`, enabled by default
 
-* `local-socks4` - Allow using SOCKS4/4a protocol for `sslocal`
+* `local-socks4` - Allow using SOCKS4/4a protocol for `sslocal`, enabled by default
 
 * `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
 
