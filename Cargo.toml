@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.10.5"
+version = "1.10.6"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -106,6 +106,10 @@ multi-threaded = ["tokio/rt-multi-thread"]
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks-service/stream-cipher"]
+
+# Enable extra AEAD ciphers
+# WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
+aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
 
 [dependencies]
 log = "0.4"
