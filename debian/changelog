@@ -1,3 +1,8 @@
+shadowsocks-rust (1.10.7) unstable; urgency=medium
+  ## Features
+
+  - Support non-standard AEAD ciphers `sm4-gcm` and `sm4-ccm`
+
 shadowsocks-rust (1.10.6) unstable; urgency=medium
   ## Features
 
