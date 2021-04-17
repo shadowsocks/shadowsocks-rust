@@ -37,6 +37,8 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
 
+* `aead-cipher-extra` - Enable non-standard AEAD ciphers
+
 #### Memory Allocators
 
 This project uses system (libc) memory allocator (Rust's default). But it also allows you to use other famous allocators by features:
