@@ -107,6 +107,10 @@ multi-threaded = ["tokio/rt-multi-thread"]
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks-service/stream-cipher"]
 
+# Enable extra AEAD ciphers
+# WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
+aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
+
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.0", optional = true }

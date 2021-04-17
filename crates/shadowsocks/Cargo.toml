@@ -27,6 +27,10 @@ trust-dns = ["trust-dns-resolver", "arc-swap", "notify"]
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks-crypto/v1-stream"]
 
+# Enable extra AEAD ciphers
+# WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
+aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
+
 [dependencies]
 log = "0.4"
 

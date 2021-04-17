@@ -62,6 +62,10 @@ local-socks4 = ["local"]
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks/stream-cipher"]
 
+# Enable extra AEAD ciphers
+# WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
+aead-cipher-extra = ["shadowsocks/aead-cipher-extra"]
+
 [dependencies]
 log = "0.4"
 log4rs = "1.0"
