@@ -46,9 +46,9 @@ checksum = "d4d7d63395147b81a9e570bcc6243aaf71c017bd666d4909cfef0085bdda8d73"
 
 [[package]]
 name = "async-trait"
-version = "0.1.49"
+version = "0.1.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "589652ce7ccb335d1e7ecb3be145425702b290dbcb7029bbeaae263fc1d87b48"
+checksum = "0b98e84bbb4cbcdd97da190ba0c58a1bb0de2c1fdf67d159e192ed766aeca722"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1503,9 +1503,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e1d8bd9b6ad23e1ef301dabd8617c9c4b50e7ac191c256c1cf6e55577bd0fec"
+checksum = "6afc9bf7a7e186dcd1e34bce9c493b0cad447694b54288f86ba0e1360acbef50"
 dependencies = [
  "crypto2",
  "rand",
@@ -1514,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.10.7"
+version = "1.10.8"
 dependencies = [
  "byte_string",
  "byteorder",
