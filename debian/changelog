@@ -1,3 +1,9 @@
+shadowsocks-rust (1.10.9) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - HTTP Proxy preserves headers' title case. https://github.com/shadowsocks/shadowsocks-rust/discussions/491 , https://github.com/hyperium/hyper/issues/2313
+
 shadowsocks-rust (1.10.8) unstable; urgency=medium
 
   ## Bug Fixes
@@ -7,6 +13,7 @@ shadowsocks-rust (1.10.8) unstable; urgency=medium
     - `aes-siv-cmac-256`, `aes-siv-cmac-384`, `aes-siv-cmac-512`
 
 shadowsocks-rust (1.10.7) unstable; urgency=medium
+
   ## Features
 
   - Support non-standard AEAD ciphers `sm4-gcm` and `sm4-ccm`
