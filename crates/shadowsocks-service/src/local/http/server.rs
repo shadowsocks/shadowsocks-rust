@@ -51,7 +51,10 @@ impl Http {
 
     /// Run server
     pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
-        let bypass_client = Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone()));
+        let bypass_client = Client::builder()
+            .http1_preserve_header_case(true)
+            .http1_title_case_headers(true)
+            .build::<_, Body>(BypassConnector::new(self.context.clone()));
 
         let context = self.context.clone();
         let proxy_client_cache = self.proxy_client_cache.clone();
@@ -89,6 +92,8 @@ impl Http {
         let server = match bind_result {
             Ok(builder) => builder
                 .http1_only(true)
+                .http1_preserve_header_case(true)
+                .http1_title_case_headers(true)
                 .tcp_sleep_on_accept_errors(true)
                 .serve(make_service),
             Err(err) => {

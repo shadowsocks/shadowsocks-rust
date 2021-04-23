@@ -97,7 +97,7 @@ socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
 
 http = { version = "0.2", optional = true }
-hyper = { version = "0.14", optional = true, features = ["full"] }
+hyper = { version = "0.14.7", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
 trust-dns-resolver = { version = "0.20.1", optional = true, features = ["serde-config"] }
