@@ -4,6 +4,8 @@ shadowsocks-rust (1.10.9) unstable; urgency=medium
 
   - HTTP Proxy preserves headers' title case. https://github.com/shadowsocks/shadowsocks-rust/discussions/491 , https://github.com/hyperium/hyper/issues/2313
 
+ -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 23 Apr 2021 23:58:08 +0800
+
 shadowsocks-rust (1.10.8) unstable; urgency=medium
 
   ## Bug Fixes
@@ -12,13 +14,18 @@ shadowsocks-rust (1.10.8) unstable; urgency=medium
     - `aes-128-ocb-taglen128`, `aes-192-ocb-taglen128`, `aes-256-ocb-taglen128`
     - `aes-siv-cmac-256`, `aes-siv-cmac-384`, `aes-siv-cmac-512`
 
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 18 Apr 2021 21:00:21 +0800
+
 shadowsocks-rust (1.10.7) unstable; urgency=medium
 
   ## Features
 
   - Support non-standard AEAD ciphers `sm4-gcm` and `sm4-ccm`
 
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 17 Apr 2021 22:46:39 +0800
+
 shadowsocks-rust (1.10.6) unstable; urgency=medium
+
   ## Features
 
   - [shadowsocks/shadowsocks-crypto#8](https://github.com/shadowsocks/shadowsocks-crypto/issues/8) Support non-standard AEAD ciphers with `crypto2`, could be enabled by feature `aead-cipher-extra`
@@ -32,11 +39,15 @@ shadowsocks-rust (1.10.6) unstable; urgency=medium
 
   - [shadowsocks/shadowsocks-android#2705](https://github.com/shadowsocks/shadowsocks-android/issues/2705) MD5 algorithm bug causes KDF (Key Derived Function) produces wrong key when `LEN(password) % 64 in [50, 64)`
 
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 17 Apr 2021 21:45:46 +0800
+
 shadowsocks-rust (1.10.5) unstable; urgency=medium
 
   ## BUG Fixed
 
   - `ProxyClientStream` should keep the concatenated first packet buffer alive before asynchronous `write()` finishes
+
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 10 Apr 2021 09:07:52 +0800
 
 shadowsocks-rust (1.10.4) unstable; urgency=medium
 
@@ -48,23 +59,23 @@ shadowsocks-rust (1.10.4) unstable; urgency=medium
 
   - Support `protocol` in basic configuration format
 
+ -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 9 Apr 2021 17:25:04 +0800
+
 shadowsocks-rust (1.10.3) unstable; urgency=medium
 
   ## BUG Fixed
 
   - #472 Fixed `SO_INCOMING_CPU` when building on some Linux targets. rust-lang/socket2#213
 
-shadowsocks-rust (1.10.2) unstable; urgency=medium
-
-  ## BUG Fixed
-
-  - #472 Fixed `SO_INCOMING_CPU` when building on some Linux targets. rust-lang/socket2#213
+ -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 7 Apr 2021 09:55:40 +0800
 
 shadowsocks-rust (1.10.2) unstable; urgency=medium
 
   ## BUG Fixed
 
   - `mode` in basic configuration format doesn't work for local instance
+
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 28 Mar 2021 11:13:01 +0800
 
 shadowsocks-rust (1.10.1) unstable; urgency=medium
 
@@ -77,7 +88,7 @@ shadowsocks-rust (1.10.1) unstable; urgency=medium
   - `sslocal` checks new local instance's parameters dependency
     - `--protocol`, `--forward-addr`, ... will require `--local-addr` to be specified
 
-  -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 27 Mar 2021 00:13:00 +0800
+ -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 27 Mar 2021 00:13:00 +0800
 
 shadowsocks-rust (1.10.0) unstable; urgency=medium
 
@@ -101,7 +112,7 @@ shadowsocks-rust (1.10.0) unstable; urgency=medium
   - `ssserver`'s command line options are now for creating a new server instance:
       - `-U` and `-u` will only applied to the local instance specified by `--server-addr`
 
-  -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 25 Mar 2021 18:10:00 +0800
+ -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 25 Mar 2021 18:10:00 +0800
 
 shadowsocks-rust (1.9.2) unstable; urgency=medium
 
