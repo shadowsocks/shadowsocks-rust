@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks"
-version = "1.10.3"
+version = "1.11.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -55,7 +55,7 @@ async-trait = "0.1"
 
 mio = "0.7"
 socket2 = "0.4"
-tokio = { version = "1", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync"] }
+tokio = { version = "1.5", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
 
 trust-dns-resolver = { version = "0.20", optional = true }
 arc-swap = { version = "1.2", optional = true }
