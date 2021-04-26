@@ -5,8 +5,8 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures::future::{self, AbortHandle};
 use io::ErrorKind;
+use lfu_cache::TimedLfuCache;
 use log::{debug, error, info, trace, warn};
-use lru_time_cache::{Entry, LruCache};
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
@@ -28,9 +28,12 @@ use crate::{
     net::MonProxySocket,
 };
 
+type AssociationMap = TimedLfuCache<SocketAddr, UdpAssociation>;
+type SharedAssociationMap = Arc<Mutex<AssociationMap>>;
+
 pub struct UdpTunnel {
     context: Arc<ServiceContext>,
-    assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+    assoc_map: SharedAssociationMap,
     cleanup_abortable: AbortHandle,
 }
 
@@ -44,8 +47,8 @@ impl UdpTunnel {
     pub fn new(context: Arc<ServiceContext>, time_to_live: Option<Duration>, capacity: Option<usize>) -> UdpTunnel {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
         let assoc_map = Arc::new(Mutex::new(match capacity {
-            Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
-            None => LruCache::with_expiry_duration(time_to_live),
+            Some(capacity) => TimedLfuCache::with_capacity_and_expiration(capacity, time_to_live),
+            None => TimedLfuCache::with_expiration(time_to_live),
         }));
 
         let cleanup_abortable = {
@@ -54,8 +57,8 @@ impl UdpTunnel {
                 loop {
                     time::sleep(time_to_live).await;
 
-                    // iter() will trigger a cleanup of expired associations
-                    let _ = assoc_map.lock().await.iter();
+                    // cleanup expired associations
+                    let _ = assoc_map.lock().await.evict_expired();
                 }
             });
             tokio::spawn(cleanup_task);
@@ -126,24 +129,26 @@ impl UdpTunnel {
         data: &[u8],
     ) -> io::Result<()> {
         let mut assoc_map = self.assoc_map.lock().await;
-        match assoc_map.entry(peer_addr) {
-            Entry::Occupied(occ) => {
-                let assoc = occ.into_mut();
-                assoc.try_send(Bytes::copy_from_slice(data))
-            }
-            Entry::Vacant(vac) => {
-                let assoc = vac.insert(UdpAssociation::new(
-                    self.context.clone(),
-                    listener.clone(),
-                    peer_addr,
-                    forward_addr.clone(),
-                    self.assoc_map.clone(),
-                    balancer.clone(),
-                ));
-                trace!("created udp association for {}", peer_addr);
-                assoc.try_send(Bytes::copy_from_slice(data))
-            }
+
+        if let Some(assoc) = assoc_map.get(&peer_addr) {
+            return assoc.try_send(Bytes::copy_from_slice(data));
         }
+
+        let assoc = UdpAssociation::new(
+            self.context.clone(),
+            listener.clone(),
+            peer_addr,
+            forward_addr.clone(),
+            self.assoc_map.clone(),
+            balancer.clone(),
+        );
+
+        trace!("created udp association for {}", peer_addr);
+
+        assoc.try_send(Bytes::copy_from_slice(data))?;
+        assoc_map.insert(peer_addr, assoc);
+
+        Ok(())
     }
 }
 
@@ -164,7 +169,7 @@ impl UdpAssociation {
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         forward_addr: Address,
-        assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+        assoc_map: SharedAssociationMap,
         balancer: PingBalancer,
     ) -> UdpAssociation {
         let (assoc, sender) =
@@ -222,7 +227,7 @@ struct UdpAssociationContext {
     peer_addr: SocketAddr,
     forward_addr: Address,
     proxied_socket: SpinMutex<UdpAssociationState>,
-    assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+    assoc_map: SharedAssociationMap,
     balancer: PingBalancer,
 }
 
@@ -238,7 +243,7 @@ impl UdpAssociationContext {
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         forward_addr: Address,
-        assoc_map: Arc<Mutex<LruCache<SocketAddr, UdpAssociation>>>,
+        assoc_map: SharedAssociationMap,
         balancer: PingBalancer,
     ) -> (Arc<UdpAssociationContext>, mpsc::Sender<Bytes>) {
         // Pending packets 1024 should be good enough for a server.
