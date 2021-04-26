@@ -34,7 +34,7 @@ aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 [dependencies]
 log = "0.4"
 
-libc = "0.2"
+libc = "0.2.94"
 bytes = "1.0"
 cfg-if = "1"
 byte_string = "1.0"
