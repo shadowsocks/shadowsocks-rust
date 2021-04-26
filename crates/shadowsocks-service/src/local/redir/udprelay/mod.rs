@@ -8,12 +8,16 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::future::{self, AbortHandle};
+use lfu_cache::TimedLfuCache;
 use log::{error, info, trace, warn};
 use shadowsocks::{
     lookup_then,
+    net::ConnectOpts,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
 };
+use tokio::sync::Mutex;
 
 use crate::{
     config::RedirType,
@@ -32,10 +36,63 @@ use self::sys::UdpRedirSocket;
 
 mod sys;
 
+const INBOUND_SOCKET_CACHE_EXPIRATION: Duration = Duration::from_secs(60);
+const INBOUND_SOCKET_CACHE_CAPACITY: usize = 256;
+
+struct UdpRedirInboundCache {
+    cache: Arc<Mutex<TimedLfuCache<SocketAddr, Arc<UdpRedirSocket>>>>,
+    watcher: AbortHandle,
+}
+
+impl Drop for UdpRedirInboundCache {
+    fn drop(&mut self) {
+        self.watcher.abort();
+    }
+}
+
+impl UdpRedirInboundCache {
+    fn new() -> UdpRedirInboundCache {
+        let cache = Arc::new(Mutex::new(TimedLfuCache::with_capacity_and_expiration(
+            INBOUND_SOCKET_CACHE_CAPACITY,
+            INBOUND_SOCKET_CACHE_EXPIRATION,
+        )));
+
+        let (cleanup_fut, watcher) = {
+            let cache = cache.clone();
+            future::abortable(async move {
+                loop {
+                    tokio::time::sleep(INBOUND_SOCKET_CACHE_EXPIRATION).await;
+                    cache.lock().await.evict_expired();
+                }
+            })
+        };
+        tokio::spawn(cleanup_fut);
+
+        UdpRedirInboundCache { cache, watcher }
+    }
+}
+
 #[derive(Clone)]
 struct UdpRedirInboundWriter {
     redir_ty: RedirType,
     socket_opts: RedirSocketOpts,
+    inbound_cache: Arc<UdpRedirInboundCache>,
+}
+
+impl UdpRedirInboundWriter {
+    #[allow(unused_variables)]
+    fn new(redir_ty: RedirType, opts: &ConnectOpts) -> UdpRedirInboundWriter {
+        UdpRedirInboundWriter {
+            redir_ty,
+            socket_opts: RedirSocketOpts {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                fwmark: opts.fwmark,
+
+                ..Default::default()
+            },
+            inbound_cache: Arc::new(UdpRedirInboundCache::new()),
+        }
+    }
 }
 
 #[async_trait]
@@ -61,12 +118,25 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
             }
         };
 
-        // Create a socket binds to destination addr
-        // This only works for systems that supports binding to non-local addresses
-        //
-        // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
-        // Outbound addresses could be connected from different source addresses.
-        let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
+        let inbound = {
+            let mut cache = self.inbound_cache.cache.lock().await;
+            if let Some(socket) = cache.get(&addr) {
+                socket.clone()
+            } else {
+                // Create a socket binds to destination addr
+                // This only works for systems that supports binding to non-local addresses
+                //
+                // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
+                // Outbound addresses could be connected from different source addresses.
+                let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
+
+                // UDP socket could be shared between threads and is safe to be manipulated by multiple threads
+                let inbound = Arc::new(inbound);
+                cache.insert(addr, inbound.clone());
+
+                inbound
+            }
+        };
 
         // Send back to client
         inbound.send_to(data, peer_addr).await.map(|n| {
@@ -133,15 +203,7 @@ impl UdpRedir {
         #[allow(clippy::needless_update)]
         let manager = UdpAssociationManager::new(
             self.context.clone(),
-            UdpRedirInboundWriter {
-                redir_ty: self.redir_ty,
-                socket_opts: RedirSocketOpts {
-                    #[cfg(any(target_os = "linux", target_os = "android"))]
-                    fwmark: self.context.connect_opts_ref().fwmark,
-
-                    ..Default::default()
-                },
-            },
+            UdpRedirInboundWriter::new(self.redir_ty, self.context.connect_opts_ref()),
             self.time_to_live,
             self.capacity,
             balancer,
