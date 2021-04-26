@@ -80,7 +80,7 @@ struct UdpRedirInboundWriter {
 }
 
 impl UdpRedirInboundWriter {
-    #[allow(unused_variables)]
+    #[allow(unused_variables, clippy::needless_update)]
     fn new(redir_ty: RedirType, opts: &ConnectOpts) -> UdpRedirInboundWriter {
         UdpRedirInboundWriter {
             redir_ty,

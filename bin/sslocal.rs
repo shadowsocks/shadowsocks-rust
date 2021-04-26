@@ -357,7 +357,7 @@ fn main() {
 
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
-            config.outbound_bind_interface = Some(From::from(iface.to_owned()));
+            config.outbound_bind_interface = Some(iface.to_owned());
         }
 
         #[cfg(all(unix, not(target_os = "android")))]

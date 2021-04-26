@@ -163,9 +163,9 @@ fn main() {
             config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
         }
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
-            config.outbound_bind_interface = Some(From::from(iface.to_owned()));
+            config.outbound_bind_interface = Some(iface.to_owned());
         }
 
         if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
