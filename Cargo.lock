@@ -751,9 +751,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "lfu_cache"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33bfa6580d3aa7abe1f17d413dc9952d726eb588a0a8082821444cb89ffdabdf"
+checksum = "29d2e56f95e5fda80586d85e2e98bb6dba8f71f4406161ce90698fa38ff16486"
 
 [[package]]
 name = "libc"
