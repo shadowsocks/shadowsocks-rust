@@ -3,6 +3,7 @@
 use std::str;
 
 use byte_string::ByteStr;
+use log::debug;
 use tokio::{
     self,
     io::{AsyncReadExt, AsyncWriteExt},
@@ -74,10 +75,23 @@ async fn tcp_tunnel() {
 
 #[tokio::test]
 async fn udp_tunnel() {
-    // Query firefox.com, TransactionID: 0x1234
-    static DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
-
     let _ = env_logger::try_init();
+
+    // A UDP echo server
+    tokio::spawn(async {
+        let socket = UdpSocket::bind("127.0.0.1:9230").await.unwrap();
+
+        debug!("UDP echo server listening on 127.0.0.1:9230");
+
+        let mut buffer = [0u8; 65536];
+        loop {
+            let (n, peer_addr) = socket.recv_from(&mut buffer).await.unwrap();
+            debug!("UDP echo server received {} bytes from {}, echoing", n, peer_addr);
+            socket.send_to(&buffer[..n], peer_addr).await.unwrap();
+        }
+    });
+
+    time::sleep(Duration::from_secs(1)).await;
 
     let local_config = Config::load_from_str(
         r#"{
@@ -86,8 +100,8 @@ async fn udp_tunnel() {
                     "local_port": 9210,
                     "local_address": "127.0.0.1",
                     "protocol": "tunnel",
-                    "forward_address": "8.8.8.8",
-                    "forward_port": 53
+                    "forward_address": "127.0.0.1",
+                    "forward_port": 9230
                 }
             ],
             "server": "127.0.0.1",
@@ -117,17 +131,16 @@ async fn udp_tunnel() {
 
     time::sleep(Duration::from_secs(1)).await;
 
+    const MESSAGE: &[u8] = b"hello shadowsocks";
+
     let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    socket.send_to(DNS_QUERY, "127.0.0.1:9210").await.unwrap();
+    socket.send_to(MESSAGE, "127.0.0.1:9210").await.unwrap();
 
     let mut buf = vec![0u8; 65536];
     let n = socket.recv(&mut buf).await.unwrap();
 
-    // DNS response have at least 12 bytes
-    assert!(n >= 12);
-
     let recv_payload = &buf[..n];
     println!("Got reply from server: {:?}", ByteStr::new(&recv_payload));
 
-    assert_eq!(b"\x12\x34", &recv_payload[0..2]);
+    assert_eq!(MESSAGE, recv_payload);
 }
