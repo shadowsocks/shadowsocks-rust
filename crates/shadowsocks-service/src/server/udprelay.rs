@@ -5,7 +5,7 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures::future::{self, AbortHandle};
 use io::ErrorKind;
-use lfu_cache::{LfuCache, TimedLfuCache};
+use lfu_cache::TimedLfuCache;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
     lookup_then,
@@ -207,7 +207,7 @@ struct UdpAssociationContext {
     outbound_ipv4_socket: SpinMutex<UdpAssociationState>,
     outbound_ipv6_socket: SpinMutex<UdpAssociationState>,
     assoc_map: SharedAssociationMap,
-    target_cache: Mutex<LfuCache<SocketAddr, Address>>,
+    target_cache: Mutex<TimedLfuCache<SocketAddr, Address>>,
 }
 
 impl Drop for UdpAssociationContext {
@@ -238,8 +238,12 @@ impl UdpAssociationContext {
             // Cache for remembering the original Address of target,
             // when recv_from a SocketAddr, we have to know whch Address that client was originally requested.
             //
-            // XXX: 64 target addresses should be enough for __one__ client.
-            target_cache: Mutex::new(LfuCache::with_capacity(64)),
+            // XXX: 128 target addresses should be enough for __one__ client.
+            //      1 hours should be enough for caching the address mapping. Most of the DNS records' TTL won't last that long.
+            target_cache: Mutex::new(TimedLfuCache::with_capacity_and_expiration(
+                128,
+                Duration::from_secs(1 * 60 * 60),
+            )),
         });
 
         let l2r_task = {
