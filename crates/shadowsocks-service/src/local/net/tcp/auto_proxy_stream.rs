@@ -59,7 +59,7 @@ impl AutoProxyClientStream {
         let addr = addr.into();
         let stream =
             TcpStream::connect_remote_with_opts(context.context_ref(), &addr, context.connect_opts_ref()).await?;
-        Ok(AutoProxyClientStream::Bypassed(stream.into()))
+        Ok(AutoProxyClientStream::Bypassed(stream))
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
