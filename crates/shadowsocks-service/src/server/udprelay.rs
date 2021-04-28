@@ -284,16 +284,15 @@ impl UdpAssociationContext {
                 SocketAddr::V6(..) => self.copy_ipv6_l2r_dispatch(sa, data).await,
             },
             Address::DomainNameAddress(ref dname, port) => {
-                let sa = lookup_then!(self.context.context_ref(), dname, port, |sa| {
+                lookup_then!(self.context.context_ref(), dname, port, |sa| {
+                    // Record resolved address as reverse index
+                    self.target_cache.lock().await.insert(sa, target_addr.clone());
+
                     match sa {
                         SocketAddr::V4(..) => self.clone().copy_ipv4_l2r_dispatch(sa, data).await,
                         SocketAddr::V6(..) => self.clone().copy_ipv6_l2r_dispatch(sa, data).await,
                     }
-                })?
-                .0;
-
-                // Record resolved address as reverse index
-                self.target_cache.lock().await.insert(sa, target_addr.clone());
+                })?;
 
                 Ok(())
             }
@@ -437,14 +436,6 @@ impl UdpAssociationContext {
                 Some(a) => a.clone(),
                 None => Address::from(addr),
             };
-
-            trace!(
-                "udp relay {} <- {} ({}) with {} bytes",
-                self.peer_addr,
-                target_addr,
-                addr,
-                data.len()
-            );
 
             // Send back to client
             if let Err(err) = self.inbound.send_to(self.peer_addr, &target_addr, data).await {
