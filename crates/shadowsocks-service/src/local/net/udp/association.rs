@@ -549,10 +549,16 @@ where
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv(&mut buffer).await {
-                Ok(n) => {
+                Ok((n, addr)) => {
+                    trace!(
+                        "udp relay {} <- {} (proxied) received {} bytes",
+                        self.peer_addr,
+                        addr,
+                        n
+                    );
                     // Keep association alive in map
                     let _ = self.assoc_map.lock().await.get(&self.peer_addr);
-                    n
+                    (n, addr)
                 }
                 Err(err) => {
                     // Socket that connected to remote server returns an error, it should be ECONNREFUSED in most cases.
@@ -575,13 +581,18 @@ where
             // Send back to client
             if let Err(err) = self.respond_writer.send_to(self.peer_addr, &addr, data).await {
                 warn!(
-                    "udp failed to send back to client {}, from target {}, error: {}",
+                    "udp failed to send back to client {}, from target {} (proxied), error: {}",
                     self.peer_addr, addr, err
                 );
                 continue;
             }
 
-            trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
+            trace!(
+                "udp relay {} <- {} (proxied) with {} bytes",
+                self.peer_addr,
+                addr,
+                data.len()
+            );
         }
     }
 
@@ -589,10 +600,16 @@ where
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv_from(&mut buffer).await {
-                Ok(n) => {
+                Ok((n, addr)) => {
+                    trace!(
+                        "udp relay {} <- {} (bypassed) received {} bytes",
+                        self.peer_addr,
+                        addr,
+                        n
+                    );
                     // Keep association alive in map
                     let _ = self.assoc_map.lock().await.get(&self.peer_addr);
-                    n
+                    (n, addr)
                 }
                 Err(err) => {
                     error!(
@@ -610,13 +627,18 @@ where
             // Send back to client
             if let Err(err) = self.respond_writer.send_to(self.peer_addr, &addr, data).await {
                 warn!(
-                    "udp failed to send back to client {}, from target {}, error: {}",
+                    "udp failed to send back to client {}, from target {} (bypassed), error: {}",
                     self.peer_addr, addr, err
                 );
                 continue;
             }
 
-            trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
+            trace!(
+                "udp relay {} <- {} (bypassed) with {} bytes",
+                self.peer_addr,
+                addr,
+                data.len()
+            );
         }
     }
 }

@@ -370,8 +370,9 @@ impl UdpAssociationContext {
     async fn copy_proxied_r2l(self: Arc<Self>, outbound: Arc<MonProxySocket>) -> io::Result<()> {
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
-            let (n, _) = match outbound.recv(&mut buffer).await {
-                Ok(n) => {
+            let n = match outbound.recv(&mut buffer).await {
+                Ok((n, addr)) => {
+                    trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, n);
                     // Keep association alive in map
                     let _ = self.assoc_map.lock().await.get(&self.peer_addr);
                     n

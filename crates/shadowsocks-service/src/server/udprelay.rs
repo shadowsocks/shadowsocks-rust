@@ -414,10 +414,11 @@ impl UdpAssociationContext {
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv_from(&mut buffer).await {
-                Ok(n) => {
+                Ok((n, addr)) => {
+                    trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, n);
                     // Keep association alive in map
                     let _ = self.assoc_map.lock().await.get(&self.peer_addr);
-                    n
+                    (n, addr)
                 }
                 Err(err) => {
                     error!(
