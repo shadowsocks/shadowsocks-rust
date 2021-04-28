@@ -1,12 +1,10 @@
 #![cfg(all(feature = "local-tunnel", feature = "server"))]
 
-use std::str;
-
 use byte_string::ByteStr;
 use log::debug;
 use tokio::{
     self,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{TcpStream, UdpSocket},
     time::{self, Duration},
 };
@@ -64,13 +62,13 @@ async fn tcp_tunnel() {
     stream.write_all(req).await.unwrap();
     stream.flush().await.unwrap();
 
-    let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).await.unwrap();
+    let mut r = BufReader::new(stream);
 
-    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+    let mut buf = Vec::new();
+    r.read_until(b'\n', &mut buf).await.unwrap();
 
     let http_status = b"HTTP/1.0 200 OK\r\n";
-    buf.starts_with(http_status);
+    assert!(buf.starts_with(http_status));
 }
 
 #[tokio::test]

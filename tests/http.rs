@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
     time,
 };
@@ -59,6 +59,7 @@ async fn http_proxy() {
             .unwrap();
         c.flush().await.unwrap();
 
+        // Proxy should close connection actively because HTTP/1.0 use short connection by default
         let mut buf = Vec::new();
         c.read_to_end(&mut buf).await.unwrap();
 
@@ -77,8 +78,10 @@ async fn http_proxy() {
             .unwrap();
         c.flush().await.unwrap();
 
+        let mut r = BufReader::new(c);
+
         let mut buf = Vec::new();
-        c.read_to_end(&mut buf).await.unwrap();
+        r.read_until(b'\n', &mut buf).await.unwrap();
 
         assert!(buf.starts_with(b"HTTP/1.0 200 OK\r\n"));
     }

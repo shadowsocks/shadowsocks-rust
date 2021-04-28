@@ -6,7 +6,7 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time::{self, Duration},
 };
 
@@ -89,11 +89,11 @@ async fn socks4_relay_connect() {
     c.write_all(HTTP_REQUEST).await.unwrap();
     c.flush().await.unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+    let mut r = BufReader::new(c);
 
-    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+    let mut buf = Vec::new();
+    r.read_until(b'\n', &mut buf).await.unwrap();
 
     let http_status = b"HTTP/1.0 200 OK\r\n";
-    buf.starts_with(http_status);
+    assert!(buf.starts_with(http_status));
 }
