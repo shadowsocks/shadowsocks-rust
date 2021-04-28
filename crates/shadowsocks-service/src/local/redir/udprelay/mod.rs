@@ -9,8 +9,8 @@ use std::{
 
 use async_trait::async_trait;
 use futures::future::{self, AbortHandle};
-use lfu_cache::TimedLfuCache;
 use log::{error, info, trace, warn};
+use lru_time_cache::LruCache;
 use shadowsocks::{
     lookup_then,
     net::ConnectOpts,
@@ -40,7 +40,7 @@ const INBOUND_SOCKET_CACHE_EXPIRATION: Duration = Duration::from_secs(60);
 const INBOUND_SOCKET_CACHE_CAPACITY: usize = 256;
 
 struct UdpRedirInboundCache {
-    cache: Arc<Mutex<TimedLfuCache<SocketAddr, Arc<UdpRedirSocket>>>>,
+    cache: Arc<Mutex<LruCache<SocketAddr, Arc<UdpRedirSocket>>>>,
     watcher: AbortHandle,
 }
 
@@ -52,9 +52,9 @@ impl Drop for UdpRedirInboundCache {
 
 impl UdpRedirInboundCache {
     fn new() -> UdpRedirInboundCache {
-        let cache = Arc::new(Mutex::new(TimedLfuCache::with_capacity_and_expiration(
-            INBOUND_SOCKET_CACHE_CAPACITY,
+        let cache = Arc::new(Mutex::new(LruCache::with_expiry_duration_and_capacity(
             INBOUND_SOCKET_CACHE_EXPIRATION,
+            INBOUND_SOCKET_CACHE_CAPACITY,
         )));
 
         let (cleanup_fut, watcher) = {
@@ -62,7 +62,7 @@ impl UdpRedirInboundCache {
             future::abortable(async move {
                 loop {
                     tokio::time::sleep(INBOUND_SOCKET_CACHE_EXPIRATION).await;
-                    cache.lock().await.evict_expired();
+                    let _ = cache.lock().await.iter();
                 }
             })
         };

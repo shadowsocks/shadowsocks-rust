@@ -5,8 +5,8 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures::future::{self, AbortHandle};
 use io::ErrorKind;
-use lfu_cache::TimedLfuCache;
 use log::{debug, error, info, trace, warn};
+use lru_time_cache::LruCache;
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
@@ -28,7 +28,7 @@ use crate::{
     net::MonProxySocket,
 };
 
-type AssociationMap = TimedLfuCache<SocketAddr, UdpAssociation>;
+type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
 type SharedAssociationMap = Arc<Mutex<AssociationMap>>;
 
 pub struct UdpTunnel {
@@ -47,8 +47,8 @@ impl UdpTunnel {
     pub fn new(context: Arc<ServiceContext>, time_to_live: Option<Duration>, capacity: Option<usize>) -> UdpTunnel {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
         let assoc_map = Arc::new(Mutex::new(match capacity {
-            Some(capacity) => TimedLfuCache::with_capacity_and_expiration(capacity, time_to_live),
-            None => TimedLfuCache::with_expiration(time_to_live),
+            Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+            None => LruCache::with_expiry_duration(time_to_live),
         }));
 
         let cleanup_abortable = {
@@ -57,8 +57,8 @@ impl UdpTunnel {
                 loop {
                     time::sleep(time_to_live).await;
 
-                    // cleanup expired associations
-                    let _ = assoc_map.lock().await.evict_expired();
+                    // cleanup expired associations. iter() will remove expired elements
+                    let _ = assoc_map.lock().await.iter();
                 }
             });
             tokio::spawn(cleanup_task);

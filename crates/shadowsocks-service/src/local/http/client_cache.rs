@@ -1,9 +1,9 @@
 //! Cached HTTP client for remote server
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use hyper::{Body, Client};
-use lfu_cache::TimedLfuCache;
+use lru_time_cache::LruCache;
 use shadowsocks::config::ServerAddr;
 use tokio::sync::Mutex;
 
@@ -14,14 +14,14 @@ use super::{connector::ProxyConnector, http_client::ProxyHttpClient};
 /// Cached HTTP client for remote servers
 pub struct ProxyClientCache {
     context: Arc<ServiceContext>,
-    cache: Mutex<TimedLfuCache<ServerAddr, ProxyHttpClient>>,
+    cache: Mutex<LruCache<ServerAddr, ProxyHttpClient>>,
 }
 
 impl ProxyClientCache {
     pub fn new(context: Arc<ServiceContext>) -> ProxyClientCache {
         ProxyClientCache {
             context,
-            cache: Mutex::new(TimedLfuCache::with_capacity_and_expiration(5, Duration::from_secs(60))),
+            cache: Mutex::new(LruCache::with_capacity(5)),
         }
     }
 

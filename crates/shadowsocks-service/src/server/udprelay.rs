@@ -5,8 +5,8 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use bytes::Bytes;
 use futures::future::{self, AbortHandle};
 use io::ErrorKind;
-use lfu_cache::TimedLfuCache;
 use log::{debug, error, info, trace, warn};
+use lru_time_cache::LruCache;
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as OutboundUdpSocket,
@@ -26,7 +26,7 @@ use crate::net::MonProxySocket;
 
 use super::context::ServiceContext;
 
-type AssociationMap = TimedLfuCache<SocketAddr, UdpAssociation>;
+type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
 type SharedAssociationMap = Arc<Mutex<AssociationMap>>;
 
 pub struct UdpServer {
@@ -45,8 +45,8 @@ impl UdpServer {
     pub fn new(context: Arc<ServiceContext>, time_to_live: Option<Duration>, capacity: Option<usize>) -> UdpServer {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
         let assoc_map = Arc::new(Mutex::new(match capacity {
-            Some(capacity) => TimedLfuCache::with_capacity_and_expiration(capacity, time_to_live),
-            None => TimedLfuCache::with_expiration(time_to_live),
+            Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
+            None => LruCache::with_expiry_duration(time_to_live),
         }));
 
         let cleanup_abortable = {
@@ -55,8 +55,8 @@ impl UdpServer {
                 loop {
                     time::sleep(time_to_live).await;
 
-                    // cleanup expired associations
-                    assoc_map.lock().await.evict_expired();
+                    // cleanup expired associations. iter() will remove expired elements
+                    let _ = assoc_map.lock().await.iter();
                 }
             });
             tokio::spawn(cleanup_task);
@@ -207,7 +207,7 @@ struct UdpAssociationContext {
     outbound_ipv4_socket: SpinMutex<UdpAssociationState>,
     outbound_ipv6_socket: SpinMutex<UdpAssociationState>,
     assoc_map: SharedAssociationMap,
-    target_cache: Mutex<TimedLfuCache<SocketAddr, Address>>,
+    target_cache: Mutex<LruCache<SocketAddr, Address>>,
 }
 
 impl Drop for UdpAssociationContext {
@@ -240,9 +240,9 @@ impl UdpAssociationContext {
             //
             // XXX: 128 target addresses should be enough for __one__ client.
             //      1 hours should be enough for caching the address mapping. Most of the DNS records' TTL won't last that long.
-            target_cache: Mutex::new(TimedLfuCache::with_capacity_and_expiration(
+            target_cache: Mutex::new(LruCache::with_expiry_duration_and_capacity(
+                Duration::from_secs(3600),
                 128,
-                Duration::from_secs(1 * 60 * 60),
             )),
         });
 

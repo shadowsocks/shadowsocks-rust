@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::{net::IpAddr, time::Duration};
 
 #[cfg(feature = "local-dns")]
-use lfu_cache::TimedLfuCache;
+use lru_time_cache::LruCache;
 use shadowsocks::{
     config::ServerType,
     context::{Context, SharedContext},
@@ -32,7 +32,7 @@ pub struct ServiceContext {
 
     // For DNS relay's ACL domain name reverse lookup -- whether the IP shall be forwarded
     #[cfg(feature = "local-dns")]
-    reverse_lookup_cache: Mutex<TimedLfuCache<IpAddr, bool>>,
+    reverse_lookup_cache: Mutex<LruCache<IpAddr, bool>>,
 }
 
 impl Default for ServiceContext {
@@ -51,9 +51,9 @@ impl ServiceContext {
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
             #[cfg(feature = "local-dns")]
-            reverse_lookup_cache: Mutex::new(TimedLfuCache::with_capacity_and_expiration(
-                10240, // XXX: It should be enough for a normal user.
+            reverse_lookup_cache: Mutex::new(LruCache::with_expiry_duration_and_capacity(
                 Duration::from_secs(3 * 24 * 60 * 60),
+                10240, // XXX: It should be enough for a normal user.
             )),
         }
     }
