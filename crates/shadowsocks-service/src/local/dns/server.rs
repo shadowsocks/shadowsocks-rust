@@ -3,9 +3,11 @@
 //! This DNS server requires 2 upstream DNS servers, one for direct queries, and the other queries through shadowsocks proxy
 
 use std::{
+    cmp::Ordering,
     collections::HashSet,
     io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -321,8 +323,28 @@ fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
 }
 
 /// given the query, determine whether remote/local query should be used, or inconclusive
-fn should_forward_by_query(acl: Option<&AccessControl>, query: &Query) -> Option<bool> {
-    if let Some(acl) = acl {
+fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, query: &Query) -> Option<bool> {
+    // Check if we are trying to make queries for remote servers
+    //
+    // This happens normally because VPN or TUN device receives DNS queries from local servers' plugins
+    // https://github.com/shadowsocks/shadowsocks-android/issues/2722
+    for server in balancer.servers() {
+        let svr_cfg = server.server_config();
+        if let ServerAddr::DomainName(ref dn, ..) = svr_cfg.addr() {
+            // Convert domain name to `Name`
+            // Ignore it if error occurs
+            if let Ok(name) = Name::from_str(dn) {
+                // cmp will handle FQDN in case insensitive way
+                if let Ordering::Equal = query.name().cmp(&name) {
+                    // It seems that query is for this server, just bypass it to local resolver
+                    trace!("DNS querying name {} of server {:?}", query.name(), svr_cfg);
+                    return Some(false);
+                }
+            }
+        }
+    }
+
+    if let Some(acl) = context.acl() {
         if query.query_class() != DNSClass::IN {
             // unconditionally use default for all non-IN queries
             Some(acl.is_default_in_proxy_list())
@@ -330,7 +352,7 @@ fn should_forward_by_query(acl: Option<&AccessControl>, query: &Query) -> Option
             Some(should_forward_by_ptr_name(acl, query.name()))
         } else {
             let result = check_name_in_proxy_list(acl, query.name());
-            if result == None && acl.is_ip_empty() && acl.is_host_empty() {
+            if result.is_none() && acl.is_ip_empty() && acl.is_host_empty() {
                 Some(acl.is_default_in_proxy_list())
             } else {
                 result
@@ -452,12 +474,19 @@ impl DnsClient {
         message.set_recursion_desired(true);
         message.set_recursion_available(true);
         message.set_message_type(MessageType::Response);
+
         if !request.recursion_desired() {
+            // RD is required by default. Otherwise it may not get valid respond from remote servers
+
             message.set_recursion_desired(false);
             message.set_response_code(ResponseCode::NotImp);
         } else if request.op_code() != OpCode::Query || request.message_type() != MessageType::Query {
+            // Other ops are not supported
+
             message.set_response_code(ResponseCode::NotImp);
         } else if request.query_count() > 0 {
+            // Make queries according to ACL rules
+
             let (r, forward) = self.acl_lookup(&request.queries()[0], local_addr, remote_addr).await;
             if let Ok(result) = r {
                 for rec in result.answers() {
@@ -486,7 +515,7 @@ impl DnsClient {
         // Start querying name servers
         debug!("DNS lookup {:?} {}", query.query_type(), query.name());
 
-        match should_forward_by_query(self.context.acl(), query) {
+        match should_forward_by_query(&self.context, &self.balancer, query) {
             Some(true) => {
                 let remote_response = self.lookup_remote(query, remote_addr).await;
                 trace!("pick remote response (query): {:?}", remote_response);

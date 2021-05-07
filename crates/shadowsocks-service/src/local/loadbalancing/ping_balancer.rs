@@ -296,6 +296,11 @@ impl PingBalancer {
     pub fn best_udp_server(&self) -> Arc<ServerIdent> {
         self.inner.context.best_udp_server()
     }
+
+    /// Get the server list
+    pub fn servers(&self) -> &[Arc<ServerIdent>] {
+        &self.inner.context.servers
+    }
 }
 
 impl Debug for PingBalancer {
