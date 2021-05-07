@@ -62,7 +62,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
-    config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
+    config::{ManagerAddr, Mode, ServerAddr, ServerConfig, ServerWeight},
     crypto::v1::CipherKind,
     plugin::PluginConfig,
 };
@@ -212,6 +212,10 @@ struct SSServerExtConfig {
     id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tcp_weight: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    udp_weight: Option<f32>,
 }
 
 /// Server config type
@@ -1195,7 +1199,7 @@ impl Config {
                     Some(mode) => match mode.parse::<Mode>() {
                         Ok(mode) => nsvr.set_mode(mode),
                         Err(..) => {
-                            let err = Error::new(ErrorKind::Malformed, "invalid `mode`", None);
+                            let err = Error::new(ErrorKind::Invalid, "invalid `mode`", None);
                             return Err(err);
                         }
                     },
@@ -1225,6 +1229,23 @@ impl Config {
 
                 if let Some(id) = svr.id {
                     nsvr.set_id(id);
+                }
+
+                if svr.tcp_weight.is_some() || svr.udp_weight.is_some() {
+                    let tcp_weight = svr.tcp_weight.unwrap_or(1.0);
+                    if tcp_weight < 0.0 || tcp_weight > 1.0 {
+                        let err = Error::new(ErrorKind::Invalid, "invalid `tcp_weight`, must be in [0, 1]", None);
+                        return Err(err);
+                    }
+                    let udp_weight = svr.udp_weight.unwrap_or(1.0);
+                    if udp_weight < 0.0 || udp_weight > 1.0 {
+                        let err = Error::new(ErrorKind::Invalid, "invalid `udp_weight`, must be in [0, 1]", None);
+                        return Err(err);
+                    }
+                    let mut weight = ServerWeight::new();
+                    weight.set_tcp_weight(tcp_weight);
+                    weight.set_udp_weight(udp_weight);
+                    nsvr.set_weight(weight);
                 }
 
                 nconfig.server.push(nsvr);
@@ -1732,6 +1753,16 @@ impl fmt::Display for Config {
                         remarks: svr.remarks().map(ToOwned::to_owned),
                         id: svr.id().map(ToOwned::to_owned),
                         mode: Some(svr.mode().to_string()),
+                        tcp_weight: if svr.weight().tcp_weight() != 1.0 {
+                            Some(svr.weight().tcp_weight())
+                        } else {
+                            None
+                        },
+                        udp_weight: if svr.weight().udp_weight() != 1.0 {
+                            Some(svr.weight().udp_weight())
+                        } else {
+                            None
+                        },
                     });
                 }
 

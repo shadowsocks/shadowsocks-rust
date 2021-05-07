@@ -97,6 +97,53 @@ impl FromStr for Mode {
     }
 }
 
+/// Server's weight
+///
+/// Commonly for using in balancer
+#[derive(Debug, Clone)]
+pub struct ServerWeight {
+    tcp_weight: f32,
+    udp_weight: f32,
+}
+
+impl Default for ServerWeight {
+    fn default() -> Self {
+        ServerWeight::new()
+    }
+}
+
+impl ServerWeight {
+    /// Creates a default weight for server, which will have 1.0 for both TCP and UDP
+    pub fn new() -> ServerWeight {
+        ServerWeight {
+            tcp_weight: 1.0,
+            udp_weight: 1.0,
+        }
+    }
+
+    /// Weight for TCP balancer
+    pub fn tcp_weight(&self) -> f32 {
+        self.tcp_weight
+    }
+
+    /// Set weight for TCP balancer in `[0, 1]`
+    pub fn set_tcp_weight(&mut self, weight: f32) {
+        assert!(weight >= 0.0 && weight <= 1.0);
+        self.tcp_weight = weight;
+    }
+
+    /// Weight for UDP balancer
+    pub fn udp_weight(&self) -> f32 {
+        self.udp_weight
+    }
+
+    /// Set weight for UDP balancer in `[0, 1]`
+    pub fn set_udp_weight(&mut self, weight: f32) {
+        assert!(weight >= 0.0 && weight <= 1.0);
+        self.udp_weight = weight;
+    }
+}
+
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -123,6 +170,9 @@ pub struct ServerConfig {
 
     /// Mode
     mode: Mode,
+
+    /// Weight
+    weight: ServerWeight,
 }
 
 impl ServerConfig {
@@ -148,6 +198,7 @@ impl ServerConfig {
             remarks: None,
             id: None,
             mode: Mode::TcpOnly,
+            weight: ServerWeight::new(),
         }
     }
 
@@ -264,6 +315,16 @@ impl ServerConfig {
         self.mode = mode;
     }
 
+    /// Get server's balancer weight
+    pub fn weight(&self) -> &ServerWeight {
+        &self.weight
+    }
+
+    /// Set server's balancer weight
+    pub fn set_weight(&mut self, weight: ServerWeight) {
+        self.weight = weight;
+    }
+
     /// Get URL for QRCode
     /// ```plain
     /// ss:// + base64(method:password@host:port)
@@ -327,7 +388,7 @@ impl ServerConfig {
         let mut sp2 = account.splitn(2, ':');
         let (method, pwd) = match (sp2.next(), sp2.next()) {
             (Some(m), Some(p)) => (m, p),
-            _ => return Err(UrlParseError::InvalidUserInfo)
+            _ => return Err(UrlParseError::InvalidUserInfo),
         };
 
         let addr = match addr.parse::<ServerAddr>() {

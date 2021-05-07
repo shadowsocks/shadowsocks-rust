@@ -16,19 +16,13 @@ pub struct ServerScore {
     score: AtomicU32,
 }
 
-impl Default for ServerScore {
-    fn default() -> Self {
-        ServerScore {
-            stat_data: Mutex::new(ServerStat::new()),
-            score: AtomicU32::new(0),
-        }
-    }
-}
-
 impl ServerScore {
     /// Create a `ServerScore`
-    pub fn new() -> ServerScore {
-        ServerScore::default()
+    pub fn new(user_weight: f32) -> ServerScore {
+        ServerScore {
+            stat_data: Mutex::new(ServerStat::new(user_weight)),
+            score: AtomicU32::new(0),
+        }
     }
 
     /// Get server's current statistic scores
@@ -70,8 +64,8 @@ impl ServerIdent {
     /// Create a  ServerIdent`
     pub fn new(svr_cfg: ServerConfig) -> ServerIdent {
         ServerIdent {
-            tcp_score: ServerScore::new(),
-            udp_score: ServerScore::new(),
+            tcp_score: ServerScore::new(svr_cfg.weight().tcp_weight()),
+            udp_score: ServerScore::new(svr_cfg.weight().udp_weight()),
             svr_cfg,
         }
     }

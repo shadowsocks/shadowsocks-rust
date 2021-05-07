@@ -394,6 +394,13 @@ Example configuration:
             "plugin": "...",
             "plugin_opts": "...",
             "timeout": 7200,
+
+            // Customized weight for local server's balancer
+            //
+            // Weight must be in [0, 1], default is 1.0.
+            // The higher weight, the server may rank higher.
+            "tcp_weight": 1.0,
+            "udp_weight": 1.0,
         }
     ],
 
