@@ -72,19 +72,16 @@ impl ServerStat {
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
         const SCORE_STDEV_WEIGHT: f64 = 1.0;
-        const SCORE_USER_WEIGHT: f64 = 5.0;
 
-        // Score = (norm_lat * 1.0 + prop_err * 3.0 + stdev * 1.0 + user_weight * 5.0) / 10.0
+        // Score = (norm_lat * 1.0 + prop_err * 3.0 + stdev * 1.0) / 5.0 / user_weight
         //
         // 1. The lower latency, the better
         // 2. The lower errored count, the better
         // 3. The lower latency's stdev, the better
         // 4. The higher user's weight, the better
-        let score = (nrtt * SCORE_RTT_WEIGHT
-            + self.fail_rate * SCORE_FAIL_WEIGHT
-            + nstdev * SCORE_STDEV_WEIGHT
-            + self.user_weight as f64 * SCORE_USER_WEIGHT)
-            / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT + SCORE_USER_WEIGHT);
+        let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
+            / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT)
+            / self.user_weight as f64;
 
         // Times 10000 converts to u32, for 0.0001 precision
         (score * 10000.0) as u32
