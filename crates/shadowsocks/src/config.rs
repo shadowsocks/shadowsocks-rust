@@ -128,7 +128,7 @@ impl ServerWeight {
 
     /// Set weight for TCP balancer in `[0, 1]`
     pub fn set_tcp_weight(&mut self, weight: f32) {
-        assert!(weight >= 0.0 && weight <= 1.0);
+        assert!((0.0..=1.0).contains(&weight));
         self.tcp_weight = weight;
     }
 
@@ -139,7 +139,7 @@ impl ServerWeight {
 
     /// Set weight for UDP balancer in `[0, 1]`
     pub fn set_udp_weight(&mut self, weight: f32) {
-        assert!(weight >= 0.0 && weight <= 1.0);
+        assert!((0.0..=1.0).contains(&weight));
         self.udp_weight = weight;
     }
 }

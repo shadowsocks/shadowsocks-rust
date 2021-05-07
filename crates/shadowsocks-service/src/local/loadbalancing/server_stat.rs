@@ -50,7 +50,7 @@ fn max_latency_stdev() -> f64 {
 
 impl ServerStat {
     pub fn new(user_weight: f32) -> ServerStat {
-        assert!(user_weight >= 0.0 && user_weight <= 1.0);
+        assert!((0.0..=1.0).contains(&user_weight));
 
         ServerStat {
             rtt: MAX_SERVER_RTT,

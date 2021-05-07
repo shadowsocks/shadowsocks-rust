@@ -1233,12 +1233,12 @@ impl Config {
 
                 if svr.tcp_weight.is_some() || svr.udp_weight.is_some() {
                     let tcp_weight = svr.tcp_weight.unwrap_or(1.0);
-                    if tcp_weight < 0.0 || tcp_weight > 1.0 {
+                    if !(0.0..=1.0).contains(&tcp_weight) {
                         let err = Error::new(ErrorKind::Invalid, "invalid `tcp_weight`, must be in [0, 1]", None);
                         return Err(err);
                     }
                     let udp_weight = svr.udp_weight.unwrap_or(1.0);
-                    if udp_weight < 0.0 || udp_weight > 1.0 {
+                    if !(0.0..=1.0).contains(&udp_weight) {
                         let err = Error::new(ErrorKind::Invalid, "invalid `udp_weight`, must be in [0, 1]", None);
                         return Err(err);
                     }
@@ -1753,12 +1753,12 @@ impl fmt::Display for Config {
                         remarks: svr.remarks().map(ToOwned::to_owned),
                         id: svr.id().map(ToOwned::to_owned),
                         mode: Some(svr.mode().to_string()),
-                        tcp_weight: if svr.weight().tcp_weight() != 1.0 {
+                        tcp_weight: if (svr.weight().tcp_weight() - 1.0).abs() > f32::EPSILON {
                             Some(svr.weight().tcp_weight())
                         } else {
                             None
                         },
-                        udp_weight: if svr.weight().udp_weight() != 1.0 {
+                        udp_weight: if (svr.weight().udp_weight() - 1.0).abs() > f32::EPSILON {
                             Some(svr.weight().udp_weight())
                         } else {
                             None
