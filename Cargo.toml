@@ -98,6 +98,9 @@ jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
 tcmalloc-vendored = ["tcmalloc/bundled"]
 
+# Enable snmalloc for binaries
+snmalloc = ["snmalloc-rs"]
+
 # Enable tokio's multi-threaded runtime
 multi-threaded = ["tokio/rt-multi-thread"]
 
@@ -125,6 +128,8 @@ tokio = { version = "1", features = ["rt", "signal"] }
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
+snmalloc-rs = { version = "0.2", optional = true }
+rpmalloc = { version = "0.2", optional = true }
 
 shadowsocks-service = { version = "1.10.6", path = "./crates/shadowsocks-service" }
 

@@ -11,11 +11,11 @@ This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
-| Library | Description |
-| ------- | ----------- |
-| [**shadowsocks**](https://crates.io/crates/shadowsocks) | [![crates.io](https://img.shields.io/crates/v/shadowsocks.svg)](https://crates.io/crates/shadowsocks) [![docs.rs](https://img.shields.io/docsrs/shadowsocks)](https://docs.rs/shadowsocks) shadowsocks core protocol |
+| Library                                                                 | Description                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**shadowsocks**](https://crates.io/crates/shadowsocks)                 | [![crates.io](https://img.shields.io/crates/v/shadowsocks.svg)](https://crates.io/crates/shadowsocks) [![docs.rs](https://img.shields.io/docsrs/shadowsocks)](https://docs.rs/shadowsocks) shadowsocks core protocol                                        |
 | [**shadowsocks-service**](https://crates.io/crates/shadowsocks-service) | [![crates.io](https://img.shields.io/crates/v/shadowsocks-service.svg)](https://crates.io/crates/shadowsocks-service) [![docs.rs](https://img.shields.io/docsrs/shadowsocks-service)](https://docs.rs/shadowsocks-service) Services for serving shadowsocks |
-| [**shadowsocks-rust**](https://crates.io/crates/shadowsocks-rust) | [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust) Binaries running common shadowsocks services |
+| [**shadowsocks-rust**](https://crates.io/crates/shadowsocks-rust)       | [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust) Binaries running common shadowsocks services                                                                                                |
 
 ## Build & Install
 
@@ -46,6 +46,8 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 * `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
 * `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
 * `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
+* `snmalloc` - Uses [snmalloc](https://github.com/microsoft/snmalloc) as gloal memory allocator
+* `rpmalloc` - Uses [rpmalloc](https://github.com/mjansson/rpmalloc) as global memory allocator
 
 ### **crates.io**
 
