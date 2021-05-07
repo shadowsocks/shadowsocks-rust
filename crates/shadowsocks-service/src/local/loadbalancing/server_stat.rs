@@ -73,6 +73,10 @@ impl ServerStat {
         const SCORE_FAIL_WEIGHT: f64 = 3.0;
         const SCORE_STDEV_WEIGHT: f64 = 1.0;
 
+        // [EPSILON, 1]
+        // Just for avoiding divide by 0
+        let user_weight = self.user_weight.max(f32::EPSILON);
+
         // Score = (norm_lat * 1.0 + prop_err * 3.0 + stdev * 1.0) / 5.0 / user_weight
         //
         // 1. The lower latency, the better
@@ -81,7 +85,7 @@ impl ServerStat {
         // 4. The higher user's weight, the better
         let score = (nrtt * SCORE_RTT_WEIGHT + self.fail_rate * SCORE_FAIL_WEIGHT + nstdev * SCORE_STDEV_WEIGHT)
             / (SCORE_RTT_WEIGHT + SCORE_FAIL_WEIGHT + SCORE_STDEV_WEIGHT)
-            / self.user_weight as f64;
+            / user_weight as f64;
 
         // Times 10000 converts to u32, for 0.0001 precision
         (score * 10000.0) as u32
