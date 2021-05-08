@@ -559,7 +559,7 @@ It supports the following features:
 * [x] Improved logging format (waiting for the new official log crate)
 * [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 * [x] Windows support.
-* [x] Build with stable `rustc`.
+* [ ] Build with stable `rustc` (blocking by `crypto2`).
 * [x] Support HTTP Proxy protocol
 * [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 * [x] Choose server based on delay #152
