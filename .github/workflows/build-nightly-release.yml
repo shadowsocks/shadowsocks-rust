@@ -1,0 +1,96 @@
+name: Build Nightly Releases
+on:
+  push:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-cross:
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: full
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install cross
+        run: cargo install cross
+
+      - name: Build ${{ matrix.target }}
+        timeout-minutes: 120
+        run: |
+          cd build
+          ./build-release -t ${{ matrix.target }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Releases
+          path: build/release/*
+
+  build-unix:
+    runs-on: ${{ matrix.os }}
+    env:
+      BUILD_EXTRA_FEATURES: "local-redir"
+      RUST_BACKTRACE: full
+    strategy:
+      matrix:
+        # os: [ubuntu-latest, macos-latest]
+        os: [macos-latest]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install GNU tar
+        if: runner.os == 'macOS'
+        run: |
+          brew install gnu-tar
+          # echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
+          echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
+
+      - name: Install Rust nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+
+      - name: Build release
+        shell: bash
+        run: |
+          cd build
+          ./build-host-release
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Releases
+          path: build/release/*
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: "-Ctarget-feature=+crt-static"
+      RUST_BACKTRACE: full
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install Rust nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+
+      - name: Build release
+        run: |
+          cd build
+          pwsh build-host-release.ps1
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: Releases
+          path: build/release/*
