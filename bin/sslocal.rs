@@ -124,17 +124,15 @@ fn main() {
 
         #[cfg(feature = "local-redir")]
         {
-            let available_redir_types = RedirType::available_types();
-
             if RedirType::tcp_default() != RedirType::NotSupported {
                 app = clap_app!(@app (app)
-                    (@arg TCP_REDIR: --("tcp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) "TCP redir (transparent proxy) type")
+                    (@arg TCP_REDIR: --("tcp-redir") +takes_value requires[LOCAL_ADDR] possible_values(RedirType::tcp_available_types()) "TCP redir (transparent proxy) type")
                 );
             }
 
             if RedirType::udp_default() != RedirType::NotSupported {
                 app = clap_app!(@app (app)
-                    (@arg UDP_REDIR: --("udp-redir") +takes_value requires[LOCAL_ADDR] possible_values(&available_redir_types) "UDP redir (transparent proxy) type")
+                    (@arg UDP_REDIR: --("udp-redir") +takes_value requires[LOCAL_ADDR] possible_values(RedirType::udp_available_types()) "UDP redir (transparent proxy) type")
                 );
             }
         }

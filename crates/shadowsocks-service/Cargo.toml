@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.11.0"
+version = "1.11.1"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -50,7 +50,7 @@ local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-rustls = ["local-http", "tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["local", "strum", "strum_macros", "mio"]
+local-redir = ["local", "mio"]
 # Enable tunnel protocol for sslocal
 local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
@@ -109,9 +109,6 @@ serde = { version = "1.0", features = ["derive"] }
 json5 = "0.3"
 
 shadowsocks = { version = "1.10.2", path = "../shadowsocks" }
-
-strum = { version = "0.20", optional = true }
-strum_macros = { version = "0.20", optional = true }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]

@@ -250,11 +250,8 @@ impl ConfigType {
 
 cfg_if! {
     if #[cfg(feature = "local-redir")] {
-        use strum::IntoEnumIterator;
-        use strum_macros::EnumIter;
-
         /// Transparent Proxy type
-        #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumIter)]
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub enum RedirType {
             /// For not supported platforms
             NotSupported,
@@ -301,13 +298,27 @@ cfg_if! {
             cfg_if! {
                 if #[cfg(any(target_os = "linux", target_os = "android"))] {
                     /// Default TCP transparent proxy solution on this platform
-                    pub fn tcp_default() -> RedirType {
+                    pub const fn tcp_default() -> RedirType {
                         RedirType::Redirect
                     }
 
+                    /// Available TCP transparent proxy types
+                    #[doc(hidden)]
+                    pub fn tcp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::Redirect.name(), RedirType::TProxy.name()];
+                        AVAILABLE_TYPES
+                    }
+
                     /// Default UDP transparent proxy solution on this platform
-                    pub fn udp_default() -> RedirType {
+                    pub const fn udp_default() -> RedirType {
                         RedirType::TProxy
+                    }
+
+                    /// Available UDP transparent proxy types
+                    #[doc(hidden)]
+                    pub fn udp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::TProxy.name()];
+                        AVAILABLE_TYPES
                     }
                 } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
                     /// Default TCP transparent proxy solution on this platform
@@ -315,9 +326,23 @@ cfg_if! {
                         RedirType::PacketFilter
                     }
 
+                    /// Available TCP transparent proxy types
+                    #[doc(hidden)]
+                    pub fn tcp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        AVAILABLE_TYPES
+                    }
+
                     /// Default UDP transparent proxy solution on this platform
                     pub fn udp_default() -> RedirType {
                         RedirType::PacketFilter
+                    }
+
+                    /// Available UDP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn udp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        AVAILABLE_TYPES
                     }
                 } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
                     /// Default TCP transparent proxy solution on this platform
@@ -325,9 +350,23 @@ cfg_if! {
                         RedirType::PacketFilter
                     }
 
+                    /// Available TCP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn tcp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        AVAILABLE_TYPES
+                    }
+
                     /// Default UDP transparent proxy solution on this platform
                     pub fn udp_default() -> RedirType {
                         RedirType::NotSupported
+                    }
+
+                    /// Available UDP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn udp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        AVAILABLE_TYPES
                     }
                 } else {
                     /// Default TCP transparent proxy solution on this platform
@@ -335,9 +374,23 @@ cfg_if! {
                         RedirType::NotSupported
                     }
 
+                    /// Available TCP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn tcp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        AVAILABLE_TYPES
+                    }
+
                     /// Default UDP transparent proxy solution on this platform
                     pub fn udp_default() -> RedirType {
                         RedirType::NotSupported
+                    }
+
+                    /// Available UDP transparent proxy types
+                    #[doc(hidden)]
+                    pub const fn udp_available_types() -> &'static [&'static str] {
+                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        AVAILABLE_TYPES
                     }
                 }
             }
@@ -348,7 +401,7 @@ cfg_if! {
             }
 
             /// Name of redirect type (transparent proxy type)
-            pub fn name(self) -> &'static str {
+            pub const fn name(self) -> &'static str {
                 match self {
                     // Dummy, shouldn't be used in any useful situations
                     RedirType::NotSupported => "not_supported",
@@ -372,19 +425,6 @@ cfg_if! {
                     #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
                     RedirType::IpFirewall => "ipfw",
                 }
-            }
-
-            /// Get all available types
-            pub fn available_types() -> Vec<&'static str> {
-                let mut v = Vec::new();
-                for e in Self::iter() {
-                    match e {
-                        RedirType::NotSupported => continue,
-                        #[allow(unreachable_patterns)]
-                        _ => v.push(e.name()),
-                    }
-                }
-                v
             }
         }
 
