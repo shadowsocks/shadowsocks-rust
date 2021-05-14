@@ -1,3 +1,12 @@
+shadowsocks-rust (1.11.0) unstable; urgency=medium
+
+  ## Features
+
+  - Support TFO (TCP Fast Open) on Linux, Windows, macOS (iOS), FreeBSD (https://github.com/shadowsocks/shadowsocks-rust/issues/184)
+  - Support customizing servers' weight for balancer (https://github.com/shadowsocks/shadowsocks-rust/issues/510)
+
+ -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 14 May 2021 12:31:54 +0800
+
 shadowsocks-rust (1.10.9) unstable; urgency=medium
 
   ## Bug Fixes
