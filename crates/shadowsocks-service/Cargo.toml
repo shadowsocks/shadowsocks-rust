@@ -45,7 +45,7 @@ local-dns-relay = ["local-dns"]
 # Currently is only used in Android
 local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
-local-http = ["local", "hyper", "http", "tower"]
+local-http = ["local", "hyper", "tower"]
 local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-rustls = ["local-http", "tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
@@ -96,7 +96,6 @@ mio = { version = "0.7", optional = true }
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
 
-http = { version = "0.2", optional = true }
 hyper = { version = "0.14.7", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 

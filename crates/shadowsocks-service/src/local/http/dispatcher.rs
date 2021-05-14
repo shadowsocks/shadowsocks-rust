@@ -2,8 +2,19 @@
 
 use std::{io, net::SocketAddr, str::FromStr, sync::Arc};
 
-use http::uri::{Authority, Scheme};
-use hyper::{header::HeaderValue, upgrade, Body, HeaderMap, Method, Request, Response, StatusCode, Uri, Version};
+use hyper::{
+    header::HeaderValue,
+    http::uri::{Authority, Scheme},
+    upgrade,
+    Body,
+    HeaderMap,
+    Method,
+    Request,
+    Response,
+    StatusCode,
+    Uri,
+    Version,
+};
 use log::{debug, error, trace};
 use shadowsocks::relay::socks5::Address;
 
