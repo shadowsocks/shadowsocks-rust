@@ -189,7 +189,7 @@ async fn decrypt_payload_stream(
     trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
     let mut cipher = Cipher::new(method, key, iv);
 
-    assert_eq!(cipher.decrypt_packet(data), true);
+    assert!(cipher.decrypt_packet(data));
 
     let (dn, addr) = parse_packet(data).await?;
 

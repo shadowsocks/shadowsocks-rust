@@ -305,7 +305,7 @@ cfg_if! {
                     /// Available TCP transparent proxy types
                     #[doc(hidden)]
                     pub fn tcp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::Redirect.name(), RedirType::TProxy.name()];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::Redirect.name(), RedirType::TProxy.name()];
                         AVAILABLE_TYPES
                     }
 
@@ -317,7 +317,7 @@ cfg_if! {
                     /// Available UDP transparent proxy types
                     #[doc(hidden)]
                     pub fn udp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::TProxy.name()];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::TProxy.name()];
                         AVAILABLE_TYPES
                     }
                 } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
@@ -329,7 +329,7 @@ cfg_if! {
                     /// Available TCP transparent proxy types
                     #[doc(hidden)]
                     pub fn tcp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
                         AVAILABLE_TYPES
                     }
 
@@ -341,7 +341,7 @@ cfg_if! {
                     /// Available UDP transparent proxy types
                     #[doc(hidden)]
                     pub const fn udp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
                         AVAILABLE_TYPES
                     }
                 } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
@@ -353,7 +353,7 @@ cfg_if! {
                     /// Available TCP transparent proxy types
                     #[doc(hidden)]
                     pub const fn tcp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
                         AVAILABLE_TYPES
                     }
 
@@ -365,7 +365,7 @@ cfg_if! {
                     /// Available UDP transparent proxy types
                     #[doc(hidden)]
                     pub const fn udp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        const AVAILABLE_TYPES: &[&str] = &[];
                         AVAILABLE_TYPES
                     }
                 } else {
@@ -377,7 +377,7 @@ cfg_if! {
                     /// Available TCP transparent proxy types
                     #[doc(hidden)]
                     pub const fn tcp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        const AVAILABLE_TYPES: &[&str] = &[];
                         AVAILABLE_TYPES
                     }
 
@@ -389,7 +389,7 @@ cfg_if! {
                     /// Available UDP transparent proxy types
                     #[doc(hidden)]
                     pub const fn udp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &'static [&'static str] = &[];
+                        const AVAILABLE_TYPES: &[&str] = &[];
                         AVAILABLE_TYPES
                     }
                 }

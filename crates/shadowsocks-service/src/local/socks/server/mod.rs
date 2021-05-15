@@ -187,7 +187,7 @@ impl Socks {
             version => {
                 error!("unsupported socks version {:x}", version);
                 let err = io::Error::new(ErrorKind::Other, "unsupported socks version");
-                return Err(err);
+                Err(err)
             }
         }
     }
