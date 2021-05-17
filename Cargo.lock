@@ -1944,9 +1944,9 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
 name = "trust-dns-https"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45d7695e335eaf31c59beae8964535540436f302bdab856ce6cff17df21da0f6"
+checksum = "9ab5bd71e569c3bf8c0398182bbbdd3065528dbe8cc5d2a9263641e3fdd6775d"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -1967,9 +1967,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-proto"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "952a078337565ba39007de99b151770f41039253a31846f0a3d5cd5a4ac8eedf"
+checksum = "ad0d7f5db438199a6e2609debe3f69f808d074e0a2888ee0bccb45fe234d03f4"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -1993,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-resolver"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da9c97f7d103e0f94dbe384a57908833505ae5870126492f166821b7cf685589"
+checksum = "f6ad17b608a64bd0735e67bde16b0636f8aa8591f831a25d18443ed00a699770"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -2019,9 +2019,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-rustls"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a1c25b0ebd52c90ac9f95ba3e51fca2e375ea542c72016c08f6f96cc1a0515b"
+checksum = "808b76640354180e411074e9874632e73aa2a5206b7a621928834ae791e9628b"
 dependencies = [
  "futures-channel",
  "futures-io",
