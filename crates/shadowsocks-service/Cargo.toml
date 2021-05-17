@@ -99,7 +99,7 @@ libc = "0.2"
 hyper = { version = "0.14.7", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-trust-dns-resolver = { version = "0.20.1", optional = true, features = ["serde-config"] }
+trust-dns-resolver = { version = "0.20.3", optional = true, features = ["serde-config"] }
 
 ipnet = "2.3"
 iprange = "0.6"
