@@ -35,6 +35,8 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 * `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
 
+* `local-dns` - Allow using dns protocol for `sslocal`, serves as a DNS server proxying queries to local or remote DNS servers by ACL rules
+
 * `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
 
 * `aead-cipher-extra` - Enable non-standard AEAD ciphers
