@@ -15,24 +15,44 @@ def get_apnic_delegated():
 
 
 def generate_ipset(content, name, location_set, type_set, output_file):
-    cidr_trans = {}
-    for i in range(0, 32):
-        cidr_trans[2 ** (32 - i - 1)] = i + 1
+
+    if 'ipv4' in type_set:
+        cidr_trans = {}
+        for i in range(0, 32):
+            cidr_trans[2 ** (32 - i - 1)] = i + 1
 
     for line in content.splitlines():
         if line.startswith('#'):
             continue
 
         splits = line.split('|')
-        if len(splits) == 7 and splits[0] == 'apnic':
-            location = splits[1]
-            addr_type = splits[2]
-            if location in location_set and addr_type in type_set:
-                start = splits[3]
-                mask = cidr_trans[int(splits[4])] if addr_type == 'ipv4' else int(
-                    splits[4])
-                output_file.write(
-                    'add {} {}/{} -exist\n'.format(name, start, mask))
+        if len(splits) == 7:
+            '''
+            This is a Record with 7 fields
+            '''
+
+            registry, cc, type_, start, value, _, _ = splits
+            if registry != 'apnic':
+                continue
+
+            if cc in location_set and type_ in type_set:
+
+                if type_ == 'ipv4':
+                    '''
+                    In the case of IPv4 address the count of hosts for this range. This count does not have to represent a CIDR range.
+
+                    But. It seems that it is always a CIDR range in this paticalur file.
+                    '''
+                    mask = cidr_trans[int(value)]
+                    output_file.write(
+                        'add {} {}/{} -exist\n'.format(name, start, mask))
+
+                elif type_ == 'ipv6':
+                    '''
+                    In the case of an IPv6 address the value will be the CIDR prefix length from the ‘first address’ value of <start>.
+                    '''
+                    output_file.write(
+                        'add {} {}/{} -exist\n'.format(name, start, value))
 
 
 if __name__ == '__main__':
