@@ -201,7 +201,7 @@ sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0
 
 ```bash
 # Read local client configuration from file
-sslocal -c /path/to/shadowsocks.json --protocol http
+sslocal -b "127.0.0.1:3128" --protocol http -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
 
 All parameters are the same as Socks5 client, except `--protocol http`.
@@ -211,22 +211,29 @@ All parameters are the same as Socks5 client, except `--protocol http`.
 ```bash
 # Read local client configuration from file
 # Set 127.0.0.1:8080 as the target for forwarding to
-sslocal -c /path/to/shadowsocks.json -f "127.0.0.1:8080" --protocol tunnel
+sslocal --protocol tunnel -b "127.0.0.1:3128" --protocol tunnel -f "127.0.0.1:8080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
+
+* `--protocol tunnel` enables local client Tunnel mode
+* `-f "127.0.0.1:8080` sets the tunnel target address
 
 ### Transparent Proxy Local client
 
-**NOTE**: This is currently only supports
+**NOTE**: It currently only supports
 
 * Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
 * BSDs (with `pf`), such as OS X 10.10+, FreeBSD, ...
 
 ```bash
 # Read local client configuration from file
-sslocal -c /path/to/shadowsocks.json --protocol redir
+sslocal -b "127.0.0.1:60080" --protocol redir -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --tcp-redir "redirect" --udp-redir "tproxy"
 ```
 
 Redirects connections with `iptables` configurations to the port that `sslocal` is listening on.
+
+* `--protocol redir` enables local client Redir mode
+* (optional) `--tcp-redir` sets TCP mode to `REDIRECT` (Linux)
+* (optional) `--udp-redir` sets UDP mode to `TPROXY` (Linux)
 
 ### Server
 
