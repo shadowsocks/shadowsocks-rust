@@ -184,12 +184,16 @@ List all available arguments with `-h`.
 
 ## Usage
 
-### Socks5 Local client
+Start local client with configuration file
 
 ```bash
 # Read local client configuration from file
 sslocal -c /path/to/shadowsocks.json
+```
 
+### Socks5 Local client
+
+```bash
 # Pass all parameters via command line
 sslocal -b "127.0.0.1:1080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin" --plugin-opts "server;tls;host=github.com"
 
