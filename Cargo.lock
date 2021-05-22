@@ -497,9 +497,9 @@ dependencies = [
 
 [[package]]
 name = "getrandom"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9495705279e7140bf035dde1f6e750c162df8b625267cd52cc44e0b156732c8"
+checksum = "7fcd999463524c52659517fe2cea98493cfe485d10565e7b0fb07dbba7ad2753"
 dependencies = [
  "cfg-if",
  "libc",
@@ -694,9 +694,9 @@ checksum = "47be2f14c678be2fdcab04ab1171db51b2762ce6f0a8ee87c8dd4a04ed216135"
 
 [[package]]
 name = "iprange"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f97116c07c1d65dacd68ec91d8df530f5c1f7fcfc56ec4d91b4d7d854868c080"
+checksum = "6aae19bc97e7b1130a569f79265e1dcc36a54bbc8184c9c5582b4b9bfaf4c057"
 dependencies = [
  "ipnet",
 ]
@@ -1030,9 +1030,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "2.2.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b50b8919aecb97e5ee9aceef27e24f39c46b11831130f4a6b7b091ec5de0de12"
+checksum = "76d99537dd7019c4dabfcf3898a43ee685412f76e6bee1ecc48785d730c1a275"
 dependencies = [
  "num-traits",
 ]
@@ -1169,9 +1169,9 @@ checksum = "bc881b2c22681370c6a780e47af9840ef841837bc98118431d4e1868bd0c1086"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a152013215dca273577e18d2bf00fa862b89b24169fb78c4c95aeb07992c9cec"
+checksum = "f0d8caf72986c1a598726adc988bb5984792ef84f5ee5aa50209145ee8077038"
 dependencies = [
  "unicode-xid",
 ]
@@ -1308,18 +1308,18 @@ dependencies = [
 
 [[package]]
 name = "rpmalloc"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dae55d27fc56f399aec2583434bf22c7100fe983b2115bbc1d961ec4f7df5db"
+checksum = "86179c13cdc0bcedbb60e63c1aebe3bac82162ddfa746320de6dcea31ebe2b06"
 dependencies = [
  "rpmalloc-sys",
 ]
 
 [[package]]
 name = "rpmalloc-sys"
-version = "0.2.1+1.4.1"
+version = "0.2.2+1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a3e9198b851305d2f4bf86353b98016d79b871158ea5f9d0756b84022aefb99"
+checksum = "370e623bf2ca97dd497b7dd0e2889ec953a46c8c268489a818a5e305633e8609"
 dependencies = [
  "cc",
  "libc",
