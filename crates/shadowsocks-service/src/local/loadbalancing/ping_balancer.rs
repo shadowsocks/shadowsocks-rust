@@ -192,7 +192,7 @@ impl PingBalancerContext {
 
             if first_run {
                 info!(
-                    "choosen best TCP server {}",
+                    "chose best TCP server {}",
                     ServerConfigFormatter::new(self.servers[best_idx].server_config())
                 );
             } else {
@@ -227,7 +227,7 @@ impl PingBalancerContext {
 
             if first_run {
                 info!(
-                    "choosen best UDP server {}",
+                    "chose best UDP server {}",
                     ServerConfigFormatter::new(self.servers[best_idx].server_config())
                 );
             } else {
