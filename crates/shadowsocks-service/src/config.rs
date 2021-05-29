@@ -1147,7 +1147,7 @@ impl Config {
 
         // Standard config
         // Server
-        match (config.server, config.server_port, config.password, config.method) {
+        match (config.server, config.server_port, config.password, &config.method) {
             (Some(address), Some(port), Some(pwd), Some(m)) => {
                 let addr = match address.parse::<Ipv4Addr>() {
                     Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))),
@@ -1190,6 +1190,9 @@ impl Config {
                 }
 
                 nconfig.server.push(nsvr);
+            }
+            (None, None, None, Some(_)) if config_type.is_manager() => {
+                // Set the default method for manager
             }
             (None, None, None, None) => (),
             _ => {
@@ -1326,6 +1329,21 @@ impl Config {
 
             let mut manager_config = ManagerConfig::new(manager);
             manager_config.mode = global_mode;
+
+            if let Some(ref m) = config.method {
+                match m.parse::<CipherKind>() {
+                    Ok(method) => manager_config.method = Some(method),
+                    Err(..) => {
+                        let err = Error::new(
+                            ErrorKind::Invalid,
+                            "unsupported method",
+                            Some(format!("`{}` is not a supported method", m)),
+                        );
+                        return Err(err);
+                    }
+                }
+            }
+
             nconfig.manager = Some(manager_config);
         }
 
