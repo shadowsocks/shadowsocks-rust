@@ -73,6 +73,10 @@ pub async fn run(config: Config) -> io::Result<()> {
         manager.set_udp_expiry_duration(d);
     }
 
+    if let Some(acl) = config.acl {
+        manager.set_acl(Arc::new(acl));
+    }
+
     for svr_cfg in config.server {
         manager.add_server(svr_cfg).await;
     }
