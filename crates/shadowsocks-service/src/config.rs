@@ -138,6 +138,9 @@ struct SSLocalExtConfig {
     local_port: u16,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    disabled: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -998,6 +1001,10 @@ impl Config {
                 // `locals` are only effective in local server
                 if let Some(locals) = config.locals {
                     for local in locals {
+                        if local.disabled.unwrap_or(false) {
+                            continue;
+                        }
+
                         if local.local_port == 0 {
                             let err = Error::new(ErrorKind::Malformed, "`local_port` cannot be 0", None);
                             return Err(err);
@@ -1667,6 +1674,7 @@ impl fmt::Display for Config {
                             ServerAddr::SocketAddr(ref sa) => sa.port(),
                             ServerAddr::DomainName(.., port) => port,
                         },
+                        disabled: None,
                         local_udp_address: local.udp_addr.as_ref().map(|udp_addr| match udp_addr {
                             ServerAddr::SocketAddr(sa) => sa.ip().to_string(),
                             ServerAddr::DomainName(dm, ..) => dm.to_string(),
