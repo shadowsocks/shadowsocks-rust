@@ -1526,7 +1526,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.11.2"
+version = "1.11.1"
 dependencies = [
  "byte_string",
  "byteorder",
@@ -1549,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.11.2"
+version = "1.11.1"
 dependencies = [
  "async-trait",
  "byte_string",
