@@ -222,7 +222,7 @@ All parameters are the same as Socks5 client, except `--protocol http`.
 ```bash
 # Read local client configuration from file
 # Set 127.0.0.1:8080 as the target for forwarding to
-sslocal --protocol tunnel -b "127.0.0.1:3128" --protocol tunnel -f "127.0.0.1:8080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
+sslocal --protocol tunnel -b "127.0.0.1:3128" -f "127.0.0.1:8080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
 
 * `--protocol tunnel` enables local client Tunnel mode
