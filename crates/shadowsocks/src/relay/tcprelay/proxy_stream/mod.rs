@@ -7,4 +7,3 @@ pub use self::{
 
 pub mod client;
 pub mod server;
-mod timeout;

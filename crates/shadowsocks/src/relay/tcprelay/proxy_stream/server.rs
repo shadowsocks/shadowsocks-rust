@@ -4,7 +4,6 @@ use std::{
     io,
     pin::Pin,
     task::{self, Poll},
-    time::Duration,
 };
 
 use pin_project::pin_project;
@@ -16,13 +15,11 @@ use crate::{
     relay::tcprelay::crypto_io::{CryptoStream, CryptoStreamReadHalf, CryptoStreamWriteHalf},
 };
 
-use super::timeout::TimedStream;
-
 /// A stream for communicating with shadowsocks' proxy client
 #[pin_project]
 pub struct ProxyServerStream<S> {
     #[pin]
-    stream: CryptoStream<TimedStream<S>>,
+    stream: CryptoStream<S>,
     context: SharedContext,
 }
 
@@ -32,33 +29,26 @@ impl<S> ProxyServerStream<S> {
         stream: S,
         method: CipherKind,
         key: &[u8],
-        connection_timeout: Duration,
     ) -> ProxyServerStream<S> {
         ProxyServerStream {
-            stream: CryptoStream::from_stream(
-                &context,
-                // NOTE: All stream will have a default timeout even if `svr_cfg.timeout()` is None
-                TimedStream::new(stream, Some(connection_timeout)),
-                method,
-                key,
-            ),
+            stream: CryptoStream::from_stream(&context, stream, method, key),
             context,
         }
     }
 
     /// Get reference of the internal stream
     pub fn get_ref(&self) -> &S {
-        self.stream.get_ref().get_ref()
+        self.stream.get_ref()
     }
 
     /// Get mutable reference of the internal stream
     pub fn get_mut(&mut self) -> &mut S {
-        self.stream.get_mut().get_mut()
+        self.stream.get_mut()
     }
 
     /// Consumes the object and return the internal stream
     pub fn into_inner(self) -> S {
-        self.stream.into_inner().into_inner()
+        self.stream.into_inner()
     }
 }
 
@@ -115,7 +105,7 @@ where
 #[pin_project]
 pub struct ProxyServerStreamReadHalf<S> {
     #[pin]
-    reader: CryptoStreamReadHalf<TimedStream<S>>,
+    reader: CryptoStreamReadHalf<S>,
     context: SharedContext,
 }
 
@@ -134,7 +124,7 @@ where
 #[pin_project]
 pub struct ProxyServerStreamWriteHalf<S> {
     #[pin]
-    writer: CryptoStreamWriteHalf<TimedStream<S>>,
+    writer: CryptoStreamWriteHalf<S>,
 }
 
 impl<S> AsyncWrite for ProxyServerStreamWriteHalf<S>

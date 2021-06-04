@@ -119,7 +119,21 @@ impl TcpServerClient {
                     "handshake failed, maybe wrong method or key, or under reply attacks. peer: {}, error: {}",
                     self.peer_addr, err
                 );
-                let _ = ignore_until_end(&mut self.stream).await;
+
+                // Unwrap and get the plain stream.
+                // Otherwise it will keep reporting decryption error before reaching EOF.
+                //
+                // Note: This will drop all data in the decryption buffer, which is no going back.
+                let mut stream = self.stream.into_inner();
+
+                let res = ignore_until_end(&mut stream).await;
+
+                trace!(
+                    "slient-drop peer: {} is now closing with result {:?}",
+                    self.peer_addr,
+                    res
+                );
+
                 return Ok(());
             }
         };
