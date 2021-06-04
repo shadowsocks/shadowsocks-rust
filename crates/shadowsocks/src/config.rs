@@ -155,7 +155,7 @@ pub struct ServerConfig {
     method: CipherKind,
     /// Encryption key
     enc_key: Box<[u8]>,
-    /// Handshake timeout
+    /// Handshake timeout (connect)
     timeout: Option<Duration>,
 
     /// Plugin config
@@ -277,6 +277,15 @@ impl ServerConfig {
     /// Timeout
     pub fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+
+    /// Timeout for established tunnels (connection)
+    pub fn connection_timeout(&self) -> Duration {
+        // Connection should be kept at least 24 hours.
+        // Otherwise connection will be closed accidently if there are no data exchanged from both ends.
+        static MIN_CONNECTION_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
+
+        std::cmp::max(MIN_CONNECTION_TIMEOUT, self.timeout.unwrap_or(Duration::from_secs(0)))
     }
 
     /// Get server's remark

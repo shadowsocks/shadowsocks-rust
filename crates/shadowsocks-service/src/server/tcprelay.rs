@@ -8,17 +8,13 @@ use std::{
     time::Duration,
 };
 
-use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
     crypto::v1::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
     relay::{
         socks5::{Address, Error as Socks5Error},
-        tcprelay::{
-            utils::{copy_from_encrypted, copy_to_encrypted},
-            ProxyServerStream,
-        },
+        tcprelay::{utils::copy_encrypted_bidirectional, ProxyServerStream},
     },
     ProxyListener,
     ServerConfig,
@@ -192,15 +188,6 @@ impl TcpServerClient {
             }
         }
 
-        let (mut lr, mut lw) = self.stream.into_split();
-        let (mut rr, mut rw) = remote_stream.split();
-
-        let l2r = copy_to_encrypted(self.method, &mut lr, &mut rw);
-        let r2l = copy_from_encrypted(self.method, &mut rr, &mut lw);
-
-        tokio::pin!(l2r);
-        tokio::pin!(r2l);
-
         debug!(
             "established tcp tunnel {} <-> {} with {:?}",
             self.peer_addr,
@@ -208,24 +195,19 @@ impl TcpServerClient {
             self.context.connect_opts_ref()
         );
 
-        match future::select(l2r, r2l).await {
-            Either::Left((Ok(..), ..)) => {
-                trace!("tcp tunnel {} -> {} closed", self.peer_addr, target_addr);
-            }
-            Either::Left((Err(err), ..)) => {
+        match copy_encrypted_bidirectional(self.method, &mut self.stream, &mut remote_stream).await {
+            Ok((rn, wn)) => {
                 trace!(
-                    "tcp tunnel {} -> {} closed with error: {}",
+                    "tcp tunnel {} <-> {} closed, L2R {} bytes, R2L {} bytes",
                     self.peer_addr,
                     target_addr,
-                    err
+                    rn,
+                    wn
                 );
             }
-            Either::Right((Ok(..), ..)) => {
-                trace!("tcp tunnel {} <- {} closed", self.peer_addr, target_addr);
-            }
-            Either::Right((Err(err), ..)) => {
+            Err(err) => {
                 trace!(
-                    "tcp tunnel {} <- {} closed with error: {}",
+                    "tcp tunnel {} <-> {} closed with error: {}",
                     self.peer_addr,
                     target_addr,
                     err

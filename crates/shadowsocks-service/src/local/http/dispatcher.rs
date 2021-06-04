@@ -101,7 +101,7 @@ impl HttpDispatcher {
             //
             // FIXME: What STATUS should I return for connection error?
             let server = self.balancer.best_tcp_server();
-            let stream = AutoProxyClientStream::connect(self.context, server.as_ref(), &host).await?;
+            let mut stream = AutoProxyClientStream::connect(self.context, server.as_ref(), &host).await?;
 
             debug!("CONNECT relay connected {} <-> {}", self.client_addr, host);
 
@@ -114,20 +114,13 @@ impl HttpDispatcher {
             let client_addr = self.client_addr;
             tokio::spawn(async move {
                 match upgrade::on(req).await {
-                    Ok(upgraded) => {
+                    Ok(mut upgraded) => {
                         trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
-
-                        use tokio::io::split;
-
-                        let (mut plain_reader, mut plain_writer) = split(upgraded);
-                        let (mut shadow_reader, mut shadow_writer) = stream.into_split();
 
                         let _ = establish_tcp_tunnel(
                             server.server_config(),
-                            &mut plain_reader,
-                            &mut plain_writer,
-                            &mut shadow_reader,
-                            &mut shadow_writer,
+                            &mut upgraded,
+                            &mut stream,
                             client_addr,
                             &host,
                         )

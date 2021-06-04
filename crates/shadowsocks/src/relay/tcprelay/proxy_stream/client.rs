@@ -26,6 +26,8 @@ use crate::{
     },
 };
 
+use super::timeout::TimedStream;
+
 enum ProxyClientStreamWriteState {
     Connect(Address),
     Connecting(BytesMut),
@@ -36,7 +38,7 @@ enum ProxyClientStreamWriteState {
 #[pin_project]
 pub struct ProxyClientStream<S> {
     #[pin]
-    stream: CryptoStream<S>,
+    stream: CryptoStream<TimedStream<S>>,
     state: ProxyClientStreamWriteState,
     context: SharedContext,
 }
@@ -139,7 +141,13 @@ where
         A: Into<Address>,
     {
         let addr = addr.into();
-        let stream = CryptoStream::from_stream(&context, stream, svr_cfg.method(), svr_cfg.key());
+        let stream = CryptoStream::from_stream(
+            &context,
+            // NOTE: All stream will have a default timeout even if `svr_cfg.timeout()` is None
+            TimedStream::new(stream, Some(svr_cfg.connection_timeout())),
+            svr_cfg.method(),
+            svr_cfg.key(),
+        );
 
         ProxyClientStream {
             stream,
@@ -150,17 +158,17 @@ where
 
     /// Get reference to the underlying stream
     pub fn get_ref(&self) -> &S {
-        self.stream.get_ref()
+        self.stream.get_ref().get_ref()
     }
 
     /// Get mutable reference to the underlying stream
     pub fn get_mut(&mut self) -> &mut S {
-        self.stream.get_mut()
+        self.stream.get_mut().get_mut()
     }
 
     /// Consumes the `ProxyClientStream` and return the underlying stream
     pub fn into_inner(self) -> S {
-        self.stream.into_inner()
+        self.stream.into_inner().into_inner()
     }
 }
 
@@ -266,7 +274,7 @@ where
 #[pin_project]
 pub struct ProxyClientStreamReadHalf<S> {
     #[pin]
-    reader: CryptoStreamReadHalf<S>,
+    reader: CryptoStreamReadHalf<TimedStream<S>>,
     context: SharedContext,
 }
 
@@ -285,7 +293,7 @@ where
 #[pin_project]
 pub struct ProxyClientStreamWriteHalf<S> {
     #[pin]
-    writer: CryptoStreamWriteHalf<S>,
+    writer: CryptoStreamWriteHalf<TimedStream<S>>,
     state: ProxyClientStreamWriteState,
 }
 

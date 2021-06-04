@@ -19,7 +19,7 @@ use crate::{
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
-        net::{AutoProxyClientStream, AutoProxyIo},
+        net::AutoProxyClientStream,
         redir::{
             redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
             to_ipv4_mapped,
@@ -44,37 +44,13 @@ async fn establish_client_tcp_redir<'a>(
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
 
-    let remote = AutoProxyClientStream::connect(context, &server, addr).await?;
+    let mut remote = AutoProxyClientStream::connect(context, &server, addr).await?;
 
     if nodelay {
         remote.set_nodelay(true)?;
     }
 
-    if remote.is_proxied() {
-        debug!(
-            "established tcp redir tunnel {} <-> {} through sever {} (outbound: {})",
-            peer_addr,
-            addr,
-            svr_cfg.external_addr(),
-            svr_cfg.addr(),
-        );
-    } else {
-        debug!("established tcp redir tunnel {} <-> {}", peer_addr, addr);
-    }
-
-    let (mut plain_reader, mut plain_writer) = stream.split();
-    let (mut shadow_reader, mut shadow_writer) = remote.into_split();
-
-    establish_tcp_tunnel(
-        svr_cfg,
-        &mut plain_reader,
-        &mut plain_writer,
-        &mut shadow_reader,
-        &mut shadow_writer,
-        peer_addr,
-        addr,
-    )
-    .await
+    establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, addr).await
 }
 
 async fn handle_redir_client(

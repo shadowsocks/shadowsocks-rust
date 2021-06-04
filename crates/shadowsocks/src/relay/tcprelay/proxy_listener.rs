@@ -1,6 +1,6 @@
 //! A TCP listener for accepting shadowsocks' client connection
 
-use std::{io, net::SocketAddr};
+use std::{io, net::SocketAddr, time::Duration};
 
 use once_cell::sync::Lazy;
 use tokio::{
@@ -21,6 +21,7 @@ pub struct ProxyListener {
     listener: TcpListener,
     method: CipherKind,
     key: Box<[u8]>,
+    connection_timeout: Duration,
     context: SharedContext,
 }
 
@@ -56,6 +57,7 @@ impl ProxyListener {
             listener,
             method: svr_cfg.method(),
             key: svr_cfg.key().to_vec().into_boxed_slice(),
+            connection_timeout: svr_cfg.connection_timeout(),
             context,
         }
     }
@@ -76,7 +78,13 @@ impl ProxyListener {
         let stream = map_fn(stream);
 
         // Create a ProxyServerStream and read the target address from it
-        let stream = ProxyServerStream::from_stream(self.context.clone(), stream, self.method, &self.key);
+        let stream = ProxyServerStream::from_stream(
+            self.context.clone(),
+            stream,
+            self.method,
+            &self.key,
+            self.connection_timeout,
+        );
 
         Ok((stream, peer_addr))
     }

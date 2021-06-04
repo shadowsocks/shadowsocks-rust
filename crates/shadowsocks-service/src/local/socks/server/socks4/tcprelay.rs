@@ -121,18 +121,6 @@ impl Socks4TcpHandler {
         // UNWRAP.
         let mut stream = stream.into_inner();
 
-        let (mut plain_reader, mut plain_writer) = stream.split();
-        let (mut shadow_reader, mut shadow_writer) = remote.into_split();
-
-        establish_tcp_tunnel(
-            svr_cfg,
-            &mut plain_reader,
-            &mut plain_writer,
-            &mut shadow_reader,
-            &mut shadow_writer,
-            peer_addr,
-            &target_addr,
-        )
-        .await
+        establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
     }
 }
