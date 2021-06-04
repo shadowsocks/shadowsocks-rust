@@ -56,7 +56,13 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
 
 ```bash
-rustup default nightly-2021-05-21
+# Set default toolchain to nightly
+rustup default nightly
+# RECOMMEND: Check the rust-toolchain file in the project root and use the recomended nightly version
+# For example:
+# rustup default nightly-2021-06-03
+
+# Install from crates.io
 cargo install shadowsocks-rust
 ```
 
