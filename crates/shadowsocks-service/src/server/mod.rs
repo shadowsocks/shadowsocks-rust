@@ -1,6 +1,6 @@
 //! Shadowsocks server
 
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
 use log::trace;
@@ -18,6 +18,11 @@ pub mod context;
 pub mod server;
 mod tcprelay;
 mod udprelay;
+
+/// Default TCP Keep Alive timeout
+///
+/// This is borrowed from Go's `net` library's default setting
+pub(crate) const SERVER_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Starts a shadowsocks server
 pub async fn run(config: Config) -> io::Result<()> {
@@ -64,14 +69,14 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
     connect_opts.tcp.nodelay = config.no_delay;
     connect_opts.tcp.fastopen = config.fast_open;
-    connect_opts.tcp.keepalive = config.keep_alive;
+    connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
 
     let mut accept_opts = AcceptOpts::default();
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
     accept_opts.tcp.fastopen = config.fast_open;
-    accept_opts.tcp.keepalive = config.keep_alive;
+    accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
 
     let resolver = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts)
         .await
