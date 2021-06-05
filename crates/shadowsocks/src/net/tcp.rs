@@ -15,7 +15,7 @@ use std::{
 use futures::{future, ready};
 use log::{debug, warn};
 use pin_project::pin_project;
-use socket2::Socket;
+use socket2::{Socket, TcpKeepalive};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpListener as TokioTcpListener, TcpSocket, TcpStream as TokioTcpStream},
@@ -265,7 +265,24 @@ fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Resu
     }
 
     try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
-    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+
+    if let Some(keepalive_duration) = opts.tcp.keepalive {
+        #[allow(unused_mut)]
+        let mut keepalive = TcpKeepalive::new().with_time(keepalive_duration);
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_os = "netbsd",
+            target_vendor = "apple",
+        ))]
+        {
+            keepalive = keepalive.with_interval(keepalive_duration);
+        }
+
+        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+    }
 
     let _ = socket.into_raw_fd();
     Ok(())
@@ -296,7 +313,13 @@ fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Resu
     }
 
     try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
-    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+
+    if let Some(keepalive_duration) = opts.tcp.keepalive {
+        let keepalive = TcpKeepalive::new()
+            .with_time(keepalive_duration)
+            .with_interval(keepalive_duration);
+        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+    }
 
     let _ = socket.into_raw_socket();
     Ok(())

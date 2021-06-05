@@ -39,16 +39,11 @@ async fn establish_client_tcp_redir<'a>(
     mut stream: TcpStream,
     peer_addr: SocketAddr,
     addr: &Address,
-    nodelay: bool,
 ) -> io::Result<()> {
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
 
     let mut remote = AutoProxyClientStream::connect(context, &server, addr).await?;
-
-    if nodelay {
-        remote.set_nodelay(true)?;
-    }
 
     establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, addr).await
 }
@@ -59,20 +54,7 @@ async fn handle_redir_client(
     s: TcpStream,
     peer_addr: SocketAddr,
     mut daddr: SocketAddr,
-    nodelay: bool,
 ) -> io::Result<()> {
-    // let svr_cfg = server.server_config();
-    //
-    // if let Err(err) = s.set_keepalive(svr_cfg.timeout()) {
-    //     error!("failed to set keep alive: {:?}", err);
-    // }
-
-    if nodelay {
-        if let Err(err) = s.set_nodelay(true) {
-            error!("failed to set TCP_NODELAY on accepted socket, error: {:?}", err);
-        }
-    }
-
     // Get forward address from socket
     //
     // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
@@ -82,7 +64,7 @@ async fn handle_redir_client(
         }
     }
     let target_addr = Address::from(daddr);
-    establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr, nodelay).await
+    establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
 }
 
 pub async fn run_tcp_redir(
@@ -90,7 +72,6 @@ pub async fn run_tcp_redir(
     client_config: &ServerAddr,
     balancer: PingBalancer,
     redir_ty: RedirType,
-    nodelay: bool,
 ) -> io::Result<()> {
     let listener = match *client_config {
         ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr).await?,
@@ -137,7 +118,7 @@ pub async fn run_tcp_redir(
                 }
             };
 
-            if let Err(err) = handle_redir_client(context, balancer, socket, peer_addr, dst_addr, nodelay).await {
+            if let Err(err) = handle_redir_client(context, balancer, socket, peer_addr, dst_addr).await {
                 debug!("TCP redirect client, error: {:?}", err);
             }
         });

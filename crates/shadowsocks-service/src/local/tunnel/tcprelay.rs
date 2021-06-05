@@ -18,7 +18,6 @@ pub async fn run_tcp_tunnel(
     client_config: &ServerAddr,
     balancer: PingBalancer,
     forward_addr: &Address,
-    nodelay: bool,
 ) -> io::Result<()> {
     let listener = match *client_config {
         ServerAddr::SocketAddr(ref saddr) => ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?,
@@ -42,10 +41,6 @@ pub async fn run_tcp_tunnel(
             }
         };
 
-        if nodelay {
-            let _ = stream.set_nodelay(true);
-        }
-
         let balancer = balancer.clone();
         let forward_addr = forward_addr.clone();
 
@@ -55,7 +50,6 @@ pub async fn run_tcp_tunnel(
             balancer,
             peer_addr,
             forward_addr,
-            nodelay,
         ));
     }
 }
@@ -66,7 +60,6 @@ async fn handle_tcp_client(
     balancer: PingBalancer,
     peer_addr: SocketAddr,
     forward_addr: Address,
-    nodelay: bool,
 ) -> io::Result<()> {
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
@@ -79,10 +72,6 @@ async fn handle_tcp_client(
     );
 
     let mut remote = AutoProxyClientStream::connect_proxied(context, &server, &forward_addr).await?;
-
-    if nodelay {
-        remote.set_nodelay(true)?;
-    }
 
     establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &forward_addr).await
 }

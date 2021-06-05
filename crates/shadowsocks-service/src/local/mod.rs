@@ -82,7 +82,9 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     };
     connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
     connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
+    connect_opts.tcp.nodelay = config.no_delay;
     connect_opts.tcp.fastopen = config.fast_open;
+    connect_opts.tcp.keepalive = config.keep_alive;
     context.set_connect_opts(connect_opts);
 
     let mut accept_opts = AcceptOpts::default();
@@ -90,6 +92,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
     accept_opts.tcp.fastopen = config.fast_open;
+    accept_opts.tcp.keepalive = config.keep_alive;
 
     if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, context.connect_opts_ref()).await {
         context.set_dns_resolver(Arc::new(resolver));
@@ -215,9 +218,6 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(b) = local_config.udp_addr {
                     server.set_udp_bind_addr(b.clone());
                 }
-                if config.no_delay {
-                    server.set_nodelay(true);
-                }
 
                 vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
             }
@@ -236,9 +236,6 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                     server.set_udp_expiry_duration(d);
                 }
                 server.set_mode(local_config.mode);
-                if config.no_delay {
-                    server.set_nodelay(true);
-                }
 
                 let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
                 vfut.push(async move { server.run(&client_addr, &udp_addr, balancer).await }.boxed());
@@ -262,9 +259,6 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                     server.set_udp_expiry_duration(d);
                 }
                 server.set_mode(local_config.mode);
-                if config.no_delay {
-                    server.set_nodelay(true);
-                }
                 server.set_tcp_redir(local_config.tcp_redir);
                 server.set_udp_redir(local_config.udp_redir);
 

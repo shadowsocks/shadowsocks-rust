@@ -24,16 +24,14 @@ use crate::local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeR
 
 pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
-    nodelay: bool,
     balancer: PingBalancer,
     mode: Mode,
 }
 
 impl Socks4TcpHandler {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
         Socks4TcpHandler {
             context,
-            nodelay,
             balancer,
             mode,
         }
@@ -107,10 +105,6 @@ impl Socks4TcpHandler {
                 return Err(err);
             }
         };
-
-        if self.nodelay {
-            remote.set_nodelay(true)?;
-        }
 
         // NOTE: Transfer all buffered data before unwrap, or these data will be lost
         let buffer = stream.buffer();

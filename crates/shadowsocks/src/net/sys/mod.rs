@@ -55,24 +55,40 @@ fn set_common_sockopt_after_connect(stream: &tokio::net::TcpStream, opts: &Conne
 #[cfg(unix)]
 #[inline]
 fn set_common_sockopt_after_connect_sys(stream: &tokio::net::TcpStream, opts: &ConnectOpts) -> io::Result<()> {
-    use socket2::Socket;
+    use socket2::{Socket, TcpKeepalive};
     use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
 
     let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
 
     macro_rules! try_sockopt {
-                ($socket:ident . $func:ident ($($arg:expr),*)) => {
-                    match $socket . $func ($($arg),*) {
-                        Ok(e) => e,
-                        Err(err) => {
-                            let _ = socket.into_raw_fd();
-                            return Err(err);
-                        }
-                    }
-                };
+        ($socket:ident . $func:ident ($($arg:expr),*)) => {
+            match $socket . $func ($($arg),*) {
+                Ok(e) => e,
+                Err(err) => {
+                    let _ = socket.into_raw_fd();
+                    return Err(err);
+                }
             }
+        };
+    }
 
-    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+    if let Some(keepalive_duration) = opts.tcp.keepalive {
+        #[allow(unused_mut)]
+        let mut keepalive = TcpKeepalive::new().with_time(keepalive_duration);
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_os = "netbsd",
+            target_vendor = "apple",
+        ))]
+        {
+            keepalive = keepalive.with_interval(keepalive_duration);
+        }
+
+        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+    }
 
     let _ = socket.into_raw_fd();
     Ok(())
@@ -81,24 +97,29 @@ fn set_common_sockopt_after_connect_sys(stream: &tokio::net::TcpStream, opts: &C
 #[cfg(windows)]
 #[inline]
 fn set_common_sockopt_after_connect_sys(stream: &tokio::net::TcpStream, opts: &ConnectOpts) -> io::Result<()> {
-    use socket2::Socket;
+    use socket2::{Socket, TcpKeepalive};
     use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket};
 
     let socket = unsafe { Socket::from_raw_socket(stream.as_raw_socket()) };
 
     macro_rules! try_sockopt {
-                ($socket:ident . $func:ident ($($arg:expr),*)) => {
-                    match $socket . $func ($($arg),*) {
-                        Ok(e) => e,
-                        Err(err) => {
-                            let _ = socket.into_raw_socket();
-                            return Err(err);
-                        }
-                    }
-                };
+        ($socket:ident . $func:ident ($($arg:expr),*)) => {
+            match $socket . $func ($($arg),*) {
+                Ok(e) => e,
+                Err(err) => {
+                    let _ = socket.into_raw_socket();
+                    return Err(err);
+                }
             }
+        };
+    }
 
-    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+    if let Some(keepalive_duration) = opts.tcp.keepalive {
+        let keepalive = TcpKeepalive::new()
+            .with_time(keepalive_duration)
+            .with_interval(keepalive_duration);
+        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+    }
 
     let _ = socket.into_raw_socket();
     Ok(())

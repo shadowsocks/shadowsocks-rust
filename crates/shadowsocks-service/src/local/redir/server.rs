@@ -18,7 +18,6 @@ pub struct Redir {
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
-    nodelay: bool,
     tcp_redir: RedirType,
     udp_redir: RedirType,
 }
@@ -43,7 +42,6 @@ impl Redir {
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: None,
-            nodelay: false,
             tcp_redir: RedirType::tcp_default(),
             udp_redir: RedirType::udp_default(),
         }
@@ -62,11 +60,6 @@ impl Redir {
     /// Set server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
-    }
-
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
     }
 
     /// Set transparent proxy type of TCP relay, which is platform dependent
@@ -96,14 +89,7 @@ impl Redir {
     }
 
     async fn run_tcp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
-        run_tcp_redir(
-            self.context.clone(),
-            client_config,
-            balancer,
-            self.tcp_redir,
-            self.nodelay,
-        )
-        .await
+        run_tcp_redir(self.context.clone(), client_config, balancer, self.tcp_redir).await
     }
 
     async fn run_udp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {

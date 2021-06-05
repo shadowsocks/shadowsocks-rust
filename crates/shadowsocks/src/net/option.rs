@@ -1,6 +1,6 @@
 //! Options for connecting to remote server
 
-use std::net::IpAddr;
+use std::{net::IpAddr, time::Duration};
 
 /// Options for connecting to TCP remote server
 #[derive(Debug, Clone)]
@@ -17,8 +17,9 @@ pub struct TcpSocketOpts {
     /// `TCP_FASTOPEN`, enables TFO
     pub fastopen: bool,
 
-    /// `TCP_KEEPALIVE`, enables keep-alive messages on connection-oriented sockets
-    pub keepalive: bool,
+    /// `SO_KEEPALIVE` and sets `TCP_KEEPIDLE`, `TCP_KEEPINTVL` and `TCP_KEEPCNT` respectly,
+    /// enables keep-alive messages on connection-oriented sockets
+    pub keepalive: Option<Duration>,
 }
 
 impl Default for TcpSocketOpts {
@@ -28,7 +29,7 @@ impl Default for TcpSocketOpts {
             recv_buffer_size: None,
             nodelay: false,
             fastopen: false,
-            keepalive: true,
+            keepalive: None,
         }
     }
 }

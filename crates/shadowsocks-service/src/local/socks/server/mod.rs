@@ -24,7 +24,6 @@ pub struct Socks {
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     udp_bind_addr: Option<ServerAddr>,
-    nodelay: bool,
 }
 
 impl Default for Socks {
@@ -48,7 +47,6 @@ impl Socks {
             udp_expiry_duration: None,
             udp_capacity: None,
             udp_bind_addr: None,
-            nodelay: false,
         }
     }
 
@@ -73,11 +71,6 @@ impl Socks {
     /// * Otherwise, UDP relay will bind to this address
     pub fn set_udp_bind_addr(&mut self, a: ServerAddr) {
         self.udp_bind_addr = Some(a);
-    }
-
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
     }
 
     /// Start serving
@@ -133,13 +126,8 @@ impl Socks {
                 }
             };
 
-            if self.nodelay {
-                let _ = stream.set_nodelay(true);
-            }
-
             let balancer = balancer.clone();
             let context = self.context.clone();
-            let nodelay = self.nodelay;
             let udp_bind_addr = udp_bind_addr.clone();
             let mode = self.mode;
 
@@ -150,7 +138,6 @@ impl Socks {
                 balancer,
                 peer_addr,
                 mode,
-                nodelay,
             ));
         }
     }
@@ -163,7 +150,6 @@ impl Socks {
         balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
-        nodelay: bool,
     ) -> io::Result<()> {
         use std::io::ErrorKind;
 
@@ -175,12 +161,12 @@ impl Socks {
 
         match version_buffer[0] {
             0x04 => {
-                let handler = Socks4TcpHandler::new(context, nodelay, balancer, mode);
+                let handler = Socks4TcpHandler::new(context, balancer, mode);
                 handler.handle_socks4_client(stream, peer_addr).await
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, balancer, mode);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
@@ -200,9 +186,8 @@ impl Socks {
         balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
-        nodelay: bool,
     ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, udp_bind_addr, nodelay, balancer, mode);
+        let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode);
         handler.handle_socks5_client(stream, peer_addr).await
     }
 

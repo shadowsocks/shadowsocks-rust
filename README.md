@@ -458,6 +458,9 @@ Example configuration:
     // TCP_NODELAY
     "no_delay": false,
 
+    // Enables `SO_KEEPALIVE` and set `TCP_KEEPIDLE`, `TCP_KEEPINTVL` to the specified seconds
+    "keep_alive": 15,
+
     // Soft and Hard limit of file descriptors on *NIX systems
     "nofile": 10240,
 

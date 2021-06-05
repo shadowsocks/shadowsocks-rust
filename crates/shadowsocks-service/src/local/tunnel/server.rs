@@ -16,7 +16,6 @@ pub struct Tunnel {
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
-    nodelay: bool,
 }
 
 impl Tunnel {
@@ -34,7 +33,6 @@ impl Tunnel {
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: None,
-            nodelay: false,
         }
     }
 
@@ -51,11 +49,6 @@ impl Tunnel {
     /// Set server mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
-    }
-
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
     }
 
     /// Start serving
@@ -75,14 +68,7 @@ impl Tunnel {
     }
 
     async fn run_tcp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
-        run_tcp_tunnel(
-            self.context.clone(),
-            client_config,
-            balancer,
-            &self.forward_addr,
-            self.nodelay,
-        )
-        .await
+        run_tcp_tunnel(self.context.clone(), client_config, balancer, &self.forward_addr).await
     }
 
     async fn run_udp_tunnel(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {

@@ -123,6 +123,8 @@ struct SSConfig {
     mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keep_alive: Option<u64>,
     #[cfg(all(unix, not(target_os = "android")))]
     #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
@@ -769,6 +771,9 @@ pub struct Config {
     pub no_delay: bool,
     /// Set `TCP_FASTOPEN` socket option
     pub fast_open: bool,
+    /// Set TCP Keep-Alive duration, will set both `TCP_KEEPIDLE` and `TCP_KEEPINTVL`
+    pub keep_alive: Option<Duration>,
+
     /// `RLIMIT_NOFILE` option for *nix systems
     #[cfg(all(unix, not(target_os = "android")))]
     pub nofile: Option<u64>,
@@ -883,6 +888,8 @@ impl Config {
 
             no_delay: false,
             fast_open: false,
+            keep_alive: None,
+
             #[cfg(all(unix, not(target_os = "android")))]
             nofile: None,
 
@@ -1374,6 +1381,11 @@ impl Config {
             nconfig.fast_open = b;
         }
 
+        // TCP Keep-Alive
+        if let Some(d) = config.keep_alive {
+            nconfig.keep_alive = Some(Duration::from_secs(d));
+        }
+
         // UDP
         nconfig.udp_timeout = config.udp_timeout.map(Duration::from_secs);
 
@@ -1862,6 +1874,10 @@ impl fmt::Display for Config {
 
         if self.fast_open {
             jconf.fast_open = Some(self.fast_open);
+        }
+
+        if let Some(keepalive) = self.keep_alive {
+            jconf.keep_alive = Some(keepalive.as_secs());
         }
 
         match self.dns {

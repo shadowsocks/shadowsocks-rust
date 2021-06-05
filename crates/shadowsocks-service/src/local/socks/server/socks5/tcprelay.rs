@@ -36,7 +36,6 @@ use crate::{
 pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
     udp_bind_addr: Option<Arc<ServerAddr>>,
-    nodelay: bool,
     balancer: PingBalancer,
     mode: Mode,
 }
@@ -45,14 +44,12 @@ impl Socks5TcpHandler {
     pub fn new(
         context: Arc<ServiceContext>,
         udp_bind_addr: Option<Arc<ServerAddr>>,
-        nodelay: bool,
         balancer: PingBalancer,
         mode: Mode,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
             udp_bind_addr,
-            nodelay,
             balancer,
             mode,
         }
@@ -162,10 +159,6 @@ impl Socks5TcpHandler {
                 return Err(err);
             }
         };
-
-        if self.nodelay {
-            remote.set_nodelay(true)?;
-        }
 
         establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
     }

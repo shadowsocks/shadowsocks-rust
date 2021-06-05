@@ -54,7 +54,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 mio = "0.7"
-socket2 = "0.4"
+socket2 = { version = "0.4", features = ["all"] }
 tokio = { version = "1.5", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
 
 trust-dns-resolver = { version = "0.20", optional = true }
