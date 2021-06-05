@@ -16,6 +16,9 @@ pub struct TcpSocketOpts {
 
     /// `TCP_FASTOPEN`, enables TFO
     pub fastopen: bool,
+
+    /// `TCP_KEEPALIVE`, enables keep-alive messages on connection-oriented sockets
+    pub keepalive: bool,
 }
 
 impl Default for TcpSocketOpts {
@@ -25,6 +28,7 @@ impl Default for TcpSocketOpts {
             recv_buffer_size: None,
             nodelay: false,
             fastopen: false,
+            keepalive: true,
         }
     }
 }

@@ -241,41 +241,69 @@ impl From<TcpListener> for TokioTcpListener {
 }
 
 #[cfg(unix)]
-fn setsockopt_with_opt<F: AsRawFd>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
+fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
     let socket = unsafe { Socket::from_raw_fd(f.as_raw_fd()) };
 
+    macro_rules! try_sockopt {
+        ($socket:ident . $func:ident ($($arg:expr),*)) => {
+            match $socket . $func ($($arg),*) {
+                Ok(e) => e,
+                Err(err) => {
+                    let _ = socket.into_raw_fd();
+                    return Err(err);
+                }
+            }
+        };
+    }
+
     if let Some(buf_size) = opts.tcp.send_buffer_size {
-        socket.set_send_buffer_size(buf_size as usize)?;
+        try_sockopt!(socket.set_send_buffer_size(buf_size as usize));
     }
 
     if let Some(buf_size) = opts.tcp.recv_buffer_size {
-        socket.set_recv_buffer_size(buf_size as usize)?;
+        try_sockopt!(socket.set_recv_buffer_size(buf_size as usize));
     }
 
-    if opts.tcp.nodelay {
-        socket.set_nodelay(true)?;
-    }
+    try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
+    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
 
     let _ = socket.into_raw_fd();
     Ok(())
 }
 
 #[cfg(windows)]
-fn setsockopt_with_opt<F: AsRawSocket>(f: &F, opts: &AcceptOpts) -> io::Result<()> {
+fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
     let socket = unsafe { Socket::from_raw_socket(f.as_raw_socket()) };
 
+    macro_rules! try_sockopt {
+        ($socket:ident . $func:ident ($($arg:expr),*)) => {
+            match $socket . $func ($($arg),*) {
+                Ok(e) => e,
+                Err(err) => {
+                    let _ = socket.into_raw_socket();
+                    return Err(err);
+                }
+            }
+        };
+    }
+
     if let Some(buf_size) = opts.tcp.send_buffer_size {
-        socket.set_send_buffer_size(buf_size as usize)?;
+        try_sockopt!(socket.set_send_buffer_size(buf_size as usize));
     }
 
     if let Some(buf_size) = opts.tcp.recv_buffer_size {
-        socket.set_recv_buffer_size(buf_size as usize)?;
+        try_sockopt!(socket.set_recv_buffer_size(buf_size as usize));
     }
 
-    if opts.tcp.nodelay {
-        socket.set_nodelay(true)?;
-    }
+    try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
+    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
 
     let _ = socket.into_raw_socket();
+    Ok(())
+}
+
+#[cfg(all(not(windows), not(unix)))]
+fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
+    f.set_nodelay(opts.tcp.nodelay)?;
     Ok(())
 }

@@ -46,9 +46,66 @@ fn set_common_sockopt_for_connect(addr: SocketAddr, socket: &TcpSocket, opts: &C
 }
 
 fn set_common_sockopt_after_connect(stream: &tokio::net::TcpStream, opts: &ConnectOpts) -> io::Result<()> {
-    if opts.tcp.nodelay {
-        stream.set_nodelay(true)?;
-    }
+    stream.set_nodelay(opts.tcp.nodelay)?;
+    set_common_sockopt_after_connect_sys(stream, opts)?;
 
+    Ok(())
+}
+
+#[cfg(unix)]
+#[inline]
+fn set_common_sockopt_after_connect_sys(stream: &tokio::net::TcpStream, opts: &ConnectOpts) -> io::Result<()> {
+    use socket2::Socket;
+    use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+
+    let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
+
+    macro_rules! try_sockopt {
+                ($socket:ident . $func:ident ($($arg:expr),*)) => {
+                    match $socket . $func ($($arg),*) {
+                        Ok(e) => e,
+                        Err(err) => {
+                            let _ = socket.into_raw_fd();
+                            return Err(err);
+                        }
+                    }
+                };
+            }
+
+    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+
+    let _ = socket.into_raw_fd();
+    Ok(())
+}
+
+#[cfg(windows)]
+#[inline]
+fn set_common_sockopt_after_connect_sys(stream: &tokio::net::TcpStream, opts: &ConnectOpts) -> io::Result<()> {
+    use socket2::Socket;
+    use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket};
+
+    let socket = unsafe { Socket::from_raw_socket(stream.as_raw_socket()) };
+
+    macro_rules! try_sockopt {
+                ($socket:ident . $func:ident ($($arg:expr),*)) => {
+                    match $socket . $func ($($arg),*) {
+                        Ok(e) => e,
+                        Err(err) => {
+                            let _ = socket.into_raw_socket();
+                            return Err(err);
+                        }
+                    }
+                };
+            }
+
+    try_sockopt!(socket.set_keepalive(opts.tcp.keepalive));
+
+    let _ = socket.into_raw_socket();
+    Ok(())
+}
+
+#[cfg(all(not(windows), not(unix)))]
+#[inline]
+fn set_common_sockopt_after_connect_sys(_: &tokio::net::TcpStream, _: &ConnectOpts) -> io::Result<()> {
     Ok(())
 }
