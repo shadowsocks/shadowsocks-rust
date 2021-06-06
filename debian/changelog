@@ -1,3 +1,24 @@
+shadowsocks-rust (1.11.1) unstable; urgency=medium
+
+  ## Features
+
+  - #546 Enable TCP Keep Alive for inbound and outbound sockets
+      - Add a new `keep_alive` key in configuration for configuring keep alive timeout
+      - Default timeout is 15 seconds (like Go's `net` library's default)
+
+  - #543 Add `disabled` key for local servers in configuration
+
+  ## Bug Fixed
+
+  - #490 Try to purge half-open TCP connections when one direction is closed
+      - When one direction is closed, server will set a 5 seconds read timeout on the other half
+
+  - #542 Allow setting `method` for default encryption method when starting `ssmanager` with configuration
+
+  - #541 Fixed ACL rules for `ssmanager`
+
+ -- ty <zonyitoo@gmail.com>  Sun, 6 June 2021 23:16:00 +0800
+
 shadowsocks-rust (1.11.0) unstable; urgency=medium
 
   ## Features
@@ -5,7 +26,7 @@ shadowsocks-rust (1.11.0) unstable; urgency=medium
   - Support TFO (TCP Fast Open) on Linux, Windows, macOS (iOS), FreeBSD (https://github.com/shadowsocks/shadowsocks-rust/issues/184)
   - Support customizing servers' weight for balancer (https://github.com/shadowsocks/shadowsocks-rust/issues/510)
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 14 May 2021 12:31:54 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 14 May 2021 12:31:54 +0800
 
 shadowsocks-rust (1.10.9) unstable; urgency=medium
 
@@ -13,7 +34,7 @@ shadowsocks-rust (1.10.9) unstable; urgency=medium
 
   - HTTP Proxy preserves headers' title case. https://github.com/shadowsocks/shadowsocks-rust/discussions/491 , https://github.com/hyperium/hyper/issues/2313
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 23 Apr 2021 23:58:08 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 23 Apr 2021 23:58:08 +0800
 
 shadowsocks-rust (1.10.8) unstable; urgency=medium
 
@@ -23,7 +44,7 @@ shadowsocks-rust (1.10.8) unstable; urgency=medium
     - `aes-128-ocb-taglen128`, `aes-192-ocb-taglen128`, `aes-256-ocb-taglen128`
     - `aes-siv-cmac-256`, `aes-siv-cmac-384`, `aes-siv-cmac-512`
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 18 Apr 2021 21:00:21 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 18 Apr 2021 21:00:21 +0800
 
 shadowsocks-rust (1.10.7) unstable; urgency=medium
 
@@ -31,7 +52,7 @@ shadowsocks-rust (1.10.7) unstable; urgency=medium
 
   - Support non-standard AEAD ciphers `sm4-gcm` and `sm4-ccm`
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 17 Apr 2021 22:46:39 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 17 Apr 2021 22:46:39 +0800
 
 shadowsocks-rust (1.10.6) unstable; urgency=medium
 
@@ -48,7 +69,7 @@ shadowsocks-rust (1.10.6) unstable; urgency=medium
 
   - [shadowsocks/shadowsocks-android#2705](https://github.com/shadowsocks/shadowsocks-android/issues/2705) MD5 algorithm bug causes KDF (Key Derived Function) produces wrong key when `LEN(password) % 64 in [50, 64)`
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 17 Apr 2021 21:45:46 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 17 Apr 2021 21:45:46 +0800
 
 shadowsocks-rust (1.10.5) unstable; urgency=medium
 
@@ -56,7 +77,7 @@ shadowsocks-rust (1.10.5) unstable; urgency=medium
 
   - `ProxyClientStream` should keep the concatenated first packet buffer alive before asynchronous `write()` finishes
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 10 Apr 2021 09:07:52 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 10 Apr 2021 09:07:52 +0800
 
 shadowsocks-rust (1.10.4) unstable; urgency=medium
 
@@ -68,7 +89,7 @@ shadowsocks-rust (1.10.4) unstable; urgency=medium
 
   - Support `protocol` in basic configuration format
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 9 Apr 2021 17:25:04 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 9 Apr 2021 17:25:04 +0800
 
 shadowsocks-rust (1.10.3) unstable; urgency=medium
 
@@ -76,7 +97,7 @@ shadowsocks-rust (1.10.3) unstable; urgency=medium
 
   - #472 Fixed `SO_INCOMING_CPU` when building on some Linux targets. rust-lang/socket2#213
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 7 Apr 2021 09:55:40 +0800
+ -- ty <zonyitoo@gmail.com>  Wed, 7 Apr 2021 09:55:40 +0800
 
 shadowsocks-rust (1.10.2) unstable; urgency=medium
 
@@ -84,7 +105,7 @@ shadowsocks-rust (1.10.2) unstable; urgency=medium
 
   - `mode` in basic configuration format doesn't work for local instance
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 28 Mar 2021 11:13:01 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 28 Mar 2021 11:13:01 +0800
 
 shadowsocks-rust (1.10.1) unstable; urgency=medium
 
@@ -97,7 +118,7 @@ shadowsocks-rust (1.10.1) unstable; urgency=medium
   - `sslocal` checks new local instance's parameters dependency
     - `--protocol`, `--forward-addr`, ... will require `--local-addr` to be specified
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 27 Mar 2021 00:13:00 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 27 Mar 2021 00:13:00 +0800
 
 shadowsocks-rust (1.10.0) unstable; urgency=medium
 
@@ -121,7 +142,7 @@ shadowsocks-rust (1.10.0) unstable; urgency=medium
   - `ssserver`'s command line options are now for creating a new server instance:
       - `-U` and `-u` will only applied to the local instance specified by `--server-addr`
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 25 Mar 2021 18:10:00 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 25 Mar 2021 18:10:00 +0800
 
 shadowsocks-rust (1.9.2) unstable; urgency=medium
 
@@ -133,7 +154,7 @@ shadowsocks-rust (1.9.2) unstable; urgency=medium
 
   * Redir: setting SO_REUSEPORT, SO_MARK for UDP send-back sockets
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 6 Mar 2021 01:15:00 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 6 Mar 2021 01:15:00 +0800
 
 shadowsocks-rust (1.9.1) unstable; urgency=medium
 
@@ -145,7 +166,7 @@ shadowsocks-rust (1.9.1) unstable; urgency=medium
 
   * Removed avx from the default CPU features
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 26 Feb 2021 19:01:06 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 26 Feb 2021 19:01:06 +0800
 
 shadowsocks-rust (1.9.0) unstable; urgency=medium
 
@@ -201,7 +222,7 @@ shadowsocks-rust (1.9.0) unstable; urgency=medium
   * Disable stream ciphers by default. Could be enabled with feature `stream-cipher`.
   * Enable IPv6 dual stack mode by default when listening on `::`.
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 22 Feb 2021 09:28:28 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 22 Feb 2021 09:28:28 +0800
 
 shadowsocks-rust (1.8.23) unstable; urgency=medium
 
@@ -209,7 +230,7 @@ shadowsocks-rust (1.8.23) unstable; urgency=medium
 
   * Fixed REDIR client setsockopt options, IPv6 should use IPV6_TRANSPARENT on level SOL_IPV6 or IPPROTO_IPV6
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Tue, 3 Nov 2020 01:17:47 +0800
+ -- ty <zonyitoo@gmail.com>  Tue, 3 Nov 2020 01:17:47 +0800
 
 shadowsocks-rust (1.8.22) unstable; urgency=medium
 
@@ -223,7 +244,7 @@ shadowsocks-rust (1.8.22) unstable; urgency=medium
   * ARMv6 release target (arm-unknown-linux-gnueabihf) shouldn't enable output AES instructions
   * Moves many connection ERROR logs to DEBUG level
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 2 Nov 2020 01:37:24 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 2 Nov 2020 01:37:24 +0800
 
 shadowsocks-rust (1.8.21) unstable; urgency=medium
 
@@ -253,7 +274,7 @@ shadowsocks-rust (1.8.21) unstable; urgency=medium
   * [#303](https://github.com/shadowsocks/shadowsocks-rust/issues/303 "sslocal tries to connect to servers even when network is not yet online") Lower proxy connection error messages to DEBUG level
   * Call sleep() if server accept() failed
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 19 Oct 2020 09:38:47 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 19 Oct 2020 09:38:47 +0800
 
 shadowsocks-rust (1.8.20) unstable; urgency=medium
 
@@ -268,7 +289,7 @@ shadowsocks-rust (1.8.20) unstable; urgency=medium
 
   * UDP associations in sslocal handled bypassed requests incorrectly, which would try to parse response packets in shadowsocks' server protocol
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 14 Oct 2020 00:46:08 +0800
+ -- ty <zonyitoo@gmail.com>  Wed, 14 Oct 2020 00:46:08 +0800
 
 shadowsocks-rust (1.8.19) unstable; urgency=medium
 
@@ -288,7 +309,7 @@ shadowsocks-rust (1.8.19) unstable; urgency=medium
   * Add arm-unknown-linux-musleabi target in releases
   * Optimized EncryptWriter by reusing decrypting buffers
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 11 Oct 2020 16:34:58 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 11 Oct 2020 16:34:58 +0800
 
 shadowsocks-rust (1.8.18) unstable; urgency=medium
 
@@ -296,7 +317,7 @@ shadowsocks-rust (1.8.18) unstable; urgency=medium
 
   * [#294](https://github.com/shadowsocks/shadowsocks-rust/pull/294 "") UDP relay server's associations shouldn't bind to local address, which will eventually cause EADDRINUSE
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Tue, 15 Sep 2020 10:11:43 +0800
+ -- ty <zonyitoo@gmail.com>  Tue, 15 Sep 2020 10:11:43 +0800
 
 shadowsocks-rust (1.8.17) unstable; urgency=medium
 
@@ -305,7 +326,7 @@ shadowsocks-rust (1.8.17) unstable; urgency=medium
   * [#292](https://github.com/shadowsocks/shadowsocks-rust/pull/292) Hold the TCP connection if it failed to decrypt the first packet for preventing activing probing.
   * [#293](https://github.com/shadowsocks/shadowsocks-rust/pull/293) Keep server running if it fails to create UDP associations.
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Tue, 8 Sep 2020 23:31:20 +0800
+ -- ty <zonyitoo@gmail.com>  Tue, 8 Sep 2020 23:31:20 +0800
 
 shadowsocks-rust (1.8.16) unstable; urgency=medium
 
@@ -317,7 +338,7 @@ shadowsocks-rust (1.8.16) unstable; urgency=medium
 
   * [#289](https://github.com/shadowsocks/shadowsocks-rust/pull/289) Fixed UDP's ServerClient data decryption
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 20 Aug 2020 17:11:01 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 20 Aug 2020 17:11:01 +0800
 
 shadowsocks-rust (1.8.15) unstable; urgency=medium
 
@@ -328,7 +349,7 @@ shadowsocks-rust (1.8.15) unstable; urgency=medium
   * `x86_64-unknown-linux-gnu` release should be built by cross with GLIBC_2.15
   * `x86_64-apple-darwin` release built with invalid format sslocal (still don't know why)
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 10 Aug 2020 01:12:54 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 10 Aug 2020 01:12:54 +0800
 
 shadowsocks-rust (1.8.14) unstable; urgency=medium
 
@@ -341,7 +362,7 @@ shadowsocks-rust (1.8.14) unstable; urgency=medium
   * [#273](https://github.com/shadowsocks/shadowsocks-rust/issues/273) Use AtomicUsize for maximum compatibility in flow statistics
   * [#285](https://github.com/shadowsocks/shadowsocks-rust/issues/285) Fixed binaries command line options issue causing by conflicts_with
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 9 Aug 2020 01:06:49 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 9 Aug 2020 01:06:49 +0800
 
 shadowsocks-rust (1.8.13) unstable; urgency=medium
 
@@ -356,7 +377,7 @@ shadowsocks-rust (1.8.13) unstable; urgency=medium
   * Client flow reports tx and rx are swapped
   * AEAD TCP protocol must check the reserved higher 2 bits
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 19 Jul 2020 12:17:48 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 19 Jul 2020 12:17:48 +0800
 
 shadowsocks-rust (1.8.12) unstable; urgency=medium
 
@@ -381,7 +402,7 @@ shadowsocks-rust (1.8.12) unstable; urgency=medium
       * DNS resolving timeout is using the default configuration (5 seconds for most cases)
       * Bypassing TCP streams won't timeout
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 1 Jun 2020 23:48:55 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 1 Jun 2020 23:48:55 +0800
 
 shadowsocks-rust (1.8.11) unstable; urgency=medium
 
@@ -407,7 +428,7 @@ shadowsocks-rust (1.8.11) unstable; urgency=medium
 
   * Removed Runtime's Handle for all run entry functions
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 16 May 2020 00:20:45 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 16 May 2020 00:20:45 +0800
 
 shadowsocks-rust (1.8.10) unstable; urgency=medium
 
@@ -448,7 +469,7 @@ shadowsocks-rust (1.8.10) unstable; urgency=medium
   * [#217](https://github.com/shadowsocks/shadowsocks-rust/issues/217) Logging output uses local datetime instead of UTC
       * Logging output is now in customized format
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Fri, 10 Apr 2020 19:39:14 +0800
+ -- ty <zonyitoo@gmail.com>  Fri, 10 Apr 2020 19:39:14 +0800
 
 shadowsocks-rust (1.8.9) unstable; urgency=medium
 
@@ -462,7 +483,7 @@ shadowsocks-rust (1.8.9) unstable; urgency=medium
 
   * Ping tasks will panic if remote servers fail to connect for the first time
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 13 Feb 2020 01:13:07 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 13 Feb 2020 01:13:07 +0800
 
 shadowsocks-rust (1.8.8) unstable; urgency=medium
 
@@ -487,7 +508,7 @@ shadowsocks-rust (1.8.8) unstable; urgency=medium
       * Obtain release binaries in #Artifacts, for example:
           * https://circleci.com/gh/shadowsocks/shadowsocks-rust/151#artifacts/containers/0
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 6 Feb 2020 20:14:57 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 6 Feb 2020 20:14:57 +0800
 
 shadowsocks-rust (1.8.7) unstable; urgency=medium
 
@@ -502,13 +523,13 @@ shadowsocks-rust (1.8.7) unstable; urgency=medium
   * ssserver shouldn't use local_port in configuration to bind() before connect() or sendto()
       * Command line argument --bind-addr or -b should only accept IP or Domain
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Mon, 13 Jan 2020 10:45:54 +0800
+ -- ty <zonyitoo@gmail.com>  Mon, 13 Jan 2020 10:45:54 +0800
 
 shadowsocks-rust (1.8.6) unstable; urgency=medium
 
   Basically the same as v1.8.5, but prints the actual error while handshaking with clients. Useful if server received a repeated IV and salt (probably replay attacks).
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 12 Jan 2020 09:44:18 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 12 Jan 2020 09:44:18 +0800
 
 shadowsocks-rust (1.8.5) unstable; urgency=medium
 
@@ -520,7 +541,7 @@ shadowsocks-rust (1.8.5) unstable; urgency=medium
   * Check repeated IV / Salt for defending against replay attacks
       * [Defend against replay attack](https://github.com/shadowsocks/shadowsocks-org/issues/44)
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 12 Jan 2020 00:09:18 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 12 Jan 2020 00:09:18 +0800
 
 shadowsocks-rust (1.8.4) unstable; urgency=medium
 
@@ -535,7 +556,7 @@ shadowsocks-rust (1.8.4) unstable; urgency=medium
 
   * ssserver won't ignore local_address and local_port in config.json
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Thu, 9 Jan 2020 23:35:59 +0800
+ -- ty <zonyitoo@gmail.com>  Thu, 9 Jan 2020 23:35:59 +0800
 
 shadowsocks-rust (1.8.3) unstable; urgency=medium
 
@@ -545,7 +566,7 @@ shadowsocks-rust (1.8.3) unstable; urgency=medium
       * For Example: HTTP sslocal can stores HttpClients into the ServerScore structure instead of putting them into a HashMap.
   * Removed trust-dns feature gate, set as default.
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 8 Jan 2020 13:42:45 +0800
+ -- ty <zonyitoo@gmail.com>  Wed, 8 Jan 2020 13:42:45 +0800
 
 shadowsocks-rust (1.8.2) unstable; urgency=medium
 
@@ -555,7 +576,7 @@ shadowsocks-rust (1.8.2) unstable; urgency=medium
       * For Example: HTTP sslocal can stores HttpClients into the ServerScore structure instead of putting them into a HashMap.
   * Removed trust-dns feature gate, set as default.
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Tue, 7 Jan 2020 09:16:50 +0800
+ -- ty <zonyitoo@gmail.com>  Tue, 7 Jan 2020 09:16:50 +0800
 
 shadowsocks-rust (1.8.1) unstable; urgency=medium
 
@@ -566,7 +587,7 @@ shadowsocks-rust (1.8.1) unstable; urgency=medium
   * HTTP Proxy client Handles IPv6 URI host properly
       * RFC 2732
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 5 Jan 2020 16:40:19 +0800
+ -- ty <zonyitoo@gmail.com>  Sun, 5 Jan 2020 16:40:19 +0800
 
 shadowsocks-rust (1.8.0) unstable; urgency=medium
 
@@ -604,7 +625,7 @@ shadowsocks-rust (1.8.0) unstable; urgency=medium
   * `shadowsocks-v1.8.0-stable.x86_64-pc-windows-gnu.zip`
       * SHA256 `f7e23a145ca42a0ce73349263650256c9cc3e05caf637c2396699d72801d6966`
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 28 Dec 2019 00:00:00 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 28 Dec 2019 00:00:00 +0800
 
 shadowsocks-rust (1.7.0) unstable; urgency=medium
 
@@ -644,25 +665,25 @@ shadowsocks-rust (1.7.0) unstable; urgency=medium
   * Uses `json5` to parse config file.
   * #85 Support `ss-manager` report protocol. (Can co-operate with `ss-manager`)
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 20 Jan 2019 01:14:55 +0800
+ -- ty <zonyitoo@gmail.com>  Wed, 20 Jan 2019 01:14:55 +0800
 
 shadowsocks-rust (1.6.11) unstable; urgency=medium
 
   * Updated dependencies
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 20 Jan 2018 20:45:59 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 20 Jan 2018 20:45:59 +0800
 
 shadowsocks-rust (1.6.10) unstable; urgency=medium
 
   * Check AEAD packet length before actually reading it.
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sat, 2 Dec 2017 11:56:00 +0800
+ -- ty <zonyitoo@gmail.com>  Sat, 2 Dec 2017 11:56:00 +0800
 
 shadowsocks-rust (1.6.9) unstable; urgency=medium
 
   * Fixed increase_nonce without libsodium
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Sun, 26 Nov 2017 10:28:13 UTC
+ -- ty <zonyitoo@gmail.com>  Sun, 26 Nov 2017 10:28:13 UTC
 
 shadowsocks-rust (1.6.8) unstable; urgency=medium
 
@@ -681,7 +702,7 @@ shadowsocks-rust (1.6.6) stable; urgency=medium
 
   * Removed aes-128-ctr cipher
 
- -- Y. T. Chung <zonyitoo@gmail.com>  Wed, 4 Oct 2017 04:11:55 +0800
+ -- ty <zonyitoo@gmail.com>  Wed, 4 Oct 2017 04:11:55 +0800
 
 shadowsocks-rust (1.6.5) unstable; urgency=medium
 
