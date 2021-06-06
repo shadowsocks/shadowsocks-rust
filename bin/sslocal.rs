@@ -67,6 +67,7 @@ fn main() {
 
             (@arg TCP_NO_DELAY: --("tcp-no-delay") !takes_value alias("no-delay") "Set TCP_NODELAY option for socket")
             (@arg TCP_FAST_OPEN: --("tcp-fast-open") !takes_value alias("fast-open") "Enable TCP Fast Open (TFO)")
+            (@arg TCP_KEEP_ALIVE: --("tcp-keep-alive") +takes_value {validator::validate_u64} "Set TCP keep alive timeout seconds")
 
             (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
             (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
@@ -346,6 +347,14 @@ fn main() {
 
         if matches.is_present("TCP_FAST_OPEN") {
             config.fast_open = true;
+        }
+
+        if let Some(keep_alive) = matches.value_of("TCP_KEEP_ALIVE") {
+            config.keep_alive = Some(Duration::from_secs(
+                keep_alive
+                    .parse::<u64>()
+                    .expect("`tcp-keep-alive` is expecting an integer"),
+            ));
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
