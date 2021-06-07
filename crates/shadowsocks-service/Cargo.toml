@@ -112,7 +112,7 @@ shadowsocks = { version = "1.11.1", path = "../shadowsocks" }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
-nix = "0.20"
+nix = "0.21"
 
 [dev-dependencies]
 byteorder = "1.3"
