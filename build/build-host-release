@@ -1,27 +1,33 @@
 #!/bin/bash
 
 BUILD_TARGET=""
-while getopts "t:" opt; do
+BUILD_FEATURES=()
+while getopts "t:f:" opt; do
     case $opt in
         t)
             BUILD_TARGET=$OPTARG
             ;;
+        f)
+            BUILD_FEATURES=($OPTARG)
+            ;;
         ?)
-            echo "Usage: $(basename $0) [-t <target-triple>]"
+            echo "Usage: $(basename $0) [-t <target-triple>] [-f <feature>]"
             ;;
     esac
 done
+
+BUILD_FEATURES+=${BUILD_EXTRA_FEATURES}
 
 ROOT_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' "${ROOT_DIR}/../Cargo.toml" | awk '{print $3}' | sed 's/"//g')
 HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
 
-echo "Started build release for ${HOST_TRIPLE} ..."
+echo "Started build release ${VERSION} for ${HOST_TRIPLE} with features \"${BUILD_FEATURES}\"..."
 
 if [[ "${BUILD_TARGET}" != "" ]]; then
-    cargo build --release --features "${BUILD_EXTRA_FEATURES}" --target "${BUILD_TARGET}"
+    cargo build --release --features "${BUILD_FEATURES}" --target "${BUILD_TARGET}"
 else
-    cargo build --release --features "${BUILD_EXTRA_FEATURES}"
+    cargo build --release --features "${BUILD_FEATURES}"
 fi
 
 if [[ "$?" != "0" ]]; then

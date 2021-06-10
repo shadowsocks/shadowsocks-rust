@@ -9,32 +9,27 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 targets=()
+features=()
 
-while getopts "t:" opt; do
+while getopts "t:f:" opt; do
     case $opt in
         t)
             targets+=($OPTARG)
             ;;
+        f)
+            features+=($OPTARG)
+            ;;
         ?)
-            echo "Usage: $(basename $0) [-t <target-triple>]"
+            echo "Usage: $(basename $0) [-t <target-triple>] [-f features]"
             ;;
     esac
 done
 
+features+=${EXTRA_FEATURES}
+
 if [[ "${#targets[@]}" == "0" ]]; then
-    targets=(
-        "x86_64-unknown-linux-musl"
-        "x86_64-unknown-linux-gnu"
-
-        "x86_64-pc-windows-gnu"
-
-        "arm-unknown-linux-gnueabihf" # armhf, hard
-        "arm-unknown-linux-musleabi"  # arm, soft
-        "aarch64-unknown-linux-gnu"
-
-        "mips-unknown-linux-musl"     # big endian
-        "mipsel-unknown-linux-musl"   # little endian
-    )
+    echo "Specifying compile target with -t <target-triple>"
+    exit 1
 fi
 
 [[ -z $upx ]] && upx="echo pending"
@@ -46,16 +41,18 @@ function build() {
     cd "$CUR_DIR/.."
 
     TARGET=$1
-    echo "* Building ${TARGET} package ${VERSION} ..."
 
     RELEASE_DIR="target/${TARGET}/release"
+    TARGET_FEATURES="${features[@]}"
 
     if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
-        EXTRA_FEATURES+=" local-redir"
+        TARGET_FEATURES+=" local-redir"
     fi
 
+    echo "* Building ${TARGET} package ${VERSION} with features \"${TARGET_FEATURES}\" ..."
+
     cross build --target "${TARGET}" \
-                --features "${EXTRA_FEATURES}" \
+                --features "${TARGET_FEATURES}" \
                 --release
 
     if [[ $? != "0" ]]; then
