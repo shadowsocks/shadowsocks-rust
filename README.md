@@ -48,7 +48,7 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 * `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
 * `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
 * `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
-* `snmalloc` - Uses [snmalloc](https://github.com/microsoft/snmalloc) as gloal memory allocator
+* `snmalloc` - Uses [snmalloc](https://github.com/microsoft/snmalloc) as global memory allocator
 * `rpmalloc` - Uses [rpmalloc](https://github.com/mjansson/rpmalloc) as global memory allocator
 
 ### **crates.io**
