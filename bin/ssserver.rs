@@ -55,7 +55,7 @@ fn main() {
             (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
             (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
 
-            (@arg MANAGER_ADDRESS: --("manager-address") +takes_value "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
+            (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
 
             (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
             (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
@@ -218,7 +218,7 @@ fn main() {
             config.outbound_bind_interface = Some(iface.to_owned());
         }
 
-        if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
+        if let Some(m) = matches.value_of("MANAGER_ADDR") {
             config.manager = Some(ManagerConfig::new(m.parse::<ManagerAddr>().expect("manager address")));
         }
 

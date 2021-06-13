@@ -43,7 +43,7 @@ fn main() {
             (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
             (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
 
-            (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDRESS")
+            (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDR")
                 "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html), \
                     the only required fields are \"manager_address\" and \"manager_port\". \
                     Servers defined will be created when process is started.")
@@ -51,7 +51,7 @@ fn main() {
             (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
             (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
-            (@arg MANAGER_ADDRESS: --("manager-address") +takes_value {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
+            (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
             (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(available_ciphers()) "Default encryption method")
             (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} "Default timeout seconds for TCP relay")
 
@@ -177,7 +177,7 @@ fn main() {
             config.outbound_bind_interface = Some(iface.to_owned());
         }
 
-        if let Some(m) = matches.value_of("MANAGER_ADDRESS") {
+        if let Some(m) = matches.value_of("MANAGER_ADDR") {
             if let Some(ref mut manager_config) = config.manager {
                 manager_config.addr = m.parse::<ManagerAddr>().expect("manager-address");
             } else {

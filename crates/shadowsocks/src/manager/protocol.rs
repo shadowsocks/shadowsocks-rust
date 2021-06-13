@@ -17,7 +17,7 @@ pub trait ManagerProtocol: Sized {
 }
 
 /// Server's configuration
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
     pub server_port: u16,
     pub password: String,
@@ -64,6 +64,7 @@ impl ManagerProtocol for AddRequest {
 }
 
 /// `add` response
+#[derive(Debug, Clone)]
 pub struct AddResponse(pub String);
 
 impl ManagerProtocol for AddResponse {
@@ -79,7 +80,7 @@ impl ManagerProtocol for AddResponse {
 }
 
 /// `remove` request
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoveRequest {
     pub server_port: u16,
 }
@@ -112,6 +113,7 @@ impl ManagerProtocol for RemoveRequest {
 }
 
 /// `remove` response
+#[derive(Debug, Clone)]
 pub struct RemoveResponse(pub String);
 
 impl ManagerProtocol for RemoveResponse {
@@ -127,6 +129,7 @@ impl ManagerProtocol for RemoveResponse {
 }
 
 /// `list` request
+#[derive(Debug, Clone)]
 pub struct ListRequest;
 
 impl ManagerProtocol for ListRequest {
@@ -145,7 +148,7 @@ impl ManagerProtocol for ListRequest {
 }
 
 /// `list` response
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct ListResponse {
     pub servers: Vec<ServerConfig>,
@@ -165,6 +168,7 @@ impl ManagerProtocol for ListResponse {
 }
 
 /// `ping` request
+#[derive(Debug, Clone)]
 pub struct PingRequest;
 
 impl ManagerProtocol for PingRequest {
@@ -183,7 +187,7 @@ impl ManagerProtocol for PingRequest {
 }
 
 /// `ping` reponse
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct PingResponse {
     pub stat: HashMap<u16, u64>,
@@ -217,7 +221,7 @@ impl ManagerProtocol for PingResponse {
 }
 
 /// `stat` request
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct StatRequest {
     pub stat: HashMap<u16, u64>,
@@ -251,6 +255,7 @@ impl ManagerProtocol for StatRequest {
 }
 
 /// Server's error message
+#[derive(Debug, Clone)]
 pub struct ErrorResponse<E: ToString>(pub E);
 
 impl<E: ToString> ManagerProtocol for ErrorResponse<E> {
@@ -266,6 +271,7 @@ impl<E: ToString> ManagerProtocol for ErrorResponse<E> {
 }
 
 /// Collections of Manager's request
+#[derive(Debug, Clone)]
 pub enum ManagerRequest {
     Add(AddRequest),
     Remove(RemoveRequest),

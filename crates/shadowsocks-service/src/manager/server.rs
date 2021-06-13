@@ -3,7 +3,7 @@
 use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures::future::{self, AbortHandle};
-use log::{error, info};
+use log::{error, info, trace};
 use shadowsocks::{
     config::{Mode, ServerConfig, ServerType},
     context::{Context, SharedContext},
@@ -130,6 +130,8 @@ impl Manager {
                     continue;
                 }
             };
+
+            trace!("received {:?} from {:?}", req, peer_addr);
 
             match req {
                 ManagerRequest::Add(ref req) => match self.handle_add(req).await {
