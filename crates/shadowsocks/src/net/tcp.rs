@@ -218,6 +218,11 @@ impl TcpListener {
     pub async fn accept(&self) -> io::Result<(TokioTcpStream, SocketAddr)> {
         future::poll_fn(|cx| self.poll_accept(cx)).await
     }
+
+    /// Unwraps and take the internal `TcpListener`
+    pub fn into_inner(self) -> TokioTcpListener {
+        self.inner
+    }
 }
 
 impl Deref for TcpListener {

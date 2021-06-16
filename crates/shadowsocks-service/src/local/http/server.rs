@@ -15,9 +15,9 @@ use hyper::{
     Server,
 };
 use log::{error, info};
-use shadowsocks::{config::ServerAddr, lookup_then};
+use shadowsocks::{config::ServerAddr, lookup_then, net::TcpListener};
 
-use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
+use crate::local::{context::ServiceContext, loadbalancing::PingBalancer, LOCAL_DEFAULT_KEEPALIVE_TIMEOUT};
 
 use super::{client_cache::ProxyClientCache, connector::BypassConnector, dispatcher::HttpDispatcher};
 
@@ -81,21 +81,40 @@ impl Http {
         });
 
         let bind_result = match *client_config {
-            ServerAddr::SocketAddr(sa) => Server::try_bind(&sa),
+            ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(&sa, self.context.accept_opts().clone()).await,
             ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                Server::try_bind(&addr)
+                TcpListener::bind_with_opts(&addr, self.context.accept_opts().clone()).await
             })
             .map(|(_, b)| b),
         };
 
-        // HTTP Proxy protocol only defined in HTTP 1.x
         let server = match bind_result {
-            Ok(builder) => builder
-                .http1_only(true)
-                .http1_preserve_header_case(true)
-                .http1_title_case_headers(true)
-                .tcp_sleep_on_accept_errors(true)
-                .serve(make_service),
+            Ok(listener) => {
+                let listener = listener.into_inner().into_std()?;
+                let builder = match Server::from_tcp(listener) {
+                    Ok(builder) => builder,
+                    Err(err) => {
+                        error!("hyper server from std::net::TcpListener error: {}", err);
+                        let err = io::Error::new(ErrorKind::InvalidInput, err);
+                        return Err(err);
+                    }
+                };
+
+                builder
+                    .http1_only(true) // HTTP Proxy protocol only defined in HTTP 1.x
+                    .http1_preserve_header_case(true)
+                    .http1_title_case_headers(true)
+                    .tcp_sleep_on_accept_errors(true)
+                    .tcp_keepalive(
+                        self.context
+                            .accept_opts()
+                            .tcp
+                            .keepalive
+                            .or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT)),
+                    )
+                    .tcp_nodelay(self.context.accept_opts().tcp.nodelay)
+                    .serve(make_service)
+            }
             Err(err) => {
                 error!("hyper server bind error: {}", err);
                 let err = io::Error::new(ErrorKind::InvalidInput, err);
