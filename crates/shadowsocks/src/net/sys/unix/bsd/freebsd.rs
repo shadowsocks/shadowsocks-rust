@@ -105,46 +105,62 @@ impl AsyncRead for TcpStream {
 }
 
 impl AsyncWrite for TcpStream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let this = self.project();
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        loop {
+            let this = self.as_mut().project();
 
-        if let TcpStreamState::FastOpenConnect(addr) = this.state {
-            loop {
-                // TCP_FASTOPEN was supported since FreeBSD 12.0
-                //
-                // Example program:
-                // <https://people.freebsd.org/~pkelsey/tfo-tools/tfo-client.c>
+            match this.state {
+                TcpStreamState::FastOpenConnect(addr) => {
+                    // TCP_FASTOPEN was supported since FreeBSD 12.0
+                    //
+                    // Example program:
+                    // <https://people.freebsd.org/~pkelsey/tfo-tools/tfo-client.c>
 
-                // Wait until socket is writable
-                ready!(this.inner.poll_write_ready(cx))?;
+                    // Wait until socket is writable
+                    ready!(this.inner.poll_write_ready(cx))?;
 
-                unsafe {
-                    let saddr = SockAddr::from(*addr);
+                    unsafe {
+                        let saddr = SockAddr::from(*addr);
 
-                    let ret = libc::sendto(
-                        this.inner.as_raw_fd(),
-                        buf.as_ptr() as *const libc::c_void,
-                        buf.len(),
-                        0, // Yes, BSD doesn't need MSG_FASTOPEN
-                        saddr.as_ptr(),
-                        saddr.len(),
-                    );
+                        let ret = libc::sendto(
+                            this.inner.as_raw_fd(),
+                            buf.as_ptr() as *const libc::c_void,
+                            buf.len(),
+                            0, // Yes, BSD doesn't need MSG_FASTOPEN
+                            saddr.as_ptr(),
+                            saddr.len(),
+                        );
 
-                    if ret >= 0 {
-                        // Connect successfully.
-                        *(this.state) = TcpStreamState::Connected;
-                        return Ok(ret as usize).into();
-                    } else {
-                        // Error occurs
-                        let err = io::Error::last_os_error();
-                        if err.kind() != ErrorKind::WouldBlock {
-                            return Err(err).into();
+                        if ret >= 0 {
+                            // Connect successfully.
+                            *(this.state) = TcpStreamState::Connected;
+                            return Ok(ret as usize).into();
+                        } else {
+                            // Error occurs
+                            let err = io::Error::last_os_error();
+
+                            // EAGAIN, EWOULDBLOCK
+                            if err.kind() != ErrorKind::WouldBlock {
+                                // EINPROGRESS
+                                if let Some(libc::EINPROGRESS) = err.raw_os_error() {
+                                    // For non-blocking socket, it returns the number of bytes queued (and transmitted in the SYN-data packet) if cookie is available.
+                                    // If cookie is not available, it transmits a data-less SYN packet with Fast Open cookie request option and returns -EINPROGRESS like connect().
+                                    //
+                                    // So in this state. We have to loop again to call `poll_write` for sending the first packet.
+                                    *(this.state) = TcpStreamState::Connected;
+                                } else {
+                                    // Other errors
+                                    return Err(err).into();
+                                }
+                            } else {
+                                // Pending on poll_write_ready
+                            }
                         }
                     }
                 }
+
+                TcpStreamState::Connected => return this.inner.poll_write(cx, buf),
             }
-        } else {
-            this.inner.poll_write(cx, buf)
         }
     }
 
