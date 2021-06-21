@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.11.1"
+version = "1.11.2"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -108,7 +108,7 @@ regex = "1.4"
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.3"
 
-shadowsocks = { version = "1.11.1", path = "../shadowsocks" }
+shadowsocks = { version = "1.11.2", path = "../shadowsocks" }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]

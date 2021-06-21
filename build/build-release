@@ -49,11 +49,18 @@ function build() {
         TARGET_FEATURES+=" local-redir"
     fi
 
-    echo "* Building ${TARGET} package ${VERSION} with features \"${TARGET_FEATURES}\" ..."
+    if [[ "${TARGET_FEATURES}" != "" ]]; then
+        echo "* Building ${TARGET} package ${VERSION} with features \"${TARGET_FEATURES}\" ..."
 
-    cross build --target "${TARGET}" \
-                --features "${TARGET_FEATURES}" \
-                --release
+        cross build --target "${TARGET}" \
+                    --features "${TARGET_FEATURES}" \
+                    --release
+    else
+        echo "* Building ${TARGET} package ${VERSION} ..."
+
+        cross build --target "${TARGET}" \
+                    --release
+    fi
 
     if [[ $? != "0" ]]; then
         exit $?
