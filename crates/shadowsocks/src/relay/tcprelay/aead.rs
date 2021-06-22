@@ -43,7 +43,7 @@ use std::{
 use byte_string::ByteStr;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
-use log::trace;
+use log::{trace, warn};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
@@ -223,12 +223,7 @@ impl DecryptedReader {
             let salt = self.salt.take().unwrap();
 
             if context.check_nonce_and_set(&salt) {
-                use std::io::Error;
-
-                trace!("detected repeated AEAD salt {:?}", ByteStr::new(&salt));
-
-                let err = Error::new(ErrorKind::Other, "detected repeated salt");
-                return Err(err).into();
+                warn!("detected repeated AEAD salt {:?}", ByteStr::new(&salt));
             }
         }
 
