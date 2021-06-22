@@ -10,7 +10,7 @@ use std::{
 use byte_string::ByteStr;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
-use log::trace;
+use log::{trace, warn};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
@@ -113,12 +113,7 @@ impl DecryptedReader {
 
         let iv = &self.buffer[..iv_len];
         if context.check_nonce_and_set(&iv) {
-            use std::io::Error;
-
-            trace!("detected repeated stream iv {:?}", ByteStr::new(&iv));
-
-            let err = Error::new(ErrorKind::Other, "detected repeated iv");
-            return Err(err).into();
+            warn!("detected repeated stream iv {:?}", ByteStr::new(&iv));
         }
 
         trace!("got stream iv {:?}", ByteStr::new(iv));
