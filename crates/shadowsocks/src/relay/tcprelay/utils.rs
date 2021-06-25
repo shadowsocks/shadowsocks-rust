@@ -247,7 +247,7 @@ where
 
             (Poll::Ready(a_to_b), Poll::Pending) => {
                 // a -> b finished, then FIN have already sent to b, setting a read timeout on b
-                if let None = b.timeout() {
+                if b.timeout().is_none() {
                     b.as_mut().set_timeout_pinned(Some(READ_TIMEOUT_WHEN_ONE_SHUTDOWN));
 
                     // poll again to ensure Waker have already registered to the timer
@@ -261,7 +261,7 @@ where
 
             (Poll::Pending, Poll::Ready(b_to_a)) => {
                 // b -> a finished, then FIN have already sent to a, setting a read timeout on a
-                if let None = a.timeout() {
+                if a.timeout().is_none() {
                     a.as_mut().set_timeout_pinned(Some(READ_TIMEOUT_WHEN_ONE_SHUTDOWN));
 
                     // poll again to ensure Waker have already registered to the timer

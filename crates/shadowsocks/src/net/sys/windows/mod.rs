@@ -112,7 +112,7 @@ unsafe impl Send for TcpStreamState {}
 unsafe impl Sync for TcpStreamState {}
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
-#[pin_project]
+#[pin_project(project = TcpStreamProj)]
 pub struct TcpStream {
     #[pin]
     inner: TokioTcpStream,
@@ -228,22 +228,22 @@ fn set_update_connect_context(sock: SOCKET) -> io::Result<()> {
 }
 
 impl AsyncWrite for TcpStream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let this = self.project();
-
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         loop {
-            match this.state {
-                TcpStreamState::Connected => {
-                    return this.inner.poll_write(cx, buf);
-                }
+            let TcpStreamProj { inner, state } = self.as_mut().project();
+
+            match *state {
+                TcpStreamState::Connected => return inner.poll_write(cx, buf),
+
                 TcpStreamState::FastOpenConnect(addr) => {
+                    let saddr = SockAddr::from(addr);
+
                     unsafe {
                         // https://docs.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_connectex
                         let connect_ex = PFN_CONNECTEX_OPT
                             .expect("LPFN_CONNECTEX function doesn't exist. It is only supported after Windows 10");
-                        let saddr = SockAddr::from(*addr);
 
-                        let sock = this.inner.as_raw_socket() as SOCKET;
+                        let sock = inner.as_raw_socket() as SOCKET;
 
                         let mut overlapped: Box<OVERLAPPED> = Box::new(mem::zeroed());
 
@@ -266,7 +266,7 @@ impl AsyncWrite for TcpStream {
 
                             debug_assert!(bytes_sent as usize <= buf.len());
 
-                            *(this.state) = TcpStreamState::Connected;
+                            *state = TcpStreamState::Connected;
                             return Ok(bytes_sent as usize).into();
                         }
 
@@ -276,47 +276,53 @@ impl AsyncWrite for TcpStream {
                         }
 
                         // ConnectEx pending (ERROR_IO_PENDING), check later in FastOpenConnecting
-                        *(this.state) = TcpStreamState::FastOpenConnecting(overlapped);
+                        *state = TcpStreamState::FastOpenConnecting(overlapped);
                     }
                 }
+
                 TcpStreamState::FastOpenConnecting(ref mut overlapped) => {
-                    // Wait until socket is writable
-                    ready!(this.inner.poll_write_ready(cx))?;
+                    let n = ready!(inner.poll_write_io(cx, || {
+                        unsafe {
+                            let sock = inner.as_raw_socket() as SOCKET;
 
-                    unsafe {
-                        let sock = this.inner.as_raw_socket() as SOCKET;
+                            let mut bytes_sent: DWORD = 0;
+                            let mut flags: DWORD = 0;
 
-                        let mut bytes_sent: DWORD = 0;
-                        let mut flags: DWORD = 0;
+                            // Fetch ConnectEx's result in a non-blocking way.
+                            let ret: BOOL = WSAGetOverlappedResult(
+                                sock,
+                                overlapped.as_mut() as LPOVERLAPPED,
+                                &mut bytes_sent as LPDWORD,
+                                FALSE, // fWait = false, non-blocking, returns WSA_IO_INCOMPLETE
+                                &mut flags as LPDWORD,
+                            );
 
-                        // Fetch ConnectEx's result in a non-blocking way.
-                        let ret: BOOL = WSAGetOverlappedResult(
-                            sock,
-                            overlapped.as_mut() as LPOVERLAPPED,
-                            &mut bytes_sent as LPDWORD,
-                            FALSE, // fWait = false, non-blocking, returns WSA_IO_INCOMPLETE
-                            &mut flags as LPDWORD,
-                        );
+                            if ret == TRUE {
+                                // Get ConnectEx's result successfully. Socket is connected
 
-                        if ret == TRUE {
-                            // Get ConnectEx's result successfully. Socket is connected
+                                // Make getpeername() works
+                                set_update_connect_context(sock)?;
 
-                            // Make getpeername() works
-                            set_update_connect_context(sock)?;
+                                debug_assert!(bytes_sent as usize <= buf.len());
 
-                            debug_assert!(bytes_sent as usize <= buf.len());
+                                return Ok(bytes_sent as usize);
+                            }
 
-                            *(this.state) = TcpStreamState::Connected;
-                            return Ok(bytes_sent as usize).into();
+                            let err = WSAGetLastError();
+                            if err == WSA_IO_INCOMPLETE {
+                                // ConnectEx is still not connected. Wait for the next round
+                                //
+                                // Let `try_write_io` clears the write readiness.
+                                Err(ErrorKind::WouldBlock.into())
+                            } else {
+                                Err(io::Error::from_raw_os_error(err))
+                            }
                         }
+                    }))?;
 
-                        let err = WSAGetLastError();
-                        if err == WSA_IO_INCOMPLETE {
-                            // ConnectEx is still not connected. Wait for the next round
-                        } else {
-                            return Err(io::Error::from_raw_os_error(err)).into();
-                        }
-                    }
+                    // Connect successfully with fast open
+                    *state = TcpStreamState::Connected;
+                    return Ok(n).into();
                 }
             }
         }

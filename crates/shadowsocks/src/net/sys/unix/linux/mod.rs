@@ -32,7 +32,7 @@ enum TcpStreamState {
 }
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
-#[pin_project]
+#[pin_project(project = TcpStreamProj)]
 pub struct TcpStream {
     #[pin]
     inner: TokioTcpStream,
@@ -179,54 +179,72 @@ impl AsyncRead for TcpStream {
 impl AsyncWrite for TcpStream {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         loop {
-            let this = self.as_mut().project();
+            let TcpStreamProj { inner, state } = self.as_mut().project();
 
-            match this.state {
+            match *state {
+                TcpStreamState::Connected => return inner.poll_write(cx, buf),
+
                 TcpStreamState::FastOpenConnect(addr) => {
                     // Fallback mode. Must be kernal < 4.11
                     //
                     // Uses sendto as BSD-like systems
 
-                    // Wait until socket is writable
-                    ready!(this.inner.poll_write_ready(cx))?;
+                    let saddr = SockAddr::from(addr);
 
-                    unsafe {
-                        let saddr = SockAddr::from(*addr);
+                    let stream = inner.get_mut();
 
-                        let ret = libc::sendto(
-                            this.inner.as_raw_fd(),
-                            buf.as_ptr() as *const libc::c_void,
-                            buf.len(),
-                            libc::MSG_FASTOPEN,
-                            saddr.as_ptr(),
-                            saddr.len(),
-                        );
+                    // Ensure socket is writable
+                    ready!(stream.poll_write_ready(cx))?;
 
-                        if ret >= 0 {
-                            // Connect successfully.
-                            *(this.state) = TcpStreamState::Connected;
-                            return Ok(ret as usize).into();
-                        } else {
-                            // Error occurs
-                            let err = io::Error::last_os_error();
+                    let mut connecting = false;
+                    let send_result = stream.try_write_io(|| {
+                        unsafe {
+                            let ret = libc::sendto(
+                                stream.as_raw_fd(),
+                                buf.as_ptr() as *const libc::c_void,
+                                buf.len(),
+                                libc::MSG_FASTOPEN,
+                                saddr.as_ptr(),
+                                saddr.len(),
+                            );
 
-                            // EAGAIN, EWOULDBLOCK
-                            if err.kind() != ErrorKind::WouldBlock {
+                            if ret >= 0 {
+                                Ok(ret as usize)
+                            } else {
+                                // Error occurs
+                                let err = io::Error::last_os_error();
+
                                 // EINPROGRESS
                                 if let Some(libc::EINPROGRESS) = err.raw_os_error() {
                                     // For non-blocking socket, it returns the number of bytes queued (and transmitted in the SYN-data packet) if cookie is available.
                                     // If cookie is not available, it transmits a data-less SYN packet with Fast Open cookie request option and returns -EINPROGRESS like connect().
                                     //
                                     // So in this state. We have to loop again to call `poll_write` for sending the first packet.
-                                    *(this.state) = TcpStreamState::Connected;
+                                    connecting = true;
+
+                                    // Let `try_write_io` clears the write readiness.
+                                    Err(ErrorKind::WouldBlock.into())
                                 } else {
-                                    // Other errors
-                                    return Err(err).into();
+                                    // Other errors, including EAGAIN, EWOULDBLOCK
+                                    Err(err)
                                 }
-                            } else {
-                                // Pending on poll_write_ready
                             }
                         }
+                    });
+
+                    match send_result {
+                        Ok(n) => {
+                            // Connected successfully with fast open
+                            *state = TcpStreamState::Connected;
+                            return Ok(n).into();
+                        }
+                        Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
+                            if connecting {
+                                // Connecting with normal TCP handshakes, write the first packet after connected
+                                *state = TcpStreamState::Connected;
+                            }
+                        }
+                        Err(err) => return Err(err).into(),
                     }
                 }
 
@@ -234,26 +252,53 @@ impl AsyncWrite for TcpStream {
                     // First `write` after `TCP_FASTOPEN_CONNECT`
                     // Kernel >= 4.11
 
-                    match ready!(this.inner.poll_write(cx, buf)) {
-                        Ok(n) => {
-                            *(this.state) = TcpStreamState::Connected;
-                            return Ok(n).into();
-                        }
-                        Err(err) => {
-                            // EAGAIN and EWOULDBLOCK should have been handled by tokio
-                            //
-                            // EINPROGRESS
-                            if let Some(libc::EINPROGRESS) = err.raw_os_error() {
-                                // loop again to call `poll_write` for sending the first packet
-                                *(this.state) = TcpStreamState::Connected;
+                    let stream = inner.get_mut();
+
+                    // Ensure socket is writable
+                    ready!(stream.poll_write_ready(cx))?;
+
+                    let mut connecting = false;
+                    let send_result = stream.try_write_io(|| {
+                        unsafe {
+                            let ret = libc::send(stream.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), 0);
+
+                            if ret >= 0 {
+                                Ok(ret as usize)
                             } else {
-                                return Err(err).into();
+                                let err = io::Error::last_os_error();
+                                // EINPROGRESS
+                                if let Some(libc::EINPROGRESS) = err.raw_os_error() {
+                                    // For non-blocking socket, it returns the number of bytes queued (and transmitted in the SYN-data packet) if cookie is available.
+                                    // If cookie is not available, it transmits a data-less SYN packet with Fast Open cookie request option and returns -EINPROGRESS like connect().
+                                    //
+                                    // So in this state. We have to loop again to call `poll_write` for sending the first packet.
+                                    connecting = true;
+
+                                    // Let `poll_write_io` clears the write readiness.
+                                    Err(ErrorKind::WouldBlock.into())
+                                } else {
+                                    // Other errors, including EAGAIN, EWOULDBLOCK
+                                    Err(err)
+                                }
                             }
                         }
+                    });
+
+                    match send_result {
+                        Ok(n) => {
+                            // Connected successfully with fast open
+                            *state = TcpStreamState::Connected;
+                            return Ok(n).into();
+                        }
+                        Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
+                            if connecting {
+                                // Connecting with normal TCP handshakes, write the first packet after connected
+                                *state = TcpStreamState::Connected;
+                            }
+                        }
+                        Err(err) => return Err(err).into(),
                     }
                 }
-
-                TcpStreamState::Connected => return this.inner.poll_write(cx, buf),
             }
         }
     }
