@@ -35,11 +35,14 @@ pub struct UdpTunnel {
     context: Arc<ServiceContext>,
     assoc_map: SharedAssociationMap,
     cleanup_abortable: AbortHandle,
+    keepalive_abortable: AbortHandle,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
 }
 
 impl Drop for UdpTunnel {
     fn drop(&mut self) {
         self.cleanup_abortable.abort();
+        self.keepalive_abortable.abort();
     }
 }
 
@@ -65,10 +68,25 @@ impl UdpTunnel {
             cleanup_abortable
         };
 
+        let (keepalive_tx, mut keepalive_rx) = mpsc::channel(256);
+
+        let keepalive_abortable = {
+            let assoc_map = assoc_map.clone();
+            let (keepalive_task, keepalive_abortable) = future::abortable(async move {
+                while let Some(peer_addr) = keepalive_rx.recv().await {
+                    assoc_map.lock().await.get(&peer_addr);
+                }
+            });
+            tokio::spawn(keepalive_task);
+            keepalive_abortable
+        };
+
         UdpTunnel {
             context,
             assoc_map,
             cleanup_abortable,
+            keepalive_abortable,
+            keepalive_tx,
         }
     }
 
@@ -139,7 +157,7 @@ impl UdpTunnel {
             listener.clone(),
             peer_addr,
             forward_addr.clone(),
-            self.assoc_map.clone(),
+            self.keepalive_tx.clone(),
             balancer.clone(),
         );
 
@@ -169,11 +187,11 @@ impl UdpAssociation {
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         forward_addr: Address,
-        assoc_map: SharedAssociationMap,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
     ) -> UdpAssociation {
         let (assoc, sender) =
-            UdpAssociationContext::new(context, inbound, peer_addr, forward_addr, assoc_map, balancer);
+            UdpAssociationContext::new(context, inbound, peer_addr, forward_addr, keepalive_tx, balancer);
         UdpAssociation { sender, assoc }
     }
 
@@ -197,9 +215,7 @@ enum UdpAssociationState {
 
 impl Drop for UdpAssociationState {
     fn drop(&mut self) {
-        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
-            abortable.abort();
-        }
+        self.abort_inner();
     }
 }
 
@@ -209,15 +225,24 @@ impl UdpAssociationState {
     }
 
     fn reset(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationState::Empty;
     }
 
     fn set_connected(&mut self, socket: Arc<MonProxySocket>, abortable: AbortHandle) {
+        self.abort_inner();
         *self = UdpAssociationState::Connected { socket, abortable };
     }
 
     fn abort(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationState::Aborted;
+    }
+
+    fn abort_inner(&mut self) {
+        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
+            abortable.abort();
+        }
     }
 }
 
@@ -227,7 +252,7 @@ struct UdpAssociationContext {
     peer_addr: SocketAddr,
     forward_addr: Address,
     proxied_socket: SpinMutex<UdpAssociationState>,
-    assoc_map: SharedAssociationMap,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
 }
 
@@ -243,7 +268,7 @@ impl UdpAssociationContext {
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
         forward_addr: Address,
-        assoc_map: SharedAssociationMap,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
     ) -> (Arc<UdpAssociationContext>, mpsc::Sender<Bytes>) {
         // Pending packets 1024 should be good enough for a server.
@@ -257,7 +282,7 @@ impl UdpAssociationContext {
             peer_addr,
             forward_addr,
             proxied_socket: SpinMutex::new(UdpAssociationState::empty()),
-            assoc_map,
+            keepalive_tx,
             balancer,
         });
 
@@ -374,7 +399,10 @@ impl UdpAssociationContext {
                 Ok((n, addr)) => {
                     trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, n);
                     // Keep association alive in map
-                    let _ = self.assoc_map.lock().await.get(&self.peer_addr);
+                    let _ = self
+                        .keepalive_tx
+                        .send_timeout(self.peer_addr, Duration::from_secs(1))
+                        .await;
                     n
                 }
                 Err(err) => {

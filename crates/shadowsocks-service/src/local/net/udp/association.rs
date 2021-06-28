@@ -54,6 +54,8 @@ where
     context: Arc<ServiceContext>,
     assoc_map: SharedAssociationMap<W>,
     cleanup_abortable: AbortHandle,
+    keepalive_abortable: AbortHandle,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
 }
 
@@ -63,6 +65,7 @@ where
 {
     fn drop(&mut self) {
         self.cleanup_abortable.abort();
+        self.keepalive_abortable.abort();
     }
 }
 
@@ -98,11 +101,26 @@ where
             cleanup_abortable
         };
 
+        let (keepalive_tx, mut keepalive_rx) = mpsc::channel(256);
+
+        let keepalive_abortable = {
+            let assoc_map = assoc_map.clone();
+            let (keepalive_task, keepalive_abortable) = future::abortable(async move {
+                while let Some(peer_addr) = keepalive_rx.recv().await {
+                    assoc_map.lock().await.get(&peer_addr);
+                }
+            });
+            tokio::spawn(keepalive_task);
+            keepalive_abortable
+        };
+
         UdpAssociationManager {
             respond_writer,
             context,
             assoc_map,
             cleanup_abortable,
+            keepalive_abortable,
+            keepalive_tx,
             balancer,
         }
     }
@@ -120,7 +138,7 @@ where
         let assoc = UdpAssociation::new(
             self.context.clone(),
             peer_addr,
-            self.assoc_map.clone(),
+            self.keepalive_tx.clone(),
             self.balancer.clone(),
             self.respond_writer.clone(),
         );
@@ -160,11 +178,11 @@ where
     fn new(
         context: Arc<ServiceContext>,
         peer_addr: SocketAddr,
-        assoc_map: SharedAssociationMap<W>,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
         respond_writer: W,
     ) -> UdpAssociation<W> {
-        let (assoc, sender) = UdpAssociationContext::new(context, peer_addr, assoc_map, balancer, respond_writer);
+        let (assoc, sender) = UdpAssociationContext::new(context, peer_addr, keepalive_tx, balancer, respond_writer);
         UdpAssociation { assoc, sender }
     }
 
@@ -219,9 +237,7 @@ enum UdpAssociationProxyState {
 
 impl Drop for UdpAssociationProxyState {
     fn drop(&mut self) {
-        if let UdpAssociationProxyState::Connected { ref abortable, .. } = *self {
-            abortable.abort();
-        }
+        self.abort_inner();
     }
 }
 
@@ -231,15 +247,24 @@ impl UdpAssociationProxyState {
     }
 
     fn reset(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationProxyState::Empty;
     }
 
     fn set_connected(&mut self, socket: Arc<MonProxySocket>, abortable: AbortHandle) {
+        self.abort_inner();
         *self = UdpAssociationProxyState::Connected { socket, abortable };
     }
 
     fn abort(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationProxyState::Aborted;
+    }
+
+    fn abort_inner(&mut self) {
+        if let UdpAssociationProxyState::Connected { ref abortable, .. } = *self {
+            abortable.abort();
+        }
     }
 }
 
@@ -252,7 +277,7 @@ where
     bypassed_ipv4_socket: SpinMutex<UdpAssociationBypassState>,
     bypassed_ipv6_socket: SpinMutex<UdpAssociationBypassState>,
     proxied_socket: SpinMutex<UdpAssociationProxyState>,
-    assoc_map: SharedAssociationMap<W>,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
     respond_writer: W,
 }
@@ -273,7 +298,7 @@ where
     fn new(
         context: Arc<ServiceContext>,
         peer_addr: SocketAddr,
-        assoc_map: SharedAssociationMap<W>,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
         respond_writer: W,
     ) -> (Arc<UdpAssociationContext<W>>, mpsc::Sender<(Address, Bytes)>) {
@@ -288,7 +313,7 @@ where
             bypassed_ipv4_socket: SpinMutex::new(UdpAssociationBypassState::empty()),
             bypassed_ipv6_socket: SpinMutex::new(UdpAssociationBypassState::empty()),
             proxied_socket: SpinMutex::new(UdpAssociationProxyState::empty()),
-            assoc_map,
+            keepalive_tx,
             balancer,
             respond_writer,
         });
@@ -557,7 +582,10 @@ where
                         n
                     );
                     // Keep association alive in map
-                    let _ = self.assoc_map.lock().await.get(&self.peer_addr);
+                    let _ = self
+                        .keepalive_tx
+                        .send_timeout(self.peer_addr, Duration::from_secs(1))
+                        .await;
                     (n, addr)
                 }
                 Err(err) => {
@@ -608,7 +636,10 @@ where
                         n
                     );
                     // Keep association alive in map
-                    let _ = self.assoc_map.lock().await.get(&self.peer_addr);
+                    let _ = self
+                        .keepalive_tx
+                        .send_timeout(self.peer_addr, Duration::from_secs(1))
+                        .await;
                     (n, addr)
                 }
                 Err(err) => {

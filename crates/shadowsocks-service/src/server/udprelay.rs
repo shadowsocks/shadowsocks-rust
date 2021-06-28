@@ -33,11 +33,14 @@ pub struct UdpServer {
     context: Arc<ServiceContext>,
     assoc_map: SharedAssociationMap,
     cleanup_abortable: AbortHandle,
+    keepalive_abortable: AbortHandle,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
 }
 
 impl Drop for UdpServer {
     fn drop(&mut self) {
         self.cleanup_abortable.abort();
+        self.keepalive_abortable.abort();
     }
 }
 
@@ -63,10 +66,25 @@ impl UdpServer {
             cleanup_abortable
         };
 
+        let (keepalive_tx, mut keepalive_rx) = mpsc::channel(256);
+
+        let keepalive_abortable = {
+            let assoc_map = assoc_map.clone();
+            let (keepalive_task, keepalive_abortable) = future::abortable(async move {
+                while let Some(peer_addr) = keepalive_rx.recv().await {
+                    assoc_map.lock().await.get(&peer_addr);
+                }
+            });
+            tokio::spawn(keepalive_task);
+            keepalive_abortable
+        };
+
         UdpServer {
             context,
             assoc_map,
             cleanup_abortable,
+            keepalive_abortable,
+            keepalive_tx,
         }
     }
 
@@ -125,7 +143,7 @@ impl UdpServer {
             self.context.clone(),
             listener.clone(),
             peer_addr,
-            self.assoc_map.clone(),
+            self.keepalive_tx.clone(),
         );
 
         trace!("created udp association for {}", peer_addr);
@@ -154,9 +172,9 @@ impl UdpAssociation {
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
-        assoc_map: SharedAssociationMap,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> UdpAssociation {
-        let (assoc, sender) = UdpAssociationContext::new(context, inbound, peer_addr, assoc_map);
+        let (assoc, sender) = UdpAssociationContext::new(context, inbound, peer_addr, keepalive_tx);
         UdpAssociation { assoc, sender }
     }
 
@@ -180,9 +198,7 @@ enum UdpAssociationState {
 
 impl Drop for UdpAssociationState {
     fn drop(&mut self) {
-        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
-            abortable.abort();
-        }
+        self.abort_inner();
     }
 }
 
@@ -192,11 +208,19 @@ impl UdpAssociationState {
     }
 
     fn set_connected(&mut self, socket: Arc<OutboundUdpSocket>, abortable: AbortHandle) {
+        self.abort_inner();
         *self = UdpAssociationState::Connected { socket, abortable };
     }
 
     fn abort(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationState::Aborted;
+    }
+
+    fn abort_inner(&mut self) {
+        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
+            abortable.abort();
+        }
     }
 }
 
@@ -206,7 +230,7 @@ struct UdpAssociationContext {
     peer_addr: SocketAddr,
     outbound_ipv4_socket: SpinMutex<UdpAssociationState>,
     outbound_ipv6_socket: SpinMutex<UdpAssociationState>,
-    assoc_map: SharedAssociationMap,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
     target_cache: Mutex<LruCache<SocketAddr, Address>>,
 }
 
@@ -221,7 +245,7 @@ impl UdpAssociationContext {
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
-        assoc_map: SharedAssociationMap,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> (Arc<UdpAssociationContext>, mpsc::Sender<(Address, Bytes)>) {
         // Pending packets 1024 should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
@@ -234,7 +258,7 @@ impl UdpAssociationContext {
             peer_addr,
             outbound_ipv4_socket: SpinMutex::new(UdpAssociationState::empty()),
             outbound_ipv6_socket: SpinMutex::new(UdpAssociationState::empty()),
-            assoc_map,
+            keepalive_tx,
             // Cache for remembering the original Address of target,
             // when recv_from a SocketAddr, we have to know whch Address that client was originally requested.
             //
@@ -415,7 +439,10 @@ impl UdpAssociationContext {
             let (n, addr) = match outbound.recv_from(&mut buffer).await {
                 Ok(r) => {
                     // Keep association alive in map
-                    let _ = self.assoc_map.lock().await.get(&self.peer_addr);
+                    let _ = self
+                        .keepalive_tx
+                        .send_timeout(self.peer_addr, Duration::from_secs(1))
+                        .await;
                     r
                 }
                 Err(err) => {
