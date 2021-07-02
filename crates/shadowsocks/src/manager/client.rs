@@ -42,7 +42,7 @@ impl ManagerClient {
 
     impl_command!(ping, PingRequest, PingResponse);
 
-    impl_command!(remote, RemoveRequest, RemoveResponse);
+    impl_command!(remove, RemoveRequest, RemoveResponse);
 
     /// Create a `ManagerDatagram` for sending data to manager
     pub async fn connect(
