@@ -1028,9 +1028,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "2.5.1"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f100fcfb41e5385e0991f74981732049f9b896821542a219420491046baafdc2"
+checksum = "6dea6388d3d5498ec651701f14edbaf463c924b5d8829fb2848ccf0bcc7b3c69"
 dependencies = [
  "num-traits",
 ]
@@ -1814,8 +1814,8 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.8.0"
-source = "git+https://github.com/zonyitoo/tokio.git#00159823901e36085bc22b4db32dcb562181e134"
+version = "1.8.1"
+source = "git+https://github.com/zonyitoo/tokio.git#6fa7de17f01c761acb34fa8b62c46ce5708208f0"
 dependencies = [
  "autocfg",
  "bytes",
@@ -1843,8 +1843,8 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "1.2.0"
-source = "git+https://github.com/zonyitoo/tokio.git#00159823901e36085bc22b4db32dcb562181e134"
+version = "1.3.0"
+source = "git+https://github.com/zonyitoo/tokio.git#6fa7de17f01c761acb34fa8b62c46ce5708208f0"
 dependencies = [
  "proc-macro2",
  "quote",

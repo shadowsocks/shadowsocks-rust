@@ -3,6 +3,7 @@
 #[cfg(unix)]
 use std::path::Path;
 use std::{
+    cmp::Ordering,
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
@@ -170,20 +171,16 @@ impl DnsClient {
                     libc::MSG_PEEK | libc::MSG_DONTWAIT,
                 );
 
-                if ret == 0 {
+                match ret.cmp(&0) {
                     // EOF, connection lost
-                    false
-                } else if ret > 0 {
+                    Ordering::Equal => false,
                     // Data in buffer
-                    true
-                } else {
-                    let err = io::Error::last_os_error();
-                    if err.kind() == ErrorKind::WouldBlock {
+                    Ordering::Greater => true,
+                    Ordering::Less => {
+                        let err = io::Error::last_os_error();
                         // EAGAIN, EWOULDBLOCK
                         // Still connected.
-                        true
-                    } else {
-                        false
+                        err.kind() == ErrorKind::WouldBlock
                     }
                 }
             }
@@ -193,10 +190,10 @@ impl DnsClient {
         fn check_peekable<F: std::os::windows::io::AsRawSocket>(s: &mut F) -> bool {
             use winapi::{
                 ctypes::{c_char, c_int},
-                um::winsock2::{recv, MSG_PEEK},
+                um::winsock2::{recv, MSG_PEEK, SOCKET},
             };
 
-            let sock = s.as_raw_socket();
+            let sock = s.as_raw_socket() as SOCKET;
 
             unsafe {
                 let mut peek_buf = [0u8; 1];
@@ -208,20 +205,16 @@ impl DnsClient {
                     MSG_PEEK,
                 );
 
-                if ret == 0 {
+                match ret.cmp(&0) {
                     // EOF, connection lost
-                    false
-                } else if ret > 0 {
+                    Ordering::Equal => false,
                     // Data in buffer
-                    true
-                } else {
-                    let err = io::Error::last_os_error();
-                    if err.kind() == ErrorKind::WouldBlock {
+                    Ordering::Greater => true,
+                    Ordering::Less => {
+                        let err = io::Error::last_os_error();
                         // I have to trust the `s` have already set to non-blocking mode
                         // Becuase windows doesn't have MSG_DONTWAIT
-                        true
-                    } else {
-                        false
+                        err.kind() == ErrorKind::WouldBlock
                     }
                 }
             }

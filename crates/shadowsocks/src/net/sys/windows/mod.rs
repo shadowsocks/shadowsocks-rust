@@ -283,7 +283,9 @@ impl AsyncWrite for TcpStream {
                 TcpStreamState::FastOpenConnecting(ref mut overlapped) => {
                     let stream = inner.get_mut();
 
-                    let n = ready!(stream.poll_write_io(cx, || {
+                    ready!(stream.poll_write_ready(cx))?;
+
+                    let write_result = stream.try_write_io(|| {
                         unsafe {
                             let sock = stream.as_raw_socket() as SOCKET;
 
@@ -320,11 +322,19 @@ impl AsyncWrite for TcpStream {
                                 Err(io::Error::from_raw_os_error(err))
                             }
                         }
-                    }))?;
+                    });
 
-                    // Connect successfully with fast open
-                    *state = TcpStreamState::Connected;
-                    return Ok(n).into();
+                    match write_result {
+                        Ok(n) => {
+                            // Connect successfully with fast open
+                            *state = TcpStreamState::Connected;
+                            return Ok(n).into();
+                        }
+                        Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
+                            // Wait again for writable event.
+                        }
+                        Err(err) => return Err(err).into(),
+                    }
                 }
             }
         }
