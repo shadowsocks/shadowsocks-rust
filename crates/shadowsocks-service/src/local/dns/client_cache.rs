@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use log::trace;
+use log::{debug, trace};
 use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 use tokio::sync::Mutex;
 use trust_dns_resolver::proto::{error::ProtoError, op::Message};
@@ -123,6 +123,13 @@ impl DnsClientCache {
         let mut last_err = None;
 
         for _ in 0..self.retry_count {
+            // UNIX stream won't keep connection alive
+            //
+            // https://github.com/shadowsocks/shadowsocks-rust/pull/567
+            //
+            // 1. The cost of recreating UNIX stream sockets are very low
+            // 2. This feature is only used by shadowsocks-android, and it doesn't support connection reuse
+
             let mut client = match DnsClient::connect_unix_stream(ns).await {
                 Ok(client) => client,
                 Err(err) => {
@@ -245,8 +252,14 @@ impl DnsClientCache {
     {
         // Check if there already is a cached client
         if let Some(q) = self.cache.lock().await.get_mut(key) {
-            if let Some(c) = q.pop_front() {
+            while let Some(mut c) = q.pop_front() {
                 trace!("take cached DNS client for {:?}", key);
+
+                if !c.check_connected().await {
+                    debug!("cached DNS client for {:?} is lost", key);
+                    continue;
+                }
+
                 return Ok(c);
             }
         }

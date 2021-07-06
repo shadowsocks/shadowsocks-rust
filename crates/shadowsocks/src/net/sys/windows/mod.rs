@@ -281,9 +281,11 @@ impl AsyncWrite for TcpStream {
                 }
 
                 TcpStreamState::FastOpenConnecting(ref mut overlapped) => {
-                    let n = ready!(inner.poll_write_io(cx, || {
+                    let stream = inner.get_mut();
+
+                    let n = ready!(stream.poll_write_io(cx, || {
                         unsafe {
-                            let sock = inner.as_raw_socket() as SOCKET;
+                            let sock = stream.as_raw_socket() as SOCKET;
 
                             let mut bytes_sent: DWORD = 0;
                             let mut flags: DWORD = 0;

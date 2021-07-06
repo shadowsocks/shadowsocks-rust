@@ -2,7 +2,12 @@
 
 #[cfg(unix)]
 use std::path::Path;
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    io::{self, ErrorKind},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
@@ -143,6 +148,92 @@ impl DnsClient {
 
                 Message::from_vec(&recv_buf[..n])
             }
+        }
+    }
+
+    /// Check if the underlying connection is still connecting
+    ///
+    /// This will only work for TCP and UNIX Stream connections.
+    /// UDP clients will always return `true`.
+    pub async fn check_connected(&mut self) -> bool {
+        #[cfg(unix)]
+        fn check_peekable<F: std::os::unix::io::AsRawFd>(fd: &mut F) -> bool {
+            let fd = fd.as_raw_fd();
+
+            unsafe {
+                let mut peek_buf = [0u8; 1];
+
+                let ret = libc::recv(
+                    fd,
+                    peek_buf.as_mut_ptr() as *mut libc::c_void,
+                    peek_buf.len(),
+                    libc::MSG_PEEK | libc::MSG_DONTWAIT,
+                );
+
+                if ret == 0 {
+                    // EOF, connection lost
+                    false
+                } else if ret > 0 {
+                    // Data in buffer
+                    true
+                } else {
+                    let err = io::Error::last_os_error();
+                    if err.kind() == ErrorKind::WouldBlock {
+                        // EAGAIN, EWOULDBLOCK
+                        // Still connected.
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        fn check_peekable<F: std::os::windows::io::AsRawSocket>(s: &mut F) -> bool {
+            use winapi::{
+                ctypes::{c_char, c_int},
+                um::winsock2::{recv, MSG_PEEK},
+            };
+
+            let sock = s.as_raw_socket();
+
+            unsafe {
+                let mut peek_buf = [0u8; 1];
+
+                let ret = recv(
+                    sock,
+                    peek_buf.as_mut_ptr() as *mut c_char,
+                    peek_buf.len() as c_int,
+                    MSG_PEEK,
+                );
+
+                if ret == 0 {
+                    // EOF, connection lost
+                    false
+                } else if ret > 0 {
+                    // Data in buffer
+                    true
+                } else {
+                    let err = io::Error::last_os_error();
+                    if err.kind() == ErrorKind::WouldBlock {
+                        // I have to trust the `s` have already set to non-blocking mode
+                        // Becuase windows doesn't have MSG_DONTWAIT
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+
+        match *self {
+            DnsClient::TcpLocal { ref mut stream } => check_peekable(stream),
+            DnsClient::UdpLocal { .. } => true,
+            #[cfg(unix)]
+            DnsClient::UnixStream { ref mut stream } => check_peekable(stream),
+            DnsClient::TcpRemote { ref mut stream } => check_peekable(stream.get_mut().get_mut()),
+            DnsClient::UdpRemote { .. } => true,
         }
     }
 }
