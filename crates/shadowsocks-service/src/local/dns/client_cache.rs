@@ -1,7 +1,7 @@
 //! DNS Client cache
 
 #[cfg(unix)]
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{
     collections::{hash_map::Entry, HashMap, VecDeque},
     future::Future,
@@ -23,8 +23,6 @@ use super::upstream::DnsClient;
 enum DnsClientKey {
     TcpLocal(SocketAddr),
     UdpLocal(SocketAddr),
-    #[cfg(unix)]
-    UnixStream(PathBuf),
     TcpRemote(Address),
     UdpRemote(Address),
 }
@@ -124,12 +122,8 @@ impl DnsClientCache {
     pub async fn lookup_unix_stream<P: AsRef<Path>>(&self, ns: &P, msg: Message) -> Result<Message, ProtoError> {
         let mut last_err = None;
 
-        let key = DnsClientKey::UnixStream(ns.as_ref().to_path_buf());
         for _ in 0..self.retry_count {
-            let mut client = match self
-                .get_client_or_create(&key, async { DnsClient::connect_unix_stream(ns).await })
-                .await
-            {
+            let mut client = match DnsClient::connect_unix_stream(ns).await {
                 Ok(client) => client,
                 Err(err) => {
                     last_err = Some(From::from(err));
@@ -144,8 +138,6 @@ impl DnsClientCache {
                     continue;
                 }
             };
-
-            self.save_client(key, client).await;
 
             return Ok(res);
         }
