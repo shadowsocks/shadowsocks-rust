@@ -15,7 +15,7 @@ use once_cell::sync::Lazy;
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
+    io::{AsyncRead, AsyncWrite, Interest, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
 };
 use winapi::{
@@ -285,7 +285,7 @@ impl AsyncWrite for TcpStream {
 
                     ready!(stream.poll_write_ready(cx))?;
 
-                    let write_result = stream.try_write_io(|| {
+                    let write_result = stream.try_io(Interest::WRITABLE, || {
                         unsafe {
                             let sock = stream.as_raw_socket() as SOCKET;
 
@@ -316,7 +316,7 @@ impl AsyncWrite for TcpStream {
                             if err == WSA_IO_INCOMPLETE {
                                 // ConnectEx is still not connected. Wait for the next round
                                 //
-                                // Let `try_write_io` clears the write readiness.
+                                // Let `try_io` clears the write readiness.
                                 Err(ErrorKind::WouldBlock.into())
                             } else {
                                 Err(io::Error::from_raw_os_error(err))

@@ -13,7 +13,7 @@ use log::error;
 use pin_project::pin_project;
 use socket2::SockAddr;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
+    io::{AsyncRead, AsyncWrite, Interest, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
 };
 
@@ -126,7 +126,7 @@ impl AsyncWrite for TcpStream {
                     ready!(stream.poll_write_ready(cx))?;
 
                     let mut connecting = false;
-                    let send_result = stream.try_write_io(|| {
+                    let send_result = stream.try_io(Interest::WRITABLE, || {
                         unsafe {
                             let ret = libc::sendto(
                                 stream.as_raw_fd(),
