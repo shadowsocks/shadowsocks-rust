@@ -1815,7 +1815,7 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 [[package]]
 name = "tokio"
 version = "1.8.1"
-source = "git+https://github.com/zonyitoo/tokio.git#279c0ef3407bcf4e393183f75ba1c5927061c514"
+source = "git+https://github.com/tokio-rs/tokio.git#c306bf853a1f8423b154f17fa47926f04eecd9b4"
 dependencies = [
  "autocfg",
  "bytes",
@@ -1844,7 +1844,7 @@ dependencies = [
 [[package]]
 name = "tokio-macros"
 version = "1.3.0"
-source = "git+https://github.com/zonyitoo/tokio.git#279c0ef3407bcf4e393183f75ba1c5927061c514"
+source = "git+https://github.com/tokio-rs/tokio.git#c306bf853a1f8423b154f17fa47926f04eecd9b4"
 dependencies = [
  "proc-macro2",
  "quote",

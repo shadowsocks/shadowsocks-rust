@@ -143,4 +143,4 @@ byte_string = "1.0"
 tokio = { version = "1", features = ["net", "time", "macros", "io-util"]}
 
 [patch.crates-io]
-tokio = { git = "https://github.com/zonyitoo/tokio.git" }
+tokio = { git = "https://github.com/tokio-rs/tokio.git" }
