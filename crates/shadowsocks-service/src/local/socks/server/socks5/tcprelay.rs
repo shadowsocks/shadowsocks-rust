@@ -13,6 +13,7 @@ use shadowsocks::{
         self,
         Address,
         Command,
+        Error as Socks5Error,
         HandshakeRequest,
         HandshakeResponse,
         Reply,
@@ -58,7 +59,17 @@ impl Socks5TcpHandler {
     pub async fn handle_socks5_client(self, mut stream: TcpStream, peer_addr: SocketAddr) -> io::Result<()> {
         // 1. Handshake
 
-        let handshake_req = HandshakeRequest::read_from(&mut stream).await?;
+        let handshake_req = match HandshakeRequest::read_from(&mut stream).await {
+            Ok(r) => r,
+            Err(Socks5Error::IoError(ref err)) if err.kind() == ErrorKind::UnexpectedEof => {
+                trace!("socks5 handshake early eof. peer: {}", peer_addr);
+                return Ok(());
+            }
+            Err(err) => {
+                error!("socks5 handshake error: {}", err);
+                return Err(err.into());
+            }
+        };
 
         trace!("socks5 {:?}", handshake_req);
 
@@ -83,14 +94,14 @@ impl Socks5TcpHandler {
         let header = match TcpRequestHeader::read_from(&mut stream).await {
             Ok(h) => h,
             Err(err) => {
-                error!("failed to get TcpRequestHeader: {}", err);
+                error!("failed to get TcpRequestHeader: {}, peer: {}", err, peer_addr);
                 let rh = TcpResponseHeader::new(err.as_reply(), Address::SocketAddress(peer_addr));
                 rh.write_to(&mut stream).await?;
                 return Err(err.into());
             }
         };
 
-        trace!("socks5 {:?}", header);
+        trace!("socks5 {:?} peer: {}", header, peer_addr);
 
         let addr = header.address;
 

@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use shadowsocks::config::Mode;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
@@ -20,7 +20,14 @@ use crate::local::{
     utils::establish_tcp_tunnel,
 };
 
-use crate::local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};
+use crate::local::socks::socks4::{
+    Address,
+    Command,
+    Error as Socks4Error,
+    HandshakeRequest,
+    HandshakeResponse,
+    ResultCode,
+};
 
 pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
@@ -42,9 +49,19 @@ impl Socks4TcpHandler {
 
         // NOTE: Wraps it with BufReader for reading NULL terminated informations in HandshakeRequest
         let mut s = BufReader::new(stream);
-        let handshake_req = HandshakeRequest::read_from(&mut s).await?;
+        let handshake_req = match HandshakeRequest::read_from(&mut s).await {
+            Ok(r) => r,
+            Err(Socks4Error::IoError(ref err)) if err.kind() == ErrorKind::UnexpectedEof => {
+                trace!("socks4 handshake early eof. peer: {}", peer_addr);
+                return Ok(());
+            }
+            Err(err) => {
+                error!("socks4 handshake error: {}", err);
+                return Err(err.into());
+            }
+        };
 
-        trace!("socks4 {:?}", handshake_req);
+        trace!("socks4 {:?} peer: {}", handshake_req, peer_addr);
 
         match handshake_req.cd {
             Command::Connect => {
