@@ -7,7 +7,7 @@
 //! *It should be notice that the extented configuration file is not suitable for the server
 //! side.*
 
-use std::{net::IpAddr, time::Duration};
+use std::{net::IpAddr, process, time::Duration};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -142,7 +142,8 @@ fn main() {
             Some(cpath) => match Config::load_from_file(cpath, ConfigType::Server) {
                 Ok(cfg) => cfg,
                 Err(err) => {
-                    panic!("loading config \"{}\", {}", cpath, err);
+                    eprintln!("loading config \"{}\", {}", cpath, err);
+                    process::exit(common::EXIT_CODE_LOAD_CONFIG_FAILURE);
                 }
             },
             None => Config::new(ConfigType::Server),
@@ -231,7 +232,8 @@ fn main() {
             let acl = match AccessControl::load_from_file(acl_file) {
                 Ok(acl) => acl,
                 Err(err) => {
-                    panic!("loading ACL \"{}\", {}", acl_file, err);
+                    eprintln!("loading ACL \"{}\", {}", acl_file, err);
+                    process::exit(common::EXIT_CODE_LOAD_ACL_FAILURE);
                 }
             };
             config.acl = Some(acl);
@@ -319,9 +321,15 @@ fn main() {
 
         match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left((Ok(..), ..)) => panic!("server exited unexpectly"),
+            Either::Left((Ok(..), ..)) => {
+                eprintln!("server exited unexpectly");
+                process::exit(common::EXIT_CODE_SERVER_EXIT_UNEXPECTLY);
+            }
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => panic!("aborted with {}", err),
+            Either::Left((Err(err), ..)) => {
+                eprintln!("server aborted with {}", err);
+                process::exit(common::EXIT_CODE_SERVER_ABORTED);
+            }
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => (),
         }
