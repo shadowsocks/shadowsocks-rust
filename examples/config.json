@@ -5,5 +5,5 @@
     "local_address": "127.0.0.1",
     "password": "password",
     "timeout": 300,
-    "method": "aes-256-cfb"
+    "method": "aes-256-gcm"
 }
