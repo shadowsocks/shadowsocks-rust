@@ -119,7 +119,7 @@ winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 
 [dev-dependencies]
 byteorder = "1.3"
-env_logger = "0.8"
+env_logger = "0.9"
 
 [package.metadata.docs.rs]
 features = ["full", "local-http-rustls", "local-dns", "dns-over-tls", "dns-over-https"]

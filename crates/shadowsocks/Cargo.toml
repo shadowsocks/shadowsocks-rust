@@ -76,4 +76,4 @@ winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 nix = "0.22"
 
 [dev-dependencies]
-env_logger = "0.8"
+env_logger = "0.9"
