@@ -189,10 +189,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         for server in config.server {
             balancer_builder.add_server(ServerIdent::new(server));
         }
-        let (balancer, checker) = balancer_builder.build().await;
-        tokio::spawn(checker);
-
-        balancer
+        balancer_builder.build().await
     };
 
     #[cfg(feature = "local-flow-stat")]
