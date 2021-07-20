@@ -221,11 +221,7 @@ impl PacketFilter {
             pnl.direction = ffi::PF_OUT as u8;
 
             if let Err(err) = ffi::ioc_natlook(self.fd, &mut pnl as *mut _) {
-                let nerr = match err.as_errno() {
-                    Some(errno) => Error::from_raw_os_error(errno as i32),
-                    None => Error::new(ErrorKind::Other, "ioctl DIOCNATLOOK"),
-                };
-                return Err(nerr);
+                return Err(Error::from_raw_os_error(err as i32));
             }
 
             let (_, dst_addr) = SockAddr::init(|dst_addr, addr_len| {
