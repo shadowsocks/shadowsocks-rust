@@ -178,7 +178,7 @@ fn main() {
             }
 
             if matches.is_present("UDP_ONLY") {
-                sc.set_mode(sc.mode().merge(Mode::UdpOnly));
+                sc.set_mode(Mode::UdpOnly);
             }
 
             if matches.is_present("TCP_AND_UDP") {

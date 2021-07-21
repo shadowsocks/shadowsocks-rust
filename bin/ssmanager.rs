@@ -203,7 +203,7 @@ fn main() {
         // Overrides
         if matches.is_present("UDP_ONLY") {
             if let Some(ref mut m) = config.manager {
-                m.mode = m.mode.merge(Mode::UdpOnly);
+                m.mode = Mode::UdpOnly;
             }
         }
 
