@@ -76,6 +76,47 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 * `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
 * `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
 
+### **Docker**
+
+This project provided Docker images for the `linux/i386` and `linux/amd64` and `linux/arm64/v8` architectures.
+
+#### Pull from GitHub Container Registry
+
+Docker will pull the image of the appropriate architecture from our [GitHub Packages](https://github.com/orgs/shadowsocks/packages?repo_name=shadowsocks-rust).
+
+```bash
+docker pull ghcr.io/shadowsocks/sslocal-rust:latest
+docker pull ghcr.io/shadowsocks/ssserver-rust:latest
+```
+
+#### Build on the local machine（Optional）
+
+If you want to build the Docker image yourself, you need to use the [BuildX](https://docs.docker.com/buildx/working-with-buildx/).
+
+```bash
+docker buildx build -t shadowsocks/ssserver-rust:latest -t shadowsocks/ssserver-rust:v1.11.1 --target ssserver .
+docker buildx build -t shadowsocks/sslocal-rust:latest -t shadowsocks/sslocal-rust:v1.11.1 --target sslocal .
+```
+
+#### Run the container
+
+You need to mount the configuration file into the container and create an external port map for the container to connect to it.
+
+```bash
+docker run --name sslocal-rust \
+  --restart always \
+  -p 1080:1080/tcp \
+  -v /path/to/config.json:/etc/shadowsocks-rust/config.json \
+  -dit ghcr.io/shadowsocks/sslocal-rust:latest
+
+docker run --name ssserver-rust \
+  --restart always \
+  -p 8388:8388/tcp \
+  -p 8388:8388/udp \
+  -v /path/to/config.json:/etc/shadowsocks-rust/config.json \
+  -dit ghcr.io/shadowsocks/ssserver-rust:latest
+```
+
 ### **Build from source**
 
 Use cargo to build. NOTE: **RAM >= 2GiB**
