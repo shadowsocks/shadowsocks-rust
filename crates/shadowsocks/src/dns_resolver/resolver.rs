@@ -135,6 +135,8 @@ cfg_if! {
 
 #[cfg(all(feature = "trust-dns", unix, not(target_os = "android")))]
 async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> notify::Result<()> {
+    use std::path::Path;
+
     use log::debug;
     use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
     use tokio::sync::watch;
@@ -144,7 +146,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
     let (tx, mut rx) = watch::channel::<Event>(Event::default());
 
     let mut watcher: RecommendedWatcher =
-        Watcher::new_immediate(move |ev_result: NotifyResult<Event>| match ev_result {
+        notify::recommended_watcher(move |ev_result: NotifyResult<Event>| match ev_result {
             Ok(ev) => {
                 trace!("received event {:?}", ev);
 
@@ -158,7 +160,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
         })?;
 
     // NOTE: It is an undefined behavior if this file get renamed or removed.
-    watcher.watch("/etc/resolv.conf", RecursiveMode::NonRecursive)?;
+    watcher.watch(Path::new("/etc/resolv.conf"), RecursiveMode::NonRecursive)?;
 
     while rx.changed().await.is_ok() {
         trace!("received notify /etc/resolv.conf changed");

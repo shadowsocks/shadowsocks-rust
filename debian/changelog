@@ -1,3 +1,25 @@
+shadowsocks-rust (1.11.2) unstable; urgency=medium
+
+  ## Features
+
+  - #570 Multi-architecture Docker image for release
+  - Replaced `futures::future::abortable` with `tokio`'s builtin `tokio::task::JoinHandle::abort`
+  - Define binaries' exit code with standard in `sysexits.h`
+  - HTTP local listener supports `TCP_NODELAY`, `SO_KEEPALIVE` and dual-stack
+
+  ## Bug Fixed
+
+  - #577 `ssmanager` and `ssserver` command line argument `-u` should overwrite `mode` to be `Mode::UdpOnly`
+  - #566 Exit with error code instead of `panic!` when loading ACL fails
+  - #555 Properly handling `EINPROGRESS` for TFO connect when falling backs
+  - #557 Properly killing UDP associations, which may cause `Future` (memory) leaks
+
+  ## Security
+
+  - #556 Remove slient dropping when replay was detected
+
+ -- ty <zonyitoo@gmail.com>  Sat, 24 July 2021 11:50:00 +0800
+
 shadowsocks-rust (1.11.1) unstable; urgency=medium
 
   ## Features
