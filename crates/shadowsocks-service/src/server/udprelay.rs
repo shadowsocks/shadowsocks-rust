@@ -227,7 +227,6 @@ struct UdpAssociationContext {
     outbound_ipv4_socket: SpinMutex<UdpAssociationState>,
     outbound_ipv6_socket: SpinMutex<UdpAssociationState>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
-    target_cache: Mutex<LruCache<SocketAddr, Address>>,
 }
 
 impl Drop for UdpAssociationContext {
@@ -255,15 +254,6 @@ impl UdpAssociationContext {
             outbound_ipv4_socket: SpinMutex::new(UdpAssociationState::empty()),
             outbound_ipv6_socket: SpinMutex::new(UdpAssociationState::empty()),
             keepalive_tx,
-            // Cache for remembering the original Address of target,
-            // when recv_from a SocketAddr, we have to know whch Address that client was originally requested.
-            //
-            // XXX: 128 target addresses should be enough for __one__ client.
-            //      1 hours should be enough for caching the address mapping. Most of the DNS records' TTL won't last that long.
-            target_cache: Mutex::new(LruCache::with_expiry_duration_and_capacity(
-                Duration::from_secs(3600),
-                128,
-            )),
         });
 
         let l2r_task = {
@@ -305,9 +295,6 @@ impl UdpAssociationContext {
             },
             Address::DomainNameAddress(ref dname, port) => {
                 lookup_then!(self.context.context_ref(), dname, port, |sa| {
-                    // Record resolved address as reverse index
-                    self.target_cache.lock().await.insert(sa, target_addr.clone());
-
                     match sa {
                         SocketAddr::V4(..) => self.clone().copy_ipv4_l2r_dispatch(sa, data).await,
                         SocketAddr::V6(..) => self.clone().copy_ipv6_l2r_dispatch(sa, data).await,
@@ -451,10 +438,7 @@ impl UdpAssociationContext {
 
             let data = &buffer[..n];
 
-            let target_addr = match self.target_cache.lock().await.get(&addr) {
-                Some(a) => a.clone(),
-                None => Address::from(addr),
-            };
+            let target_addr = Address::from(addr);
 
             // Send back to client
             if let Err(err) = self.inbound.send_to(self.peer_addr, &target_addr, data).await {
