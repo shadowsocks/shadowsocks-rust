@@ -13,7 +13,7 @@ use std::{
 };
 
 use futures::{future, ready};
-use log::{debug, warn};
+use log::warn;
 use pin_project::pin_project;
 use socket2::{Socket, TcpKeepalive};
 use tokio::{
@@ -173,7 +173,7 @@ impl TcpListener {
                 Ok(..) => {}
                 Err(ref err) if err.kind() == ErrorKind::AddrInUse => {
                     // This is probably 0.0.0.0 with the same port has already been occupied
-                    debug!(
+                    warn!(
                         "0.0.0.0:{} may have already been occupied, retry with IPV6_V6ONLY",
                         addr.port()
                     );
