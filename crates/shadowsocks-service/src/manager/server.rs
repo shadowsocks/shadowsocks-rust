@@ -2,7 +2,6 @@
 
 use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
-use futures::future::{self, AbortHandle};
 use log::{error, info, trace};
 use shadowsocks::{
     config::{Mode, ServerConfig, ServerType},
@@ -26,7 +25,7 @@ use shadowsocks::{
     ManagerListener,
     ServerAddr,
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     acl::AccessControl,
@@ -37,7 +36,7 @@ use crate::{
 
 struct ServerInstance {
     flow_stat: Arc<FlowStat>,
-    abortable: AbortHandle,
+    abortable: JoinHandle<io::Result<()>>,
     svr_cfg: ServerConfig,
 }
 
@@ -198,8 +197,7 @@ impl Manager {
 
         let flow_stat = server.flow_stat();
 
-        let (server_fut, abortable) = future::abortable(async move { server.run().await });
-        tokio::spawn(server_fut);
+        let abortable = tokio::spawn(async move { server.run().await });
 
         servers.insert(
             server_port,

@@ -14,11 +14,11 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use cfg_if::cfg_if;
 #[cfg(feature = "trust-dns")]
-use futures::future::{self, AbortHandle};
-#[cfg(feature = "trust-dns")]
 use log::error;
 use log::{log_enabled, trace, Level};
 use tokio::net::lookup_host;
+#[cfg(feature = "trust-dns")]
+use tokio::task::JoinHandle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
@@ -44,7 +44,7 @@ pub enum DnsResolver {
     #[cfg(feature = "trust-dns")]
     TrustDnsSystem {
         inner: Arc<TrustDnsSystemResolver>,
-        abortable: AbortHandle,
+        abortable: JoinHandle<()>,
     },
     /// Trust-DNS resolver
     #[cfg(feature = "trust-dns")]
@@ -186,7 +186,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
 #[cfg(all(feature = "trust-dns", any(not(unix), target_os = "android")))]
 async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> notify::Result<()> {
     let _ = resolver.ipv6_first; // use it for supressing warning
-    future::pending().await
+    futures::future::pending().await
 }
 
 impl DnsResolver {
@@ -209,15 +209,14 @@ impl DnsResolver {
             ipv6_first,
         });
 
-        let (notify_task, abortable) = {
+        let abortable = {
             let inner = inner.clone();
-            future::abortable(async {
+            tokio::spawn(async {
                 if let Err(err) = trust_dns_notify_update_dns(inner).await {
                     error!("failed to watch DNS system configuration changes, error: {}", err);
                 }
             })
         };
-        tokio::spawn(notify_task);
 
         Ok(DnsResolver::TrustDnsSystem { inner, abortable })
     }

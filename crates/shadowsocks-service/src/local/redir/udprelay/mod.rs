@@ -8,7 +8,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use futures::future::{self, AbortHandle};
 use log::{error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
@@ -17,7 +16,7 @@ use shadowsocks::{
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     config::RedirType,
@@ -41,7 +40,7 @@ const INBOUND_SOCKET_CACHE_CAPACITY: usize = 256;
 
 struct UdpRedirInboundCache {
     cache: Arc<Mutex<LruCache<SocketAddr, Arc<UdpRedirSocket>>>>,
-    watcher: AbortHandle,
+    watcher: JoinHandle<()>,
 }
 
 impl Drop for UdpRedirInboundCache {
@@ -57,16 +56,15 @@ impl UdpRedirInboundCache {
             INBOUND_SOCKET_CACHE_CAPACITY,
         )));
 
-        let (cleanup_fut, watcher) = {
+        let watcher = {
             let cache = cache.clone();
-            future::abortable(async move {
+            tokio::spawn(async move {
                 loop {
                     tokio::time::sleep(INBOUND_SOCKET_CACHE_EXPIRATION).await;
                     let _ = cache.lock().await.iter();
                 }
             })
         };
-        tokio::spawn(cleanup_fut);
 
         UdpRedirInboundCache { cache, watcher }
     }
