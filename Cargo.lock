@@ -612,7 +612,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.0",
+ "socket2 0.4.1",
  "tokio",
  "tower-service",
  "tracing",
@@ -1541,7 +1541,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "shadowsocks-crypto",
- "socket2 0.4.0",
+ "socket2 0.4.1",
  "spin 0.9.2",
  "thiserror",
  "tokio",
@@ -1616,7 +1616,7 @@ dependencies = [
  "rustls-native-certs",
  "serde",
  "shadowsocks",
- "socket2 0.4.0",
+ "socket2 0.4.1",
  "spin 0.9.2",
  "thiserror",
  "tokio",
@@ -1686,9 +1686,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e3dfc207c526015c632472a77be09cf1b6e46866581aecae5cc38fb4235dea2"
+checksum = "765f090f0e423d2b55843402a07915add955e7d60657db13707a159727326cad"
 dependencies = [
  "libc",
  "winapi",
