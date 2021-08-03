@@ -318,6 +318,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "etherparse"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fa20922281f9ee5ffcda45e80d56085829279f1270f79fbabc39809a4354807"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "exitcode"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -668,6 +677,12 @@ checksum = "bee0328b1209d157ef001c94dd85b4f8f64139adb0eac2659f4b08382b2f474d"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "ioctl-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c429fffa658f288669529fc26565f728489a2e39bc7b24a428aaaf51355182e"
 
 [[package]]
 name = "ipconfig"
@@ -1596,6 +1611,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "env_logger",
+ "etherparse",
  "futures",
  "hyper",
  "ipnet",
@@ -1624,6 +1640,7 @@ dependencies = [
  "tokio-rustls",
  "tower",
  "trust-dns-resolver",
+ "tun",
  "webpki-roots",
  "winapi",
 ]
@@ -2077,6 +2094,21 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "tun"
+version = "0.5.1"
+source = "git+https://github.com/meh/rust-tun.git#19906c006512acf805f392e744e38aec8adc6618"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "futures-core",
+ "ioctl-sys",
+ "libc",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+]
 
 [[package]]
 name = "typemap"

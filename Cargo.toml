@@ -92,6 +92,8 @@ local-redir = ["local", "shadowsocks-service/local-redir"]
 local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local", "shadowsocks-service/local-socks4"]
+# Enable Tun interface protocol for sslocal
+local-tun = ["local", "shadowsocks-service/local-tun"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]

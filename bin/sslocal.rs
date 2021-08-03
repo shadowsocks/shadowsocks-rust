@@ -271,6 +271,8 @@ fn main() {
                 Some("redir") => ProtocolType::Redir,
                 #[cfg(feature = "local-dns")]
                 Some("dns") => ProtocolType::Dns,
+                #[cfg(feature = "local-tun")]
+                Some("tun") => ProtocolType::Tun,
                 Some(p) => panic!("not supported `protocol` \"{}\"", p),
                 None => ProtocolType::Socks,
             };

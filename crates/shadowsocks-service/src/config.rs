@@ -552,6 +552,8 @@ pub enum ProtocolType {
     Redir,
     #[cfg(feature = "local-dns")]
     Dns,
+    #[cfg(feature = "local-tun")]
+    Tun,
 }
 
 impl Default for ProtocolType {
@@ -573,6 +575,8 @@ impl ProtocolType {
             ProtocolType::Redir => "redir",
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => "dns",
+            #[cfg(feature = "local-tun")]
+            ProtocolType::Tun => "tun",
         }
     }
 
@@ -588,6 +592,8 @@ impl ProtocolType {
             "redir",
             #[cfg(feature = "local-dns")]
             "dns",
+            #[cfg(feature = "local-tun")]
+            "tun",
         ]
     }
 }
@@ -610,6 +616,8 @@ impl FromStr for ProtocolType {
             "redir" => Ok(ProtocolType::Redir),
             #[cfg(feature = "local-dns")]
             "dns" => Ok(ProtocolType::Dns),
+            #[cfg(feature = "local-tun")]
+            "tun" => Ok(ProtocolType::Tun),
             _ => Err(ProtocolTypeError),
         }
     }

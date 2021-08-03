@@ -38,6 +38,8 @@ pub mod net;
 #[cfg(feature = "local-redir")]
 pub mod redir;
 pub mod socks;
+#[cfg(feature = "local-tun")]
+pub mod tun;
 #[cfg(feature = "local-tunnel")]
 pub mod tunnel;
 pub mod utils;
@@ -125,6 +127,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         ProtocolType::Redir => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => local_config.mode.enable_tcp(),
+        #[cfg(feature = "local-tun")]
+        ProtocolType::Tun => true,
     });
 
     if enable_tcp {
@@ -280,6 +284,16 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 server.set_mode(local_config.mode);
 
                 vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-tun")]
+            ProtocolType::Tun => {
+                use self::tun::TunBuilder;
+
+                let server = TunBuilder::new(context.clone(), balancer)
+                    .address("10.255.0.1/24".parse().unwrap())
+                    .build()
+                    .await?;
+                vfut.push(async move { server.run().await }.boxed());
             }
         }
     }

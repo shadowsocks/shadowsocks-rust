@@ -55,6 +55,8 @@ local-redir = ["local", "mio"]
 local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
+# Enable Tun interface protocol for sslocal
+local-tun = ["local", "etherparse", "tun", "rand"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecured
@@ -104,6 +106,9 @@ trust-dns-resolver = { version = "0.20.3", optional = true, features = ["serde-c
 ipnet = "2.3"
 iprange = "0.6"
 regex = "1.4"
+
+tun = { version = "0.5", features = ["async"], optional = true, git = "https://github.com/meh/rust-tun.git" }
+etherparse = { version = "0.9", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.3"
