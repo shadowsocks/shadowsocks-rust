@@ -20,11 +20,8 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
-        redir::{
-            redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
-            to_ipv4_mapped,
-        },
-        utils::establish_tcp_tunnel,
+        redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+        utils::{establish_tcp_tunnel, to_ipv4_mapped},
     },
 };
 

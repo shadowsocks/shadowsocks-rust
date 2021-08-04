@@ -1,27 +1,22 @@
 use std::{
     io::{self, ErrorKind},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
 
-use etherparse::{IpHeader, TcpHeader};
+use etherparse::TcpHeader;
 use ipnet::IpNet;
-use log::{debug, error, trace, warn};
-use lru_time_cache::{Entry, LruCache};
+use log::{debug, error, trace};
+use lru_time_cache::LruCache;
 use shadowsocks::{net::TcpListener, relay::socks5::Address};
-use tokio::{
-    net::TcpStream,
-    sync::{mpsc, Mutex},
-    task::JoinHandle,
-};
-use tun::TunPacket;
+use tokio::{net::TcpStream, sync::Mutex, task::JoinHandle};
 
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
     net::AutoProxyClientStream,
-    utils::establish_tcp_tunnel,
+    utils::{establish_tcp_tunnel, to_ipv4_mapped},
 };
 
 struct TcpAddressTranslator {
@@ -59,7 +54,8 @@ impl TcpTun {
             None => return Err(io::Error::new(ErrorKind::Other, "tun network doesn't have any hosts")),
         };
 
-        let free_addrs = hosts.collect::<Vec<IpAddr>>();
+        // Take up to 10 IPs as saddr for NAT allocating
+        let free_addrs = hosts.take(10).collect::<Vec<IpAddr>>();
         assert!(!free_addrs.is_empty());
 
         debug!("tun tcp listener bind {}", tcp_daddr);
@@ -87,7 +83,7 @@ impl TcpTun {
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         tcp_header: &TcpHeader,
-    ) -> io::Result<(SocketAddr, SocketAddr)> {
+    ) -> io::Result<Option<(SocketAddr, SocketAddr)>> {
         let TcpAddressTranslator {
             ref mut connections,
             ref mut mapping,
@@ -129,10 +125,8 @@ impl TcpTun {
                 Some(saddr) => match connections.get_mut(saddr) {
                     Some(c) => (c, false),
                     None => {
-                        return Err(io::Error::new(
-                            ErrorKind::Other,
-                            format!("unknown tcp connection {} -> {}", src_addr, dst_addr),
-                        ));
+                        debug!("unknown tcp connection {} -> {}", src_addr, dst_addr);
+                        return Ok(None);
                     }
                 },
                 None => {
@@ -140,10 +134,8 @@ impl TcpTun {
                     match connections.get_mut(&dst_addr) {
                         Some(c) => (c, true),
                         None => {
-                            return Err(io::Error::new(
-                                ErrorKind::Other,
-                                format!("unknown tcp connection {} -> {}", src_addr, dst_addr),
-                            ));
+                            debug!("unknown tcp connection {} -> {}", src_addr, dst_addr);
+                            return Ok(None);
                         }
                     }
                 }
@@ -173,7 +165,7 @@ impl TcpTun {
             }
         }
 
-        Ok((trans_saddr, trans_daddr))
+        Ok(Some((trans_saddr, trans_daddr)))
     }
 
     async fn tunnel(
@@ -235,14 +227,14 @@ async fn handle_redir_client(
     peer_addr: SocketAddr,
     mut daddr: SocketAddr,
 ) -> io::Result<()> {
-    // // Get forward address from socket
-    // //
-    // // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
-    // if let SocketAddr::V6(ref a) = daddr {
-    //     if let Some(v4) = to_ipv4_mapped(a.ip()) {
-    //         daddr = SocketAddr::new(IpAddr::from(v4), a.port());
-    //     }
-    // }
+    // Get forward address from socket
+    //
+    // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
+    if let SocketAddr::V6(ref a) = daddr {
+        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+            daddr = SocketAddr::new(IpAddr::from(v4), a.port());
+        }
+    }
     let target_addr = Address::from(daddr);
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
 }

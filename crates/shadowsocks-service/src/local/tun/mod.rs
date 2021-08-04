@@ -2,26 +2,28 @@
 
 use std::{
     io::{self, Cursor, ErrorKind},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
-    time::Duration,
 };
 
 use byte_string::ByteStr;
+use bytes::BytesMut;
 use etherparse::{IpHeader, PacketHeaders, ReadError, TransportHeader};
 use ipnet::{IpNet, Ipv4Net};
 use log::{error, info, trace};
-use shadowsocks::net::TcpListener;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
-    time,
 };
-use tun::{AsyncDevice, Configuration as TunConfiguration, Device, IntoAddress, Layer, TunPacket};
+use tun::{AsyncDevice, Configuration as TunConfiguration, Device, Layer};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-use self::{sys::IFF_PI_PREFIX_LEN, tcp::TcpTun, udp::UdpTun};
+use self::{
+    sys::{set_packet_information, IFF_PI_PREFIX_LEN},
+    tcp::TcpTun,
+    udp::UdpTun,
+};
 
 mod sys;
 mod tcp;
@@ -52,8 +54,8 @@ impl TunBuilder {
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         self.tun_config.platform(|tun_config| {
-            // Enable Packet Information for the framed API (do not set IFF_NO_PI)
-            tun_config.packet_information(true);
+            // IFF_NO_PI preventing excessive buffer reallocating
+            tun_config.packet_information(false);
         });
 
         let device = match tun::create_as_async(&self.tun_config) {
@@ -91,15 +93,15 @@ impl TunBuilder {
         Ok(Tun {
             device,
             tun_rx,
-            tcp: TcpTun::new(self.context.clone(), tun_network.into(), self.balancer).await?,
-            udp: UdpTun::new(self.context, tun_tx),
+            tcp: TcpTun::new(self.context.clone(), tun_network.into(), self.balancer.clone()).await?,
+            udp: UdpTun::new(self.context, tun_tx, self.balancer),
         })
     }
 }
 
 pub struct Tun {
     device: AsyncDevice,
-    tun_rx: mpsc::Receiver<TunPacket>,
+    tun_rx: mpsc::Receiver<BytesMut>,
     tcp: TcpTun,
     udp: UdpTun,
 }
@@ -120,22 +122,39 @@ impl Tun {
         let mut packet_buffer = vec![0u8; mtu as usize + IFF_PI_PREFIX_LEN].into_boxed_slice();
 
         loop {
-            // tun device
-            let n = self.device.read(&mut packet_buffer).await?;
+            tokio::select! {
+                // tun device
+                n = self.device.read(&mut packet_buffer) => {
+                    let n = n?;
 
-            if n <= IFF_PI_PREFIX_LEN {
-                error!(
-                    "[TUN] packet too short, packet: {:?}",
-                    ByteStr::new(&packet_buffer[..n])
-                );
-                continue;
-            }
+                    if n <= IFF_PI_PREFIX_LEN {
+                        error!(
+                            "[TUN] packet too short, packet: {:?}",
+                            ByteStr::new(&packet_buffer[..n])
+                        );
+                        continue;
+                    }
 
-            let packet = &mut packet_buffer[IFF_PI_PREFIX_LEN..n];
-            trace!("[TUN] received IP packet {:?}", ByteStr::new(packet));
+                    let packet = &mut packet_buffer[IFF_PI_PREFIX_LEN..n];
+                    trace!("[TUN] received IP packet {:?}", ByteStr::new(packet));
 
-            if self.handle_packet(packet).await? {
-                self.device.write_all(&packet_buffer[..n]).await?;
+                    if self.handle_packet(packet).await? {
+                        self.device.write_all(&packet_buffer[..n]).await?;
+                    }
+                }
+
+                // channel sent back
+                maybe_packet = self.tun_rx.recv() => {
+                    let mut packet = maybe_packet.expect("tun channel closed");
+                    match set_packet_information(&mut packet) {
+                        Err(err) => {
+                            error!("failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
+                        }
+                        Ok(..) => {
+                            self.device.write_all(&packet).await?;
+                        }
+                    }
+                }
             }
         }
     }
@@ -171,9 +190,10 @@ impl Tun {
                 let dst_addr = SocketAddr::new(dst_ip, tcp_header.destination_port);
 
                 let (mod_src_addr, mod_dst_addr) = match self.tcp.handle_packet(src_addr, dst_addr, &tcp_header).await {
-                    Ok(a) => a,
+                    Ok(Some(a)) => a,
+                    Ok(None) => return Ok(false),
                     Err(err) => {
-                        error!("handle IP packet failed, error: {}", err);
+                        error!("handle TCP/IP packet failed, error: {}", err);
                         return Ok(false);
                     }
                 };
@@ -217,6 +237,10 @@ impl Tun {
 
                 let src_addr = SocketAddr::new(src_ip, udp_header.source_port);
                 let dst_addr = SocketAddr::new(dst_ip, udp_header.destination_port);
+
+                if let Err(err) = self.udp.handle_packet(src_addr, dst_addr, ph.payload).await {
+                    error!("handle UDP/IP packet failed, error: {}", err);
+                }
 
                 Ok(false)
             }
