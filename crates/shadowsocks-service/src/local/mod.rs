@@ -331,6 +331,10 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(fd) = local_config.tun_device_fd {
                     builder = builder.file_descriptor(fd);
                 } else if let Some(ref fd_path) = local_config.tun_device_fd_from_path {
+                    use std::fs;
+
+                    let _ = fs::remove_file(fd_path);
+
                     let listener = match UnixListener::bind(fd_path) {
                         Ok(l) => l,
                         Err(err) => {

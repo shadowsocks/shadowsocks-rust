@@ -82,7 +82,10 @@ impl TunBuilder {
         let tun_address = match device.get_ref().address() {
             Ok(t) => t,
             Err(err) => {
-                error!("failed to get tun address, err: {}", err);
+                error!(
+                    "tun device doesn't have address, err: {}, set it by tun_interface_address",
+                    err
+                );
                 return Err(io::Error::new(ErrorKind::Other, err));
             }
         };
@@ -90,7 +93,10 @@ impl TunBuilder {
         let tun_netmask = match device.get_ref().netmask() {
             Ok(m) => m,
             Err(err) => {
-                error!("failed to get netmask, err: {}", err);
+                error!(
+                    "tun device doesn't have netmask, err: {}, set it by tun_interface_address",
+                    err
+                );
                 return Err(io::Error::new(ErrorKind::Other, err));
             }
         };

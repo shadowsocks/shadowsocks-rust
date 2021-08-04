@@ -93,7 +93,7 @@ local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local", "shadowsocks-service/local-socks4"]
 # Enable Tun interface protocol for sslocal
-local-tun = ["local", "shadowsocks-service/local-tun"]
+local-tun = ["local", "shadowsocks-service/local-tun", "ipnet"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
@@ -128,7 +128,7 @@ exitcode = "1"
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }
 
-ipnet = "2.3"
+ipnet = { version = "2.3", optional = true }
 
 mimalloc = { version = "0.1", optional = true }
 tcmalloc = { version = "0.3", optional = true }

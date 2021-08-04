@@ -6,7 +6,7 @@
 
 use std::{process, time::Duration};
 
-use clap::{clap_app, Arg};
+use clap::{clap_app, Arg, Error as ClapError, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
@@ -41,7 +41,7 @@ fn main() {
             (version: VERSION)
             (about: "A fast tunnel proxy that helps you bypass firewalls.")
 
-            (@arg CONFIG: -c --config +takes_value required_unless_all(&["LOCAL_ADDR", "SERVER_CONFIG"]) "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
+            (@arg CONFIG: -c --config +takes_value required_unless("SERVER_CONFIG") "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
             (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
             (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
@@ -172,7 +172,7 @@ fn main() {
         {
             app = clap_app!(@app (app)
                 (@arg TUN_INTERFACE_NAME: --("tun-interface-name") +takes_value "Tun interface name, allocate one if not specify")
-                (@arg TUN_INTERFACE_ADDRESS: --("tun-interface-address") +takes_value default_value("10.255.0.1/24") {validator::validate_ipnet} "Tun interface address (network)")
+                (@arg TUN_INTERFACE_ADDRESS: --("tun-interface-address") +takes_value {validator::validate_ipnet} "Tun interface address (network)")
             );
 
             #[cfg(unix)]
@@ -299,8 +299,11 @@ fn main() {
                     }
                 }
                 (_, None) => {
-                    eprintln!("Protocol \"{}\" requires local-addr", protocol.as_str());
-                    std::process::exit(1);
+                    ClapError::with_description(
+                        format!("Protocol \"{}\" requires local-addr", protocol.as_str()).as_str(),
+                        ClapErrorKind::ArgumentNotFound,
+                    )
+                    .exit();
                 }
                 (_, Some(local_addr)) => {
                     local_config.addr = Some(local_addr.parse::<ServerAddr>().expect("local bind addr"));

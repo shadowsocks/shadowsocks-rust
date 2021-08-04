@@ -4,6 +4,8 @@
 
 use std::net::{IpAddr, SocketAddr};
 
+#[cfg(feature = "local-tun")]
+use ipnet::IpNet;
 #[cfg(feature = "local-dns")]
 use shadowsocks_service::local::dns::NameServerAddr;
 use shadowsocks_service::shadowsocks::{relay::socks5::Address, ManagerAddr, ServerAddr, ServerConfig};
@@ -49,4 +51,16 @@ pub fn validate_server_url(v: String) -> Result<(), String> {
     }
 }
 
-validate_type!(validate_ipnet, IpAddr, "should be a CIDR address like 10.1.2.3/24");
+#[cfg(feature = "local-tun")]
+pub fn validate_ipnet(v: String) -> Result<(), String> {
+    match v.parse::<IpNet>() {
+        Err(..) => Err("should be a CIDR address like 10.1.2.3/24".to_owned()),
+        Ok(n) => {
+            if n.trunc() == n {
+                Err("should be a valid CIDR address with a host like 10.1.2.3/24".to_owned())
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
