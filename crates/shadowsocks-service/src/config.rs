@@ -1773,20 +1773,14 @@ impl fmt::Display for Config {
                 let mut jlocals = Vec::with_capacity(self.local.len());
                 for local in &self.local {
                     let jlocal = SSLocalExtConfig {
-                        local_address: match local.addr {
-                            None => None,
-                            Some(ref a) => Some(match a {
-                                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                            }),
-                        },
-                        local_port: match local.addr {
-                            None => None,
-                            Some(ref a) => Some(match a {
-                                ServerAddr::SocketAddr(ref sa) => sa.port(),
-                                ServerAddr::DomainName(.., port) => *port,
-                            }),
-                        },
+                        local_address: local.addr.as_ref().map(|a| match a {
+                            ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                            ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                        }),
+                        local_port: local.addr.as_ref().map(|a| match a {
+                            ServerAddr::SocketAddr(ref sa) => sa.port(),
+                            ServerAddr::DomainName(.., port) => *port,
+                        }),
                         disabled: None,
                         local_udp_address: local.udp_addr.as_ref().map(|udp_addr| match udp_addr {
                             ServerAddr::SocketAddr(sa) => sa.ip().to_string(),
