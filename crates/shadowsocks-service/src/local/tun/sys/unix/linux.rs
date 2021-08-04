@@ -1,3 +1,7 @@
+use std::io;
+
+use bytes::BytesMut;
+
 /// Packet Information length in bytes
 ///
 /// Tun device have set `IFF_NO_PI`, so ther is no prefix headers

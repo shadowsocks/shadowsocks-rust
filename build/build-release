@@ -46,7 +46,7 @@ function build() {
     TARGET_FEATURES="${features[@]}"
 
     if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
-        TARGET_FEATURES+=" local-redir"
+        TARGET_FEATURES+=" local-redir local-tun"
     fi
 
     if [[ "${TARGET_FEATURES}" != "" ]]; then
