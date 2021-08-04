@@ -6,6 +6,7 @@ use std::{
     io::{self, Cursor, ErrorKind},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 
 use byte_string::ByteStr;
@@ -35,6 +36,8 @@ pub struct TunBuilder {
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
     tun_config: TunConfiguration,
+    udp_expiry_duration: Option<Duration>,
+    udp_capacity: Option<usize>,
 }
 
 impl TunBuilder {
@@ -43,6 +46,8 @@ impl TunBuilder {
             context,
             balancer,
             tun_config: TunConfiguration::default(),
+            udp_expiry_duration: None,
+            udp_capacity: None,
         }
     }
 
@@ -59,6 +64,16 @@ impl TunBuilder {
     #[cfg(unix)]
     pub fn file_descriptor(mut self, fd: RawFd) -> TunBuilder {
         self.tun_config.raw_fd(fd);
+        self
+    }
+
+    pub fn udp_expiry_duration(mut self, udp_expiry_duration: Duration) -> TunBuilder {
+        self.udp_expiry_duration = Some(udp_expiry_duration);
+        self
+    }
+
+    pub fn udp_capacity(mut self, udp_capacity: usize) -> TunBuilder {
+        self.udp_capacity = Some(udp_capacity);
         self
     }
 
@@ -113,7 +128,13 @@ impl TunBuilder {
             device,
             tun_rx,
             tcp: TcpTun::new(self.context.clone(), tun_network.into(), self.balancer.clone()).await?,
-            udp: UdpTun::new(self.context, tun_tx, self.balancer),
+            udp: UdpTun::new(
+                self.context,
+                tun_tx,
+                self.balancer,
+                self.udp_expiry_duration,
+                self.udp_capacity,
+            ),
         })
     }
 }

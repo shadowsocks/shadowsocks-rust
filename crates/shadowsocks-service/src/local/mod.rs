@@ -329,6 +329,12 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(name) = local_config.tun_interface_name {
                     builder = builder.name(&name);
                 }
+                if let Some(c) = config.udp_max_associations {
+                    builder = builder.udp_capacity(c);
+                }
+                if let Some(d) = config.udp_timeout {
+                    builder = builder.udp_expiry_duration(d);
+                }
                 #[cfg(unix)]
                 if let Some(fd) = local_config.tun_device_fd {
                     builder = builder.file_descriptor(fd);

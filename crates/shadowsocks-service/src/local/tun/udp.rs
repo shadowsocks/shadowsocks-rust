@@ -2,6 +2,7 @@ use std::{
     io::{self, ErrorKind},
     net::{IpAddr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -23,9 +24,21 @@ pub struct UdpTun {
 }
 
 impl UdpTun {
-    pub fn new(context: Arc<ServiceContext>, tun_tx: mpsc::Sender<BytesMut>, balancer: PingBalancer) -> UdpTun {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        tun_tx: mpsc::Sender<BytesMut>,
+        balancer: PingBalancer,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+    ) -> UdpTun {
         UdpTun {
-            manager: UdpAssociationManager::new(context, UdpTunInboundWriter::new(tun_tx), None, None, balancer),
+            manager: UdpAssociationManager::new(
+                context,
+                UdpTunInboundWriter::new(tun_tx),
+                time_to_live,
+                capacity,
+                balancer,
+            ),
         }
     }
 
