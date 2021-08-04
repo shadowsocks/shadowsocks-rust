@@ -89,6 +89,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
 
+        bind_local_addr: config.outbound_bind_addr,
+
         ..Default::default()
     };
     connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;

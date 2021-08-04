@@ -817,8 +817,6 @@ impl Default for DnsConfig {
 pub struct Config {
     /// Remote ShadowSocks server configurations
     pub server: Vec<ServerConfig>,
-    /// Local server's bind address, or ShadowSocks server's outbound address
-    pub local_addr: Option<IpAddr>,
     /// Local server configuration
     pub local: Vec<LocalConfig>,
 
@@ -858,6 +856,8 @@ pub struct Config {
     /// Set `SO_BINDTODEVICE` socket option for outbound sockets
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
     pub outbound_bind_interface: Option<String>,
+    /// Outbound sockets will `bind` to this address
+    pub outbound_bind_addr: Option<IpAddr>,
     /// Path to protect callback unix address, only for Android
     #[cfg(target_os = "android")]
     pub outbound_vpn_protect_path: Option<PathBuf>,
@@ -954,7 +954,6 @@ impl Config {
     pub fn new(config_type: ConfigType) -> Config {
         Config {
             server: Vec::new(),
-            local_addr: None,
             local: Vec::new(),
 
             dns: DnsConfig::default(),
@@ -971,6 +970,7 @@ impl Config {
             outbound_fwmark: None,
             #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
             outbound_bind_interface: None,
+            outbound_bind_addr: None,
             #[cfg(target_os = "android")]
             outbound_vpn_protect_path: None,
 
@@ -1237,19 +1237,10 @@ impl Config {
                 }
             }
             ConfigType::Server | ConfigType::Manager => {
+                // NOTE: IGNORED.
                 // servers only uses `local_address` for binding outbound interfaces
-
-                if let Some(local_address) = config.local_address {
-                    match local_address.parse::<IpAddr>() {
-                        Ok(ip) => {
-                            nconfig.local_addr = Some(ip);
-                        }
-                        Err(..) => {
-                            let err = Error::new(ErrorKind::Malformed, "`local_address` invalid", None);
-                            return Err(err);
-                        }
-                    }
-                }
+                //
+                // This behavior causes lots of confusion. use outbound_bind_addr instead
             }
         }
 
@@ -1760,10 +1751,6 @@ impl fmt::Display for Config {
         // Convert to json
 
         let mut jconf = SSConfig::default();
-
-        if let Some(ref client) = self.local_addr {
-            jconf.local_address = Some(client.to_string());
-        }
 
         // Locals
         if !self.local.is_empty() {

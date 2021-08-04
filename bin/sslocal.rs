@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use std::{process, time::Duration};
+use std::{net::IpAddr, process, time::Duration};
 
 use clap::{clap_app, Arg, Error as ClapError, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
@@ -76,6 +76,8 @@ fn main() {
             (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
             (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
             (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
+
+            (@arg OUTBOUND_BIND_ADDR: --("outbound-bind-addr") +takes_value alias("bind-addr") {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
         );
 
         // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
@@ -459,6 +461,11 @@ fn main() {
         }
         if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
             config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
+        }
+
+        if let Some(bind_addr) = matches.value_of("OUTBOUND_BIND_ADDR") {
+            let bind_addr = bind_addr.parse::<IpAddr>().expect("outbound-bind-addr");
+            config.outbound_bind_addr = Some(bind_addr);
         }
 
         // DONE READING options
