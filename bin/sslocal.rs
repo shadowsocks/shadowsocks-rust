@@ -356,7 +356,7 @@ fn main() {
                 if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
                     let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
 
-                    let mut local_dns_config = LocalConfig::new(addr, ProtocolType::Dns);
+                    let mut local_dns_config = LocalConfig::new_with_addr(addr, ProtocolType::Dns);
 
                     // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
                     local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
