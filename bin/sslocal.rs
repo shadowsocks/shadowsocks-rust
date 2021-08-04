@@ -46,7 +46,7 @@ fn main() {
             (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
             (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
             (@arg TCP_AND_UDP: -U requires[LOCAL_ADDR] "Server mode TCP_AND_UDP")
-            (@arg PROTOCOL: --protocol +takes_value requires[LOCAL_ADDR] possible_values(ProtocolType::available_protocols()) "Protocol for communicating with clients (SOCKS5 by default)")
+            (@arg PROTOCOL: --protocol +takes_value possible_values(ProtocolType::available_protocols()) "Protocol for communicating with clients (SOCKS5 by default)")
             (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value requires[LOCAL_ADDR] {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
 
             (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
@@ -168,6 +168,21 @@ fn main() {
             }
         }
 
+        #[cfg(feature = "local-tun")]
+        {
+            app = clap_app!(@app (app)
+                (@arg TUN_INTERFACE_NAME: --("tun-interface-name") +takes_value "Tun interface name, allocate one if not specify")
+                (@arg TUN_INTERFACE_ADDRESS: --("tun-interface-address") +takes_value default_value("10.255.0.1/24") {validator::validate_ipnet} "Tun interface address (network)")
+            );
+
+            #[cfg(unix)]
+            {
+                app = clap_app!(@app (app)
+                    (@arg TUN_DEVICE_FD_FROM_PATH: --("tun-device-fd-from-path") +takes_value "Tun device file descriptor will be transferred from this unix domain socket path")
+                );
+            }
+        }
+
         #[cfg(unix)]
         {
             app = clap_app!(@app (app)
@@ -258,9 +273,7 @@ fn main() {
             config.outbound_vpn_protect_path = Some(From::from("protect_path"));
         }
 
-        if let Some(local_addr) = matches.value_of("LOCAL_ADDR") {
-            let local_addr = local_addr.parse::<ServerAddr>().expect("local bind addr");
-
+        if matches.value_of("LOCAL_ADDR").is_some() || matches.value_of("PROTOCOL").is_some() {
             let protocol = match matches.value_of("PROTOCOL") {
                 Some("socks") => ProtocolType::Socks,
                 #[cfg(feature = "local-http")]
@@ -277,7 +290,22 @@ fn main() {
                 None => ProtocolType::Socks,
             };
 
-            let mut local_config = LocalConfig::new(local_addr, protocol);
+            let mut local_config = LocalConfig::new(protocol);
+            match (protocol, matches.value_of("LOCAL_ADDR")) {
+                #[cfg(feature = "local-tun")]
+                (ProtocolType::Tun, local_addr_opt) => {
+                    if let Some(local_addr) = local_addr_opt {
+                        local_config.addr = Some(local_addr.parse::<ServerAddr>().expect("local bind addr"));
+                    }
+                }
+                (_, None) => {
+                    eprintln!("Protocol \"{}\" requires local-addr", protocol.as_str());
+                    std::process::exit(1);
+                }
+                (_, Some(local_addr)) => {
+                    local_config.addr = Some(local_addr.parse::<ServerAddr>().expect("local bind addr"));
+                }
+            }
 
             if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
                 local_config.udp_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
@@ -330,6 +358,21 @@ fn main() {
                     local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
 
                     config.local.push(local_dns_config);
+                }
+            }
+
+            #[cfg(feature = "local-tun")]
+            {
+                if let Some(tun_address) = matches.value_of("TUN_INTERFACE_ADDRESS") {
+                    local_config.tun_interface_address = Some(tun_address.parse().expect("tun-interface-address"));
+                }
+                if let Some(tun_name) = matches.value_of("TUN_INTERFACE_NAME") {
+                    local_config.tun_interface_name = Some(tun_name.parse().expect("tun-interface-name"));
+                }
+
+                #[cfg(unix)]
+                if let Some(fd_path) = matches.value_of("TUN_DEVICE_FD_FROM_PATH") {
+                    local_config.tun_device_fd_from_path = Some(fd_path.into());
                 }
             }
 

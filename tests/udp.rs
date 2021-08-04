@@ -35,7 +35,10 @@ fn get_svr_config() -> Config {
 
 fn get_cli_config() -> Config {
     let mut cfg = Config::new(ConfigType::Local);
-    cfg.local = vec![LocalConfig::new(LOCAL_ADDR.parse().unwrap(), ProtocolType::Socks)];
+    cfg.local = vec![LocalConfig::new_with_addr(
+        LOCAL_ADDR.parse().unwrap(),
+        ProtocolType::Socks,
+    )];
     cfg.local[0].mode = Mode::TcpAndUdp;
     cfg.server = vec![ServerConfig::new(
         SERVER_ADDR.parse::<SocketAddr>().unwrap(),

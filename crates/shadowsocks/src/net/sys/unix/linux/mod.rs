@@ -420,7 +420,7 @@ cfg_if! {
         use std::path::Path;
         use std::os::unix::io::RawFd;
 
-        mod uds;
+        use super::uds::UnixStream;
 
         /// This is a RPC for Android to `protect()` socket for connecting to remote servers
         ///
@@ -430,7 +430,7 @@ cfg_if! {
         async fn vpn_protect<P: AsRef<Path>>(protect_path: P, fd: RawFd) -> io::Result<()> {
             use tokio::io::AsyncReadExt;
 
-            let mut stream = self::uds::UnixStream::connect(protect_path).await?;
+            let mut stream = UnixStream::connect(protect_path).await?;
 
             // send fds
             let dummy: [u8; 1] = [1];

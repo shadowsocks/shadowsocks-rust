@@ -48,3 +48,5 @@ pub fn validate_server_url(v: String) -> Result<(), String> {
         Err(..) => Err("should be SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) format".to_owned()),
     }
 }
+
+validate_type!(validate_ipnet, IpAddr, "should be a CIDR address like 10.1.2.3/24");

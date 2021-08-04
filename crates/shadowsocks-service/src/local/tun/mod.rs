@@ -1,5 +1,7 @@
 //! Shadowsocks Local server serving on a Tun interface
 
+#[cfg(unix)]
+use std::os::unix::io::RawFd;
 use std::{
     io::{self, Cursor, ErrorKind},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -46,6 +48,17 @@ impl TunBuilder {
 
     pub fn address(mut self, addr: IpNet) -> TunBuilder {
         self.tun_config.address(addr.addr()).netmask(addr.netmask());
+        self
+    }
+
+    pub fn name(mut self, name: &str) -> TunBuilder {
+        self.tun_config.name(name);
+        self
+    }
+
+    #[cfg(unix)]
+    pub fn file_descriptor(mut self, fd: RawFd) -> TunBuilder {
+        self.tun_config.raw_fd(fd);
         self
     }
 

@@ -2,6 +2,8 @@
 
 use std::net::SocketAddr;
 
+#[cfg(unix)]
+pub use self::sys::uds::{UnixListener, UnixStream};
 pub use self::{
     option::{AcceptOpts, ConnectOpts},
     tcp::{TcpListener, TcpStream},

@@ -45,7 +45,10 @@ impl Socks4TestServer {
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local = vec![LocalConfig::new(ServerAddr::from(local_addr), ProtocolType::Socks)];
+                cfg.local = vec![LocalConfig::new_with_addr(
+                    ServerAddr::from(local_addr),
+                    ProtocolType::Socks,
+                )];
                 cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
                 cfg
             },

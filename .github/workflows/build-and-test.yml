@@ -43,8 +43,12 @@ jobs:
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build & Test (--no-default-features) - shadowsocks
         run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-default-features --no-fail-fast
-      - name: Build with All Features Enabled
+      - name: Build with All Features Enabled (Unix)
+        if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "local-http-rustls local-redir local-dns dns-over-tls dns-over-https stream-cipher local-tun"
+      - name: Build with All Features Enabled (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher"
       - name: Build with All Features Enabled - shadowsocks
         run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher"
       - name: Clippy Check

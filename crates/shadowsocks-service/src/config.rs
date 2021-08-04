@@ -58,6 +58,8 @@ use std::{
 };
 
 use cfg_if::cfg_if;
+#[cfg(feature = "local-tun")]
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
@@ -136,8 +138,10 @@ struct SSConfig {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct SSLocalExtConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
     local_address: Option<String>,
-    local_port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local_port: Option<u16>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     disabled: Option<bool>,
@@ -188,6 +192,14 @@ struct SSLocalExtConfig {
     #[cfg(feature = "local-tunnel")]
     #[serde(skip_serializing_if = "Option::is_none")]
     forward_port: Option<u16>,
+
+    /// Tun
+    #[cfg(feature = "local-tun")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tun_interface_name: Option<String>,
+    #[cfg(feature = "local-tun")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tun_interface_address: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -626,7 +638,9 @@ impl FromStr for ProtocolType {
 /// Local server configuration
 #[derive(Clone, Debug)]
 pub struct LocalConfig {
-    pub addr: ServerAddr,
+    /// Listen address for local servers
+    pub addr: Option<ServerAddr>,
+
     pub protocol: ProtocolType,
 
     /// Mode
@@ -659,13 +673,30 @@ pub struct LocalConfig {
     /// Sending DNS query through proxy to this address
     #[cfg(feature = "local-dns")]
     pub remote_dns_addr: Option<Address>,
+
+    /// Tun interface's name
+    ///
+    /// Linux: eth0, eth1, ...
+    /// macOS: utun0, utun1, ...
+    #[cfg(feature = "local-tun")]
+    pub tun_interface_name: Option<String>,
+    /// Tun interface's address and netmask
+    #[cfg(feature = "local-tun")]
+    pub tun_interface_address: Option<IpNet>,
+    /// Tun interface's file descriptor
+    #[cfg(all(feature = "local-tun", unix))]
+    pub tun_device_fd: Option<std::os::unix::io::RawFd>,
+    /// Tun interface's file descriptor read from this Unix Domain Socket
+    #[cfg(all(feature = "local-tun", unix))]
+    pub tun_device_fd_from_path: Option<PathBuf>,
 }
 
 impl LocalConfig {
     /// Create a new `LocalConfig`
-    pub fn new(addr: ServerAddr, protocol: ProtocolType) -> LocalConfig {
+    pub fn new(protocol: ProtocolType) -> LocalConfig {
         LocalConfig {
-            addr,
+            addr: None,
+
             protocol,
 
             mode: Mode::TcpOnly,
@@ -683,10 +714,38 @@ impl LocalConfig {
             local_dns_addr: None,
             #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
+
+            #[cfg(feature = "local-tun")]
+            tun_interface_name: None,
+            #[cfg(feature = "local-tun")]
+            tun_interface_address: None,
+            #[cfg(all(feature = "local-tun", unix))]
+            tun_device_fd: None,
+            #[cfg(all(feature = "local-tun", unix))]
+            tun_device_fd_from_path: None,
         }
     }
 
+    /// Create a new `LocalConfig` with listen address
+    pub fn new_with_addr(addr: ServerAddr, protocol: ProtocolType) -> LocalConfig {
+        let mut config = LocalConfig::new(protocol);
+        config.addr = Some(addr);
+        config
+    }
+
     fn check_integrity(&self) -> Result<(), Error> {
+        match self.protocol {
+            #[cfg(feature = "local-tun")]
+            ProtocolType::Tun => {}
+
+            _ => {
+                if self.addr.is_none() {
+                    let err = Error::new(ErrorKind::MissingField, "missing `addr` in configuration", None);
+                    return Err(err);
+                }
+            }
+        }
+
         match self.protocol {
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => {
@@ -1000,7 +1059,8 @@ impl Config {
                         get_local_address(config.local_address, local_port, config.ipv6_first.unwrap_or(false));
 
                     // shadowsocks uses SOCKS5 by default
-                    let mut local_config = LocalConfig::new(local_addr, ProtocolType::Socks);
+                    let mut local_config = LocalConfig::new(ProtocolType::Socks);
+                    local_config.addr = Some(local_addr);
                     local_config.mode = global_mode;
                     local_config.protocol = match config.protocol {
                         None => ProtocolType::Socks,
@@ -1027,17 +1087,6 @@ impl Config {
                             continue;
                         }
 
-                        if local.local_port == 0 {
-                            let err = Error::new(ErrorKind::Malformed, "`local_port` cannot be 0", None);
-                            return Err(err);
-                        }
-
-                        let local_addr = get_local_address(
-                            local.local_address,
-                            local.local_port,
-                            config.ipv6_first.unwrap_or(false),
-                        );
-
                         let protocol = match local.protocol {
                             None => ProtocolType::Socks,
                             Some(p) => match p.parse::<ProtocolType>() {
@@ -1053,7 +1102,21 @@ impl Config {
                             },
                         };
 
-                        let mut local_config = LocalConfig::new(local_addr, protocol);
+                        let mut local_config = LocalConfig::new(protocol);
+
+                        if let Some(local_port) = local.local_port {
+                            if local_port == 0 {
+                                let err = Error::new(ErrorKind::Malformed, "`local_port` cannot be 0", None);
+                                return Err(err);
+                            }
+
+                            let local_addr =
+                                get_local_address(local.local_address, local_port, config.ipv6_first.unwrap_or(false));
+                            local_config.addr = Some(local_addr);
+                        } else if local.local_address.is_some() {
+                            let err = Error::new(ErrorKind::Malformed, "missing `local_port`", None);
+                            return Err(err);
+                        }
 
                         if let Some(local_udp_port) = local.local_udp_port {
                             if local_udp_port == 0 {
@@ -1151,6 +1214,22 @@ impl Config {
                                 Ok(ip) => Address::from(SocketAddr::new(ip, remote_dns_port)),
                                 Err(..) => Address::from((remote_dns_address, remote_dns_port)),
                             });
+                        }
+
+                        #[cfg(feature = "local-tun")]
+                        if let Some(tun_interface_address) = local.tun_interface_address {
+                            match tun_interface_address.parse::<IpNet>() {
+                                Ok(addr) => local_config.tun_interface_address = Some(addr),
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "`tun_interface_address` invalid", None);
+                                    return Err(err);
+                                }
+                            }
+                        }
+
+                        #[cfg(feature = "local-tun")]
+                        if let Some(tun_interface_name) = local.tun_interface_name {
+                            local_config.tun_interface_name = Some(tun_interface_name);
                         }
 
                         nconfig.local.push(local_config);
@@ -1690,14 +1769,16 @@ impl fmt::Display for Config {
         if !self.local.is_empty() {
             if self.local.len() == 1 && self.local[0].is_basic() {
                 let local = &self.local[0];
-                jconf.local_address = Some(match local.addr {
-                    ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                    ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                });
-                jconf.local_port = Some(match local.addr {
-                    ServerAddr::SocketAddr(ref sa) => sa.port(),
-                    ServerAddr::DomainName(.., port) => port,
-                });
+                if let Some(ref a) = local.addr {
+                    jconf.local_address = Some(match a {
+                        ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                        ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                    });
+                    jconf.local_port = Some(match a {
+                        ServerAddr::SocketAddr(ref sa) => sa.port(),
+                        ServerAddr::DomainName(.., port) => *port,
+                    });
+                }
                 if local.protocol != ProtocolType::Socks {
                     jconf.protocol = Some(local.protocol.as_str().to_owned());
                 }
@@ -1705,13 +1786,19 @@ impl fmt::Display for Config {
                 let mut jlocals = Vec::with_capacity(self.local.len());
                 for local in &self.local {
                     let jlocal = SSLocalExtConfig {
-                        local_address: Some(match local.addr {
-                            ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
-                            ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
-                        }),
+                        local_address: match local.addr {
+                            None => None,
+                            Some(ref a) => Some(match a {
+                                ServerAddr::SocketAddr(ref sa) => sa.ip().to_string(),
+                                ServerAddr::DomainName(ref dm, ..) => dm.to_string(),
+                            }),
+                        },
                         local_port: match local.addr {
-                            ServerAddr::SocketAddr(ref sa) => sa.port(),
-                            ServerAddr::DomainName(.., port) => port,
+                            None => None,
+                            Some(ref a) => Some(match a {
+                                ServerAddr::SocketAddr(ref sa) => sa.port(),
+                                ServerAddr::DomainName(.., port) => *port,
+                            }),
                         },
                         disabled: None,
                         local_udp_address: local.udp_addr.as_ref().map(|udp_addr| match udp_addr {
@@ -1792,6 +1879,10 @@ impl fmt::Display for Config {
                                 Address::DomainNameAddress(.., port) => Some(*port),
                             },
                         },
+                        #[cfg(feature = "local-tun")]
+                        tun_interface_name: local.tun_interface_name.clone(),
+                        #[cfg(feature = "local-tun")]
+                        tun_interface_address: local.tun_interface_address.as_ref().map(ToString::to_string),
                     };
                     jlocals.push(jlocal);
                 }

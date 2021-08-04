@@ -1534,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.11.3"
+version = "1.12.0"
 dependencies = [
  "arc-swap 1.3.0",
  "async-trait",
@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.11.3"
+version = "1.12.0"
 dependencies = [
  "byte_string",
  "byteorder",
@@ -1589,6 +1589,7 @@ dependencies = [
  "env_logger",
  "exitcode",
  "futures",
+ "ipnet",
  "jemallocator",
  "log",
  "log4rs",
@@ -1603,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.11.3"
+version = "1.12.0"
 dependencies = [
  "async-trait",
  "byte_string",
