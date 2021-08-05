@@ -58,10 +58,10 @@ impl TcpTun {
         let free_addrs = hosts.take(10).collect::<Vec<IpAddr>>();
         assert!(!free_addrs.is_empty());
 
-        debug!("tun tcp listener bind {}", tcp_daddr);
-
         let listener = TcpListener::bind_with_opts(&SocketAddr::new(tcp_daddr, 0), context.accept_opts()).await?;
         let tcp_daddr = listener.local_addr()?;
+
+        debug!("tun tcp listener bind {}", tcp_daddr);
 
         let translator = Arc::new(Mutex::new(TcpAddressTranslator::new()));
 
@@ -241,8 +241,14 @@ async fn handle_redir_client(
 
 #[derive(Debug, Eq, PartialEq)]
 enum TcpState {
+    /// TCP state `ESTABLISHED`
+    ///
+    /// When receiving the first SYN then the state will be set to `ESTABLISHED`.
+    /// The detailed state like (SYN_SEND, SYN_RCVD) will be handled properly by the `TcpListener`.
     Established,
+    /// When receiving from the first FIN will be transferred from Established
     FinWait,
+    /// When receiving the last ACK of FIN will be transferred from FinWait
     LastAck,
 }
 
