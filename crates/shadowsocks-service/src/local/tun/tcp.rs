@@ -56,7 +56,12 @@ impl TcpTun {
 
         // Take up to 10 IPs as saddr for NAT allocating
         let free_addrs = hosts.take(10).collect::<Vec<IpAddr>>();
-        assert!(!free_addrs.is_empty());
+        if free_addrs.is_empty() {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "tun network doesn't have enough free addresses",
+            ));
+        }
 
         let listener = TcpListener::bind_with_opts(&SocketAddr::new(tcp_daddr, 0), context.accept_opts()).await?;
         let tcp_daddr = listener.local_addr()?;

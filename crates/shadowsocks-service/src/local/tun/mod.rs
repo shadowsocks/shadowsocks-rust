@@ -18,12 +18,12 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
 };
-use tun::{AsyncDevice, Configuration as TunConfiguration, Device, Layer};
+use tun::{Configuration as TunConfiguration, Device, Layer};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 use self::{
-    sys::{set_packet_information, IFF_PI_PREFIX_LEN},
+    sys::{set_packet_information, AsyncDevice, IFF_PI_PREFIX_LEN},
     tcp::TcpTun,
     udp::UdpTun,
 };
@@ -86,13 +86,7 @@ impl TunBuilder {
             tun_config.packet_information(false);
         });
 
-        let device = match tun::create_as_async(&self.tun_config) {
-            Ok(d) => d,
-            Err(err) => {
-                error!("failed to create tun device, error: {:?}", err);
-                return Err(io::Error::new(ErrorKind::Other, err));
-            }
-        };
+        let device = AsyncDevice::create(&self.tun_config)?;
 
         let tun_address = match device.get_ref().address() {
             Ok(t) => t,
@@ -286,10 +280,7 @@ impl Tun {
             }
             None => {
                 error!("no transport layer in ethernet packet {:?}", ph);
-                Err(io::Error::new(
-                    ErrorKind::Other,
-                    "no transport layer in ethernet packet",
-                ))
+                Ok(false)
             }
         }
     }

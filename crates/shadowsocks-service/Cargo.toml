@@ -107,7 +107,7 @@ ipnet = "2.3"
 iprange = "0.6"
 regex = "1.4"
 
-tun = { version = "0.5", features = ["async"], optional = true, git = "https://github.com/meh/rust-tun.git" }
+tun = { version = "0.5", optional = true }
 etherparse = { version = "0.9", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }
