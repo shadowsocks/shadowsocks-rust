@@ -92,7 +92,7 @@ impl TunBuilder {
             Ok(t) => t,
             Err(err) => {
                 error!(
-                    "tun device doesn't have address, err: {}, set it by tun_interface_address",
+                    "tun device doesn't have address, error: {}, set it by tun_interface_address",
                     err
                 );
                 return Err(io::Error::new(ErrorKind::Other, err));
@@ -103,7 +103,7 @@ impl TunBuilder {
             Ok(m) => m,
             Err(err) => {
                 error!(
-                    "tun device doesn't have netmask, err: {}, set it by tun_interface_address",
+                    "tun device doesn't have netmask, error: {}, set it by tun_interface_address",
                     err
                 );
                 return Err(io::Error::new(ErrorKind::Other, err));

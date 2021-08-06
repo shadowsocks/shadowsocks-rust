@@ -10,7 +10,7 @@ use ipnet::IpNet;
 use log::{debug, error, trace};
 use lru_time_cache::LruCache;
 use shadowsocks::{net::TcpListener, relay::socks5::Address};
-use tokio::{net::TcpStream, sync::Mutex, task::JoinHandle};
+use tokio::{net::TcpStream, sync::Mutex, task::JoinHandle, time};
 
 use crate::local::{
     context::ServiceContext,
@@ -180,7 +180,14 @@ impl TcpTun {
         translator: Arc<Mutex<TcpAddressTranslator>>,
     ) -> io::Result<()> {
         loop {
-            let (stream, peer_addr) = listener.accept().await?;
+            let (stream, peer_addr) = match listener.accept().await {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("accept failed, error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
 
             // Try to translate
             let (saddr, daddr) = {
