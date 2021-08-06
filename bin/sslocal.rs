@@ -372,7 +372,7 @@ fn main() {
                     local_config.tun_interface_address = Some(tun_address.parse().expect("tun-interface-address"));
                 }
                 if let Some(tun_name) = matches.value_of("TUN_INTERFACE_NAME") {
-                    local_config.tun_interface_name = Some(tun_name.parse().expect("tun-interface-name"));
+                    local_config.tun_interface_name = Some(tun_name.to_owned());
                 }
 
                 #[cfg(unix)]
