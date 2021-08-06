@@ -12,7 +12,7 @@ use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 use tun::{platform::Device, Configuration};
 
 cfg_if! {
-    if #[cfg(any(target_os = "linux", target_os = "android"))] {
+    if #[cfg(any(target_os = "linux"))] {
         mod linux;
         pub use self::linux::*;
     } else if #[cfg(target_vendor = "apple")] {
@@ -21,6 +21,9 @@ cfg_if! {
     } else if #[cfg(any(target_os = "freebsd", target_os = "openbsd"))] {
         mod bsd;
         pub use self::bsd::*;
+    } else if #[cfg(target_os = "android")] {
+        mod android;
+        pub use self::android::*;
     }
 }
 
