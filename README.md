@@ -291,11 +291,37 @@ Redirects connections with `iptables` configurations to the port that `sslocal` 
 * Linux, Android
 * macOS, iOS
 
+#### Linux
+
+Create a Tun interface with name `tun0`
+
+```bash
+ip tuntap add mode tun tun0
+ifconfig tun0 inet 10.255.0.1 netmask 255.255.255.0 up
+```
+
+Start `sslocal` with `--protocol tun` and binds to `tun0`
+
+```bash
+sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-name tun0
+```
+
+#### macOS
+
 ```bash
 sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-address 10.255.0.1/24
 ```
 
 It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
+
+(OPTIONAL) macOS requires adding a route entry to redirect packets that destinated to `10.155.0.1` (the address of the Tun interface) to the Tun interface itself.
+
+```bash
+# 10.255.0.1 address
+# 255.255.255.0 netmask
+# utun8 tun's interface name
+route add -net 10.255.0.1 -netmask 255.255.255.0 -interface utun8
+```
 
 ### Server
 

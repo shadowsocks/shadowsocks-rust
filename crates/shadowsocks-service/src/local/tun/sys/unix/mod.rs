@@ -16,8 +16,8 @@ cfg_if! {
         mod linux;
         pub use self::linux::*;
     } else if #[cfg(target_vendor = "apple")] {
-        mod macos;
-        pub use self::macos::*;
+        mod apple;
+        pub use self::apple::*;
     } else if #[cfg(any(target_os = "freebsd", target_os = "openbsd"))] {
         mod bsd;
         pub use self::bsd::*;

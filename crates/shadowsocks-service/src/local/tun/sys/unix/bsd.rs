@@ -1,6 +1,7 @@
 use std::io::{self, ErrorKind};
 
 use bytes::{BufMut, BytesMut};
+use tun::platform::Device as TunDevice;
 
 /// Packet Information length in bytes
 pub const IFF_PI_PREFIX_LEN: usize = 4;
@@ -34,5 +35,10 @@ pub fn set_packet_information(packet: &mut BytesMut) -> io::Result<()> {
     full_packet.put_slice(&packet);
 
     *packet = full_packet;
+    Ok(())
+}
+
+/// Set platform specific route configuration
+pub async fn set_route_configuration(_device: &TunDevice) -> io::Result<()> {
     Ok(())
 }

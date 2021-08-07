@@ -13,7 +13,7 @@ use byte_string::ByteStr;
 use bytes::BytesMut;
 use etherparse::{IpHeader, PacketHeaders, ReadError, TransportHeader};
 use ipnet::{IpNet, Ipv4Net};
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
@@ -23,7 +23,7 @@ use tun::{Configuration as TunConfiguration, Device, Layer};
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 use self::{
-    sys::{set_packet_information, AsyncDevice, IFF_PI_PREFIX_LEN},
+    sys::{set_packet_information, set_route_configuration, AsyncDevice, IFF_PI_PREFIX_LEN},
     tcp::TcpTun,
     udp::UdpTun,
 };
@@ -110,7 +110,16 @@ impl TunBuilder {
             }
         };
 
-        trace!("tun address: {}, netmask: {}", tun_address, tun_netmask);
+        let tun_name = device.get_ref().name();
+
+        trace!("tun {}, address: {}, netmask: {}", tun_name, tun_address, tun_netmask);
+
+        if let Err(err) = set_route_configuration(device.get_ref()).await {
+            warn!(
+                "failed to set system route for {}, consider set it manually, error: {}",
+                tun_name, err
+            );
+        }
 
         let tun_netmask_u32: u32 = tun_netmask.into();
 
@@ -279,7 +288,7 @@ impl Tun {
                 Ok(false)
             }
             None => {
-                error!("no transport layer in ethernet packet {:?}", ph);
+                trace!("no transport layer in ethernet packet {:?}", ph);
                 Ok(false)
             }
         }
