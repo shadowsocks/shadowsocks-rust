@@ -25,8 +25,8 @@ pub fn set_packet_information(packet: &mut BytesMut) -> io::Result<()> {
     full_packet.put_u16(0);
     // Protocol, infer from the original packet
     let protocol = match packet[0] >> 4 {
-        4 => libc::PF_INET,
-        6 => libc::PF_INET6,
+        4 => libc::ETH_P_IP,
+        6 => libc::ETH_P_IPV6,
         _ => return Err(io::Error::new(ErrorKind::InvalidData, "neither an IPv4 or IPv6 packet")),
     };
     full_packet.put_u16(protocol as u16);
