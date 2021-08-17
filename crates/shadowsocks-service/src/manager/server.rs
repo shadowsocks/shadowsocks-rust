@@ -237,6 +237,8 @@ impl Manager {
                 plugin_args: Vec::new(),
             };
             svr_cfg.set_plugin(p);
+        } else if let Some(ref plugin) = self.svr_cfg.plugin {
+            svr_cfg.set_plugin(plugin.clone());
         }
 
         let mode = match req.mode {

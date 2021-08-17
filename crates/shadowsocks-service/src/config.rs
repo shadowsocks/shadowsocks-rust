@@ -514,6 +514,8 @@ pub struct ManagerConfig {
     pub addr: ManagerAddr,
     /// Manager's default method
     pub method: Option<CipherKind>,
+    /// Manager's default plugin
+    pub plugin: Option<PluginConfig>,
     /// Timeout for TCP connections, setting to manager's created servers
     pub timeout: Option<Duration>,
     /// IP/Host for servers to bind (inbound)
@@ -530,6 +532,7 @@ impl ManagerConfig {
         ManagerConfig {
             addr,
             method: None,
+            plugin: None,
             timeout: None,
             server_host: ManagerServerHost::default(),
             mode: Mode::TcpOnly,
@@ -1190,14 +1193,14 @@ impl Config {
                 let mut nsvr = ServerConfig::new(addr, pwd, method);
                 nsvr.set_mode(global_mode);
 
-                if let Some(p) = config.plugin {
+                if let Some(ref p) = config.plugin {
                     // SIP008 allows "plugin" to be an empty string
                     // Empty string implies "no plugin"
                     if !p.is_empty() {
                         let plugin = PluginConfig {
-                            plugin: p,
-                            plugin_opts: config.plugin_opts,
-                            plugin_args: config.plugin_args.unwrap_or_default(),
+                            plugin: p.clone(),
+                            plugin_opts: config.plugin_opts.clone(),
+                            plugin_args: config.plugin_args.clone().unwrap_or_default(),
                         };
                         nsvr.set_plugin(plugin);
                     }
@@ -1359,6 +1362,18 @@ impl Config {
                         );
                         return Err(err);
                     }
+                }
+            }
+
+            if let Some(p) = config.plugin {
+                // SIP008 allows "plugin" to be an empty string
+                // Empty string implies "no plugin"
+                if !p.is_empty() {
+                    manager_config.plugin = Some(PluginConfig {
+                        plugin: p,
+                        plugin_opts: config.plugin_opts,
+                        plugin_args: config.plugin_args.unwrap_or_default(),
+                    });
                 }
             }
 
@@ -1869,6 +1884,24 @@ impl fmt::Display for Config {
 
             if jconf.mode.is_none() {
                 jconf.mode = Some(m.mode.to_string());
+            }
+
+            if jconf.method.is_none() {
+                if let Some(ref m) = m.method {
+                    jconf.method = Some(m.to_string());
+                }
+            }
+
+            if jconf.plugin.is_none() {
+                if let Some(ref p) = m.plugin {
+                    jconf.plugin = Some(p.plugin.clone());
+                    if let Some(ref o) = p.plugin_opts {
+                        jconf.plugin_opts = Some(o.clone());
+                    }
+                    if !p.plugin_args.is_empty() {
+                        jconf.plugin_args = Some(p.plugin_args.clone());
+                    }
+                }
             }
         }
 

@@ -21,6 +21,7 @@ use shadowsocks_service::{
     shadowsocks::{
         config::{ManagerAddr, Mode},
         crypto::v1::{available_ciphers, CipherKind},
+        plugin::PluginConfig,
     },
 };
 
@@ -54,6 +55,9 @@ fn main() {
             (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
             (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value possible_values(available_ciphers()) "Default encryption method")
             (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} "Default timeout seconds for TCP relay")
+
+            (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "Default SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
+            (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Default SIP003 plugin options")
 
             (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
             (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
@@ -197,6 +201,14 @@ fn main() {
 
             if let Some(sh) = matches.value_of("SERVER_HOST") {
                 manager_config.server_host = sh.parse::<ManagerServerHost>().unwrap();
+            }
+
+            if let Some(p) = matches.value_of("PLUGIN") {
+                manager_config.plugin = Some(PluginConfig {
+                    plugin: p.to_owned(),
+                    plugin_opts: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+                    plugin_args: Vec::new(),
+                });
             }
         }
 
