@@ -1,0 +1,47 @@
+name: shadowsocks-rust
+adopt-info: shadowsocks-rust
+summary: Rust port of Shadowsocks
+description: |
+  Shadowsocks Client & Server, written in Rust.
+base: core18
+grade: stable
+confinement: strict
+
+apps:
+  sslocal:
+    command: bin/sslocal
+    plugs: [network, network-bind]
+
+  sslocal-daemon:
+    command: bin/sslocal
+    daemon: simple
+    plugs: [network, network-bind]
+
+  ssserver:
+    command: bin/ssserver
+    plugs: [network, network-bind]
+
+  ssserver-daemon:
+    command: bin/ssserver
+    daemon: simple
+    plugs: [network, network-bind]
+
+  ssurl:
+    command: bin/ssurl
+
+  ssmanager:
+    command: bin/ssmanager
+    plugs: [network]
+
+passthrough:
+  layout:
+    /etc/shadowsocks-rust:
+      bind: $SNAP_COMMON/etc/shadowsocks-rust
+
+parts:
+  shadowsocks-rust:
+    plugin: rust
+    source: https://github.com/shadowsocks/shadowsocks-rust.git
+    override-pull: |
+      snapcraftctl pull
+      snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
