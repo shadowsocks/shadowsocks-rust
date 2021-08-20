@@ -1,9 +1,8 @@
 name: shadowsocks-rust
-version: git
+adopt-info: shadowsocks-rust
 summary: Rust port of Shadowsocks
 description: |
   Shadowsocks Client & Server, written in Rust.
-
 base: core18
 grade: devel
 confinement: strict
@@ -43,3 +42,6 @@ parts:
   shadowsocks-rust:
     plugin: rust
     source: https://github.com/shadowsocks/shadowsocks-rust.git
+    override-pull: |
+      snapcraftctl pull
+      snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
