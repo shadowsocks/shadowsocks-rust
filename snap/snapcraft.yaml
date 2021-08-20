@@ -1,5 +1,5 @@
 name: shadowsocks-rust
-version: "1.11.2"
+version: git
 summary: Rust port of Shadowsocks
 description: |
   Shadowsocks Client & Server, written in Rust.
@@ -10,28 +10,28 @@ confinement: strict
 
 apps:
   ssrust-local:
-    command: install/bin/ss-local
+    command: bin/sslocal
     plugs: [network, network-bind]
 
   ssrust-local-daemon:
-    command: install/bin/ss-local
+    command: bin/sslocal
     daemon: simple
     plugs: [network, network-bind]
 
   ssrust-server:
-    command: install/bin/ss-server
+    command: bin/ssserver
     plugs: [network, network-bind]
 
   ssrust-server-daemon:
-    command: install/bin/ss-server
+    command: bin/ssserver
     daemon: simple
     plugs: [network, network-bind]
 
   ssrust-url:
-    command: install/bin/ss-url
+    command: bin/ssurl
 
   ssrust-manager:
-    command: install/bin/ss-manager
+    command: bin/ssmanager
     plugs: [network]
 
 passthrough:
