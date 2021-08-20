@@ -8,28 +8,28 @@ grade: stable
 confinement: strict
 
 apps:
-  ssrust-local:
+  sslocal:
     command: bin/sslocal
     plugs: [network, network-bind]
 
-  ssrust-local-daemon:
+  sslocal-daemon:
     command: bin/sslocal
     daemon: simple
     plugs: [network, network-bind]
 
-  ssrust-server:
+  ssserver:
     command: bin/ssserver
     plugs: [network, network-bind]
 
-  ssrust-server-daemon:
+  ssserver-daemon:
     command: bin/ssserver
     daemon: simple
     plugs: [network, network-bind]
 
-  ssrust-url:
+  ssurl:
     command: bin/ssurl
 
-  ssrust-manager:
+  ssmanager:
     command: bin/ssmanager
     plugs: [network]
 
