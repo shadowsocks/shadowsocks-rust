@@ -10,3 +10,4 @@ confinement: devmode
 parts:
   shadowsocks-rust:
     plugin: rust
+    source: https://github.com/shadowsocks/shadowsocks-rust
