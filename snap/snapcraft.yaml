@@ -4,6 +4,7 @@ summary: Rust port of Shadowsocks
 description: |
   Shadowsocks Client & Server, written in Rust.
 
+base: core18
 grade: devel
 confinement: devmode
 
