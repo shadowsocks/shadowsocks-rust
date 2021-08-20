@@ -1,12 +1,43 @@
 name: shadowsocks-rust
-version: '0.1' # just for humans, typically '1.2+git' or '1.3.2'
+version: "1.11.2"
 summary: Rust port of Shadowsocks
 description: |
   Shadowsocks Client & Server, written in Rust.
 
 base: core18
 grade: devel
-confinement: devmode
+confinement: strict
+
+apps:
+  ssrust-local:
+    command: bin/ss-local
+    plugs: [network, network-bind]
+
+  ssrust-local-daemon:
+    command: bin/ss-local
+    daemon: simple
+    plugs: [network, network-bind]
+
+  ssrust-server:
+    command: bin/ss-server
+    plugs: [network, network-bind]
+
+  ssrust-server-daemon:
+    command: bin/ss-server
+    daemon: simple
+    plugs: [network, network-bind]
+
+  ssrust-url:
+    command: bin/ss-url
+
+  ssrust-manager:
+    command: bin/ss-manager
+    plugs: [network]
+
+passthrough:
+  layout:
+    /etc/shadowsocks-rust:
+      bind: $SNAP_COMMON/etc/shadowsocks-rust
 
 parts:
   shadowsocks-rust:
