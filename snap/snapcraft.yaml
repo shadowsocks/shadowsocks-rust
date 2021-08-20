@@ -10,28 +10,28 @@ confinement: strict
 
 apps:
   ssrust-local:
-    command: bin/ss-local
+    command: install/bin/ss-local
     plugs: [network, network-bind]
 
   ssrust-local-daemon:
-    command: bin/ss-local
+    command: install/bin/ss-local
     daemon: simple
     plugs: [network, network-bind]
 
   ssrust-server:
-    command: bin/ss-server
+    command: install/bin/ss-server
     plugs: [network, network-bind]
 
   ssrust-server-daemon:
-    command: bin/ss-server
+    command: install/bin/ss-server
     daemon: simple
     plugs: [network, network-bind]
 
   ssrust-url:
-    command: bin/ss-url
+    command: install/bin/ss-url
 
   ssrust-manager:
-    command: bin/ss-manager
+    command: install/bin/ss-manager
     plugs: [network]
 
 passthrough:
