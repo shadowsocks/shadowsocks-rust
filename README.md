@@ -252,7 +252,6 @@ sslocal -b "127.0.0.1:1080" --server-url "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@127.0
 ### HTTP Local client
 
 ```bash
-# Read local client configuration from file
 sslocal -b "127.0.0.1:3128" --protocol http -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
 
@@ -261,7 +260,6 @@ All parameters are the same as Socks5 client, except `--protocol http`.
 ### Tunnel Local client
 
 ```bash
-# Read local client configuration from file
 # Set 127.0.0.1:8080 as the target for forwarding to
 sslocal --protocol tunnel -b "127.0.0.1:3128" -f "127.0.0.1:8080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
@@ -277,7 +275,6 @@ sslocal --protocol tunnel -b "127.0.0.1:3128" -f "127.0.0.1:8080" -s "[::1]:8388
 * BSDs (with `pf`), such as OS X 10.10+, FreeBSD, ...
 
 ```bash
-# Read local client configuration from file
 sslocal -b "127.0.0.1:60080" --protocol redir -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --tcp-redir "redirect" --udp-redir "tproxy"
 ```
 
@@ -286,6 +283,45 @@ Redirects connections with `iptables` configurations to the port that `sslocal` 
 * `--protocol redir` enables local client Redir mode
 * (optional) `--tcp-redir` sets TCP mode to `REDIRECT` (Linux)
 * (optional) `--udp-redir` sets UDP mode to `TPROXY` (Linux)
+
+### Tun interface client
+
+**NOTE**: It currently only supports
+
+* Linux, Android
+* macOS, iOS
+
+#### Linux
+
+Create a Tun interface with name `tun0`
+
+```bash
+ip tuntap add mode tun tun0
+ifconfig tun0 inet 10.255.0.1 netmask 255.255.255.0 up
+```
+
+Start `sslocal` with `--protocol tun` and binds to `tun0`
+
+```bash
+sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-name tun0
+```
+
+#### macOS
+
+```bash
+sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface lo0 --tun-interface-address 10.255.0.1/24
+```
+
+It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
+
+(OPTIONAL) macOS requires adding a route entry to redirect packets that destinated to `10.155.0.1` (the address of the Tun interface) to the Tun interface itself.
+
+```bash
+# 10.255.0.1 address
+# 255.255.255.0 netmask
+# utun8 tun's interface name
+route add -net 10.255.0.1 -netmask 255.255.255.0 -interface utun8
+```
 
 ### Server
 
@@ -422,6 +458,16 @@ Example configuration:
             "remote_dns_address": "8.8.8.8",
             // OPTIONAL. Remote DNS's port, 53 by default
             "remote_dns_port": 53
+        },
+        {
+            // Tun local server (feature = "local-tun")
+            "protocol": "tun",
+            // Tun interface name
+            "tun_interface_name": "tun0",
+            // Tun interface address
+            //
+            // It has to be a host address in CIDR form
+            "tun_interface_address": "10.255.0.1/24"
         }
     ],
 

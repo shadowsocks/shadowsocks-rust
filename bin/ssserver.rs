@@ -43,7 +43,7 @@ fn main() {
 
             (@arg CONFIG: -c --config +takes_value required_unless("SERVER_ADDR") "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
-            (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
+            (@arg OUTBOUND_BIND_ADDR: -b --("outbound-bind-addr") +takes_value alias("bind-addr") {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
 
             (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
             (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
@@ -188,9 +188,9 @@ fn main() {
             config.server.push(sc);
         }
 
-        if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
-            let bind_addr = bind_addr.parse::<IpAddr>().expect("bind-addr");
-            config.local_addr = Some(bind_addr);
+        if let Some(bind_addr) = matches.value_of("OUTBOUND_BIND_ADDR") {
+            let bind_addr = bind_addr.parse::<IpAddr>().expect("outbound-bind-addr");
+            config.outbound_bind_addr = Some(bind_addr);
         }
 
         if matches.is_present("TCP_NO_DELAY") {

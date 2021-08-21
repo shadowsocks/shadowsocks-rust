@@ -28,6 +28,8 @@ cfg_if! {
     }
 }
 
+pub mod uds;
+
 /// Create a `UdpSocket` binded to `addr`
 pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
     let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {

@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.11.3"
+version = "1.12.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -55,6 +55,8 @@ local-redir = ["local", "mio"]
 local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
+# Enable Tun interface protocol for sslocal
+local-tun = ["local", "etherparse", "tun", "rand"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecured
@@ -105,10 +107,13 @@ ipnet = "2.3"
 iprange = "0.6"
 regex = "1.4"
 
+tun = { version = "0.5", optional = true }
+etherparse = { version = "0.9", optional = true }
+
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.3"
 
-shadowsocks = { version = "1.11.3", path = "../shadowsocks" }
+shadowsocks = { version = "1.12.0", path = "../shadowsocks" }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]

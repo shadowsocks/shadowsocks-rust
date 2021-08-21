@@ -2,7 +2,11 @@
 
 #[cfg(feature = "local-flow-stat")]
 use std::path::PathBuf;
-use std::{io, sync::Arc, time::Duration};
+use std::{
+    io::{self, ErrorKind},
+    sync::Arc,
+    time::Duration,
+};
 
 use futures::{
     future,
@@ -38,6 +42,8 @@ pub mod net;
 #[cfg(feature = "local-redir")]
 pub mod redir;
 pub mod socks;
+#[cfg(feature = "local-tun")]
+pub mod tun;
 #[cfg(feature = "local-tunnel")]
 pub mod tunnel;
 pub mod utils;
@@ -83,6 +89,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
 
+        bind_local_addr: config.outbound_bind_addr,
+
         ..Default::default()
     };
     connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
@@ -125,6 +133,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         ProtocolType::Redir => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => local_config.mode.enable_tcp(),
+        #[cfg(feature = "local-tun")]
+        ProtocolType::Tun => true,
     });
 
     if enable_tcp {
@@ -202,11 +212,15 @@ pub async fn run(mut config: Config) -> io::Result<()> {
 
     for local_config in config.local {
         let balancer = balancer.clone();
-        let client_addr = local_config.addr;
 
         match local_config.protocol {
             ProtocolType::Socks => {
                 use self::socks::Socks;
+
+                let client_addr = match local_config.addr {
+                    Some(a) => a,
+                    None => return Err(io::Error::new(ErrorKind::Other, "socks requires local address")),
+                };
 
                 let mut server = Socks::with_context(context.clone());
                 server.set_mode(local_config.mode);
@@ -227,6 +241,11 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             ProtocolType::Tunnel => {
                 use self::tunnel::Tunnel;
 
+                let client_addr = match local_config.addr {
+                    Some(a) => a,
+                    None => return Err(io::Error::new(ErrorKind::Other, "tunnel requires local address")),
+                };
+
                 let forward_addr = local_config.forward_addr.expect("tunnel requires forward address");
 
                 let mut server = Tunnel::with_context(context.clone(), forward_addr.clone());
@@ -246,12 +265,22 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             ProtocolType::Http => {
                 use self::http::Http;
 
+                let client_addr = match local_config.addr {
+                    Some(a) => a,
+                    None => return Err(io::Error::new(ErrorKind::Other, "http requires local address")),
+                };
+
                 let server = Http::with_context(context.clone());
                 vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
             }
             #[cfg(feature = "local-redir")]
             ProtocolType::Redir => {
                 use self::redir::Redir;
+
+                let client_addr = match local_config.addr {
+                    Some(a) => a,
+                    None => return Err(io::Error::new(ErrorKind::Other, "redir requires local address")),
+                };
 
                 let mut server = Redir::with_context(context.clone());
                 if let Some(c) = config.udp_max_associations {
@@ -271,6 +300,11 @@ pub async fn run(mut config: Config) -> io::Result<()> {
             ProtocolType::Dns => {
                 use self::dns::Dns;
 
+                let client_addr = match local_config.addr {
+                    Some(a) => a,
+                    None => return Err(io::Error::new(ErrorKind::Other, "dns requires local address")),
+                };
+
                 let mut server = {
                     let local_addr = local_config.local_dns_addr.expect("missing local_dns_addr");
                     let remote_addr = local_config.remote_dns_addr.expect("missing remote_dns_addr");
@@ -280,6 +314,78 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 server.set_mode(local_config.mode);
 
                 vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+            }
+            #[cfg(feature = "local-tun")]
+            ProtocolType::Tun => {
+                use log::info;
+                use shadowsocks::net::UnixListener;
+
+                use self::tun::TunBuilder;
+
+                let mut builder = TunBuilder::new(context.clone(), balancer);
+                if let Some(address) = local_config.tun_interface_address {
+                    builder = builder.address(address);
+                }
+                if let Some(name) = local_config.tun_interface_name {
+                    builder = builder.name(&name);
+                }
+                if let Some(c) = config.udp_max_associations {
+                    builder = builder.udp_capacity(c);
+                }
+                if let Some(d) = config.udp_timeout {
+                    builder = builder.udp_expiry_duration(d);
+                }
+                #[cfg(unix)]
+                if let Some(fd) = local_config.tun_device_fd {
+                    builder = builder.file_descriptor(fd);
+                } else if let Some(ref fd_path) = local_config.tun_device_fd_from_path {
+                    use std::fs;
+
+                    let _ = fs::remove_file(fd_path);
+
+                    let listener = match UnixListener::bind(fd_path) {
+                        Ok(l) => l,
+                        Err(err) => {
+                            error!("failed to bind uds path \"{}\", error: {}", fd_path.display(), err);
+                            return Err(err);
+                        }
+                    };
+
+                    info!("waiting tun's file descriptor from {}", fd_path.display());
+
+                    loop {
+                        let (mut stream, peer_addr) = listener.accept().await?;
+                        trace!("accepted {:?} for receiving tun file descriptor", peer_addr);
+
+                        let mut buffer = [0u8; 1024];
+                        let mut fd_buffer = [0];
+
+                        match stream.recv_with_fd(&mut buffer, &mut fd_buffer).await {
+                            Ok((n, fd_size)) => {
+                                if fd_size == 0 {
+                                    error!(
+                                        "client {:?} didn't send file descriptors with buffer.size {} bytes",
+                                        peer_addr, n
+                                    );
+                                    continue;
+                                }
+
+                                info!("got file descriptor {} for tun from {:?}", fd_buffer[0], peer_addr);
+
+                                builder = builder.file_descriptor(fd_buffer[0]);
+                                break;
+                            }
+                            Err(err) => {
+                                error!(
+                                    "failed to receive file descriptors from {:?}, error: {}",
+                                    peer_addr, err
+                                );
+                            }
+                        }
+                    }
+                }
+                let server = builder.build().await?;
+                vfut.push(async move { server.run().await }.boxed());
             }
         }
     }

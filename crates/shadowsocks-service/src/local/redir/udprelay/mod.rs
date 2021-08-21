@@ -24,10 +24,8 @@ use crate::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
         net::{UdpAssociationManager, UdpInboundWrite},
-        redir::{
-            redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
-            to_ipv4_mapped,
-        },
+        redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
+        utils::to_ipv4_mapped,
     },
 };
 

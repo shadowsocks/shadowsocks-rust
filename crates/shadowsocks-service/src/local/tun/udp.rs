@@ -1,0 +1,122 @@
+use std::{
+    io::{self, ErrorKind},
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
+
+use async_trait::async_trait;
+use bytes::{BufMut, BytesMut};
+use etherparse::PacketBuilder;
+use log::trace;
+use shadowsocks::relay::socks5::Address;
+use tokio::sync::mpsc;
+
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::{UdpAssociationManager, UdpInboundWrite},
+    utils::to_ipv4_mapped,
+};
+
+pub struct UdpTun {
+    manager: UdpAssociationManager<UdpTunInboundWriter>,
+}
+
+impl UdpTun {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        tun_tx: mpsc::Sender<BytesMut>,
+        balancer: PingBalancer,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+    ) -> UdpTun {
+        UdpTun {
+            manager: UdpAssociationManager::new(
+                context,
+                UdpTunInboundWriter::new(tun_tx),
+                time_to_live,
+                capacity,
+                balancer,
+            ),
+        }
+    }
+
+    pub async fn handle_packet(
+        &mut self,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        payload: &[u8],
+    ) -> io::Result<()> {
+        trace!("UDP {} -> {} payload.size: {} bytes", src_addr, dst_addr, payload.len());
+        self.manager.send_to(src_addr, dst_addr.into(), payload).await
+    }
+}
+
+#[derive(Clone)]
+struct UdpTunInboundWriter {
+    tun_tx: mpsc::Sender<BytesMut>,
+}
+
+impl UdpTunInboundWriter {
+    fn new(tun_tx: mpsc::Sender<BytesMut>) -> UdpTunInboundWriter {
+        UdpTunInboundWriter { tun_tx }
+    }
+}
+
+#[async_trait]
+impl UdpInboundWrite for UdpTunInboundWriter {
+    async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
+        let addr = match *remote_addr {
+            Address::SocketAddress(sa) => {
+                // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
+                match sa {
+                    SocketAddr::V4(..) => sa,
+                    SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
+                        Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
+                        None => sa,
+                    },
+                }
+            }
+            Address::DomainNameAddress(..) => {
+                let err = io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "redir destination must not be an domain name address",
+                );
+                return Err(err);
+            }
+        };
+
+        let packet = match (peer_addr, addr) {
+            (SocketAddr::V4(peer), SocketAddr::V4(remote)) => {
+                let builder =
+                    PacketBuilder::ipv4(remote.ip().octets(), peer.ip().octets(), 20).udp(remote.port(), peer.port());
+
+                let packet = BytesMut::with_capacity(builder.size(data.len()));
+                let mut packet_writer = packet.writer();
+                builder.write(&mut packet_writer, data).expect("PacketBuilder::write");
+
+                packet_writer.into_inner()
+            }
+            (SocketAddr::V6(peer), SocketAddr::V6(remote)) => {
+                let builder =
+                    PacketBuilder::ipv6(remote.ip().octets(), peer.ip().octets(), 20).udp(remote.port(), peer.port());
+
+                let packet = BytesMut::with_capacity(builder.size(data.len()));
+                let mut packet_writer = packet.writer();
+                builder.write(&mut packet_writer, data).expect("PacketBuilder::write");
+
+                packet_writer.into_inner()
+            }
+            _ => {
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    "source and destination type unmatch",
+                ));
+            }
+        };
+
+        self.tun_tx.send(packet).await.expect("tun_tx::send");
+        Ok(())
+    }
+}

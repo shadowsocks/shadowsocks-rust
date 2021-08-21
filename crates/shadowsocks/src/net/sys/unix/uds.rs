@@ -14,7 +14,7 @@ use std::{
 };
 
 use futures::{future, ready};
-use mio::net::UnixStream as MioUnixStream;
+use mio::net::{SocketAddr, UnixListener as MioUnixListener, UnixStream as MioUnixStream};
 use tokio::io::{unix::AsyncFd, AsyncRead, AsyncWrite, ReadBuf};
 
 /// A UnixStream supports transferring FDs between processes
@@ -31,6 +31,11 @@ impl UnixStream {
         let mut ready = future::poll_fn(|cx| io.poll_write_ready(cx)).await?;
         ready.retain_ready();
         Ok(UnixStream { io })
+    }
+
+    /// Create from a mio's `UnixStream`
+    pub fn from_mio(io: MioUnixStream) -> io::Result<UnixStream> {
+        Ok(UnixStream { io: AsyncFd::new(io)? })
     }
 
     fn poll_send_with_fd(&self, cx: &mut Context, buf: &[u8], fds: &[RawFd]) -> Poll<io::Result<usize>> {
@@ -54,6 +59,34 @@ impl UnixStream {
     /// Send data with file descriptors
     pub async fn send_with_fd(&mut self, buf: &[u8], fds: &[RawFd]) -> io::Result<usize> {
         future::poll_fn(|cx| self.poll_send_with_fd(cx, buf, fds)).await
+    }
+
+    fn poll_recv_with_fd(
+        &self,
+        cx: &mut Context,
+        buf: &mut [u8],
+        fds: &mut [RawFd],
+    ) -> Poll<io::Result<(usize, usize)>> {
+        loop {
+            let mut ready = ready!(self.io.poll_write_ready(cx))?;
+
+            let fd = self.io.get_ref().as_raw_fd();
+            match recv_with_fd(fd, buf, fds) {
+                // self.io.poll_write_ready indicates that writable event have been received by tokio,
+                // so it is not a common case that recvto returns EAGAIN.
+                //
+                // Just for double check. If EAGAIN actually returns, clear the readness state.
+                Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
+                    ready.clear_ready();
+                }
+                x => return Poll::Ready(x),
+            }
+        }
+    }
+
+    /// Recv data with file descriptors
+    pub async fn recv_with_fd(&mut self, buf: &mut [u8], fds: &mut [RawFd]) -> io::Result<(usize, usize)> {
+        future::poll_fn(|cx| self.poll_recv_with_fd(cx, buf, fds)).await
     }
 
     /// Shuts down the read, write, or both halves of this connection.
@@ -136,6 +169,40 @@ impl UnixStream {
     }
 }
 
+/// A UnixListener supports transferring FDs between processes
+pub struct UnixListener {
+    io: AsyncFd<MioUnixListener>,
+}
+
+impl UnixListener {
+    /// Creates a new `UnixListener` bound to the specified socket.
+    pub fn bind<P: AsRef<Path>>(path: P) -> io::Result<UnixListener> {
+        Ok(UnixListener {
+            io: AsyncFd::new(MioUnixListener::bind(path)?)?,
+        })
+    }
+
+    /// Accepts a new incoming connection to this listener.
+    pub fn poll_accept(&self, cx: &mut Context<'_>) -> Poll<io::Result<(UnixStream, SocketAddr)>> {
+        loop {
+            let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
+
+            match self.io.get_ref().accept() {
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    read_guard.clear_ready();
+                }
+                Ok((stream, peer_addr)) => return Poll::Ready(Ok((UnixStream::from_mio(stream)?, peer_addr))),
+                Err(err) => return Poll::Ready(Err(err)),
+            }
+        }
+    }
+
+    /// Accepts a new incoming connection to this listener.
+    pub async fn accept(&self) -> io::Result<(UnixStream, SocketAddr)> {
+        future::poll_fn(|cx| self.poll_accept(cx)).await
+    }
+}
+
 /// A common implementation of `sendmsg` that sends provided bytes with ancillary file descriptors
 /// over either a datagram or stream unix socket.
 ///
@@ -187,5 +254,80 @@ fn send_with_fd(socket: RawFd, bs: &[u8], fds: &[RawFd]) -> io::Result<usize> {
         } else {
             Ok(count as usize)
         }
+    }
+}
+
+/// A common implementation of `recvmsg` that receives provided bytes and the ancillary file
+/// descriptors over either a datagram or stream unix socket.
+///
+/// Borrowed from: https://github.com/Standard-Cognition/sendfd
+fn recv_with_fd(socket: RawFd, bs: &mut [u8], mut fds: &mut [RawFd]) -> io::Result<(usize, usize)> {
+    unsafe {
+        let mut iov = libc::iovec {
+            iov_base: bs.as_mut_ptr() as *mut _,
+            iov_len: bs.len(),
+        };
+
+        // Construct msghdr
+        //
+        // 1. Allocate memory for msg_control
+        let cmsg_fd_len = fds.len() * mem::size_of::<RawFd>();
+        let cmsg_buffer_len = libc::CMSG_SPACE(cmsg_fd_len as u32) as usize;
+        let mut cmsg_buffer = Vec::with_capacity(cmsg_buffer_len);
+        cmsg_buffer.set_len(cmsg_buffer_len);
+
+        let mut msghdr = libc::msghdr {
+            msg_name: ptr::null_mut(),
+            msg_namelen: 0,
+            msg_iov: &mut iov as *mut _,
+            msg_iovlen: 1,
+            msg_control: cmsg_buffer.as_mut_ptr(),
+            msg_controllen: cmsg_buffer_len.try_into().unwrap(),
+            ..mem::zeroed()
+        };
+
+        let count = libc::recvmsg(socket, &mut msghdr as *mut _, 0);
+        if count < 0 {
+            let error = io::Error::last_os_error();
+            return Err(error);
+        }
+
+        // Walk the ancillary data buffer and copy the raw descriptors from it into the output
+        // buffer.
+        let mut descriptor_count = 0;
+        let mut cmsg_header = libc::CMSG_FIRSTHDR(&mut msghdr as *mut _);
+        while !cmsg_header.is_null() {
+            if (*cmsg_header).cmsg_level == libc::SOL_SOCKET && (*cmsg_header).cmsg_type == libc::SCM_RIGHTS {
+                let data_ptr = libc::CMSG_DATA(cmsg_header);
+                let data_offset = data_ptr.offset_from(cmsg_header as *const _);
+                debug_assert!(data_offset >= 0);
+                let data_byte_count = (*cmsg_header).cmsg_len as usize - data_offset as usize;
+                debug_assert!((*cmsg_header).cmsg_len as isize > data_offset);
+                debug_assert!(data_byte_count % mem::size_of::<RawFd>() == 0);
+                let rawfd_count = (data_byte_count / mem::size_of::<RawFd>()) as isize;
+                let fd_ptr = data_ptr as *const RawFd;
+                for i in 0..rawfd_count {
+                    if let Some((dst, rest)) = { fds }.split_first_mut() {
+                        *dst = ptr::read_unaligned(fd_ptr.offset(i));
+                        descriptor_count += 1;
+                        fds = rest;
+                    } else {
+                        // This branch is unreachable. We allocate the ancillary data buffer just
+                        // large enough to fit exactly the number of `RawFd`s that are in the `fds`
+                        // buffer. It is not possible for the OS to return more of them.
+                        //
+                        // If this branch ended up being reachable for some reason, it would be
+                        // necessary for this branch to close the file descriptors to avoid leaking
+                        // resources.
+                        //
+                        // TODO: consider using unreachable_unchecked
+                        unreachable!();
+                    }
+                }
+            }
+            cmsg_header = libc::CMSG_NXTHDR(&mut msghdr as *mut _, cmsg_header);
+        }
+
+        Ok((count as usize, descriptor_count))
     }
 }

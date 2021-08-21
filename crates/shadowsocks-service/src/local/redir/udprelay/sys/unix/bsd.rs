@@ -119,15 +119,17 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
         _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
     };
 
-    let ret = libc::setsockopt(
-        fd,
-        level,
-        opt,
-        &enable as *const _ as *const _,
-        mem::size_of_val(&enable) as libc::socklen_t,
-    );
-    if ret != 0 {
-        return Err(Error::last_os_error());
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
     }
 
     Ok(())
@@ -140,15 +142,17 @@ fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let enable: libc::c_int = 1;
 
     // https://man.openbsd.org/getsockopt.2
-    let ret = libc::setsockopt(
-        fd,
-        libc::SOL_SOCKET,
-        libc::SO_BINDANY,
-        &enable as *const _ as *const _,
-        mem::size_of_val(&enable) as libc::socklen_t,
-    );
-    if ret != 0 {
-        return Err(Error::last_os_error());
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_BINDANY,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
     }
 
     Ok(())

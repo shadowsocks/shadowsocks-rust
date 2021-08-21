@@ -52,7 +52,7 @@ jobs:
   build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: "local-redir"
+      BUILD_EXTRA_FEATURES: "local-redir local-tun"
       RUST_BACKTRACE: full
     strategy:
       matrix:

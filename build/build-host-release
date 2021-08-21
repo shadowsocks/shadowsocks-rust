@@ -8,7 +8,7 @@ while getopts "t:f:" opt; do
             BUILD_TARGET=$OPTARG
             ;;
         f)
-            BUILD_FEATURES=($OPTARG)
+            BUILD_FEATURES+=($OPTARG)
             ;;
         ?)
             echo "Usage: $(basename $0) [-t <target-triple>] [-f <feature>]"

@@ -49,7 +49,7 @@ fn main() {
                     the only required fields are \"manager_address\" and \"manager_port\". \
                     Servers defined will be created when process is started.")
 
-            (@arg BIND_ADDR: -b --("bind-addr") +takes_value {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
+            (@arg OUTBOUND_BIND_ADDR: -b --("outbound-bind-addr") +takes_value alias("bind-addr") {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
             (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
             (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
@@ -151,9 +151,9 @@ fn main() {
             None => Config::new(ConfigType::Manager),
         };
 
-        if let Some(bind_addr) = matches.value_of("BIND_ADDR") {
-            let bind_addr = bind_addr.parse::<IpAddr>().expect("bind-addr");
-            config.local_addr = Some(bind_addr);
+        if let Some(bind_addr) = matches.value_of("OUTBOUND_BIND_ADDR") {
+            let bind_addr = bind_addr.parse::<IpAddr>().expect("outbound-bind-addr");
+            config.outbound_bind_addr = Some(bind_addr);
         }
 
         if matches.is_present("TCP_NO_DELAY") {
