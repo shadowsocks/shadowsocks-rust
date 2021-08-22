@@ -1,7 +1,6 @@
 //! Android specific features
 
 use std::{
-    convert::TryInto,
     io::{self, Error, ErrorKind, Read, Write},
     mem,
     net::Shutdown,
@@ -224,15 +223,11 @@ fn send_with_fd(socket: RawFd, bs: &[u8], fds: &[RawFd]) -> io::Result<usize> {
         let mut cmsg_buffer = Vec::with_capacity(cmsg_buffer_len);
         cmsg_buffer.set_len(cmsg_buffer_len);
 
-        let mut msghdr = libc::msghdr {
-            msg_name: ptr::null_mut(),
-            msg_namelen: 0,
-            msg_iov: &mut iov as *mut _,
-            msg_iovlen: 1,
-            msg_control: cmsg_buffer.as_mut_ptr(),
-            msg_controllen: cmsg_buffer_len.try_into().unwrap(),
-            ..mem::zeroed()
-        };
+        let mut msghdr: libc::msghdr = mem::zeroed();
+        msghdr.msg_iov = &mut iov as *mut _;
+        msghdr.msg_iovlen = 1;
+        msghdr.msg_control = cmsg_buffer.as_mut_ptr();
+        msghdr.msg_controllen = cmsg_buffer_len as _;
 
         // Fill cmsg with the file descriptors we are sending.
         let cmsg_header = libc::CMSG_FIRSTHDR(&mut msghdr as *mut _);
@@ -276,15 +271,11 @@ fn recv_with_fd(socket: RawFd, bs: &mut [u8], mut fds: &mut [RawFd]) -> io::Resu
         let mut cmsg_buffer = Vec::with_capacity(cmsg_buffer_len);
         cmsg_buffer.set_len(cmsg_buffer_len);
 
-        let mut msghdr = libc::msghdr {
-            msg_name: ptr::null_mut(),
-            msg_namelen: 0,
-            msg_iov: &mut iov as *mut _,
-            msg_iovlen: 1,
-            msg_control: cmsg_buffer.as_mut_ptr(),
-            msg_controllen: cmsg_buffer_len.try_into().unwrap(),
-            ..mem::zeroed()
-        };
+        let mut msghdr: libc::msghdr = mem::zeroed();
+        msghdr.msg_iov = &mut iov as *mut _;
+        msghdr.msg_iovlen = 1;
+        msghdr.msg_control = cmsg_buffer.as_mut_ptr();
+        msghdr.msg_controllen = cmsg_buffer_len as _;
 
         let count = libc::recvmsg(socket, &mut msghdr as *mut _, 0);
         if count < 0 {
