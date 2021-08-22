@@ -236,11 +236,11 @@ fn send_with_fd(socket: RawFd, bs: &[u8], fds: &[RawFd]) -> io::Result<usize> {
 
         // Fill cmsg with the file descriptors we are sending.
         let cmsg_header = libc::CMSG_FIRSTHDR(&mut msghdr as *mut _);
-        cmsg_header.write(libc::cmsghdr {
-            cmsg_level: libc::SOL_SOCKET,
-            cmsg_type: libc::SCM_RIGHTS,
-            cmsg_len: libc::CMSG_LEN(cmsg_fd_len as u32).try_into().unwrap(),
-        });
+        let mut cmsg: libc::cmsghdr = mem::zeroed();
+        cmsg.cmsg_level = libc::SOL_SOCKET;
+        cmsg.cmsg_type = libc::SCM_RIGHTS;
+        cmsg.cmsg_len = libc::CMSG_LEN(cmsg_fd_len as u32) as _;
+        cmsg_header.write(cmsg);
 
         let cmsg_data = libc::CMSG_DATA(cmsg_header);
         #[allow(clippy::cast_ptr_alignment)] // false positive

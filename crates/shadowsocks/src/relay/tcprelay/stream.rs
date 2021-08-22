@@ -112,8 +112,8 @@ impl DecryptedReader {
         }
 
         let iv = &self.buffer[..iv_len];
-        if context.check_nonce_and_set(&iv) {
-            warn!("detected repeated stream iv {:?}", ByteStr::new(&iv));
+        if context.check_nonce_and_set(iv) {
+            warn!("detected repeated stream iv {:?}", ByteStr::new(iv));
         }
 
         trace!("got stream iv {:?}", ByteStr::new(iv));

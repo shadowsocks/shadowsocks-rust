@@ -84,7 +84,7 @@ fn encrypt_payload_stream(
         context.check_nonce_and_set(iv);
     }
 
-    let mut cipher = Cipher::new(method, key, &iv);
+    let mut cipher = Cipher::new(method, key, iv);
 
     addr.write_to_buf(dst);
     dst.put_slice(payload);
@@ -219,7 +219,7 @@ async fn decrypt_payload_aead(
 
     trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
 
-    let mut cipher = Cipher::new(method, &key, &salt);
+    let mut cipher = Cipher::new(method, key, salt);
     let tag_len = cipher.tag_len();
 
     if data.len() < tag_len {

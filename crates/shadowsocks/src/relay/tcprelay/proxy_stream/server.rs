@@ -77,7 +77,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.stream.poll_read_decrypted(cx, &this.context, buf)
+        this.stream.poll_read_decrypted(cx, this.context, buf)
     }
 }
 
@@ -116,7 +116,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.reader.poll_read_decrypted(cx, &this.context, buf)
+        this.reader.poll_read_decrypted(cx, this.context, buf)
     }
 }
 

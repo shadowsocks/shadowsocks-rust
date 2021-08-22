@@ -193,9 +193,9 @@ impl Dns {
 
     async fn run_udp_server(&self, bind_addr: &ServerAddr, client: Arc<DnsClient>) -> io::Result<()> {
         let socket = match *bind_addr {
-            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(saddr).await?,
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(&self.context.context_ref(), dname, port, |addr| {
+                lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?
                 .1

@@ -92,13 +92,12 @@ impl PingBalancerBuilder {
             tokio::spawn(async move { shared_context.checker_task().await })
         };
 
-        let balancer = PingBalancer {
+        PingBalancer {
             inner: Arc::new(PingBalancerInner {
                 context: shared_context,
                 abortable,
             }),
-        };
-        balancer
+        }
     }
 }
 
@@ -453,7 +452,7 @@ impl PingChecker {
         if dns_answer.len() < 12 || &dns_answer[0..2] != b"\x12\x34" {
             use std::io::{Error, ErrorKind};
 
-            debug!("unexpected response from 8.8.8.8:53, {:?}", ByteStr::new(&dns_answer));
+            debug!("unexpected response from 8.8.8.8:53, {:?}", ByteStr::new(dns_answer));
 
             let err = Error::new(ErrorKind::InvalidData, "unexpected response from 8.8.8.8:53");
             return Err(err);

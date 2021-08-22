@@ -93,9 +93,9 @@ impl UdpTunnel {
         forward_addr: &Address,
     ) -> io::Result<()> {
         let socket = match *client_config {
-            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(saddr).await?,
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(&self.context.context_ref(), dname, port, |addr| {
+                lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?
                 .1
@@ -120,7 +120,7 @@ impl UdpTunnel {
 
             let data = &buffer[..n];
             if let Err(err) = self
-                .send_packet(&listener, peer_addr, &balancer, &forward_addr, data)
+                .send_packet(&listener, peer_addr, &balancer, forward_addr, data)
                 .await
             {
                 error!(

@@ -34,7 +34,7 @@ impl UdpSocket {
                 socket
             }
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(&context, dname, port, |remote_addr| {
+                lookup_then!(context, dname, port, |remote_addr| {
                     let s = create_outbound_udp_socket(From::from(&remote_addr), opts).await?;
                     s.connect(remote_addr).await.map(|_| s)
                 })?
@@ -58,7 +58,7 @@ impl UdpSocket {
                 socket
             }
             Address::DomainNameAddress(ref dname, port) => {
-                lookup_then!(&context, dname, port, |remote_addr| {
+                lookup_then!(context, dname, port, |remote_addr| {
                     let s = create_outbound_udp_socket(From::from(&remote_addr), opts).await?;
                     s.connect(remote_addr).await.map(|_| s)
                 })?

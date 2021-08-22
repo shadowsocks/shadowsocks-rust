@@ -171,7 +171,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.stream.poll_read_decrypted(cx, &this.context, buf)
+        this.stream.poll_read_decrypted(cx, this.context, buf)
     }
 }
 
@@ -202,7 +202,7 @@ where
                     *(this.state) = ProxyClientStreamWriteState::Connecting(buffer);
                 }
                 ProxyClientStreamWriteState::Connecting(ref buffer) => {
-                    let n = ready!(this.stream.poll_write_encrypted(cx, &buffer))?;
+                    let n = ready!(this.stream.poll_write_encrypted(cx, buffer))?;
 
                     // In general, poll_write_encrypted should perform like write_all.
                     debug_assert!(n == buffer.len());
@@ -277,7 +277,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.reader.poll_read_decrypted(cx, &this.context, buf)
+        this.reader.poll_read_decrypted(cx, this.context, buf)
     }
 }
 
@@ -316,7 +316,7 @@ where
                     *(this.state) = ProxyClientStreamWriteState::Connecting(buffer);
                 }
                 ProxyClientStreamWriteState::Connecting(ref buffer) => {
-                    let n = ready!(this.writer.poll_write_encrypted(cx, &buffer))?;
+                    let n = ready!(this.writer.poll_write_encrypted(cx, buffer))?;
 
                     // In general, poll_write_encrypted should perform like write_all.
                     debug_assert!(n == buffer.len());

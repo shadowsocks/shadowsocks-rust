@@ -32,7 +32,7 @@ pub fn set_packet_information(packet: &mut BytesMut) -> io::Result<()> {
     full_packet.put_u16(protocol as u16);
 
     // Append the whole packet
-    full_packet.put_slice(&packet);
+    full_packet.put_slice(packet);
 
     *packet = full_packet;
     Ok(())

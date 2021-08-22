@@ -236,12 +236,12 @@ impl ServerConfig {
 
     /// Get encryption key
     pub fn key(&self) -> &[u8] {
-        &self.enc_key.as_ref()
+        self.enc_key.as_ref()
     }
 
     /// Get password
     pub fn password(&self) -> &str {
-        &self.password.as_str()
+        self.password.as_str()
     }
 
     /// Get method

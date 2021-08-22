@@ -232,7 +232,7 @@ impl Tun {
                 let src_addr = SocketAddr::new(src_ip, tcp_header.source_port);
                 let dst_addr = SocketAddr::new(dst_ip, tcp_header.destination_port);
 
-                let (mod_src_addr, mod_dst_addr) = match self.tcp.handle_packet(src_addr, dst_addr, &tcp_header).await {
+                let (mod_src_addr, mod_dst_addr) = match self.tcp.handle_packet(src_addr, dst_addr, tcp_header).await {
                     Ok(Some(a)) => a,
                     Ok(None) => return Ok(false),
                     Err(err) => {

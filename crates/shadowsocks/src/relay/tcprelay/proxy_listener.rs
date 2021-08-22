@@ -41,7 +41,7 @@ impl ProxyListener {
         let listener = match svr_cfg.external_addr() {
             ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(sa, accept_opts).await?,
             ServerAddr::DomainName(domain, port) => {
-                lookup_then!(&context, &domain, *port, |addr| {
+                lookup_then!(&context, domain, *port, |addr| {
                     TcpListener::bind_with_opts(&addr, accept_opts.clone()).await
                 })?
                 .1

@@ -69,9 +69,9 @@ impl Socks5UdpServer {
 
     pub async fn run(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
         let socket = match *client_config {
-            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(&saddr).await?,
+            ServerAddr::SocketAddr(ref saddr) => ShadowUdpSocket::listen(saddr).await?,
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(&self.context.context_ref(), dname, port, |addr| {
+                lookup_then!(self.context.context_ref(), dname, port, |addr| {
                     ShadowUdpSocket::listen(&addr).await
                 })?
                 .1

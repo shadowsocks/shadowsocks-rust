@@ -659,7 +659,7 @@ impl HandshakeRequest {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let HandshakeRequest { ref methods } = *self;
         buf.put_slice(&[consts::SOCKS5_VERSION, methods.len() as u8]);
-        buf.put_slice(&methods);
+        buf.put_slice(methods);
     }
 
     /// Get length of bytes
