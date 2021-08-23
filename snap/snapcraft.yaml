@@ -6,6 +6,7 @@ description: |
 base: core18
 grade: stable
 confinement: strict
+architectures: [amd64, arm64, armhf, i386, ppc64el]
 
 apps:
   sslocal:
