@@ -98,7 +98,7 @@ mio = { version = "0.7", optional = true }
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
 
-hyper = { version = "0.14.7", optional = true, features = ["full"] }
+hyper = { version = "0.14.12", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
 trust-dns-resolver = { version = "0.20.3", optional = true, features = ["serde-config"] }
