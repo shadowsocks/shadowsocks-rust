@@ -107,7 +107,7 @@ ipnet = "2.3"
 iprange = "0.6"
 regex = "1.4"
 
-tun = { version = "0.5", optional = true }
+tun = { version = "0.5.3", optional = true, features = ["async"] }
 etherparse = { version = "0.9", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }

@@ -134,7 +134,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         #[cfg(feature = "local-dns")]
         ProtocolType::Dns => local_config.mode.enable_tcp(),
         #[cfg(feature = "local-tun")]
-        ProtocolType::Tun => true,
+        ProtocolType::Tun => local_config.mode.enable_tcp(),
     });
 
     if enable_tcp {
@@ -335,6 +335,7 @@ pub async fn run(mut config: Config) -> io::Result<()> {
                 if let Some(d) = config.udp_timeout {
                     builder = builder.udp_expiry_duration(d);
                 }
+                builder = builder.mode(local_config.mode);
                 #[cfg(unix)]
                 if let Some(fd) = local_config.tun_device_fd {
                     builder = builder.file_descriptor(fd);
