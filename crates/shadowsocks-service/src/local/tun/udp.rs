@@ -20,18 +20,21 @@ use crate::local::{
 };
 
 pub struct UdpTun {
+    tun_rx: mpsc::Receiver<BytesMut>,
     manager: UdpAssociationManager<UdpTunInboundWriter>,
 }
 
 impl UdpTun {
     pub fn new(
         context: Arc<ServiceContext>,
-        tun_tx: mpsc::Sender<BytesMut>,
         balancer: PingBalancer,
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
     ) -> UdpTun {
+        let (tun_tx, tun_rx) = mpsc::channel(64);
+
         UdpTun {
+            tun_rx,
             manager: UdpAssociationManager::new(
                 context,
                 UdpTunInboundWriter::new(tun_tx),
@@ -50,6 +53,13 @@ impl UdpTun {
     ) -> io::Result<()> {
         trace!("UDP {} -> {} payload.size: {} bytes", src_addr, dst_addr, payload.len());
         self.manager.send_to(src_addr, dst_addr.into(), payload).await
+    }
+
+    pub async fn recv_packet(&mut self) -> BytesMut {
+        match self.tun_rx.recv().await {
+            Some(b) => b,
+            None => unreachable!("channel closed unexpectly"),
+        }
     }
 }
 
@@ -81,7 +91,7 @@ impl UdpInboundWrite for UdpTunInboundWriter {
             Address::DomainNameAddress(..) => {
                 let err = io::Error::new(
                     ErrorKind::InvalidInput,
-                    "redir destination must not be an domain name address",
+                    "tun destination must not be an domain name address",
                 );
                 return Err(err);
             }

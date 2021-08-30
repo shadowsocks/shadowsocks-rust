@@ -1,7 +1,10 @@
-use std::io::{self, ErrorKind};
+use std::{
+    io::{self, ErrorKind, IoSlice},
+    marker::Unpin,
+};
 
-use bytes::{BufMut, BytesMut};
 use cfg_if::cfg_if;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 cfg_if! {
     if #[cfg(target_os = "macos")] {
@@ -23,27 +26,39 @@ pub const IFF_PI_PREFIX_LEN: usize = 4;
 /// | Flags (0)       | Protocol        |
 /// +--------+--------+--------+--------+
 /// ```
-pub fn set_packet_information(packet: &mut BytesMut) -> io::Result<()> {
+pub async fn write_packet_with_pi<W: AsyncWrite + Unpin>(writer: &mut W, packet: &[u8]) -> io::Result<()> {
     if packet.is_empty() {
         return Err(io::Error::new(ErrorKind::InvalidInput, "empty packet"));
     }
 
-    // FIXME: Bad Performance because of new allocation and memory copies.
-    let mut full_packet = BytesMut::with_capacity(4 + packet.len());
+    let mut header = [0u8; 4];
 
-    // Flags, always 0
-    full_packet.put_u16(0);
     // Protocol, infer from the original packet
     let protocol = match packet[0] >> 4 {
         4 => libc::PF_INET,
         6 => libc::PF_INET6,
         _ => return Err(io::Error::new(ErrorKind::InvalidData, "neither an IPv4 or IPv6 packet")),
     };
-    full_packet.put_u16(protocol as u16);
 
-    // Append the whole packet
-    full_packet.put_slice(packet);
+    let protocol_buf = &mut header[2..];
+    let protocol_bytes = (protocol as u16).to_be_bytes();
+    protocol_buf.copy_from_slice(&protocol_bytes);
 
-    *packet = full_packet;
+    let bufs = [IoSlice::new(&header), IoSlice::new(packet)];
+    let n = writer.write_vectored(&bufs).await?;
+
+    // Packets must be written together with the header
+    if n != header.len() + packet.len() {
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            format!(
+                "write_vectored header {} bytes, packet {} bytes, but sent {} bytes",
+                header.len(),
+                packet.len(),
+                n
+            ),
+        ));
+    }
+
     Ok(())
 }

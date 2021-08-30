@@ -10,20 +10,17 @@ use std::{
 };
 
 use byte_string::ByteStr;
-use bytes::BytesMut;
 use etherparse::{IpHeader, PacketHeaders, ReadError, TransportHeader};
 use ipnet::{IpNet, Ipv4Net};
 use log::{error, info, trace, warn};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    sync::mpsc,
-};
-use tun::{Configuration as TunConfiguration, Device, Layer};
+use shadowsocks::config::Mode;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tun::{AsyncDevice, Configuration as TunConfiguration, Device, Error as TunError, Layer};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
 use self::{
-    sys::{set_packet_information, set_route_configuration, AsyncDevice, IFF_PI_PREFIX_LEN},
+    sys::{set_route_configuration, write_packet_with_pi, IFF_PI_PREFIX_LEN},
     tcp::TcpTun,
     udp::UdpTun,
 };
@@ -38,6 +35,7 @@ pub struct TunBuilder {
     tun_config: TunConfiguration,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
+    mode: Mode,
 }
 
 impl TunBuilder {
@@ -48,6 +46,7 @@ impl TunBuilder {
             tun_config: TunConfiguration::default(),
             udp_expiry_duration: None,
             udp_capacity: None,
+            mode: Mode::TcpOnly,
         }
     }
 
@@ -77,6 +76,11 @@ impl TunBuilder {
         self
     }
 
+    pub fn mode(mut self, mode: Mode) -> TunBuilder {
+        self.mode = mode;
+        self
+    }
+
     pub async fn build(mut self) -> io::Result<Tun> {
         self.tun_config.layer(Layer::L3).up();
 
@@ -86,7 +90,11 @@ impl TunBuilder {
             tun_config.packet_information(false);
         });
 
-        let device = AsyncDevice::create(&self.tun_config)?;
+        let device = match tun::create_as_async(&self.tun_config) {
+            Ok(d) => d,
+            Err(TunError::Io(err)) => return Err(err),
+            Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
+        };
 
         let tun_address = match device.get_ref().address() {
             Ok(t) => t,
@@ -125,28 +133,33 @@ impl TunBuilder {
 
         let tun_network = Ipv4Net::new(tun_address, tun_netmask_u32.leading_ones() as u8).expect("Ipv4Net::new");
 
-        let (tun_tx, tun_rx) = mpsc::channel(64);
-
         Ok(Tun {
             device,
-            tun_rx,
-            tcp: TcpTun::new(self.context.clone(), tun_network.into(), self.balancer.clone()).await?,
-            udp: UdpTun::new(
-                self.context,
-                tun_tx,
-                self.balancer,
-                self.udp_expiry_duration,
-                self.udp_capacity,
-            ),
+            tcp: if self.mode.enable_tcp() {
+                Some(TcpTun::new(self.context.clone(), tun_network.into(), self.balancer.clone()).await?)
+            } else {
+                None
+            },
+            udp: if self.mode.enable_udp() {
+                Some(UdpTun::new(
+                    self.context,
+                    self.balancer,
+                    self.udp_expiry_duration,
+                    self.udp_capacity,
+                ))
+            } else {
+                None
+            },
+            mode: self.mode,
         })
     }
 }
 
 pub struct Tun {
     device: AsyncDevice,
-    tun_rx: mpsc::Receiver<BytesMut>,
-    tcp: TcpTun,
-    udp: UdpTun,
+    tcp: Option<TcpTun>,
+    udp: Option<UdpTun>,
+    mode: Mode,
 }
 
 impl Tun {
@@ -155,11 +168,12 @@ impl Tun {
         assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
 
         info!(
-            "shadowsocks tun device {}, address {}, netmask {}, mtu {}",
+            "shadowsocks tun device {}, address {}, netmask {}, mtu {}, mode {:?}",
             self.device.get_ref().name(),
             self.device.get_ref().address().expect("address"),
             self.device.get_ref().netmask().expect("netmask"),
             mtu,
+            self.mode,
         );
 
         let mut packet_buffer = vec![0u8; mtu as usize + IFF_PI_PREFIX_LEN].into_boxed_slice();
@@ -187,15 +201,9 @@ impl Tun {
                 }
 
                 // channel sent back
-                maybe_packet = self.tun_rx.recv() => {
-                    let mut packet = maybe_packet.expect("tun channel closed");
-                    match set_packet_information(&mut packet) {
-                        Err(err) => {
-                            error!("failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
-                        }
-                        Ok(..) => {
-                            self.device.write_all(&packet).await?;
-                        }
+                packet = self.udp.as_mut().unwrap().recv_packet(), if self.udp.is_some() => {
+                    if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
+                        error!("failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
                     }
                 }
             }
@@ -229,10 +237,15 @@ impl Tun {
 
         match ph.transport {
             Some(TransportHeader::Tcp(ref mut tcp_header)) => {
+                let tcp = match self.tcp {
+                    Some(ref mut tcp) => tcp,
+                    None => return Ok(false),
+                };
+
                 let src_addr = SocketAddr::new(src_ip, tcp_header.source_port);
                 let dst_addr = SocketAddr::new(dst_ip, tcp_header.destination_port);
 
-                let (mod_src_addr, mod_dst_addr) = match self.tcp.handle_packet(src_addr, dst_addr, tcp_header).await {
+                let (mod_src_addr, mod_dst_addr) = match tcp.handle_packet(src_addr, dst_addr, tcp_header).await {
                     Ok(Some(a)) => a,
                     Ok(None) => return Ok(false),
                     Err(err) => {
@@ -277,11 +290,15 @@ impl Tun {
             }
             Some(TransportHeader::Udp(ref udp_header)) => {
                 // UDP proxies directly
+                let udp = match self.udp {
+                    Some(ref mut udp) => udp,
+                    None => return Ok(false),
+                };
 
                 let src_addr = SocketAddr::new(src_ip, udp_header.source_port);
                 let dst_addr = SocketAddr::new(dst_ip, udp_header.destination_port);
 
-                if let Err(err) = self.udp.handle_packet(src_addr, dst_addr, ph.payload).await {
+                if let Err(err) = udp.handle_packet(src_addr, dst_addr, ph.payload).await {
                     error!("handle UDP/IP packet failed, error: {}", err);
                 }
 
