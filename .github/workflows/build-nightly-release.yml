@@ -32,9 +32,9 @@ jobs:
             compile_features="-f local-redir -f local-tun"
           fi
 
-          if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
-            compile_compress="-u"
-          fi
+          #if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
+          #  compile_compress="-u"
+          #fi
 
           cd build
           ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
