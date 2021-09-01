@@ -1,6 +1,5 @@
 use std::{io, marker::Unpin};
 
-use bytes::BytesMut;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tun::platform::Device as TunDevice;
 

@@ -10,8 +10,9 @@ fi
 
 targets=()
 features=()
+use_upx=false
 
-while getopts "t:f:" opt; do
+while getopts "t:f:u" opt; do
     case $opt in
         t)
             targets+=($OPTARG)
@@ -19,8 +20,11 @@ while getopts "t:f:" opt; do
         f)
             features+=($OPTARG)
             ;;
+        u)
+            use_upx=true
+            ;;
         ?)
-            echo "Usage: $(basename $0) [-t <target-triple>] [-f features]"
+            echo "Usage: $(basename $0) [-t <target-triple>] [-f features] [-u]"
             ;;
     esac
 done
@@ -32,10 +36,17 @@ if [[ "${#targets[@]}" == "0" ]]; then
     exit 1
 fi
 
-[[ -z $upx ]] && upx="echo pending"
-if [[ $upx == "echo pending" ]] && hash upx 2>/dev/null; then
-	upx="upx -9"
+if [[ "${use_upx}" = true ]]; then
+    if [[ ! -z $upx ]] && hash upx 2>/dev/null; then
+        upx="upx -9"
+    fi
+
+    if [[ "x$upx" == "x" ]]; then
+        echo "Couldn't find upx in PATH, consider specifying it with variable \$upx"
+        exit 1
+    fi
 fi
+
 
 function build() {
     cd "$CUR_DIR/.."
@@ -44,10 +55,6 @@ function build() {
 
     RELEASE_DIR="target/${TARGET}/release"
     TARGET_FEATURES="${features[@]}"
-
-    if [[ "$TARGET" == *"-linux-"* || "$TARGET" == *"-darwin" ]]; then
-        TARGET_FEATURES+=" local-redir local-tun"
-    fi
 
     if [[ "${TARGET_FEATURES}" != "" ]]; then
         echo "* Building ${TARGET} package ${VERSION} with features \"${TARGET_FEATURES}\" ..."
@@ -75,7 +82,7 @@ function build() {
 
         cd ${RELEASE_DIR}
 
-        if [[ "$TARGET" == "mips"* ]]; then
+        if [[ "${use_upx}" = true ]]; then
             # Enable upx for MIPS.
             $upx sslocal ssserver ssurl ssmanager #>/dev/null
         fi
