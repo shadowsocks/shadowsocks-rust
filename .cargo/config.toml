@@ -48,7 +48,7 @@ rustflags = [
 
     # Common ISA that is supported by modern CPUs
     # ARMv8-A, Cortex-A8
-    "-C", "target-feature=+aes,+crypto,+neon",
+    "-C", "target-feature=+neon,+pmull,+aes,+sha2,+crc",
 ]
 
 # NOTE:
