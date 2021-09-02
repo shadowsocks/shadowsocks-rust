@@ -47,7 +47,9 @@ rustflags = [
     # "-C", "target-cpu=native",
 
     # Common ISA that is supported by modern CPUs
-    # ARMv8-A, Cortex-A8
+    # sha2: SHA1 & SHA2-256 instructions
+    # sha3: SHA2-512 & SHA3 instructions
+    # Optional feature: +sha3,+sm4
     "-C", "target-feature=+neon,+pmull,+aes,+sha2,+crc",
 ]
 
