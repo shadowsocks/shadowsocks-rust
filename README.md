@@ -1,11 +1,17 @@
 # shadowsocks
 
+[![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![Build & Test](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-and-test.yml)
 [![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml)
 [![Build Nightly Releases](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-nightly-release.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-nightly-release.yml)
-[![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
+
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
+[![archlinuxcn shadowsocks-rust-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+[![archlinuxcn shadowsocks-rust-opt-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-opt-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
+
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
