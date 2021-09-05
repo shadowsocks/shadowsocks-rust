@@ -10,7 +10,9 @@ use std::{
 };
 
 use byte_string::ByteStr;
+use bytes::BytesMut;
 use etherparse::{IpHeader, PacketHeaders, ReadError, TransportHeader};
+use futures::future;
 use ipnet::{IpNet, Ipv4Net};
 use log::{error, info, trace, warn};
 use shadowsocks::config::Mode;
@@ -179,6 +181,14 @@ impl Tun {
         let mut packet_buffer = vec![0u8; mtu as usize + IFF_PI_PREFIX_LEN].into_boxed_slice();
 
         loop {
+            #[inline(always)]
+            async fn udp_recv_packet(udp: &mut Option<UdpTun>) -> BytesMut {
+                match *udp {
+                    Some(ref mut udp) => udp.recv_packet().await,
+                    None => future::pending().await,
+                }
+            }
+
             tokio::select! {
                 // tun device
                 n = self.device.read(&mut packet_buffer) => {
@@ -201,7 +211,7 @@ impl Tun {
                 }
 
                 // channel sent back
-                packet = self.udp.as_mut().unwrap().recv_packet(), if self.udp.is_some() => {
+                packet = udp_recv_packet(&mut self.udp) => {
                     if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
                         error!("failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
                     }
