@@ -11,28 +11,28 @@ architectures: [amd64, arm64, armhf, i386, ppc64el]
 apps:
   sslocal:
     command: bin/sslocal
-    plugs: [network, network-bind]
+    plugs: [network, network-bind, home]
 
   sslocal-daemon:
     command: bin/sslocal
     daemon: simple
-    plugs: [network, network-bind]
+    plugs: [network, network-bind, home]
 
   ssserver:
     command: bin/ssserver
-    plugs: [network, network-bind]
+    plugs: [network, network-bind, home]
 
   ssserver-daemon:
     command: bin/ssserver
     daemon: simple
-    plugs: [network, network-bind]
+    plugs: [network, network-bind, home]
 
   ssurl:
     command: bin/ssurl
 
   ssmanager:
     command: bin/ssmanager
-    plugs: [network]
+    plugs: [network, home]
 
 passthrough:
   layout:
