@@ -170,7 +170,7 @@ impl Tun {
         assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
 
         info!(
-            "shadowsocks tun device {}, address {}, netmask {}, mtu {}, mode {:?}",
+            "shadowsocks tun device {}, address {}, netmask {}, mtu {}, mode {}",
             self.device.get_ref().name(),
             self.device.get_ref().address().expect("address"),
             self.device.get_ref().netmask().expect("netmask"),
