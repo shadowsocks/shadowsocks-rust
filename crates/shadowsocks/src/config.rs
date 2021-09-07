@@ -197,7 +197,7 @@ impl ServerConfig {
             plugin_addr: None,
             remarks: None,
             id: None,
-            mode: Mode::TcpOnly,
+            mode: Mode::TcpAndUdp, // Server serves TCP & UDP by default
             weight: ServerWeight::new(),
         }
     }

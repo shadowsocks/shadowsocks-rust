@@ -1345,7 +1345,7 @@ impl Config {
                             return Err(err);
                         }
                     },
-                    None => nsvr.set_mode(global_mode),
+                    None => {}
                 }
 
                 if let Some(p) = svr.plugin {
