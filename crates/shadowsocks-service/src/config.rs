@@ -1345,7 +1345,12 @@ impl Config {
                             return Err(err);
                         }
                     },
-                    None => nsvr.set_mode(global_mode),
+                    None => {
+                        // Server will derive mode from the global scope
+                        if matches!(config_type, ConfigType::Server | ConfigType::Manager) {
+                            nsvr.set_mode(global_mode);
+                        }
+                    }
                 }
 
                 if let Some(p) = svr.plugin {

@@ -21,7 +21,7 @@ impl ServerScore {
     pub fn new(user_weight: f32) -> ServerScore {
         ServerScore {
             stat_data: Mutex::new(ServerStat::new(user_weight)),
-            score: AtomicU32::new(0),
+            score: AtomicU32::new(u32::MAX),
         }
     }
 

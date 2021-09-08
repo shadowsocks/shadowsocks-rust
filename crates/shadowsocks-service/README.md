@@ -18,6 +18,7 @@ shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
   * Tunnel (`local-tunnel`)
   * Redir, aka Transparent Proxy (`local-redir`)
   * DNS (`local-dns`)
+  * Tun (`local-tun`)
 
 * Server
 
