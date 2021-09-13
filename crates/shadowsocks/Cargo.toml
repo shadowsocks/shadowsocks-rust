@@ -60,7 +60,7 @@ tokio-io-timeout = "1.1"
 
 trust-dns-resolver = { version = "0.20", optional = true }
 arc-swap = { version = "1.3", optional = true }
-notify = { version = "5.0.0-pre.11", optional = true }
+notify = { version = "5.0.0-pre.13", optional = true }
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 shadowsocks-crypto = { version = "0.2", features = ["ring"] }
