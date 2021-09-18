@@ -27,7 +27,7 @@ impl SubDomainsTree {
         let mut current_map = &mut self.0;
         let mut last_included = None;
         for part in value.rsplit('.') {
-            let entry = current_map.entry(part.to_string()).or_insert_with(|| DomainPart::new());
+            let entry = current_map.entry(part.to_ascii_lowercase()).or_insert_with(|| DomainPart::new());
             // We don't need to include `a.b.c` if we already have `b.c`
             if entry.included {
                 return;

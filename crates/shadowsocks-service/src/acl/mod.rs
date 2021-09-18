@@ -145,18 +145,20 @@ impl ParsingRules {
         self.ipv6.add(rule.into());
     }
 
-    fn add_regex_rule(&mut self, rule: String) {
+    fn add_regex_rule(&mut self, mut rule: String) {
+        rule.make_ascii_lowercase();
         // FIXME: If this line is not a valid regex, how can we know without actually compile it?
         self.rules_regex.push(rule);
     }
 
     fn add_set_rule(&mut self, rule: &str) -> io::Result<()> {
-        self.rules_set.insert(self.check_is_ascii(rule)?.to_string());
+        self.rules_set.insert(self.check_is_ascii(rule)?.to_ascii_lowercase());
         Ok(())
     }
 
     fn add_tree_rule(&mut self, rule: &str) -> io::Result<()> {
-        self.rules_tree.insert(self.check_is_ascii(rule)?);
+        // SubDomainsTree do lowercase conversion inside insert
+        self.rules_tree.insert(&self.check_is_ascii(rule)?);
         Ok(())
     }
 
@@ -174,7 +176,6 @@ impl ParsingRules {
     fn compile_regex(name: &'static str, regex_rules: Vec<String>) -> io::Result<RegexSet> {
         const REGEX_SIZE_LIMIT: usize = usize::max_value();
         RegexSetBuilder::new(regex_rules)
-            .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
             .build()
@@ -397,7 +398,11 @@ impl AccessControl {
             Address::SocketAddress(ref addr) => !self.check_ip_in_proxy_list(&addr.ip()),
             // Resolve hostname and check the list
             Address::DomainNameAddress(ref host, port) => {
-                if let Some(value) = self.check_host_in_proxy_list(host) {
+                // FIXME: Maybe return some error?
+                let is_matched = idna::domain_to_ascii(host)
+                    .map(|host| self.check_host_in_proxy_list(&host))
+                    .unwrap_or(None);
+                if let Some(value) = is_matched {
                     return !value;
                 }
                 if self.is_ip_empty() {

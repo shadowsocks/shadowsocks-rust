@@ -1615,6 +1615,7 @@ dependencies = [
  "etherparse",
  "futures",
  "hyper",
+ "idna",
  "ipnet",
  "iprange",
  "json5",
