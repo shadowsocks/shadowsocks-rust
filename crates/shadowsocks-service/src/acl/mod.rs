@@ -277,13 +277,13 @@ impl AccessControl {
                 continue;
             }
 
-            if line.starts_with("||") {
-                curr.add_tree_rule(&line[2..])?;
+            if let Some(rule) = line.strip_prefix("||") {
+                curr.add_tree_rule(rule)?;
                 continue;
             }
 
-            if line.starts_with('|') {
-                curr.add_set_rule(&line[1..])?;
+            if let Some(rule) = line.strip_prefix('|') {
+                curr.add_set_rule(rule)?;
                 continue;
             }
 
