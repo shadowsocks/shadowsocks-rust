@@ -282,6 +282,7 @@ impl AccessControl {
 
         let outbound_block_regex = match RegexSetBuilder::new(outbound_block_rules_regex)
             .size_limit(REGEX_SIZE_LIMIT)
+            .unicode(false)
             .build()
         {
             Ok(r) => r,
@@ -294,6 +295,7 @@ impl AccessControl {
         let bypass_regex = match RegexSetBuilder::new(bypass_rules_regex)
             .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
+            .unicode(false)
             .build()
         {
             Ok(r) => r,
@@ -309,6 +311,7 @@ impl AccessControl {
         let proxy_regex = match RegexSetBuilder::new(proxy_rules_regex)
             .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
+            .unicode(false)
             .build()
         {
             Ok(r) => r,
