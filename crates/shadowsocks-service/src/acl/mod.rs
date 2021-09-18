@@ -3,6 +3,7 @@
 //! This is for advance controlling server behaviors in both local and proxy servers.
 
 use std::{
+    collections::HashSet,
     fmt,
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
@@ -15,6 +16,10 @@ use iprange::IpRange;
 use regex::{RegexSet, RegexSetBuilder};
 
 use shadowsocks::{context::Context, relay::socks5::Address};
+
+use self::sub_domains_tree::SubDomainsTree;
+
+mod sub_domains_tree;
 
 /// Strategy mode that ACL is running
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -29,17 +34,19 @@ pub enum Mode {
 struct Rules {
     ipv4: IpRange<Ipv4Net>,
     ipv6: IpRange<Ipv6Net>,
-    rule: RegexSet,
+    rule_regex: RegexSet,
+    rule_set: HashSet<String>,
+    rule_tree: SubDomainsTree,
 }
 
 impl fmt::Debug for Rules {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Rules {{ ipv4: {:?}, ipv6: {:?}, rule: [", self.ipv4, self.ipv6)?;
+        write!(f, "Rules {{ ipv4: {:?}, ipv6: {:?}, rule_regex: [", self.ipv4, self.ipv6)?;
 
         let max_len = 2;
-        let has_more = self.rule.len() > max_len;
+        let has_more = self.rule_regex.len() > max_len;
 
-        for (idx, r) in self.rule.patterns().iter().take(max_len).enumerate() {
+        for (idx, r) in self.rule_regex.patterns().iter().take(max_len).enumerate() {
             if idx > 0 {
                 f.write_str(", ")?;
             }
@@ -50,18 +57,30 @@ impl fmt::Debug for Rules {
             f.write_str(", ...")?;
         }
 
-        f.write_str("] }")
+        write!(f, "], rule_set: {:?}, rule_tree: {:?} }}", self.rule_set, self.rule_tree)
     }
 }
 
 impl Rules {
     /// Create a new rule
-    fn new(mut ipv4: IpRange<Ipv4Net>, mut ipv6: IpRange<Ipv6Net>, rule: RegexSet) -> Rules {
+    fn new(
+        mut ipv4: IpRange<Ipv4Net>,
+        mut ipv6: IpRange<Ipv6Net>,
+        rule_regex: RegexSet,
+        rule_set: HashSet<String>,
+        rule_tree: SubDomainsTree,
+    ) -> Rules {
         // Optimization, merging networks
         ipv4.simplify();
         ipv6.simplify();
 
-        Rules { ipv4, ipv6, rule }
+        Rules {
+            ipv4,
+            ipv6,
+            rule_regex,
+            rule_set,
+            rule_tree,
+        }
     }
 
     /// Check if the specified address matches these rules
@@ -83,7 +102,7 @@ impl Rules {
 
     /// Check if the specified host matches any rules
     fn check_host_matched(&self, host: &str) -> bool {
-        self.rule.is_match(host)
+        self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host)
     }
 
     /// Check if there are no rules for IP addresses
@@ -93,7 +112,7 @@ impl Rules {
 
     /// Check if there are no rules for domain names
     fn is_host_empty(&self) -> bool {
-        self.rule.is_empty()
+        self.rule_set.is_empty() && self.rule_tree.is_empty() && self.rule_regex.is_empty()
     }
 }
 
@@ -162,17 +181,25 @@ impl AccessControl {
 
         let mut outbound_block_ipv4 = IpRange::new();
         let mut outbound_block_ipv6 = IpRange::new();
-        let mut outbound_block_rules = Vec::new();
+        let mut outbound_block_rules_regex = Vec::new();
+        let mut outbound_block_rules_set = HashSet::new();
+        let mut outbound_block_rules_tree = SubDomainsTree::new();
         let mut bypass_ipv4 = IpRange::new();
         let mut bypass_ipv6 = IpRange::new();
-        let mut bypass_rules = Vec::new();
+        let mut bypass_rules_regex = Vec::new();
+        let mut bypass_rules_set = HashSet::new();
+        let mut bypass_rules_tree = SubDomainsTree::new();
         let mut proxy_ipv4 = IpRange::new();
         let mut proxy_ipv6 = IpRange::new();
-        let mut proxy_rules = Vec::new();
+        let mut proxy_rules_regex = Vec::new();
+        let mut proxy_rules_set = HashSet::new();
+        let mut proxy_rules_tree = SubDomainsTree::new();
 
         let mut curr_ipv4 = &mut bypass_ipv4;
         let mut curr_ipv6 = &mut bypass_ipv6;
-        let mut curr_rules = &mut bypass_rules;
+        let mut curr_rules_regex = &mut bypass_rules_regex;
+        let mut curr_rules_set = &mut bypass_rules_set;
+        let mut curr_rules_tree = &mut bypass_rules_tree;
 
         for line in r.lines() {
             let line = line?;
@@ -182,6 +209,16 @@ impl AccessControl {
 
             // Comments
             if line.starts_with('#') {
+                continue;
+            }
+
+            if line.starts_with("||") {
+                curr_rules_tree.insert(&line[2..]);
+                continue;
+            }
+
+            if line.starts_with('|') {
+                curr_rules_set.insert(line[1..].to_string());
                 continue;
             }
 
@@ -195,17 +232,23 @@ impl AccessControl {
                 "[outbound_block_list]" => {
                     curr_ipv4 = &mut outbound_block_ipv4;
                     curr_ipv6 = &mut outbound_block_ipv6;
-                    curr_rules = &mut outbound_block_rules;
+                    curr_rules_regex = &mut outbound_block_rules_regex;
+                    curr_rules_set = &mut outbound_block_rules_set;
+                    curr_rules_tree = &mut outbound_block_rules_tree;
                 }
                 "[black_list]" | "[bypass_list]" => {
                     curr_ipv4 = &mut bypass_ipv4;
                     curr_ipv6 = &mut bypass_ipv6;
-                    curr_rules = &mut bypass_rules;
+                    curr_rules_regex = &mut bypass_rules_regex;
+                    curr_rules_set = &mut bypass_rules_set;
+                    curr_rules_tree = &mut bypass_rules_tree;
                 }
                 "[white_list]" | "[proxy_list]" => {
                     curr_ipv4 = &mut proxy_ipv4;
                     curr_ipv6 = &mut proxy_ipv6;
-                    curr_rules = &mut proxy_rules;
+                    curr_rules_regex = &mut proxy_rules_regex;
+                    curr_rules_set = &mut proxy_rules_set;
+                    curr_rules_tree = &mut proxy_rules_tree;
                 }
                 _ => {
                     match line.parse::<IpNet>() {
@@ -226,7 +269,7 @@ impl AccessControl {
                                 }
                                 Err(..) => {
                                     // FIXME: If this line is not a valid regex, how can we know without actually compile it?
-                                    curr_rules.push(line);
+                                    curr_rules_regex.push(line);
                                 }
                             }
                         }
@@ -237,7 +280,7 @@ impl AccessControl {
 
         const REGEX_SIZE_LIMIT: usize = usize::max_value();
 
-        let outbound_block_regex = match RegexSetBuilder::new(outbound_block_rules)
+        let outbound_block_regex = match RegexSetBuilder::new(outbound_block_rules_regex)
             .size_limit(REGEX_SIZE_LIMIT)
             .build()
         {
@@ -248,7 +291,7 @@ impl AccessControl {
             }
         };
 
-        let bypass_regex = match RegexSetBuilder::new(bypass_rules)
+        let bypass_regex = match RegexSetBuilder::new(bypass_rules_regex)
             .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
             .build()
@@ -263,7 +306,7 @@ impl AccessControl {
             }
         };
 
-        let proxy_regex = match RegexSetBuilder::new(proxy_rules)
+        let proxy_regex = match RegexSetBuilder::new(proxy_rules_regex)
             .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
             .build()
@@ -279,9 +322,21 @@ impl AccessControl {
         };
 
         Ok(AccessControl {
-            outbound_block: Rules::new(outbound_block_ipv4, outbound_block_ipv6, outbound_block_regex),
-            black_list: Rules::new(bypass_ipv4, bypass_ipv6, bypass_regex),
-            white_list: Rules::new(proxy_ipv4, proxy_ipv6, proxy_regex),
+            outbound_block: Rules::new(
+                outbound_block_ipv4,
+                outbound_block_ipv6,
+                outbound_block_regex,
+                outbound_block_rules_set,
+                outbound_block_rules_tree,
+            ),
+            black_list: Rules::new(
+                bypass_ipv4,
+                bypass_ipv6,
+                bypass_regex,
+                bypass_rules_set,
+                bypass_rules_tree,
+            ),
+            white_list: Rules::new(proxy_ipv4, proxy_ipv6, proxy_regex, proxy_rules_set, proxy_rules_tree),
             mode,
         })
     }
