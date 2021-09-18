@@ -13,7 +13,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use regex::{RegexSet, RegexSetBuilder};
+use regex::bytes::{RegexSet, RegexSetBuilder};
 
 use shadowsocks::{context::Context, relay::socks5::Address};
 
@@ -102,7 +102,7 @@ impl Rules {
 
     /// Check if the specified host matches any rules
     fn check_host_matched(&self, host: &str) -> bool {
-        self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host)
+        self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host.as_bytes())
     }
 
     /// Check if there are no rules for IP addresses
