@@ -637,7 +637,7 @@ Example configuration:
 # Match with subdomains
 ||google.com
 # An internationalized domain name should be converted to punycode
-# |☃-⌘\.com - WRONG
+# |☃-⌘.com - WRONG
 |xn----dqo34k.com
 # ||джpумлатест.bрфa - WRONG
 ||xn--p-8sbkgc5ag7bhce.xn--ba-lmcq
