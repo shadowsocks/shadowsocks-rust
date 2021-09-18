@@ -3,6 +3,7 @@
 //! This is for advance controlling server behaviors in both local and proxy servers.
 
 use std::{
+    borrow::Cow,
     collections::HashSet,
     fmt,
     fs::File,
@@ -100,7 +101,7 @@ impl Rules {
         }
     }
 
-    /// Check if the specified host matches any rules
+    /// Check if the specified ASCII host matches any rules
     fn check_host_matched(&self, host: &str) -> bool {
         self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host.as_bytes())
     }
@@ -158,7 +159,7 @@ impl ParsingRules {
 
     fn add_tree_rule(&mut self, rule: &str) -> io::Result<()> {
         // SubDomainsTree do lowercase conversion inside insert
-        self.rules_tree.insert(&self.check_is_ascii(rule)?);
+        self.rules_tree.insert(self.check_is_ascii(rule)?);
         Ok(())
     }
 
@@ -338,7 +339,7 @@ impl AccessControl {
         })
     }
 
-    /// Check if domain name is in proxy_list.
+    /// Check if ASCII domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
     ///
     /// Return
@@ -390,6 +391,14 @@ impl AccessControl {
         }
     }
 
+    /// Returns the ASCII representation a domain name,
+    /// if conversion fails returns original string
+    fn convert_to_ascii(host: &str) -> Cow<str> {
+        idna::domain_to_ascii(host)
+            .map(From::from)
+            .unwrap_or_else(|_| host.into())
+    }
+
     /// Check if target address should be bypassed (for client)
     ///
     /// This function may perform a DNS resolution
@@ -398,11 +407,7 @@ impl AccessControl {
             Address::SocketAddress(ref addr) => !self.check_ip_in_proxy_list(&addr.ip()),
             // Resolve hostname and check the list
             Address::DomainNameAddress(ref host, port) => {
-                // FIXME: Maybe return some error?
-                let is_matched = idna::domain_to_ascii(host)
-                    .map(|host| self.check_host_in_proxy_list(&host))
-                    .unwrap_or(None);
-                if let Some(value) = is_matched {
+                if let Some(value) = self.check_host_in_proxy_list(&Self::convert_to_ascii(host)) {
                     return !value;
                 }
                 if self.is_ip_empty() {
@@ -442,7 +447,7 @@ impl AccessControl {
         match outbound {
             Address::SocketAddress(saddr) => self.outbound_block.check_ip_matched(&saddr.ip()),
             Address::DomainNameAddress(host, port) => {
-                if self.outbound_block.check_host_matched(host) {
+                if self.outbound_block.check_host_matched(&Self::convert_to_ascii(host)) {
                     return true;
                 }
 
