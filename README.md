@@ -630,7 +630,17 @@ Example configuration:
 [outbound_block_list]
 127.0.0.1/8
 ::1
-(^|\.)baidu.com
+# Using regular expression
+^[a-z]{5}\.baidu\.com
+# Match exactly
+|baidu.com
+# Match with subdomains
+||google.com
+# An internationalized domain name should be converted to punycode
+# |☃-⌘\.com - WRONG
+|xn----dqo34k.com
+# ||джpумлатест.bрфa - WRONG
+||xn--p-8sbkgc5ag7bhce.xn--ba-lmcq
 
 # CLIENTS
 # For sslocal, ..., bypasses all targets by default
@@ -638,7 +648,7 @@ Example configuration:
 
 # Proxy these addresses
 [proxy_list]
-(^|\.)google.com
+||google.com
 8.8.8.8
 ```
 
