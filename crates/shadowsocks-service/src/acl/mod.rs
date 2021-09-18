@@ -116,6 +116,85 @@ impl Rules {
     }
 }
 
+struct ParsingRules {
+    name: &'static str,
+    ipv4: IpRange<Ipv4Net>,
+    ipv6: IpRange<Ipv6Net>,
+    rules_regex: Vec<String>,
+    rules_set: HashSet<String>,
+    rules_tree: SubDomainsTree,
+}
+
+impl ParsingRules {
+    fn new(name: &'static str) -> Self {
+        ParsingRules {
+            name,
+            ipv4: IpRange::new(),
+            ipv6: IpRange::new(),
+            rules_regex: Vec::new(),
+            rules_set: HashSet::new(),
+            rules_tree: SubDomainsTree::new(),
+        }
+    }
+
+    fn add_ipv4_rule(&mut self, rule: impl Into<Ipv4Net>) {
+        self.ipv4.add(rule.into());
+    }
+
+    fn add_ipv6_rule(&mut self, rule: impl Into<Ipv6Net>) {
+        self.ipv6.add(rule.into());
+    }
+
+    fn add_regex_rule(&mut self, rule: String) {
+        // FIXME: If this line is not a valid regex, how can we know without actually compile it?
+        self.rules_regex.push(rule);
+    }
+
+    fn add_set_rule(&mut self, rule: &str) -> io::Result<()> {
+        self.rules_set.insert(self.check_is_ascii(rule)?.to_string());
+        Ok(())
+    }
+
+    fn add_tree_rule(&mut self, rule: &str) -> io::Result<()> {
+        self.rules_tree.insert(self.check_is_ascii(rule)?);
+        Ok(())
+    }
+
+    fn check_is_ascii<'a>(&self, str: &'a str) -> io::Result<&'a str> {
+        if str.is_ascii() {
+            Ok(str)
+        } else {
+            Err(Error::new(
+                ErrorKind::Other, 
+                format!("{} parsing error: Unicode not allowed here `{}`", self.name, str)
+            ))
+        }
+    }
+
+    fn compile_regex(name: &'static str, regex_rules: Vec<String>) -> io::Result<RegexSet> {
+        const REGEX_SIZE_LIMIT: usize = usize::max_value();
+        RegexSetBuilder::new(regex_rules)
+            .case_insensitive(true)
+            .size_limit(REGEX_SIZE_LIMIT)
+            .unicode(false)
+            .build()
+            .map_err(|err| Error::new(
+                ErrorKind::Other,
+                format!("{} regex error: {}", name, err),
+            ))
+    }
+
+    fn into_rules(self) -> io::Result<Rules> {
+        Ok(Rules::new(
+            self.ipv4,
+            self.ipv6,
+            Self::compile_regex(self.name, self.rules_regex)?,
+            self.rules_set,
+            self.rules_tree,
+        ))
+    }
+}
+
 /// ACL rules
 ///
 /// ## Sections
@@ -163,6 +242,8 @@ impl Rules {
 /// - CIDR form network addresses, like `10.9.0.32/16`
 /// - IP addresses, like `127.0.0.1` or `::1`
 /// - Regular Expression for matching hosts, like `(^|\.)gmail\.com$`
+/// - Domain with preceding `|` for exact matching, like `|google.com`
+/// - Domain with preceding `||` for matching with subdomains, like `||google.com`
 #[derive(Debug, Clone)]
 pub struct AccessControl {
     outbound_block: Rules,
@@ -179,27 +260,10 @@ impl AccessControl {
 
         let mut mode = Mode::BlackList;
 
-        let mut outbound_block_ipv4 = IpRange::new();
-        let mut outbound_block_ipv6 = IpRange::new();
-        let mut outbound_block_rules_regex = Vec::new();
-        let mut outbound_block_rules_set = HashSet::new();
-        let mut outbound_block_rules_tree = SubDomainsTree::new();
-        let mut bypass_ipv4 = IpRange::new();
-        let mut bypass_ipv6 = IpRange::new();
-        let mut bypass_rules_regex = Vec::new();
-        let mut bypass_rules_set = HashSet::new();
-        let mut bypass_rules_tree = SubDomainsTree::new();
-        let mut proxy_ipv4 = IpRange::new();
-        let mut proxy_ipv6 = IpRange::new();
-        let mut proxy_rules_regex = Vec::new();
-        let mut proxy_rules_set = HashSet::new();
-        let mut proxy_rules_tree = SubDomainsTree::new();
-
-        let mut curr_ipv4 = &mut bypass_ipv4;
-        let mut curr_ipv6 = &mut bypass_ipv6;
-        let mut curr_rules_regex = &mut bypass_rules_regex;
-        let mut curr_rules_set = &mut bypass_rules_set;
-        let mut curr_rules_tree = &mut bypass_rules_tree;
+        let mut outbound_block = ParsingRules::new("[outbound_block_list]");
+        let mut bypass = ParsingRules::new("[black_list] or [bypass_list]");
+        let mut proxy = ParsingRules::new("[white_list] or [proxy_list]");
+        let mut curr = &mut bypass;
 
         for line in r.lines() {
             let line = line?;
@@ -213,12 +277,12 @@ impl AccessControl {
             }
 
             if line.starts_with("||") {
-                curr_rules_tree.insert(&line[2..]);
+                curr.add_tree_rule(&line[2..])?;
                 continue;
             }
 
             if line.starts_with('|') {
-                curr_rules_set.insert(line[1..].to_string());
+                curr.add_set_rule(&line[1..])?;
                 continue;
             }
 
@@ -230,46 +294,33 @@ impl AccessControl {
                     mode = Mode::BlackList;
                 }
                 "[outbound_block_list]" => {
-                    curr_ipv4 = &mut outbound_block_ipv4;
-                    curr_ipv6 = &mut outbound_block_ipv6;
-                    curr_rules_regex = &mut outbound_block_rules_regex;
-                    curr_rules_set = &mut outbound_block_rules_set;
-                    curr_rules_tree = &mut outbound_block_rules_tree;
+                    curr = &mut outbound_block;
                 }
                 "[black_list]" | "[bypass_list]" => {
-                    curr_ipv4 = &mut bypass_ipv4;
-                    curr_ipv6 = &mut bypass_ipv6;
-                    curr_rules_regex = &mut bypass_rules_regex;
-                    curr_rules_set = &mut bypass_rules_set;
-                    curr_rules_tree = &mut bypass_rules_tree;
+                    curr = &mut bypass;
                 }
                 "[white_list]" | "[proxy_list]" => {
-                    curr_ipv4 = &mut proxy_ipv4;
-                    curr_ipv6 = &mut proxy_ipv6;
-                    curr_rules_regex = &mut proxy_rules_regex;
-                    curr_rules_set = &mut proxy_rules_set;
-                    curr_rules_tree = &mut proxy_rules_tree;
+                    curr = &mut proxy;
                 }
                 _ => {
                     match line.parse::<IpNet>() {
                         Ok(IpNet::V4(v4)) => {
-                            curr_ipv4.add(v4);
+                            curr.add_ipv4_rule(v4);
                         }
                         Ok(IpNet::V6(v6)) => {
-                            curr_ipv6.add(v6);
+                            curr.add_ipv6_rule(v6);
                         }
                         Err(..) => {
                             // Maybe it is a pure IpAddr
                             match line.parse::<IpAddr>() {
                                 Ok(IpAddr::V4(v4)) => {
-                                    curr_ipv4.add(Ipv4Net::from(v4));
+                                    curr.add_ipv4_rule(v4);
                                 }
                                 Ok(IpAddr::V6(v6)) => {
-                                    curr_ipv6.add(Ipv6Net::from(v6));
+                                    curr.add_ipv6_rule(v6);
                                 }
                                 Err(..) => {
-                                    // FIXME: If this line is not a valid regex, how can we know without actually compile it?
-                                    curr_rules_regex.push(line);
+                                    curr.add_regex_rule(line);
                                 }
                             }
                         }
@@ -278,68 +329,10 @@ impl AccessControl {
             }
         }
 
-        const REGEX_SIZE_LIMIT: usize = usize::max_value();
-
-        let outbound_block_regex = match RegexSetBuilder::new(outbound_block_rules_regex)
-            .size_limit(REGEX_SIZE_LIMIT)
-            .unicode(false)
-            .build()
-        {
-            Ok(r) => r,
-            Err(err) => {
-                let err = Error::new(ErrorKind::Other, format!("[outbound_block_list] regex error: {}", err));
-                return Err(err);
-            }
-        };
-
-        let bypass_regex = match RegexSetBuilder::new(bypass_rules_regex)
-            .case_insensitive(true)
-            .size_limit(REGEX_SIZE_LIMIT)
-            .unicode(false)
-            .build()
-        {
-            Ok(r) => r,
-            Err(err) => {
-                let err = Error::new(
-                    ErrorKind::Other,
-                    format!("[black_list] or [bypass_list] regex error: {}", err),
-                );
-                return Err(err);
-            }
-        };
-
-        let proxy_regex = match RegexSetBuilder::new(proxy_rules_regex)
-            .case_insensitive(true)
-            .size_limit(REGEX_SIZE_LIMIT)
-            .unicode(false)
-            .build()
-        {
-            Ok(r) => r,
-            Err(err) => {
-                let err = Error::new(
-                    ErrorKind::Other,
-                    format!("[white_list] or [proxy_list] regex error: {}", err),
-                );
-                return Err(err);
-            }
-        };
-
         Ok(AccessControl {
-            outbound_block: Rules::new(
-                outbound_block_ipv4,
-                outbound_block_ipv6,
-                outbound_block_regex,
-                outbound_block_rules_set,
-                outbound_block_rules_tree,
-            ),
-            black_list: Rules::new(
-                bypass_ipv4,
-                bypass_ipv6,
-                bypass_regex,
-                bypass_rules_set,
-                bypass_rules_tree,
-            ),
-            white_list: Rules::new(proxy_ipv4, proxy_ipv6, proxy_regex, proxy_rules_set, proxy_rules_tree),
+            outbound_block: outbound_block.into_rules()?,
+            black_list: bypass.into_rules()?,
+            white_list: proxy.into_rules()?,
             mode,
         })
     }
