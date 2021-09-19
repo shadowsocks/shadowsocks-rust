@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::{self, Debug},
+};
 
 #[derive(Debug, Clone)]
 struct DomainPart {
@@ -15,8 +18,14 @@ impl DomainPart {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SubDomainsTree(HashMap<String, DomainPart>);
+
+impl Debug for SubDomainsTree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SubDomainsTree {{ .. }}")
+    }
+}
 
 impl SubDomainsTree {
     pub fn new() -> Self {
@@ -27,7 +36,9 @@ impl SubDomainsTree {
         let mut current_map = &mut self.0;
         let mut last_included = None;
         for part in value.rsplit('.') {
-            let entry = current_map.entry(part.to_string()).or_insert_with(|| DomainPart::new());
+            let entry = current_map
+                .entry(part.to_ascii_lowercase())
+                .or_insert_with(DomainPart::new);
             // We don't need to include `a.b.c` if we already have `b.c`
             if entry.included {
                 return;

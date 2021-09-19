@@ -3,6 +3,7 @@
 //! This is for advance controlling server behaviors in both local and proxy servers.
 
 use std::{
+    borrow::Cow,
     collections::HashSet,
     fmt,
     fs::File,
@@ -41,7 +42,11 @@ struct Rules {
 
 impl fmt::Debug for Rules {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Rules {{ ipv4: {:?}, ipv6: {:?}, rule_regex: [", self.ipv4, self.ipv6)?;
+        write!(
+            f,
+            "Rules {{ ipv4: {:?}, ipv6: {:?}, rule_regex: [",
+            self.ipv4, self.ipv6
+        )?;
 
         let max_len = 2;
         let has_more = self.rule_regex.len() > max_len;
@@ -57,7 +62,21 @@ impl fmt::Debug for Rules {
             f.write_str(", ...")?;
         }
 
-        write!(f, "], rule_set: {:?}, rule_tree: {:?} }}", self.rule_set, self.rule_tree)
+        write!(f, "], rule_set: [")?;
+
+        let has_more = self.rule_set.len() > max_len;
+        for (idx, r) in self.rule_set.iter().take(max_len).enumerate() {
+            if idx > 0 {
+                f.write_str(", ")?;
+            }
+            f.write_str(r)?;
+        }
+
+        if has_more {
+            f.write_str(", ...")?;
+        }
+
+        write!(f, "], rule_tree: {:?} }}", self.rule_tree)
     }
 }
 
@@ -100,8 +119,9 @@ impl Rules {
         }
     }
 
-    /// Check if the specified host matches any rules
+    /// Check if the specified ASCII host matches any rules
     fn check_host_matched(&self, host: &str) -> bool {
+        let host = host.trim_end_matches('.'); // FQDN, removes the last `.`
         self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host.as_bytes())
     }
 
@@ -145,28 +165,31 @@ impl ParsingRules {
         self.ipv6.add(rule.into());
     }
 
-    fn add_regex_rule(&mut self, rule: String) {
+    fn add_regex_rule(&mut self, mut rule: String) {
+        rule.make_ascii_lowercase();
         // FIXME: If this line is not a valid regex, how can we know without actually compile it?
         self.rules_regex.push(rule);
     }
 
     fn add_set_rule(&mut self, rule: &str) -> io::Result<()> {
-        self.rules_set.insert(self.check_is_ascii(rule)?.to_string());
+        self.rules_set.insert(self.check_is_ascii(rule)?.to_ascii_lowercase());
         Ok(())
     }
 
     fn add_tree_rule(&mut self, rule: &str) -> io::Result<()> {
+        // SubDomainsTree do lowercase conversion inside insert
         self.rules_tree.insert(self.check_is_ascii(rule)?);
         Ok(())
     }
 
     fn check_is_ascii<'a>(&self, str: &'a str) -> io::Result<&'a str> {
         if str.is_ascii() {
-            Ok(str)
+            // Remove the last `.` of FQDN
+            Ok(str.trim_end_matches('.'))
         } else {
             Err(Error::new(
-                ErrorKind::Other, 
-                format!("{} parsing error: Unicode not allowed here `{}`", self.name, str)
+                ErrorKind::Other,
+                format!("{} parsing error: Unicode not allowed here `{}`", self.name, str),
             ))
         }
     }
@@ -174,14 +197,10 @@ impl ParsingRules {
     fn compile_regex(name: &'static str, regex_rules: Vec<String>) -> io::Result<RegexSet> {
         const REGEX_SIZE_LIMIT: usize = usize::max_value();
         RegexSetBuilder::new(regex_rules)
-            .case_insensitive(true)
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
             .build()
-            .map_err(|err| Error::new(
-                ErrorKind::Other,
-                format!("{} regex error: {}", name, err),
-            ))
+            .map_err(|err| Error::new(ErrorKind::Other, format!("{} regex error: {}", name, err)))
     }
 
     fn into_rules(self) -> io::Result<Rules> {
@@ -276,17 +295,19 @@ impl AccessControl {
                 continue;
             }
 
-            if line.starts_with("||") {
-                curr.add_tree_rule(&line[2..])?;
+            let line = line.trim();
+
+            if let Some(rule) = line.strip_prefix("||") {
+                curr.add_tree_rule(rule)?;
                 continue;
             }
 
-            if line.starts_with('|') {
-                curr.add_set_rule(&line[1..])?;
+            if let Some(rule) = line.strip_prefix('|') {
+                curr.add_set_rule(rule)?;
                 continue;
             }
 
-            match line.as_str() {
+            match line {
                 "[reject_all]" | "[bypass_all]" => {
                     mode = Mode::WhiteList;
                 }
@@ -320,7 +341,7 @@ impl AccessControl {
                                     curr.add_ipv6_rule(v6);
                                 }
                                 Err(..) => {
-                                    curr.add_regex_rule(line);
+                                    curr.add_regex_rule(line.to_owned());
                                 }
                             }
                         }
@@ -345,6 +366,18 @@ impl AccessControl {
     /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
     /// - `None` if `host` doesn't match any rules
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
+        let host = Self::convert_to_ascii(host);
+        self.check_ascii_host_in_proxy_list(&host)
+    }
+
+    /// Check if ASCII domain name is in proxy_list.
+    /// If so, it should be resolved from remote (for Android's DNS relay)
+    ///
+    /// Return
+    /// - `Some(true)` if `host` is in `white_list` (should be proxied)
+    /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
+    /// - `None` if `host` doesn't match any rules
+    pub fn check_ascii_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         // Addresses in proxy_list will be proxied
         if self.white_list.check_host_matched(host) {
             return Some(true);
@@ -387,6 +420,14 @@ impl AccessControl {
             Mode::BlackList => true,
             Mode::WhiteList => false,
         }
+    }
+
+    /// Returns the ASCII representation a domain name,
+    /// if conversion fails returns original string
+    fn convert_to_ascii(host: &str) -> Cow<str> {
+        idna::domain_to_ascii(host)
+            .map(From::from)
+            .unwrap_or_else(|_| host.into())
     }
 
     /// Check if target address should be bypassed (for client)
@@ -437,7 +478,7 @@ impl AccessControl {
         match outbound {
             Address::SocketAddress(saddr) => self.outbound_block.check_ip_matched(&saddr.ip()),
             Address::DomainNameAddress(host, port) => {
-                if self.outbound_block.check_host_matched(host) {
+                if self.outbound_block.check_host_matched(&Self::convert_to_ascii(host)) {
                     return true;
                 }
 
