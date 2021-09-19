@@ -62,11 +62,21 @@ impl fmt::Debug for Rules {
             f.write_str(", ...")?;
         }
 
-        write!(
-            f,
-            "], rule_set: {:?}, rule_tree: {:?} }}",
-            self.rule_set, self.rule_tree
-        )
+        write!(f, "], rule_set: [")?;
+
+        let has_more = self.rule_set.len() > max_len;
+        for (idx, r) in self.rule_set.iter().take(max_len).enumerate() {
+            if idx > 0 {
+                f.write_str(", ")?;
+            }
+            f.write_str(r)?;
+        }
+
+        if has_more {
+            f.write_str(", ...")?;
+        }
+
+        write!(f, "], rule_tree: {:?} }}", self.rule_tree)
     }
 }
 
