@@ -316,7 +316,7 @@ fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
         let mut name = name.to_ascii();
         name.pop();
         name.make_ascii_lowercase();
-        acl.check_host_in_proxy_list(&name)
+        acl.check_ascii_host_in_proxy_list(&name)
     } else {
         // unconditionally use default for PQDNs
         Some(acl.is_default_in_proxy_list())

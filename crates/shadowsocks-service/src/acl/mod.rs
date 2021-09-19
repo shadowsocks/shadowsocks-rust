@@ -42,7 +42,11 @@ struct Rules {
 
 impl fmt::Debug for Rules {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Rules {{ ipv4: {:?}, ipv6: {:?}, rule_regex: [", self.ipv4, self.ipv6)?;
+        write!(
+            f,
+            "Rules {{ ipv4: {:?}, ipv6: {:?}, rule_regex: [",
+            self.ipv4, self.ipv6
+        )?;
 
         let max_len = 2;
         let has_more = self.rule_regex.len() > max_len;
@@ -58,7 +62,11 @@ impl fmt::Debug for Rules {
             f.write_str(", ...")?;
         }
 
-        write!(f, "], rule_set: {:?}, rule_tree: {:?} }}", self.rule_set, self.rule_tree)
+        write!(
+            f,
+            "], rule_set: {:?}, rule_tree: {:?} }}",
+            self.rule_set, self.rule_tree
+        )
     }
 }
 
@@ -168,8 +176,8 @@ impl ParsingRules {
             Ok(str)
         } else {
             Err(Error::new(
-                ErrorKind::Other, 
-                format!("{} parsing error: Unicode not allowed here `{}`", self.name, str)
+                ErrorKind::Other,
+                format!("{} parsing error: Unicode not allowed here `{}`", self.name, str),
             ))
         }
     }
@@ -180,10 +188,7 @@ impl ParsingRules {
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
             .build()
-            .map_err(|err| Error::new(
-                ErrorKind::Other,
-                format!("{} regex error: {}", name, err),
-            ))
+            .map_err(|err| Error::new(ErrorKind::Other, format!("{} regex error: {}", name, err)))
     }
 
     fn into_rules(self) -> io::Result<Rules> {
@@ -339,7 +344,7 @@ impl AccessControl {
         })
     }
 
-    /// Check if ASCII domain name is in proxy_list.
+    /// Check if domain name is in proxy_list.
     /// If so, it should be resolved from remote (for Android's DNS relay)
     ///
     /// Return
@@ -347,6 +352,18 @@ impl AccessControl {
     /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
     /// - `None` if `host` doesn't match any rules
     pub fn check_host_in_proxy_list(&self, host: &str) -> Option<bool> {
+        let host = Self::convert_to_ascii(host);
+        self.check_ascii_host_in_proxy_list(&host)
+    }
+
+    /// Check if ASCII domain name is in proxy_list.
+    /// If so, it should be resolved from remote (for Android's DNS relay)
+    ///
+    /// Return
+    /// - `Some(true)` if `host` is in `white_list` (should be proxied)
+    /// - `Some(false)` if `host` is in `black_list` (should be bypassed)
+    /// - `None` if `host` doesn't match any rules
+    pub fn check_ascii_host_in_proxy_list(&self, host: &str) -> Option<bool> {
         // Addresses in proxy_list will be proxied
         if self.white_list.check_host_matched(host) {
             return Some(true);
@@ -407,7 +424,7 @@ impl AccessControl {
             Address::SocketAddress(ref addr) => !self.check_ip_in_proxy_list(&addr.ip()),
             // Resolve hostname and check the list
             Address::DomainNameAddress(ref host, port) => {
-                if let Some(value) = self.check_host_in_proxy_list(&Self::convert_to_ascii(host)) {
+                if let Some(value) = self.check_host_in_proxy_list(host) {
                     return !value;
                 }
                 if self.is_ip_empty() {
