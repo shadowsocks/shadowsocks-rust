@@ -111,6 +111,7 @@ impl Rules {
 
     /// Check if the specified ASCII host matches any rules
     fn check_host_matched(&self, host: &str) -> bool {
+        let host = host.trim_end_matches('.'); // FQDN, removes the last `.`
         self.rule_set.contains(host) || self.rule_tree.contains(host) || self.rule_regex.is_match(host.as_bytes())
     }
 
@@ -173,7 +174,8 @@ impl ParsingRules {
 
     fn check_is_ascii<'a>(&self, str: &'a str) -> io::Result<&'a str> {
         if str.is_ascii() {
-            Ok(str)
+            // Remove the last `.` of FQDN
+            Ok(str.trim_end_matches('.'))
         } else {
             Err(Error::new(
                 ErrorKind::Other,
