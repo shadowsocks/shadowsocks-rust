@@ -314,7 +314,6 @@ fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
     if name.is_fqdn() {
         // remove the last dot from FQDN
         let mut name = name.to_ascii();
-        name.pop();
         name.make_ascii_lowercase();
         acl.check_ascii_host_in_proxy_list(&name)
     } else {
