@@ -295,6 +295,8 @@ impl AccessControl {
                 continue;
             }
 
+            let line = line.trim();
+
             if let Some(rule) = line.strip_prefix("||") {
                 curr.add_tree_rule(rule)?;
                 continue;
@@ -305,7 +307,7 @@ impl AccessControl {
                 continue;
             }
 
-            match line.as_str() {
+            match line {
                 "[reject_all]" | "[bypass_all]" => {
                     mode = Mode::WhiteList;
                 }
@@ -339,7 +341,7 @@ impl AccessControl {
                                     curr.add_ipv6_rule(v6);
                                 }
                                 Err(..) => {
-                                    curr.add_regex_rule(line);
+                                    curr.add_regex_rule(line.to_owned());
                                 }
                             }
                         }
