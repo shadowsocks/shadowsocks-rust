@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.12.0-alpha.3"
+version = "1.12.0-alpha.4"
 dependencies = [
  "byte_string",
  "byteorder",
