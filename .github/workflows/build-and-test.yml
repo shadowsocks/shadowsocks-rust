@@ -61,3 +61,14 @@ jobs:
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
             -A clippy::collapsible_else_if
+      - name: prepare AppleSilicon build
+        uses: actions-rs/toolchain@v1
+        with:
+          target: aarch64-apple-darwin
+        if: runner.os == 'macOS'
+      - name: Check compilation for Apple Silicon
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --target aarch64-apple-darwin
+        if: runner.os == 'macOS'
