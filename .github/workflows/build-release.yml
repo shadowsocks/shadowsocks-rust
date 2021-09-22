@@ -68,6 +68,9 @@ jobs:
       matrix:
         # os: [ubuntu-latest, macos-latest]
         os: [macos-latest]
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v2
 
@@ -83,11 +86,17 @@ jobs:
         with:
           profile: minimal
 
+      # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
+      - if: ${{ matrix.target }} == 'aarch-apple-darwin'
+        run: |
+          sudo xcode-select -s /Applications/Xcode_12.4.app &&
+          sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
+
       - name: Build release
         shell: bash
         run: |
           cd build
-          ./build-host-release
+          ./build-host-release -t ${{ matrix.target }}
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
