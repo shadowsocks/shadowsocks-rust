@@ -223,7 +223,7 @@ struct SSServerExtConfig {
     plugin_args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "name")]
     remarks: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
