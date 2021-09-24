@@ -111,6 +111,10 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         context.set_dns_resolver(Arc::new(resolver));
     }
 
+    if config.ipv6_first {
+        context.set_ipv6_first(config.ipv6_first);
+    }
+
     if let Some(acl) = config.acl {
         context.set_acl(acl);
     }

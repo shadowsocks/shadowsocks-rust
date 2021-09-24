@@ -103,6 +103,12 @@ impl Server {
         self.accept_opts = opts;
     }
 
+    /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
+    pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
+        let context = Arc::get_mut(&mut self.context).expect("cannot set ipv6_first on a shared context");
+        context.set_ipv6_first(ipv6_first);
+    }
+
     /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
         let vfut = FuturesUnordered::new();

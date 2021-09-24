@@ -56,6 +56,7 @@ pub struct Manager {
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     acl: Option<Arc<AccessControl>>,
+    ipv6_first: bool,
 }
 
 impl Manager {
@@ -75,6 +76,7 @@ impl Manager {
             udp_expiry_duration: None,
             udp_capacity: None,
             acl: None,
+            ipv6_first: false,
         }
     }
 
@@ -112,6 +114,11 @@ impl Manager {
     /// Set access control list
     pub fn set_acl(&mut self, acl: Arc<AccessControl>) {
         self.acl = Some(acl);
+    }
+
+    /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
+    pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
+        self.ipv6_first = ipv6_first;
     }
 
     /// Start serving
@@ -181,6 +188,10 @@ impl Manager {
 
         if let Some(ref acl) = self.acl {
             server.set_acl(acl.clone());
+        }
+
+        if self.ipv6_first {
+            server.set_ipv6_first(self.ipv6_first);
         }
 
         let server_port = server.config().addr().port();

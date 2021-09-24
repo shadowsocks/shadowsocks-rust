@@ -108,6 +108,10 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.set_acl(acl.clone());
         }
 
+        if config.ipv6_first {
+            server.set_ipv6_first(config.ipv6_first);
+        }
+
         servers.push(server);
     }
 

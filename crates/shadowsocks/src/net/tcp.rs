@@ -49,7 +49,7 @@ impl TcpStream {
         let stream = match *addr {
             ServerAddr::SocketAddr(ref addr) => SysTcpStream::connect(*addr, opts).await?,
             ServerAddr::DomainName(ref domain, port) => {
-                lookup_then!(context, domain, port, |addr| {
+                lookup_then_connect!(context, domain, port, |addr| {
                     SysTcpStream::connect(addr, opts).await
                 })?
                 .1
@@ -68,7 +68,7 @@ impl TcpStream {
         let stream = match *addr {
             Address::SocketAddress(ref addr) => SysTcpStream::connect(*addr, opts).await?,
             Address::DomainNameAddress(ref domain, port) => {
-                lookup_then!(context, domain, port, |addr| {
+                lookup_then_connect!(context, domain, port, |addr| {
                     SysTcpStream::connect(addr, opts).await
                 })?
                 .1

@@ -98,6 +98,9 @@ pub struct Context {
 
     // trust-dns resolver, which supports REAL asynchronous resolving, and also customizable
     dns_resolver: Arc<DnsResolver>,
+
+    // Connect IPv6 address first
+    ipv6_first: bool,
 }
 
 /// `Context` for sharing between services
@@ -110,6 +113,7 @@ impl Context {
         Context {
             nonce_ppbloom,
             dns_resolver: Arc::new(DnsResolver::system_resolver()),
+            ipv6_first: false,
         }
     }
 
@@ -148,5 +152,15 @@ impl Context {
     #[allow(clippy::needless_lifetimes)]
     pub async fn dns_resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
         self.dns_resolver.resolve(addr, port).await
+    }
+
+    /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
+    pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
+        self.ipv6_first = ipv6_first;
+    }
+
+    /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
+    pub fn ipv6_first(&self) -> bool {
+        self.ipv6_first
     }
 }
