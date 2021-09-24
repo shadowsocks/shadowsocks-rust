@@ -35,7 +35,7 @@ impl Default for TcpSocketOpts {
 }
 
 /// Options for connecting to remote server
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectOpts {
     /// Linux mark based routing, going to set by `setsockopt` with `SO_MARK` option
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -60,32 +60,9 @@ pub struct ConnectOpts {
     pub tcp: TcpSocketOpts,
 }
 
-impl Default for ConnectOpts {
-    fn default() -> ConnectOpts {
-        ConnectOpts {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            fwmark: None,
-            #[cfg(target_os = "android")]
-            vpn_protect_path: None,
-            bind_local_addr: None,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
-            bind_interface: None,
-            tcp: TcpSocketOpts::default(),
-        }
-    }
-}
-
 /// Inbound connection options
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AcceptOpts {
     /// TCP options
     pub tcp: TcpSocketOpts,
-}
-
-impl Default for AcceptOpts {
-    fn default() -> AcceptOpts {
-        AcceptOpts {
-            tcp: TcpSocketOpts::default(),
-        }
-    }
 }

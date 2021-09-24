@@ -74,18 +74,9 @@ where
 }
 
 // sockopts for send-back sockets
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RedirSocketOpts {
     /// Linux mark based routing, going to set by `setsockopt` with `SO_MARK` option
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fwmark: Option<u32>,
-}
-
-impl Default for RedirSocketOpts {
-    fn default() -> RedirSocketOpts {
-        RedirSocketOpts {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            fwmark: None,
-        }
-    }
 }
