@@ -3,7 +3,7 @@
 use std::{net::IpAddr, time::Duration};
 
 /// Options for connecting to TCP remote server
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TcpSocketOpts {
     /// TCP socket's `SO_SNDBUF`
     pub send_buffer_size: Option<u32>,
@@ -20,18 +20,6 @@ pub struct TcpSocketOpts {
     /// `SO_KEEPALIVE` and sets `TCP_KEEPIDLE`, `TCP_KEEPINTVL` and `TCP_KEEPCNT` respectly,
     /// enables keep-alive messages on connection-oriented sockets
     pub keepalive: Option<Duration>,
-}
-
-impl Default for TcpSocketOpts {
-    fn default() -> TcpSocketOpts {
-        TcpSocketOpts {
-            send_buffer_size: None,
-            recv_buffer_size: None,
-            nodelay: false,
-            fastopen: false,
-            keepalive: None,
-        }
-    }
 }
 
 /// Options for connecting to remote server
