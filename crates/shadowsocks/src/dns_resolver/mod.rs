@@ -11,21 +11,78 @@ mod trust_dns_resolver;
 #[macro_export]
 macro_rules! lookup_then {
     ($context:expr, $addr:expr, $port:expr, |$resolved_addr:ident| $body:block) => {{
-        let mut result = None;
+        use std::net::SocketAddr;
 
-        for $resolved_addr in $context.dns_resolve($addr, $port).await? {
-            match $body {
-                Ok(r) => {
-                    result = Some(Ok(($resolved_addr, r)));
-                    break;
-                }
-                Err(err) => {
-                    result = Some(Err(err));
-                }
+        let ipv6_first = $context.ipv6_first();
+
+        let mut v4_addrs = Vec::new();
+        let mut v6_addrs = Vec::new();
+
+        for addr in $context.dns_resolve($addr, $port).await? {
+            match addr {
+                SocketAddr::V4(..) => v4_addrs.push(addr),
+                SocketAddr::V6(..) => v6_addrs.push(addr),
             }
         }
 
-        result.expect("resolved empty address")
+        let has_v4 = !v4_addrs.is_empty();
+        let has_v6 = !v6_addrs.is_empty();
+
+        let handle_v4 = async {
+            let mut result = None;
+
+            for $resolved_addr in v4_addrs {
+                match $body {
+                    Ok(r) => {
+                        result = Some(Ok(($resolved_addr, r)));
+                        break;
+                    }
+                    Err(err) => {
+                        result = Some(Err(err));
+                    }
+                }
+            }
+
+            result.expect("resolved empty address")
+        };
+
+        let handle_v6 = async {
+            let mut result = None;
+
+            for $resolved_addr in v6_addrs {
+                match $body {
+                    Ok(r) => {
+                        result = Some(Ok(($resolved_addr, r)));
+                        break;
+                    }
+                    Err(err) => {
+                        result = Some(Err(err));
+                    }
+                }
+            }
+
+            result.expect("resolved empty address")
+        };
+
+        assert!(has_v4 || has_v6, "resolved empty address");
+
+        if !has_v4 && has_v6 {
+            handle_v6.await
+        } else if has_v4 && !has_v6 {
+            handle_v4.await
+        } else {
+            if ipv6_first {
+                match handle_v6.await {
+                    Ok(r) => Ok(r),
+                    Err(_v6_err) => handle_v4.await,
+                }
+            } else {
+                match handle_v4.await {
+                    Ok(r) => Ok(r),
+                    Err(_v4_err) => handle_v6.await,
+                }
+            }
+        }
     }};
 }
 
