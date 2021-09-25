@@ -293,7 +293,7 @@ fn main() {
             daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
         }
 
-        info!("shadowsocks {}", VERSION);
+        info!("shadowsocks manager {} build {}", VERSION, common::BUILD_TIME);
 
         #[cfg(feature = "multi-threaded")]
         let mut builder = if matches.is_present("SINGLE_THREADED") {

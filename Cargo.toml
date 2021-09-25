@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.12.0-alpha.4"
+version = "1.12.0-alpha.5"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -124,6 +124,7 @@ clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
 exitcode = "1"
+build-time = "0.1"
 
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }
