@@ -55,7 +55,9 @@ macro_rules! lookup_then_connect {
         assert!(has_v4 || has_v6, "resolved empty address");
 
         // Happy Eyeballs, RFC6555, RFC8305
-        const FIXED_DELAY: Duration = Duration::from_millis(200);
+        //
+        // RFC6555 gives an example that Chrome and Firefox uses 300ms
+        const FIXED_DELAY: Duration = Duration::from_millis(300);
 
         // Connects every addresses synchronously.
         // TODO: Try another address after FIXED_DELAY if one of the IPs is unreachable.
