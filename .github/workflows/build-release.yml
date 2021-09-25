@@ -81,10 +81,12 @@ jobs:
           # echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
           echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Install Rust nightly
+      - name: Install Rust Nightly
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: nightly
+          target: ${{ matrix.target }}
 
       # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
       - if: ${{ matrix.target }} == 'aarch-apple-darwin'
@@ -114,10 +116,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install Rust nightly
+      - name: Install Rust Nightly
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: nightly
 
       - name: Build release
         run: |
