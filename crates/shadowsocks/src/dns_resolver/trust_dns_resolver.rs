@@ -9,16 +9,16 @@ use trust_dns_resolver::{
 };
 
 /// Create a `trust-dns` asynchronous DNS resolver
-pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> ResolveResult<TokioAsyncResolver> {
-    let mut resolver_opts = ResolverOpts::default();
-
-    if ipv6_first {
-        resolver_opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
-    }
-
+pub async fn create_resolver(dns: Option<ResolverConfig>, _ipv6_first: bool) -> ResolveResult<TokioAsyncResolver> {
     // Customized dns resolution
     match dns {
         Some(conf) => {
+            let mut resolver_opts = ResolverOpts::default();
+
+            // Use Ipv4AndIpv6 strategy. Because Ipv4ThenIpv6 or Ipv6ThenIpv4 will return if the first query returned.
+            // Since we want to use Happy Eyeballs to connnect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
+            resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+
             trace!(
                 "initializing DNS resolver with config {:?} opts {:?}",
                 conf,
@@ -50,10 +50,8 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, ipv6_first: bool) -> R
 
                     // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
                     //
-                    // Only ip_strategy should be changed
-                    if ipv6_first {
-                        opts.ip_strategy = LookupIpStrategy::Ipv6thenIpv4;
-                    }
+                    // Only ip_strategy should be changed. Why Ipv4AndIpv6? See comments above.
+                    opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
                     trace!(
                         "initializing DNS resolver with system-config {:?} opts {:?}",
