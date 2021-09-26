@@ -13,11 +13,12 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, _ipv6_first: bool) -> 
     // Customized dns resolution
     match dns {
         Some(conf) => {
-            let mut resolver_opts = ResolverOpts::default();
-
-            // Use Ipv4AndIpv6 strategy. Because Ipv4ThenIpv6 or Ipv6ThenIpv4 will return if the first query returned.
-            // Since we want to use Happy Eyeballs to connnect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
-            resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+            let resolver_opts = ResolverOpts {
+                // Use Ipv4AndIpv6 strategy. Because Ipv4ThenIpv6 or Ipv6ThenIpv4 will return if the first query returned.
+                // Since we want to use Happy Eyeballs to connnect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
+                ip_strategy: LookupIpStrategy::Ipv4AndIpv6,
+                ..ResolverOpts::default()
+            };
 
             trace!(
                 "initializing DNS resolver with config {:?} opts {:?}",
