@@ -23,22 +23,13 @@ use winapi::{
     shared::{
         minwindef::{BOOL, DWORD, FALSE, LPDWORD, LPVOID, TRUE},
         winerror::ERROR_IO_PENDING,
-        ws2def::{
-            ADDRESS_FAMILY,
-            AF_INET,
-            AF_INET6,
-            IPPROTO_TCP,
-            SIO_GET_EXTENSION_FUNCTION_POINTER,
-            SOCKADDR,
-            SOCKADDR_IN,
-        },
+        ws2def::{AF_INET, IPPROTO_TCP, SIO_GET_EXTENSION_FUNCTION_POINTER},
     },
     um::{
         minwinbase::{LPOVERLAPPED, OVERLAPPED},
         mswsock::{LPFN_CONNECTEX, SIO_UDP_CONNRESET, SO_UPDATE_CONNECT_CONTEXT, WSAID_CONNECTEX},
         winnt::PVOID,
         winsock2::{
-            bind,
             closesocket,
             setsockopt,
             socket,
@@ -163,22 +154,10 @@ impl TcpStream {
             }
 
             if opts.bind_local_addr.is_none() {
-                // Bind to a dummy address (required)
-                let mut dummy_addr: SOCKADDR_IN = mem::zeroed();
+                // Bind to a dummy address (required for TFO socket)
                 match addr.ip() {
-                    IpAddr::V4(..) => dummy_addr.sin_family = AF_INET as ADDRESS_FAMILY,
-                    IpAddr::V6(..) => dummy_addr.sin_family = AF_INET6 as ADDRESS_FAMILY,
-                }
-
-                let ret = bind(
-                    sock,
-                    &dummy_addr as *const _ as *const SOCKADDR,
-                    mem::size_of_val(&dummy_addr) as c_int,
-                );
-
-                if ret == SOCKET_ERROR {
-                    let err = WSAGetLastError();
-                    return Err(io::Error::from_raw_os_error(err));
+                    IpAddr::V4(..) => socket.bind(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0))?,
+                    IpAddr::V6(..) => socket.bind(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0))?,
                 }
             }
         }
