@@ -316,7 +316,15 @@ impl AsyncWrite for TcpStream {
 ///
 /// `TCP_FASTOPEN` was supported since Linux 3.7
 pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
-    let queue: libc::c_int = 5;
+    // https://lwn.net/Articles/508865/
+    //
+    // The option value, qlen, specifies this server's limit on the size of the queue of TFO requests that have
+    // not yet completed the three-way handshake (see the remarks on prevention of resource-exhaustion attacks above).
+    //
+    // It was recommended to be `5` in this document.
+    //
+    // But since mio's TcpListener sets backlogs to 1024, it would be nice to have 1024 slots for handshaking TFO requests.
+    let queue: libc::c_int = 1024;
 
     unsafe {
         let ret = libc::setsockopt(
