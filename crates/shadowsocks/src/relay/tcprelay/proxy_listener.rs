@@ -21,6 +21,7 @@ pub struct ProxyListener {
     listener: TcpListener,
     method: CipherKind,
     key: Box<[u8]>,
+    context: SharedContext,
 }
 
 static DEFAULT_ACCEPT_OPTS: Lazy<AcceptOpts> = Lazy::new(Default::default);
@@ -46,15 +47,16 @@ impl ProxyListener {
                 .1
             }
         };
-        Ok(ProxyListener::from_listener(listener, svr_cfg))
+        Ok(ProxyListener::from_listener(context, listener, svr_cfg))
     }
 
     /// Create a `ProxyListener` from a `TcpListener`
-    pub fn from_listener(listener: TcpListener, svr_cfg: &ServerConfig) -> ProxyListener {
+    pub fn from_listener(context: SharedContext, listener: TcpListener, svr_cfg: &ServerConfig) -> ProxyListener {
         ProxyListener {
             listener,
             method: svr_cfg.method(),
             key: svr_cfg.key().to_vec().into_boxed_slice(),
+            context,
         }
     }
 
@@ -74,7 +76,7 @@ impl ProxyListener {
         let stream = map_fn(stream);
 
         // Create a ProxyServerStream and read the target address from it
-        let stream = ProxyServerStream::from_stream(stream, self.method, &self.key);
+        let stream = ProxyServerStream::from_stream(self.context.clone(), stream, self.method, &self.key);
 
         Ok((stream, peer_addr))
     }

@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use shadowsocks::{
+    config::ServerType,
     context::{Context, SharedContext},
     dns_resolver::DnsResolver,
     net::ConnectOpts,
@@ -26,7 +27,7 @@ pub struct ServiceContext {
 impl Default for ServiceContext {
     fn default() -> Self {
         ServiceContext {
-            context: Context::new_shared(),
+            context: Context::new_shared(ServerType::Server),
             connect_opts: ConnectOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),

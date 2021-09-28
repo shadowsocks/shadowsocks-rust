@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use shadowsocks::{
-    config::ServerConfig,
+    config::{ServerConfig, ServerType},
     context::Context,
     crypto::v1::CipherKind,
     relay::{
@@ -94,8 +94,8 @@ async fn tcp_tunnel_example(
     let svr_cfg_server = ServerConfig::new(server_addr, password, method);
     let svr_cfg_local = svr_cfg_server.clone();
 
-    let ctx_server = Context::new_shared();
-    let ctx_local = Context::new_shared();
+    let ctx_server = Context::new_shared(ServerType::Server);
+    let ctx_local = Context::new_shared(ServerType::Local);
 
     let barrier_server = Arc::new(Barrier::new(3));
     let barrier_local = barrier_server.clone();

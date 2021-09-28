@@ -43,10 +43,13 @@ use std::{
 use byte_string::ByteStr;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
-use log::trace;
+use log::{trace, warn};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::crypto::v1::{Cipher, CipherKind};
+use crate::{
+    context::Context,
+    crypto::v1::{Cipher, CipherKind},
+};
 
 /// AEAD packet payload must be smaller than 0x3FFF
 pub const MAX_PACKET_SIZE: usize = 0x3FFF;
@@ -64,6 +67,7 @@ pub struct DecryptedReader {
     cipher: Option<Cipher>,
     buffer: BytesMut,
     method: CipherKind,
+    salt: Option<Bytes>,
 }
 
 impl DecryptedReader {
@@ -76,6 +80,7 @@ impl DecryptedReader {
                 cipher: None,
                 buffer: BytesMut::with_capacity(method.salt_len()),
                 method,
+                salt: None,
             }
         } else {
             DecryptedReader {
@@ -83,6 +88,7 @@ impl DecryptedReader {
                 cipher: Some(Cipher::new(method, key, &[])),
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
                 method,
+                salt: None,
             }
         }
     }
@@ -91,6 +97,7 @@ impl DecryptedReader {
     pub fn poll_read_decrypted<S>(
         &mut self,
         cx: &mut task::Context<'_>,
+        context: &Context,
         stream: &mut S,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>>
@@ -118,7 +125,7 @@ impl DecryptedReader {
                     }
                 },
                 DecryptReadState::ReadData { length } => {
-                    ready!(self.poll_read_data(cx, stream, length))?;
+                    ready!(self.poll_read_data(cx, context, stream, length))?;
 
                     self.state = DecryptReadState::BufferedData { pos: 0 };
                 }
@@ -154,6 +161,11 @@ impl DecryptedReader {
         }
 
         let salt = &self.buffer[..salt_len];
+        // #442 Remember salt in filter after first successful decryption.
+        //
+        // If we check salt right here will allow attacker to flood our filter and eventually block all of our legitimate clients' requests.
+        self.salt = Some(Bytes::copy_from_slice(salt));
+
         trace!("got AEAD salt {:?}", ByteStr::new(salt));
 
         let cipher = Cipher::new(self.method, key, salt);
@@ -182,7 +194,13 @@ impl DecryptedReader {
         Ok(Some(length)).into()
     }
 
-    fn poll_read_data<S>(&mut self, cx: &mut task::Context<'_>, stream: &mut S, size: usize) -> Poll<io::Result<()>>
+    fn poll_read_data<S>(
+        &mut self,
+        cx: &mut task::Context<'_>,
+        context: &Context,
+        stream: &mut S,
+        size: usize,
+    ) -> Poll<io::Result<()>>
     where
         S: AsyncRead + Unpin + ?Sized,
     {
@@ -198,6 +216,15 @@ impl DecryptedReader {
         let m = &mut self.buffer[..data_len];
         if !cipher.decrypt_packet(m) {
             return Err(io::Error::new(ErrorKind::Other, "invalid tag-in")).into();
+        }
+
+        // Check repeated salt after first successful decryption #442
+        if self.salt.is_some() {
+            let salt = self.salt.take().unwrap();
+
+            if context.check_nonce_and_set(&salt) {
+                warn!("detected repeated AEAD salt {:?}", ByteStr::new(&salt));
+            }
         }
 
         // Remote TAG

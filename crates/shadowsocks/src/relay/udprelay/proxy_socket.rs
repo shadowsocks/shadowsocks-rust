@@ -29,6 +29,7 @@ pub struct ProxySocket {
     key: Box<[u8]>,
     send_timeout: Option<Duration>,
     recv_timeout: Option<Duration>,
+    context: SharedContext,
 }
 
 impl ProxySocket {
@@ -49,11 +50,11 @@ impl ProxySocket {
 
         trace!("connected udp remote {} with {:?}", svr_cfg.addr(), opts);
 
-        Ok(ProxySocket::from_socket(svr_cfg, socket.into()))
+        Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))
     }
 
     /// Create a `ProxySocket` from a `UdpSocket`
-    pub fn from_socket(svr_cfg: &ServerConfig, socket: UdpSocket) -> ProxySocket {
+    pub fn from_socket(context: SharedContext, svr_cfg: &ServerConfig, socket: UdpSocket) -> ProxySocket {
         let key = svr_cfg.key().to_vec().into_boxed_slice();
         let method = svr_cfg.method();
 
@@ -65,23 +66,24 @@ impl ProxySocket {
             key,
             send_timeout: None,
             recv_timeout: None,
+            context,
         }
     }
 
     /// Create a `ProxySocket` binding to a specific address
-    pub async fn bind(svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
+    pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
         // Plugins doesn't support UDP
         let socket = match svr_cfg.addr() {
             ServerAddr::SocketAddr(sa) => UdpSocket::bind(sa).await?,
             ServerAddr::DomainName(domain, port) => UdpSocket::bind((domain.as_str(), *port)).await?,
         };
-        Ok(ProxySocket::from_socket(svr_cfg, socket))
+        Ok(ProxySocket::from_socket(context, svr_cfg, socket))
     }
 
     /// Send a UDP packet to addr through proxy
     pub async fn send(&self, addr: &Address, payload: &[u8]) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-        encrypt_payload(self.method, &self.key, addr, payload, &mut send_buf);
+        encrypt_payload(&self.context, self.method, &self.key, addr, payload, &mut send_buf);
 
         trace!(
             "UDP server client send to {}, payload length {} bytes, packet length {} bytes",
@@ -113,7 +115,7 @@ impl ProxySocket {
     /// Send a UDP packet to target from proxy
     pub async fn send_to<A: ToSocketAddrs>(&self, target: A, addr: &Address, payload: &[u8]) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-        encrypt_payload(self.method, &self.key, addr, payload, &mut send_buf);
+        encrypt_payload(&self.context, self.method, &self.key, addr, payload, &mut send_buf);
 
         trace!(
             "UDP server client send to, addr {}, payload length {} bytes, packet length {} bytes",
@@ -158,7 +160,7 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr) = decrypt_payload(self.method, &self.key, &mut recv_buf[..recv_n]).await?;
+        let (n, addr) = decrypt_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?;
 
         trace!(
             "UDP server client receive from {}, packet length {} bytes, payload length {} bytes",
@@ -185,7 +187,7 @@ impl ProxySocket {
                 Err(..) => return Err(io::ErrorKind::TimedOut.into()),
             },
         };
-        let (n, addr) = decrypt_payload(self.method, &self.key, &mut recv_buf[..recv_n]).await?;
+        let (n, addr) = decrypt_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?;
 
         trace!(
             "UDP server client receive from {}, addr {}, packet length {} bytes, payload length {} bytes",

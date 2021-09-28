@@ -11,7 +11,10 @@ use byte_string::ByteStr;
 use log::trace;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
-use crate::crypto::v1::{random_iv_or_salt, CipherCategory, CipherKind};
+use crate::{
+    context::Context,
+    crypto::v1::{random_iv_or_salt, CipherCategory, CipherKind},
+};
 
 use super::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
 #[cfg(feature = "stream-cipher")]
@@ -42,6 +45,7 @@ impl DecryptedReader {
     pub fn poll_read_decrypted<S>(
         &mut self,
         cx: &mut task::Context<'_>,
+        context: &Context,
         stream: &mut S,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>>
@@ -50,8 +54,8 @@ impl DecryptedReader {
     {
         match *self {
             #[cfg(feature = "stream-cipher")]
-            DecryptedReader::Stream(ref mut reader) => reader.poll_read_decrypted(cx, stream, buf),
-            DecryptedReader::Aead(ref mut reader) => reader.poll_read_decrypted(cx, stream, buf),
+            DecryptedReader::Stream(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
+            DecryptedReader::Aead(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
             DecryptedReader::None => Pin::new(stream).poll_read(cx, buf),
         }
     }
@@ -106,7 +110,7 @@ pub struct CryptoStream<S> {
 
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
-    pub fn from_stream(stream: S, method: CipherKind, key: &[u8]) -> CryptoStream<S> {
+    pub fn from_stream(context: &Context, stream: S, method: CipherKind, key: &[u8]) -> CryptoStream<S> {
         let category = method.category();
 
         if category == CipherCategory::None {
@@ -124,23 +128,33 @@ impl<S> CryptoStream<S> {
         let iv = match category {
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => {
-                let local_iv = {
+                let local_iv = loop {
                     let mut iv = vec![0u8; prev_len];
                     if prev_len > 0 {
                         random_iv_or_salt(&mut iv);
                     }
-                    iv
+
+                    if context.check_nonce_and_set(&iv) {
+                        // IV exist, generate another one
+                        continue;
+                    }
+                    break iv;
                 };
                 trace!("generated Stream cipher IV {:?}", ByteStr::new(&local_iv));
                 local_iv
             }
             CipherCategory::Aead => {
-                let local_salt = {
+                let local_salt = loop {
                     let mut salt = vec![0u8; prev_len];
                     if prev_len > 0 {
                         random_iv_or_salt(&mut salt);
                     }
-                    salt
+
+                    if context.check_nonce_and_set(&salt) {
+                        // Salt exist, generate another one
+                        continue;
+                    }
+                    break salt;
                 };
                 trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
@@ -194,8 +208,13 @@ where
 {
     /// Attempt to read decrypted data from `stream`
     #[inline]
-    pub fn poll_read_decrypted(&mut self, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        self.dec.poll_read_decrypted(cx, &mut self.stream, buf)
+    pub fn poll_read_decrypted(
+        &mut self,
+        cx: &mut task::Context<'_>,
+        context: &Context,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.dec.poll_read_decrypted(cx, context, &mut self.stream, buf)
     }
 }
 
@@ -263,8 +282,13 @@ where
 {
     /// Attempt to read decrypted data from `stream`
     #[inline]
-    pub fn poll_read_decrypted(&mut self, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        self.dec.poll_read_decrypted(cx, &mut self.reader, buf)
+    pub fn poll_read_decrypted(
+        &mut self,
+        cx: &mut task::Context<'_>,
+        context: &Context,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.dec.poll_read_decrypted(cx, context, &mut self.reader, buf)
     }
 }
 

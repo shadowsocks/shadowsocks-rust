@@ -5,7 +5,7 @@ use log::info;
 use tokio::{net::UdpSocket, sync::Barrier};
 
 use shadowsocks::{
-    config::ServerConfig,
+    config::{ServerConfig, ServerType},
     context::{Context, SharedContext},
     crypto::v1::CipherKind,
     relay::{socks5::Address, udprelay::ProxySocket},
@@ -62,7 +62,8 @@ async fn udp_tunnel_echo(
     let svr_cfg_server = ServerConfig::new(server_addr, password, method);
     let svr_cfg_local = svr_cfg_server.clone();
 
-    let ctx_local = Context::new_shared();
+    let ctx_server = Context::new_shared(ServerType::Server);
+    let ctx_local = Context::new_shared(ServerType::Local);
 
     let barrier_server = Arc::new(Barrier::new(4));
     let barrier_local = barrier_server.clone();
@@ -83,8 +84,9 @@ async fn udp_tunnel_echo(
 
     tokio::spawn(async move {
         let svr_cfg_server = Arc::new(svr_cfg_server);
+        let context = ctx_server;
 
-        let socket = ProxySocket::bind(&svr_cfg_server).await.unwrap();
+        let socket = ProxySocket::bind(context.clone(), &svr_cfg_server).await.unwrap();
         barrier_server.wait().await;
 
         let mut recv_buf = vec![0u8; 65536];
