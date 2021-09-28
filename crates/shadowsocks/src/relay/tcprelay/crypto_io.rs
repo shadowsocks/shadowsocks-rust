@@ -13,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     context::Context,
-    crypto::v1::{random_iv_or_salt, CipherCategory, CipherKind},
+    crypto::v1::{CipherCategory, CipherKind},
 };
 
 use super::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
@@ -128,34 +128,14 @@ impl<S> CryptoStream<S> {
         let iv = match category {
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => {
-                let local_iv = loop {
-                    let mut iv = vec![0u8; prev_len];
-                    if prev_len > 0 {
-                        random_iv_or_salt(&mut iv);
-                    }
-
-                    if context.check_nonce_and_set(&iv) {
-                        // IV exist, generate another one
-                        continue;
-                    }
-                    break iv;
-                };
+                let mut local_iv = vec![0u8; prev_len];
+                context.generate_nonce(&mut local_iv);
                 trace!("generated Stream cipher IV {:?}", ByteStr::new(&local_iv));
                 local_iv
             }
             CipherCategory::Aead => {
-                let local_salt = loop {
-                    let mut salt = vec![0u8; prev_len];
-                    if prev_len > 0 {
-                        random_iv_or_salt(&mut salt);
-                    }
-
-                    if context.check_nonce_and_set(&salt) {
-                        // Salt exist, generate another one
-                        continue;
-                    }
-                    break salt;
-                };
+                let mut local_salt = vec![0u8; prev_len];
+                context.generate_nonce(&mut local_salt);
                 trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
             }

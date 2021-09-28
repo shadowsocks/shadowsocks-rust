@@ -112,6 +112,8 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.set_ipv6_first(config.ipv6_first);
         }
 
+        server.set_security_config(&config.security);
+
         servers.push(server);
     }
 

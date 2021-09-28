@@ -116,6 +116,9 @@ stream-cipher = ["shadowsocks-service/stream-cipher"]
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
 
+# Enable detection against replay attack
+replay-attack-detect = ["shadowsocks-service/replay-attack-detect"]
+
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.0", optional = true }

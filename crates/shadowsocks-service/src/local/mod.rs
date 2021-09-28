@@ -119,6 +119,8 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         context.set_acl(acl);
     }
 
+    context.set_security_config(&config.security);
+
     assert!(!config.local.is_empty(), "no valid local server configuration");
 
     let context = Arc::new(context);

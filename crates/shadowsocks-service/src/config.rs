@@ -64,7 +64,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
-    config::{ManagerAddr, Mode, ServerAddr, ServerConfig, ServerWeight},
+    config::{ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerWeight},
     crypto::v1::CipherKind,
     plugin::PluginConfig,
 };
@@ -81,6 +81,18 @@ enum SSDnsConfig {
     Simple(String),
     #[cfg(feature = "trust-dns")]
     TrustDns(ResolverConfig),
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct SSSecurityConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replay_attack: Option<SSSecurityReplayAttackConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct SSSecurityReplayAttackConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    policy: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -134,6 +146,8 @@ struct SSConfig {
     ipv6_first: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     fast_open: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    security: Option<SSSecurityConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -812,6 +826,17 @@ impl Default for DnsConfig {
     }
 }
 
+/// Security Config
+#[derive(Clone, Debug, Default)]
+pub struct SecurityConfig {
+    pub replay_attack: SecurityReplayAttackConfig,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SecurityReplayAttackConfig {
+    pub policy: ReplayAttackPolicy,
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -888,6 +913,9 @@ pub struct Config {
     /// Flow statistic report Unix socket path (only for Android)
     #[cfg(feature = "local-flow-stat")]
     pub stat_path: Option<PathBuf>,
+
+    /// Replay attack policy
+    pub security: SecurityConfig,
 }
 
 /// Configuration parsing error kind
@@ -990,6 +1018,8 @@ impl Config {
 
             #[cfg(feature = "local-flow-stat")]
             stat_path: None,
+
+            security: SecurityConfig::default(),
         }
     }
 
@@ -1503,6 +1533,21 @@ impl Config {
         // Uses IPv6 first
         if let Some(f) = config.ipv6_first {
             nconfig.ipv6_first = f;
+        }
+
+        // Security
+        if let Some(sec) = config.security {
+            if let Some(replay_attack) = sec.replay_attack {
+                if let Some(policy) = replay_attack.policy {
+                    match policy.parse::<ReplayAttackPolicy>() {
+                        Ok(p) => nconfig.security.replay_attack.policy = p,
+                        Err(..) => {
+                            let err = Error::new(ErrorKind::Invalid, "invalid replay attack policy", None);
+                            return Err(err);
+                        }
+                    }
+                }
+            }
         }
 
         Ok(nconfig)
@@ -2025,6 +2070,15 @@ impl fmt::Display for Config {
 
         if self.ipv6_first {
             jconf.ipv6_first = Some(self.ipv6_first);
+        }
+
+        // Security
+        if self.security.replay_attack.policy != ReplayAttackPolicy::default() {
+            jconf.security = Some(SSSecurityConfig {
+                replay_attack: Some(SSSecurityReplayAttackConfig {
+                    policy: Some(self.security.replay_attack.policy.to_string()),
+                }),
+            });
         }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())

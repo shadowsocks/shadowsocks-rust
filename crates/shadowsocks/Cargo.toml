@@ -31,6 +31,9 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
+# Enable detection against replay attack
+replay-attack-detect = ["bloomfilter", "spin"]
+
 [dependencies]
 log = "0.4"
 
@@ -41,9 +44,9 @@ byte_string = "1.0"
 base64 = "0.13"
 url = "2.2"
 once_cell = "1.8"
-spin = { version = "0.9", features = ["std"] }
+spin = { version = "0.9", features = ["std"], optional = true }
 pin-project = "1.0"
-bloomfilter = "1.0.8"
+bloomfilter = { version = "1.0.8", optional = true }
 thiserror = "1.0"
 
 serde = { version = "1.0", features = ["derive"] }

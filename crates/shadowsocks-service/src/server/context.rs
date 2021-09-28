@@ -10,7 +10,7 @@ use shadowsocks::{
     relay::Address,
 };
 
-use crate::{acl::AccessControl, net::FlowStat};
+use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
 
 /// Server Service Context
 pub struct ServiceContext {
@@ -104,5 +104,11 @@ impl ServiceContext {
     pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set ipv6_first on a shared context");
         context.set_ipv6_first(ipv6_first);
+    }
+
+    /// Set security config
+    pub fn set_security_config(&mut self, security: &SecurityConfig) {
+        let context = Arc::get_mut(&mut self.context).expect("cannot set security on a shared context");
+        context.set_replay_attack_policy(security.replay_attack.policy);
     }
 }

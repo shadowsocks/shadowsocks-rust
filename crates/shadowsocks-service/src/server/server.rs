@@ -18,7 +18,7 @@ use shadowsocks::{
 };
 use tokio::time;
 
-use crate::{acl::AccessControl, net::FlowStat};
+use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
 
 use super::{context::ServiceContext, tcprelay::TcpServer, udprelay::UdpServer};
 
@@ -107,6 +107,12 @@ impl Server {
     pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
         let context = Arc::get_mut(&mut self.context).expect("cannot set ipv6_first on a shared context");
         context.set_ipv6_first(ipv6_first);
+    }
+
+    /// Set security config
+    pub fn set_security_config(&mut self, security: &SecurityConfig) {
+        let context = Arc::get_mut(&mut self.context).expect("cannot set security on a shared context");
+        context.set_security_config(security)
     }
 
     /// Start serving

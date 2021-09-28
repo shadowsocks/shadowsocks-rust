@@ -43,7 +43,7 @@ use std::{
 use byte_string::ByteStr;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::ready;
-use log::{trace, warn};
+use log::trace;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
@@ -221,10 +221,7 @@ impl DecryptedReader {
         // Check repeated salt after first successful decryption #442
         if self.salt.is_some() {
             let salt = self.salt.take().unwrap();
-
-            if context.check_nonce_and_set(&salt) {
-                warn!("detected repeated AEAD salt {:?}", ByteStr::new(&salt));
-            }
+            context.check_nonce_replay(&salt)?;
         }
 
         // Remote TAG

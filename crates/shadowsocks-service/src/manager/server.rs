@@ -29,7 +29,7 @@ use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
     acl::AccessControl,
-    config::{ManagerConfig, ManagerServerHost},
+    config::{ManagerConfig, ManagerServerHost, SecurityConfig},
     net::FlowStat,
     server::Server,
 };
@@ -57,6 +57,7 @@ pub struct Manager {
     udp_capacity: Option<usize>,
     acl: Option<Arc<AccessControl>>,
     ipv6_first: bool,
+    security: SecurityConfig,
 }
 
 impl Manager {
@@ -77,6 +78,7 @@ impl Manager {
             udp_capacity: None,
             acl: None,
             ipv6_first: false,
+            security: SecurityConfig::default(),
         }
     }
 
@@ -119,6 +121,11 @@ impl Manager {
     /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
     pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
         self.ipv6_first = ipv6_first;
+    }
+
+    /// Set security config
+    pub fn set_security_config(&mut self, security: SecurityConfig) {
+        self.security = security;
     }
 
     /// Start serving
@@ -193,6 +200,8 @@ impl Manager {
         if self.ipv6_first {
             server.set_ipv6_first(self.ipv6_first);
         }
+
+        server.set_security_config(&self.security);
 
         let server_port = server.config().addr().port();
 
