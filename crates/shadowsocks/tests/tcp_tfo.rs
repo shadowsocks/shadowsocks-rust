@@ -13,7 +13,6 @@ use byte_string::ByteStr;
 use futures::future;
 use log::debug;
 use shadowsocks::{
-    config::ServerType,
     context::Context,
     crypto::v1::CipherKind,
     net::{AcceptOpts, ConnectOpts},
@@ -38,7 +37,7 @@ async fn tcp_tunnel_tfo() {
     let svr_cfg_client = svr_cfg.clone();
 
     tokio::spawn(async move {
-        let context = Context::new_shared(ServerType::Server);
+        let context = Context::new_shared();
 
         let mut accept_opts = AcceptOpts::default();
         accept_opts.tcp.fastopen = true;
@@ -73,7 +72,7 @@ async fn tcp_tunnel_tfo() {
 
     tokio::task::yield_now().await;
 
-    let context = Context::new_shared(ServerType::Local);
+    let context = Context::new_shared();
 
     let mut connect_opts = ConnectOpts::default();
     connect_opts.tcp.fastopen = true;

@@ -7,7 +7,6 @@ use std::{net::IpAddr, time::Duration};
 #[cfg(feature = "local-dns")]
 use lru_time_cache::LruCache;
 use shadowsocks::{
-    config::ServerType,
     context::{Context, SharedContext},
     dns_resolver::DnsResolver,
     net::{AcceptOpts, ConnectOpts},
@@ -45,7 +44,7 @@ impl ServiceContext {
     /// Create a new `ServiceContext`
     pub fn new() -> ServiceContext {
         ServiceContext {
-            context: Context::new_shared(ServerType::Local),
+            context: Context::new_shared(),
             connect_opts: ConnectOpts::default(),
             accept_opts: AcceptOpts::default(),
             acl: None,

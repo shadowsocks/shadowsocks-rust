@@ -85,7 +85,7 @@ impl UdpServer {
     }
 
     pub async fn run(mut self, svr_cfg: &ServerConfig) -> io::Result<()> {
-        let socket = ProxySocket::bind(self.context.context(), svr_cfg).await?;
+        let socket = ProxySocket::bind(svr_cfg).await?;
 
         info!(
             "shadowsocks udp server listening on {}",

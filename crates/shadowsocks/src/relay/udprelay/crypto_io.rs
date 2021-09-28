@@ -23,23 +23,15 @@ use std::io::{self, Cursor, ErrorKind};
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
-use log::{trace, warn};
+use log::trace;
 
 use crate::{
-    context::Context,
     crypto::v1::{random_iv_or_salt, Cipher, CipherCategory, CipherKind},
     relay::socks5::Address,
 };
 
 /// Encrypt payload into ShadowSocks UDP encrypted packet
-pub fn encrypt_payload(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    addr: &Address,
-    payload: &[u8],
-    dst: &mut BytesMut,
-) {
+pub fn encrypt_payload(method: CipherKind, key: &[u8], addr: &Address, payload: &[u8], dst: &mut BytesMut) {
     match method.category() {
         CipherCategory::None => {
             dst.reserve(addr.serialized_len() + payload.len());
@@ -47,20 +39,13 @@ pub fn encrypt_payload(
             dst.put_slice(payload);
         }
         #[cfg(feature = "stream-cipher")]
-        CipherCategory::Stream => encrypt_payload_stream(context, method, key, addr, payload, dst),
-        CipherCategory::Aead => encrypt_payload_aead(context, method, key, addr, payload, dst),
+        CipherCategory::Stream => encrypt_payload_stream(method, key, addr, payload, dst),
+        CipherCategory::Aead => encrypt_payload_aead(method, key, addr, payload, dst),
     }
 }
 
 #[cfg(feature = "stream-cipher")]
-fn encrypt_payload_stream(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    addr: &Address,
-    payload: &[u8],
-    dst: &mut BytesMut,
-) {
+fn encrypt_payload_stream(method: CipherKind, key: &[u8], addr: &Address, payload: &[u8], dst: &mut BytesMut) {
     let iv_len = method.iv_len();
     let addr_len = addr.serialized_len();
 
@@ -72,16 +57,9 @@ fn encrypt_payload_stream(
     let iv = &mut dst[..iv_len];
 
     if iv_len > 0 {
-        loop {
-            random_iv_or_salt(iv);
-            if !context.check_nonce_and_set(iv) {
-                break;
-            }
-        }
+        random_iv_or_salt(iv);
 
         trace!("UDP packet generated stream iv {:?}", ByteStr::new(iv));
-    } else {
-        context.check_nonce_and_set(iv);
     }
 
     let mut cipher = Cipher::new(method, key, iv);
@@ -92,14 +70,7 @@ fn encrypt_payload_stream(
     cipher.encrypt_packet(m);
 }
 
-fn encrypt_payload_aead(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    addr: &Address,
-    payload: &[u8],
-    dst: &mut BytesMut,
-) {
+fn encrypt_payload_aead(method: CipherKind, key: &[u8], addr: &Address, payload: &[u8], dst: &mut BytesMut) {
     let salt_len = method.salt_len();
     let addr_len = addr.serialized_len();
 
@@ -111,16 +82,9 @@ fn encrypt_payload_aead(
     let salt = &mut dst[..salt_len];
 
     if salt_len > 0 {
-        loop {
-            random_iv_or_salt(salt);
-            if !context.check_nonce_and_set(salt) {
-                break;
-            }
-        }
+        random_iv_or_salt(salt);
 
         trace!("UDP packet generated aead salt {:?}", ByteStr::new(salt));
-    } else {
-        context.check_nonce_and_set(salt);
     }
 
     let mut cipher = Cipher::new(method, key, salt);
@@ -137,12 +101,7 @@ fn encrypt_payload_aead(
 }
 
 /// Decrypt payload from ShadowSocks UDP encrypted packet
-pub async fn decrypt_payload(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &mut [u8],
-) -> io::Result<(usize, Address)> {
+pub async fn decrypt_payload(method: CipherKind, key: &[u8], payload: &mut [u8]) -> io::Result<(usize, Address)> {
     match method.category() {
         CipherCategory::None => {
             let mut cur = Cursor::new(payload);
@@ -160,18 +119,13 @@ pub async fn decrypt_payload(
             }
         }
         #[cfg(feature = "stream-cipher")]
-        CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload).await,
-        CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload).await,
+        CipherCategory::Stream => decrypt_payload_stream(method, key, payload).await,
+        CipherCategory::Aead => decrypt_payload_aead(method, key, payload).await,
     }
 }
 
 #[cfg(feature = "stream-cipher")]
-async fn decrypt_payload_stream(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &mut [u8],
-) -> io::Result<(usize, Address)> {
+async fn decrypt_payload_stream(method: CipherKind, key: &[u8], payload: &mut [u8]) -> io::Result<(usize, Address)> {
     let plen = payload.len();
     let iv_len = method.iv_len();
 
@@ -181,9 +135,6 @@ async fn decrypt_payload_stream(
     }
 
     let (iv, data) = payload.split_at_mut(iv_len);
-    if context.check_nonce_and_set(iv) {
-        warn!("detected repeated iv {:?}", ByteStr::new(iv));
-    }
 
     trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
     let mut cipher = Cipher::new(method, key, iv);
@@ -199,12 +150,7 @@ async fn decrypt_payload_stream(
     Ok((data_length, addr))
 }
 
-async fn decrypt_payload_aead(
-    context: &Context,
-    method: CipherKind,
-    key: &[u8],
-    payload: &mut [u8],
-) -> io::Result<(usize, Address)> {
+async fn decrypt_payload_aead(method: CipherKind, key: &[u8], payload: &mut [u8]) -> io::Result<(usize, Address)> {
     let plen = payload.len();
     let salt_len = method.salt_len();
     if plen < salt_len {
@@ -213,9 +159,6 @@ async fn decrypt_payload_aead(
     }
 
     let (salt, data) = payload.split_at_mut(salt_len);
-    if context.check_nonce_and_set(salt) {
-        warn!("detected repeated salt {:?}", ByteStr::new(salt));
-    }
 
     trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
 

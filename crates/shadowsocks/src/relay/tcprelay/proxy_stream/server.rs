@@ -10,7 +10,6 @@ use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
-    context::SharedContext,
     crypto::v1::CipherKind,
     relay::tcprelay::crypto_io::{CryptoStream, CryptoStreamReadHalf, CryptoStreamWriteHalf},
 };
@@ -20,19 +19,12 @@ use crate::{
 pub struct ProxyServerStream<S> {
     #[pin]
     stream: CryptoStream<S>,
-    context: SharedContext,
 }
 
 impl<S> ProxyServerStream<S> {
-    pub(crate) fn from_stream(
-        context: SharedContext,
-        stream: S,
-        method: CipherKind,
-        key: &[u8],
-    ) -> ProxyServerStream<S> {
+    pub(crate) fn from_stream(stream: S, method: CipherKind, key: &[u8]) -> ProxyServerStream<S> {
         ProxyServerStream {
-            stream: CryptoStream::from_stream(&context, stream, method, key),
-            context,
+            stream: CryptoStream::from_stream(stream, method, key),
         }
     }
 
@@ -61,10 +53,7 @@ where
         let (reader, writer) = self.stream.into_split();
 
         (
-            ProxyServerStreamReadHalf {
-                reader,
-                context: self.context,
-            },
+            ProxyServerStreamReadHalf { reader },
             ProxyServerStreamWriteHalf { writer },
         )
     }
@@ -77,7 +66,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.stream.poll_read_decrypted(cx, this.context, buf)
+        this.stream.poll_read_decrypted(cx, buf)
     }
 }
 
@@ -106,7 +95,6 @@ where
 pub struct ProxyServerStreamReadHalf<S> {
     #[pin]
     reader: CryptoStreamReadHalf<S>,
-    context: SharedContext,
 }
 
 impl<S> AsyncRead for ProxyServerStreamReadHalf<S>
@@ -116,7 +104,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.reader.poll_read_decrypted(cx, this.context, buf)
+        this.reader.poll_read_decrypted(cx, buf)
     }
 }
 

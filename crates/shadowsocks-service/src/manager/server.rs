@@ -4,7 +4,7 @@ use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
 use shadowsocks::{
-    config::{Mode, ServerConfig, ServerType},
+    config::{Mode, ServerConfig},
     context::{Context, SharedContext},
     crypto::v1::CipherKind,
     dns_resolver::DnsResolver,
@@ -62,7 +62,7 @@ pub struct Manager {
 impl Manager {
     /// Create a new manager server from configuration
     pub fn new(svr_cfg: ManagerConfig) -> Manager {
-        Manager::with_context(svr_cfg, Context::new_shared(ServerType::Server))
+        Manager::with_context(svr_cfg, Context::new_shared())
     }
 
     /// Create a new manager server with context and configuration

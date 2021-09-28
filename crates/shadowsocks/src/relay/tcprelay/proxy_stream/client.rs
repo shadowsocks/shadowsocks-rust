@@ -139,7 +139,7 @@ where
         A: Into<Address>,
     {
         let addr = addr.into();
-        let stream = CryptoStream::from_stream(&context, stream, svr_cfg.method(), svr_cfg.key());
+        let stream = CryptoStream::from_stream(stream, svr_cfg.method(), svr_cfg.key());
 
         ProxyClientStream {
             stream,
@@ -171,7 +171,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.stream.poll_read_decrypted(cx, this.context, buf)
+        this.stream.poll_read_decrypted(cx, buf)
     }
 }
 
@@ -277,7 +277,7 @@ where
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         let mut this = self.project();
-        this.reader.poll_read_decrypted(cx, this.context, buf)
+        this.reader.poll_read_decrypted(cx, buf)
     }
 }
 
