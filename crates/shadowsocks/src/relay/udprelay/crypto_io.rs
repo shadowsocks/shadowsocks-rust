@@ -72,7 +72,7 @@ fn encrypt_payload_stream(
     let iv = &mut dst[..iv_len];
 
     if iv_len > 0 {
-        context.generate_nonce(iv);
+        context.generate_nonce(iv, false);
         trace!("UDP packet generated stream iv {:?}", ByteStr::new(iv));
     }
 
@@ -103,7 +103,7 @@ fn encrypt_payload_aead(
     let salt = &mut dst[..salt_len];
 
     if salt_len > 0 {
-        context.generate_nonce(salt);
+        context.generate_nonce(salt, false);
         trace!("UDP packet generated aead salt {:?}", ByteStr::new(salt));
     }
 
@@ -151,7 +151,7 @@ pub async fn decrypt_payload(
 
 #[cfg(feature = "stream-cipher")]
 async fn decrypt_payload_stream(
-    context: &Context,
+    _context: &Context,
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
@@ -165,7 +165,7 @@ async fn decrypt_payload_stream(
     }
 
     let (iv, data) = payload.split_at_mut(iv_len);
-    context.check_nonce_replay(iv)?;
+    // context.check_nonce_replay(iv)?;
 
     trace!("UDP packet got stream IV {:?}", ByteStr::new(iv));
     let mut cipher = Cipher::new(method, key, iv);
@@ -182,7 +182,7 @@ async fn decrypt_payload_stream(
 }
 
 async fn decrypt_payload_aead(
-    context: &Context,
+    _context: &Context,
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
@@ -195,7 +195,7 @@ async fn decrypt_payload_aead(
     }
 
     let (salt, data) = payload.split_at_mut(salt_len);
-    context.check_nonce_replay(salt)?;
+    // context.check_nonce_replay(salt)?;
 
     trace!("UDP packet got AEAD salt {:?}", ByteStr::new(salt));
 

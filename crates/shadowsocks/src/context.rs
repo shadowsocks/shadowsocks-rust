@@ -59,7 +59,7 @@ impl Context {
     }
 
     /// Generate nonce (IV or SALT)
-    pub fn generate_nonce(&self, nonce: &mut [u8]) {
+    pub fn generate_nonce(&self, nonce: &mut [u8], unique: bool) {
         if nonce.is_empty() {
             return;
         }
@@ -68,7 +68,7 @@ impl Context {
             random_iv_or_salt(nonce);
 
             // Salt already exists, generate a new one.
-            if self.check_nonce_and_set(nonce) {
+            if unique && self.check_nonce_and_set(nonce) {
                 continue;
             }
 

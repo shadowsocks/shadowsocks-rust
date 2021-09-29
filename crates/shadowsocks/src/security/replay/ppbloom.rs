@@ -1,4 +1,5 @@
 use bloomfilter::Bloom;
+use log::debug;
 use spin::Mutex as SpinMutex;
 
 use crate::config::ServerType;
@@ -75,6 +76,12 @@ impl PingPongBloom {
 
             self.bloom_count[self.current] = 0;
             self.blooms[self.current].clear();
+
+            debug!(
+                "bloom filter based replay protector full, each capacity: {}, total filters: {}",
+                self.item_count,
+                self.blooms.len(),
+            );
         }
 
         // Cannot be optimized by `check_and_set`
