@@ -22,7 +22,7 @@ ROOT_DIR=$( cd $( dirname $0 ) && pwd )
 VERSION=$(grep -E '^version' "${ROOT_DIR}/../Cargo.toml" | awk '{print $3}' | sed 's/"//g')
 HOST_TRIPLE=$(rustc -Vv | grep 'host:' | awk '{print $2}')
 
-echo "Started build release ${VERSION} for ${HOST_TRIPLE} with features \"${BUILD_FEATURES}\"..."
+echo "Started build release ${VERSION} for ${HOST_TRIPLE} (target: ${BUILD_TARGET}) with features \"${BUILD_FEATURES}\"..."
 
 if [[ "${BUILD_TARGET}" != "" ]]; then
     if [[ "${BUILD_FEATURES}" != "" ]]; then
@@ -42,15 +42,19 @@ if [[ "$?" != "0" ]]; then
     exit $?;
 fi
 
+if [[ "${BUILD_TARGET}" == "" ]]; then
+    BUILD_TARGET=$HOST_TRIPLE
+fi
+
 TARGET_SUFFIX=""
-if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
+if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then
     TARGET_SUFFIX=".exe"
 fi
 
 TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}")
 
 RELEASE_FOLDER="${ROOT_DIR}/release"
-RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${HOST_TRIPLE}"
+RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${BUILD_TARGET}"
 
 mkdir -p "${RELEASE_FOLDER}"
 
@@ -61,7 +65,7 @@ else
     cd "${ROOT_DIR}/../target/release"
 fi
 
-if [[ "${HOST_TRIPLE}" == *"-windows-"* ]]; then
+if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then
     # For Windows, use zip
 
     RELEASE_PACKAGE_FILE_NAME="${RELEASE_PACKAGE_NAME}.zip"

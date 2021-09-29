@@ -87,9 +87,10 @@ jobs:
           profile: minimal
           toolchain: nightly
           target: ${{ matrix.target }}
+          default: true
 
       # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
-      - if: ${{ matrix.target }} == 'aarch-apple-darwin'
+      - if: ${{ matrix.target }} == 'aarch64-apple-darwin'
         run: |
           sudo xcode-select -s /Applications/Xcode_12.4.app &&
           sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
@@ -121,6 +122,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          default: true
 
       - name: Build release
         run: |
