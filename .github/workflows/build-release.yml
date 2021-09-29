@@ -88,6 +88,7 @@ jobs:
           toolchain: nightly
           target: ${{ matrix.target }}
           default: true
+          override: true
 
       # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
       - if: ${{ matrix.target }} == 'aarch64-apple-darwin'
@@ -98,8 +99,7 @@ jobs:
       - name: Build release
         shell: bash
         run: |
-          cd build
-          ./build-host-release -t ${{ matrix.target }}
+          ./build/build-host-release -t ${{ matrix.target }}
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
@@ -123,11 +123,11 @@ jobs:
           profile: minimal
           toolchain: nightly
           default: true
+          override: true
 
       - name: Build release
         run: |
-          cd build
-          pwsh build-host-release.ps1
+          pwsh ./build/build-host-release.ps1
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
