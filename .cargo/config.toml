@@ -58,7 +58,7 @@ rustflags = [
     # sha3: SHA2-512 & SHA3 instructions
     # 
     # Optional CPU feature: +sha3,+sm4
-    "-C", "target-feature=+neon,+pmull,+aes,+sha2,+crc",
+    "-C", "target-feature=+neon,+aes,+sha2,+crc",
 ]
 
 # NOTE:
