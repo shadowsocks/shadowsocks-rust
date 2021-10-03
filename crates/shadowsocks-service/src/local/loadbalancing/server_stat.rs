@@ -7,8 +7,7 @@ pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 10;
 /// Timeout of each check
 pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5; // A common connection timeout of 5 seconds.
 
-const MAX_SERVER_RTT: u32 = DEFAULT_CHECK_TIMEOUT_SEC as u32 * 1000;
-const MAX_LATENCY_QUEUE_SIZE: usize = 59; // Account for the last 10 minutes.
+const MAX_LATENCY_QUEUE_SIZE: usize = 67;
 
 /// Statistic score
 #[derive(Debug, Copy, Clone)]
@@ -27,20 +26,24 @@ pub struct ServerStat {
     /// Use median instead of average time,
     /// because probing result may have some really bad cases
     rtt: u32,
+    /// MAX server's RTT, normally the check timeout milliseconds
+    max_server_rtt: u32,
     /// Total_Fail / Total_Probe
     fail_rate: f64,
     /// Recently probe data
     latency_queue: VecDeque<Score>,
     /// Score's standard deviation
     latency_stdev: f64,
+    /// Score's standard deviation MAX
+    max_latency_stdev: f64,
     /// Score's average
     latency_mean: f64,
     /// User's customized weight
     user_weight: f32,
 }
 
-fn max_latency_stdev() -> f64 {
-    let mrtt = MAX_SERVER_RTT as f64;
+fn max_latency_stdev(max_server_rtt: u32) -> f64 {
+    let mrtt = max_server_rtt as f64;
     let avg = (0.0 + mrtt) / 2.0;
     let diff1 = (0.0 - avg) * (0.0 - avg);
     let diff2 = (mrtt - avg) * (mrtt - avg);
@@ -49,14 +52,16 @@ fn max_latency_stdev() -> f64 {
 }
 
 impl ServerStat {
-    pub fn new(user_weight: f32) -> ServerStat {
+    pub fn new(user_weight: f32, max_server_rtt: u32) -> ServerStat {
         assert!((0.0..=1.0).contains(&user_weight));
 
         ServerStat {
-            rtt: MAX_SERVER_RTT,
+            rtt: max_server_rtt,
+            max_server_rtt,
             fail_rate: 1.0,
             latency_queue: VecDeque::new(),
             latency_stdev: 0.0,
+            max_latency_stdev: max_latency_stdev(max_server_rtt),
             latency_mean: 0.0,
             user_weight,
         }
@@ -64,10 +69,10 @@ impl ServerStat {
 
     fn score(&self) -> u32 {
         // Normalize rtt
-        let nrtt = self.rtt as f64 / MAX_SERVER_RTT as f64;
+        let nrtt = self.rtt as f64 / self.max_server_rtt as f64;
 
         // Normalize stdev
-        let nstdev = self.latency_stdev / max_latency_stdev();
+        let nstdev = self.latency_stdev / self.max_latency_stdev;
 
         const SCORE_RTT_WEIGHT: f64 = 1.0;
         const SCORE_FAIL_WEIGHT: f64 = 3.0;

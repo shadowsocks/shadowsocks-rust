@@ -558,7 +558,16 @@ Example configuration:
     "nofile": 10240,
 
     // Try to resolve domain name to IPv6 (AAAA) addresses first
-    "ipv6_first": false
+    "ipv6_first": false,
+
+    // Balancer customization
+    "balancer": {
+        // MAX Round-Trip-Time (RTT) of servers
+        // The timeout seconds of each individual checks
+        "max_server_rtt": 5,
+        // Interval seconds between each check
+        "check_interval": 10,
+    }
 }
 ```
 

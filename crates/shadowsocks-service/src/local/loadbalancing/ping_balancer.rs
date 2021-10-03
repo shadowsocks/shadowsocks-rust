@@ -58,6 +58,8 @@ pub struct PingBalancerBuilder {
     servers: Vec<Arc<ServerIdent>>,
     context: Arc<ServiceContext>,
     mode: Mode,
+    max_server_rtt: Duration,
+    check_interval: Duration,
 }
 
 impl PingBalancerBuilder {
@@ -66,11 +68,22 @@ impl PingBalancerBuilder {
             servers: Vec::new(),
             context,
             mode,
+            max_server_rtt: Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC),
+            check_interval: Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
         }
     }
 
-    pub fn add_server(&mut self, server: ServerIdent) {
-        self.servers.push(Arc::new(server));
+    pub fn add_server(&mut self, server: ServerConfig) {
+        let ident = ServerIdent::new(server, self.max_server_rtt);
+        self.servers.push(Arc::new(ident));
+    }
+
+    pub fn max_server_rtt(&mut self, rtt: Duration) {
+        self.max_server_rtt = rtt;
+    }
+
+    pub fn check_interval(&mut self, intv: Duration) {
+        self.check_interval = intv;
     }
 
     pub async fn build(self) -> PingBalancer {
@@ -131,6 +144,8 @@ impl PingBalancerBuilder {
             best_udp_idx: AtomicUsize::new(best_udp_idx),
             context: self.context,
             mode: self.mode,
+            max_server_rtt: self.max_server_rtt,
+            check_interval: self.check_interval,
         };
 
         balancer_context.init_score().await;
@@ -157,6 +172,8 @@ struct PingBalancerContext {
     best_udp_idx: AtomicUsize,
     context: Arc<ServiceContext>,
     mode: Mode,
+    max_server_rtt: Duration,
+    check_interval: Duration,
 }
 
 impl PingBalancerContext {
@@ -231,6 +248,7 @@ impl PingBalancerContext {
                     server: server.clone(),
                     server_type: ServerType::Tcp,
                     context: self.context.clone(),
+                    max_server_rtt: self.max_server_rtt,
                 };
                 vfut_tcp.push(checker.check_update_score());
             }
@@ -240,6 +258,7 @@ impl PingBalancerContext {
                     server: server.clone(),
                     server_type: ServerType::Udp,
                     context: self.context.clone(),
+                    max_server_rtt: self.max_server_rtt,
                 };
                 vfut_udp.push(checker.check_update_score());
             }
@@ -336,7 +355,7 @@ impl PingBalancerContext {
 
     async fn checker_task_real(&self) {
         loop {
-            time::sleep(Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC)).await;
+            time::sleep(self.check_interval).await;
 
             // Sleep before check.
             // PingBalancer already checked once when constructing
@@ -404,6 +423,7 @@ struct PingChecker {
     server: Arc<ServerIdent>,
     server_type: ServerType,
     context: Arc<ServiceContext>,
+    max_server_rtt: Duration,
 }
 
 impl PingChecker {
@@ -563,8 +583,7 @@ impl PingChecker {
         let start = Instant::now();
 
         // Send HTTP GET and read the first byte
-        let timeout = Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC);
-        let res = time::timeout(timeout, self.check_request()).await;
+        let res = time::timeout(self.max_server_rtt, self.check_request()).await;
 
         let elapsed = Instant::now() - start;
         let elapsed = elapsed.as_secs() as u32 * 1000 + elapsed.subsec_millis(); // Converted to ms

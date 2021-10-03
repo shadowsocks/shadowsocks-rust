@@ -96,6 +96,14 @@ struct SSSecurityReplayAttackConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+struct SSBalancerConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_server_rtt: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    check_interval: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     server: Option<String>,
@@ -148,6 +156,8 @@ struct SSConfig {
     fast_open: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     security: Option<SSSecurityConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    balancer: Option<SSBalancerConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -837,6 +847,15 @@ pub struct SecurityReplayAttackConfig {
     pub policy: ReplayAttackPolicy,
 }
 
+/// Balancer Config
+#[derive(Clone, Debug, Default)]
+pub struct BalancerConfig {
+    /// MAX rtt of servers, which is the timeout duration of each check requests
+    pub max_server_rtt: Option<Duration>,
+    /// Interval between each checking
+    pub check_interval: Option<Duration>,
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -916,6 +935,9 @@ pub struct Config {
 
     /// Replay attack policy
     pub security: SecurityConfig,
+
+    /// Balancer config of local server
+    pub balancer: BalancerConfig,
 }
 
 /// Configuration parsing error kind
@@ -1020,6 +1042,8 @@ impl Config {
             stat_path: None,
 
             security: SecurityConfig::default(),
+
+            balancer: BalancerConfig::default(),
         }
     }
 
@@ -1550,6 +1574,13 @@ impl Config {
             }
         }
 
+        if let Some(balancer) = config.balancer {
+            nconfig.balancer = BalancerConfig {
+                max_server_rtt: balancer.max_server_rtt.map(Duration::from_secs),
+                check_interval: balancer.check_interval.map(Duration::from_secs),
+            };
+        }
+
         Ok(nconfig)
     }
 
@@ -1728,6 +1759,21 @@ impl Config {
                     None,
                 );
                 return Err(err);
+            }
+
+            // Balancer related checks
+            if let Some(rtt) = self.balancer.max_server_rtt {
+                if rtt.as_secs() == 0 {
+                    let err = Error::new(ErrorKind::Invalid, "balancer.max_server_rtt must be > 0", None);
+                    return Err(err);
+                }
+            }
+
+            if let Some(intv) = self.balancer.check_interval {
+                if intv.as_secs() == 0 {
+                    let err = Error::new(ErrorKind::Invalid, "balancer.check_interval must be > 0", None);
+                    return Err(err);
+                }
             }
         }
 
@@ -2078,6 +2124,14 @@ impl fmt::Display for Config {
                 replay_attack: Some(SSSecurityReplayAttackConfig {
                     policy: Some(self.security.replay_attack.policy.to_string()),
                 }),
+            });
+        }
+
+        // Balancer
+        if self.balancer.max_server_rtt.is_some() || self.balancer.check_interval.is_some() {
+            jconf.balancer = Some(SSBalancerConfig {
+                max_server_rtt: self.balancer.max_server_rtt.as_ref().map(Duration::as_secs),
+                check_interval: self.balancer.check_interval.as_ref().map(Duration::as_secs),
             });
         }
 

@@ -27,10 +27,7 @@ use crate::{
     dns::build_dns_resolver,
 };
 
-use self::{
-    context::ServiceContext,
-    loadbalancing::{PingBalancerBuilder, ServerIdent},
-};
+use self::{context::ServiceContext, loadbalancing::PingBalancerBuilder};
 
 pub mod context;
 #[cfg(feature = "local-dns")]
@@ -202,9 +199,20 @@ pub async fn run(mut config: Config) -> io::Result<()> {
         }
 
         let mut balancer_builder = PingBalancerBuilder::new(context.clone(), mode);
-        for server in config.server {
-            balancer_builder.add_server(ServerIdent::new(server));
+
+        // max_server_rtt have to be set before add_server
+        if let Some(rtt) = config.balancer.max_server_rtt {
+            balancer_builder.max_server_rtt(rtt);
         }
+
+        if let Some(intv) = config.balancer.check_interval {
+            balancer_builder.check_interval(intv);
+        }
+
+        for server in config.server {
+            balancer_builder.add_server(server);
+        }
+
         balancer_builder.build().await
     };
 
