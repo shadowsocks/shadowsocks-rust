@@ -6,7 +6,7 @@ use std::{
     fmt::{self, Debug},
     io::{self, Error, ErrorKind},
     net::SocketAddr,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[cfg(feature = "trust-dns")]
@@ -16,9 +16,9 @@ use cfg_if::cfg_if;
 #[cfg(feature = "trust-dns")]
 use log::error;
 use log::{log_enabled, trace, Level};
-use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use tokio::task::JoinHandle;
+use tokio::{net::lookup_host, time};
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
@@ -143,42 +143,62 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
 
     use super::trust_dns_resolver::create_resolver;
 
+    static DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
+
     let (tx, mut rx) = watch::channel::<Event>(Event::default());
 
     let mut watcher: RecommendedWatcher =
         notify::recommended_watcher(move |ev_result: NotifyResult<Event>| match ev_result {
             Ok(ev) => {
-                trace!("received event {:?}", ev);
+                trace!("received {} event {:?}", DNS_RESOLV_FILE_PATH, ev);
 
                 if let EventKind::Modify(..) = ev.kind {
                     tx.send(ev).expect("watcher.send");
                 }
             }
             Err(err) => {
-                error!("watching /etc/resolv.conf error: {}", err);
+                error!("watching {} error: {}", DNS_RESOLV_FILE_PATH, err);
             }
         })?;
 
     // NOTE: It is an undefined behavior if this file get renamed or removed.
-    watcher.watch(Path::new("/etc/resolv.conf"), RecursiveMode::NonRecursive)?;
+    watcher.watch(Path::new(DNS_RESOLV_FILE_PATH), RecursiveMode::NonRecursive)?;
+
+    // Delayed task
+    let mut update_task: Option<JoinHandle<()>> = None;
 
     while rx.changed().await.is_ok() {
-        trace!("received notify /etc/resolv.conf changed");
+        trace!("received notify {} changed", DNS_RESOLV_FILE_PATH);
 
-        let new_resolver = match create_resolver(None, resolver.ipv6_first).await {
-            Ok(r) => r,
-            Err(err) => {
-                error!("failed to reload /etc/resolv.conf, error: {}", err);
-                continue;
-            }
+        // Kill the pending task
+        if let Some(t) = update_task.take() {
+            t.abort();
+        }
+
+        let task = {
+            let resolver = resolver.clone();
+            tokio::spawn(async move {
+                // /etc/resolv.conf may be modified multiple time in 1 second
+                // Update once for all those Modify events
+                time::sleep(Duration::from_secs(1)).await;
+
+                match create_resolver(None, resolver.ipv6_first).await {
+                    Ok(r) => {
+                        debug!("auto-reload {}", DNS_RESOLV_FILE_PATH);
+
+                        resolver.resolver.store(Arc::new(r));
+                    }
+                    Err(err) => {
+                        error!("failed to reload {}, error: {}", DNS_RESOLV_FILE_PATH, err);
+                    }
+                }
+            })
         };
 
-        debug!("auto-reload /etc/resolv.conf");
-
-        resolver.resolver.store(Arc::new(new_resolver));
+        update_task = Some(task);
     }
 
-    error!("auto-reload /etc/resolv.conf task exited unexpectly");
+    error!("auto-reload {} task exited unexpectly", DNS_RESOLV_FILE_PATH);
 
     Ok(())
 }

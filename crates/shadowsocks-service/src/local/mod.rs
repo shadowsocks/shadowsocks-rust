@@ -9,7 +9,7 @@ use std::{
 };
 
 use futures::{
-    future,
+    future::{self, BoxFuture},
     stream::{FuturesUnordered, StreamExt},
     FutureExt,
 };
@@ -27,7 +27,10 @@ use crate::{
     dns::build_dns_resolver,
 };
 
-use self::{context::ServiceContext, loadbalancing::PingBalancerBuilder};
+use self::{
+    context::ServiceContext,
+    loadbalancing::{PingBalancer, PingBalancerBuilder},
+};
 
 pub mod context;
 #[cfg(feature = "local-dns")]
@@ -50,8 +53,26 @@ pub mod utils;
 /// This is borrowed from Go's `net` library's default setting
 pub(crate) const LOCAL_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
 
+pub struct Server {
+    vfut: FuturesUnordered<BoxFuture<'static, io::Result<()>>>,
+    balancer: PingBalancer,
+}
+
+impl Server {
+    /// Run local server
+    pub async fn run(self) -> io::Result<()> {
+        let (res, _) = self.vfut.into_future().await;
+        res.unwrap()
+    }
+
+    /// Get the internal server balancer
+    pub fn server_balancer(&self) -> &PingBalancer {
+        &self.balancer
+    }
+}
+
 /// Starts a shadowsocks local server
-pub async fn run(mut config: Config) -> io::Result<()> {
+pub async fn create(mut config: Config) -> io::Result<Server> {
     assert!(config.config_type == ConfigType::Local && !config.local.is_empty());
     assert!(!config.server.is_empty());
 
@@ -406,8 +427,10 @@ pub async fn run(mut config: Config) -> io::Result<()> {
     }
 
     // let (res, ..) = future::select_all(vfut).await;
-    let (res, _) = vfut.into_future().await;
-    res.unwrap()
+    // let (res, _) = vfut.into_future().await;
+    // res.unwrap()
+
+    Ok(Server { vfut, balancer })
 }
 
 #[cfg(feature = "local-flow-stat")]

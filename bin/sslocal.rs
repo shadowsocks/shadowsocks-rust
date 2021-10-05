@@ -4,11 +4,11 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use std::{net::IpAddr, process, time::Duration};
+use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
 use clap::{clap_app, Arg, Error as ClapError, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
-use log::info;
+use log::{error, info};
 use tokio::{self, runtime::Builder};
 
 #[cfg(feature = "local-redir")]
@@ -18,7 +18,8 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{Config, ConfigType, LocalConfig, ProtocolType},
-    run_local,
+    create_local,
+    local::loadbalancing::PingBalancer,
     shadowsocks::{
         config::{Mode, ServerAddr, ServerConfig},
         crypto::v1::{available_ciphers, CipherKind},
@@ -523,8 +524,16 @@ fn main() {
     };
 
     runtime.block_on(async move {
+        let config_path = config.config_path.clone();
+
+        let instance = create_local(config).await.expect("create local");
+
+        if let Some(config_path) = config_path {
+            launch_reload_server_task(config_path, instance.server_balancer().clone());
+        }
+
         let abort_signal = monitor::create_signal_monitor();
-        let server = run_local(config);
+        let server = instance.run();
 
         tokio::pin!(abort_signal);
         tokio::pin!(server);
@@ -545,3 +554,30 @@ fn main() {
         }
     });
 }
+
+#[cfg(unix)]
+fn launch_reload_server_task(config_path: PathBuf, balancer: PingBalancer) {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    tokio::spawn(async move {
+        let mut sigusr1 = signal(SignalKind::user_defined1()).expect("signal");
+
+        while let Some(_) = sigusr1.recv().await {
+            let config = match Config::load_from_file(&config_path, ConfigType::Local) {
+                Ok(c) => c,
+                Err(err) => {
+                    error!("auto-reload {} failed with error: {}", config_path.display(), err);
+                    continue;
+                }
+            };
+
+            let servers = config.server;
+            info!("auto-reload {} with {} servers", config_path.display(), servers.len());
+
+            balancer.reset_servers(servers).await;
+        }
+    });
+}
+
+#[cfg(not(unix))]
+fn launch_reload_server_task(_: PathBuf, _: PingBalancer) {}

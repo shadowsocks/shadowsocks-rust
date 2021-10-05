@@ -51,7 +51,7 @@
 use std::time::Duration;
 
 #[cfg(feature = "local")]
-pub use self::local::run as run_local;
+pub use self::local::create as create_local;
 #[cfg(feature = "manager")]
 pub use self::manager::run as run_manager;
 #[cfg(feature = "server")]

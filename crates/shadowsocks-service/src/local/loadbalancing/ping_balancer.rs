@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use arc_swap::ArcSwap;
 use byte_string::ByteStr;
 use futures::future;
 use log::{debug, info, trace, warn};
@@ -86,15 +87,13 @@ impl PingBalancerBuilder {
         self.check_interval = intv;
     }
 
-    pub async fn build(self) -> PingBalancer {
-        assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
-
+    fn find_best_idx(servers: &[Arc<ServerIdent>], mode: Mode) -> (usize, usize) {
         let mut best_tcp_idx = 0;
         let mut best_udp_idx = 0;
 
-        if self.mode.enable_tcp() {
+        if mode.enable_tcp() {
             let mut found_tcp_idx = false;
-            for (idx, server) in self.servers.iter().enumerate() {
+            for (idx, server) in servers.iter().enumerate() {
                 if PingBalancerContext::check_server_tcp_enabled(server.server_config()) {
                     best_tcp_idx = idx;
                     found_tcp_idx = true;
@@ -105,19 +104,19 @@ impl PingBalancerBuilder {
             if !found_tcp_idx {
                 warn!(
                     "no valid TCP server serving for TCP clients, consider disable TCP with \"mode\": \"udp_only\", currently chose {}",
-                    ServerConfigFormatter::new(self.servers[best_tcp_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_tcp_idx].server_config())
                 );
             } else {
                 trace!(
                     "init chose TCP server {}",
-                    ServerConfigFormatter::new(self.servers[best_tcp_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_tcp_idx].server_config())
                 );
             }
         }
 
-        if self.mode.enable_udp() {
+        if mode.enable_udp() {
             let mut found_udp_idx = false;
-            for (idx, server) in self.servers.iter().enumerate() {
+            for (idx, server) in servers.iter().enumerate() {
                 if PingBalancerContext::check_server_udp_enabled(server.server_config()) {
                     best_udp_idx = idx;
                     found_udp_idx = true;
@@ -128,18 +127,26 @@ impl PingBalancerBuilder {
             if !found_udp_idx {
                 warn!(
                     "no valid UDP server serving for UDP clients, consider disable UDP with \"mode\": \"tcp_only\", currently chose {}",
-                    ServerConfigFormatter::new(self.servers[best_udp_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_udp_idx].server_config())
                 );
             } else {
                 trace!(
                     "init chose UDP server {}",
-                    ServerConfigFormatter::new(self.servers[best_udp_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_udp_idx].server_config())
                 );
             }
         }
 
+        (best_tcp_idx, best_udp_idx)
+    }
+
+    pub async fn build(self) -> PingBalancer {
+        assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
+
+        let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&self.servers, self.mode);
+
         let balancer_context = PingBalancerContext {
-            servers: self.servers,
+            servers: ArcSwap::new(Arc::new(self.servers)),
             best_tcp_idx: AtomicUsize::new(best_tcp_idx),
             best_udp_idx: AtomicUsize::new(best_udp_idx),
             context: self.context,
@@ -152,7 +159,7 @@ impl PingBalancerBuilder {
 
         let shared_context = Arc::new(balancer_context);
 
-        let abortable = {
+        let checker_abortable = {
             let shared_context = shared_context.clone();
             tokio::spawn(async move { shared_context.checker_task().await })
         };
@@ -160,14 +167,14 @@ impl PingBalancerBuilder {
         PingBalancer {
             inner: Arc::new(PingBalancerInner {
                 context: shared_context,
-                abortable,
+                checker_abortable,
             }),
         }
     }
 }
 
 struct PingBalancerContext {
-    servers: Vec<Arc<ServerIdent>>,
+    servers: ArcSwap<Vec<Arc<ServerIdent>>>,
     best_tcp_idx: AtomicUsize,
     best_udp_idx: AtomicUsize,
     context: Arc<ServiceContext>,
@@ -178,21 +185,64 @@ struct PingBalancerContext {
 
 impl PingBalancerContext {
     fn best_tcp_server(&self) -> Arc<ServerIdent> {
-        self.servers[self.best_tcp_idx.load(Ordering::Relaxed)].clone()
+        let servers = self.servers.load();
+
+        // A guard if reset_servers is running
+        let mut best_tcp_idx = self.best_tcp_idx.load(Ordering::Relaxed);
+        if best_tcp_idx >= servers.len() {
+            best_tcp_idx = 0;
+        }
+
+        servers[best_tcp_idx].clone()
     }
 
     fn best_udp_server(&self) -> Arc<ServerIdent> {
-        self.servers[self.best_udp_idx.load(Ordering::Relaxed)].clone()
+        let servers = self.servers.load();
+
+        // A guard if reset_servers is running
+        let mut best_udp_idx = self.best_udp_idx.load(Ordering::Relaxed);
+        if best_udp_idx >= servers.len() {
+            best_udp_idx = 0;
+        }
+
+        servers[best_udp_idx].clone()
     }
 }
 
 impl PingBalancerContext {
-    async fn init_score(&self) {
-        assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
+    pub async fn reset_servers(&self, servers: Vec<ServerConfig>) {
+        let max_server_rtt = self.max_server_rtt;
+        let servers = servers
+            .into_iter()
+            .map(|s| Arc::new(ServerIdent::new(s, max_server_rtt)))
+            .collect();
+        self.reset_servers_ident(servers).await
+    }
 
-        if self.probing_required() {
-            self.check_once(true).await;
-        }
+    pub async fn reset_servers_ident(&self, servers: Vec<Arc<ServerIdent>>) {
+        assert!(!servers.is_empty(), "servers shouldn't be empty");
+
+        // Restore best_tcp_idx and best_udp_idx
+        let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&servers, self.mode);
+
+        // Create a new Arc servers
+        let new_servers = Arc::new(servers);
+
+        // Replace into context and then run the checker task once
+        self.servers.store(new_servers);
+        self.best_tcp_idx.store(best_tcp_idx, Ordering::Release);
+        self.best_udp_idx.store(best_udp_idx, Ordering::Release);
+
+        self.check_once(true).await;
+    }
+
+    async fn init_score(&self) {
+        assert!(
+            !self.servers.load().is_empty(),
+            "check PingBalancer without any servers"
+        );
+
+        self.check_once(true).await;
     }
 
     fn check_server_tcp_enabled(svr_cfg: &ServerConfig) -> bool {
@@ -203,11 +253,11 @@ impl PingBalancerContext {
         svr_cfg.mode().enable_udp() && svr_cfg.weight().udp_weight() > 0.0
     }
 
-    fn probing_required(&self) -> bool {
+    fn probing_required(&self, servers: &[Arc<ServerIdent>]) -> bool {
         let mut tcp_count = 0;
         let mut udp_count = 0;
 
-        for server in self.servers.iter() {
+        for server in servers.iter() {
             let svr_cfg = server.server_config();
             if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(svr_cfg) {
                 tcp_count += 1;
@@ -221,26 +271,25 @@ impl PingBalancerContext {
     }
 
     async fn checker_task(self: Arc<Self>) {
-        assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
+        assert!(
+            !self.servers.load().is_empty(),
+            "check PingBalancer without any servers"
+        );
 
-        if !self.probing_required() {
-            self.checker_task_dummy().await
-        } else {
-            self.checker_task_real().await
-        }
-    }
-
-    /// Dummy task that will do nothing if there only have one server in the balancer
-    async fn checker_task_dummy(self: Arc<Self>) {
-        future::pending().await
+        self.checker_task_real().await
     }
 
     /// Check each servers' score and update the best server's index
     async fn check_once(&self, first_run: bool) {
-        let mut vfut_tcp = Vec::with_capacity(self.servers.len());
-        let mut vfut_udp = Vec::with_capacity(self.servers.len());
+        let servers = self.servers.load();
+        if !self.probing_required(&*servers) {
+            return;
+        }
 
-        for server in self.servers.iter() {
+        let mut vfut_tcp = Vec::with_capacity(servers.len());
+        let mut vfut_udp = Vec::with_capacity(servers.len());
+
+        for server in servers.iter() {
             let svr_cfg = server.server_config();
 
             if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(svr_cfg) {
@@ -287,7 +336,7 @@ impl PingBalancerContext {
 
             let mut best_idx = 0;
             let mut best_score = u32::MAX;
-            for (idx, server) in self.servers.iter().enumerate() {
+            for (idx, server) in servers.iter().enumerate() {
                 let score = server.tcp_score().score();
                 if score < best_score {
                     best_idx = idx;
@@ -299,19 +348,19 @@ impl PingBalancerContext {
             if first_run {
                 info!(
                     "chose best TCP server {}",
-                    ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_idx].server_config())
                 );
             } else {
                 if best_idx != old_best_idx {
                     info!(
                         "switched best TCP server from {} to {}",
-                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config()),
-                        ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(servers[best_idx].server_config())
                     );
                 } else {
                     debug!(
                         "kept best TCP server {}",
-                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config())
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
                     );
                 }
             }
@@ -322,7 +371,7 @@ impl PingBalancerContext {
 
             let mut best_idx = 0;
             let mut best_score = u32::MAX;
-            for (idx, server) in self.servers.iter().enumerate() {
+            for (idx, server) in servers.iter().enumerate() {
                 let score = server.udp_score().score();
                 if score < best_score {
                     best_idx = idx;
@@ -334,19 +383,19 @@ impl PingBalancerContext {
             if first_run {
                 info!(
                     "chose best UDP server {}",
-                    ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                    ServerConfigFormatter::new(servers[best_idx].server_config())
                 );
             } else {
                 if best_idx != old_best_idx {
                     info!(
                         "switched best UDP server from {} to {}",
-                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config()),
-                        ServerConfigFormatter::new(self.servers[best_idx].server_config())
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(servers[best_idx].server_config())
                     );
                 } else {
                     debug!(
                         "kept best UDP server {}",
-                        ServerConfigFormatter::new(self.servers[old_best_idx].server_config())
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
                     );
                 }
             }
@@ -366,12 +415,12 @@ impl PingBalancerContext {
 
 struct PingBalancerInner {
     context: Arc<PingBalancerContext>,
-    abortable: JoinHandle<()>,
+    checker_abortable: JoinHandle<()>,
 }
 
 impl Drop for PingBalancerInner {
     fn drop(&mut self) {
-        self.abortable.abort();
+        self.checker_abortable.abort();
         trace!("ping balancer stopped");
     }
 }
@@ -404,8 +453,14 @@ impl PingBalancer {
     }
 
     /// Get the server list
-    pub fn servers(&self) -> &[Arc<ServerIdent>] {
-        &self.inner.context.servers
+    pub fn servers(&self) -> Arc<Vec<Arc<ServerIdent>>> {
+        self.inner.context.servers.load().clone()
+    }
+
+    /// Reset servers in load balancer. Designed for auto-reloading configuration file.
+    #[inline]
+    pub async fn reset_servers(&self, servers: Vec<ServerConfig>) {
+        self.inner.context.reset_servers(servers).await
     }
 }
 

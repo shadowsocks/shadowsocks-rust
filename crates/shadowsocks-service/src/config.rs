@@ -938,6 +938,10 @@ pub struct Config {
 
     /// Balancer config of local server
     pub balancer: BalancerConfig,
+
+    /// Configuration file path, the actual path of the configuration.
+    /// This is normally for auto-reloading if implementation supports.
+    pub config_path: Option<PathBuf>,
 }
 
 /// Configuration parsing error kind
@@ -1044,6 +1048,8 @@ impl Config {
             security: SecurityConfig::default(),
 
             balancer: BalancerConfig::default(),
+
+            config_path: None,
         }
     }
 
@@ -1719,11 +1725,19 @@ impl Config {
     }
 
     /// Load Config from a File
-    pub fn load_from_file(filename: &str, config_type: ConfigType) -> Result<Config, Error> {
-        let mut reader = OpenOptions::new().read(true).open(&Path::new(filename))?;
+    pub fn load_from_file<P: AsRef<Path>>(filename: P, config_type: ConfigType) -> Result<Config, Error> {
+        let filename = filename.as_ref();
+
+        let mut reader = OpenOptions::new().read(true).open(filename)?;
         let mut content = String::new();
         reader.read_to_string(&mut content)?;
-        Config::load_from_str(&content[..], config_type)
+
+        let mut config = Config::load_from_str(&content[..], config_type)?;
+
+        // Record the path of the configuration for auto-reloading
+        config.config_path = Some(filename.to_owned());
+
+        Ok(config)
     }
 
     /// Check if there are any plugin are enabled with servers
