@@ -53,6 +53,7 @@ pub mod utils;
 /// This is borrowed from Go's `net` library's default setting
 pub(crate) const LOCAL_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Local Server instance
 pub struct Server {
     vfut: FuturesUnordered<BoxFuture<'static, io::Result<()>>>,
     balancer: PingBalancer,
@@ -474,4 +475,9 @@ async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::R
             }
         }
     }
+}
+
+/// Create then run a Local Server
+pub async fn run(config: Config) -> io::Result<()> {
+    create(config).await?.run().await
 }
