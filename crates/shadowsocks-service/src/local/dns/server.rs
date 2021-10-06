@@ -328,7 +328,7 @@ fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, qu
     //
     // This happens normally because VPN or TUN device receives DNS queries from local servers' plugins
     // https://github.com/shadowsocks/shadowsocks-android/issues/2722
-    for server in balancer.servers().as_ref() {
+    for server in balancer.servers() {
         let svr_cfg = server.server_config();
         if let ServerAddr::DomainName(ref dn, ..) = svr_cfg.addr() {
             // Convert domain name to `Name`
