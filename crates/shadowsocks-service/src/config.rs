@@ -41,8 +41,6 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-#[cfg(any(unix, target_os = "android", feature = "local-flow-stat"))]
-use std::path::PathBuf;
 use std::{
     convert::{From, Infallible},
     default::Default,
@@ -51,7 +49,7 @@ use std::{
     io::Read,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     option::Option,
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
     time::Duration,

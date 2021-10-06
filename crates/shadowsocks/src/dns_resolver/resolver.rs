@@ -6,7 +6,7 @@ use std::{
     fmt::{self, Debug},
     io::{self, Error, ErrorKind},
     net::SocketAddr,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[cfg(feature = "trust-dns")]
@@ -16,9 +16,9 @@ use cfg_if::cfg_if;
 #[cfg(feature = "trust-dns")]
 use log::error;
 use log::{log_enabled, trace, Level};
+use tokio::net::lookup_host;
 #[cfg(feature = "trust-dns")]
 use tokio::task::JoinHandle;
-use tokio::{net::lookup_host, time};
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::{config::ResolverConfig, TokioAsyncResolver};
 
@@ -135,11 +135,11 @@ cfg_if! {
 
 #[cfg(all(feature = "trust-dns", unix, not(target_os = "android")))]
 async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> notify::Result<()> {
-    use std::path::Path;
+    use std::{path::Path, time::Duration};
 
     use log::debug;
     use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult, Watcher};
-    use tokio::sync::watch;
+    use tokio::{sync::watch, time};
 
     use super::trust_dns_resolver::create_resolver;
 
