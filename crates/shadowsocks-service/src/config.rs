@@ -1204,6 +1204,16 @@ impl Config {
                             }
                         }
 
+                        #[cfg(feature = "local-http")]
+                        if !local_config.mode.enable_tcp() {
+                            let err = Error::new(
+                                ErrorKind::Invalid,
+                                "invalid `mode`, TCP have to be enabled for http",
+                                None,
+                            );
+                            return Err(err);
+                        }
+
                         #[cfg(feature = "local-tunnel")]
                         if let Some(forward_address) = local.forward_address {
                             let forward_port = match local.forward_port {

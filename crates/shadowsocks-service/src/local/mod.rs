@@ -9,15 +9,14 @@ use std::{
 };
 
 use futures::{
-    future::{self, BoxFuture},
+    future::BoxFuture,
     stream::{FuturesUnordered, StreamExt},
     FutureExt,
 };
-use log::{error, trace};
+use log::trace;
 use shadowsocks::{
     config::Mode,
     net::{AcceptOpts, ConnectOpts},
-    plugin::{Plugin, PluginMode},
 };
 
 #[cfg(feature = "local-flow-stat")]
@@ -73,7 +72,7 @@ impl Server {
 }
 
 /// Starts a shadowsocks local server
-pub async fn create(mut config: Config) -> io::Result<Server> {
+pub async fn create(config: Config) -> io::Result<Server> {
     assert!(config.config_type == ConfigType::Local && !config.local.is_empty());
     assert!(!config.server.is_empty());
 
@@ -146,73 +145,7 @@ pub async fn create(mut config: Config) -> io::Result<Server> {
 
     let vfut = FuturesUnordered::new();
 
-    // Check if any of the local servers enable TCP connections
-
-    let enable_tcp = config.local.iter().any(|local_config| match local_config.protocol {
-        ProtocolType::Socks => local_config.mode.enable_tcp(),
-        #[cfg(feature = "local-tunnel")]
-        ProtocolType::Tunnel => local_config.mode.enable_tcp(),
-        #[cfg(feature = "local-http")]
-        ProtocolType::Http => true,
-        #[cfg(feature = "local-redir")]
-        ProtocolType::Redir => local_config.mode.enable_tcp(),
-        #[cfg(feature = "local-dns")]
-        ProtocolType::Dns => local_config.mode.enable_tcp(),
-        #[cfg(feature = "local-tun")]
-        ProtocolType::Tun => local_config.mode.enable_tcp(),
-    });
-
-    if enable_tcp {
-        // Start plugins for TCP proxies
-
-        let mut plugins = Vec::with_capacity(config.server.len());
-
-        for server in &mut config.server {
-            if let Some(c) = server.plugin() {
-                let plugin = Plugin::start(c, server.addr(), PluginMode::Client)?;
-                server.set_plugin_addr(plugin.local_addr().into());
-                plugins.push(plugin);
-            }
-        }
-
-        // Load balancer will check all servers' score before server's actual start.
-        // So we have to ensure all plugins have been started before that.
-        if config.server.len() > 1 && !plugins.is_empty() {
-            let mut check_fut = Vec::with_capacity(plugins.len());
-
-            for plugin in &plugins {
-                // 3 seconds is not a carefully selected value
-                // I choose that because any values bigger will make me fell too long.
-                check_fut.push(plugin.wait_started(Duration::from_secs(3)));
-            }
-
-            // Run all of them simutaneously
-            let _ = future::join_all(check_fut).await;
-        }
-
-        // Join all of them
-        for plugin in plugins {
-            vfut.push(
-                async move {
-                    match plugin.join().await {
-                        Ok(status) => {
-                            error!("plugin exited with status: {}", status);
-                            Ok(())
-                        }
-                        Err(err) => {
-                            error!("plugin exited with error: {}", err);
-                            Err(err)
-                        }
-                    }
-                }
-                .boxed(),
-            );
-        }
-    }
-
     // Create a service balancer for choosing between multiple servers
-    //
-    // XXX: This have to be called after allocating plugins' addresses
     let balancer = {
         let mut mode = Mode::TcpOnly;
 
@@ -235,7 +168,7 @@ pub async fn create(mut config: Config) -> io::Result<Server> {
             balancer_builder.add_server(server);
         }
 
-        balancer_builder.build().await
+        balancer_builder.build().await?
     };
 
     #[cfg(feature = "local-flow-stat")]
@@ -383,7 +316,7 @@ pub async fn create(mut config: Config) -> io::Result<Server> {
                     let listener = match UnixListener::bind(fd_path) {
                         Ok(l) => l,
                         Err(err) => {
-                            error!("failed to bind uds path \"{}\", error: {}", fd_path.display(), err);
+                            log::error!("failed to bind uds path \"{}\", error: {}", fd_path.display(), err);
                             return Err(err);
                         }
                     };
@@ -400,9 +333,10 @@ pub async fn create(mut config: Config) -> io::Result<Server> {
                         match stream.recv_with_fd(&mut buffer, &mut fd_buffer).await {
                             Ok((n, fd_size)) => {
                                 if fd_size == 0 {
-                                    error!(
+                                    log::error!(
                                         "client {:?} didn't send file descriptors with buffer.size {} bytes",
-                                        peer_addr, n
+                                        peer_addr,
+                                        n
                                     );
                                     continue;
                                 }
@@ -413,9 +347,10 @@ pub async fn create(mut config: Config) -> io::Result<Server> {
                                 break;
                             }
                             Err(err) => {
-                                error!(
+                                log::error!(
                                     "failed to receive file descriptors from {:?}, error: {}",
-                                    peer_addr, err
+                                    peer_addr,
+                                    err
                                 );
                             }
                         }

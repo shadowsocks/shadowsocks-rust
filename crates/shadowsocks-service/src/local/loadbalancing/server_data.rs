@@ -78,6 +78,10 @@ impl ServerIdent {
         &self.svr_cfg
     }
 
+    pub fn server_config_mut(&mut self) -> &mut ServerConfig {
+        &mut self.svr_cfg
+    }
+
     pub fn tcp_score(&self) -> &ServerScore {
         &self.tcp_score
     }

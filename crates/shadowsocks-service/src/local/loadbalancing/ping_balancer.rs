@@ -15,9 +15,10 @@ use std::{
 use arc_swap::ArcSwap;
 use byte_string::ByteStr;
 use futures::future;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use shadowsocks::{
     config::Mode,
+    plugin::{Plugin, PluginMode},
     relay::{
         socks5::Address,
         tcprelay::proxy_stream::ProxyClientStream,
@@ -141,35 +142,37 @@ impl PingBalancerBuilder {
         (best_tcp_idx, best_udp_idx)
     }
 
-    pub async fn build(self) -> PingBalancer {
+    pub async fn build(self) -> io::Result<PingBalancer> {
         assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
 
-        let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&self.servers, self.mode);
+        let (shared_context, task_abortable) = PingBalancerContext::new(
+            self.servers,
+            self.context,
+            self.mode,
+            self.max_server_rtt,
+            self.check_interval,
+        )
+        .await?;
 
-        let balancer_context = PingBalancerContext {
-            servers: self.servers,
-            best_tcp_idx: AtomicUsize::new(best_tcp_idx),
-            best_udp_idx: AtomicUsize::new(best_udp_idx),
-            context: self.context,
-            mode: self.mode,
-            max_server_rtt: self.max_server_rtt,
-            check_interval: self.check_interval,
-        };
-
-        balancer_context.init_score().await;
-
-        let shared_context = Arc::new(balancer_context);
-
-        let checker_abortable = {
-            let shared_context = shared_context.clone();
-            tokio::spawn(async move { shared_context.checker_task().await })
-        };
-
-        PingBalancer {
+        Ok(PingBalancer {
             inner: Arc::new(PingBalancerInner {
                 context: ArcSwap::new(shared_context),
-                checker_abortable: SpinMutex::new(checker_abortable),
+                task_abortable: SpinMutex::new(task_abortable),
             }),
+        })
+    }
+}
+
+struct PingBalancerContextTask {
+    checker_abortable: JoinHandle<()>,
+    plugin_abortable: Option<JoinHandle<()>>,
+}
+
+impl Drop for PingBalancerContextTask {
+    fn drop(&mut self) {
+        self.checker_abortable.abort();
+        if let Some(ref p) = self.plugin_abortable {
+            p.abort();
         }
     }
 }
@@ -195,6 +198,106 @@ impl PingBalancerContext {
 }
 
 impl PingBalancerContext {
+    pub(crate) async fn new(
+        mut servers: Vec<Arc<ServerIdent>>,
+        context: Arc<ServiceContext>,
+        mode: Mode,
+        max_server_rtt: Duration,
+        check_interval: Duration,
+    ) -> io::Result<(Arc<PingBalancerContext>, PingBalancerContextTask)> {
+        let plugin_abortable = if mode.enable_tcp() {
+            // Start plugins for TCP proxies
+
+            let mut plugins = Vec::with_capacity(servers.len());
+
+            for server in &mut servers {
+                let server = Arc::get_mut(server).unwrap();
+                let svr_cfg = server.server_config_mut();
+
+                if let Some(p) = svr_cfg.plugin() {
+                    // Start Plugin Process
+                    let plugin = Plugin::start(p, svr_cfg.addr(), PluginMode::Client)?;
+                    svr_cfg.set_plugin_addr(plugin.local_addr().into());
+                    plugins.push(plugin);
+                }
+            }
+
+            if plugins.is_empty() {
+                None
+            } else {
+                // Load balancer will check all servers' score before server's actual start.
+                // So we have to ensure all plugins have been started before that.
+
+                let mut check_fut = Vec::with_capacity(plugins.len());
+
+                for plugin in &plugins {
+                    // 3 seconds is not a carefully selected value
+                    // I choose that because any values bigger will make me felt too long.
+                    check_fut.push(plugin.wait_started(Duration::from_secs(3)));
+                }
+
+                // Run all of them simutaneously
+                let _ = future::join_all(check_fut).await;
+
+                let plugin_abortable = tokio::spawn(async move {
+                    let mut vfut = Vec::with_capacity(plugins.len());
+
+                    for plugin in plugins {
+                        vfut.push(async move {
+                            match plugin.join().await {
+                                Ok(status) => {
+                                    error!("plugin exited with status: {}", status);
+                                    Ok(())
+                                }
+                                Err(err) => {
+                                    error!("plugin exited with error: {}", err);
+                                    Err(err)
+                                }
+                            }
+                        });
+                    }
+
+                    let _ = future::join_all(vfut).await;
+
+                    panic!("all plugins are exited. all connections may fail, check your configuration");
+                });
+
+                Some(plugin_abortable)
+            }
+        } else {
+            None
+        };
+
+        let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&servers, mode);
+
+        let balancer_context = PingBalancerContext {
+            servers,
+            best_tcp_idx: AtomicUsize::new(best_tcp_idx),
+            best_udp_idx: AtomicUsize::new(best_udp_idx),
+            context,
+            mode,
+            max_server_rtt,
+            check_interval,
+        };
+
+        balancer_context.init_score().await;
+
+        let shared_context = Arc::new(balancer_context);
+
+        let checker_abortable = {
+            let shared_context = shared_context.clone();
+            tokio::spawn(async move { shared_context.checker_task().await })
+        };
+
+        Ok((
+            shared_context,
+            PingBalancerContextTask {
+                checker_abortable,
+                plugin_abortable,
+            },
+        ))
+    }
+
     async fn init_score(&self) {
         assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
 
@@ -374,12 +477,11 @@ impl PingBalancerContext {
 
 struct PingBalancerInner {
     context: ArcSwap<PingBalancerContext>,
-    checker_abortable: SpinMutex<JoinHandle<()>>,
+    task_abortable: SpinMutex<PingBalancerContextTask>,
 }
 
 impl Drop for PingBalancerInner {
     fn drop(&mut self) {
-        self.checker_abortable.lock().abort();
         trace!("ping balancer stopped");
     }
 }
@@ -420,44 +522,33 @@ impl PingBalancer {
     }
 
     /// Reset servers in load balancer. Designed for auto-reloading configuration file.
-    pub async fn reset_servers(&self, servers: Vec<ServerConfig>) {
+    pub async fn reset_servers(&self, servers: Vec<ServerConfig>) -> io::Result<()> {
         let old_context = self.inner.context.load();
 
         let servers = servers
             .into_iter()
             .map(|s| Arc::new(ServerIdent::new(s, old_context.max_server_rtt)))
             .collect::<Vec<Arc<ServerIdent>>>();
-        let (best_tcp_idx, best_udp_idx) = PingBalancerBuilder::find_best_idx(&servers, old_context.mode);
 
-        // Stop the update task and create a new Context.
-        let context = PingBalancerContext {
+        let (shared_context, task_abortable) = PingBalancerContext::new(
             servers,
-            best_tcp_idx: AtomicUsize::new(best_tcp_idx),
-            best_udp_idx: AtomicUsize::new(best_udp_idx),
-            context: old_context.context.clone(),
-            mode: old_context.mode,
-            max_server_rtt: old_context.max_server_rtt,
-            check_interval: old_context.check_interval,
-        };
-
-        context.init_score().await;
-
-        let shared_context = Arc::new(context);
-
-        let checker_abortable = {
-            let shared_context = shared_context.clone();
-            tokio::spawn(async move { shared_context.checker_task().await })
-        };
+            old_context.context.clone(),
+            old_context.mode,
+            old_context.max_server_rtt,
+            old_context.check_interval,
+        )
+        .await?;
 
         {
             // Stop the previous task and replace with the new task
-            let mut abortable = self.inner.checker_abortable.lock();
-            abortable.abort();
-            *abortable = checker_abortable;
+            let mut abortable = self.inner.task_abortable.lock();
+            *abortable = task_abortable;
         }
 
         // Replace with the new context
         self.inner.context.store(shared_context);
+
+        Ok(())
     }
 }
 
