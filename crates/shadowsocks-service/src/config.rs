@@ -1205,7 +1205,7 @@ impl Config {
                         }
 
                         #[cfg(feature = "local-http")]
-                        if !local_config.mode.enable_tcp() {
+                        if local_config.protocol == ProtocolType::Http && !local_config.mode.enable_tcp() {
                             let err = Error::new(
                                 ErrorKind::Invalid,
                                 "invalid `mode`, TCP have to be enabled for http",
