@@ -14,6 +14,6 @@ pub fn daemonize<F: AsRef<Path>>(pid_path: Option<F>) {
     }
 
     if let Err(err) = d.start() {
-        error!("failed to daemonize, {}", err);
+        error!("failed to daemonize, {:?} ({})", err, err);
     }
 }
