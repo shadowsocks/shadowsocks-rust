@@ -512,7 +512,7 @@ impl PingBalancer {
     }
 
     /// Get the server list
-    pub fn servers<'a>(&'a self) -> PingServerIter<'a> {
+    pub fn servers(&self) -> PingServerIter<'_> {
         let context = self.inner.context.load();
         let servers: &Vec<Arc<ServerIdent>> = unsafe { &*(&context.servers as *const _) };
         PingServerIter {
