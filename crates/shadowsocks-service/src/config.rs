@@ -788,6 +788,14 @@ impl LocalConfig {
                 }
             }
 
+            #[cfg(feature = "local-http")]
+            ProtocolType::Http => {
+                if !self.mode.enable_tcp() {
+                    let err = Error::new(ErrorKind::Invalid, "TCP mode have to be enabled for http", None);
+                    return Err(err);
+                }
+            }
+
             _ => {}
         }
 
@@ -1202,16 +1210,6 @@ impl Config {
                             None => {
                                 local_config.mode = global_mode;
                             }
-                        }
-
-                        #[cfg(feature = "local-http")]
-                        if local_config.protocol == ProtocolType::Http && !local_config.mode.enable_tcp() {
-                            let err = Error::new(
-                                ErrorKind::Invalid,
-                                "invalid `mode`, TCP have to be enabled for http",
-                                None,
-                            );
-                            return Err(err);
                         }
 
                         #[cfg(feature = "local-tunnel")]
