@@ -541,6 +541,50 @@ impl FromStr for ManagerServerHost {
     }
 }
 
+/// Mode of Manager's server
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ManagerServerMode {
+    /// Run shadowsocks server in the same process of manager
+    Builtin,
+
+    /// Run shadowsocks server in standalone (process) mode
+    #[cfg(unix)]
+    Standalone,
+}
+
+impl Default for ManagerServerMode {
+    fn default() -> ManagerServerMode {
+        ManagerServerMode::Builtin
+    }
+}
+
+/// Parsing ManagerServerMode error
+#[derive(Debug, Clone, Copy)]
+pub struct ManagerServerModeError;
+
+impl FromStr for ManagerServerMode {
+    type Err = ManagerServerModeError;
+
+    fn from_str(s: &str) -> Result<ManagerServerMode, Self::Err> {
+        match s {
+            "builtin" => Ok(ManagerServerMode::Builtin),
+            #[cfg(unix)]
+            "standalone" => Ok(ManagerServerMode::Standalone),
+            _ => Err(ManagerServerModeError),
+        }
+    }
+}
+
+impl Display for ManagerServerMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ManagerServerMode::Builtin => f.write_str("builtin"),
+            #[cfg(unix)]
+            ManagerServerMode::Standalone => f.write_str("standalone"),
+        }
+    }
+}
+
 /// Configuration for Manager
 #[derive(Clone, Debug)]
 pub struct ManagerConfig {
@@ -558,6 +602,14 @@ pub struct ManagerConfig {
     pub server_host: ManagerServerHost,
     /// Server's mode
     pub mode: Mode,
+    /// Server's running mode
+    pub server_mode: ManagerServerMode,
+    /// Server's command if running in Standalone mode
+    #[cfg(unix)]
+    pub server_program: String,
+    /// Server's working directory if running in Standalone mode
+    #[cfg(unix)]
+    pub server_working_directory: PathBuf,
 }
 
 impl ManagerConfig {
@@ -570,6 +622,14 @@ impl ManagerConfig {
             timeout: None,
             server_host: ManagerServerHost::default(),
             mode: Mode::TcpOnly,
+            server_mode: ManagerServerMode::Builtin,
+            #[cfg(unix)]
+            server_program: "ssserver".to_owned(),
+            #[cfg(unix)]
+            server_working_directory: match std::env::current_dir() {
+                Ok(d) => d,
+                Err(..) => "/tmp/shadowsocks-manager".into(),
+            },
         }
     }
 }

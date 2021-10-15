@@ -89,6 +89,9 @@ fn main() {
             app = clap_app!(@app (app)
                 (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
                 (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
+
+                (@arg MANAGER_SERVER_MODE: --("manager-server-mode") +takes_value possible_values(&["builtin", "standalone"]) "Servers that running in builtin or standalone mode")
+                (@arg MANAGER_SERVER_WORKING_DIRECTORY: --("manager-server-working-directory") +takes_value "Folder for putting servers' configuration and pid files, default is current directory")
             );
         }
 
@@ -210,6 +213,18 @@ fn main() {
                     plugin_args: Vec::new(),
                 });
             }
+
+            #[cfg(unix)]
+            if let Some(server_mode) = matches.value_of("MANAGER_SERVER_MODE") {
+                manager_config.server_mode = server_mode.parse().expect("manager-server-mode");
+            }
+
+            #[cfg(unix)]
+            if let Some(server_working_directory) = matches.value_of("MANAGER_SERVER_WORKING_DIRECTORY") {
+                manager_config.server_working_directory = server_working_directory
+                    .parse()
+                    .expect("manager-server-working-directory");
+            }
         }
 
         // Overrides
@@ -288,7 +303,7 @@ fn main() {
         }
 
         #[cfg(unix)]
-        if matches.is_present("DAEMONIZE") {
+        if matches.is_present("DAEMONIZE") || matches.is_present("DAEMONIZE_PID_PATH") {
             use self::common::daemonize;
             daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
         }

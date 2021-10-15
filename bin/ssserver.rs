@@ -86,7 +86,7 @@ fn main() {
         {
             app = clap_app!(@app (app)
                 (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
-                (@arg DAEMONIZE_PID_PATH: --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
+                (@arg DAEMONIZE_PID_PATH: -f --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
             );
         }
 
@@ -287,7 +287,7 @@ fn main() {
         }
 
         #[cfg(unix)]
-        if matches.is_present("DAEMONIZE") {
+        if matches.is_present("DAEMONIZE") || matches.is_present("DAEMONIZE_PID_PATH") {
             use self::common::daemonize;
             daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
         }

@@ -498,7 +498,7 @@ fn main() {
         }
 
         #[cfg(unix)]
-        if matches.is_present("DAEMONIZE") {
+        if matches.is_present("DAEMONIZE") || matches.is_present("DAEMONIZE_PID_PATH") {
             use self::common::daemonize;
             daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
         }
