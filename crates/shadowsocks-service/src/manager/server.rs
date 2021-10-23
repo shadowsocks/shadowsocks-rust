@@ -2,13 +2,7 @@
 
 #[cfg(unix)]
 use std::path::PathBuf;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    io,
-    net::SocketAddr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
 use shadowsocks::{
@@ -59,6 +53,7 @@ struct ServerInstance {
 
 impl Drop for ServerInstance {
     fn drop(&mut self) {
+        #[allow(irrefutable_let_patterns)]
         if let ServerInstanceMode::Builtin { ref abortable, .. } = self.mode {
             abortable.abort();
         }
@@ -504,6 +499,7 @@ impl Manager {
     #[cfg(unix)]
     async fn handle_stat(&self, stat: &StatRequest) {
         use log::warn;
+        use std::collections::hash_map::Entry;
 
         use crate::config::{Config, ConfigType};
 
