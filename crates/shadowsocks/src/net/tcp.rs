@@ -77,19 +77,25 @@ impl TcpStream {
 
         Ok(TcpStream(stream))
     }
-}
 
-impl Deref for TcpStream {
-    type Target = TokioTcpStream;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    /// Returns the local address that this stream is bound to.
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.0.local_addr()
     }
-}
 
-impl DerefMut for TcpStream {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    /// Returns the remote address that this stream is connected to.
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.0.peer_addr()
+    }
+
+    /// Gets the value of the `TCP_NODELAY` option on this socket.
+    pub fn nodelay(&self) -> io::Result<bool> {
+        self.0.nodelay()
+    }
+
+    /// Sets the value of the `TCP_NODELAY` option on this socket.
+    pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
+        self.0.set_nodelay(nodelay)
     }
 }
 

@@ -1574,6 +1574,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-io-timeout",
+ "tokio-tfo",
  "trust-dns-resolver",
  "url",
  "winapi",
@@ -1934,6 +1935,23 @@ dependencies = [
  "rustls",
  "tokio",
  "webpki",
+]
+
+[[package]]
+name = "tokio-tfo"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b22b79bdd90c351d2f03bfd0d4297e215a2b5a395bb999c69fc7041d1ee5847a"
+dependencies = [
+ "cfg-if",
+ "futures",
+ "libc",
+ "log",
+ "once_cell",
+ "pin-project",
+ "socket2 0.4.2",
+ "tokio",
+ "winapi",
 ]
 
 [[package]]

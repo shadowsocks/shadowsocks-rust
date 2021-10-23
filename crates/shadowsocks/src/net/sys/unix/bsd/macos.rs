@@ -1,22 +1,20 @@
 use std::{
     io::{self, ErrorKind},
     mem,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream as StdTcpStream},
-    ops::{Deref, DerefMut},
-    os::unix::io::{AsRawFd, FromRawFd, IntoRawFd},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    os::unix::io::{AsRawFd, RawFd},
     pin::Pin,
     ptr,
     task::{self, Poll},
 };
 
-use futures::ready;
 use log::error;
 use pin_project::pin_project;
-use socket2::SockAddr;
 use tokio::{
-    io::{AsyncRead, AsyncWrite, Interest, ReadBuf},
+    io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
 };
+use tokio_tfo::TfoStream;
 
 use crate::net::{
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
@@ -24,17 +22,11 @@ use crate::net::{
     ConnectOpts,
 };
 
-enum TcpStreamState {
-    Connected,
-    FastOpenWrite,
-}
-
 /// A `TcpStream` that supports TFO (TCP Fast Open)
 #[pin_project(project = TcpStreamProj)]
-pub struct TcpStream {
-    #[pin]
-    inner: TokioTcpStream,
-    state: TcpStreamState,
+pub enum TcpStream {
+    Standard(#[pin] TokioTcpStream),
+    FastOpen(#[pin] TfoStream),
 }
 
 impl TcpStream {
@@ -55,140 +47,82 @@ impl TcpStream {
             // If TFO is not enabled, it just works like a normal TcpStream
             let stream = socket.connect(addr).await?;
             set_common_sockopt_after_connect(&stream, opts)?;
-            return Ok(TcpStream {
-                inner: stream,
-                state: TcpStreamState::Connected,
-            });
+            return Ok(TcpStream::Standard(stream));
         }
 
-        // TFO in macos uses connectx
-
-        unsafe {
-            let raddr = SockAddr::from(addr);
-
-            let mut endpoints: libc::sa_endpoints_t = mem::zeroed();
-            endpoints.sae_dstaddr = raddr.as_ptr();
-            endpoints.sae_dstaddrlen = raddr.len();
-
-            let ret = libc::connectx(
-                socket.as_raw_fd(),
-                &endpoints as *const _,
-                libc::SAE_ASSOCID_ANY,
-                libc::CONNECT_DATA_IDEMPOTENT /* Enable TFO */ | libc::CONNECT_RESUME_ON_READ_WRITE, /* Send SYN with subsequence send/recv */
-                ptr::null(),
-                0,
-                ptr::null_mut(),
-                ptr::null_mut(),
-            );
-
-            if ret != 0 {
-                return Err(io::Error::last_os_error());
-            }
-        }
-
-        let stream = TokioTcpStream::from_std(unsafe { StdTcpStream::from_raw_fd(socket.into_raw_fd()) })?;
+        let stream = TfoStream::connect_with_socket(socket, addr).await?;
         set_common_sockopt_after_connect(&stream, opts)?;
 
-        Ok(TcpStream {
-            inner: stream,
-            state: TcpStreamState::FastOpenWrite,
-        })
+        Ok(TcpStream::FastOpen(stream))
+    }
+
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        match *self {
+            TcpStream::Standard(ref s) => s.local_addr(),
+            TcpStream::FastOpen(ref s) => s.local_addr(),
+        }
+    }
+
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> {
+        match *self {
+            TcpStream::Standard(ref s) => s.peer_addr(),
+            TcpStream::FastOpen(ref s) => s.peer_addr(),
+        }
+    }
+
+    pub fn nodelay(&self) -> io::Result<bool> {
+        match *self {
+            TcpStream::Standard(ref s) => s.nodelay(),
+            TcpStream::FastOpen(ref s) => s.nodelay(),
+        }
+    }
+
+    pub fn set_nodelay(&self, nodelay: bool) -> io::Result<()> {
+        match *self {
+            TcpStream::Standard(ref s) => s.set_nodelay(nodelay),
+            TcpStream::FastOpen(ref s) => s.set_nodelay(nodelay),
+        }
     }
 }
 
-impl Deref for TcpStream {
-    type Target = TokioTcpStream;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for TcpStream {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+impl AsRawFd for TcpStream {
+    fn as_raw_fd(&self) -> RawFd {
+        match *self {
+            TcpStream::Standard(ref s) => s.as_raw_fd(),
+            TcpStream::FastOpen(ref s) => s.as_raw_fd(),
+        }
     }
 }
 
 impl AsyncRead for TcpStream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        self.project().inner.poll_read(cx, buf)
+        match self.project() {
+            TcpStreamProj::Standard(s) => s.poll_read(cx, buf),
+            TcpStreamProj::FastOpen(s) => s.poll_read(cx, buf),
+        }
     }
 }
 
 impl AsyncWrite for TcpStream {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        loop {
-            let TcpStreamProj { inner, state } = self.as_mut().project();
-
-            match *state {
-                TcpStreamState::Connected => return inner.poll_write(cx, buf),
-
-                TcpStreamState::FastOpenWrite => {
-                    // `CONNECT_RESUME_ON_READ_WRITE` is set when calling `connectx`,
-                    // so the first call of `send` will perform the actual SYN with TFO cookie.
-                    //
-                    // (NOT SURE) If remote server doesn't support TFO or this is the first connection,
-                    // it may return EINPROGRESS just like other platforms (Linux, FreeBSD).
-
-                    let stream = inner.get_mut();
-
-                    // Ensure socket is writable
-                    ready!(stream.poll_write_ready(cx))?;
-
-                    let mut connecting = false;
-                    let send_result = stream.try_io(Interest::WRITABLE, || {
-                        unsafe {
-                            let ret = libc::send(stream.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), 0);
-                            if ret >= 0 {
-                                Ok(ret as usize)
-                            } else {
-                                let err = io::Error::last_os_error();
-                                // EAGAIN and EWOULDBLOCK should have been handled by tokio
-                                //
-                                // EINPROGRESS
-                                if let Some(libc::EINPROGRESS) = err.raw_os_error() {
-                                    // For non-blocking socket, it returns the number of bytes queued (and transmitted in the SYN-data packet) if cookie is available.
-                                    // If cookie is not available, it transmits a data-less SYN packet with Fast Open cookie request option and returns -EINPROGRESS like connect().
-                                    //
-                                    // So in this state. We have to loop again to call `poll_write` for sending the first packet.
-                                    connecting = true;
-
-                                    // Let `poll_write_io` clears the write readiness.
-                                    Err(ErrorKind::WouldBlock.into())
-                                } else {
-                                    // Other errors, including EAGAIN
-                                    Err(err)
-                                }
-                            }
-                        }
-                    });
-
-                    match send_result {
-                        Ok(n) => {
-                            // Connected successfully with fast open
-                            *state = TcpStreamState::Connected;
-                            return Ok(n).into();
-                        }
-                        Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
-                            if connecting {
-                                // Connecting with normal TCP handshakes, write the first packet after connected
-                                *state = TcpStreamState::Connected;
-                            }
-                        }
-                        Err(err) => return Err(err).into(),
-                    }
-                }
-            }
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        match self.project() {
+            TcpStreamProj::Standard(s) => s.poll_write(cx, buf),
+            TcpStreamProj::FastOpen(s) => s.poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
-        self.project().inner.poll_flush(cx)
+        match self.project() {
+            TcpStreamProj::Standard(s) => s.poll_flush(cx),
+            TcpStreamProj::FastOpen(s) => s.poll_flush(cx),
+        }
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
-        self.project().inner.poll_shutdown(cx)
+        match self.project() {
+            TcpStreamProj::Standard(s) => s.poll_shutdown(cx),
+            TcpStreamProj::FastOpen(s) => s.poll_shutdown(cx),
+        }
     }
 }
 

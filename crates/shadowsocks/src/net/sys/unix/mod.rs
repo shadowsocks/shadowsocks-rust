@@ -1,12 +1,15 @@
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
+    os::unix::io::{AsRawFd, FromRawFd, IntoRawFd},
 };
 
 use cfg_if::cfg_if;
 use log::{debug, warn};
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
 use tokio::net::UdpSocket;
+
+use crate::net::ConnectOpts;
 
 cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "android"))] {
@@ -74,4 +77,46 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocke
         socket.set_nonblocking(true)?;
         UdpSocket::from_std(socket.into())
     }
+}
+
+pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {
+    let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
+
+    macro_rules! try_sockopt {
+        ($socket:ident . $func:ident ($($arg:expr),*)) => {
+            match $socket . $func ($($arg),*) {
+                Ok(e) => e,
+                Err(err) => {
+                    let _ = socket.into_raw_fd();
+                    return Err(err);
+                }
+            }
+        };
+    }
+
+    if opts.tcp.nodelay {
+        try_sockopt!(socket.set_nodelay(true));
+    }
+
+    if let Some(keepalive_duration) = opts.tcp.keepalive {
+        #[allow(unused_mut)]
+        let mut keepalive = TcpKeepalive::new().with_time(keepalive_duration);
+
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_os = "netbsd",
+            target_vendor = "apple",
+        ))]
+        {
+            keepalive = keepalive.with_interval(keepalive_duration);
+        }
+
+        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+    }
+
+    let _ = socket.into_raw_fd();
+
+    Ok(())
 }
