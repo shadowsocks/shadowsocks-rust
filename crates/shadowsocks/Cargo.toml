@@ -73,7 +73,7 @@ shadowsocks-crypto = { version = "0.2", features = ["ring"] }
 shadowsocks-crypto = { version = "0.2", features = [] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
+winapi = { version = "0.3", features = ["mswsock", "winsock2", "netioapi"] }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]

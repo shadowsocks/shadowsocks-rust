@@ -50,6 +50,7 @@ fn main() {
                     Servers defined will be created when process is started.")
 
             (@arg OUTBOUND_BIND_ADDR: -b --("outbound-bind-addr") +takes_value alias("bind-addr") {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
+            (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket")
             (@arg SERVER_HOST: -s --("server-host") +takes_value "Host name or IP address of your remote server")
 
             (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") {validator::validate_manager_addr} "ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock")
@@ -105,15 +106,7 @@ fn main() {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             app = clap_app!(@app (app)
-                (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set SO_BINDTODEVICE option for outbound socket")
                 (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
-            );
-        }
-
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            app = clap_app!(@app (app)
-                (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set IP_BOUND_IF option for outbound socket")
             );
         }
 
@@ -180,7 +173,6 @@ fn main() {
             config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
         }
 
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
             config.outbound_bind_interface = Some(iface.to_owned());
         }

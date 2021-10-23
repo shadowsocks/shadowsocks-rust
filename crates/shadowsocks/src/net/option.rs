@@ -41,7 +41,6 @@ pub struct ConnectOpts {
     pub bind_local_addr: Option<IpAddr>,
 
     /// Outbound socket binds to interface
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
     pub bind_interface: Option<String>,
 
     /// TCP options

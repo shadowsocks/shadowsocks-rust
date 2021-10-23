@@ -41,8 +41,6 @@ pub async fn run(config: Config) -> io::Result<()> {
         vpn_protect_path: config.outbound_vpn_protect_path,
 
         bind_local_addr: config.outbound_bind_addr,
-
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()

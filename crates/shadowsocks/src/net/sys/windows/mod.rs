@@ -1,4 +1,5 @@
 use std::{
+    ffi::CString,
     io::{self, ErrorKind},
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -20,7 +21,10 @@ use winapi::{
     ctypes::{c_char, c_int},
     shared::{
         minwindef::{BOOL, DWORD, FALSE, LPDWORD, LPVOID},
-        ws2def::IPPROTO_TCP,
+        netioapi::if_nametoindex,
+        ntdef::PCSTR,
+        ws2def::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP},
+        ws2ipdef::IPV6_UNICAST_IF,
     },
     um::{
         mswsock::SIO_UDP_CONNRESET,
@@ -35,6 +39,10 @@ use crate::net::{sys::set_common_sockopt_for_connect, AddrFamily, ConnectOpts};
 // https://github.com/retep998/winapi-rs/issues/856
 const TCP_FASTOPEN: DWORD = 15;
 
+// ws2ipdef.h
+// https://github.com/retep998/winapi-rs/pull/1007
+const IP_UNICAST_IF: DWORD = 31;
+
 /// A `TcpStream` that supports TFO (TCP Fast Open)
 #[pin_project(project = TcpStreamProj)]
 pub enum TcpStream {
@@ -48,6 +56,11 @@ impl TcpStream {
             SocketAddr::V4(..) => TcpSocket::new_v4()?,
             SocketAddr::V6(..) => TcpSocket::new_v6()?,
         };
+
+        // Binds to a specific network interface (device)
+        if let Some(ref iface) = opts.bind_interface {
+            set_ip_unicast_if(&socket, addr, iface)?;
+        }
 
         set_common_sockopt_for_connect(addr, &socket, opts)?;
 
@@ -166,6 +179,51 @@ pub fn set_tcp_fastopen<S: AsRawSocket>(socket: &S) -> io::Result<()> {
     Ok(())
 }
 
+fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: SocketAddr, iface: &str) -> io::Result<()> {
+    let handle = socket.as_raw_socket() as SOCKET;
+
+    unsafe {
+        // Windows if_nametoindex requires a C-string for interface name
+        let ifname = CString::new(iface).expect("iface");
+
+        // https://docs.microsoft.com/en-us/previous-versions/windows/hardware/drivers/ff553788(v=vs.85)
+        let if_index = if_nametoindex(ifname.as_ptr() as PCSTR);
+        if if_index == 0 {
+            // If the if_nametoindex function fails and returns zero, it is not possible to determine an error code.
+            error!("if_nametoindex {} fails", iface);
+            return Err(io::Error::new(ErrorKind::InvalidInput, "invalid interface name"));
+        }
+
+        // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
+        let if_index = if_index as DWORD;
+
+        let ret = match addr {
+            SocketAddr::V4(..) => setsockopt(
+                handle,
+                IPPROTO_IP as c_int,
+                IP_UNICAST_IF as c_int,
+                &if_index as *const _ as *const c_char,
+                mem::size_of_val(&if_index) as c_int,
+            ),
+            SocketAddr::V6(..) => setsockopt(
+                handle,
+                IPPROTO_IPV6 as c_int,
+                IPV6_UNICAST_IF as c_int,
+                &if_index as *const _ as *const c_char,
+                mem::size_of_val(&if_index) as c_int,
+            ),
+        };
+
+        if ret == SOCKET_ERROR {
+            let err = io::Error::from_raw_os_error(WSAGetLastError());
+            error!("set IP_UNICAST_IF / IPV6_UNICAST_IF error: {}", err);
+            return Err(err);
+        }
+    }
+
+    Ok(())
+}
+
 fn disable_connection_reset(socket: &UdpSocket) -> io::Result<()> {
     let handle = socket.as_raw_socket() as SOCKET;
 
@@ -270,6 +328,10 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> i
 
     let socket = UdpSocket::bind(bind_addr).await?;
     disable_connection_reset(&socket)?;
+
+    if let Some(ref iface) = opts.bind_interface {
+        set_ip_unicast_if(&socket, bind_addr, iface)?;
+    }
 
     Ok(socket)
 }

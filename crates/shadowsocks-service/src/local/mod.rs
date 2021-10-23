@@ -104,9 +104,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
         bind_interface: config.outbound_bind_interface,
-
         bind_local_addr: config.outbound_bind_addr,
 
         ..Default::default()

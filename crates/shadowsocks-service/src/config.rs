@@ -963,8 +963,7 @@ pub struct Config {
     /// Set `SO_MARK` socket option for outbound sockets
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub outbound_fwmark: Option<u32>,
-    /// Set `SO_BINDTODEVICE` socket option for outbound sockets
-    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+    /// Set `SO_BINDTODEVICE` (Linux), `IP_BOUND_IF` (BSD), `IP_UNICAST_IF` (Windows) socket option for outbound sockets
     pub outbound_bind_interface: Option<String>,
     /// Outbound sockets will `bind` to this address
     pub outbound_bind_addr: Option<IpAddr>,
@@ -1088,7 +1087,6 @@ impl Config {
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
             outbound_bind_interface: None,
             outbound_bind_addr: None,
             #[cfg(target_os = "android")]
