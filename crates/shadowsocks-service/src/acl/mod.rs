@@ -195,7 +195,7 @@ impl ParsingRules {
     }
 
     fn compile_regex(name: &'static str, regex_rules: Vec<String>) -> io::Result<RegexSet> {
-        const REGEX_SIZE_LIMIT: usize = usize::max_value();
+        const REGEX_SIZE_LIMIT: usize = usize::MAX;
         RegexSetBuilder::new(regex_rules)
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
