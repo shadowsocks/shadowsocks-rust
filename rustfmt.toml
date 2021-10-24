@@ -1,4 +1,4 @@
-edition = "2018"
+edition = "2021"
 max_width = 120
 #indent_style = "Visual"
 #fn_call_width = 120
