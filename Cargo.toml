@@ -8,7 +8,7 @@ readme = "README.md"
 documentation = "https://docs.rs/shadowsocks"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
-edition = "2018"
+edition = "2021"
 
 [badges]
 maintenance = { status = "passively-maintained" }
