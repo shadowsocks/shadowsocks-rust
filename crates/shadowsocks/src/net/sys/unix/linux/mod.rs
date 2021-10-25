@@ -6,6 +6,8 @@ use std::{
     pin::Pin,
     task::{self, Poll},
 };
+#[cfg(target_os = "android")]
+use std::io::ErrorKind;
 
 use cfg_if::cfg_if;
 use log::error;
@@ -278,7 +280,6 @@ fn set_bindtodevice<S: AsRawFd>(socket: &S, iface: &str) -> io::Result<()> {
 cfg_if! {
     if #[cfg(target_os = "android")] {
         use std::path::Path;
-        use std::os::unix::io::RawFd;
 
         use super::uds::UnixStream;
 
