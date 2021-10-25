@@ -6,8 +6,6 @@ use std::{
     pin::Pin,
     task::{self, Poll},
 };
-#[cfg(target_os = "android")]
-use std::io::ErrorKind;
 
 use cfg_if::cfg_if;
 use log::error;
@@ -42,7 +40,7 @@ impl TcpStream {
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
         if !addr.ip().is_loopback() {
-            use std::time::Duration;
+            use std::{io::ErrorKind, time::Duration};
             use tokio::time;
 
             if let Some(ref path) = opts.vpn_protect_path {
@@ -214,7 +212,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
     {
-        use std::time::Duration;
+        use std::{io::ErrorKind, time::Duration};
         use tokio::time;
 
         if let Some(ref path) = config.vpn_protect_path {
@@ -279,7 +277,11 @@ fn set_bindtodevice<S: AsRawFd>(socket: &S, iface: &str) -> io::Result<()> {
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
-        use std::path::Path;
+        use std::{
+            io::ErrorKind,
+            path::Path,
+        };
+        use tokio::io::AsyncReadExt;
 
         use super::uds::UnixStream;
 
@@ -289,8 +291,6 @@ cfg_if! {
         ///
         /// More detail could be found in [shadowsocks-android](https://github.com/shadowsocks/shadowsocks-android) project.
         async fn vpn_protect<P: AsRef<Path>>(protect_path: P, fd: RawFd) -> io::Result<()> {
-            use tokio::io::AsyncReadExt;
-
             let mut stream = UnixStream::connect(protect_path).await?;
 
             // send fds
