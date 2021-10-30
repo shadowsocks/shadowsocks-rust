@@ -1573,7 +1573,6 @@ dependencies = [
  "spin 0.9.2",
  "thiserror",
  "tokio",
- "tokio-io-timeout",
  "tokio-tfo",
  "trust-dns-resolver",
  "url",
@@ -1893,16 +1892,6 @@ dependencies = [
  "signal-hook-registry",
  "tokio-macros",
  "winapi",
-]
-
-[[package]]
-name = "tokio-io-timeout"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90c49f106be240de154571dd31fbe48acb10ba6c6dd6f6517ad603abffa42de9"
-dependencies = [
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]

@@ -17,7 +17,6 @@ pub struct Context {
     // Protector against replay attack
     // The actual replay detection behavior is implemented in ReplayProtector
     replay_protector: ReplayProtector,
-
     // Policy against replay attack
     replay_policy: ReplayAttackPolicy,
 

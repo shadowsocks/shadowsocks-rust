@@ -1,6 +1,6 @@
 use crate::config::ServerType;
 
-/// A dummy protector against replay attach
+/// A dummy protector against replay attack
 ///
 /// It is dummy because it can protect nothing.
 pub struct ReplayProtector;

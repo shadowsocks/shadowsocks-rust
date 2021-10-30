@@ -8,13 +8,11 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 
 use futures::ready;
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_io_timeout::TimeoutReader;
 
 use crate::crypto::v1::{CipherCategory, CipherKind};
 
@@ -181,9 +179,9 @@ enum TransferState {
 #[pin_project(project = CopyBidirectionalProj)]
 struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
     #[pin]
-    a: TimeoutReader<&'a mut A>,
+    a: &'a mut A,
     #[pin]
-    b: TimeoutReader<&'a mut B>,
+    b: &'a mut B,
     a_to_b: TransferState,
     b_to_a: TransferState,
 }
@@ -191,8 +189,8 @@ struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
 fn transfer_one_direction<A, B>(
     cx: &mut Context<'_>,
     state: &mut TransferState,
-    mut r: Pin<&mut TimeoutReader<&mut A>>,
-    mut w: Pin<&mut TimeoutReader<&mut B>>,
+    mut r: Pin<&mut A>,
+    mut w: Pin<&mut B>,
 ) -> Poll<io::Result<u64>>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
@@ -235,46 +233,10 @@ where
 
         // It is not a problem if ready! returns early because transfer_one_direction for the
         // other direction will keep returning TransferState::Done(count) in future calls to poll
+        let a_to_b = ready!(poll_a_to_b);
+        let b_to_a = ready!(poll_b_to_a);
 
-        // When one direction have already finished, FIN have already sent to the writer.
-        // But the FIN may have been lost.
-        // This timer is for purging those "Half Open" connections.
-        const READ_TIMEOUT_WHEN_ONE_SHUTDOWN: Duration = Duration::from_secs(5);
-
-        // Check if one end have already finished
-        match (poll_a_to_b, poll_b_to_a) {
-            (Poll::Ready(a_to_b), Poll::Ready(b_to_a)) => Poll::Ready(Ok((a_to_b, b_to_a))),
-
-            (Poll::Ready(a_to_b), Poll::Pending) => {
-                // a -> b finished, then FIN have already sent to b, setting a read timeout on b
-                if b.timeout().is_none() {
-                    b.as_mut().set_timeout_pinned(Some(READ_TIMEOUT_WHEN_ONE_SHUTDOWN));
-
-                    // poll again to ensure Waker have already registered to the timer
-                    let b_to_a = ready!(transfer_one_direction(cx, b_to_a, b.as_mut(), a.as_mut())?);
-
-                    Poll::Ready(Ok((a_to_b, b_to_a)))
-                } else {
-                    Poll::Pending
-                }
-            }
-
-            (Poll::Pending, Poll::Ready(b_to_a)) => {
-                // b -> a finished, then FIN have already sent to a, setting a read timeout on a
-                if a.timeout().is_none() {
-                    a.as_mut().set_timeout_pinned(Some(READ_TIMEOUT_WHEN_ONE_SHUTDOWN));
-
-                    // poll again to ensure Waker have already registered to the timer
-                    let a_to_b = ready!(transfer_one_direction(cx, a_to_b, a.as_mut(), b.as_mut())?);
-
-                    Poll::Ready(Ok((a_to_b, b_to_a)))
-                } else {
-                    Poll::Pending
-                }
-            }
-
-            (Poll::Pending, Poll::Pending) => Poll::Pending,
-        }
+        Poll::Ready(Ok((a_to_b, b_to_a)))
     }
 }
 
@@ -315,8 +277,8 @@ where
     P: AsyncRead + AsyncWrite + Unpin + ?Sized,
 {
     CopyBidirectional {
-        a: TimeoutReader::new(encrypted),
-        b: TimeoutReader::new(plain),
+        a: encrypted,
+        b: plain,
         a_to_b: TransferState::Running(CopyBuffer::new(encrypted_read_buffer_size(method))),
         b_to_a: TransferState::Running(CopyBuffer::new(plain_read_buffer_size(method))),
     }
