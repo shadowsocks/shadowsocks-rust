@@ -61,30 +61,50 @@ impl ProxyHttpStream {
 
     #[cfg(feature = "local-http-rustls")]
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
+        use byte_string::ByteStr;
         use log::warn;
         use once_cell::sync::Lazy;
-        use std::sync::Arc;
+        use std::{convert::TryFrom, sync::Arc};
         use tokio_rustls::{
-            rustls::{ClientConfig, Session},
-            webpki::DNSNameRef,
+            rustls::{Certificate, ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName},
             TlsConnector,
         };
 
         static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
-            let mut config = ClientConfig::new();
+            let mut config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(match rustls_native_certs::load_native_certs() {
+                    Ok(certs) => {
+                        let mut store = RootCertStore::empty();
 
-            match rustls_native_certs::load_native_certs() {
-                Ok(store) => {
-                    config.root_store = store;
-                }
-                Err((_, err)) => {
-                    warn!("failed to load native certs, {}", err);
+                        for cert in certs {
+                            let rcert = Certificate(cert.0);
+                            if let Err(err) = store.add(&rcert) {
+                                warn!("failed to add cert, error: {}, cert: {:?}", err, ByteStr::new(&rcert.0));
+                            }
+                        }
 
-                    config
-                        .root_store
-                        .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-                }
-            }
+                        store
+                    }
+                    Err(err) => {
+                        warn!("failed to load native certs, {}", err);
+
+                        let mut roots = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
+                        for root in webpki_roots::TLS_SERVER_ROOTS.0 {
+                            roots.push(OwnedTrustAnchor::from_subject_spki_name_constraints(
+                                root.subject,
+                                root.spki,
+                                root.name_constraints,
+                            ));
+                        }
+
+                        let mut store = RootCertStore::empty();
+                        store.add_server_trust_anchors(roots.into_iter());
+
+                        store
+                    }
+                })
+                .with_no_client_auth();
 
             // Try to negociate HTTP/2
             config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
@@ -93,7 +113,7 @@ impl ProxyHttpStream {
 
         let connector = TlsConnector::from(TLS_CONFIG.clone());
 
-        let host = match DNSNameRef::try_from_ascii_str(domain) {
+        let host = match ServerName::try_from(domain) {
             Ok(n) => n,
             Err(_) => {
                 return Err(io::Error::new(
@@ -106,7 +126,7 @@ impl ProxyHttpStream {
         let tls_stream = connector.connect(host, stream).await?;
 
         let (_, session) = tls_stream.get_ref();
-        let negociated_http2 = matches!(session.get_alpn_protocol(), Some(b"h2"));
+        let negociated_http2 = matches!(session.alpn_protocol(), Some(b"h2"));
 
         Ok(ProxyHttpStream::Https(tls_stream, negociated_http2))
     }
