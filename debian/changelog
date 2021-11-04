@@ -554,7 +554,7 @@ shadowsocks-rust (1.8.8) unstable; urgency=medium
       * Eliminated those connection failures while sslocal server just started
   * [#191](https://github.com/shadowsocks/shadowsocks-rust/issues/191) Skip IV/nonce duplication check for plain cipher
 
-  ## Miscelleous
+  ## Miscellaneous
 
   * Nightly builds on CircleCI: https://circleci.com/gh/shadowsocks/shadowsocks-rust
       * Obtain release binaries in #Artifacts, for example:
