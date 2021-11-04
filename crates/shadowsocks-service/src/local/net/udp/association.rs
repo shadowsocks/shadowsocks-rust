@@ -35,7 +35,7 @@ use crate::{
 /// Writer for sending packets back to client
 ///
 /// Currently it requires `async-trait` for `async fn` in trait, which will allocate a `Box`ed `Future` every call of `send_to`.
-/// This performance issue could be solved when `generic_associated_types` and `generic_associated_types` are stablized.
+/// This performance issue could be solved when `generic_associated_types` and `generic_associated_types` are stabilized.
 #[async_trait]
 pub trait UdpInboundWrite {
     /// Sends packet `data` received from `remote_addr` back to `peer_addr`
