@@ -17,7 +17,7 @@ pub struct TcpSocketOpts {
     /// `TCP_FASTOPEN`, enables TFO
     pub fastopen: bool,
 
-    /// `SO_KEEPALIVE` and sets `TCP_KEEPIDLE`, `TCP_KEEPINTVL` and `TCP_KEEPCNT` respectly,
+    /// `SO_KEEPALIVE` and sets `TCP_KEEPIDLE`, `TCP_KEEPINTVL` and `TCP_KEEPCNT` respectively,
     /// enables keep-alive messages on connection-oriented sockets
     pub keepalive: Option<Duration>,
 }
