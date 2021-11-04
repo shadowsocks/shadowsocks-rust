@@ -52,7 +52,7 @@ impl Redir {
         self.udp_expiry_duration = Some(d);
     }
 
-    /// Set total UDP association to be kept simultaneouslyin server
+    /// Set total UDP association to be kept simultaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = Some(c);
     }
