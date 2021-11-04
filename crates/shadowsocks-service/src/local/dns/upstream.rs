@@ -213,7 +213,7 @@ impl DnsClient {
                     Ordering::Less => {
                         let err = io::Error::last_os_error();
                         // I have to trust the `s` have already set to non-blocking mode
-                        // Becuase windows doesn't have MSG_DONTWAIT
+                        // Because windows doesn't have MSG_DONTWAIT
                         err.kind() == ErrorKind::WouldBlock
                     }
                 }
