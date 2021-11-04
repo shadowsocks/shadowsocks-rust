@@ -268,7 +268,7 @@ impl UdpAssociationContext {
         balancer: PingBalancer,
     ) -> (Arc<UdpAssociationContext>, mpsc::Sender<Bytes>) {
         // Pending packets 1024 should be good enough for a server.
-        // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
+        // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
         let (sender, receiver) = mpsc::channel(1024);
 
