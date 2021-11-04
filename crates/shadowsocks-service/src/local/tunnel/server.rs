@@ -41,7 +41,7 @@ impl Tunnel {
         self.udp_expiry_duration = Some(d);
     }
 
-    /// Set total UDP association to be kept simutaneously in server
+    /// Set total UDP association to be kept simultaneouslyin server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = Some(c);
     }

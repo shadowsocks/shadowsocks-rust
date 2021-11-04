@@ -440,7 +440,7 @@ shadowsocks-rust (1.8.12) unstable; urgency=medium
   * [#233](https://github.com/shadowsocks/shadowsocks-rust/issues/233) sslocal supports socks4 protocol (SOCKS4/4a)
   * Options for LRU cache in UDP relay:
       * udp_timeout: UDP Association will be kept up to this duration (in seconds)
-      * udp_max_associations: Maximum number of UDP Associations will be kept simutanously
+      * udp_max_associations: Maximum number of UDP Associations will be kept simultaneously
 
   ## BUG Fixed
 
