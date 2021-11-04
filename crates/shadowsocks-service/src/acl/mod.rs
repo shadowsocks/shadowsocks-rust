@@ -412,7 +412,7 @@ impl AccessControl {
 
     /// Default mode
     ///
-    /// Default behavor for hosts that are not configured
+    /// Default behavior for hosts that are not configured
     /// - `true` - Proxied
     /// - `false` - Bypassed
     pub fn is_default_in_proxy_list(&self) -> bool {

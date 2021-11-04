@@ -129,7 +129,7 @@ impl TcpServerClient {
                 let res = ignore_until_end(&mut stream).await;
 
                 trace!(
-                    "slient-drop peer: {} is now closing with result {:?}",
+                    "silent-drop peer: {} is now closing with result {:?}",
                     self.peer_addr,
                     res
                 );

@@ -59,7 +59,7 @@ local-socks4 = ["local"]
 local-tun = ["local", "etherparse", "tun", "rand"]
 
 # Enable Stream Cipher Protocol
-# WARN: Stream Cipher Protocol is proved to be insecured
+# WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks/stream-cipher"]

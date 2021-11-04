@@ -41,7 +41,7 @@ def generate_ipset(content, name, location_set, type_set, output_file):
                     '''
                     In the case of IPv4 address the count of hosts for this range. This count does not have to represent a CIDR range.
 
-                    But. It seems that it is always a CIDR range in this paticalur file.
+                    But. It seems that it is always a CIDR range in this particular file.
                     '''
                     mask = cidr_trans[int(value)]
                     output_file.write(

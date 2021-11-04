@@ -70,7 +70,7 @@ Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
 ```bash
 # Set default toolchain to nightly
 rustup default nightly
-# RECOMMEND: Check the rust-toolchain file in the project root and use the recomended nightly version
+# RECOMMEND: Check the rust-toolchain file in the project root and use the recommended nightly version
 # For example:
 # rustup default nightly-2021-06-03
 

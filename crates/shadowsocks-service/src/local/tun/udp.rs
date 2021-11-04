@@ -58,7 +58,7 @@ impl UdpTun {
     pub async fn recv_packet(&mut self) -> BytesMut {
         match self.tun_rx.recv().await {
             Some(b) => b,
-            None => unreachable!("channel closed unexpectly"),
+            None => unreachable!("channel closed unexpectedly"),
         }
     }
 }

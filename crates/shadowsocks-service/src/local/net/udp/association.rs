@@ -35,7 +35,7 @@ use crate::{
 /// Writer for sending packets back to client
 ///
 /// Currently it requires `async-trait` for `async fn` in trait, which will allocate a `Box`ed `Future` every call of `send_to`.
-/// This performance issue could be solved when `generic_associated_types` and `generic_associated_types` are stablized.
+/// This performance issue could be solved when `generic_associated_types` and `generic_associated_types` are stabilized.
 #[async_trait]
 pub trait UdpInboundWrite {
     /// Sends packet `data` received from `remote_addr` back to `peer_addr`
@@ -299,7 +299,7 @@ where
         respond_writer: W,
     ) -> (Arc<UdpAssociationContext<W>>, mpsc::Sender<(Address, Bytes)>) {
         // Pending packets 1024 should be good enough for a server.
-        // If there are plenty of packets stuck in the channel, dropping exccess packets is a good way to protect the server from
+        // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
         let (sender, receiver) = mpsc::channel(1024);
 

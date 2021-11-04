@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 //!
-//! *It should be notice that the extented configuration file is not suitable for the server
+//! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
 use std::{net::IpAddr, process, time::Duration};
@@ -314,8 +314,8 @@ fn main() {
         match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => {
-                eprintln!("server exited unexpectly");
-                process::exit(common::EXIT_CODE_SERVER_EXIT_UNEXPECTLY);
+                eprintln!("server exited unexpectedly");
+                process::exit(common::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY);
             }
             // Server future resolved with error, which are listener errors in most cases
             Either::Left((Err(err), ..)) => {

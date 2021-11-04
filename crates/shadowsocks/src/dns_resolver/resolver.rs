@@ -198,7 +198,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
         update_task = Some(task);
     }
 
-    error!("auto-reload {} task exited unexpectly", DNS_RESOLV_FILE_PATH);
+    error!("auto-reload {} task exited unexpectedly", DNS_RESOLV_FILE_PATH);
 
     Ok(())
 }

@@ -159,7 +159,7 @@ impl Server {
             error!("servers exited with error: {}", err);
         }
 
-        let err = io::Error::new(ErrorKind::Other, "server exited unexpectly");
+        let err = io::Error::new(ErrorKind::Other, "server exited unexpectedly");
         Err(err)
     }
 

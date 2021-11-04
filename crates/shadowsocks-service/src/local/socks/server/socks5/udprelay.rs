@@ -36,7 +36,7 @@ struct Socks5UdpInboundWriter {
 #[async_trait]
 impl UdpInboundWrite for Socks5UdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
-        // Resssemble packet
+        // Reassemble packet
         let mut payload_buffer = BytesMut::new();
         let header = UdpAssociateHeader::new(0, remote_addr.clone());
         payload_buffer.reserve(header.serialized_len() + data.len());
