@@ -375,7 +375,7 @@ shadowsocks-rust (1.8.17) unstable; urgency=medium
 
   ## BUG Fixed
 
-  * [#292](https://github.com/shadowsocks/shadowsocks-rust/pull/292) Hold the TCP connection if it failed to decrypt the first packet for preventing activing probing.
+  * [#292](https://github.com/shadowsocks/shadowsocks-rust/pull/292) Hold the TCP connection if it failed to decrypt the first packet for preventing active probing.
   * [#293](https://github.com/shadowsocks/shadowsocks-rust/pull/293) Keep server running if it fails to create UDP associations.
 
  -- ty <zonyitoo@gmail.com>  Tue, 8 Sep 2020 23:31:20 +0800
