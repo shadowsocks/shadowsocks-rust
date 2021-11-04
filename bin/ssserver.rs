@@ -314,7 +314,7 @@ fn main() {
         match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => {
-                eprintln!("server exited unexpectly");
+                eprintln!("server exited unexpectedly");
                 process::exit(common::EXIT_CODE_SERVER_EXIT_UNEXPECTLY);
             }
             // Server future resolved with error, which are listener errors in most cases
