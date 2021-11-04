@@ -656,7 +656,7 @@ shadowsocks-rust (1.8.0) unstable; urgency=medium
       * `trust-dns-resolver` - `v0.18`
       * `libsodium-sys` (switched from `libsodium-ffi` for better build process)
   * Ping balancer
-      * Calculate scores not only with servers' latency, but also availablity
+      * Calculate scores not only with servers' latency, but also availability
       * Supports UDP relay
   * Retry 3 times if it connects failed to remote proxy server automatically
 
