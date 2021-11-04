@@ -46,7 +46,7 @@ shadowsocks-rust (1.11.2) unstable; urgency=medium
 
   ## Security
 
-  - #556 Remove slient dropping when replay was detected
+  - #556 Remove silent dropping when replay was detected
 
  -- ty <zonyitoo@gmail.com>  Sat, 24 July 2021 11:50:00 +0800
 
