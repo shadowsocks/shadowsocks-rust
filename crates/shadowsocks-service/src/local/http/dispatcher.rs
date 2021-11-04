@@ -233,7 +233,7 @@ fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_pr
     let mut conn_keep_alive = !matches!(version, Version::HTTP_09 | Version::HTTP_10);
 
     if check_proxy {
-        // Modern browers will send Proxy-Connection instead of Connection
+        // Modern browsers will send Proxy-Connection instead of Connection
         // for HTTP/1.0 proxies which blindly forward Connection to remote
         //
         // https://tools.ietf.org/html/rfc7230#appendix-A.1.2
