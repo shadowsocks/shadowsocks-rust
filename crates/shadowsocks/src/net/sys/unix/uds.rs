@@ -46,7 +46,7 @@ impl UnixStream {
                 // self.io.poll_write_ready indicates that writable event have been received by tokio,
                 // so it is not a common case that sendto returns EAGAIN.
                 //
-                // Just for double check. If EAGAIN actually returns, clear the readness state.
+                // Just for double check. If EAGAIN actually returns, clear the readiness state.
                 Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
                     ready.clear_ready();
                 }
@@ -74,7 +74,7 @@ impl UnixStream {
                 // self.io.poll_write_ready indicates that writable event have been received by tokio,
                 // so it is not a common case that recvto returns EAGAIN.
                 //
-                // Just for double check. If EAGAIN actually returns, clear the readness state.
+                // Just for double check. If EAGAIN actually returns, clear the readiness state.
                 Err(ref err) if err.kind() == ErrorKind::WouldBlock => {
                     ready.clear_ready();
                 }
