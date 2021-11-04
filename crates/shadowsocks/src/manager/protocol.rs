@@ -186,7 +186,7 @@ impl ManagerProtocol for PingRequest {
     }
 }
 
-/// `ping` reponse
+/// `ping` response
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct PingResponse {
