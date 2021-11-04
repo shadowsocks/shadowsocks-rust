@@ -462,7 +462,7 @@ shadowsocks-rust (1.8.11) unstable; urgency=medium
 
   * [#232](https://github.com/shadowsocks/shadowsocks-rust/issues/232) Send data along with handshake (LOCAL -> REMOTE)
   * HTTP server supports https target with both native-tls and rustls
-      * For rustls, https connections will try to negociate h2 with ALPN
+      * For rustls, https connections will try to negotiate h2 with ALPN
   * shadowsocks/shadowsocks-org#161 Support none as dummy cipher's name
   * Adding local-tunnel feature for controlling tunnel protocol
   * [#252](https://github.com/shadowsocks/shadowsocks-rust/issues/252) Support udp_max_associations configuration option
