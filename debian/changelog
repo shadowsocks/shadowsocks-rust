@@ -1,3 +1,33 @@
+shadowsocks-rust (1.12.0) unstable; urgency=medium
+
+  ## Features
+
+  - TCP connects with Happy Eyeballs (RFC6555, RFC8305) strategy
+  - Local 
+    - #586 Basic support of `tun` interface in `sslocal` (Experimental) Tested on macOS and Linux
+    - #620 Local server will choose remote servers based on their `"mode"`
+    - Local Balancer
+      - Configurable `max_server_rtt` and `check_interval`
+      - Reload configuration `"servers"` in runtime when receiving `SIGUSR1` signal
+  - Manager
+    - #421 `ssmanager` support `--plugin` and `--plugin-opts` as default plugin configurations
+    - #648 `ssmanager` support starting `ssserver` in standalone (independent process) mode.
+  - #627 ACL support `|` and `||` hash-set and domain-tree mode
+  - Support `--outbound-bind-interface` on Windows.
+
+  ## Bug Fixed
+
+  - #579 UDP server reply target address should be received source address
+  - TFO socket on Windows should bind to `SOCKADDR_IN6` for IPv6 targets
+  - #640 `--daemonize` will set `chdir` to current working directory
+    - [BREAKING] In the previous version `--daemonize` will call `chdir` to `/` by default, so it may change the behavior if users using relative paths in `"plugin"` or `"plugin_opts"`
+
+  ## Miscellaneous
+
+  - #596 Support Snapcraft https://snapcraft.io/shadowsocks-rust
+  - TFO on Linux queue length set to 1024 to match backlogs
+  - Completely remove Replay Attack Protection with Ping-Pong bloom filter in default build configuration
+
 shadowsocks-rust (1.11.2) unstable; urgency=medium
 
   ## Features
