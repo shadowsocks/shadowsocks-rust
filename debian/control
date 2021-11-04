@@ -12,5 +12,5 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, lsb-base
 Conflicts: shadowsocks
 Description: Rust port of shadowsocks, a secure socks5 proxy
  Shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
- Shadowsocks-rust was inspired by Shadowsock (in Python). It's rewritten
+ Shadowsocks-rust was inspired by Shadowsocks (in Python). It's rewritten
  in rust.
