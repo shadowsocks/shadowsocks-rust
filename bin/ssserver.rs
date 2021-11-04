@@ -4,7 +4,7 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 //!
-//! *It should be notice that the extented configuration file is not suitable for the server
+//! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
 use std::{net::IpAddr, process, time::Duration};
