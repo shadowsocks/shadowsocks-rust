@@ -170,6 +170,9 @@ fn main() {
                 sc.set_plugin(plugin);
             }
 
+            // For historical reason, servers that are created from command-line have to be tcp_only.
+            sc.set_mode(Mode::TcpOnly);
+
             if matches.is_present("UDP_ONLY") {
                 sc.set_mode(Mode::UdpOnly);
             }
