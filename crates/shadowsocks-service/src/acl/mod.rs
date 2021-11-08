@@ -10,11 +10,14 @@ use std::{
     io::{self, BufRead, BufReader, Error, ErrorKind},
     net::{IpAddr, SocketAddr},
     path::Path,
+    str,
 };
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use regex::bytes::{RegexSet, RegexSetBuilder};
+use log::trace;
+use once_cell::sync::Lazy;
+use regex::bytes::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 
 use shadowsocks::{context::Context, relay::socks5::Address};
 
@@ -158,25 +161,74 @@ impl ParsingRules {
     }
 
     fn add_ipv4_rule(&mut self, rule: impl Into<Ipv4Net>) {
-        self.ipv4.add(rule.into());
+        let rule = rule.into();
+        trace!("IPV4-RULE {}", rule);
+        self.ipv4.add(rule);
     }
 
     fn add_ipv6_rule(&mut self, rule: impl Into<Ipv6Net>) {
-        self.ipv6.add(rule.into());
+        let rule = rule.into();
+        trace!("IPV6-RULE {}", rule);
+        self.ipv6.add(rule);
     }
 
     fn add_regex_rule(&mut self, mut rule: String) {
+        static TREE_SET_RULE_EQUIV: Lazy<Regex> = Lazy::new(|| {
+            RegexBuilder::new(
+                r#"^(?:(?:\((?:\?:)?\^\|\\\.\)|(?:\^\.\+)?\\\.)((?:[\w-]+(?:\\\.)?)+)|\^((?:[\w-]+(?:\\\.)?)+))\$$"#,
+            )
+            .unicode(false)
+            .build()
+            .unwrap()
+        });
+
+        if let Some(caps) = TREE_SET_RULE_EQUIV.captures(rule.as_bytes()) {
+            if let Some(tree_rule) = caps.get(1) {
+                if let Ok(tree_rule) = str::from_utf8(tree_rule.as_bytes()) {
+                    let tree_rule = tree_rule.replace("\\.", ".");
+                    if let Ok(..) = self.add_tree_rule_inner(&tree_rule) {
+                        trace!("REGEX-RULE {} => TREE-RULE {}", rule, tree_rule);
+                        return;
+                    }
+                }
+            } else if let Some(set_rule) = caps.get(2) {
+                if let Ok(set_rule) = str::from_utf8(set_rule.as_bytes()) {
+                    let set_rule = set_rule.replace("\\.", ".");
+                    if let Ok(..) = self.add_set_rule_inner(&set_rule) {
+                        trace!("REGEX-RULE {} => SET-RULE {}", rule, set_rule);
+                        return;
+                    }
+                }
+            }
+        }
+
+        trace!("REGEX-RULE {}", rule);
+
         rule.make_ascii_lowercase();
+
+        // Handle it as a normal REGEX
         // FIXME: If this line is not a valid regex, how can we know without actually compile it?
         self.rules_regex.push(rule);
     }
 
+    #[inline]
     fn add_set_rule(&mut self, rule: &str) -> io::Result<()> {
+        trace!("SET-RULE {}", rule);
+        self.add_set_rule_inner(rule)
+    }
+
+    fn add_set_rule_inner(&mut self, rule: &str) -> io::Result<()> {
         self.rules_set.insert(self.check_is_ascii(rule)?.to_ascii_lowercase());
         Ok(())
     }
 
+    #[inline]
     fn add_tree_rule(&mut self, rule: &str) -> io::Result<()> {
+        trace!("TREE-RULE {}", rule);
+        self.add_tree_rule_inner(rule)
+    }
+
+    fn add_tree_rule_inner(&mut self, rule: &str) -> io::Result<()> {
         // SubDomainsTree do lowercase conversion inside insert
         self.rules_tree.insert(self.check_is_ascii(rule)?);
         Ok(())
@@ -274,6 +326,8 @@ pub struct AccessControl {
 impl AccessControl {
     /// Load ACL rules from a file
     pub fn load_from_file<P: AsRef<Path>>(p: P) -> io::Result<AccessControl> {
+        trace!("ACL loading from {:?}", p.as_ref());
+
         let fp = File::open(p)?;
         let r = BufReader::new(fp);
 
@@ -283,6 +337,8 @@ impl AccessControl {
         let mut bypass = ParsingRules::new("[black_list] or [bypass_list]");
         let mut proxy = ParsingRules::new("[white_list] or [proxy_list]");
         let mut curr = &mut bypass;
+
+        trace!("ACL parsing start from mode {:?} and black_list / bypass_list", mode);
 
         for line in r.lines() {
             let line = line?;
@@ -310,18 +366,23 @@ impl AccessControl {
             match line {
                 "[reject_all]" | "[bypass_all]" => {
                     mode = Mode::WhiteList;
+                    trace!("switch to mode {:?}", mode);
                 }
                 "[accept_all]" | "[proxy_all]" => {
                     mode = Mode::BlackList;
+                    trace!("switch to mode {:?}", mode);
                 }
                 "[outbound_block_list]" => {
                     curr = &mut outbound_block;
+                    trace!("loading outbound_block_list");
                 }
                 "[black_list]" | "[bypass_list]" => {
                     curr = &mut bypass;
+                    trace!("loading black_list / bypass_list");
                 }
                 "[white_list]" | "[proxy_list]" => {
                     curr = &mut proxy;
+                    trace!("loading white_list / proxy_list");
                 }
                 _ => {
                     match line.parse::<IpNet>() {
