@@ -37,7 +37,7 @@ if [[ "${#targets[@]}" == "0" ]]; then
 fi
 
 if [[ "${use_upx}" = true ]]; then
-    if [[ ! -z $upx ]] && hash upx 2>/dev/null; then
+    if [[ -z "$upx" ]] && command -v upx &> /dev/null; then
         upx="upx -9"
     fi
 
