@@ -15,7 +15,7 @@ use std::{
 
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use iprange::IpRange;
-use log::trace;
+use log::{trace, warn};
 use once_cell::sync::Lazy;
 use regex::bytes::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 
@@ -352,6 +352,11 @@ impl AccessControl {
             }
 
             let line = line.trim();
+
+            if !line.is_ascii() {
+                warn!("ACL rule {} containing non-ASCII characters, skipped", line);
+                continue;
+            }
 
             if let Some(rule) = line.strip_prefix("||") {
                 curr.add_tree_rule(rule)?;
