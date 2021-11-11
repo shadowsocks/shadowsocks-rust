@@ -1,3 +1,14 @@
+shadowsocks-rust (1.12.1) unstable; urgency=medium
+
+  ## Features
+
+    - #669 ACL regular expression rules will try to convert to `||` (sub-domains) and `|` (exact match) rules.
+
+  ## Bug Fixes
+
+    - #674 MIPS targets in pre-built releases binaries will be compressed by `upx`
+    - #670 Servers created by command line options in `ssserver` will have mode `tcp_only`
+
 shadowsocks-rust (1.12.0) unstable; urgency=medium
 
   ## Features
