@@ -97,7 +97,7 @@ tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6.1", optional = true }
 async-trait = "0.1"
-mio = { version = "0.7", optional = true }
+mio = { version = "0.8", optional = true }
 
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
