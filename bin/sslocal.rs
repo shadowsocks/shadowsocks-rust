@@ -329,7 +329,25 @@ fn main() {
 
             #[cfg(feature = "local-dns")]
             {
-                use shadowsocks_service::local::dns::NameServerAddr;
+                use shadowsocks_service::{local::dns::NameServerAddr, shadowsocks::relay::socks5::AddressError};
+                use std::net::SocketAddr;
+
+                #[inline]
+                fn parse_remote_dns_addr(a: &str) -> Result<Address, AddressError> {
+                    if let Ok(ip) = a.parse::<IpAddr>() {
+                        return Ok(Address::SocketAddress(SocketAddr::new(ip, 53)));
+                    }
+
+                    if let Ok(saddr) = a.parse::<SocketAddr>() {
+                        return Ok(Address::SocketAddress(saddr));
+                    }
+
+                    if a.find(':').is_some() {
+                        a.parse::<Address>()
+                    } else {
+                        Ok(Address::DomainNameAddress(a.to_owned(), 53))
+                    }
+                }
 
                 if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
                     let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
@@ -337,7 +355,7 @@ fn main() {
                 }
 
                 if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-                    let addr = remote_dns_addr.parse::<Address>().expect("remote dns address");
+                    let addr = parse_remote_dns_addr(remote_dns_addr).expect("remote dns address");
                     local_config.remote_dns_addr = Some(addr);
                 }
             }
