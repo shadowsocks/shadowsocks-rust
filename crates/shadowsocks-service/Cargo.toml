@@ -50,7 +50,7 @@ local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-rustls = ["local-http", "tokio-rustls", "webpki-roots", "rustls-native-certs"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
-local-redir = ["local", "mio"]
+local-redir = ["local"]
 # Enable tunnel protocol for sslocal
 local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
@@ -97,7 +97,6 @@ tokio-rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6.1", optional = true }
 async-trait = "0.1"
-mio = { version = "0.7", optional = true }
 
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"

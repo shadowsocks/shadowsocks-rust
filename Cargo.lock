@@ -1500,6 +1500,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sendfd"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fa25200c6de90f8da82d63f8806bd2ea1261018620dd4881626d6b146e13bd7"
+dependencies = [
+ "libc",
+ "tokio",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.130"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1591,11 +1601,11 @@ dependencies = [
  "futures",
  "libc",
  "log",
- "mio",
  "nix",
  "notify",
  "once_cell",
  "pin-project",
+ "sendfd",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1669,7 +1679,6 @@ dependencies = [
  "log",
  "log4rs",
  "lru_time_cache",
- "mio",
  "native-tls",
  "nix",
  "once_cell",
