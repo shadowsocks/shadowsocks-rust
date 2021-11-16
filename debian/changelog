@@ -1,3 +1,13 @@
+shadowsocks-rust (1.12.2) unstable; urgency=medium
+
+  ## BUG Fixes
+
+  - #683 local-dns command line `--remote-dns-addr` will have default port `53`
+
+  ## Miscellaneous
+
+  - Removed direct dependency to [`mio`](https://crates.io/crates/mio), sending file descriptors through UDS now with [`sendfd`](https://crates.io/crates/sendfd).
+
 shadowsocks-rust (1.12.1) unstable; urgency=medium
 
   ## Features
