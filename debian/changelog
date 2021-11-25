@@ -8,8 +8,9 @@ shadowsocks-rust (1.12.3) unstable; urgency=medium
     - macOS: `$HOME/Library/Application Support/org.shadowsocks.shadowsocks-rust/config.json`
   - #691 Manipulating default logging options (command line options `-vvv` and `--log-without-time`) with environment variable `SS_LOG_VERBOSE_LEVEL` and `SS_LOG_WITHOUT_TIME`
   - #419 Read servers' password from environment variables
-    - Server created from command line argument without `--password`, reading password from `SS_SERVER_${SERVER_ADDR}_PASSWORD`, `SS_SERVER_PASSWORD` or TTY
-    - Server defined in configuration file, `"password"` field support `${VAR_NAME}` format to read password from environment variable `VAR_NAME`
+    - Server created from command line argument without `--password` will try to read it from TTY
+    - Servers' `"password"` field or `--password` option support `${VAR_NAME}` format to read password from environment variable `VAR_NAME`
+
 
 shadowsocks-rust (1.12.2) unstable; urgency=medium
 

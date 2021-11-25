@@ -16,7 +16,7 @@ use tokio::{self, runtime::Builder};
 
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, ManagerConfig},
+    config::{read_variable_field_value, Config, ConfigType, ManagerConfig},
     run_server,
     shadowsocks::{
         config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
@@ -152,7 +152,7 @@ fn main() {
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
             let password = match clap::value_t!(matches.value_of("PASSWORD"), String) {
-                Ok(pwd) => pwd.to_owned(),
+                Ok(pwd) => read_variable_field_value(&pwd).into(),
                 Err(err) => {
                     // NOTE: svr_addr should have been checked by common::validator
                     match common::password::read_server_password(svr_addr) {

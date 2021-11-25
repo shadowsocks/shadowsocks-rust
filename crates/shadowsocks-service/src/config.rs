@@ -1396,7 +1396,7 @@ impl Config {
                 };
 
                 // Only "password" support getting from environment variable.
-                let password = get_variable_field_value(&pwd);
+                let password = read_variable_field_value(&pwd);
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
                 nsvr.set_mode(global_mode);
@@ -1466,7 +1466,7 @@ impl Config {
                 };
 
                 // Only "password" support getting from environment variable.
-                let password = get_variable_field_value(&svr.password);
+                let password = read_variable_field_value(&svr.password);
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
 
@@ -2226,21 +2226,22 @@ impl fmt::Display for Config {
     }
 }
 
-fn get_variable_field_value(value: &str) -> Cow<'_, str> {
+/// Parse variable value if it is an environment variable
+///
+/// If value is in format `${VAR_NAME}` then it will try to read from `VAR_NAME` environment variable.
+/// It will return the original value if fails to read `${VAR_NAME}`.
+pub fn read_variable_field_value(value: &str) -> Cow<'_, str> {
     if let Some(left_over) = value.strip_prefix("${") {
         if let Some(var_name) = left_over.strip_suffix("}") {
-            return match env::var(var_name) {
-                Ok(value) => value.into(),
+            match env::var(var_name) {
+                Ok(value) => return value.into(),
                 Err(err) => {
                     warn!(
                         "couldn't read password from environemnt variable {}, error: {}",
                         var_name, err
                     );
-
-                    // NOTE: Just like shell, if environment variable not found, then the value of it is an empty string.
-                    "".into()
                 }
-            };
+            }
         }
     }
 

@@ -17,7 +17,7 @@ use shadowsocks_service::config::RedirType;
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{Config, ConfigType, LocalConfig, ProtocolType},
+    config::{read_variable_field_value, Config, ConfigType, LocalConfig, ProtocolType},
     create_local,
     local::loadbalancing::PingBalancer,
     shadowsocks::{
@@ -228,7 +228,7 @@ fn main() {
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
             let password = match clap::value_t!(matches.value_of("PASSWORD"), String) {
-                Ok(pwd) => pwd.to_owned(),
+                Ok(pwd) => read_variable_field_value(&pwd).into(),
                 Err(err) => {
                     // NOTE: svr_addr should have been checked by common::validator
                     match common::password::read_server_password(svr_addr) {
