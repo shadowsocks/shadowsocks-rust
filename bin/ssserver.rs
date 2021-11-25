@@ -170,7 +170,7 @@ fn main() {
                 Err(err) => err.exit(),
             };
 
-            let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method);
+            let mut sc = ServerConfig::new(svr_addr, password, method);
             if let Some(timeout) = timeout {
                 sc.set_timeout(timeout);
             }

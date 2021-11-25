@@ -355,24 +355,18 @@ fn main() {
 
                     fn from_str(a: &str) -> Result<RemoteDnsAddress, Self::Err> {
                         if let Ok(ip) = a.parse::<IpAddr>() {
-                            return Ok(Address::SocketAddress(SocketAddr::new(ip, 53)).into());
+                            return Ok(RemoteDnsAddress(Address::SocketAddress(SocketAddr::new(ip, 53))));
                         }
 
                         if let Ok(saddr) = a.parse::<SocketAddr>() {
-                            return Ok(Address::SocketAddress(saddr).into());
+                            return Ok(RemoteDnsAddress(Address::SocketAddress(saddr)));
                         }
 
                         if a.find(':').is_some() {
-                            a.parse::<Address>().map(Into::into)
+                            a.parse::<Address>().map(RemoteDnsAddress)
                         } else {
-                            Ok(Address::DomainNameAddress(a.to_owned(), 53).into())
+                            Ok(RemoteDnsAddress(Address::DomainNameAddress(a.to_owned(), 53)))
                         }
-                    }
-                }
-
-                impl Into<RemoteDnsAddress> for Address {
-                    fn into(self) -> RemoteDnsAddress {
-                        RemoteDnsAddress(self)
                     }
                 }
 
