@@ -7,7 +7,7 @@
 //! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
-use std::{net::IpAddr, process, time::Duration};
+use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
 use clap::{clap_app, Arg};
 use futures::future::{self, Either};
@@ -44,7 +44,7 @@ fn main() {
             (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] "Server mode UDP_ONLY")
             (@arg TCP_AND_UDP: -U conflicts_with[UDP_ONLY] "Server mode TCP_AND_UDP")
 
-            (@arg CONFIG: -c --config +takes_value required_unless("MANAGER_ADDR")
+            (@arg CONFIG: -c --config +takes_value
                 "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html), \
                     the only required fields are \"manager_address\" and \"manager_port\". \
                     Servers defined will be created when process is started.")
@@ -136,11 +136,19 @@ fn main() {
             }
         }
 
-        let mut config = match matches.value_of("CONFIG") {
-            Some(cpath) => match Config::load_from_file(cpath, ConfigType::Manager) {
+        let config_path_opt = matches.value_of("CONFIG").map(|c| PathBuf::from(c)).or_else(|| {
+            if !matches.is_present("MANAGER_ADDR") {
+                common::config::get_default_config_path()
+            } else {
+                None
+            }
+        });
+
+        let mut config = match config_path_opt {
+            Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Manager) {
                 Ok(cfg) => cfg,
                 Err(err) => {
-                    eprintln!("loading config \"{}\", {}", cpath, err);
+                    eprintln!("loading config \"{}\", {}", cpath.display(), err);
                     process::exit(common::EXIT_CODE_LOAD_CONFIG_FAILURE);
                 }
             },

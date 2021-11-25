@@ -128,6 +128,8 @@ cfg-if = "1"
 qrcode = { version = "0.12", default-features = false }
 exitcode = "1"
 build-time = "0.1"
+directories = "4.0"
+xdg = "2.4"
 
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }

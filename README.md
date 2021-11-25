@@ -49,6 +49,8 @@ Related Projects:
 
 * `local-dns` - Allow using dns protocol for `sslocal`, serves as a DNS server proxying queries to local or remote DNS servers by ACL rules
 
+* `local-tun` - [TUN](https://en.wikipedia.org/wiki/TUN/TAP) interface support for `sslocal`
+
 * `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
 
 * `aead-cipher-extra` - Enable non-standard AEAD ciphers

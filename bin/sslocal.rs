@@ -42,7 +42,7 @@ fn main() {
             (version: VERSION)
             (about: "A fast tunnel proxy that helps you bypass firewalls.")
 
-            (@arg CONFIG: -c --config +takes_value required_unless("SERVER_CONFIG") "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
+            (@arg CONFIG: -c --config +takes_value "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
 
             (@arg LOCAL_ADDR: -b --("local-addr") +takes_value {validator::validate_server_addr} "Local address, listen only to this address if specified")
             (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[LOCAL_ADDR] "Server mode UDP_ONLY")
@@ -207,11 +207,19 @@ fn main() {
             }
         }
 
-        let mut config = match matches.value_of("CONFIG") {
-            Some(cpath) => match Config::load_from_file(cpath, ConfigType::Local) {
+        let config_path_opt = matches.value_of("CONFIG").map(|c| PathBuf::from(c)).or_else(|| {
+            if !matches.is_present("SERVER_CONFIG") {
+                common::config::get_default_config_path()
+            } else {
+                None
+            }
+        });
+
+        let mut config = match config_path_opt {
+            Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Local) {
                 Ok(cfg) => cfg,
                 Err(err) => {
-                    eprintln!("loading config \"{}\", {}", cpath, err);
+                    eprintln!("loading config \"{}\", {}", cpath.display(), err);
                     process::exit(common::EXIT_CODE_LOAD_CONFIG_FAILURE);
                 }
             },
