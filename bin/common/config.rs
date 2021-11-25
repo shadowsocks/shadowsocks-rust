@@ -30,7 +30,8 @@ pub fn get_default_config_path() -> Option<PathBuf> {
     }
 
     // UNIX global configuration file
-    if cfg!(unix) {
+    #[cfg(unix)]
+    {
         let global_config_path = Path::new("/etc/shadowsocks-rust/config.json");
         if global_config_path.exists() {
             return Some(global_config_path.to_path_buf());

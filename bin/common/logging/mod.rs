@@ -1,6 +1,6 @@
 //! Loggin facilities
 
-use std::path::Path;
+use std::{env, path::Path};
 
 use clap::ArgMatches;
 use log::LevelFilter;
@@ -18,8 +18,24 @@ where
 }
 
 pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
-    let debug_level = matches.occurrences_of("VERBOSE");
-    let without_time = matches.is_present("LOG_WITHOUT_TIME");
+    let mut debug_level = matches.occurrences_of("VERBOSE");
+    if debug_level == 0 {
+        // Override by SS_LOG_VERBOSE_LEVEL
+        if let Ok(verbose_level) = env::var("SS_LOG_VERBOSE_LEVEL") {
+            if let Ok(verbose_level) = verbose_level.parse::<u64>() {
+                debug_level = verbose_level;
+            }
+        }
+    }
+
+    let mut without_time = matches.is_present("LOG_WITHOUT_TIME");
+    if !without_time {
+        if let Ok(log_without_time) = env::var("SS_LOG_WITHOUT_TIME") {
+            if let Ok(log_without_time) = log_without_time.parse::<u32>() {
+                without_time = log_without_time != 0;
+            }
+        }
+    }
 
     let mut pattern = String::new();
     if !without_time {

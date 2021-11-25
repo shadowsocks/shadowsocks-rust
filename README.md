@@ -579,6 +579,11 @@ Example configuration:
 }
 ```
 
+### Environment Variables
+
+- `SS_LOG_VERBOSE_LEVEL`: Logging level for binaries (`sslocal`, `ssserver` and `ssmanager`). It is valid only when command line argument `-v` is not applied. Example: `SS_LOG_VERBOSE_LEVEL=1`
+- `SS_LOG_WITHOUT_TIME`: Logging format for binaries (`sslocal`, `ssserver` and `ssmanager`). It is valid only when command line argument `--log-without-time` is not applied. Example `SS_LOG_WITHOUT_TIME=1`
+
 ## Supported Ciphers
 
 ### AEAD Ciphers
