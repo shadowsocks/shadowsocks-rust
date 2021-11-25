@@ -42,8 +42,10 @@
 //! These defined server will be used with a load balancing algorithm.
 
 use std::{
+    borrow::Cow,
     convert::{From, Infallible},
     default::Default,
+    env,
     fmt::{self, Debug, Display, Formatter},
     fs::OpenOptions,
     io::Read,
@@ -58,6 +60,7 @@ use std::{
 use cfg_if::cfg_if;
 #[cfg(feature = "local-tun")]
 use ipnet::IpNet;
+use log::warn;
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
@@ -1392,7 +1395,10 @@ impl Config {
                     }
                 };
 
-                let mut nsvr = ServerConfig::new(addr, pwd, method);
+                // Only "password" support getting from environment variable.
+                let password = get_variable_field_value(&pwd);
+
+                let mut nsvr = ServerConfig::new(addr, password, method);
                 nsvr.set_mode(global_mode);
 
                 if let Some(ref p) = config.plugin {
@@ -1459,7 +1465,10 @@ impl Config {
                     }
                 };
 
-                let mut nsvr = ServerConfig::new(addr, svr.password, method);
+                // Only "password" support getting from environment variable.
+                let password = get_variable_field_value(&svr.password);
+
+                let mut nsvr = ServerConfig::new(addr, password, method);
 
                 match svr.mode {
                     Some(mode) => match mode.parse::<Mode>() {
@@ -2215,4 +2224,25 @@ impl fmt::Display for Config {
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
     }
+}
+
+fn get_variable_field_value(value: &str) -> Cow<'_, str> {
+    if let Some(left_over) = value.strip_prefix("${") {
+        if let Some(var_name) = left_over.strip_suffix("}") {
+            return match env::var(var_name) {
+                Ok(value) => value.into(),
+                Err(err) => {
+                    warn!(
+                        "couldn't read password from environemnt variable {}, error: {}",
+                        var_name, err
+                    );
+
+                    // NOTE: Just like shell, if environment variable not found, then the value of it is an empty string.
+                    "".into()
+                }
+            };
+        }
+    }
+
+    value.into()
 }

@@ -1,13 +1,14 @@
 //! Shadowsocks service command line utilities
 
 pub mod allocator;
+pub mod config;
 #[cfg(unix)]
 pub mod daemonize;
 #[cfg(feature = "logging")]
 pub mod logging;
 pub mod monitor;
+pub mod password;
 pub mod validator;
-pub mod config;
 
 pub const EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY: i32 = exitcode::SOFTWARE;
 pub const EXIT_CODE_SERVER_ABORTED: i32 = exitcode::SOFTWARE;

@@ -227,7 +227,19 @@ fn main() {
         };
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
-            let password = matches.value_of("PASSWORD").expect("password");
+            let password = match matches.value_of("PASSWORD") {
+                Some(pwd) => pwd.to_owned(),
+                None => {
+                    // NOTE: svr_addr should have been checked by common::validator
+                    match common::password::read_server_password(svr_addr) {
+                        Ok(pwd) => pwd,
+                        Err(..) => {
+                            panic!("missing server's password");
+                        }
+                    }
+                }
+            };
+
             let method = matches
                 .value_of("ENCRYPT_METHOD")
                 .expect("encrypt-method")
@@ -240,7 +252,7 @@ fn main() {
                 .map(|t| t.parse::<u64>().expect("timeout"))
                 .map(Duration::from_secs);
 
-            let mut sc = ServerConfig::new(svr_addr, password.to_owned(), method);
+            let mut sc = ServerConfig::new(svr_addr, password, method);
             if let Some(timeout) = timeout {
                 sc.set_timeout(timeout);
             }

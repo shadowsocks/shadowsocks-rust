@@ -1,3 +1,5 @@
+//! Common configuration utilities
+
 use directories::ProjectDirs;
 use std::path::{Path, PathBuf};
 

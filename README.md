@@ -522,6 +522,14 @@ Example configuration:
             // The higher weight, the server may rank higher.
             "tcp_weight": 1.0,
             "udp_weight": 1.0,
+        },
+        {
+            // Same key as basic format "server" and "server_port"
+            "server": "0.0.0.0",
+            "server_port": 8388,
+            "method": "chacha20-ietf-poly1305",
+            // Read the actual password from environment variable PASSWORD_FROM_ENV
+            "password": "${PASSWORD_FROM_ENV}"
         }
     ],
 
@@ -583,6 +591,8 @@ Example configuration:
 
 - `SS_LOG_VERBOSE_LEVEL`: Logging level for binaries (`sslocal`, `ssserver` and `ssmanager`). It is valid only when command line argument `-v` is not applied. Example: `SS_LOG_VERBOSE_LEVEL=1`
 - `SS_LOG_WITHOUT_TIME`: Logging format for binaries (`sslocal`, `ssserver` and `ssmanager`). It is valid only when command line argument `--log-without-time` is not applied. Example `SS_LOG_WITHOUT_TIME=1`
+- `SS_SERVER_PASSWORD`: A default password for servers that created from command line argument (`--server-addr`)
+- `SS_SERVER_${SERVER_ADDR}_PASSWORD`: A default password for server with address `$SERVER_ADDR` that created from command line argument (`--server-addr`)
 
 ## Supported Ciphers
 
