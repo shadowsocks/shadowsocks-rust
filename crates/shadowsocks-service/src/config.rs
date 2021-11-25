@@ -2232,7 +2232,7 @@ impl fmt::Display for Config {
 /// It will return the original value if fails to read `${VAR_NAME}`.
 pub fn read_variable_field_value(value: &str) -> Cow<'_, str> {
     if let Some(left_over) = value.strip_prefix("${") {
-        if let Some(var_name) = left_over.strip_suffix("}") {
+        if let Some(var_name) = left_over.strip_suffix('}') {
             match env::var(var_name) {
                 Ok(value) => return value.into(),
                 Err(err) => {

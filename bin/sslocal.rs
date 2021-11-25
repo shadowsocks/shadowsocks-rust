@@ -207,7 +207,7 @@ fn main() {
             }
         }
 
-        let config_path_opt = matches.value_of("CONFIG").map(|c| PathBuf::from(c)).or_else(|| {
+        let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
             if !matches.is_present("SERVER_CONFIG") {
                 common::config::get_default_config_path()
             } else {
