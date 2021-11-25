@@ -29,6 +29,7 @@ use shadowsocks_service::{
 use self::common::logging;
 use self::common::{monitor, validator};
 
+#[allow(dead_code)]
 mod common;
 
 /// shadowsocks version
