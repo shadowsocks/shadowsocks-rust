@@ -9,11 +9,13 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{clap_app, Arg};
+use clap::{clap_app, Arg, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
 
+#[cfg(unix)]
+use shadowsocks_service::config::ManagerServerMode;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{Config, ConfigType, ManagerConfig, ManagerServerHost},
@@ -156,11 +158,6 @@ fn main() {
             None => Config::new(ConfigType::Manager),
         };
 
-        if let Some(bind_addr) = matches.value_of("OUTBOUND_BIND_ADDR") {
-            let bind_addr = bind_addr.parse::<IpAddr>().expect("outbound-bind-addr");
-            config.outbound_bind_addr = Some(bind_addr);
-        }
-
         if matches.is_present("TCP_NO_DELAY") {
             config.no_delay = true;
         }
@@ -169,42 +166,54 @@ fn main() {
             config.fast_open = true;
         }
 
-        if let Some(keep_alive) = matches.value_of("TCP_KEEP_ALIVE") {
-            config.keep_alive = Some(Duration::from_secs(
-                keep_alive
-                    .parse::<u64>()
-                    .expect("`tcp-keep-alive` is expecting an integer"),
-            ));
+        match clap::value_t!(matches.value_of("TCP_KEEP_ALIVE"), u64) {
+            Ok(keep_alive) => config.keep_alive = Some(Duration::from_secs(keep_alive)),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Some(mark) = matches.value_of("OUTBOUND_FWMARK") {
-            config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
+        match clap::value_t!(matches.value_of("OUTBOUND_FWMARK"), u32) {
+            Ok(mark) => config.outbound_fwmark = Some(mark),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
-            config.outbound_bind_interface = Some(iface.to_owned());
+        match clap::value_t!(matches.value_of("OUTBOUND_BIND_INTERFACE"), String) {
+            Ok(iface) => config.outbound_bind_interface = Some(iface),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(m) = matches.value_of("MANAGER_ADDR") {
-            if let Some(ref mut manager_config) = config.manager {
-                manager_config.addr = m.parse::<ManagerAddr>().expect("manager-address");
-            } else {
-                config.manager = Some(ManagerConfig::new(m.parse::<ManagerAddr>().expect("manager-address")));
+        match clap::value_t!(matches.value_of("MANAGER_ADDR"), ManagerAddr) {
+            Ok(addr) => {
+                if let Some(ref mut manager_config) = config.manager {
+                    manager_config.addr = addr;
+                } else {
+                    config.manager = Some(ManagerConfig::new(addr));
+                }
             }
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         if let Some(ref mut manager_config) = config.manager {
-            if let Some(m) = matches.value_of("ENCRYPT_METHOD") {
-                manager_config.method = Some(m.parse::<CipherKind>().expect("encrypt-method"));
+            match clap::value_t!(matches.value_of("ENCRYPT_METHOD"), CipherKind) {
+                Ok(m) => manager_config.method = Some(m),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
-            if let Some(t) = matches.value_of("TIMEOUT") {
-                manager_config.timeout = Some(Duration::from_secs(t.parse::<u64>().expect("timeout")));
+            match clap::value_t!(matches.value_of("TIMEOUT"), u64) {
+                Ok(t) => manager_config.timeout = Some(Duration::from_secs(t)),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
-            if let Some(sh) = matches.value_of("SERVER_HOST") {
-                manager_config.server_host = sh.parse::<ManagerServerHost>().unwrap();
+            match clap::value_t!(matches.value_of("SERVER_HOST"), ManagerServerHost) {
+                Ok(sh) => manager_config.server_host = sh,
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
             if let Some(p) = matches.value_of("PLUGIN") {
@@ -216,15 +225,17 @@ fn main() {
             }
 
             #[cfg(unix)]
-            if let Some(server_mode) = matches.value_of("MANAGER_SERVER_MODE") {
-                manager_config.server_mode = server_mode.parse().expect("manager-server-mode");
+            match clap::value_t!(matches.value_of("MANAGER_SERVER_MODE"), ManagerServerMode) {
+                Ok(server_mode) => manager_config.server_mode = server_mode,
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
             #[cfg(unix)]
-            if let Some(server_working_directory) = matches.value_of("MANAGER_SERVER_WORKING_DIRECTORY") {
-                manager_config.server_working_directory = server_working_directory
-                    .parse()
-                    .expect("manager-server-working-directory");
+            match clap::value_t!(matches.value_of("MANAGER_SERVER_WORKING_DIRECTORY"), PathBuf) {
+                Ok(server_working_directory) => manager_config.server_working_directory = server_working_directory,
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
         }
 
@@ -242,8 +253,10 @@ fn main() {
         }
 
         #[cfg(all(unix, not(target_os = "android")))]
-        if let Some(nofile) = matches.value_of("NOFILE") {
-            config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
+        match clap::value_t!(matches.value_of("NOFILE"), u64) {
+            Ok(nofile) => config.nofile = Some(nofile),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         if let Some(acl_file) = matches.value_of("ACL") {
@@ -265,25 +278,43 @@ fn main() {
             config.ipv6_first = true;
         }
 
-        if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
-            config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+        match clap::value_t!(matches.value_of("UDP_TIMEOUT"), u64) {
+            Ok(udp_timeout) => config.udp_timeout = Some(Duration::from_secs(udp_timeout)),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
-            config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
+        match clap::value_t!(matches.value_of("UDP_MAX_ASSOCIATIONS"), usize) {
+            Ok(udp_max_assoc) => config.udp_max_associations = Some(udp_max_assoc),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
-            config.inbound_send_buffer_size = Some(bs.parse::<u32>().expect("inbound-send-buffer-size"));
+        match clap::value_t!(matches.value_of("INBOUND_SEND_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.inbound_send_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("INBOUND_RECV_BUFFER_SIZE") {
-            config.inbound_recv_buffer_size = Some(bs.parse::<u32>().expect("inbound-recv-buffer-size"));
+        match clap::value_t!(matches.value_of("INBOUND_RECV_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.inbound_recv_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("OUTBOUND_SEND_BUFFER_SIZE") {
-            config.outbound_send_buffer_size = Some(bs.parse::<u32>().expect("outbound-send-buffer-size"));
+        match clap::value_t!(matches.value_of("OUTBOUND_SEND_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.outbound_send_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
-            config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
+        match clap::value_t!(matches.value_of("OUTBOUND_RECV_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.outbound_recv_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
+        }
+
+        match clap::value_t!(matches.value_of("OUTBOUND_BIND_ADDR"), IpAddr) {
+            Ok(bind_addr) => config.outbound_bind_addr = Some(bind_addr),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         // DONE reading options

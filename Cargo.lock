@@ -1694,7 +1694,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.12.1"
+version = "1.12.2"
 dependencies = [
  "arc-swap 1.5.0",
  "async-trait",

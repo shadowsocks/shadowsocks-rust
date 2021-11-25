@@ -6,7 +6,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{clap_app, Arg, Error as ClapError, ErrorKind as ClapErrorKind};
+use clap::{clap_app, Arg, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::info;
 use tokio::{self, runtime::Builder};
@@ -50,7 +50,7 @@ fn main() {
             (@arg PROTOCOL: --protocol +takes_value possible_values(ProtocolType::available_protocols()) "Protocol for communicating with clients (SOCKS5 by default)")
             (@arg UDP_BIND_ADDR: --("udp-bind-addr") +takes_value requires[LOCAL_ADDR] {validator::validate_server_addr} "UDP relay's bind address, default is the same as local-addr")
 
-            (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[PASSWORD ENCRYPT_METHOD] "Server address")
+            (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[ENCRYPT_METHOD] "Server address")
             (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
             (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] possible_values(available_ciphers()) "Server's encryption method")
             (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
@@ -227,30 +227,25 @@ fn main() {
         };
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
-            let password = match matches.value_of("PASSWORD") {
-                Some(pwd) => pwd.to_owned(),
-                None => {
+            let password = match clap::value_t!(matches.value_of("PASSWORD"), String) {
+                Ok(pwd) => pwd.to_owned(),
+                Err(err) => {
                     // NOTE: svr_addr should have been checked by common::validator
                     match common::password::read_server_password(svr_addr) {
                         Ok(pwd) => pwd,
-                        Err(..) => {
-                            panic!("missing server's password");
-                        }
+                        Err(..) => err.exit(),
                     }
                 }
             };
 
-            let method = matches
-                .value_of("ENCRYPT_METHOD")
-                .expect("encrypt-method")
-                .parse::<CipherKind>()
-                .expect("encryption method");
+            let method = clap::value_t_or_exit!(matches.value_of("ENCRYPT_METHOD"), CipherKind);
             let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
-            let timeout = matches
-                .value_of("TIMEOUT")
-                .map(|t| t.parse::<u64>().expect("timeout"))
-                .map(Duration::from_secs);
+            let timeout = match clap::value_t!(matches.value_of("TIMEOUT"), u64) {
+                Ok(t) => Some(Duration::from_secs(t)),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => None,
+                Err(err) => err.exit(),
+            };
 
             let mut sc = ServerConfig::new(svr_addr, password, method);
             if let Some(timeout) = timeout {
@@ -270,9 +265,10 @@ fn main() {
             config.server.push(sc);
         }
 
-        if let Some(url) = matches.value_of("URL") {
-            let svr_addr = url.parse::<ServerConfig>().expect("server SIP002 url");
-            config.server.push(svr_addr);
+        match clap::value_t!(matches.value_of("URL"), ServerConfig) {
+            Ok(svr_addr) => config.server.push(svr_addr),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         #[cfg(feature = "local-flow-stat")]
@@ -307,76 +303,89 @@ fn main() {
             };
 
             let mut local_config = LocalConfig::new(protocol);
-            match (protocol, matches.value_of("LOCAL_ADDR")) {
-                #[cfg(feature = "local-tun")]
-                (ProtocolType::Tun, local_addr_opt) => {
-                    if let Some(local_addr) = local_addr_opt {
-                        local_config.addr = Some(local_addr.parse::<ServerAddr>().expect("local bind addr"));
+            match clap::value_t!(matches.value_of("LOCAL_ADDR"), ServerAddr) {
+                Ok(local_addr) => local_config.addr = Some(local_addr),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound =>
+                {
+                    #[cfg(feature = "local-tun")]
+                    if protocol == ProtocolType::Tun {
+                        err.exit();
                     }
                 }
-                (_, None) => {
-                    ClapError::with_description(
-                        format!("Protocol \"{}\" requires local-addr", protocol.as_str()).as_str(),
-                        ClapErrorKind::ArgumentNotFound,
-                    )
-                    .exit();
-                }
-                (_, Some(local_addr)) => {
-                    local_config.addr = Some(local_addr.parse::<ServerAddr>().expect("local bind addr"));
-                }
+                Err(err) => err.exit(),
             }
 
-            if let Some(udp_bind_addr) = matches.value_of("UDP_BIND_ADDR") {
-                local_config.udp_addr = Some(udp_bind_addr.parse::<ServerAddr>().expect("udp-bind-addr"));
+            match clap::value_t!(matches.value_of("UDP_BIND_ADDR"), ServerAddr) {
+                Ok(udp_bind_addr) => local_config.udp_addr = Some(udp_bind_addr),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
             #[cfg(feature = "local-tunnel")]
-            if let Some(faddr) = matches.value_of("FORWARD_ADDR") {
-                let addr = faddr.parse::<Address>().expect("forward-addr");
-                local_config.forward_addr = Some(addr);
+            match clap::value_t!(matches.value_of("FORWARD_ADDR"), Address) {
+                Ok(addr) => local_config.forward_addr = Some(addr),
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
 
             #[cfg(feature = "local-redir")]
             {
-                if let Some(tcp_redir) = matches.value_of("TCP_REDIR") {
-                    local_config.tcp_redir = tcp_redir.parse::<RedirType>().expect("TCP redir type");
+                match clap::value_t!(matches.value_of("TCP_REDIR"), RedirType) {
+                    Ok(tcp_redir) => local_config.tcp_redir = tcp_redir,
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
 
-                if let Some(udp_redir) = matches.value_of("UDP_REDIR") {
-                    local_config.udp_redir = udp_redir.parse::<RedirType>().expect("UDP redir type");
+                match clap::value_t!(matches.value_of("UDP_REDIR"), RedirType) {
+                    Ok(udp_redir) => local_config.udp_redir = udp_redir,
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
             }
 
             #[cfg(feature = "local-dns")]
             {
                 use shadowsocks_service::{local::dns::NameServerAddr, shadowsocks::relay::socks5::AddressError};
-                use std::net::SocketAddr;
+                use std::{net::SocketAddr, str::FromStr};
 
-                #[inline]
-                fn parse_remote_dns_addr(a: &str) -> Result<Address, AddressError> {
-                    if let Ok(ip) = a.parse::<IpAddr>() {
-                        return Ok(Address::SocketAddress(SocketAddr::new(ip, 53)));
-                    }
+                struct RemoteDnsAddress(Address);
 
-                    if let Ok(saddr) = a.parse::<SocketAddr>() {
-                        return Ok(Address::SocketAddress(saddr));
-                    }
+                impl FromStr for RemoteDnsAddress {
+                    type Err = AddressError;
 
-                    if a.find(':').is_some() {
-                        a.parse::<Address>()
-                    } else {
-                        Ok(Address::DomainNameAddress(a.to_owned(), 53))
+                    fn from_str(a: &str) -> Result<RemoteDnsAddress, Self::Err> {
+                        if let Ok(ip) = a.parse::<IpAddr>() {
+                            return Ok(Address::SocketAddress(SocketAddr::new(ip, 53)).into());
+                        }
+
+                        if let Ok(saddr) = a.parse::<SocketAddr>() {
+                            return Ok(Address::SocketAddress(saddr).into());
+                        }
+
+                        if a.find(':').is_some() {
+                            a.parse::<Address>().map(Into::into)
+                        } else {
+                            Ok(Address::DomainNameAddress(a.to_owned(), 53).into())
+                        }
                     }
                 }
 
-                if let Some(local_dns_addr) = matches.value_of("LOCAL_DNS_ADDR") {
-                    let addr = local_dns_addr.parse::<NameServerAddr>().expect("local dns address");
-                    local_config.local_dns_addr = Some(addr);
+                impl Into<RemoteDnsAddress> for Address {
+                    fn into(self) -> RemoteDnsAddress {
+                        RemoteDnsAddress(self)
+                    }
                 }
 
-                if let Some(remote_dns_addr) = matches.value_of("REMOTE_DNS_ADDR") {
-                    let addr = parse_remote_dns_addr(remote_dns_addr).expect("remote dns address");
-                    local_config.remote_dns_addr = Some(addr);
+                match clap::value_t!(matches.value_of("LOCAL_DNS_ADDR"), NameServerAddr) {
+                    Ok(addr) => local_config.local_dns_addr = Some(addr),
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
+                }
+
+                match clap::value_t!(matches.value_of("REMOTE_DNS_ADDR"), RemoteDnsAddress) {
+                    Ok(addr) => local_config.remote_dns_addr = Some(addr.0),
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
             }
 
@@ -385,31 +394,41 @@ fn main() {
                 // Start a DNS local server binding to DNS_LOCAL_ADDR
                 //
                 // This is a special route only for shadowsocks-android
-                if let Some(dns_relay_addr) = matches.value_of("DNS_LOCAL_ADDR") {
-                    let addr = dns_relay_addr.parse::<ServerAddr>().expect("dns relay address");
+                match clap::value_t!(matches.value_of("DNS_LOCAL_ADDR"), ServerAddr) {
+                    Ok(addr) => {
+                        let mut local_dns_config = LocalConfig::new_with_addr(addr, ProtocolType::Dns);
 
-                    let mut local_dns_config = LocalConfig::new_with_addr(addr, ProtocolType::Dns);
+                        // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
+                        local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
+                        local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
 
-                    // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
-                    local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
-                    local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
-
-                    config.local.push(local_dns_config);
+                        config.local.push(local_dns_config);
+                    }
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
             }
 
             #[cfg(feature = "local-tun")]
             {
-                if let Some(tun_address) = matches.value_of("TUN_INTERFACE_ADDRESS") {
-                    local_config.tun_interface_address = Some(tun_address.parse().expect("tun-interface-address"));
+                use ipnet::IpNet;
+
+                match clap::value_t!(matches.value_of("TUN_INTERFACE_ADDRESS"), IpNet) {
+                    Ok(tun_address) => local_config.tun_interface_address = Some(tun_address),
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
-                if let Some(tun_name) = matches.value_of("TUN_INTERFACE_NAME") {
-                    local_config.tun_interface_name = Some(tun_name.to_owned());
+                match clap::value_t!(matches.value_of("TUN_INTERFACE_NAME"), String) {
+                    Ok(tun_name) => local_config.tun_interface_name = Some(tun_name),
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
 
                 #[cfg(unix)]
-                if let Some(fd_path) = matches.value_of("TUN_DEVICE_FD_FROM_PATH") {
-                    local_config.tun_device_fd_from_path = Some(fd_path.into());
+                match clap::value_t!(matches.value_of("TUN_DEVICE_FD_FROM_PATH"), PathBuf) {
+                    Ok(fd_path) => local_config.tun_device_fd_from_path = Some(fd_path),
+                    Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                    Err(err) => err.exit(),
                 }
             }
 
@@ -432,26 +451,30 @@ fn main() {
             config.fast_open = true;
         }
 
-        if let Some(keep_alive) = matches.value_of("TCP_KEEP_ALIVE") {
-            config.keep_alive = Some(Duration::from_secs(
-                keep_alive
-                    .parse::<u64>()
-                    .expect("`tcp-keep-alive` is expecting an integer"),
-            ));
+        match clap::value_t!(matches.value_of("TCP_KEEP_ALIVE"), u64) {
+            Ok(keep_alive) => config.keep_alive = Some(Duration::from_secs(keep_alive)),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Some(mark) = matches.value_of("OUTBOUND_FWMARK") {
-            config.outbound_fwmark = Some(mark.parse::<u32>().expect("an unsigned integer for `outbound-fwmark`"));
+        match clap::value_t!(matches.value_of("OUTBOUND_FWMARK"), u32) {
+            Ok(mark) => config.outbound_fwmark = Some(mark),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(iface) = matches.value_of("OUTBOUND_BIND_INTERFACE") {
-            config.outbound_bind_interface = Some(iface.to_owned());
+        match clap::value_t!(matches.value_of("OUTBOUND_BIND_INTERFACE"), String) {
+            Ok(iface) => config.outbound_bind_interface = Some(iface),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         #[cfg(all(unix, not(target_os = "android")))]
-        if let Some(nofile) = matches.value_of("NOFILE") {
-            config.nofile = Some(nofile.parse::<u64>().expect("an unsigned integer for `nofile`"));
+        match clap::value_t!(matches.value_of("NOFILE"), u64) {
+            Ok(nofile) => config.nofile = Some(nofile),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         if let Some(acl_file) = matches.value_of("ACL") {
@@ -473,30 +496,43 @@ fn main() {
             config.ipv6_first = true;
         }
 
-        if let Some(udp_timeout) = matches.value_of("UDP_TIMEOUT") {
-            config.udp_timeout = Some(Duration::from_secs(udp_timeout.parse::<u64>().expect("udp-timeout")));
+        match clap::value_t!(matches.value_of("UDP_TIMEOUT"), u64) {
+            Ok(udp_timeout) => config.udp_timeout = Some(Duration::from_secs(udp_timeout)),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(udp_max_assoc) = matches.value_of("UDP_MAX_ASSOCIATIONS") {
-            config.udp_max_associations = Some(udp_max_assoc.parse::<usize>().expect("udp-max-associations"));
+        match clap::value_t!(matches.value_of("UDP_MAX_ASSOCIATIONS"), usize) {
+            Ok(udp_max_assoc) => config.udp_max_associations = Some(udp_max_assoc),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(bs) = matches.value_of("INBOUND_SEND_BUFFER_SIZE") {
-            config.inbound_send_buffer_size = Some(bs.parse::<u32>().expect("inbound-send-buffer-size"));
+        match clap::value_t!(matches.value_of("INBOUND_SEND_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.inbound_send_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("INBOUND_RECV_BUFFER_SIZE") {
-            config.inbound_recv_buffer_size = Some(bs.parse::<u32>().expect("inbound-recv-buffer-size"));
+        match clap::value_t!(matches.value_of("INBOUND_RECV_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.inbound_recv_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("OUTBOUND_SEND_BUFFER_SIZE") {
-            config.outbound_send_buffer_size = Some(bs.parse::<u32>().expect("outbound-send-buffer-size"));
+        match clap::value_t!(matches.value_of("OUTBOUND_SEND_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.outbound_send_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
-        if let Some(bs) = matches.value_of("OUTBOUND_RECV_BUFFER_SIZE") {
-            config.outbound_recv_buffer_size = Some(bs.parse::<u32>().expect("outbound-recv-buffer-size"));
+        match clap::value_t!(matches.value_of("OUTBOUND_RECV_BUFFER_SIZE"), u32) {
+            Ok(bs) => config.outbound_recv_buffer_size = Some(bs),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
-        if let Some(bind_addr) = matches.value_of("OUTBOUND_BIND_ADDR") {
-            let bind_addr = bind_addr.parse::<IpAddr>().expect("outbound-bind-addr");
-            config.outbound_bind_addr = Some(bind_addr);
+        match clap::value_t!(matches.value_of("OUTBOUND_BIND_ADDR"), IpAddr) {
+            Ok(bind_addr) => config.outbound_bind_addr = Some(bind_addr),
+            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(err) => err.exit(),
         }
 
         // DONE READING options
@@ -540,8 +576,12 @@ fn main() {
             Builder::new_current_thread()
         } else {
             let mut builder = Builder::new_multi_thread();
-            if let Some(worker_threads) = matches.value_of("WORKER_THREADS") {
-                builder.worker_threads(worker_threads.parse::<usize>().expect("worker-threads"));
+            match clap::value_t!(matches.value_of("WORKER_THREADS"), usize) {
+                Ok(worker_threads) => {
+                    builder.worker_threads(worker_threads);
+                }
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
             builder
         };
