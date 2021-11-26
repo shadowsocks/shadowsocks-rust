@@ -11,7 +11,6 @@ shadowsocks-rust (1.12.3) unstable; urgency=medium
     - Server created from command line argument without `--password` will try to read it from TTY
     - Servers' `"password"` field or `--password` option support `${VAR_NAME}` format to read password from environment variable `VAR_NAME`
 
-
 shadowsocks-rust (1.12.2) unstable; urgency=medium
 
   ## BUG Fixes
