@@ -14,7 +14,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
     crypto::v1::CipherKind,
-    net::{ConnectOpts, UdpSocket as OutboundUdpSocket},
+    net::{ConnectOpts, UdpSocket as ShadowUdpSocket},
     relay::socks5::Address,
 };
 
@@ -33,12 +33,12 @@ pub struct ProxySocket {
 }
 
 impl ProxySocket {
-    /// Create a client to communicate with Shadowsocks' UDP server
+    /// Create a client to communicate with Shadowsocks' UDP server (outbound)
     pub async fn connect(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
         ProxySocket::connect_with_opts(context, svr_cfg, &DEFAULT_CONNECT_OPTS).await
     }
 
-    /// Create a client to communicate with Shadowsocks' UDP server
+    /// Create a client to communicate with Shadowsocks' UDP server (outbound)
     pub async fn connect_with_opts(
         context: SharedContext,
         svr_cfg: &ServerConfig,
@@ -46,7 +46,7 @@ impl ProxySocket {
     ) -> io::Result<ProxySocket> {
         // Note: Plugins doesn't support UDP relay
 
-        let socket = OutboundUdpSocket::connect_server_with_opts(&context, svr_cfg.addr(), opts).await?;
+        let socket = ShadowUdpSocket::connect_server_with_opts(&context, svr_cfg.addr(), opts).await?;
 
         trace!("connected udp remote {} with {:?}", svr_cfg.addr(), opts);
 
@@ -70,14 +70,16 @@ impl ProxySocket {
         }
     }
 
-    /// Create a `ProxySocket` binding to a specific address
+    /// Create a `ProxySocket` binding to a specific address (inbound)
     pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
         // Plugins doesn't support UDP
         let socket = match svr_cfg.addr() {
-            ServerAddr::SocketAddr(sa) => UdpSocket::bind(sa).await?,
-            ServerAddr::DomainName(domain, port) => UdpSocket::bind((domain.as_str(), *port)).await?,
+            ServerAddr::SocketAddr(sa) => ShadowUdpSocket::listen(sa).await?,
+            ServerAddr::DomainName(domain, port) => {
+                lookup_then!(&context, domain, *port, |addr| { ShadowUdpSocket::listen(&addr).await })?.1
+            }
         };
-        Ok(ProxySocket::from_socket(context, svr_cfg, socket))
+        Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))
     }
 
     /// Send a UDP packet to addr through proxy
