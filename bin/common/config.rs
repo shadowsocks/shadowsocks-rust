@@ -1,7 +1,9 @@
 //! Common configuration utilities
 
 use directories::ProjectDirs;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::path::Path;
+use std::path::PathBuf;
 
 /// Default configuration file path
 pub fn get_default_config_path() -> Option<PathBuf> {
