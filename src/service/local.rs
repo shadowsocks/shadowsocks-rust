@@ -201,7 +201,13 @@ pub fn main(matches: &ArgMatches<'_>) {
 
         let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
             if !matches.is_present("SERVER_CONFIG") {
-                crate::config::get_default_config_path()
+                match crate::config::get_default_config_path() {
+                    None => None,
+                    Some(p) => {
+                        info!("loading default config from {:?}", p);
+                        Some(p)
+                    }
+                }
             } else {
                 None
             }
@@ -211,7 +217,7 @@ pub fn main(matches: &ArgMatches<'_>) {
             Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Local) {
                 Ok(cfg) => cfg,
                 Err(err) => {
-                    eprintln!("loading config \"{}\", {}", cpath.display(), err);
+                    eprintln!("loading config {:?}, {}", cpath, err);
                     process::exit(crate::EXIT_CODE_LOAD_CONFIG_FAILURE);
                 }
             },
