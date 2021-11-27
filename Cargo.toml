@@ -5,7 +5,7 @@ authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
 readme = "README.md"
-documentation = "https://docs.rs/shadowsocks"
+documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
@@ -33,6 +33,11 @@ name = "ssmanager"
 path = "bin/ssmanager.rs"
 required-features = ["manager"]
 
+[[bin]]
+name = "ssservice"
+path = "bin/ssservice.rs"
+required-features = ["service"]
+
 [workspace]
 members = [
     "crates/shadowsocks",
@@ -53,6 +58,7 @@ default = [
     "server",
     "manager",
     "utility",
+    "service",
     "local-http",
     "local-tunnel",
     "local-socks4",
@@ -67,6 +73,8 @@ server = ["shadowsocks-service/server"]
 manager = ["shadowsocks-service/manager"]
 # Enable utility
 utility = []
+# Enable service
+service = ["local", "server", "manager"]
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
