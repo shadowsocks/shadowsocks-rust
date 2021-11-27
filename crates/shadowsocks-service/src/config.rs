@@ -110,53 +110,72 @@ struct SSConfig {
     server: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     server_port: Option<u16>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     local_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     protocol: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     manager_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     manager_port: Option<u16>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     method: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_max_associations: Option<usize>,
+
     #[serde(skip_serializing_if = "Option::is_none", alias = "shadowsocks")]
     servers: Option<Vec<SSServerExtConfig>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     locals: Option<Vec<SSLocalExtConfig>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     dns: Option<SSDnsConfig>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     keep_alive: Option<u64>,
+
     #[cfg(all(unix, not(target_os = "android")))]
     #[serde(skip_serializing_if = "Option::is_none")]
     nofile: Option<u64>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     ipv6_first: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    ipv6_only: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     fast_open: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     security: Option<SSSecurityConfig>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     balancer: Option<SSBalancerConfig>,
 }
@@ -236,24 +255,31 @@ struct SSServerExtConfig {
     server: String,
     #[serde(alias = "port")]
     server_port: u16,
+
     password: String,
     method: String,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     disabled: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
+
     #[serde(skip_serializing_if = "Option::is_none", alias = "name")]
     remarks: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     tcp_weight: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -774,6 +800,9 @@ pub struct LocalConfig {
     /// Tun interface's file descriptor read from this Unix Domain Socket
     #[cfg(all(feature = "local-tun", unix))]
     pub tun_device_fd_from_path: Option<PathBuf>,
+
+    /// Set `IPV6_V6ONLY` for listener socket
+    pub ipv6_only: bool,
 }
 
 impl LocalConfig {
@@ -808,6 +837,8 @@ impl LocalConfig {
             tun_device_fd: None,
             #[cfg(all(feature = "local-tun", unix))]
             tun_device_fd_from_path: None,
+
+            ipv6_only: false,
         }
     }
 
@@ -947,6 +978,8 @@ pub struct Config {
     ///
     /// Set to `true` if you want to query IPv6 addresses before IPv4
     pub ipv6_first: bool,
+    /// Set `IPV6_V6ONLY` for listener sockets
+    pub ipv6_only: bool,
 
     /// Set `TCP_NODELAY` socket option
     pub no_delay: bool,
@@ -1080,6 +1113,7 @@ impl Config {
 
             dns: DnsConfig::default(),
             ipv6_first: false,
+            ipv6_only: false,
 
             no_delay: false,
             fast_open: false,
@@ -1636,6 +1670,11 @@ impl Config {
         // Uses IPv6 first
         if let Some(f) = config.ipv6_first {
             nconfig.ipv6_first = f;
+        }
+
+        // IPV6_V6ONLY
+        if let Some(o) = config.ipv6_only {
+            nconfig.ipv6_only = o;
         }
 
         // Security
@@ -2203,6 +2242,10 @@ impl fmt::Display for Config {
 
         if self.ipv6_first {
             jconf.ipv6_first = Some(self.ipv6_first);
+        }
+
+        if self.ipv6_only {
+            jconf.ipv6_only = Some(self.ipv6_only);
         }
 
         // Security

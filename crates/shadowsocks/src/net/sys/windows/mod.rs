@@ -9,9 +9,9 @@ use std::{
     task::{self, Poll},
 };
 
-use log::{debug, error, warn};
+use log::error;
 use pin_project::pin_project;
-use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
+use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
@@ -32,7 +32,12 @@ use winapi::{
     },
 };
 
-use crate::net::{sys::set_common_sockopt_for_connect, AddrFamily, ConnectOpts};
+use crate::net::{
+    is_dual_stack_addr,
+    sys::{set_common_sockopt_for_connect, socket_bind_dual_stack},
+    AddrFamily,
+    ConnectOpts,
+};
 
 // ws2ipdef.h
 // FIXME: Use winapi's definition if issue resolved
@@ -268,44 +273,14 @@ fn disable_connection_reset(socket: &UdpSocket) -> io::Result<()> {
 /// Create a `UdpSocket` binded to `addr`
 ///
 /// It also disables `WSAECONNRESET` for UDP socket
-pub async fn create_inbound_udp_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
-    let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {
-        v6.ip().is_unspecified()
-    } else {
-        false
-    };
+pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io::Result<UdpSocket> {
+    let set_dual_stack = is_dual_stack_addr(addr);
 
     let socket = if !set_dual_stack {
         UdpSocket::bind(addr).await?
     } else {
         let socket = Socket::new(Domain::for_address(*addr), Type::DGRAM, Some(Protocol::UDP))?;
-
-        if let Err(err) = socket.set_only_v6(false) {
-            warn!("failed to set IPV6_V6ONLY: false for listener, error: {}", err);
-
-            // This is not a fatal error, just warn and skip
-        }
-
-        let saddr = SockAddr::from(*addr);
-
-        match socket.bind(&saddr) {
-            Ok(..) => {}
-            Err(ref err) if err.kind() == ErrorKind::AddrInUse => {
-                // This is probably 0.0.0.0 with the same port has already been occupied
-                debug!(
-                    "0.0.0.0:{} may have already been occupied, retry with IPV6_V6ONLY",
-                    addr.port()
-                );
-
-                if let Err(err) = socket.set_only_v6(true) {
-                    warn!("failed to set IPV6_V6ONLY: true for listener, error: {}", err);
-
-                    // This is not a fatal error, just warn and skip
-                }
-                socket.bind(&saddr)?;
-            }
-            Err(err) => return Err(err),
-        }
+        socket_bind_dual_stack(&socket, addr, ipv6_only)?;
 
         // UdpSocket::from_std requires socket to be non-blocked
         socket.set_nonblocking(true)?;

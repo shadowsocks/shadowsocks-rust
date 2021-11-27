@@ -9,6 +9,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use shadowsocks::net::AcceptOpts;
 use tokio::net::TcpListener;
 
 use crate::config::RedirType;
@@ -19,7 +20,7 @@ pub trait TcpListenerRedirExt {
     // Create a TcpListener for transparent proxy
     //
     // Implementation is platform dependent
-    async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener>;
+    async fn bind_redir(ty: RedirType, addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener>;
 }
 
 /// Extension function for `TcpStream` for reading original destination address

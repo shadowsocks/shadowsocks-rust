@@ -9,12 +9,17 @@ use std::{
 
 use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
+use log::warn;
+use shadowsocks::net::is_dual_stack_addr;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
 
 use crate::{
     config::RedirType,
-    local::redir::redir_ext::{RedirSocketOpts, UdpSocketRedir},
+    local::redir::{
+        redir_ext::{RedirSocketOpts, UdpSocketRedir},
+        sys::set_ipv6_only,
+    },
 };
 
 pub struct UdpRedirSocket {
@@ -68,6 +73,14 @@ impl UdpRedirSocket {
         socket.set_reuse_address(true)?;
         if reuse_port {
             socket.set_reuse_port(true)?;
+        }
+
+        if is_dual_stack_addr(&addr) {
+            // Transparent socket shouldn't support dual-stack.
+
+            if let Err(err) = set_ipv6_only(&socket, true) {
+                warn!("failed to set IPV6_V6ONLY, error: {}", err);
+            }
         }
 
         socket.bind(&SockAddr::from(addr))?;
