@@ -117,7 +117,7 @@ etherparse = { version = "0.9", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 
-shadowsocks = { version = "1.12.0", path = "../shadowsocks" }
+shadowsocks = { version = "1.12.2", path = "../shadowsocks" }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
