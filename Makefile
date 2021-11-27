@@ -17,7 +17,7 @@ install:
 	install -m 755 target/${TARGET}/ssserver ${DESTDIR}${PREFIX}/ssserver
 	install -m 755 target/${TARGET}/ssurl ${DESTDIR}${PREFIX}/ssurl
 	install -m 755 target/${TARGET}/ssmanager ${DESTDIR}${PREFIX}/ssmanager
-	install -m 755 target/${TARGET}/ssmanager ${DESTDIR}${PREFIX}/ssservice
+	install -m 755 target/${TARGET}/ssservice ${DESTDIR}${PREFIX}/ssservice
 
 uninstall:
 	rm ${DESTDIR}${PREFIX}/sslocal
