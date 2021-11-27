@@ -3,10 +3,25 @@
 use directories::ProjectDirs;
 #[cfg(unix)]
 use std::path::Path;
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 /// Default configuration file path
 pub fn get_default_config_path() -> Option<PathBuf> {
+    // config.json in the current working directory ($PWD)
+    if let Ok(mut path) = env::current_dir() {
+        path.push("config.json");
+
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    // config.json in the current working directory (relative path)
+    let relative_path = PathBuf::from("config.json");
+    if relative_path.exists() {
+        return Some(relative_path);
+    }
+
     // System standard directories
     if let Some(project_dirs) = ProjectDirs::from("org", "shadowsocks", "shadowsocks-rust") {
         // Linux: $XDG_CONFIG_HOME/shadowsocks-rust/config.json
