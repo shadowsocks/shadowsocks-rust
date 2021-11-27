@@ -121,7 +121,7 @@ pub fn main(matches: &ArgMatches<'_>) {
                 logging::init_with_file(path);
             }
             None => {
-                logging::init_with_config("ssmanager", &matches);
+                logging::init_with_config("ssmanager", matches);
             }
         }
 
