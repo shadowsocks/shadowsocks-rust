@@ -71,10 +71,10 @@ pub async fn run_tcp_redir(
     redir_ty: RedirType,
 ) -> io::Result<()> {
     let listener = match *client_config {
-        ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr).await?,
+        ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr, context.accept_opts()).await?,
         ServerAddr::DomainName(ref dname, port) => {
             lookup_then!(context.context_ref(), dname, port, |addr| {
-                TcpListener::bind_redir(redir_ty, addr).await
+                TcpListener::bind_redir(redir_ty, addr, context.accept_opts()).await
             })?
             .1
         }

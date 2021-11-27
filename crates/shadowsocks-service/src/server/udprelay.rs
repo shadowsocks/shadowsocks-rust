@@ -8,7 +8,7 @@ use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
     lookup_then,
-    net::UdpSocket as OutboundUdpSocket,
+    net::{AcceptOpts, UdpSocket as OutboundUdpSocket},
     relay::{
         socks5::Address,
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
@@ -35,6 +35,7 @@ pub struct UdpServer {
     cleanup_abortable: JoinHandle<()>,
     keepalive_abortable: JoinHandle<()>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
+    accept_opts: AcceptOpts,
 }
 
 impl Drop for UdpServer {
@@ -45,7 +46,12 @@ impl Drop for UdpServer {
 }
 
 impl UdpServer {
-    pub fn new(context: Arc<ServiceContext>, time_to_live: Option<Duration>, capacity: Option<usize>) -> UdpServer {
+    pub fn new(
+        context: Arc<ServiceContext>,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+        accept_opts: AcceptOpts,
+    ) -> UdpServer {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
         let assoc_map = Arc::new(Mutex::new(match capacity {
             Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
@@ -81,11 +87,12 @@ impl UdpServer {
             cleanup_abortable,
             keepalive_abortable,
             keepalive_tx,
+            accept_opts,
         }
     }
 
     pub async fn run(mut self, svr_cfg: &ServerConfig) -> io::Result<()> {
-        let socket = ProxySocket::bind(self.context.context(), svr_cfg).await?;
+        let socket = ProxySocket::bind_with_opts(self.context.context(), svr_cfg, self.accept_opts.clone()).await?;
 
         info!(
             "shadowsocks udp server listening on {}",

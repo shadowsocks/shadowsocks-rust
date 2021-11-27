@@ -5,7 +5,7 @@ use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket};
 use std::{
-    io::{self, ErrorKind},
+    io,
     net::SocketAddr,
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -13,7 +13,6 @@ use std::{
 };
 
 use futures::{future, ready};
-use log::warn;
 use pin_project::pin_project;
 use socket2::{Socket, TcpKeepalive};
 use tokio::{
@@ -24,7 +23,8 @@ use tokio::{
 use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
-    sys::{set_tcp_fastopen, TcpStream as SysTcpStream},
+    is_dual_stack_addr,
+    sys::{set_tcp_fastopen, socket_bind_dual_stack, TcpStream as SysTcpStream},
     AcceptOpts,
     ConnectOpts,
 };
@@ -143,52 +143,10 @@ impl TcpListener {
         #[cfg(not(windows))]
         socket.set_reuseaddr(true)?;
 
-        let set_dual_stack = if let SocketAddr::V6(ref v6) = *addr {
-            v6.ip().is_unspecified()
-        } else {
-            false
-        };
+        let set_dual_stack = is_dual_stack_addr(addr);
 
         if set_dual_stack {
-            // Set to DUAL STACK mode by default.
-            // WARNING: This would fail if you want to start another program listening on the same port.
-            //
-            // Should this behavior be configurable?
-            fn set_only_v6(socket: &TcpSocket, only_v6: bool) {
-                unsafe {
-                    // WARN: If the following code panics, FD will be closed twice.
-                    #[cfg(unix)]
-                    let s = Socket::from_raw_fd(socket.as_raw_fd());
-                    #[cfg(windows)]
-                    let s = Socket::from_raw_socket(socket.as_raw_socket());
-                    if let Err(err) = s.set_only_v6(only_v6) {
-                        warn!("failed to set IPV6_V6ONLY: {} for listener, error: {}", only_v6, err);
-
-                        // This is not a fatal error, just warn and skip
-                    }
-
-                    #[cfg(unix)]
-                    let _ = s.into_raw_fd();
-                    #[cfg(windows)]
-                    let _ = s.into_raw_socket();
-                }
-            }
-
-            set_only_v6(&socket, false);
-            match socket.bind(*addr) {
-                Ok(..) => {}
-                Err(ref err) if err.kind() == ErrorKind::AddrInUse => {
-                    // This is probably 0.0.0.0 with the same port has already been occupied
-                    warn!(
-                        "0.0.0.0:{} may have already been occupied, retry with IPV6_V6ONLY",
-                        addr.port()
-                    );
-
-                    set_only_v6(&socket, true);
-                    socket.bind(*addr)?;
-                }
-                Err(err) => return Err(err),
-            }
+            socket_bind_dual_stack(&socket, addr, accept_opts.ipv6_only)?;
         } else {
             socket.bind(*addr)?;
         }

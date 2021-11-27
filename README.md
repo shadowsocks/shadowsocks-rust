@@ -12,7 +12,6 @@
 
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
 
-
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
@@ -33,37 +32,37 @@ Related Projects:
 
 ### Optional Features
 
-* `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
+- `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
 
-* `local-http` - Allow using HTTP protocol for `sslocal`
+- `local-http` - Allow using HTTP protocol for `sslocal`
 
-  * `local-http-native-tls` - Support HTTPS with [`native-tls`](https://crates.io/crates/native-tls)
+  - `local-http-native-tls` - Support HTTPS with [`native-tls`](https://crates.io/crates/native-tls)
   
-  * `local-http-rustls` - Support HTTPS with [`rustls`](https://crates.io/crates/rustls)
+  - `local-http-rustls` - Support HTTPS with [`rustls`](https://crates.io/crates/rustls)
 
-* `local-tunnel` - Allow using tunnel protocol for `sslocal`
+- `local-tunnel` - Allow using tunnel protocol for `sslocal`
 
-* `local-socks4` - Allow using SOCKS4/4a protocol for `sslocal`
+- `local-socks4` - Allow using SOCKS4/4a protocol for `sslocal`
 
-* `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
+- `local-redir` - Allow using redir (transparent proxy) protocol for `sslocal`
 
-* `local-dns` - Allow using dns protocol for `sslocal`, serves as a DNS server proxying queries to local or remote DNS servers by ACL rules
+- `local-dns` - Allow using dns protocol for `sslocal`, serves as a DNS server proxying queries to local or remote DNS servers by ACL rules
 
-* `local-tun` - [TUN](https://en.wikipedia.org/wiki/TUN/TAP) interface support for `sslocal`
+- `local-tun` - [TUN](https://en.wikipedia.org/wiki/TUN/TAP) interface support for `sslocal`
 
-* `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
+- `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
 
-* `aead-cipher-extra` - Enable non-standard AEAD ciphers
+- `aead-cipher-extra` - Enable non-standard AEAD ciphers
 
 #### Memory Allocators
 
 This project uses system (libc) memory allocator (Rust's default). But it also allows you to use other famous allocators by features:
 
-* `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
-* `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
-* `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
-* `snmalloc` - Uses [snmalloc](https://github.com/microsoft/snmalloc) as global memory allocator
-* `rpmalloc` - Uses [rpmalloc](https://github.com/mjansson/rpmalloc) as global memory allocator
+- `jemalloc` - Uses [jemalloc](http://jemalloc.net/) as global memory allocator
+- `mimalloc` - Uses [mi-malloc](https://microsoft.github.io/mimalloc/) as global memory allocator
+- `tcmalloc` - Uses [TCMalloc](https://google.github.io/tcmalloc/overview.html) as global memory allocator. It tries to link system-wide tcmalloc by default, use vendored from source with `tcmalloc-vendored`.
+- `snmalloc` - Uses [snmalloc](https://github.com/microsoft/snmalloc) as global memory allocator
+- `rpmalloc` - Uses [rpmalloc](https://github.com/mjansson/rpmalloc) as global memory allocator
 
 ### **crates.io**
 
@@ -86,9 +85,9 @@ then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
-* `build-windows`: Build for `x86_64-pc-windows-msvc`
-* `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
-* `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
+- `build-windows`: Build for `x86_64-pc-windows-msvc`
+- `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
+- `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
 
 ### **Docker**
 
@@ -161,7 +160,7 @@ export RUSTFLAGS="-C target-cpu=native"
 
 Requirements:
 
-* Docker
+- Docker
 
 ```bash
 ./build/build-release
@@ -169,8 +168,8 @@ Requirements:
 
 Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
 
-* `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
-* `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
+- `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
+- `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
 
@@ -278,15 +277,15 @@ All parameters are the same as Socks5 client, except `--protocol http`.
 sslocal --protocol tunnel -b "127.0.0.1:3128" -f "127.0.0.1:8080" -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty"
 ```
 
-* `--protocol tunnel` enables local client Tunnel mode
-* `-f "127.0.0.1:8080` sets the tunnel target address
+- `--protocol tunnel` enables local client Tunnel mode
+- `-f "127.0.0.1:8080` sets the tunnel target address
 
 ### Transparent Proxy Local client
 
 **NOTE**: It currently only supports
 
-* Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
-* BSDs (with `pf`), such as OS X 10.10+, FreeBSD, ...
+- Linux (with `iptables` targets `REDIRECT` and `TPROXY`)
+- BSDs (with `pf`), such as OS X 10.10+, FreeBSD, ...
 
 ```bash
 sslocal -b "127.0.0.1:60080" --protocol redir -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --tcp-redir "redirect" --udp-redir "tproxy"
@@ -294,16 +293,16 @@ sslocal -b "127.0.0.1:60080" --protocol redir -s "[::1]:8388" -m "aes-256-gcm" -
 
 Redirects connections with `iptables` configurations to the port that `sslocal` is listening on.
 
-* `--protocol redir` enables local client Redir mode
-* (optional) `--tcp-redir` sets TCP mode to `REDIRECT` (Linux)
-* (optional) `--udp-redir` sets UDP mode to `TPROXY` (Linux)
+- `--protocol redir` enables local client Redir mode
+- (optional) `--tcp-redir` sets TCP mode to `REDIRECT` (Linux)
+- (optional) `--udp-redir` sets UDP mode to `TPROXY` (Linux)
 
 ### Tun interface client
 
 **NOTE**: It currently only supports
 
-* Linux, Android
-* macOS, iOS
+- Linux, Android
+- macOS, iOS
 
 #### Linux
 
@@ -351,10 +350,10 @@ ssserver -s "[::]:8388" -m "aes-256-gcm" -k "hello-kitty" --plugin "v2ray-plugin
 
 Supported [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users) API:
 
-* `add` - Starts a server instance
-* `remove` - Deletes an existing server instance
-* `list` - Lists all current running servers
-* `ping` - Lists all servers' statistic data
+- `add` - Starts a server instance
+- `remove` - Deletes an existing server instance
+- `list` - Lists all current running servers
+- `ping` - Lists all servers' statistic data
 
 NOTE: `stat` command is not supported. Because servers are running in the same process with the manager itself.
 
@@ -575,6 +574,9 @@ Example configuration:
 
     // Try to resolve domain name to IPv6 (AAAA) addresses first
     "ipv6_first": false,
+    // Set IPV6_V6ONLY for all IPv6 listener sockets
+    // Only valid for locals and servers listening on `::`
+    "ipv6_only": false,
 
     // Balancer customization
     "balancer": {
@@ -598,28 +600,28 @@ Example configuration:
 
 ### AEAD Ciphers
 
-* `chacha20-ietf-poly1305`
-* `aes-128-gcm`, `aes-256-gcm`
+- `chacha20-ietf-poly1305`
+- `aes-128-gcm`, `aes-256-gcm`
 
 ### Stream Ciphers
 
-* `plain` or `none` (No encryption, only used for debugging or with plugins that ensure transport security)
+- `plain` or `none` (No encryption, only used for debugging or with plugins that ensure transport security)
 
 <details><summary>Deprecated</summary>
 <p>
 
-* `table`
-* `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
-* `aes-192-cfb`, `aes-192-cfb1`, `aes-192-cfb8`, `aes-192-cfb128`
-* `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
-* `aes-128-ctr`
-* `aes-192-ctr`
-* `aes-256-ctr`
-* `camellia-128-cfb`, `camellia-128-cfb1`, `camellia-128-cfb8`, `camellia-128-cfb128`
-* `camellia-192-cfb`, `camellia-192-cfb1`, `camellia-192-cfb8`, `camellia-192-cfb128`
-* `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
-* `rc4-md5`
-* `chacha20-ietf`
+- `table`
+- `aes-128-cfb`, `aes-128-cfb1`, `aes-128-cfb8`, `aes-128-cfb128`
+- `aes-192-cfb`, `aes-192-cfb1`, `aes-192-cfb8`, `aes-192-cfb128`
+- `aes-256-cfb`, `aes-256-cfb1`, `aes-256-cfb8`, `aes-256-cfb128`
+- `aes-128-ctr`
+- `aes-192-ctr`
+- `aes-256-ctr`
+- `camellia-128-cfb`, `camellia-128-cfb1`, `camellia-128-cfb8`, `camellia-128-cfb128`
+- `camellia-192-cfb`, `camellia-192-cfb1`, `camellia-192-cfb8`, `camellia-192-cfb128`
+- `camellia-256-cfb`, `camellia-256-cfb1`, `camellia-256-cfb8`, `camellia-256-cfb128`
+- `rc4-md5`
+- `chacha20-ietf`
 
 </p>
 </details>
@@ -630,21 +632,21 @@ Example configuration:
 
 ### Available sections
 
-* For local servers (`sslocal`, `ssredir`, ...)
-  * Modes:
-    * `[bypass_all]` - ACL runs in `BlackList` mode. Bypasses all addresses that didn't match any rules.
-    * `[proxy_all]` - ACL runs in `WhiteList` mode. Proxies all addresses that didn't match any rules.
-  * Rules:
-    * `[bypass_list]` - Rules for connecting directly
-    * `[proxy_list]` - Rules for connecting through proxies
-* For remote servers (`ssserver`)
-  * Modes:
-    * `[reject_all]` - ACL runs in `BlackList` mode. Rejects all clients that didn't match any rules.
-    * `[accept_all]` - ACL runs in `WhiteList` mode. Accepts all clients that didn't match any rules.
-  * Rules:
-    * `[white_list]` - Rules for accepted clients
-    * `[black_list]` - Rules for rejected clients
-    * `[outbound_block_list]` - Rules for blocking outbound addresses.
+- For local servers (`sslocal`, `ssredir`, ...)
+  - Modes:
+    - `[bypass_all]` - ACL runs in `BlackList` mode. Bypasses all addresses that didn't match any rules.
+    - `[proxy_all]` - ACL runs in `WhiteList` mode. Proxies all addresses that didn't match any rules.
+  - Rules:
+    - `[bypass_list]` - Rules for connecting directly
+    - `[proxy_list]` - Rules for connecting through proxies
+- For remote servers (`ssserver`)
+  - Modes:
+    - `[reject_all]` - ACL runs in `BlackList` mode. Rejects all clients that didn't match any rules.
+    - `[accept_all]` - ACL runs in `WhiteList` mode. Accepts all clients that didn't match any rules.
+  - Rules:
+    - `[white_list]` - Rules for accepted clients
+    - `[black_list]` - Rules for rejected clients
+    - `[outbound_block_list]` - Rules for blocking outbound addresses.
 
 ### Example
 
@@ -696,31 +698,31 @@ Example configuration:
 
 It supports the following features:
 
-* [x] SOCKS5 CONNECT command
-* [x] SOCKS5 UDP ASSOCIATE command (partial)
-* [x] SOCKS4/4a CONNECT command
-* [x] Various crypto algorithms
-* [x] Load balancing (multiple servers) and server delay checking
-* [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
-* [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
-* [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
-* [x] HTTP Proxy Supports ([RFC 7230](http://tools.ietf.org/html/rfc7230) and [CONNECT](https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01))
-* [x] Defend against replay attacks, [shadowsocks/shadowsocks-org#44](https://github.com/shadowsocks/shadowsocks-org/issues/44)
-* [x] Manager APIs, supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
-* [x] ACL (Access Control List)
-* [x] Support HTTP/HTTPS Proxy protocol
+- [x] SOCKS5 CONNECT command
+- [x] SOCKS5 UDP ASSOCIATE command (partial)
+- [x] SOCKS4/4a CONNECT command
+- [x] Various crypto algorithms
+- [x] Load balancing (multiple servers) and server delay checking
+- [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
+- [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
+- [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
+- [x] HTTP Proxy Supports ([RFC 7230](http://tools.ietf.org/html/rfc7230) and [CONNECT](https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01))
+- [x] Defend against replay attacks, [shadowsocks/shadowsocks-org#44](https://github.com/shadowsocks/shadowsocks-org/issues/44)
+- [x] Manager APIs, supporting [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
+- [x] ACL (Access Control List)
+- [x] Support HTTP/HTTPS Proxy protocol
 
 ## TODO
 
-* [x] Documentation
-* [x] Extend configuration format
-* [x] Improved logging format (waiting for the new official log crate)
-* [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
-* [x] Windows support.
-* [ ] Build with stable `rustc` (blocking by `crypto2`).
-* [x] Support HTTP Proxy protocol
-* [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
-* [x] Choose server based on delay #152
+- [x] Documentation
+- [x] Extend configuration format
+- [x] Improved logging format (waiting for the new official log crate)
+- [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
+- [x] Windows support.
+- [ ] Build with stable `rustc` (blocking by `crypto2`).
+- [x] Support HTTP Proxy protocol
+- [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
+- [x] Choose server based on delay #152
 
 ## License
 

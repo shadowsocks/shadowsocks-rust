@@ -14,7 +14,7 @@ use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
     crypto::v1::CipherKind,
-    net::{ConnectOpts, UdpSocket as ShadowUdpSocket},
+    net::{AcceptOpts, ConnectOpts, UdpSocket as ShadowUdpSocket},
     relay::socks5::Address,
 };
 
@@ -72,11 +72,23 @@ impl ProxySocket {
 
     /// Create a `ProxySocket` binding to a specific address (inbound)
     pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxySocket> {
+        ProxySocket::bind_with_opts(context, svr_cfg, AcceptOpts::default()).await
+    }
+
+    /// Create a `ProxySocket` binding to a specific address (inbound)
+    pub async fn bind_with_opts(
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+        opts: AcceptOpts,
+    ) -> io::Result<ProxySocket> {
         // Plugins doesn't support UDP
         let socket = match svr_cfg.addr() {
-            ServerAddr::SocketAddr(sa) => ShadowUdpSocket::listen(sa).await?,
+            ServerAddr::SocketAddr(sa) => ShadowUdpSocket::listen_with_opts(sa, opts).await?,
             ServerAddr::DomainName(domain, port) => {
-                lookup_then!(&context, domain, *port, |addr| { ShadowUdpSocket::listen(&addr).await })?.1
+                lookup_then!(&context, domain, *port, |addr| {
+                    ShadowUdpSocket::listen_with_opts(&addr, opts.clone()).await
+                })?
+                .1
             }
         };
         Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))

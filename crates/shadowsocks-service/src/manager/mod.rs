@@ -53,6 +53,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
 
     let mut accept_opts = AcceptOpts::default();
+    accept_opts.ipv6_only = config.ipv6_only;
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;

@@ -52,4 +52,7 @@ pub struct ConnectOpts {
 pub struct AcceptOpts {
     /// TCP options
     pub tcp: TcpSocketOpts,
+
+    /// Enable IPV6_V6ONLY option for socket
+    pub ipv6_only: bool,
 }

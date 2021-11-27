@@ -169,7 +169,12 @@ impl Server {
     }
 
     async fn run_udp_server(&self) -> io::Result<()> {
-        let server = UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
+        let server = UdpServer::new(
+            self.context.clone(),
+            self.udp_expiry_duration,
+            self.udp_capacity,
+            self.accept_opts.clone(),
+        );
         server.run(&self.svr_cfg).await
     }
 

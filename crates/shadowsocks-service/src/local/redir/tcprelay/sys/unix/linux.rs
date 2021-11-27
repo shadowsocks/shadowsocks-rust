@@ -6,25 +6,64 @@ use std::{
 };
 
 use async_trait::async_trait;
+use log::warn;
+use shadowsocks::net::{is_dual_stack_addr, set_tcp_fastopen, AcceptOpts};
 use socket2::SockAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
 use crate::{
     config::RedirType,
-    local::redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+    local::redir::{
+        redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
+        sys::set_ipv6_only,
+    },
 };
 
 #[async_trait]
 impl TcpListenerRedirExt for TcpListener {
-    async fn bind_redir(ty: RedirType, addr: SocketAddr) -> io::Result<TcpListener> {
+    async fn bind_redir(ty: RedirType, addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
         match ty {
             RedirType::Redirect => {
                 // REDIRECT rule doesn't need to set IP_TRANSPARENT
-                TcpListener::bind(addr).await
+
+                let socket = match addr {
+                    SocketAddr::V4(..) => TcpSocket::new_v4()?,
+                    SocketAddr::V6(..) => TcpSocket::new_v6()?,
+                };
+
+                // On platforms with Berkeley-derived sockets, this allows to quickly
+                // rebind a socket, without needing to wait for the OS to clean up the
+                // previous one.
+                //
+                // On Windows, this allows rebinding sockets which are actively in use,
+                // which allows “socket hijacking”, so we explicitly don't set it here.
+                // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+                #[cfg(unix)]
+                socket.set_reuseaddr(true)?;
+
+                let set_dual_stack = is_dual_stack_addr(&addr);
+                if set_dual_stack {
+                    // Transparent socket shouldn't support dual-stack.
+
+                    if let Err(err) = set_ipv6_only(&socket, true) {
+                        warn!("failed to set IPV6_V6ONLY, error: {}", err);
+                    }
+                }
+
+                socket.bind(addr)?;
+
+                // mio's default backlog is 1024
+                let listener = socket.listen(1024)?;
+
+                if accept_opts.tcp.fastopen {
+                    set_tcp_fastopen(&listener)?;
+                }
+
+                Ok(listener)
             }
             RedirType::TProxy => {
                 // TPROXY rule requires IP_TRANSPARENT
-                create_redir_listener(addr).await
+                create_redir_listener(addr, accept_opts).await
             }
             _ => Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -89,7 +128,7 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     }
 }
 
-async fn create_redir_listener(addr: SocketAddr) -> io::Result<TcpListener> {
+async fn create_redir_listener(addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
     let socket = match addr {
         SocketAddr::V4(..) => TcpSocket::new_v4()?,
         SocketAddr::V6(..) => TcpSocket::new_v6()?,
@@ -123,11 +162,34 @@ async fn create_redir_listener(addr: SocketAddr) -> io::Result<TcpListener> {
         }
     }
 
-    // tokio requires allow reuse addr
+    // On platforms with Berkeley-derived sockets, this allows to quickly
+    // rebind a socket, without needing to wait for the OS to clean up the
+    // previous one.
+    //
+    // On Windows, this allows rebinding sockets which are actively in use,
+    // which allows “socket hijacking”, so we explicitly don't set it here.
+    // https://docs.microsoft.com/en-us/windows/win32/winsock/using-so-reuseaddr-and-so-exclusiveaddruse
+    #[cfg(unix)]
     socket.set_reuseaddr(true)?;
+
+    let set_dual_stack = is_dual_stack_addr(&addr);
+    if set_dual_stack {
+        // Transparent socket shouldn't support dual-stack.
+
+        if let Err(err) = set_ipv6_only(&socket, true) {
+            warn!("failed to set IPV6_V6ONLY, error: {}", err);
+        }
+    }
 
     // bind, listen as original
     socket.bind(addr)?;
+
     // listen backlogs = 1024 as mio's default
-    socket.listen(1024)
+    let listener = socket.listen(1024)?;
+
+    if accept_opts.tcp.fastopen {
+        set_tcp_fastopen(&listener)?;
+    }
+
+    Ok(listener)
 }

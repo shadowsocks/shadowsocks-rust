@@ -117,6 +117,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
     context.set_connect_opts(connect_opts);
 
     let mut accept_opts = AcceptOpts::default();
+    accept_opts.ipv6_only = config.ipv6_only;
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
