@@ -7,6 +7,8 @@
 //! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
+use std::{env, path::Path};
+
 use clap::{clap_app, AppSettings, SubCommand};
 use shadowsocks_rust::service::{local, manager, server};
 
@@ -15,6 +17,18 @@ fn main() {
         (version: shadowsocks_rust::VERSION)
         (about: "A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)")
     );
+
+    // Allow running `ssservice` as symlink of `sslocal`, `ssserver` and `ssmanager`
+    if let Some(program_path) = env::args().next() {
+        if let Some(program_name) = Path::new(&program_path).file_name() {
+            match program_name.to_str() {
+                Some("sslocal") => return local::main(&local::define_command_line_options(app).get_matches()),
+                Some("ssserver") => return server::main(&local::define_command_line_options(app).get_matches()),
+                Some("ssmanager") => return manager::main(&local::define_command_line_options(app).get_matches()),
+                _ => {}
+            }
+        }
+    }
 
     let matches = app
         .setting(AppSettings::SubcommandRequired)
