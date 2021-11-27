@@ -14,12 +14,12 @@ pub fn get_default_config_path() -> Option<PathBuf> {
         if path.exists() {
             return Some(path);
         }
-    }
-
-    // config.json in the current working directory (relative path)
-    let relative_path = PathBuf::from("config.json");
-    if relative_path.exists() {
-        return Some(relative_path);
+    } else {
+        // config.json in the current working directory (relative path)
+        let relative_path = PathBuf::from("config.json");
+        if relative_path.exists() {
+            return Some(relative_path);
+        }
     }
 
     // System standard directories
