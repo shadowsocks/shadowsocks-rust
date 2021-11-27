@@ -11,9 +11,13 @@ pub mod password;
 pub mod service;
 pub mod validator;
 
+/// Exit code when server exits unexpectly
 pub const EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY: i32 = exitcode::SOFTWARE;
+/// Exit code when server aborted
 pub const EXIT_CODE_SERVER_ABORTED: i32 = exitcode::SOFTWARE;
+/// Exit code when loading configuration from file fails
 pub const EXIT_CODE_LOAD_CONFIG_FAILURE: i32 = exitcode::CONFIG;
+/// Exit code when loading ACL from file fails
 pub const EXIT_CODE_LOAD_ACL_FAILURE: i32 = exitcode::CONFIG;
 
 /// Build timestamp in UTC

@@ -1,3 +1,5 @@
+//! Server Manager launchers
+
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
 use clap::{clap_app, App, Arg, ArgMatches, ErrorKind as ClapErrorKind};

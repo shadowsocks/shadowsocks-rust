@@ -3,6 +3,9 @@ use log::info;
 use std::io;
 use tokio::signal::unix::{signal, SignalKind};
 
+/// Create a monitor future for signals
+///
+/// It will exit when received `SIGTERM` or `SIGINT`.
 pub async fn create_signal_monitor() -> io::Result<()> {
     // Future resolving to two signal streams. Can fail if setting up signal monitoring fails
     let mut sigterm = signal(SignalKind::terminate())?;

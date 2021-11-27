@@ -256,7 +256,7 @@ where
 /// it will return a tuple of the number of bytes copied from encrypted to plain
 /// and the number of bytes copied from plain to encrypted, in that order.
 ///
-/// [`shutdown()`]: crate::io::AsyncWriteExt::shutdown
+/// [`shutdown()`]: tokio::io::AsyncWriteExt::shutdown
 ///
 /// # Errors
 ///

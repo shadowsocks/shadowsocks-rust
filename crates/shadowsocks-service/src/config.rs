@@ -987,7 +987,7 @@ pub struct Config {
     pub fast_open: bool,
     /// Set TCP Keep-Alive duration, will set both `TCP_KEEPIDLE` and `TCP_KEEPINTVL`
     ///
-    /// https://github.com/shadowsocks/shadowsocks-rust/issues/546
+    /// <https://github.com/shadowsocks/shadowsocks-rust/issues/546>
     ///
     /// If this is not set, sockets will be set with a default timeout
     pub keep_alive: Option<Duration>,

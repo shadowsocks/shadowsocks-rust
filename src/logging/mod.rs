@@ -1,4 +1,4 @@
-//! Loggin facilities
+//! Logging facilities
 
 use std::{env, path::Path};
 
@@ -10,6 +10,7 @@ use log4rs::{
     encode::pattern::PatternEncoder,
 };
 
+/// Initialize logger ([log4rs](https://crates.io/crates/log4rs)) from yaml configuration file
 pub fn init_with_file<P>(path: P)
 where
     P: AsRef<Path>,
@@ -17,6 +18,7 @@ where
     log4rs::init_file(path, Default::default()).expect("init logging with file");
 }
 
+/// Initialize logger with default configuration
 pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
     let mut debug_level = matches.occurrences_of("VERBOSE");
     if debug_level == 0 {

@@ -1,11 +1,4 @@
-//! This is a binary running in the server environment
-//!
-//! You have to provide all needed configuration attributes via command line parameters,
-//! or you could specify a configuration file. The format of configuration file is defined
-//! in mod `config`.
-//!
-//! *It should be notice that the extended configuration file is not suitable for the server
-//! side.*
+//! Server launchers
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
@@ -29,6 +22,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{monitor, validator};
 
+/// Defines command line options
 pub fn define_command_line_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
     let mut app = clap_app!(@app (app)
         (@arg CONFIG: -c --config +takes_value "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
