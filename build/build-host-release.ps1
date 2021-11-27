@@ -45,7 +45,7 @@ Push-Location "${PSScriptRoot}\..\target\release"
 $ProgressPreference = "SilentlyContinue"
 New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
 $CompressParam = @{
-    LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe"
+    LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe", "ssservice.exe"
     DestinationPath = "${PackagePath}"
 }
 Compress-Archive @CompressParam

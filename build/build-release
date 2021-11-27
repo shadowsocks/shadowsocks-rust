@@ -92,7 +92,8 @@ function build() {
             "sslocal" \
             "ssserver" \
             "ssurl" \
-            "ssmanager"
+            "ssmanager" \
+            "ssservice"
 
         if [[ $? != "0" ]]; then
             exit $?
@@ -110,7 +111,8 @@ function build() {
             "sslocal.exe" \
             "ssserver.exe" \
             "ssurl.exe" \
-            "ssmanager.exe"
+            "ssmanager.exe" \
+            "ssservice.exe"
 
         if [[ $? != "0" ]]; then
             exit $?
