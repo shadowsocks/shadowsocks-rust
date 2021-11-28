@@ -130,6 +130,9 @@ replay-attack-detect = ["shadowsocks-service/replay-attack-detect"]
 [dependencies]
 log = "0.4"
 log4rs = { version = "1.0", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+json5 = "0.4"
+thiserror = "1.0"
 
 clap = { version = "2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
