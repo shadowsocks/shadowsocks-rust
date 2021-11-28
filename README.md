@@ -613,7 +613,6 @@ Example configuration:
 ### Environment Variables
 
 - `SS_SERVER_PASSWORD`: A default password for servers that created from command line argument (`--server-addr`)
-- `SS_SERVER_${SERVER_ADDR}_PASSWORD`: A default password for server with address `$SERVER_ADDR` that created from command line argument (`--server-addr`)
 
 ## Supported Ciphers
 
