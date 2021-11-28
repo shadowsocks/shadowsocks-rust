@@ -180,6 +180,7 @@ impl Config {
             self.runtime.mode = RuntimeMode::SingleThread;
         }
 
+        #[cfg(feature = "multi-threaded")]
         match clap::value_t!(matches.value_of("WORKER_THREADS"), usize) {
             Ok(worker_count) => self.runtime.worker_count = Some(worker_count),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
