@@ -4,7 +4,7 @@ use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
 use clap::{clap_app, App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
-use log::info;
+use log::{info, trace};
 use tokio::{self, runtime::Builder};
 
 use shadowsocks_service::{
@@ -20,7 +20,11 @@ use shadowsocks_service::{
 
 #[cfg(feature = "logging")]
 use crate::logging;
-use crate::{monitor, validator};
+use crate::{
+    config::{Config as ServiceConfig, RuntimeMode},
+    monitor,
+    validator,
+};
 
 /// Defines command line options
 pub fn define_command_line_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
@@ -110,22 +114,12 @@ pub fn define_command_line_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
 /// Program entrance `main`
 pub fn main(matches: &ArgMatches<'_>) {
     let (config, runtime) = {
-        #[cfg(feature = "logging")]
-        match matches.value_of("LOG_CONFIG") {
-            Some(path) => {
-                logging::init_with_file(path);
-            }
-            None => {
-                logging::init_with_config("ssserver", matches);
-            }
-        }
-
         let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
             if !matches.is_present("SERVER_CONFIG") {
                 match crate::config::get_default_config_path() {
                     None => None,
                     Some(p) => {
-                        info!("loading default config from {:?}", p);
+                        println!("loading default config {:?}", p);
                         Some(p)
                     }
                 }
@@ -133,6 +127,30 @@ pub fn main(matches: &ArgMatches<'_>) {
                 None
             }
         });
+
+        let mut service_config = match config_path_opt {
+            Some(ref config_path) => match ServiceConfig::load_from_file(config_path) {
+                Ok(c) => c,
+                Err(err) => {
+                    eprintln!("loading config {:?}, {}", config_path, err);
+                    process::exit(crate::EXIT_CODE_LOAD_CONFIG_FAILURE);
+                }
+            },
+            None => ServiceConfig::default(),
+        };
+        service_config.set_options(&matches);
+
+        #[cfg(feature = "logging")]
+        match service_config.log.config_path {
+            Some(ref path) => {
+                logging::init_with_file(path);
+            }
+            None => {
+                logging::init_with_config("sslocal", &service_config.log);
+            }
+        }
+
+        trace!("{:?}", service_config);
 
         let mut config = match config_path_opt {
             Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Server) {
@@ -324,24 +342,18 @@ pub fn main(matches: &ArgMatches<'_>) {
 
         info!("shadowsocks server {} build {}", crate::VERSION, crate::BUILD_TIME);
 
-        #[cfg(feature = "multi-threaded")]
-        let mut builder = if matches.is_present("SINGLE_THREADED") {
-            Builder::new_current_thread()
-        } else {
-            let mut builder = Builder::new_multi_thread();
-
-            match clap::value_t!(matches.value_of("WORKER_THREADS"), usize) {
-                Ok(worker_threads) => {
+        let mut builder = match service_config.runtime.mode {
+            RuntimeMode::SingleThread => Builder::new_current_thread(),
+            #[cfg(feature = "multi-threaded")]
+            RuntimeMode::MultiThread => {
+                let mut builder = Builder::new_multi_thread();
+                if let Some(worker_threads) = service_config.runtime.worker_count {
                     builder.worker_threads(worker_threads);
                 }
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
-                Err(err) => err.exit(),
-            }
 
-            builder
+                builder
+            }
         };
-        #[cfg(not(feature = "multi-threaded"))]
-        let mut builder = Builder::new_current_thread();
 
         let runtime = builder.enable_all().build().expect("create tokio Runtime");
 

@@ -1,14 +1,15 @@
 //! Logging facilities
 
-use std::{env, path::Path};
+use std::path::Path;
 
-use clap::ArgMatches;
 use log::LevelFilter;
 use log4rs::{
     append::console::{ConsoleAppender, Target},
     config::{Appender, Config, Logger, Root},
     encode::pattern::PatternEncoder,
 };
+
+use crate::config::LogConfig;
 
 /// Initialize logger ([log4rs](https://crates.io/crates/log4rs)) from yaml configuration file
 pub fn init_with_file<P>(path: P)
@@ -19,25 +20,9 @@ where
 }
 
 /// Initialize logger with default configuration
-pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
-    let mut debug_level = matches.occurrences_of("VERBOSE");
-    if debug_level == 0 {
-        // Override by SS_LOG_VERBOSE_LEVEL
-        if let Ok(verbose_level) = env::var("SS_LOG_VERBOSE_LEVEL") {
-            if let Ok(verbose_level) = verbose_level.parse::<u64>() {
-                debug_level = verbose_level;
-            }
-        }
-    }
-
-    let mut without_time = matches.is_present("LOG_WITHOUT_TIME");
-    if !without_time {
-        if let Ok(log_without_time) = env::var("SS_LOG_WITHOUT_TIME") {
-            if let Ok(log_without_time) = log_without_time.parse::<u32>() {
-                without_time = log_without_time != 0;
-            }
-        }
-    }
+pub fn init_with_config(bin_name: &str, config: &LogConfig) {
+    let debug_level = config.level;
+    let without_time = config.format.without_time;
 
     let mut pattern = String::new();
     if !without_time {
@@ -91,4 +76,9 @@ pub fn init_with_config(bin_name: &str, matches: &ArgMatches) {
     .expect("logging");
 
     log4rs::init_config(config).expect("logging");
+}
+
+/// Init a default logger
+pub fn init_with_default(bin_name: &str) {
+    init_with_config(bin_name, &LogConfig::default());
 }
