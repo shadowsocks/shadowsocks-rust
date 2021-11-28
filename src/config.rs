@@ -186,6 +186,8 @@ impl Config {
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
+
+        let _ = matches;
     }
 }
 
