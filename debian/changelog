@@ -1,3 +1,22 @@
+shadowsocks-rust (1.12.4) unstable; urgency=medium
+
+  ## Features
+
+  - Configuration
+    - `ipv6_only` configuration option setting `IPV6_V6ONLY` to all listener sockets that are listening to dual-stack address (`::`)
+    - #700 Default configuration search path also includes `$PWD`
+    - Log and Runtime related options could be configured via configuration file
+  - #698 New binary `ssservice` unified features in (`sslocal`, `ssserver` and `ssmanager`)
+
+  ## Bug Fixes
+
+  - #694 UDP binds to dual-stack address (`::`) will detect `0.0.0.0` already in use automatically
+  - Transparent Proxy (redir) local client will always set `IPV6_V6ONLY` for listeners that are listening on `::`
+
+  ## Miscelleneous
+
+  - Deprecating `SS_LOG_VERBOSE_LEVEL` and `SS_LOG_WITHOUT_TIME` (introduced in [v1.12.3](https://github.com/shadowsocks/shadowsocks-rust/releases/tag/v1.12.3)) in flavor of configuring in the configuration file
+
 shadowsocks-rust (1.12.3) unstable; urgency=medium
 
   ## Features
