@@ -361,12 +361,9 @@ dependencies = [
 
 [[package]]
 name = "etherparse"
-version = "0.9.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fa20922281f9ee5ffcda45e80d56085829279f1270f79fbabc39809a4354807"
-dependencies = [
- "byteorder",
-]
+checksum = "9feedaea5a9f602932e78b512b2fde69aaefd2ef4fd5fd744238f7424b246186"
 
 [[package]]
 name = "exitcode"
