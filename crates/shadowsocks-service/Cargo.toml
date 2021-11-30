@@ -112,7 +112,7 @@ iprange = "0.6"
 regex = "1.4"
 
 tun = { version = "0.5.3", optional = true, features = ["async"] }
-etherparse = { version = "0.9", optional = true }
+etherparse = { version = "0.10", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"

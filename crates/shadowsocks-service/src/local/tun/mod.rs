@@ -241,8 +241,8 @@ impl Tun {
         };
 
         let (src_ip, dst_ip) = match *ip_header {
-            IpHeader::Version4(ref v4) => (Ipv4Addr::from(v4.source).into(), Ipv4Addr::from(v4.destination).into()),
-            IpHeader::Version6(ref v6) => (Ipv6Addr::from(v6.source).into(), Ipv6Addr::from(v6.destination).into()),
+            IpHeader::Version4(ref v4, ..) => (Ipv4Addr::from(v4.source).into(), Ipv4Addr::from(v4.destination).into()),
+            IpHeader::Version6(ref v6, ..) => (Ipv6Addr::from(v6.source).into(), Ipv6Addr::from(v6.destination).into()),
         };
 
         match ph.transport {
@@ -266,24 +266,24 @@ impl Tun {
 
                 // Replaces IP_HEADER, TRANSPORT_HEADER directly into packet
                 match (mod_src_addr, &mut ip_header) {
-                    (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip)) => v4ip.source = v4addr.ip().octets(),
-                    (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip)) => v6ip.source = v6addr.ip().octets(),
+                    (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip, ..)) => v4ip.source = v4addr.ip().octets(),
+                    (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip, ..)) => v6ip.source = v6addr.ip().octets(),
                     _ => unreachable!("modified saddr not match"),
                 }
                 tcp_header.source_port = mod_src_addr.port();
                 match (mod_dst_addr, &mut ip_header) {
-                    (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip)) => v4ip.destination = v4addr.ip().octets(),
-                    (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip)) => v6ip.destination = v6addr.ip().octets(),
+                    (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip, ..)) => v4ip.destination = v4addr.ip().octets(),
+                    (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip, ..)) => v6ip.destination = v6addr.ip().octets(),
                     _ => unreachable!("modified daddr not match"),
                 }
                 tcp_header.destination_port = mod_dst_addr.port();
                 match ip_header {
-                    IpHeader::Version4(v4) => {
+                    IpHeader::Version4(v4, ..) => {
                         tcp_header.checksum = tcp_header
                             .calc_checksum_ipv4(v4, ph.payload)
                             .expect("calc_checksum_ipv4")
                     }
-                    IpHeader::Version6(v6) => {
+                    IpHeader::Version6(v6, ..) => {
                         tcp_header.checksum = tcp_header
                             .calc_checksum_ipv6(v6, ph.payload)
                             .expect("calc_checksum_ipv6")
