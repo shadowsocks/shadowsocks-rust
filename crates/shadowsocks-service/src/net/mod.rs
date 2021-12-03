@@ -1,4 +1,4 @@
-//! Shadowsocks Sevice Network Utilities
+//! Shadowsocks Service Network Utilities
 
 pub use self::{flow::FlowStat, mon_socket::MonProxySocket, mon_stream::MonProxyStream};
 
