@@ -27,7 +27,7 @@ mod consts {
     pub const SOCKS4_RESULT_REQUEST_GRANTED:                   u8 = 90;
     pub const SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED:        u8 = 91;
     pub const SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT:   u8 = 92;
-    pub const SOCKS4_RESULT_REQUEST_REJECTED_DFFERENT_USER_ID: u8 = 93;
+    pub const SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID: u8 = 93;
 }
 
 /// SOCKS4 Command
@@ -80,7 +80,7 @@ impl ResultCode {
             ResultCode::RequestGranted => consts::SOCKS4_RESULT_REQUEST_GRANTED,
             ResultCode::RequestRejectedOrFailed => consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED,
             ResultCode::RequestRejectedCannotConnect => consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT,
-            ResultCode::RequestRejectedDifferentUserId => consts::SOCKS4_RESULT_REQUEST_REJECTED_DFFERENT_USER_ID,
+            ResultCode::RequestRejectedDifferentUserId => consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID,
             ResultCode::Other(c) => c,
         }
     }
@@ -91,7 +91,7 @@ impl ResultCode {
             consts::SOCKS4_RESULT_REQUEST_GRANTED => ResultCode::RequestGranted,
             consts::SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED => ResultCode::RequestRejectedOrFailed,
             consts::SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT => ResultCode::RequestRejectedCannotConnect,
-            consts::SOCKS4_RESULT_REQUEST_REJECTED_DFFERENT_USER_ID => ResultCode::RequestRejectedDifferentUserId,
+            consts::SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID => ResultCode::RequestRejectedDifferentUserId,
             code => ResultCode::Other(code),
         }
     }
@@ -103,7 +103,7 @@ impl fmt::Display for ResultCode {
             ResultCode::RequestGranted => f.write_str("request granted"),
             ResultCode::RequestRejectedOrFailed => f.write_str("request rejected or failed"),
             ResultCode::RequestRejectedCannotConnect => {
-                f.write_str("request rejected becasue SOCKS server cannot connect to identd on the client")
+                f.write_str("request rejected because SOCKS server cannot connect to identd on the client")
             }
             ResultCode::RequestRejectedDifferentUserId => {
                 f.write_str("request rejected because the client program and identd report different user-ids")

@@ -11,9 +11,10 @@ use std::{
 };
 
 use log::{debug, trace};
-use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 use tokio::sync::Mutex;
 use trust_dns_resolver::proto::{error::ProtoError, op::Message};
+
+use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 
 use crate::local::context::ServiceContext;
 
@@ -50,35 +51,8 @@ impl DnsClientCache {
         msg: Message,
         connect_opts: &ConnectOpts,
     ) -> Result<Message, ProtoError> {
-        let mut last_err = None;
-
-        for _ in 0..self.retry_count {
-            let key = DnsClientKey::TcpLocal(ns);
-            let mut client = match self
-                .get_client_or_create(&key, async { DnsClient::connect_tcp_local(ns, connect_opts).await })
-                .await
-            {
-                Ok(client) => client,
-                Err(err) => {
-                    last_err = Some(From::from(err));
-                    continue;
-                }
-            };
-
-            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
-                Ok(msg) => msg,
-                Err(error) => {
-                    last_err = Some(error);
-                    continue;
-                }
-            };
-
-            self.save_client(key, client).await;
-
-            return Ok(res);
-        }
-
-        Err(last_err.unwrap())
+        let key = DnsClientKey::TcpLocal(ns);
+        self.lookup_dns(&key, msg, Some(connect_opts), None, None).await
     }
 
     pub async fn lookup_udp_local(
@@ -87,35 +61,30 @@ impl DnsClientCache {
         msg: Message,
         connect_opts: &ConnectOpts,
     ) -> Result<Message, ProtoError> {
-        let mut last_err = None;
+        let key = DnsClientKey::UdpLocal(ns);
+        self.lookup_dns(&key, msg, Some(connect_opts), None, None).await
+    }
 
-        for _ in 0..self.retry_count {
-            let key = DnsClientKey::UdpLocal(ns);
-            let mut client = match self
-                .get_client_or_create(&key, async { DnsClient::connect_udp_local(ns, connect_opts).await })
-                .await
-            {
-                Ok(client) => client,
-                Err(err) => {
-                    last_err = Some(From::from(err));
-                    continue;
-                }
-            };
+    pub async fn lookup_tcp_remote(
+        &self,
+        context: &ServiceContext,
+        svr_cfg: &ServerConfig,
+        ns: &Address,
+        msg: Message,
+    ) -> Result<Message, ProtoError> {
+        let key = DnsClientKey::TcpRemote(ns.clone());
+        self.lookup_dns(&key, msg, None, Some(context), Some(svr_cfg)).await
+    }
 
-            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
-                Ok(msg) => msg,
-                Err(error) => {
-                    last_err = Some(error);
-                    continue;
-                }
-            };
-
-            self.save_client(key, client).await;
-
-            return Ok(res);
-        }
-
-        Err(last_err.unwrap())
+    pub async fn lookup_udp_remote(
+        &self,
+        context: &ServiceContext,
+        svr_cfg: &ServerConfig,
+        ns: &Address,
+        msg: Message,
+    ) -> Result<Message, ProtoError> {
+        let key = DnsClientKey::UdpRemote(ns.clone());
+        self.lookup_dns(&key, msg, None, Some(context), Some(svr_cfg)).await
     }
 
     #[cfg(unix)]
@@ -145,104 +114,67 @@ impl DnsClientCache {
                     continue;
                 }
             };
-
             return Ok(res);
         }
-
         Err(last_err.unwrap())
     }
 
-    pub async fn lookup_tcp_remote(
+    async fn lookup_dns(
         &self,
-        context: &ServiceContext,
-        svr_cfg: &ServerConfig,
-        ns: &Address,
+        dck: &DnsClientKey,
         msg: Message,
+        connect_opts: Option<&ConnectOpts>,
+        context: Option<&ServiceContext>,
+        svr_cfg: Option<&ServerConfig>,
     ) -> Result<Message, ProtoError> {
         let mut last_err = None;
-
-        let key = DnsClientKey::UdpRemote(ns.clone());
+        let mut dns_res: io::Result<DnsClient>;
         for _ in 0..self.retry_count {
-            let mut client = match self
-                .get_client_or_create(&key, async {
-                    DnsClient::connect_tcp_remote(
-                        context.context(),
-                        svr_cfg,
-                        ns,
-                        context.connect_opts_ref(),
-                        context.flow_stat(),
+            match dck {
+                DnsClientKey::TcpLocal(tcp_l) => {
+                    dns_res = DnsClient::connect_tcp_local(*tcp_l, connect_opts.unwrap()).await;
+                }
+                DnsClientKey::UdpLocal(udp_l) => {
+                    dns_res = DnsClient::connect_udp_local(*udp_l, connect_opts.unwrap()).await;
+                }
+                DnsClientKey::TcpRemote(tcp_l) => {
+                    dns_res = DnsClient::connect_tcp_remote(
+                        context.unwrap().context(),
+                        svr_cfg.unwrap(),
+                        tcp_l,
+                        context.unwrap().connect_opts_ref(),
+                        context.unwrap().flow_stat(),
                     )
-                    .await
-                })
-                .await
-            {
-                Ok(client) => client,
+                    .await;
+                }
+                DnsClientKey::UdpRemote(udp_l) => {
+                    dns_res = DnsClient::connect_udp_remote(
+                        context.unwrap().context(),
+                        svr_cfg.unwrap(),
+                        udp_l.clone(),
+                        context.unwrap().connect_opts_ref(),
+                        context.unwrap().flow_stat(),
+                    )
+                    .await;
+                }
+            }
+            match self.get_client_or_create(&dck, async { dns_res }).await {
+                Ok(mut client) => match client.lookup_timeout(msg.clone(), self.timeout).await {
+                    Ok(msg) => {
+                        self.save_client(dck.clone(), client).await;
+                        return Ok(msg);
+                    }
+                    Err(err) => {
+                        last_err = Some(From::from(err));
+                        continue;
+                    }
+                },
                 Err(err) => {
                     last_err = Some(From::from(err));
                     continue;
                 }
-            };
-
-            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
-                Ok(msg) => msg,
-                Err(error) => {
-                    last_err = Some(error);
-                    continue;
-                }
-            };
-
-            self.save_client(key, client).await;
-
-            return Ok(res);
+            }
         }
-
-        Err(last_err.unwrap())
-    }
-
-    pub async fn lookup_udp_remote(
-        &self,
-        context: &ServiceContext,
-        svr_cfg: &ServerConfig,
-        ns: &Address,
-        msg: Message,
-    ) -> Result<Message, ProtoError> {
-        let mut last_err = None;
-
-        let key = DnsClientKey::TcpRemote(ns.clone());
-        for _ in 0..self.retry_count {
-            let mut client = match self
-                .get_client_or_create(&key, async {
-                    DnsClient::connect_udp_remote(
-                        context.context(),
-                        svr_cfg,
-                        ns.clone(),
-                        context.connect_opts_ref(),
-                        context.flow_stat(),
-                    )
-                    .await
-                })
-                .await
-            {
-                Ok(client) => client,
-                Err(err) => {
-                    last_err = Some(From::from(err));
-                    continue;
-                }
-            };
-
-            let res = match client.lookup_timeout(msg.clone(), self.timeout).await {
-                Ok(msg) => msg,
-                Err(error) => {
-                    last_err = Some(error);
-                    continue;
-                }
-            };
-
-            self.save_client(key, client).await;
-
-            return Ok(res);
-        }
-
         Err(last_err.unwrap())
     }
 
@@ -254,16 +186,13 @@ impl DnsClientCache {
         if let Some(q) = self.cache.lock().await.get_mut(key) {
             while let Some(mut c) = q.pop_front() {
                 trace!("take cached DNS client for {:?}", key);
-
                 if !c.check_connected().await {
                     debug!("cached DNS client for {:?} is lost", key);
                     continue;
                 }
-
                 return Ok(c);
             }
         }
-
         trace!("creating connection to DNS server {:?}", key);
 
         // Create one
