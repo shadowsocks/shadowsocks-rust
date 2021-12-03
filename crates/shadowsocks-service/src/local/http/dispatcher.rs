@@ -3,7 +3,7 @@
 use std::{io, net::SocketAddr, str::FromStr, sync::Arc};
 
 use hyper::{
-    header::HeaderValue,
+    header::{GetAll, HeaderValue},
     http::uri::{Authority, Scheme},
     upgrade,
     Body,
@@ -16,6 +16,7 @@ use hyper::{
     Version,
 };
 use log::{debug, error, trace};
+
 use shadowsocks::relay::socks5::Address;
 
 use crate::local::{
@@ -27,7 +28,7 @@ use crate::local::{
 
 use super::{
     client_cache::ProxyClientCache,
-    http_client::BypassHttpClient,
+    http_client::{BypassHttpClient, HttpClientEnum},
     utils::{authority_addr, host_addr},
 };
 
@@ -142,7 +143,6 @@ impl HttpDispatcher {
         } else {
             let method = self.req.method().clone();
             let version = self.req.version();
-
             debug!("HTTP {} {} {:?}", method, host, version);
 
             // Check if client wants us to keep long connection
@@ -153,47 +153,30 @@ impl HttpDispatcher {
 
             // Set keep-alive for connection with remote
             set_conn_keep_alive(version, self.req.headers_mut(), conn_keep_alive);
-
-            let mut res = if self.context.check_target_bypassed(&host).await {
+            let client: HttpClientEnum;
+            if self.context.check_target_bypassed(&host).await {
                 trace!("bypassed {} -> {} {:?}", self.client_addr, host, self.req);
-
-                // Keep connections in a global client instance
-                match self.bypass_client.request(self.req).await {
-                    Ok(res) => res,
-                    Err(err) => {
-                        error!(
-                            "HTTP {} {} <-> {} relay failed, error: {}",
-                            method, self.client_addr, host, err
-                        );
-
-                        let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
-                        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-
-                        return Ok(resp);
-                    }
-                }
+                client = HttpClientEnum::Bypass(self.bypass_client);
             } else {
                 trace!("proxied {} -> {} {:?}", self.client_addr, host, self.req);
 
                 // Keep connections for clients in ServerScore::client
-                //
                 // client instance is kept for Keep-Alive connections
                 let server = self.balancer.best_tcp_server();
-                let client = self.proxy_client_cache.get_connected(&server).await;
+                client = HttpClientEnum::Proxy(self.proxy_client_cache.get_connected(&server).await);
+            };
 
-                match client.request(self.req).await {
-                    Ok(res) => res,
-                    Err(err) => {
-                        error!(
-                            "HTTP {} {} <-> {} relay failed, error: {}",
-                            method, self.client_addr, host, err
-                        );
+            let mut res = match client.send(self.req).await {
+                Ok(res) => res,
+                Err(err) => {
+                    error!(
+                        "HTTP {} {} <-> {} relay failed, error: {}",
+                        method, self.client_addr, host, err
+                    );
 
-                        let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
-                        *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-
-                        return Ok(resp);
-                    }
+                    let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
+                    *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+                    return Ok(resp);
                 }
             };
 
@@ -228,6 +211,26 @@ fn make_bad_request() -> io::Result<Response<Body>> {
     Ok(resp)
 }
 
+fn get_keep_alive_val(values: GetAll<HeaderValue>) -> Option<bool> {
+    let mut conn_keep_alive = None;
+    for value in values {
+        if let Ok(value) = value.to_str() {
+            if value.eq_ignore_ascii_case("close") {
+                conn_keep_alive = Some(false);
+            } else {
+                for part in value.split(',') {
+                    let part = part.trim();
+                    if part.eq_ignore_ascii_case("keep-alive") {
+                        conn_keep_alive = Some(true);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    conn_keep_alive
+}
+
 fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_proxy: bool) -> bool {
     // HTTP/1.1, HTTP/2, HTTP/3 keeps alive by default
     let mut conn_keep_alive = !matches!(version, Version::HTTP_09 | Version::HTTP_10);
@@ -237,77 +240,42 @@ fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, check_pr
         // for HTTP/1.0 proxies which blindly forward Connection to remote
         //
         // https://tools.ietf.org/html/rfc7230#appendix-A.1.2
-        for value in headers.get_all("Proxy-Connection") {
-            if let Ok(value) = value.to_str() {
-                if value.eq_ignore_ascii_case("close") {
-                    conn_keep_alive = false;
-                } else {
-                    for part in value.split(',') {
-                        let part = part.trim();
-                        if part.eq_ignore_ascii_case("keep-alive") {
-                            conn_keep_alive = true;
-                            break;
-                        }
-                    }
-                }
-            }
+        if let Some(b) = get_keep_alive_val(headers.get_all("Proxy-Connection")) {
+            conn_keep_alive = b
         }
     }
 
     // Connection will replace Proxy-Connection
     //
     // But why client sent both Connection and Proxy-Connection? That's not standard!
-    for value in headers.get_all("Connection") {
-        if let Ok(value) = value.to_str() {
-            if value.eq_ignore_ascii_case("close") {
-                conn_keep_alive = false;
-            } else {
-                for part in value.split(',') {
-                    let part = part.trim();
-
-                    if part.eq_ignore_ascii_case("keep-alive") {
-                        conn_keep_alive = true;
-                        break;
-                    }
-                }
-            }
-        }
+    if let Some(b) = get_keep_alive_val(headers.get_all("Connection")) {
+        conn_keep_alive = b
     }
 
     conn_keep_alive
 }
 
+fn get_extra_headers(headers: GetAll<HeaderValue>) -> Vec<String> {
+    let mut extra_headers = Vec::new();
+    for connection in headers {
+        if let Ok(conn) = connection.to_str() {
+            // close is a command instead of a header
+            if conn.eq_ignore_ascii_case("close") {
+                continue;
+            }
+            for header in conn.split(',') {
+                let header = header.trim();
+                extra_headers.push(header.to_owned());
+            }
+        }
+    }
+    extra_headers
+}
+
 fn clear_hop_headers(headers: &mut HeaderMap<HeaderValue>) {
     // Clear headers indicated by Connection and Proxy-Connection
-    let mut extra_headers = Vec::new();
-
-    for connection in headers.get_all("Connection") {
-        if let Ok(conn) = connection.to_str() {
-            // close is a command instead of a header
-            if conn.eq_ignore_ascii_case("close") {
-                continue;
-            }
-
-            for header in conn.split(',') {
-                let header = header.trim();
-                extra_headers.push(header.to_owned());
-            }
-        }
-    }
-
-    for connection in headers.get_all("Proxy-Connection") {
-        if let Ok(conn) = connection.to_str() {
-            // close is a command instead of a header
-            if conn.eq_ignore_ascii_case("close") {
-                continue;
-            }
-
-            for header in conn.split(',') {
-                let header = header.trim();
-                extra_headers.push(header.to_owned());
-            }
-        }
-    }
+    let mut extra_headers = get_extra_headers(headers.get_all("Connection"));
+    extra_headers.extend(get_extra_headers(headers.get_all("Proxy-Connection")));
 
     for header in extra_headers {
         while let Some(..) = headers.remove(&header) {}

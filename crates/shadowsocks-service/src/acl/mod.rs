@@ -304,7 +304,7 @@ impl ParsingRules {
 /// Mode is the default ACL strategy for those addresses that are not in configuration file.
 ///
 /// - `BlackList` - Bypasses / Rejects all addresses except those in `[proxy_list]` or `[white_list]`
-/// - `WhiltList` - Proxies / Accepts all addresses except those in `[bypass_list]` or `[black_list]`
+/// - `WhiteList` - Proxies / Accepts all addresses except those in `[bypass_list]` or `[black_list]`
 ///
 /// ## Rules
 ///
