@@ -19,88 +19,21 @@ use crate::local::{context::ServiceContext, loadbalancing::ServerIdent, net::Aut
 use super::{http_stream::ProxyHttpStream, utils::host_addr};
 
 #[derive(Clone)]
-pub struct BypassConnector {
+pub struct Connector {
     context: Arc<ServiceContext>,
+    server: Option<Arc<ServerIdent>>,
 }
 
-impl BypassConnector {
-    pub fn new(context: Arc<ServiceContext>) -> BypassConnector {
-        BypassConnector { context }
+impl Connector {
+    pub fn new(context: Arc<ServiceContext>, server: Option<Arc<ServerIdent>>) -> Connector {
+        Connector { context, server }
     }
 }
 
-impl Service<Uri> for BypassConnector {
-    type Error = io::Error;
-    type Future = BypassConnecting;
+impl Service<Uri> for Connector {
     type Response = ProxyHttpStream;
-
-    fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, dst: Uri) -> Self::Future {
-        let context = self.context.clone();
-
-        BypassConnecting {
-            fut: async move {
-                let is_https = dst.scheme_str() == Some("https");
-
-                match host_addr(&dst) {
-                    None => {
-                        use std::io::Error;
-
-                        error!("HTTP target URI must be a valid address, but found: {}", dst);
-
-                        let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
-                        Err(err)
-                    }
-                    Some(addr) => {
-                        let s = AutoProxyClientStream::connect_bypassed(context, addr).await?;
-
-                        if is_https {
-                            let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
-                            ProxyHttpStream::connect_https(s, host).await
-                        } else {
-                            Ok(ProxyHttpStream::connect_http(s))
-                        }
-                    }
-                }
-            }
-            .boxed(),
-        }
-    }
-}
-
-#[pin_project]
-pub struct BypassConnecting {
-    #[pin]
-    fut: BoxFuture<'static, io::Result<ProxyHttpStream>>,
-}
-
-impl Future for BypassConnecting {
-    type Output = io::Result<ProxyHttpStream>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
-        self.project().fut.poll(cx)
-    }
-}
-
-#[derive(Clone)]
-pub struct ProxyConnector {
-    context: Arc<ServiceContext>,
-    server: Arc<ServerIdent>,
-}
-
-impl ProxyConnector {
-    pub fn new(context: Arc<ServiceContext>, server: Arc<ServerIdent>) -> ProxyConnector {
-        ProxyConnector { context, server }
-    }
-}
-
-impl Service<Uri> for ProxyConnector {
     type Error = io::Error;
-    type Future = ProxyConnecting;
-    type Response = ProxyHttpStream;
+    type Future = Connecting;
 
     fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -109,22 +42,21 @@ impl Service<Uri> for ProxyConnector {
     fn call(&mut self, dst: Uri) -> Self::Future {
         let context = self.context.clone();
         let server = self.server.clone();
-
-        ProxyConnecting {
+        Connecting {
             fut: async move {
                 let is_https = dst.scheme_str() == Some("https");
-
                 match host_addr(&dst) {
                     None => {
                         use std::io::Error;
-
                         error!("HTTP target URI must be a valid address, but found: {}", dst);
-
                         let err = Error::new(ErrorKind::Other, "URI must be a valid Address");
                         Err(err)
                     }
                     Some(addr) => {
-                        let s = AutoProxyClientStream::connect_proxied(context, server.as_ref(), addr).await?;
+                        let s = match server {
+                            Some(ser) => AutoProxyClientStream::connect_proxied(context, ser.as_ref(), addr).await?,
+                            None => AutoProxyClientStream::connect_bypassed(context, addr).await?,
+                        };
 
                         if is_https {
                             let host = dst.host().unwrap().trim_start_matches('[').trim_start_matches(']');
@@ -135,18 +67,18 @@ impl Service<Uri> for ProxyConnector {
                     }
                 }
             }
-            .boxed(),
+                .boxed(),
         }
     }
 }
 
 #[pin_project]
-pub struct ProxyConnecting {
+pub struct Connecting {
     #[pin]
     fut: BoxFuture<'static, io::Result<ProxyHttpStream>>,
 }
 
-impl Future for ProxyConnecting {
+impl Future for Connecting {
     type Output = io::Result<ProxyHttpStream>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {

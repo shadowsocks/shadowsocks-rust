@@ -2,10 +2,10 @@
 
 use hyper::{client::ResponseFuture, Body, Client, Request};
 
-use super::connector::{BypassConnector, ProxyConnector};
+use super::connector::Connector;
 
-pub type ProxyHttpClient = Client<ProxyConnector, Body>;
-pub type BypassHttpClient = Client<BypassConnector, Body>;
+pub type ProxyHttpClient = Client<Connector, Body>;
+pub type BypassHttpClient = Client<Connector, Body>;
 
 pub enum HttpClientEnum {
     Proxy(ProxyHttpClient),
