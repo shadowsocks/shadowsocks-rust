@@ -46,33 +46,23 @@ pub fn init_with_config(bin_name: &str, config: &LogConfig) {
         ),
     );
 
+    let (l1, l2) = match debug_level {
+        0 => (LevelFilter::Info, LevelFilter::Off),
+        1 => (LevelFilter::Debug, LevelFilter::Off),
+        2 => (LevelFilter::Trace, LevelFilter::Off),
+        3 => (LevelFilter::Trace, LevelFilter::Debug),
+        _ => (LevelFilter::Off, LevelFilter::Trace),
+    };
+
     let config = match debug_level {
-        0 => logging_builder
-            .logger(Logger::builder().build(bin_name, LevelFilter::Info))
-            .logger(Logger::builder().build("shadowsocks_rust", LevelFilter::Info))
-            .logger(Logger::builder().build("shadowsocks", LevelFilter::Info))
-            .logger(Logger::builder().build("shadowsocks_service", LevelFilter::Info))
-            .build(Root::builder().appender("console").build(LevelFilter::Off)),
-        1 => logging_builder
-            .logger(Logger::builder().build(bin_name, LevelFilter::Debug))
-            .logger(Logger::builder().build("shadowsocks_rust", LevelFilter::Debug))
-            .logger(Logger::builder().build("shadowsocks", LevelFilter::Debug))
-            .logger(Logger::builder().build("shadowsocks_service", LevelFilter::Debug))
-            .build(Root::builder().appender("console").build(LevelFilter::Off)),
-        2 => logging_builder
-            .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_rust", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_service", LevelFilter::Trace))
-            .build(Root::builder().appender("console").build(LevelFilter::Off)),
-        3 => logging_builder
-            .logger(Logger::builder().build(bin_name, LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_rust", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks", LevelFilter::Trace))
-            .logger(Logger::builder().build("shadowsocks_service", LevelFilter::Trace))
-            .build(Root::builder().appender("console").build(LevelFilter::Debug)),
-        _ => logging_builder.build(Root::builder().appender("console").build(LevelFilter::Trace)),
+        0 | 1 | 2 | 3 => logging_builder
+            .logger(Logger::builder().build(bin_name, l1))
+            .logger(Logger::builder().build("shadowsocks_rust", l1))
+            .logger(Logger::builder().build("shadowsocks", l1))
+            .logger(Logger::builder().build("shadowsocks_service", l1)),
+        _ => logging_builder,
     }
+    .build(Root::builder().appender("console").build(l2))
     .expect("logging");
 
     log4rs::init_config(config).expect("logging");
