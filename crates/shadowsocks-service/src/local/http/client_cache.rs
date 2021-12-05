@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 
 use crate::local::{context::ServiceContext, loadbalancing::ServerIdent};
 
-use super::{connector::ProxyConnector, http_client::ProxyHttpClient};
+use super::{connector::Connector, http_client::ProxyHttpClient};
 
 /// Cached HTTP client for remote servers
 pub struct ProxyClientCache {
@@ -37,7 +37,7 @@ impl ProxyClientCache {
         let client = Client::builder()
             .http1_preserve_header_case(true)
             .http1_title_case_headers(true)
-            .build::<_, Body>(ProxyConnector::new(self.context.clone(), server.clone()));
+            .build::<_, Body>(Connector::new(self.context.clone(), Some(server.clone())));
         cache.insert(server_config.addr().clone(), client.clone());
 
         client
