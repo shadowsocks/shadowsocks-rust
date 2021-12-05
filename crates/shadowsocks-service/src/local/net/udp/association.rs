@@ -11,6 +11,14 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use log::{debug, error, trace, warn};
 use lru_time_cache::LruCache;
+use spin::Mutex as SpinMutex;
+use tokio::{
+    net::UdpSocket,
+    sync::{mpsc, Mutex},
+    task::JoinHandle,
+    time,
+};
+
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
@@ -18,13 +26,6 @@ use shadowsocks::{
         udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
         Address,
     },
-};
-use spin::Mutex as SpinMutex;
-use tokio::{
-    net::UdpSocket,
-    sync::{mpsc, Mutex},
-    task::JoinHandle,
-    time,
 };
 
 use crate::{
@@ -379,61 +380,24 @@ where
     }
 
     async fn copy_bypassed_ipv4_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        let socket = {
-            let mut handle = self.bypassed_ipv4_socket.lock();
-
-            match *handle {
-                UdpAssociationBypassState::Empty => {
-                    // Create a new connection to proxy server
-
-                    let socket =
-                        ShadowUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-                    let socket: Arc<UdpSocket> = Arc::new(socket.into());
-
-                    // CLIENT <- REMOTE
-                    let r2l_abortable = {
-                        let assoc = self.clone();
-                        tokio::spawn(assoc.copy_bypassed_r2l(socket.clone()))
-                    };
-                    debug!(
-                        "created udp association for {} (bypassed) with {:?}",
-                        self.peer_addr,
-                        self.context.connect_opts_ref()
-                    );
-
-                    handle.set_connected(socket.clone(), r2l_abortable);
-                    socket
-                }
-                UdpAssociationBypassState::Connected { ref socket, .. } => socket.clone(),
-                UdpAssociationBypassState::Aborted => {
-                    debug!(
-                        "udp association for {} (bypassed) have been aborted, dropped packet {} bytes to {}",
-                        self.peer_addr,
-                        data.len(),
-                        target_addr
-                    );
-                    return Ok(());
-                }
-            }
-        };
-
-        let n = socket.send_to(data, target_addr).await?;
-        if n != data.len() {
-            warn!(
-                "{} -> {} sent {} bytes != expected {} bytes",
-                self.peer_addr,
-                target_addr,
-                n,
-                data.len()
-            );
-        }
-
-        Ok(())
+        self.copy_bypassed_l2r_impl(target_addr, data, false)
     }
 
     async fn copy_bypassed_ipv6_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
+        self.copy_bypassed_l2r_impl(target_addr, data, true)
+    }
+
+    async fn copy_bypassed_l2r_impl(
+        self: Arc<Self>,
+        target_addr: SocketAddr,
+        data: &[u8],
+        is_ipv6: bool,
+    ) -> io::Result<()> {
         let socket = {
-            let mut handle = self.bypassed_ipv6_socket.lock();
+            let mut handle = match is_ipv6 {
+                true => self.bypassed_ipv6_socket.lock(),
+                false => self.bypassed_ipv4_socket.lock(),
+            };
 
             match *handle {
                 UdpAssociationBypassState::Empty => {
