@@ -380,11 +380,11 @@ where
     }
 
     async fn copy_bypassed_ipv4_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        self.copy_bypassed_l2r_impl(target_addr, data, false)
+        self.copy_bypassed_l2r_impl(target_addr, data, false).await
     }
 
     async fn copy_bypassed_ipv6_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        self.copy_bypassed_l2r_impl(target_addr, data, true)
+        self.copy_bypassed_l2r_impl(target_addr, data, true).await
     }
 
     async fn copy_bypassed_l2r_impl(
