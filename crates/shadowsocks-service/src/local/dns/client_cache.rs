@@ -45,45 +45,32 @@ impl DnsClientCache {
         }
     }
 
-    pub async fn lookup_tcp_local(
+    pub async fn lookup_local(
         &self,
         ns: SocketAddr,
         msg: Message,
         connect_opts: &ConnectOpts,
+        is_udp: bool
     ) -> Result<Message, ProtoError> {
-        let key = DnsClientKey::TcpLocal(ns);
+        let key = match is_udp {
+            true => DnsClientKey::UdpLocal(ns),
+            false => DnsClientKey::TcpLocal(ns),
+        };
         self.lookup_dns(&key, msg, Some(connect_opts), None, None).await
     }
 
-    pub async fn lookup_udp_local(
-        &self,
-        ns: SocketAddr,
-        msg: Message,
-        connect_opts: &ConnectOpts,
-    ) -> Result<Message, ProtoError> {
-        let key = DnsClientKey::UdpLocal(ns);
-        self.lookup_dns(&key, msg, Some(connect_opts), None, None).await
-    }
-
-    pub async fn lookup_tcp_remote(
+    pub async fn lookup_remote(
         &self,
         context: &ServiceContext,
         svr_cfg: &ServerConfig,
         ns: &Address,
         msg: Message,
+        is_udp: bool
     ) -> Result<Message, ProtoError> {
-        let key = DnsClientKey::TcpRemote(ns.clone());
-        self.lookup_dns(&key, msg, None, Some(context), Some(svr_cfg)).await
-    }
-
-    pub async fn lookup_udp_remote(
-        &self,
-        context: &ServiceContext,
-        svr_cfg: &ServerConfig,
-        ns: &Address,
-        msg: Message,
-    ) -> Result<Message, ProtoError> {
-        let key = DnsClientKey::UdpRemote(ns.clone());
+        let key = match is_udp {
+            true => DnsClientKey::UdpRemote(ns.clone()),
+            false => DnsClientKey::TcpRemote(ns.clone()),
+        };
         self.lookup_dns(&key, msg, None, Some(context), Some(svr_cfg)).await
     }
 
