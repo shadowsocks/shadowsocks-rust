@@ -116,7 +116,7 @@ impl TcpServerClient {
                 //
                 // Keep connection open.
                 warn!(
-                    "handshake failed, maybe wrong method or key, or under reply attacks. peer: {}, error: {}",
+                    "handshake failed, maybe wrong method or key, or under replay attacks. peer: {}, error: {}",
                     self.peer_addr, err
                 );
 
