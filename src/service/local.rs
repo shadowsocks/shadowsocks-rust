@@ -50,7 +50,7 @@ pub fn define_command_line_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
         (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
         (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
 
-        (@arg URL: --("server-url") +takes_value {validator::validate_server_url} "Server address in SIP002 (https://shadowsocks.org/en/spec/SIP002-URI-Scheme.html) URL")
+        (@arg URL: --("server-url") +takes_value {validator::validate_server_url} "Server address in SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) URL")
 
         (@group SERVER_CONFIG =>
             (@attributes +multiple arg[SERVER_ADDR URL]))
