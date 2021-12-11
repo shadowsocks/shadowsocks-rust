@@ -84,7 +84,7 @@ function build() {
 
         if [[ "${use_upx}" = true ]]; then
             # Enable upx for MIPS.
-            $upx sslocal ssserver ssurl ssmanager #>/dev/null
+            $upx sslocal ssserver ssurl ssmanager ssservice #>/dev/null
         fi
 
         echo "* Packaging XZ in ${PKG_PATH} ..."
