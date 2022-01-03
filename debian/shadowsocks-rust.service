@@ -14,7 +14,7 @@ EnvironmentFile=/etc/default/shadowsocks-rust
 User=nobody
 Group=nogroup
 LimitNOFILE=32768
-ExecStart=/usr/bin/ssserver --log-without-time -c ${CONFFILE} ${DAEMON_ARGS}
+ExecStart=/usr/bin/ssservice server -c ${CONFFILE} ${DAEMON_ARGS}
 
 [Install]
 WantedBy=multi-user.target
