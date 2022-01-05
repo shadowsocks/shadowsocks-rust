@@ -7,14 +7,13 @@
 //! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
-use clap::clap_app;
+use clap::App;
 use shadowsocks_rust::service::server;
 
 fn main() {
-    let mut app = clap_app!(shadowsocks =>
-        (version: shadowsocks_rust::VERSION)
-        (about: "A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)")
-    );
+    let mut app = App::new("shadowsocks")
+        .version(shadowsocks_rust::VERSION)
+        .about("A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)");
     app = server::define_command_line_options(app);
 
     let matches = app.get_matches();

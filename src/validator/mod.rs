@@ -12,7 +12,7 @@ use shadowsocks_service::shadowsocks::{relay::socks5::Address, ManagerAddr, Serv
 
 macro_rules! validate_type {
     ($name:ident, $ty:ty, $help:expr) => {
-        pub fn $name(v: String) -> Result<(), String> {
+        pub fn $name(v: &str) -> Result<(), String> {
             match v.parse::<$ty>() {
                 Ok(..) => Ok(()),
                 Err(..) => Err($help.to_owned()),
@@ -44,7 +44,7 @@ validate_type!(validate_u64, u64, "should be unsigned integer");
 validate_type!(validate_u32, u32, "should be unsigned integer");
 validate_type!(validate_usize, usize, "should be unsigned integer");
 
-pub fn validate_server_url(v: String) -> Result<(), String> {
+pub fn validate_server_url(v: &str) -> Result<(), String> {
     match ServerConfig::from_url(&v) {
         Ok(..) => Ok(()),
         Err(..) => Err("should be SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) format".to_owned()),
@@ -52,7 +52,7 @@ pub fn validate_server_url(v: String) -> Result<(), String> {
 }
 
 #[cfg(feature = "local-tun")]
-pub fn validate_ipnet(v: String) -> Result<(), String> {
+pub fn validate_ipnet(v: &str) -> Result<(), String> {
     match v.parse::<IpNet>() {
         Err(..) => Err("should be a CIDR address like 10.1.2.3/24".to_owned()),
         Ok(n) => {

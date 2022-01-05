@@ -3,7 +3,7 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-use clap::clap_app;
+use clap::{App, Arg};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{
@@ -73,14 +73,32 @@ fn decode(encoded: &str, need_qrcode: bool) {
 }
 
 fn main() {
-    let app = clap_app!(ssurl =>
-        (version: VERSION)
-        (about: "Encode and decode ShadowSocks URL")
-        (@arg ENCODE_CONFIG_PATH: -e --encode +takes_value conflicts_with[DECODE_CONFIG_PATH] required_unless[DECODE_CONFIG_PATH] "Encode the server configuration in the provided JSON file")
-        (@arg DECODE_CONFIG_PATH: -d --decode +takes_value required_unless[ENCODE_CONFIG_PATH] "Decode the server configuration from the provide ShadowSocks URL")
-        (@arg QRCODE: -c --qrcode !takes_value "Generate the QRCode with the provided configuration")
-    );
-
+    let app = App::new("ssurl")
+        .version(VERSION)
+        .about("Encode and decode ShadowSocks URL")
+        .arg(
+            Arg::new("ENCODE_CONFIG_PATH")
+                .short('e')
+                .long("encode")
+                .takes_value(true)
+                .conflicts_with("DECODE_CONFIG_PATH")
+                .required_unless_present("DECODE_CONFIG_PATH")
+                .help("Encode the server configuration in the provided JSON file"),
+        )
+        .arg(
+            Arg::new("DECODE_CONFIG_PATH")
+                .short('d')
+                .long("decode")
+                .takes_value(true)
+                .required_unless_present("ENCODE_CONFIG_PATH")
+                .help("Decode the server configuration from the provide ShadowSocks URL"),
+        )
+        .arg(
+            Arg::new("QRCODE")
+                .short('c')
+                .long("qrcode")
+                .help("Generate the QRCode with the provided configuration"),
+        );
     let matches = app.get_matches();
 
     let need_qrcode = matches.is_present("QRCODE");

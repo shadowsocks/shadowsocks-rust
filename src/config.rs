@@ -158,7 +158,7 @@ impl Config {
     }
 
     /// Set by command line options
-    pub fn set_options(&mut self, matches: &ArgMatches<'_>) {
+    pub fn set_options(&mut self, matches: &ArgMatches) {
         #[cfg(feature = "logging")]
         {
             let debug_level = matches.occurrences_of("VERBOSE");
@@ -181,7 +181,7 @@ impl Config {
         }
 
         #[cfg(feature = "multi-threaded")]
-        match clap::value_t!(matches.value_of("WORKER_THREADS"), usize) {
+        match matches.value_of_t::<usize>("WORKER_THREADS") {
             Ok(worker_count) => self.runtime.worker_count = Some(worker_count),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),

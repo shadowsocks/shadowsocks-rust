@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{clap_app, App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -27,92 +27,187 @@ use crate::{
 };
 
 /// Defines command line options
-pub fn define_command_line_options<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
-    let mut app = clap_app!(@app (app)
-        (@arg CONFIG: -c --config +takes_value "Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)")
-
-        (@arg OUTBOUND_BIND_ADDR: -b --("outbound-bind-addr") +takes_value alias("bind-addr") {validator::validate_ip_addr} "Bind address, outbound socket will bind this address")
-        (@arg OUTBOUND_BIND_INTERFACE: --("outbound-bind-interface") +takes_value "Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket")
-
-        (@arg SERVER_ADDR: -s --("server-addr") +takes_value {validator::validate_server_addr} requires[ENCRYPT_METHOD] "Server address")
-        (@arg PASSWORD: -k --password +takes_value requires[SERVER_ADDR] "Server's password")
-        (@arg ENCRYPT_METHOD: -m --("encrypt-method") +takes_value requires[SERVER_ADDR] possible_values(available_ciphers()) "Server's encryption method")
-        (@arg TIMEOUT: --timeout +takes_value {validator::validate_u64} requires[SERVER_ADDR] "Server's timeout seconds for TCP relay")
-        (@arg UDP_ONLY: -u conflicts_with[TCP_AND_UDP] requires[SERVER_ADDR] "Server mode UDP_ONLY")
-        (@arg TCP_AND_UDP: -U requires[SERVER_ADDR] "Server mode TCP_AND_UDP")
-
-        (@arg PLUGIN: --plugin +takes_value requires[SERVER_ADDR] "SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin")
-        (@arg PLUGIN_OPT: --("plugin-opts") +takes_value requires[PLUGIN] "Set SIP003 plugin options")
-
-        (@arg MANAGER_ADDR: --("manager-addr") +takes_value alias("manager-address") "ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\"")
-
-        (@arg ACL: --acl +takes_value "Path to ACL (Access Control List)")
-        (@arg DNS: --dns +takes_value "DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\"")
-
-        (@arg TCP_NO_DELAY: --("tcp-no-delay") !takes_value alias("no-delay") "Set TCP_NODELAY option for socket")
-        (@arg TCP_FAST_OPEN: --("tcp-fast-open") !takes_value alias("fast-open") "Enable TCP Fast Open (TFO)")
-        (@arg TCP_KEEP_ALIVE: --("tcp-keep-alive") +takes_value {validator::validate_u64} "Set TCP keep alive timeout seconds")
-
-        (@arg UDP_TIMEOUT: --("udp-timeout") +takes_value {validator::validate_u64} "Timeout seconds for UDP relay")
-        (@arg UDP_MAX_ASSOCIATIONS: --("udp-max-associations") +takes_value {validator::validate_u64} "Maximum associations to be kept simultaneously for UDP relay")
-
-        (@arg INBOUND_SEND_BUFFER_SIZE: --("inbound-send-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_SNDBUF option")
-        (@arg INBOUND_RECV_BUFFER_SIZE: --("inbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set inbound sockets' SO_RCVBUF option")
-        (@arg OUTBOUND_SEND_BUFFER_SIZE: --("outbound-send-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_SNDBUF option")
-        (@arg OUTBOUND_RECV_BUFFER_SIZE: --("outbound-recv-buffer-size") +takes_value {validator::validate_u32} "Set outbound sockets' SO_RCVBUF option")
-    );
+pub fn define_command_line_options<'a>(mut app: App<'a>) -> App<'a> {
+    app = app
+        .arg(
+            Arg::new("CONFIG")
+                .short('c')
+                .long("config")
+                .takes_value(true)
+                .help("Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)"),
+        )
+        .arg(
+            Arg::new("OUTBOUND_BIND_ADDR")
+                .short('b')
+                .long("outbound-bind-addr")
+                .takes_value(true)
+                .alias("bind-addr")
+                .validator(validator::validate_ip_addr)
+                .help("Bind address, outbound socket will bind this address"),
+        )
+        .arg(
+            Arg::new("OUTBOUND_BIND_INTERFACE")
+                .long("outbound-bind-interface")
+                .takes_value(true)
+                .help("Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket"),
+        )
+        .arg(
+            Arg::new("SERVER_ADDR")
+                .short('s')
+                .long("server-addr")
+                .takes_value(true)
+                .validator(validator::validate_server_addr)
+                .requires("ENCRYPT_METHOD")
+                .help("Server address"),
+        )
+        .arg(
+            Arg::new("PASSWORD")
+                .short('k')
+                .long("password")
+                .takes_value(true)
+                .requires("SERVER_ADDR")
+                .help("Server's password"),
+        )
+        .arg(
+            Arg::new("ENCRYPT_METHOD")
+                .short('m')
+                .long("encrypt-method")
+                .takes_value(true)
+                .requires("SERVER_ADDR")
+                .possible_values(available_ciphers())
+                .help("Server's encryption method"),
+        )
+        .arg(
+            Arg::new("TIMEOUT")
+                .long("timeout")
+                .takes_value(true)
+                .validator(validator::validate_u64)
+                .requires("SERVER_ADDR")
+                .help("Server's timeout seconds for TCP relay"),
+        )
+        .arg(
+            Arg::new("UDP_ONLY")
+                .short('u')
+                .conflicts_with("TCP_AND_UDP")
+                .requires("SERVER_ADDR")
+                .help("Server mode UDP_ONLY"),
+        )
+        .arg(
+            Arg::new("TCP_AND_UDP")
+                .short('U')
+                .requires("SERVER_ADDR")
+                .help("Server mode TCP_AND_UDP"),
+        )
+        .arg(
+            Arg::new("PLUGIN")
+                .long("plugin")
+                .takes_value(true)
+                .requires("SERVER_ADDR")
+                .help("SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin"),
+        )
+        .arg(
+            Arg::new("PLUGIN_OPT")
+                .long("plugin-opts")
+                .takes_value(true)
+                .requires("PLUGIN")
+                .help("Set SIP003 plugin options"),
+        )
+        .arg(Arg::new("MANAGER_ADDR").long("manager-addr").takes_value(true).alias("manager-address").help("ShadowSocks Manager (ssmgr) address, could be \"IP:Port\", \"Domain:Port\" or \"/path/to/unix.sock\""))
+        .arg(Arg::new("ACL").long("acl").takes_value(true).help("Path to ACL (Access Control List)"))
+        .arg(Arg::new("DNS").long("dns").takes_value(true).help("DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\""))
+        .arg(Arg::new("TCP_NO_DELAY").long("tcp-no-delay").alias("no-delay").help("Set TCP_NODELAY option for sockets"))
+        .arg(Arg::new("TCP_FAST_OPEN").long("tcp-fast-open").alias("fast-open").help("Enable TCP Fast Open (TFO)"))
+        .arg(Arg::new("TCP_KEEP_ALIVE").long("tcp-keep-alive").takes_value(true).validator(validator::validate_u64).help("Set TCP keep alive timeout seconds"))
+        .arg(Arg::new("UDP_TIMEOUT").long("udp-timeout").takes_value(true).validator(validator::validate_u64).help("Timeout seconds for UDP relay"))
+        .arg(Arg::new("UDP_MAX_ASSOCIATIONS").long("udp-max-associations").takes_value(true).validator(validator::validate_u64).help("Maximum associations to be kept simultaneously for UDP relay"))
+        .arg(Arg::new("INBOUND_SEND_BUFFER_SIZE").long("inbound-send-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set inbound sockets' SO_SNDBUF option"))
+        .arg(Arg::new("INBOUND_RECV_BUFFER_SIZE").long("inbound-recv-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set inbound sockets' SO_RCVBUF option"))
+        .arg(Arg::new("OUTBOUND_SEND_BUFFER_SIZE").long("outbound-send-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set outbound sockets' SO_SNDBUF option"))
+        .arg(Arg::new("OUTBOUND_RECV_BUFFER_SIZE").long("outbound-recv-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set outbound sockets' SO_RCVBUF option"))
+        .arg(
+            Arg::new("IPV6_FIRST")
+                .short('6')
+                .help("Resolve hostname to IPv6 address first"),
+        );
 
     #[cfg(feature = "logging")]
     {
-        app = clap_app!(@app (app)
-            (@arg VERBOSE: -v ... "Set log level")
-            (@arg LOG_WITHOUT_TIME: --("log-without-time") "Log without datetime prefix")
-            (@arg LOG_CONFIG: --("log-config") +takes_value "log4rs configuration file")
-        );
+        app = app
+            .arg(
+                Arg::new("VERBOSE")
+                    .short('v')
+                    .multiple_occurrences(true)
+                    .help("Set log level"),
+            )
+            .arg(
+                Arg::new("LOG_WITHOUT_TIME")
+                    .long("log-without-time")
+                    .help("Log without datetime prefix"),
+            )
+            .arg(
+                Arg::new("LOG_CONFIG")
+                    .long("log-config")
+                    .takes_value(true)
+                    .help("log4rs configuration file"),
+            );
     }
 
     #[cfg(unix)]
     {
-        app = clap_app!(@app (app)
-            (@arg DAEMONIZE: -d --("daemonize") "Daemonize")
-            (@arg DAEMONIZE_PID_PATH: -f --("daemonize-pid") +takes_value "File path to store daemonized process's PID")
-        );
+        app = app
+            .arg(Arg::new("DAEMONIZE").short('d').long("daemonize").help("Daemonize"))
+            .arg(
+                Arg::new("DAEMONIZE_PID_PATH")
+                    .long("daemonize-pid")
+                    .takes_value(true)
+                    .help("File path to store daemonized process's PID"),
+            );
     }
 
     #[cfg(all(unix, not(target_os = "android")))]
     {
-        app = clap_app!(@app (app)
-            (@arg NOFILE: -n --nofile +takes_value "Set RLIMIT_NOFILE with both soft and hard limit")
+        app = app.arg(
+            Arg::new("NOFILE")
+                .short('n')
+                .long("nofile")
+                .takes_value(true)
+                .help("Set RLIMIT_NOFILE with both soft and hard limit"),
         );
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        app = clap_app!(@app (app)
-            (@arg OUTBOUND_FWMARK: --("outbound-fwmark") +takes_value {validator::validate_u32} "Set SO_MARK option for outbound socket")
+        app = app.arg(
+            Arg::new("OUTBOUND_FWMARK")
+                .long("outbound-fwmark")
+                .takes_value(true)
+                .validator(validator::validate_u32)
+                .help("Set SO_MARK option for outbound sockets"),
         );
     }
 
     #[cfg(feature = "multi-threaded")]
     {
-        app = clap_app!(@app (app)
-            (@arg SINGLE_THREADED: --("single-threaded") "Run the program all in one thread")
-            (@arg WORKER_THREADS: --("worker-threads") +takes_value {validator::validate_usize} "Sets the number of worker threads the `Runtime` will use")
-        );
+        app = app
+            .arg(
+                Arg::new("SINGLE_THREADED")
+                    .long("single-threaded")
+                    .help("Run the program all in one thread"),
+            )
+            .arg(
+                Arg::new("WORKER_THREADS")
+                    .long("worker-threads")
+                    .takes_value(true)
+                    .validator(validator::validate_usize)
+                    .help("Sets the number of worker threads the `Runtime` will use"),
+            );
     }
-
-    // FIXME: -6 is not a identifier, so we cannot build it with clap_app!
-    app = app.arg(
-        Arg::with_name("IPV6_FIRST")
-            .short("6")
-            .help("Resolve hostname to IPv6 address first"),
-    );
 
     app
 }
 
 /// Program entrance `main`
-pub fn main(matches: &ArgMatches<'_>) {
+pub fn main(matches: &ArgMatches) {
     let (config, runtime) = {
         let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
             if !matches.is_present("SERVER_CONFIG") {
@@ -164,7 +259,7 @@ pub fn main(matches: &ArgMatches<'_>) {
         };
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
-            let password = match clap::value_t!(matches.value_of("PASSWORD"), String) {
+            let password = match matches.value_of_t::<String>("PASSWORD") {
                 Ok(pwd) => read_variable_field_value(&pwd).into(),
                 Err(err) => {
                     // NOTE: svr_addr should have been checked by crate::validator
@@ -175,9 +270,9 @@ pub fn main(matches: &ArgMatches<'_>) {
                 }
             };
 
-            let method = clap::value_t_or_exit!(matches.value_of("ENCRYPT_METHOD"), CipherKind);
+            let method = matches.value_of_t_or_exit::<CipherKind>("ENCRYPT_METHOD");
             let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
-            let timeout = match clap::value_t!(matches.value_of("TIMEOUT"), u64) {
+            let timeout = match matches.value_of_t::<u64>("TIMEOUT") {
                 Ok(t) => Some(Duration::from_secs(t)),
                 Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => None,
                 Err(err) => err.exit(),
@@ -220,26 +315,26 @@ pub fn main(matches: &ArgMatches<'_>) {
             config.fast_open = true;
         }
 
-        match clap::value_t!(matches.value_of("TCP_KEEP_ALIVE"), u64) {
+        match matches.value_of_t::<u64>("TCP_KEEP_ALIVE") {
             Ok(keep_alive) => config.keep_alive = Some(Duration::from_secs(keep_alive)),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        match clap::value_t!(matches.value_of("OUTBOUND_FWMARK"), u32) {
+        match matches.value_of_t::<u32>("OUTBOUND_FWMARK") {
             Ok(mark) => config.outbound_fwmark = Some(mark),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
-        match clap::value_t!(matches.value_of("OUTBOUND_BIND_INTERFACE"), String) {
+        match matches.value_of_t::<String>("OUTBOUND_BIND_INTERFACE") {
             Ok(iface) => config.outbound_bind_interface = Some(iface),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
-        match clap::value_t!(matches.value_of("MANAGER_ADDR"), ManagerAddr) {
+        match matches.value_of_t::<ManagerAddr>("MANAGER_ADDR") {
             Ok(addr) => {
                 if let Some(ref mut manager_config) = config.manager {
                     manager_config.addr = addr;
@@ -252,7 +347,7 @@ pub fn main(matches: &ArgMatches<'_>) {
         }
 
         #[cfg(all(unix, not(target_os = "android")))]
-        match clap::value_t!(matches.value_of("NOFILE"), u64) {
+        match matches.value_of_t::<u64>("NOFILE") {
             Ok(nofile) => config.nofile = Some(nofile),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
@@ -277,40 +372,40 @@ pub fn main(matches: &ArgMatches<'_>) {
             config.ipv6_first = true;
         }
 
-        match clap::value_t!(matches.value_of("UDP_TIMEOUT"), u64) {
+        match matches.value_of_t::<u64>("UDP_TIMEOUT") {
             Ok(udp_timeout) => config.udp_timeout = Some(Duration::from_secs(udp_timeout)),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
-        match clap::value_t!(matches.value_of("UDP_MAX_ASSOCIATIONS"), usize) {
+        match matches.value_of_t::<usize>("UDP_MAX_ASSOCIATIONS") {
             Ok(udp_max_assoc) => config.udp_max_associations = Some(udp_max_assoc),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
-        match clap::value_t!(matches.value_of("INBOUND_SEND_BUFFER_SIZE"), u32) {
+        match matches.value_of_t::<u32>("INBOUND_SEND_BUFFER_SIZE") {
             Ok(bs) => config.inbound_send_buffer_size = Some(bs),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
-        match clap::value_t!(matches.value_of("INBOUND_RECV_BUFFER_SIZE"), u32) {
+        match matches.value_of_t::<u32>("INBOUND_RECV_BUFFER_SIZE") {
             Ok(bs) => config.inbound_recv_buffer_size = Some(bs),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
-        match clap::value_t!(matches.value_of("OUTBOUND_SEND_BUFFER_SIZE"), u32) {
+        match matches.value_of_t::<u32>("OUTBOUND_SEND_BUFFER_SIZE") {
             Ok(bs) => config.outbound_send_buffer_size = Some(bs),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
-        match clap::value_t!(matches.value_of("OUTBOUND_RECV_BUFFER_SIZE"), u32) {
+        match matches.value_of_t::<u32>("OUTBOUND_RECV_BUFFER_SIZE") {
             Ok(bs) => config.outbound_recv_buffer_size = Some(bs),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
-        match clap::value_t!(matches.value_of("OUTBOUND_BIND_ADDR"), IpAddr) {
+        match matches.value_of_t::<IpAddr>("OUTBOUND_BIND_ADDR") {
             Ok(bind_addr) => config.outbound_bind_addr = Some(bind_addr),
             Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
@@ -324,13 +419,11 @@ pub fn main(matches: &ArgMatches<'_>) {
              --server-addr, --encrypt-method, --password command line option, \
                 or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
             );
-            println!("{}", matches.usage());
             return;
         }
 
         if let Err(err) = config.check_integrity() {
             eprintln!("config integrity check failed, {}", err);
-            println!("{}", matches.usage());
             return;
         }
 

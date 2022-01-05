@@ -524,6 +524,12 @@ impl ServerAddr {
 #[derive(Debug)]
 pub struct ServerAddrError;
 
+impl Display for ServerAddrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid ServerAddr")
+    }
+}
+
 impl FromStr for ServerAddr {
     type Err = ServerAddrError;
 
@@ -621,6 +627,12 @@ pub enum ManagerAddr {
 /// Error for parsing `ManagerAddr`
 #[derive(Debug)]
 pub struct ManagerAddrError;
+
+impl Display for ManagerAddrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid ManagerAddr")
+    }
+}
 
 impl FromStr for ManagerAddr {
     type Err = ManagerAddrError;
@@ -720,6 +732,12 @@ impl Display for ReplayAttackPolicy {
 /// Error while parsing ReplayAttackPolicy from string
 #[derive(Debug, Clone, Copy)]
 pub struct ReplayAttackPolicyError;
+
+impl Display for ReplayAttackPolicyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid ReplayAttackPolicy")
+    }
+}
 
 impl FromStr for ReplayAttackPolicy {
     type Err = ReplayAttackPolicyError;

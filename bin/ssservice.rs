@@ -9,14 +9,13 @@
 
 use std::{env, path::Path};
 
-use clap::{clap_app, AppSettings, SubCommand};
+use clap::{App, AppSettings};
 use shadowsocks_rust::service::{local, manager, server};
 
 fn main() {
-    let app = clap_app!(shadowsocks =>
-        (version: shadowsocks_rust::VERSION)
-        (about: "A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)")
-    );
+    let app = App::new("shadowsocks")
+        .version(shadowsocks_rust::VERSION)
+        .about("A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)");
 
     // Allow running `ssservice` as symlink of `sslocal`, `ssserver` and `ssmanager`
     if let Some(program_path) = env::args().next() {
@@ -32,22 +31,17 @@ fn main() {
 
     let matches = app
         .setting(AppSettings::SubcommandRequired)
+        .subcommand(local::define_command_line_options(App::new("local")).about("Shadowsocks Local service"))
+        .subcommand(server::define_command_line_options(App::new("server")).about("Shadowsocks Server service"))
         .subcommand(
-            local::define_command_line_options(SubCommand::with_name("local")).about("Shadowsocks Local service"),
-        )
-        .subcommand(
-            server::define_command_line_options(SubCommand::with_name("server")).about("Shadowsocks Server service"),
-        )
-        .subcommand(
-            manager::define_command_line_options(SubCommand::with_name("manager"))
-                .about("Shadowsocks Server Manager service"),
+            manager::define_command_line_options(App::new("manager")).about("Shadowsocks Server Manager service"),
         )
         .get_matches();
 
     match matches.subcommand() {
-        ("local", Some(matches)) => local::main(matches),
-        ("server", Some(matches)) => server::main(matches),
-        ("manager", Some(matches)) => manager::main(matches),
-        (subcommand, _) => unreachable!("Unrecognized subcommand {}", subcommand),
+        Some(("local", matches)) => local::main(matches),
+        Some(("server", matches)) => server::main(matches),
+        Some(("manager", matches)) => manager::main(matches),
+        _ => unreachable!("expecting a subcommand"),
     }
 }

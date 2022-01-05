@@ -4,7 +4,7 @@
 
 use std::{
     convert::From,
-    fmt::{self, Debug, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     io::{self, ErrorKind},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     slice,
@@ -381,6 +381,12 @@ impl From<&Address> for Address {
 /// Parse `Address` error
 #[derive(Debug)]
 pub struct AddressError;
+
+impl Display for AddressError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid Address")
+    }
+}
 
 impl FromStr for Address {
     type Err = AddressError;

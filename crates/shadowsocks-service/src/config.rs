@@ -506,6 +506,12 @@ cfg_if! {
         #[derive(Debug)]
         pub struct InvalidRedirType;
 
+        impl Display for InvalidRedirType {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("invalid RedirType")
+            }
+        }
+
         impl FromStr for RedirType {
             type Err = InvalidRedirType;
 
@@ -590,6 +596,12 @@ impl Default for ManagerServerMode {
 /// Parsing ManagerServerMode error
 #[derive(Debug, Clone, Copy)]
 pub struct ManagerServerModeError;
+
+impl Display for ManagerServerModeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid ManagerServerMode")
+    }
+}
 
 impl FromStr for ManagerServerMode {
     type Err = ManagerServerModeError;
@@ -724,6 +736,12 @@ impl ProtocolType {
 /// Error while parsing `ProtocolType` from string
 #[derive(Debug)]
 pub struct ProtocolTypeError;
+
+impl Display for ProtocolTypeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid ProtocolType")
+    }
+}
 
 impl FromStr for ProtocolType {
     type Err = ProtocolTypeError;
