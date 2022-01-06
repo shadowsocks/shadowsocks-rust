@@ -153,17 +153,16 @@ impl HttpDispatcher {
 
             // Set keep-alive for connection with remote
             set_conn_keep_alive(version, self.req.headers_mut(), conn_keep_alive);
-            let client: HttpClientEnum;
-            if self.context.check_target_bypassed(&host).await {
+            let client = if self.context.check_target_bypassed(&host).await {
                 trace!("bypassed {} -> {} {:?}", self.client_addr, host, self.req);
-                client = HttpClientEnum::Bypass(self.bypass_client);
+                HttpClientEnum::Bypass(self.bypass_client)
             } else {
                 trace!("proxied {} -> {} {:?}", self.client_addr, host, self.req);
 
                 // Keep connections for clients in ServerScore::client
                 // client instance is kept for Keep-Alive connections
                 let server = self.balancer.best_tcp_server();
-                client = HttpClientEnum::Proxy(self.proxy_client_cache.get_connected(&server).await);
+                HttpClientEnum::Proxy(self.proxy_client_cache.get_connected(&server).await)
             };
 
             let mut res = match client.send(self.req).await {

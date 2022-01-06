@@ -50,7 +50,7 @@ impl DnsClientCache {
         ns: SocketAddr,
         msg: Message,
         connect_opts: &ConnectOpts,
-        is_udp: bool
+        is_udp: bool,
     ) -> Result<Message, ProtoError> {
         let key = match is_udp {
             true => DnsClientKey::UdpLocal(ns),
@@ -65,7 +65,7 @@ impl DnsClientCache {
         svr_cfg: &ServerConfig,
         ns: &Address,
         msg: Message,
-        is_udp: bool
+        is_udp: bool,
     ) -> Result<Message, ProtoError> {
         let key = match is_udp {
             true => DnsClientKey::UdpRemote(ns.clone()),
@@ -145,14 +145,14 @@ impl DnsClientCache {
                     .await;
                 }
             }
-            match self.get_client_or_create(&dck, async { dns_res }).await {
+            match self.get_client_or_create(dck, async { dns_res }).await {
                 Ok(mut client) => match client.lookup_timeout(msg.clone(), self.timeout).await {
                     Ok(msg) => {
                         self.save_client(dck.clone(), client).await;
                         return Ok(msg);
                     }
                     Err(err) => {
-                        last_err = Some(From::from(err));
+                        last_err = Some(err);
                         continue;
                     }
                 },

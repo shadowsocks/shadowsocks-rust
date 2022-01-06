@@ -32,7 +32,7 @@ use crate::{
 };
 
 /// Defines command line options
-pub fn define_command_line_options<'a, 'b>(mut app: App<'a>) -> App<'a> {
+pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
     app = app.arg(
         Arg::new("CONFIG")
             .short('c')
@@ -379,7 +379,7 @@ pub fn main(matches: &ArgMatches) {
             },
             None => ServiceConfig::default(),
         };
-        service_config.set_options(&matches);
+        service_config.set_options(matches);
 
         #[cfg(feature = "logging")]
         match service_config.log.config_path {

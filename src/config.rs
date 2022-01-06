@@ -193,7 +193,7 @@ impl Config {
 
 /// Logger configuration
 #[cfg(feature = "logging")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LogConfig {
     /// Default logger log level, [0, 3]
     pub level: u32,
@@ -203,29 +203,11 @@ pub struct LogConfig {
     pub config_path: Option<PathBuf>,
 }
 
-#[cfg(feature = "logging")]
-impl Default for LogConfig {
-    fn default() -> LogConfig {
-        LogConfig {
-            level: 0,
-            format: LogFormatConfig::default(),
-            config_path: None,
-        }
-    }
-}
-
 /// Logger format configuration
 #[cfg(feature = "logging")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LogFormatConfig {
     pub without_time: bool,
-}
-
-#[cfg(feature = "logging")]
-impl Default for LogFormatConfig {
-    fn default() -> LogFormatConfig {
-        LogFormatConfig { without_time: false }
-    }
 }
 
 /// Runtime mode (Tokio)

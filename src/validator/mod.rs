@@ -45,7 +45,7 @@ validate_type!(validate_u32, u32, "should be unsigned integer");
 validate_type!(validate_usize, usize, "should be unsigned integer");
 
 pub fn validate_server_url(v: &str) -> Result<(), String> {
-    match ServerConfig::from_url(&v) {
+    match ServerConfig::from_url(v) {
         Ok(..) => Ok(()),
         Err(..) => Err("should be SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) format".to_owned()),
     }
