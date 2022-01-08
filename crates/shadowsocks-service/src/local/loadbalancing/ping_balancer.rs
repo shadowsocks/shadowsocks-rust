@@ -530,9 +530,6 @@ impl PingBalancerContext {
 
         future::join_all(vfut).await;
 
-        // Check if we are still the best?
-        let mut still_the_best = true;
-
         if self.mode.enable_tcp() && check_tcp {
             let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
 
@@ -545,14 +542,21 @@ impl PingBalancerContext {
                     best_score = score;
                 }
             }
+            self.best_tcp_idx.store(best_idx, Ordering::Release);
 
             if best_idx != old_best_idx {
-                still_the_best = false;
-
-                debug!(
-                    "best TCP server {} has lower score than others",
-                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
-                );
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best TCP server from {} to {} (best check)",
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(servers[best_idx].server_config())
+                    );
+                } else {
+                    debug!(
+                        "kept best TCP server {} (best check)",
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                    );
+                }
             }
         }
 
@@ -568,19 +572,22 @@ impl PingBalancerContext {
                     best_score = score;
                 }
             }
+            self.best_udp_idx.store(best_idx, Ordering::Release);
 
             if best_idx != old_best_idx {
-                still_the_best = false;
-
-                debug!(
-                    "best UDP server {} has lower score than others",
-                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
-                );
+                if best_idx != old_best_idx {
+                    info!(
+                        "switched best UDP server from {} to {} (best check)",
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                        ServerConfigFormatter::new(servers[best_idx].server_config())
+                    );
+                } else {
+                    debug!(
+                        "kept best UDP server {} (best check)",
+                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                    );
+                }
             }
-        }
-
-        if !still_the_best {
-            self.check_once(false).await;
         }
     }
 
