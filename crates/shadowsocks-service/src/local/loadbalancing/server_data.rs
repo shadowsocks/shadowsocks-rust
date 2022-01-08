@@ -19,12 +19,12 @@ pub struct ServerScore {
 
 impl ServerScore {
     /// Create a `ServerScore`
-    pub fn new(user_weight: f32, max_server_rtt: Duration) -> ServerScore {
+    pub fn new(user_weight: f32, max_server_rtt: Duration, check_window: Duration) -> ServerScore {
         let max_server_rtt = max_server_rtt.as_millis() as u32;
         assert!(max_server_rtt > 0);
 
         ServerScore {
-            stat_data: Mutex::new(ServerStat::new(user_weight, max_server_rtt)),
+            stat_data: Mutex::new(ServerStat::new(user_weight, max_server_rtt, check_window)),
             score: AtomicU32::new(u32::MAX),
         }
     }
@@ -66,10 +66,10 @@ pub struct ServerIdent {
 
 impl ServerIdent {
     /// Create a `ServerIdent`
-    pub fn new(svr_cfg: ServerConfig, max_server_rtt: Duration) -> ServerIdent {
+    pub fn new(svr_cfg: ServerConfig, max_server_rtt: Duration, check_window: Duration) -> ServerIdent {
         ServerIdent {
-            tcp_score: ServerScore::new(svr_cfg.weight().tcp_weight(), max_server_rtt),
-            udp_score: ServerScore::new(svr_cfg.weight().udp_weight(), max_server_rtt),
+            tcp_score: ServerScore::new(svr_cfg.weight().tcp_weight(), max_server_rtt, check_window),
+            udp_score: ServerScore::new(svr_cfg.weight().udp_weight(), max_server_rtt, check_window),
             svr_cfg,
         }
     }

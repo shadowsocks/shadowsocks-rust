@@ -40,6 +40,8 @@ use super::{
     server_stat::{Score, DEFAULT_CHECK_INTERVAL_SEC, DEFAULT_CHECK_TIMEOUT_SEC},
 };
 
+const EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW: u32 = 67;
+
 /// Remote Server Type
 #[derive(Debug, Clone, Copy)]
 pub enum ServerType {
@@ -63,6 +65,7 @@ pub struct PingBalancerBuilder {
     mode: Mode,
     max_server_rtt: Duration,
     check_interval: Duration,
+    check_best_interval: Option<Duration>,
 }
 
 impl PingBalancerBuilder {
@@ -73,11 +76,16 @@ impl PingBalancerBuilder {
             mode,
             max_server_rtt: Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC),
             check_interval: Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
+            check_best_interval: None,
         }
     }
 
     pub fn add_server(&mut self, server: ServerConfig) {
-        let ident = ServerIdent::new(server, self.max_server_rtt);
+        let ident = ServerIdent::new(
+            server,
+            self.max_server_rtt,
+            self.check_interval * EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW,
+        );
         self.servers.push(Arc::new(ident));
     }
 
@@ -87,6 +95,10 @@ impl PingBalancerBuilder {
 
     pub fn check_interval(&mut self, intv: Duration) {
         self.check_interval = intv;
+    }
+
+    pub fn check_best_interval(&mut self, intv: Duration) {
+        self.check_best_interval = Some(intv);
     }
 
     fn find_best_idx(servers: &[Arc<ServerIdent>], mode: Mode) -> (usize, usize) {
@@ -145,12 +157,22 @@ impl PingBalancerBuilder {
     pub async fn build(self) -> io::Result<PingBalancer> {
         assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
 
+        if let Some(intv) = self.check_best_interval {
+            if intv > self.check_interval {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "check_interval must be >= check_best_interval",
+                ));
+            }
+        }
+
         let (shared_context, task_abortable) = PingBalancerContext::new(
             self.servers,
             self.context,
             self.mode,
             self.max_server_rtt,
             self.check_interval,
+            self.check_best_interval,
         )
         .await?;
 
@@ -185,6 +207,7 @@ struct PingBalancerContext {
     mode: Mode,
     max_server_rtt: Duration,
     check_interval: Duration,
+    check_best_interval: Option<Duration>,
 }
 
 impl PingBalancerContext {
@@ -204,6 +227,7 @@ impl PingBalancerContext {
         mode: Mode,
         max_server_rtt: Duration,
         check_interval: Duration,
+        check_best_interval: Option<Duration>,
     ) -> io::Result<(Arc<PingBalancerContext>, PingBalancerContextTask)> {
         let plugin_abortable = if mode.enable_tcp() {
             // Start plugins for TCP proxies
@@ -278,6 +302,7 @@ impl PingBalancerContext {
             mode,
             max_server_rtt,
             check_interval,
+            check_best_interval,
         };
 
         balancer_context.init_score().await;
@@ -464,13 +489,130 @@ impl PingBalancerContext {
         }
     }
 
+    /// Check the best server only
+    async fn check_best_server(&self) {
+        let servers = &self.servers;
+
+        let mut vfut = Vec::new();
+
+        let best_tcp_idx = self.best_tcp_idx.load(Ordering::Acquire);
+        let best_udp_idx = self.best_udp_idx.load(Ordering::Acquire);
+
+        let best_tcp_server = &servers[best_tcp_idx];
+        let best_tcp_svr_cfg = best_tcp_server.server_config();
+        let best_udp_server = &servers[best_udp_idx];
+        let best_udp_svr_cfg = best_udp_server.server_config();
+
+        let mut check_tcp = false;
+        let mut check_udp = false;
+
+        if self.mode.enable_tcp() && PingBalancerContext::check_server_tcp_enabled(best_tcp_svr_cfg) {
+            let checker = PingChecker {
+                server: best_tcp_server.clone(),
+                server_type: ServerType::Tcp,
+                context: self.context.clone(),
+                max_server_rtt: self.max_server_rtt,
+            };
+            vfut.push(checker.check_update_score());
+            check_tcp = true;
+        }
+
+        if self.mode.enable_udp() && PingBalancerContext::check_server_udp_enabled(best_udp_svr_cfg) {
+            let checker = PingChecker {
+                server: best_udp_server.clone(),
+                server_type: ServerType::Udp,
+                context: self.context.clone(),
+                max_server_rtt: self.max_server_rtt,
+            };
+            vfut.push(checker.check_update_score());
+            check_udp = true;
+        }
+
+        future::join_all(vfut).await;
+
+        // Check if we are still the best?
+        let mut still_the_best = true;
+
+        if self.mode.enable_tcp() && check_tcp {
+            let old_best_idx = self.best_tcp_idx.load(Ordering::Acquire);
+
+            let mut best_idx = 0;
+            let mut best_score = u32::MAX;
+            for (idx, server) in servers.iter().enumerate() {
+                let score = server.tcp_score().score();
+                if score < best_score {
+                    best_idx = idx;
+                    best_score = score;
+                }
+            }
+
+            if best_idx != old_best_idx {
+                still_the_best = false;
+
+                debug!(
+                    "best TCP server {} has lower score than others",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                );
+            }
+        }
+
+        if self.mode.enable_udp() && check_udp {
+            let old_best_idx = self.best_udp_idx.load(Ordering::Acquire);
+
+            let mut best_idx = 0;
+            let mut best_score = u32::MAX;
+            for (idx, server) in servers.iter().enumerate() {
+                let score = server.udp_score().score();
+                if score < best_score {
+                    best_idx = idx;
+                    best_score = score;
+                }
+            }
+
+            if best_idx != old_best_idx {
+                still_the_best = false;
+
+                debug!(
+                    "best UDP server {} has lower score than others",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                );
+            }
+        }
+
+        if !still_the_best {
+            self.check_once(false).await;
+        }
+    }
+
     async fn checker_task_real(&self) {
+        if self.check_best_interval.is_none() {
+            return self.checker_task_all_servers().await;
+        }
+
+        let best = self.checker_task_best_server();
+        let all = self.checker_task_all_servers();
+        futures::join!(best, all);
+    }
+
+    async fn checker_task_all_servers(&self) {
         loop {
             time::sleep(self.check_interval).await;
 
             // Sleep before check.
             // PingBalancer already checked once when constructing
             self.check_once(false).await;
+        }
+    }
+
+    async fn checker_task_best_server(&self) {
+        let check_best_interval = self.check_best_interval.unwrap();
+
+        loop {
+            time::sleep(check_best_interval).await;
+
+            // Sleep before check.
+            // PingBalancer already checked once when constructing
+            self.check_best_server().await;
         }
     }
 }
@@ -527,7 +669,13 @@ impl PingBalancer {
 
         let servers = servers
             .into_iter()
-            .map(|s| Arc::new(ServerIdent::new(s, old_context.max_server_rtt)))
+            .map(|s| {
+                Arc::new(ServerIdent::new(
+                    s,
+                    old_context.max_server_rtt,
+                    old_context.check_interval * EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW,
+                ))
+            })
             .collect::<Vec<Arc<ServerIdent>>>();
 
         let (shared_context, task_abortable) = PingBalancerContext::new(
@@ -536,6 +684,7 @@ impl PingBalancer {
             old_context.mode,
             old_context.max_server_rtt,
             old_context.check_interval,
+            old_context.check_best_interval,
         )
         .await?;
 

@@ -1,13 +1,14 @@
 //! Server latency statistic
 
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 /// Interval between each check
 pub const DEFAULT_CHECK_INTERVAL_SEC: u64 = 10;
 /// Timeout of each check
 pub const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5; // A common connection timeout of 5 seconds.
-
-const MAX_LATENCY_QUEUE_SIZE: usize = 67;
 
 /// Statistic score
 #[derive(Debug, Copy, Clone)]
@@ -31,7 +32,7 @@ pub struct ServerStat {
     /// Total_Fail / Total_Probe
     fail_rate: f64,
     /// Recently probe data
-    latency_queue: VecDeque<Score>,
+    latency_queue: VecDeque<(Score, Instant)>,
     /// Score's standard deviation
     latency_stdev: f64,
     /// Score's standard deviation MAX
@@ -40,6 +41,8 @@ pub struct ServerStat {
     latency_mean: f64,
     /// User's customized weight
     user_weight: f32,
+    /// Checking window size
+    check_window: Duration,
 }
 
 fn max_latency_stdev(max_server_rtt: u32) -> f64 {
@@ -52,7 +55,7 @@ fn max_latency_stdev(max_server_rtt: u32) -> f64 {
 }
 
 impl ServerStat {
-    pub fn new(user_weight: f32, max_server_rtt: u32) -> ServerStat {
+    pub fn new(user_weight: f32, max_server_rtt: u32, check_window: Duration) -> ServerStat {
         assert!((0.0..=1.0).contains(&user_weight));
 
         ServerStat {
@@ -64,6 +67,7 @@ impl ServerStat {
             max_latency_stdev: max_latency_stdev(max_server_rtt),
             latency_mean: 0.0,
             user_weight,
+            check_window,
         }
     }
 
@@ -97,11 +101,18 @@ impl ServerStat {
     }
 
     pub fn push_score(&mut self, score: Score) -> u32 {
-        self.latency_queue.push_back(score);
+        let now = Instant::now();
 
-        // Only records recently MAX_LATENCY_QUEUE_SIZE probe data
-        if self.latency_queue.len() > MAX_LATENCY_QUEUE_SIZE {
-            self.latency_queue.pop_front();
+        self.latency_queue.push_back((score, now));
+
+        // Removes stats that are not in the check window
+        let windows_left = now - self.check_window;
+        while let Some((_, inst)) = self.latency_queue.front() {
+            if *inst < windows_left {
+                self.latency_queue.pop_front();
+            } else {
+                break;
+            }
         }
 
         self.recalculate_score()
@@ -114,7 +125,7 @@ impl ServerStat {
 
         let mut vlat = Vec::with_capacity(self.latency_queue.len());
         let mut cerr = 0;
-        for s in &self.latency_queue {
+        for (s, _) in &self.latency_queue {
             match *s {
                 Score::Errored => cerr += 1,
                 Score::Latency(lat) => vlat.push(lat),

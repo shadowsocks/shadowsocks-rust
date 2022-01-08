@@ -165,6 +165,10 @@ pub async fn create(config: Config) -> io::Result<Server> {
             balancer_builder.check_interval(intv);
         }
 
+        if let Some(intv) = config.balancer.check_best_interval {
+            balancer_builder.check_best_interval(intv);
+        }
+
         for server in config.server {
             balancer_builder.add_server(server);
         }

@@ -585,6 +585,9 @@ Example configuration:
         "max_server_rtt": 5,
         // Interval seconds between each check
         "check_interval": 10,
+        // Interval seconds between each check for the best server
+        // Optional. Specify to enable shorter checking interval for the best server only.
+        "check_best_interval": 5
     },
 
     // Service configurations

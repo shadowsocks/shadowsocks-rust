@@ -102,6 +102,8 @@ struct SSBalancerConfig {
     max_server_rtt: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     check_interval: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    check_best_interval: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -972,6 +974,8 @@ pub struct BalancerConfig {
     pub max_server_rtt: Option<Duration>,
     /// Interval between each checking
     pub check_interval: Option<Duration>,
+    /// Interval for checking the best server
+    pub check_best_interval: Option<Duration>,
 }
 
 /// Configuration
@@ -1714,6 +1718,7 @@ impl Config {
             nconfig.balancer = BalancerConfig {
                 max_server_rtt: balancer.max_server_rtt.map(Duration::from_secs),
                 check_interval: balancer.check_interval.map(Duration::from_secs),
+                check_best_interval: balancer.check_best_interval.map(Duration::from_secs),
             };
         }
 
@@ -2280,6 +2285,7 @@ impl fmt::Display for Config {
             jconf.balancer = Some(SSBalancerConfig {
                 max_server_rtt: self.balancer.max_server_rtt.as_ref().map(Duration::as_secs),
                 check_interval: self.balancer.check_interval.as_ref().map(Duration::as_secs),
+                check_best_interval: self.balancer.check_best_interval.as_ref().map(Duration::as_secs),
             });
         }
 
