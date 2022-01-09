@@ -31,12 +31,10 @@ data:
             "fast_open": true,
             "method": "aes-256-gcm",
             "mode": "tcp_and_udp",
-            "nameserver": "8.8.8.8",
             "password": "mypassword",
-            "server": "0.0.0.0",
+            "server": "::",
             "server_port": 8388,
-            "service_port": 80,
-            "timeout": 7200
+            "service_port": 80
           }
         ]
     }
@@ -99,7 +97,7 @@ spec:
       - name: shadowsocks-rust
         securityContext:
           {}
-        image: "teddysun/shadowsocks-rust:debian-1.9.1"
+        image: "ghcr.io/shadowsocks/ssserver-rust:latest"
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - name: config

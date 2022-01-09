@@ -154,16 +154,14 @@ Below is the common default values you can change:
 
 ```yaml
 # This is the shadowsocks config which will be mount to /etc/shadowocks-rust.
-# You can put arbitrary yaml here, it will translation to json before mounting.
+# You can put arbitrary yaml here, and it will be translated to json before mounting.
 servers:
-- server: 0.0.0.0
+- server: "::"
   server_port: 8388
   service_port: 80 # the k8s service port, default to server_port
   password: mypassword
-  timeout: 7200
   method: aes-256-gcm
   fast_open: true
-  nameserver: 8.8.8.8
   mode: tcp_and_udp
   # plugin: v2ray-plugin
   # plugin_opts: server;tls;host=github.com
