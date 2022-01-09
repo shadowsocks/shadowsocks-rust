@@ -130,6 +130,66 @@ docker run --name ssserver-rust \
   -dit ghcr.io/shadowsocks/ssserver-rust:latest
 ```
 
+### **Deploy to Kubernetes**
+
+This project provided yaml manifests for deploying to Kubernetes.
+
+You can leverage k8s Service to expose traffic outside, like LoadBalancer or NodePort which gains more fine-grained compared with fixed host or port.
+
+For a more interesting use case, you can use a Ingress(Istio, nginx, etc.) which routes the matched traffic to shadowsocks along with the real web service.
+
+#### Using `kubectl`
+
+`kubectl apply -f https://github.com/shadowsocks/shadowsocks-rust/raw/master/k8s/shadowsocks-rust.yaml`
+
+You can change the config via editing the ConfigMap named `shadowsocks-rust`.
+
+For more fine-grained control, use `helm`.
+
+#### Using `helm`
+
+`helm install my-release k8s/chart -f my-values.yaml`
+
+Below is the common default values you can change:
+
+```yaml
+# This is the shadowsocks config which will be mount to /etc/shadowocks-rust.
+# You can put arbitrary yaml here, it will translation to json before mounting.
+servers:
+- server: 0.0.0.0
+  server_port: 8388
+  service_port: 80 # the k8s service port, default to server_port
+  password: mypassword
+  timeout: 7200
+  method: aes-256-gcm
+  fast_open: true
+  nameserver: 8.8.8.8
+  mode: tcp_and_udp
+  # plugin: v2ray-plugin
+  # plugin_opts: server;tls;host=github.com
+
+# Whether to download v2ray and xray plugin.
+downloadPlugins: false
+
+# Name of the ConfigMap with config.json configuration for shadowsocks-rust. 
+configMapName: ""
+
+service:
+  # Change to LoadBalancer if you are behind a cloud provider like aws, gce, or tke.
+  type: ClusterIP
+
+# Bind shadowsocks port port to host, i.e., we can use host:port to access shawdowsocks server.
+hostPort: false
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/shadowsocks/ssserver-rust
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+```
+
 ### **Build from source**
 
 Use cargo to build. NOTE: **RAM >= 2GiB**
