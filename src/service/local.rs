@@ -58,7 +58,6 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
     .arg(
         Arg::new("TCP_AND_UDP")
             .short('U')
-            .requires("LOCAL_ADDR")
             .help("Server mode TCP_AND_UDP"),
     )
     .arg(
@@ -72,7 +71,6 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
         Arg::new("UDP_BIND_ADDR")
             .long("udp-bind-addr")
             .takes_value(true)
-            .requires("LOCAL_ADDR")
             .validator(validator::validate_server_addr)
             .help("UDP relay's bind address, default is the same as local-addr"),
     )
