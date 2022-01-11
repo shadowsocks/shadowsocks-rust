@@ -1,6 +1,7 @@
 //! Load Balancer chooses server by statistic latency data collected from active probing
 
 use std::{
+    cmp,
     fmt::{self, Debug, Display},
     io,
     iter::Iterator,
@@ -29,6 +30,7 @@ use shadowsocks::{
 use spin::Mutex as SpinMutex;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    sync::Notify,
     task::JoinHandle,
     time,
 };
@@ -208,6 +210,7 @@ struct PingBalancerContext {
     max_server_rtt: Duration,
     check_interval: Duration,
     check_best_interval: Option<Duration>,
+    best_task_notify: Notify,
 }
 
 impl PingBalancerContext {
@@ -303,6 +306,7 @@ impl PingBalancerContext {
             max_server_rtt,
             check_interval,
             check_best_interval,
+            best_task_notify: Notify::new(),
         };
 
         balancer_context.init_score().await;
@@ -602,6 +606,27 @@ impl PingBalancerContext {
     }
 
     async fn checker_task_all_servers(&self) {
+        if let Some(check_best_interval) = self.check_best_interval {
+            // Get at least 10 points to get the precise scores
+
+            let interval = cmp::min(check_best_interval, self.check_interval);
+
+            let mut count = 0;
+            while count < EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW {
+                time::sleep(interval).await;
+
+                // Sleep before check.
+                // PingBalancer already checked once when constructing
+                self.check_once(false).await;
+
+                count += 1;
+            }
+
+            self.best_task_notify.notify_one();
+
+            trace!("finished initializing server scores");
+        }
+
         loop {
             time::sleep(self.check_interval).await;
 
@@ -612,6 +637,10 @@ impl PingBalancerContext {
     }
 
     async fn checker_task_best_server(&self) {
+        // Wait until checker_task_all_servers notify.
+        // Because when server starts, the scores are unstable, so we have to run check_all for multiple times
+        self.best_task_notify.notified().await;
+
         let check_best_interval = self.check_best_interval.unwrap();
 
         loop {
