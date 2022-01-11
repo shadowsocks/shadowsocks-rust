@@ -483,10 +483,11 @@ pub fn main(matches: &ArgMatches) {
             let mut local_config = LocalConfig::new(protocol);
             match matches.value_of_t::<ServerAddr>("LOCAL_ADDR") {
                 Ok(local_addr) => local_config.addr = Some(local_addr),
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound =>
-                {
+                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {
                     #[cfg(feature = "local-tun")]
                     if protocol == ProtocolType::Tun {
+                        // `tun` protocol doesn't need --local-addr
+                    } else {
                         err.exit();
                     }
                 }
