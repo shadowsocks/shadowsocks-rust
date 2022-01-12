@@ -268,13 +268,23 @@ impl Tun {
                 match (mod_src_addr, &mut ip_header) {
                     (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip, ..)) => v4ip.source = v4addr.ip().octets(),
                     (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip, ..)) => v6ip.source = v6addr.ip().octets(),
-                    _ => unreachable!("modified saddr not match"),
+                    _ => {
+                        unreachable!(
+                            "modified TCP saddr not match, addr: {}, header: {:?}",
+                            mod_src_addr, ip_header
+                        );
+                    }
                 }
                 tcp_header.source_port = mod_src_addr.port();
                 match (mod_dst_addr, &mut ip_header) {
                     (SocketAddr::V4(v4addr), IpHeader::Version4(v4ip, ..)) => v4ip.destination = v4addr.ip().octets(),
                     (SocketAddr::V6(v6addr), IpHeader::Version6(v6ip, ..)) => v6ip.destination = v6addr.ip().octets(),
-                    _ => unreachable!("modified daddr not match"),
+                    _ => {
+                        unreachable!(
+                            "modified TCP daddr not match, addr: {}, header: {:?}",
+                            mod_dst_addr, ip_header
+                        );
+                    }
                 }
                 tcp_header.destination_port = mod_dst_addr.port();
                 match ip_header {
