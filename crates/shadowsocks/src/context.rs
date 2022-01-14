@@ -4,7 +4,6 @@ use std::{io, net::SocketAddr, sync::Arc};
 
 use byte_string::ByteStr;
 use log::warn;
-use rand::Rng;
 
 use crate::{
     config::{ReplayAttackPolicy, ServerType},
@@ -70,14 +69,19 @@ impl Context {
             // SECURITY: First 6 bytes of payload should be printable characters
             // Observation shows that prepending 6 bytes of printable characters to random payload will exempt it from blocking.
             // by 2022-01-13 gfw.report et al.
-            const SECURITY_PRINTABLE_PREFIX_LEN: usize = 6;
-            if nonce.len() >= SECURITY_PRINTABLE_PREFIX_LEN {
-                // Printable characters follows definition of isprint in C/C++
-                static ASCII_PRINTABLE_CHARS: &[u8] = br##"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ "##;
+            #[cfg(feature = "security-iv-printable-prefix")]
+            {
+                const SECURITY_PRINTABLE_PREFIX_LEN: usize = 6;
+                if nonce.len() >= SECURITY_PRINTABLE_PREFIX_LEN {
+                    use rand::Rng;
 
-                let mut rng = rand::thread_rng();
-                for b in nonce.iter_mut().take(SECURITY_PRINTABLE_PREFIX_LEN) {
-                    *b = ASCII_PRINTABLE_CHARS[rng.gen_range::<usize, _>(0..ASCII_PRINTABLE_CHARS.len())];
+                    // Printable characters follows definition of isprint in C/C++
+                    static ASCII_PRINTABLE_CHARS: &[u8] = br##"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ "##;
+
+                    let mut rng = rand::thread_rng();
+                    for b in nonce.iter_mut().take(SECURITY_PRINTABLE_PREFIX_LEN) {
+                        *b = ASCII_PRINTABLE_CHARS[rng.gen_range::<usize, _>(0..ASCII_PRINTABLE_CHARS.len())];
+                    }
                 }
             }
 

@@ -32,7 +32,9 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable detection against replay attack
-replay-attack-detect = ["bloomfilter", "spin"]
+security-replay-attack-detect = ["bloomfilter", "spin"]
+# Enable IV printable prefix
+security-iv-printable-prefix = ["rand"]
 
 [dependencies]
 log = "0.4"
@@ -48,7 +50,7 @@ spin = { version = "0.9", features = ["std"], optional = true }
 pin-project = "1.0"
 bloomfilter = { version = "1.0.8", optional = true }
 thiserror = "1.0"
-rand = "0.8"
+rand = { version = "0.8", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }
 serde_urlencoded = "0.7"

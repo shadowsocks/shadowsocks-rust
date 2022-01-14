@@ -125,7 +125,10 @@ stream-cipher = ["shadowsocks-service/stream-cipher"]
 aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
 
 # Enable detection against replay attack
-replay-attack-detect = ["shadowsocks-service/replay-attack-detect"]
+security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]
+replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.
+# Enable IV printable prefix
+security-iv-printable-prefix = ["shadowsocks-service/security-iv-printable-prefix"]
 
 [dependencies]
 log = "0.4"
