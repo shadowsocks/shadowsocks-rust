@@ -262,17 +262,19 @@ impl TcpTun {
                     error!("TCP tunnel failure, {} <-> {}, error: {}", src_addr, dst_addr, err);
                 }
             });
-
-            // Wake up and poll the interface.
-            self.manager_notify.notify_waiters();
         }
 
         Ok(())
     }
 
     pub fn drive_interface_state(&mut self, frame: &[u8]) {
-        let mut manager = self.manager.lock().unwrap();
-        manager.iface.device_mut().inject_packet(frame.to_vec());
+        {
+            let mut manager = self.manager.lock().unwrap();
+            manager.iface.device_mut().inject_packet(frame.to_vec());
+        }
+
+        // Wake up and poll the interface.
+        self.manager_notify.notify_waiters();
     }
 
     pub async fn recv_packet(&mut self) -> Vec<u8> {
