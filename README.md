@@ -385,15 +385,6 @@ sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbo
 
 It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
 
-(OPTIONAL) macOS requires adding a route entry to redirect packets that destinated to `10.155.0.1` (the address of the Tun interface) to the Tun interface itself.
-
-```bash
-# 10.255.0.1 address
-# 255.255.255.0 netmask
-# utun8 tun's interface name
-route add -net 10.255.0.1 -netmask 255.255.255.0 -interface utun8
-```
-
 ### Server
 
 ```bash

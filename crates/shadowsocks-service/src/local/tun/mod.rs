@@ -192,6 +192,11 @@ impl Tun {
 
         match packet.protocol() {
             IpProtocol::Tcp => {
+                if !self.mode.enable_tcp() {
+                    trace!("received TCP packet but mode is {}, throwing away", self.mode);
+                    return Ok(());
+                }
+
                 let tcp_packet = match TcpPacket::new_checked(packet.payload()) {
                     Ok(p) => p,
                     Err(err) => {
@@ -225,6 +230,11 @@ impl Tun {
                 self.tcp.drive_interface_state(frame);
             }
             IpProtocol::Udp => {
+                if !self.mode.enable_udp() {
+                    trace!("received UDP packet but mode is {}, throwing away", self.mode);
+                    return Ok(());
+                }
+
                 let udp_packet = match UdpPacket::new_checked(packet.payload()) {
                     Ok(p) => p,
                     Err(err) => {
