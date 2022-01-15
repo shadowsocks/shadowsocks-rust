@@ -1,16 +1,28 @@
 use std::{
+    collections::BTreeMap,
     io::{self, ErrorKind},
     net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::Duration,
+    pin::Pin,
+    sync::{Arc, Mutex as StdMutex},
+    task::{Context, Poll},
+    time::Duration as StdDuration,
 };
 
-use etherparse::TcpHeader;
-use ipnet::IpNet;
-use log::{debug, error, trace};
-use lru_time_cache::LruCache;
-use shadowsocks::{net::TcpListener, relay::socks5::Address};
-use tokio::{net::TcpStream, sync::Mutex, task::JoinHandle, time};
+use log::{error, trace};
+use shadowsocks::relay::socks5::Address;
+use smoltcp::{
+    iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
+    phy::{DeviceCapabilities, Medium},
+    socket::{TcpSocket, TcpSocketBuffer, TcpState},
+    time::{Duration, Instant},
+    wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
+};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    sync::{mpsc, Notify},
+    task::JoinHandle,
+    time,
+};
 
 use crate::local::{
     context::ServiceContext,
@@ -19,197 +31,254 @@ use crate::local::{
     utils::{establish_tcp_tunnel, to_ipv4_mapped},
 };
 
-struct TcpAddressTranslator {
-    connections: LruCache<SocketAddr, TcpConnection>,
-    mapping: LruCache<(SocketAddr, SocketAddr), SocketAddr>,
+use super::virt_device::VirtTunDevice;
+
+struct TcpSocketManager {
+    iface: Interface<'static, VirtTunDevice>,
+    manager_notify: Arc<Notify>,
 }
 
-impl TcpAddressTranslator {
-    fn new() -> TcpAddressTranslator {
-        TcpAddressTranslator {
-            connections: LruCache::with_expiry_duration(Duration::from_secs(24 * 60 * 60)),
-            mapping: LruCache::with_expiry_duration(Duration::from_secs(24 * 60 * 60)),
+impl TcpSocketManager {
+    fn notify(&self) {
+        self.manager_notify.notify_waiters();
+    }
+}
+
+type SharedTcpSocketManager = Arc<StdMutex<TcpSocketManager>>;
+
+struct TcpConnection {
+    socket_handle: SocketHandle,
+    manager: SharedTcpSocketManager,
+}
+
+impl Drop for TcpConnection {
+    fn drop(&mut self) {
+        let mut manager = self.manager.lock().unwrap();
+        let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
+        socket.close();
+    }
+}
+
+impl TcpConnection {
+    fn new(socket: TcpSocket<'static>, manager: SharedTcpSocketManager) -> TcpConnection {
+        let socket_handle = {
+            let mut manager = manager.lock().unwrap();
+            manager.iface.add_socket(socket)
+        };
+
+        TcpConnection { socket_handle, manager }
+    }
+}
+
+impl AsyncRead for TcpConnection {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut manager = self.manager.lock().unwrap();
+        {
+            let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
+            if !socket.is_open() {
+                return Ok(()).into();
+            }
+
+            if socket.can_recv() {
+                let recv_buf = buf.initialize_unfilled();
+                let n = match socket.recv_slice(recv_buf) {
+                    Ok(n) => n,
+                    Err(err) => return Err(io::Error::new(ErrorKind::Other, err)).into(),
+                };
+                buf.advance(n);
+            } else {
+                socket.register_recv_waker(cx.waker());
+                return Poll::Pending;
+            }
         }
+
+        manager.notify();
+        Ok(()).into()
+    }
+}
+
+impl AsyncWrite for TcpConnection {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let mut manager = self.manager.lock().unwrap();
+        let n = {
+            let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
+            if !socket.is_open() {
+                return Err(ErrorKind::BrokenPipe.into()).into();
+            }
+            if socket.can_send() {
+                match socket.send_slice(buf) {
+                    Ok(n) => n,
+                    Err(err) => return Err(io::Error::new(ErrorKind::Other, err)).into(),
+                }
+            } else {
+                socket.register_send_waker(cx.waker());
+                return Poll::Pending;
+            }
+        };
+
+        manager.notify();
+        Ok(n).into()
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Ok(()).into()
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut manager = self.manager.lock().unwrap();
+        {
+            let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
+            // close the transmission half.
+            if socket.is_open() {
+                socket.close();
+            }
+
+            if socket.state() != TcpState::Closed {
+                socket.register_send_waker(cx.waker());
+                return Poll::Pending;
+            }
+        }
+        manager.notify();
+        Ok(()).into()
     }
 }
 
 pub struct TcpTun {
-    tcp_daddr: SocketAddr,
-    free_addrs: Vec<IpAddr>,
-    translator: Arc<Mutex<TcpAddressTranslator>>,
-    abortable: JoinHandle<io::Result<()>>,
+    context: Arc<ServiceContext>,
+    manager: SharedTcpSocketManager,
+    manager_handle: JoinHandle<()>,
+    manager_notify: Arc<Notify>,
+    balancer: PingBalancer,
+    iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
 }
 
 impl Drop for TcpTun {
     fn drop(&mut self) {
-        self.abortable.abort();
+        self.manager_handle.abort();
     }
 }
 
 impl TcpTun {
-    pub async fn new(context: Arc<ServiceContext>, tun_network: IpNet, balancer: PingBalancer) -> io::Result<TcpTun> {
-        let mut hosts = tun_network.hosts();
-        let tcp_daddr = match hosts.next() {
-            Some(d) => d,
-            None => return Err(io::Error::new(ErrorKind::Other, "tun network doesn't have any hosts")),
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mtu: u32) -> TcpTun {
+        let mut capabilities = DeviceCapabilities::default();
+        capabilities.medium = Medium::Ip;
+        capabilities.max_transmission_unit = mtu as usize;
+
+        let (iface_tx, iface_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let virt = VirtTunDevice::new(capabilities, iface_tx);
+
+        let iface_builder = InterfaceBuilder::new(virt, vec![]);
+        let iface_ipaddrs = [
+            IpCidr::new(IpAddress::v4(0, 0, 0, 1), 0),
+            IpCidr::new(IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1), 0),
+        ];
+        let mut iface_routes = Routes::new(BTreeMap::new());
+        iface_routes
+            .add_default_ipv4_route(Ipv4Address::new(0, 0, 0, 1))
+            .expect("IPv4 route");
+        iface_routes
+            .add_default_ipv6_route(Ipv6Address::new(0, 0, 0, 0, 0, 0, 0, 1))
+            .expect("IPv6 route");
+        let iface = iface_builder
+            .any_ip(true)
+            .ip_addrs(iface_ipaddrs)
+            .routes(iface_routes)
+            .finalize();
+
+        let manager_notify = Arc::new(Notify::new());
+        let manager = Arc::new(StdMutex::new(TcpSocketManager {
+            iface,
+            manager_notify: manager_notify.clone(),
+        }));
+
+        let manager_handle = {
+            let manager = manager.clone();
+            let manager_notify = manager_notify.clone();
+            tokio::spawn(async move {
+                loop {
+                    let next_duration = {
+                        let mut manager = manager.lock().unwrap();
+
+                        if let Err(err) = manager.iface.poll(Instant::now()) {
+                            error!("virtual device error: {}", err);
+                        }
+
+                        let next_duration = manager
+                            .iface
+                            .poll_delay(Instant::now())
+                            .unwrap_or(Duration::from_millis(50));
+
+                        next_duration
+                    };
+
+                    tokio::select! {
+                        _ = time::sleep(StdDuration::from(next_duration)) => {}
+                        _ = manager_notify.notified() => {}
+                    }
+                }
+            })
         };
 
-        // Take up to 10 IPs as saddr for NAT allocating
-        let free_addrs = hosts.take(10).collect::<Vec<IpAddr>>();
-        if free_addrs.is_empty() {
-            return Err(io::Error::new(
-                ErrorKind::InvalidInput,
-                "tun network doesn't have enough free addresses",
-            ));
+        TcpTun {
+            context,
+            manager,
+            manager_handle,
+            manager_notify,
+            balancer,
+            iface_rx,
         }
-
-        let listener = TcpListener::bind_with_opts(&SocketAddr::new(tcp_daddr, 0), context.accept_opts()).await?;
-        let tcp_daddr = listener.local_addr()?;
-
-        debug!("tun tcp listener bind {}", tcp_daddr);
-
-        let translator = Arc::new(Mutex::new(TcpAddressTranslator::new()));
-
-        let abortable = {
-            let translator = translator.clone();
-            tokio::spawn(TcpTun::tunnel(context, listener, balancer, translator))
-        };
-
-        Ok(TcpTun {
-            tcp_daddr,
-            free_addrs,
-            translator,
-            abortable,
-        })
     }
 
     pub async fn handle_packet(
         &mut self,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
-        tcp_header: &TcpHeader,
-    ) -> io::Result<Option<(SocketAddr, SocketAddr)>> {
-        let TcpAddressTranslator {
-            ref mut connections,
-            ref mut mapping,
-        } = *(self.translator.lock().await);
-
-        let (conn, is_reply) = if tcp_header.syn && !tcp_header.ack {
-            // 1st SYN, creating a new connection
-            // Allocate a `saddr` for it
-            let saddr = loop {
-                let addr_idx = rand::random::<usize>() % self.free_addrs.len();
-                let port = rand::random::<u16>() % (65535 - 1024) + 1024;
-
-                let addr = SocketAddr::new(self.free_addrs[addr_idx], port);
-                if !connections.contains_key(&addr) {
-                    trace!("allocated tcp addr {} for {} -> {}", addr, src_addr, dst_addr);
-
-                    // Create one in the connection map.
-                    connections.insert(
-                        addr,
-                        TcpConnection {
-                            saddr: src_addr,
-                            daddr: dst_addr,
-                            faked_saddr: addr,
-                            state: TcpState::Established,
-                        },
-                    );
-
-                    // Record the fake address mapping
-                    mapping.insert((src_addr, dst_addr), addr);
-
-                    break addr;
-                }
-            };
-
-            (connections.get_mut(&saddr).unwrap(), false)
-        } else {
-            // Find if it is an existed connection, ignore it otherwise
-            match mapping.get(&(src_addr, dst_addr)) {
-                Some(saddr) => match connections.get_mut(saddr) {
-                    Some(c) => (c, false),
-                    None => {
-                        debug!("unknown tcp connection {} -> {}", src_addr, dst_addr);
-                        return Ok(None);
-                    }
-                },
-                None => {
-                    // Check if it is a reply packet
-                    match connections.get_mut(&dst_addr) {
-                        Some(c) => (c, true),
-                        None => {
-                            debug!("unknown tcp connection {} -> {}", src_addr, dst_addr);
-                            return Ok(None);
-                        }
-                    }
-                }
-            }
-        };
-
-        let (trans_saddr, trans_daddr) = if is_reply {
-            trace!("TCP {} <- {} {:?}", conn.saddr, conn.daddr, tcp_header);
-            (conn.daddr, conn.saddr)
-        } else {
-            trace!("TCP {} -> {} {:?}", conn.saddr, conn.daddr, tcp_header);
-            (conn.faked_saddr, self.tcp_daddr)
-        };
-
-        if tcp_header.rst || (tcp_header.ack && conn.state == TcpState::LastAck) {
-            // Connection closed.
-            trace!("tcp connection closed {} -> {}", conn.saddr, conn.daddr);
-
-            mapping.remove(&(src_addr, dst_addr));
-            let faked_saddr = conn.faked_saddr;
-            connections.remove(&faked_saddr);
-        } else if tcp_header.fin {
-            match conn.state {
-                TcpState::Established => conn.state = TcpState::FinWait,
-                TcpState::FinWait => conn.state = TcpState::LastAck,
-                _ => {}
-            }
-        }
-
-        Ok(Some((trans_saddr, trans_daddr)))
-    }
-
-    async fn tunnel(
-        context: Arc<ServiceContext>,
-        listener: TcpListener,
-        balancer: PingBalancer,
-        translator: Arc<Mutex<TcpAddressTranslator>>,
+        tcp_packet: &TcpPacket<&[u8]>,
     ) -> io::Result<()> {
-        loop {
-            let (stream, peer_addr) = match listener.accept().await {
-                Ok(s) => s,
-                Err(err) => {
-                    error!("accept failed, error: {}", err);
-                    time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
+        // TCP first handshake packet, create a new Connection
+        if tcp_packet.syn() && !tcp_packet.ack() {
+            let accept_opts = self.context.accept_opts();
+            let send_buffer_size = accept_opts.tcp.send_buffer_size.unwrap_or(4096);
+            let recv_buffer_size = accept_opts.tcp.recv_buffer_size.unwrap_or(4096);
 
-            // Try to translate
-            let (saddr, daddr) = {
-                let mut translator = translator.lock().await;
-                match translator.connections.get(&peer_addr) {
-                    Some(c) => (c.saddr, c.daddr),
-                    None => {
-                        error!("unknown connection from {}", peer_addr);
-                        continue;
-                    }
-                }
-            };
+            let mut socket = TcpSocket::new(
+                TcpSocketBuffer::new(vec![0u8; recv_buffer_size as usize]),
+                TcpSocketBuffer::new(vec![0u8; send_buffer_size as usize]),
+            );
+            socket.set_ack_delay(None);
+            if let Err(err) = socket.listen(dst_addr) {
+                return Err(io::Error::new(ErrorKind::Other, err));
+            }
 
-            debug!("establishing tcp tunnel {} -> {}", saddr, daddr);
+            trace!("created TCP connection for {} <-> {}", src_addr, dst_addr);
 
-            let context = context.clone();
-            let balancer = balancer.clone();
+            let connection = TcpConnection::new(socket, self.manager.clone());
+
+            // establish a tunnel
+            let context = self.context.clone();
+            let balancer = self.balancer.clone();
             tokio::spawn(async move {
-                if let Err(err) = handle_redir_client(context, balancer, stream, peer_addr, daddr).await {
-                    debug!("TCP redirect client, error: {:?}", err);
+                if let Err(err) = handle_redir_client(context, balancer, connection, src_addr, dst_addr).await {
+                    error!("TCP tunnel failure, {} <-> {}, error: {}", src_addr, dst_addr, err);
                 }
             });
+
+            // Wake up and poll the interface.
+            self.manager_notify.notify_waiters();
+        }
+
+        Ok(())
+    }
+
+    pub fn drive_interface_state(&mut self, frame: &[u8]) {
+        let mut manager = self.manager.lock().unwrap();
+        manager.iface.device_mut().inject_packet(frame.to_vec());
+    }
+
+    pub async fn recv_packet(&mut self) -> Vec<u8> {
+        match self.iface_rx.recv().await {
+            Some(v) => v,
+            None => unreachable!("channel closed unexpectedly"),
         }
     }
 }
@@ -220,7 +289,7 @@ impl TcpTun {
 async fn establish_client_tcp_redir<'a>(
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
-    mut stream: TcpStream,
+    mut stream: TcpConnection,
     peer_addr: SocketAddr,
     addr: &Address,
 ) -> io::Result<()> {
@@ -235,7 +304,7 @@ async fn establish_client_tcp_redir<'a>(
 async fn handle_redir_client(
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
-    s: TcpStream,
+    s: TcpConnection,
     peer_addr: SocketAddr,
     mut daddr: SocketAddr,
 ) -> io::Result<()> {
@@ -249,24 +318,4 @@ async fn handle_redir_client(
     }
     let target_addr = Address::from(daddr);
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum TcpState {
-    /// TCP state `ESTABLISHED`
-    ///
-    /// When receiving the first SYN then the state will be set to `ESTABLISHED`.
-    /// The detailed state like (SYN_SEND, SYN_RCVD) will be handled properly by the `TcpListener`.
-    Established,
-    /// When receiving from the first FIN will be transferred from Established
-    FinWait,
-    /// When receiving the last ACK of FIN will be transferred from FinWait
-    LastAck,
-}
-
-struct TcpConnection {
-    saddr: SocketAddr,
-    daddr: SocketAddr,
-    faked_saddr: SocketAddr,
-    state: TcpState,
 }

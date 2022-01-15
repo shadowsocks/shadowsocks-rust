@@ -56,7 +56,7 @@ local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
 # Enable Tun interface protocol for sslocal
-local-tun = ["local", "etherparse", "tun", "rand"]
+local-tun = ["local", "etherparse", "tun", "rand", "smoltcp"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecure
@@ -115,6 +115,7 @@ regex = "1.4"
 
 tun = { version = "0.5.3", optional = true, features = ["async"] }
 etherparse = { version = "0.10", optional = true }
+smoltcp = { version = "0.8", optional = true, features = [] }
 
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"

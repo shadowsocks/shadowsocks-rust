@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{App, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -129,6 +129,8 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
             .validator(validator::validate_server_url)
             .help("Server address in SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) URL"),
     )
+    .group(ArgGroup::new("SERVER_CONFIG")
+        .arg("SERVER_ADDR").arg("URL").multiple(true))
     .arg(
         Arg::new("ACL")
             .long("acl")

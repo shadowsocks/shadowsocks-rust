@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{App, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -84,6 +84,9 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
                 .validator(validator::validate_u64)
                 .requires("SERVER_ADDR")
                 .help("Server's timeout seconds for TCP relay"),
+        )
+        .group(
+            ArgGroup::new("SERVER_CONFIG").arg("SERVER_ADDR")
         )
         .arg(
             Arg::new("UDP_ONLY")

@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{App, Arg, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{App, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -74,6 +74,7 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
                 .validator(validator::validate_manager_addr)
                 .help("ShadowSocks Manager (ssmgr) address, could be ip:port, domain:port or /path/to/unix.sock"),
         )
+        .group(ArgGroup::new("SERVER_CONFIG").arg("MANAGER_ADDR"))
         .arg(Arg::new("ENCRYPT_METHOD").short('m').long("encrypt-method").takes_value(true).possible_values(available_ciphers()).help("Default encryption method"))
         .arg(Arg::new("TIMEOUT").long("timeout").takes_value(true).validator(validator::validate_u64).help("Default timeout seconds for TCP relay"))
         .arg(
