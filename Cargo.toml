@@ -42,6 +42,7 @@ required-features = ["service"]
 members = [
     "crates/shadowsocks",
     "crates/shadowsocks-service",
+    "crates/shadowsocks-tools",
 ]
 
 [profile.release]

@@ -1,0 +1,17 @@
+[package]
+name = "shadowsocks-tools"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "dns-pressure"
+path = "src/dns_pressure.rs"
+
+[dependencies]
+shadowsocks = { version = "1.12.3", path = "../shadowsocks" }
+
+clap = { version = "3", features = ["wrap_help", "suggestions"] }
+tokio = { version = "1", features = ["full"] }
+trust-dns-proto = "0.20"
+rand = "0.8"
+env_logger = "0.9"
