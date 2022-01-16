@@ -77,7 +77,7 @@ impl ManagerClient {
             warn!("manager send {} bytes != buffer {} bytes", n, buf.len());
         }
 
-        let mut buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let n = self.socket.recv(&mut buf).await?;
         R::from_bytes(&buf[..n]).map_err(Into::into)
     }

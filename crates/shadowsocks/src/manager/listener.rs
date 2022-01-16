@@ -26,7 +26,7 @@ impl ManagerListener {
     }
 
     pub async fn recv_from(&mut self) -> Result<(ManagerRequest, ManagerSocketAddr), Error> {
-        let mut buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (n, peer_addr) = self.socket.recv_from(&mut buf).await?;
         Ok((ManagerRequest::from_bytes(&buf[..n])?, peer_addr))
     }
