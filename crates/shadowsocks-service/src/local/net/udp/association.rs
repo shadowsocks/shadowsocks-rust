@@ -203,9 +203,7 @@ enum UdpAssociationBypassState {
 
 impl Drop for UdpAssociationBypassState {
     fn drop(&mut self) {
-        if let UdpAssociationBypassState::Connected { ref abortable, .. } = *self {
-            abortable.abort();
-        }
+        self.abort_inner();
     }
 }
 
@@ -215,11 +213,19 @@ impl UdpAssociationBypassState {
     }
 
     fn set_connected(&mut self, socket: Arc<UdpSocket>, abortable: JoinHandle<io::Result<()>>) {
+        self.abort_inner();
         *self = UdpAssociationBypassState::Connected { socket, abortable };
     }
 
     fn abort(&mut self) {
+        self.abort_inner();
         *self = UdpAssociationBypassState::Aborted;
+    }
+
+    fn abort_inner(&mut self) {
+        if let UdpAssociationBypassState::Connected { ref abortable, .. } = *self {
+            abortable.abort();
+        }
     }
 }
 
@@ -299,7 +305,7 @@ where
         balancer: PingBalancer,
         respond_writer: W,
     ) -> (Arc<UdpAssociationContext<W>>, mpsc::Sender<(Address, Bytes)>) {
-        // Pending packets 1024 should be good enough for a server.
+        // Pending packets 1024 for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
         let (sender, receiver) = mpsc::channel(1024);
@@ -379,10 +385,12 @@ where
         }
     }
 
+    #[inline]
     async fn copy_bypassed_ipv4_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
         self.copy_bypassed_l2r_impl(target_addr, data, false).await
     }
 
+    #[inline]
     async fn copy_bypassed_ipv6_l2r(self: Arc<Self>, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
         self.copy_bypassed_l2r_impl(target_addr, data, true).await
     }
