@@ -3,12 +3,13 @@ use std::{
     io::{self, ErrorKind},
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::{Arc, Mutex as StdMutex},
+    sync::Arc,
     task::{Context, Poll},
     time::Duration as StdDuration,
 };
 
 use log::{error, trace};
+use parking_lot::Mutex as ParkingMutex;
 use shadowsocks::relay::socks5::Address;
 use smoltcp::{
     iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
@@ -44,7 +45,7 @@ impl TcpSocketManager {
     }
 }
 
-type SharedTcpSocketManager = Arc<StdMutex<TcpSocketManager>>;
+type SharedTcpSocketManager = Arc<ParkingMutex<TcpSocketManager>>;
 
 struct TcpConnection {
     socket_handle: SocketHandle,
@@ -53,7 +54,7 @@ struct TcpConnection {
 
 impl Drop for TcpConnection {
     fn drop(&mut self) {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock();
         let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
         socket.close();
     }
@@ -62,7 +63,7 @@ impl Drop for TcpConnection {
 impl TcpConnection {
     fn new(socket: TcpSocket<'static>, manager: SharedTcpSocketManager) -> TcpConnection {
         let socket_handle = {
-            let mut manager = manager.lock().unwrap();
+            let mut manager = manager.lock();
             manager.iface.add_socket(socket)
         };
 
@@ -72,7 +73,7 @@ impl TcpConnection {
 
 impl AsyncRead for TcpConnection {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock();
         {
             let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
             if !socket.is_open() {
@@ -99,7 +100,7 @@ impl AsyncRead for TcpConnection {
 
 impl AsyncWrite for TcpConnection {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock();
         let n = {
             let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
             if !socket.is_open() {
@@ -125,7 +126,7 @@ impl AsyncWrite for TcpConnection {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let mut manager = self.manager.lock().unwrap();
+        let mut manager = self.manager.lock();
         {
             let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
             // close the transmission half.
@@ -186,7 +187,7 @@ impl TcpTun {
             .finalize();
 
         let manager_notify = Arc::new(Notify::new());
-        let manager = Arc::new(StdMutex::new(TcpSocketManager {
+        let manager = Arc::new(ParkingMutex::new(TcpSocketManager {
             iface,
             manager_notify: manager_notify.clone(),
         }));
@@ -197,7 +198,7 @@ impl TcpTun {
             tokio::spawn(async move {
                 loop {
                     let next_duration = {
-                        let mut manager = manager.lock().unwrap();
+                        let mut manager = manager.lock();
 
                         if let Err(err) = manager.iface.poll(Instant::now()) {
                             error!("virtual device error: {}", err);
