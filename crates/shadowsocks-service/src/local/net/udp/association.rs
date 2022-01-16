@@ -533,7 +533,7 @@ where
     }
 
     async fn copy_proxied_r2l(self: Arc<Self>, outbound: Arc<MonProxySocket>) -> io::Result<()> {
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buffer = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv(&mut buffer).await {
                 Ok((n, addr)) => {
@@ -587,7 +587,7 @@ where
     }
 
     async fn copy_bypassed_r2l(self: Arc<Self>, outbound: Arc<UdpSocket>) -> io::Result<()> {
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buffer = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv_from(&mut buffer).await {
                 Ok((n, addr)) => {

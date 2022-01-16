@@ -884,7 +884,7 @@ impl PingChecker {
         .await?;
         client.send(&addr, DNS_QUERY).await?;
 
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buffer = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (n, ..) = client.recv(&mut buffer).await?;
 
         let dns_answer = &buffer[..n];

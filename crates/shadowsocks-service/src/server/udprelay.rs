@@ -102,7 +102,7 @@ impl UdpServer {
         let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
         let listener = Arc::new(socket);
 
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buffer = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, peer_addr, target_addr) = match listener.recv_from(&mut buffer).await {
                 Ok(s) => s,
@@ -420,7 +420,7 @@ impl UdpAssociationContext {
     }
 
     async fn copy_r2l(self: Arc<Self>, outbound: Arc<OutboundUdpSocket>) -> io::Result<()> {
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut buffer = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (n, addr) = match outbound.recv_from(&mut buffer).await {
                 Ok(r) => {

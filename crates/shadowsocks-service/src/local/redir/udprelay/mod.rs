@@ -205,7 +205,7 @@ impl UdpRedir {
             balancer,
         );
 
-        let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut pkt_buf = vec![0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             let (recv_len, src, mut dst) = match listener.recv_dest_from(&mut pkt_buf).await {
                 Ok(o) => o,
