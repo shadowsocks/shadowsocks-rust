@@ -1,7 +1,5 @@
 //! Virtual Device for receiving packets from tun
 
-use std::collections::VecDeque;
-
 use smoltcp::{
     phy::{self, Device, DeviceCapabilities},
     time::Instant,
@@ -10,21 +8,24 @@ use tokio::sync::mpsc;
 
 pub struct VirtTunDevice {
     capabilities: DeviceCapabilities,
-    in_buf: VecDeque<Vec<u8>>,
+    in_buf: mpsc::Receiver<Vec<u8>>,
     out_buf: mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl VirtTunDevice {
-    pub fn new(capabilities: DeviceCapabilities, iface_tx: mpsc::UnboundedSender<Vec<u8>>) -> Self {
-        Self {
-            capabilities,
-            in_buf: VecDeque::new(),
-            out_buf: iface_tx,
-        }
-    }
+    pub fn new(capabilities: DeviceCapabilities) -> (Self, mpsc::UnboundedReceiver<Vec<u8>>, mpsc::Sender<Vec<u8>>) {
+        let (iface_tx, iface_output) = mpsc::unbounded_channel();
+        let (iface_input, iface_rx) = mpsc::channel(512);
 
-    pub fn inject_packet(&mut self, buffer: Vec<u8>) {
-        self.in_buf.push_back(buffer);
+        (
+            Self {
+                capabilities,
+                in_buf: iface_rx,
+                out_buf: iface_tx,
+            },
+            iface_output,
+            iface_input,
+        )
     }
 }
 
@@ -33,7 +34,7 @@ impl<'a> Device<'a> for VirtTunDevice {
     type TxToken = VirtTxToken<'a>;
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-        if let Some(buffer) = self.in_buf.pop_front() {
+        if let Ok(buffer) = self.in_buf.try_recv() {
             let rx = Self::RxToken { buffer };
             let tx = VirtTxToken(self);
             return Some((rx, tx));

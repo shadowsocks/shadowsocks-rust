@@ -150,6 +150,7 @@ pub struct TcpTun {
     manager_notify: Arc<Notify>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
+    iface_tx: mpsc::Sender<Vec<u8>>,
 }
 
 impl Drop for TcpTun {
@@ -164,8 +165,7 @@ impl TcpTun {
         capabilities.medium = Medium::Ip;
         capabilities.max_transmission_unit = mtu as usize;
 
-        let (iface_tx, iface_rx) = mpsc::unbounded_channel::<Vec<u8>>();
-        let virt = VirtTunDevice::new(capabilities, iface_tx);
+        let (virt, iface_rx, iface_tx) = VirtTunDevice::new(capabilities);
 
         let iface_builder = InterfaceBuilder::new(virt, vec![]);
         let iface_ipaddrs = [
@@ -226,6 +226,7 @@ impl TcpTun {
             manager_notify,
             balancer,
             iface_rx,
+            iface_tx,
         }
     }
 
@@ -267,10 +268,9 @@ impl TcpTun {
         Ok(())
     }
 
-    pub fn drive_interface_state(&mut self, frame: &[u8]) {
-        {
-            let mut manager = self.manager.lock().unwrap();
-            manager.iface.device_mut().inject_packet(frame.to_vec());
+    pub async fn drive_interface_state(&mut self, frame: &[u8]) {
+        if let Err(..) = self.iface_tx.send(frame.to_vec()).await {
+            panic!("interface send channel closed unexpectly");
         }
 
         // Wake up and poll the interface.

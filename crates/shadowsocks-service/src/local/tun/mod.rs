@@ -227,7 +227,7 @@ impl Tun {
                     );
                 }
 
-                self.tcp.drive_interface_state(frame);
+                self.tcp.drive_interface_state(frame).await;
             }
             IpProtocol::Udp => {
                 if !self.mode.enable_udp() {
