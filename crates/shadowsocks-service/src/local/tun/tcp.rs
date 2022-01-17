@@ -56,8 +56,7 @@ struct TcpConnection {
 impl Drop for TcpConnection {
     fn drop(&mut self) {
         let mut manager = self.manager.lock();
-        let socket = manager.iface.get_socket::<TcpSocket>(self.socket_handle);
-        socket.close();
+        manager.iface.remove_socket(self.socket_handle);
     }
 }
 
