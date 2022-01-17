@@ -223,8 +223,6 @@ impl TcpTun {
                         next_duration
                     };
 
-                    tokio::task::yield_now().await;
-
                     tokio::select! {
                         _ = time::sleep(StdDuration::from(next_duration)) => {}
                         _ = manager_notify.notified() => {}
