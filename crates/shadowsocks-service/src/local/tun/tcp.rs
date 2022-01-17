@@ -253,8 +253,11 @@ impl TcpTun {
         // TCP first handshake packet, create a new Connection
         if tcp_packet.syn() && !tcp_packet.ack() {
             let accept_opts = self.context.accept_opts();
-            let send_buffer_size = accept_opts.tcp.send_buffer_size.unwrap_or(4096);
-            let recv_buffer_size = accept_opts.tcp.recv_buffer_size.unwrap_or(4096);
+            // NOTE: Default value is taken from Linux
+            // recv: /proc/sys/net/ipv4/tcp_rmem 87380 bytes
+            // send: /proc/sys/net/ipv4/tcp_wmem 16384 bytes
+            let send_buffer_size = accept_opts.tcp.send_buffer_size.unwrap_or(16384);
+            let recv_buffer_size = accept_opts.tcp.recv_buffer_size.unwrap_or(87380);
 
             let mut socket = TcpSocket::new(
                 TcpSocketBuffer::new(vec![0u8; recv_buffer_size as usize]),

@@ -168,6 +168,8 @@ impl Tun {
                 packet = self.udp.recv_packet() => {
                     if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
                         error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
+                    } else {
+                        trace!("[TUN] sent IP packet (UDP) {:?}", ByteStr::new(&packet));
                     }
                 }
 
@@ -175,6 +177,8 @@ impl Tun {
                 packet = self.tcp.recv_packet() => {
                     if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
                         error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
+                    } else {
+                        trace!("[TUN] sent IP packet (TCP) {:?}", ByteStr::new(&packet));
                     }
                 }
             }
