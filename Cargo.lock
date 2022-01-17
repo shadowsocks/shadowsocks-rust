@@ -732,9 +732,9 @@ checksum = "68f2d64f2edebec4ce84ad108148e67e1064789bee435edc5b60ad398714a3a9"
 
 [[package]]
 name = "iprange"
-version = "0.6.6"
+version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c35c37d40904e85813524129c09edb700f9f4c9eef5a5de03fb7e22e4d5efe7f"
+checksum = "37209be0ad225457e63814401415e748e2453a5297f9b637338f5fb8afa4ec00"
 dependencies = [
  "ipnet",
 ]
