@@ -263,7 +263,8 @@ impl TcpTun {
                 TcpSocketBuffer::new(vec![0u8; recv_buffer_size as usize]),
                 TcpSocketBuffer::new(vec![0u8; send_buffer_size as usize]),
             );
-            socket.set_ack_delay(None);
+            socket.set_keep_alive(accept_opts.tcp.keepalive.map(From::from));
+
             if let Err(err) = socket.listen(dst_addr) {
                 return Err(io::Error::new(ErrorKind::Other, err));
             }
