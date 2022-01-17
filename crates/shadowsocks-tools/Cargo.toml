@@ -15,3 +15,4 @@ tokio = { version = "1", features = ["full"] }
 trust-dns-proto = "0.20"
 rand = "0.8"
 env_logger = "0.9"
+byteorder = "1.3"

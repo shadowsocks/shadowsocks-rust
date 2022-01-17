@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     io::{self, ErrorKind},
+    mem,
     net::{IpAddr, SocketAddr},
     pin::Pin,
     sync::Arc,
@@ -81,7 +82,7 @@ impl AsyncRead for TcpConnection {
             }
 
             if socket.can_recv() {
-                let recv_buf = buf.initialize_unfilled();
+                let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
                 let n = match socket.recv_slice(recv_buf) {
                     Ok(n) => n,
                     Err(err) => return Err(io::Error::new(ErrorKind::Other, err)).into(),
@@ -200,17 +201,30 @@ impl TcpTun {
                     let next_duration = {
                         let mut manager = manager.lock();
 
-                        if let Err(err) = manager.iface.poll(Instant::now()) {
-                            error!("virtual device error: {}", err);
+                        let before_poll = Instant::now();
+                        let updated_sockets = match manager.iface.poll(before_poll) {
+                            Ok(u) => u,
+                            Err(err) => {
+                                error!("VirtDevice::poll error: {}", err);
+                                false
+                            }
+                        };
+
+                        let after_poll = Instant::now();
+
+                        if updated_sockets {
+                            trace!("VirtDevice::poll costed {}", after_poll - before_poll);
                         }
 
                         let next_duration = manager
                             .iface
-                            .poll_delay(Instant::now())
+                            .poll_delay(after_poll)
                             .unwrap_or(Duration::from_millis(50));
 
                         next_duration
                     };
+
+                    tokio::task::yield_now().await;
 
                     tokio::select! {
                         _ = time::sleep(StdDuration::from(next_duration)) => {}

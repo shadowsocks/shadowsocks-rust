@@ -1759,6 +1759,7 @@ dependencies = [
 name = "shadowsocks-tools"
 version = "0.1.0"
 dependencies = [
+ "byteorder",
  "clap",
  "env_logger",
  "rand",

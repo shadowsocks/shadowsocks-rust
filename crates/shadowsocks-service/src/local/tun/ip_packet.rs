@@ -2,7 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use smoltcp::wire::{IpProtocol, Ipv4Packet, Ipv6Packet};
+use smoltcp::wire::{IpProtocol, IpVersion, Ipv4Packet, Ipv6Packet};
 
 #[derive(Debug)]
 pub enum IpPacket<T: AsRef<[u8]>> {
@@ -11,16 +11,13 @@ pub enum IpPacket<T: AsRef<[u8]>> {
 }
 
 impl<T: AsRef<[u8]> + Copy> IpPacket<T> {
-    pub fn new_checked(packet: T) -> Option<IpPacket<T>> {
-        if let Ok(ipv4) = Ipv4Packet::new_checked(packet) {
-            return Some(IpPacket::Ipv4(ipv4));
+    pub fn new_checked(packet: T) -> smoltcp::Result<Option<IpPacket<T>>> {
+        let buffer = packet.as_ref();
+        match IpVersion::of_packet(buffer)? {
+            IpVersion::Ipv4 => Ok(Some(IpPacket::Ipv4(Ipv4Packet::new_checked(packet)?))),
+            IpVersion::Ipv6 => Ok(Some(IpPacket::Ipv6(Ipv6Packet::new_checked(packet)?))),
+            _ => Ok(None),
         }
-
-        if let Ok(ipv6) = Ipv6Packet::new_checked(packet) {
-            return Some(IpPacket::Ipv6(ipv6));
-        }
-
-        None
     }
 
     pub fn src_addr(&self) -> IpAddr {
