@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 #[cfg(unix)]
 pub use self::sys::uds::{UnixListener, UnixStream};
 pub use self::{
-    option::{AcceptOpts, ConnectOpts},
+    option::{AcceptOpts, ConnectOpts, TcpSocketOpts},
     sys::{set_tcp_fastopen, socket_bind_dual_stack},
     tcp::{TcpListener, TcpStream},
     udp::UdpSocket,
