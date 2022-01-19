@@ -713,7 +713,7 @@ pub fn main(matches: &ArgMatches) {
         if config.local.is_empty() {
             eprintln!(
                 "missing `local_address`, consider specifying it by --local-addr command line option, \
-             or \"local_address\" and \"local_port\" in configuration file"
+                    or \"local_address\" and \"local_port\" in configuration file"
             );
             return;
         }
@@ -721,9 +721,9 @@ pub fn main(matches: &ArgMatches) {
         if config.server.is_empty() {
             eprintln!(
                 "missing proxy servers, consider specifying it by \
-             --server-addr, --encrypt-method, --password command line option, \
-                or --server-url command line option, \
-                or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
+                    --server-addr, --encrypt-method, --password command line option, \
+                        or --server-url command line option, \
+                        or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
             );
             return;
         }

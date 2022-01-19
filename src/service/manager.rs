@@ -412,7 +412,7 @@ pub fn main(matches: &ArgMatches) {
         if config.manager.is_none() {
             eprintln!(
                 "missing `manager_address`, consider specifying it by --manager-address command line option, \
-             or \"manager_address\" and \"manager_port\" keys in configuration file"
+                    or \"manager_address\" and \"manager_port\" keys in configuration file"
             );
             return;
         }

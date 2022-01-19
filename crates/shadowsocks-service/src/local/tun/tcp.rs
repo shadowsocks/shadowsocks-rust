@@ -42,7 +42,7 @@ struct TcpSocketManager {
 
 impl TcpSocketManager {
     fn notify(&self) {
-        self.manager_notify.notify_waiters();
+        self.manager_notify.notify_one();
     }
 }
 
@@ -290,7 +290,7 @@ impl TcpTun {
         }
 
         // Wake up and poll the interface.
-        self.manager_notify.notify_waiters();
+        self.manager_notify.notify_one();
     }
 
     pub async fn recv_packet(&mut self) -> Vec<u8> {

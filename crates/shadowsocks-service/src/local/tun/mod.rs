@@ -266,7 +266,7 @@ impl Tun {
                     error!("handle UDP packet failed, err: {}, packet: {:?}", err, udp_packet);
                 }
             }
-            IpProtocol::Icmp => {
+            IpProtocol::Icmp | IpProtocol::Icmpv6 => {
                 self.handle_icmp_packet(&packet).await?;
             }
             _ => {
@@ -282,11 +282,17 @@ impl Tun {
         match *packet {
             IpPacket::Ipv4(ref ipv4) => {
                 let icmp = Icmpv4Packet::new_checked(ipv4.payload())?;
-                debug!("[TUN] received {}", icmp);
+                trace!("[TUN] received {}", icmp);
             }
             IpPacket::Ipv6(ref ipv6) => {
-                let _icmp = Icmpv6Packet::new_checked(ipv6.payload())?;
-                debug!("[TUN] received ICMPv6");
+                let icmp = Icmpv6Packet::new_checked(ipv6.payload())?;
+                trace!(
+                    "[TUN] received ICMPv6 {:?} code={} echo_ident={} echo_seq_no={}",
+                    icmp.msg_type(),
+                    icmp.msg_code(),
+                    icmp.echo_ident(),
+                    icmp.echo_seq_no()
+                );
             }
         }
 
