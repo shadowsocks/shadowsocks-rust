@@ -61,7 +61,7 @@ where
             Ok(Err(err)) => return Err(err),
             Err(..) => {
                 // Timeout. Send handshake to server.
-                shadow.write(&[]).await?;
+                let _ = shadow.write(&[]).await?;
 
                 trace!(
                     "tcp tunnel {} -> {} (proxied) sent handshake without data",

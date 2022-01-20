@@ -26,6 +26,7 @@ use crate::{
 use super::auto_proxy_io::AutoProxyIo;
 
 /// Unified stream for bypassed and proxied connections
+#[allow(clippy::large_enum_variant)]
 #[pin_project(project = AutoProxyClientStreamProj)]
 pub enum AutoProxyClientStream {
     Proxied(#[pin] ProxyClientStream<MonProxyStream<TcpStream>>),
