@@ -112,7 +112,9 @@ impl AsyncRead for TcpConnection {
         if control.recv_buffer.is_empty() {
             // Nothing could be read. Wait for notify.
             if let Some(old_waker) = control.recv_waker.replace(cx.waker().clone()) {
-                old_waker.wake();
+                if !old_waker.will_wake(cx.waker()) {
+                    old_waker.wake();
+                }
             }
 
             return Poll::Pending;
@@ -138,7 +140,9 @@ impl AsyncWrite for TcpConnection {
 
         if control.send_buffer.is_full() {
             if let Some(old_waker) = control.send_waker.replace(cx.waker().clone()) {
-                old_waker.wake();
+                if !old_waker.will_wake(cx.waker()) {
+                    old_waker.wake();
+                }
             }
 
             return Poll::Pending;
@@ -163,7 +167,9 @@ impl AsyncWrite for TcpConnection {
 
         control.is_closed = true;
         if let Some(old_waker) = control.send_waker.replace(cx.waker().clone()) {
-            old_waker.wake();
+            if !old_waker.will_wake(cx.waker()) {
+                old_waker.wake();
+            }
         }
 
         Poll::Pending
