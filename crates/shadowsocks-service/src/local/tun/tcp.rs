@@ -387,6 +387,8 @@ impl TcpTun {
                 TcpSocketBuffer::new(vec![0u8; send_buffer_size as usize]),
             );
             socket.set_keep_alive(accept_opts.tcp.keepalive.map(From::from));
+            // FIXME: This should follows system's setting. 7200 is Linux's default.
+            socket.set_timeout(Some(Duration::from_secs(7200)));
 
             if let Err(err) = socket.listen(dst_addr) {
                 return Err(io::Error::new(ErrorKind::Other, err));
