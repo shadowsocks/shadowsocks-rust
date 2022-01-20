@@ -251,7 +251,7 @@ dependencies = [
 [[package]]
 name = "crypto2"
 version = "0.2.0"
-source = "git+https://github.com/shadowsocks/crypto2.git#843155ef65be66a86c6b9a833793e3034a5e05c0"
+source = "git+https://github.com/shadowsocks/crypto2.git#f1eeeb7265297d75e7202f1a272b69638bdd383a"
 dependencies = [
  "cfg-if",
 ]
