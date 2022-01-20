@@ -182,6 +182,7 @@ impl AutoProxyClientStream {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[pin_project(project = AutoProxyClientStreamReadHalfProj)]
 pub enum AutoProxyClientStreamReadHalf {
     Proxied(#[pin] ProxyClientStreamReadHalf<MonProxyStream<TcpStream>>),
@@ -203,6 +204,7 @@ impl AsyncRead for AutoProxyClientStreamReadHalf {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[pin_project(project = AutoProxyClientStreamWriteHalfProj)]
 pub enum AutoProxyClientStreamWriteHalf {
     Proxied(#[pin] ProxyClientStreamWriteHalf<MonProxyStream<TcpStream>>),
