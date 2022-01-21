@@ -343,6 +343,9 @@ impl UdpAssociationContext {
                     data.len(),
                     err
                 );
+
+                // Drop the socket and reconnect to another server.
+                self.proxied_socket = None;
             }
         }
 
