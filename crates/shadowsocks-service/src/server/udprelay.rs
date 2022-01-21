@@ -149,7 +149,7 @@ impl UdpServer {
             self.keepalive_tx.clone(),
         );
 
-        trace!("created udp association for {}", peer_addr);
+        debug!("created udp association for {}", peer_addr);
 
         assoc.try_send((target_addr, Bytes::copy_from_slice(data)))?;
         assoc_map.insert(peer_addr, assoc);

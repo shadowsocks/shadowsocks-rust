@@ -159,7 +159,7 @@ impl UdpTunnel {
             balancer.clone(),
         );
 
-        trace!("created udp association for {}", peer_addr);
+        debug!("created udp association for {}", peer_addr);
 
         assoc.try_send(Bytes::copy_from_slice(data))?;
         assoc_map.insert(peer_addr, assoc);
