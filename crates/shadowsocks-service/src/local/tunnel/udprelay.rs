@@ -256,7 +256,7 @@ struct UdpAssociationContext {
 
 impl Drop for UdpAssociationContext {
     fn drop(&mut self) {
-        trace!("udp tunnel for {} is closed", self.peer_addr);
+        debug!("udp tunnel for {} is closed", self.peer_addr);
     }
 }
 

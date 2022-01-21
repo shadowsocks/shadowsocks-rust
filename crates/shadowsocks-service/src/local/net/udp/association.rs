@@ -290,7 +290,7 @@ where
     W: UdpInboundWrite + Send + Sync + Unpin + 'static,
 {
     fn drop(&mut self) {
-        trace!("udp association for {} is closed", self.peer_addr);
+        debug!("udp association for {} is closed", self.peer_addr);
     }
 }
 
