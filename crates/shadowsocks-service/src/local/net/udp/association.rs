@@ -179,7 +179,7 @@ where
         respond_writer: W,
     ) -> UdpAssociation<W> {
         let (assoc_handle, sender) =
-            UdpAssociationContext::new(context, peer_addr, keepalive_tx, balancer, respond_writer);
+            UdpAssociationContext::create(context, peer_addr, keepalive_tx, balancer, respond_writer);
         UdpAssociation {
             assoc_handle,
             sender,
@@ -223,7 +223,7 @@ impl<W> UdpAssociationContext<W>
 where
     W: UdpInboundWrite + Send + Sync + Unpin + 'static,
 {
-    fn new(
+    fn create(
         context: Arc<ServiceContext>,
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<SocketAddr>,

@@ -176,7 +176,7 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> UdpAssociation {
-        let (assoc_handle, sender) = UdpAssociationContext::new(context, inbound, peer_addr, keepalive_tx);
+        let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_tx);
         UdpAssociation { assoc_handle, sender }
     }
 
@@ -205,7 +205,7 @@ impl Drop for UdpAssociationContext {
 }
 
 impl UdpAssociationContext {
-    fn new(
+    fn create(
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
@@ -304,7 +304,7 @@ impl UdpAssociationContext {
             data.len()
         );
 
-        if self.context.check_outbound_blocked(&target_addr).await {
+        if self.context.check_outbound_blocked(target_addr).await {
             error!(
                 "udp client {} outbound {} blocked by ACL rules",
                 self.peer_addr, target_addr

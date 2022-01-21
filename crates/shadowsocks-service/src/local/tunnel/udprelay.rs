@@ -189,7 +189,7 @@ impl UdpAssociation {
         balancer: PingBalancer,
     ) -> UdpAssociation {
         let (assoc_handle, sender) =
-            UdpAssociationContext::new(context, inbound, peer_addr, forward_addr, keepalive_tx, balancer);
+            UdpAssociationContext::create(context, inbound, peer_addr, forward_addr, keepalive_tx, balancer);
         UdpAssociation { assoc_handle, sender }
     }
 
@@ -219,7 +219,7 @@ impl Drop for UdpAssociationContext {
 }
 
 impl UdpAssociationContext {
-    fn new(
+    fn create(
         context: Arc<ServiceContext>,
         inbound: Arc<UdpSocket>,
         peer_addr: SocketAddr,
