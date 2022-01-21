@@ -3,6 +3,7 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use bytes::Bytes;
+use futures::future;
 use io::ErrorKind;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
@@ -15,7 +16,6 @@ use shadowsocks::{
     },
     ServerAddr,
 };
-use spin::Mutex as SpinMutex;
 use tokio::{
     net::UdpSocket,
     sync::{mpsc, Mutex},
@@ -169,13 +169,13 @@ impl UdpTunnel {
 }
 
 struct UdpAssociation {
+    assoc_handle: JoinHandle<()>,
     sender: mpsc::Sender<Bytes>,
-    assoc: Arc<UdpAssociationContext>,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
-        self.assoc.proxied_socket.lock().abort();
+        self.assoc_handle.abort();
     }
 }
 
@@ -188,9 +188,9 @@ impl UdpAssociation {
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
     ) -> UdpAssociation {
-        let (assoc, sender) =
+        let (assoc_handle, sender) =
             UdpAssociationContext::new(context, inbound, peer_addr, forward_addr, keepalive_tx, balancer);
-        UdpAssociation { sender, assoc }
+        UdpAssociation { assoc_handle, sender }
     }
 
     fn try_send(&self, data: Bytes) -> io::Result<()> {
@@ -202,61 +202,19 @@ impl UdpAssociation {
     }
 }
 
-enum UdpAssociationState {
-    Empty,
-    Connected {
-        socket: Arc<MonProxySocket>,
-        abortable: JoinHandle<io::Result<()>>,
-    },
-    Aborted,
-}
-
-impl Drop for UdpAssociationState {
-    fn drop(&mut self) {
-        self.abort_inner();
-    }
-}
-
-impl UdpAssociationState {
-    fn empty() -> UdpAssociationState {
-        UdpAssociationState::Empty
-    }
-
-    fn reset(&mut self) {
-        self.abort_inner();
-        *self = UdpAssociationState::Empty;
-    }
-
-    fn set_connected(&mut self, socket: Arc<MonProxySocket>, abortable: JoinHandle<io::Result<()>>) {
-        self.abort_inner();
-        *self = UdpAssociationState::Connected { socket, abortable };
-    }
-
-    fn abort(&mut self) {
-        self.abort_inner();
-        *self = UdpAssociationState::Aborted;
-    }
-
-    fn abort_inner(&mut self) {
-        if let UdpAssociationState::Connected { ref abortable, .. } = *self {
-            abortable.abort();
-        }
-    }
-}
-
 struct UdpAssociationContext {
     context: Arc<ServiceContext>,
-    inbound: Arc<UdpSocket>,
     peer_addr: SocketAddr,
     forward_addr: Address,
-    proxied_socket: SpinMutex<UdpAssociationState>,
+    proxied_socket: Option<MonProxySocket>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
+    inbound: Arc<UdpSocket>,
 }
 
 impl Drop for UdpAssociationContext {
     fn drop(&mut self) {
-        debug!("udp tunnel for {} is closed", self.peer_addr);
+        debug!("udp association for {} is closed", self.peer_addr);
     }
 }
 
@@ -268,171 +226,145 @@ impl UdpAssociationContext {
         forward_addr: Address,
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
-    ) -> (Arc<UdpAssociationContext>, mpsc::Sender<Bytes>) {
-        // Pending packets 1024 should be good enough for a server.
+    ) -> (JoinHandle<()>, mpsc::Sender<Bytes>) {
+        // Pending packets 128 for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
-        let (sender, receiver) = mpsc::channel(1024);
+        let (sender, receiver) = mpsc::channel(128);
 
-        let assoc = Arc::new(UdpAssociationContext {
+        let mut assoc = UdpAssociationContext {
             context,
-            inbound,
             peer_addr,
             forward_addr,
-            proxied_socket: SpinMutex::new(UdpAssociationState::empty()),
+            proxied_socket: None,
             keepalive_tx,
             balancer,
-        });
-
-        let l2r_task = {
-            let assoc = assoc.clone();
-            assoc.copy_l2r(receiver)
+            inbound,
         };
-        tokio::spawn(l2r_task);
+        let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
 
-        (assoc, sender)
+        (handle, sender)
     }
 
-    async fn copy_l2r(self: Arc<Self>, mut receiver: mpsc::Receiver<Bytes>) {
-        while let Some(data) = receiver.recv().await {
-            if let Err(err) = self.clone().copy_proxied_l2r(&data).await {
-                error!(
-                    "udp failed to send to {} outbound socket, error: {}",
-                    self.forward_addr, err
-                );
-            } else {
-                trace!(
-                    "udp relay {} -> {} with {} bytes",
-                    self.peer_addr,
-                    self.forward_addr,
-                    data.len()
-                );
-            }
-        }
-    }
+    async fn dispatch_packet(&mut self, mut receiver: mpsc::Receiver<Bytes>) {
+        let mut proxied_buffer = Vec::new();
 
-    async fn copy_proxied_l2r(self: Arc<Self>, data: &[u8]) -> io::Result<()> {
-        let mut last_err = io::Error::new(ErrorKind::Other, "udp relay sendto failed after retry");
-        let target_addr = &self.forward_addr;
-
-        for tried in 0..3 {
-            let socket = {
-                let mut handle = self.proxied_socket.lock();
-
-                match *handle {
-                    UdpAssociationState::Empty => {
-                        // Create a new connection to proxy server
-
-                        let server = self.balancer.best_udp_server();
-                        let svr_cfg = server.server_config();
-
-                        let socket = ProxySocket::connect_with_opts(
-                            self.context.context(),
-                            svr_cfg,
-                            self.context.connect_opts_ref(),
-                        )
-                        .await?;
-                        let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
-                        let socket = Arc::new(socket);
-
-                        // CLIENT <- REMOTE
-                        let r2l_abortable = {
-                            let assoc = self.clone();
-                            tokio::spawn(assoc.copy_proxied_r2l(socket.clone()))
-                        };
-
-                        debug!(
-                            "created udp association for {} <-> {} (proxied) with {:?}",
-                            self.peer_addr,
-                            svr_cfg.addr(),
-                            self.context.connect_opts_ref()
-                        );
-
-                        handle.set_connected(socket.clone(), r2l_abortable);
-                        socket
-                    }
-                    UdpAssociationState::Connected { ref socket, .. } => socket.clone(),
-                    UdpAssociationState::Aborted => {
-                        debug!(
-                            "udp association for {} (proxied) have been aborted, dropped packet {} bytes to {}",
-                            self.peer_addr,
-                            data.len(),
-                            target_addr
-                        );
-                        return Ok(());
-                    }
-                }
-            };
-
-            match socket.send(target_addr, data).await {
-                Ok(..) => return Ok(()),
-                Err(err) => {
-                    debug!(
-                        "{} -> {} (proxied) sending {} bytes failed, tried: {}, error: {}",
-                        self.peer_addr,
-                        target_addr,
-                        data.len(),
-                        tried + 1,
-                        err
-                    );
-                    last_err = err;
-
-                    // Reset for reconnecting
-                    self.proxied_socket.lock().reset();
-
-                    tokio::task::yield_now().await;
-                }
-            }
-        }
-
-        Err(last_err)
-    }
-
-    async fn copy_proxied_r2l(self: Arc<Self>, outbound: Arc<MonProxySocket>) -> io::Result<()> {
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
-            let n = match outbound.recv(&mut buffer).await {
-                Ok((n, addr)) => {
-                    trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, n);
-                    // Keep association alive in map
-                    let _ = self
-                        .keepalive_tx
-                        .send_timeout(self.peer_addr, Duration::from_secs(1))
-                        .await;
-                    n
+            tokio::select! {
+                packet_received_opt = receiver.recv() => {
+                    let data = match packet_received_opt {
+                        Some(d) => d,
+                        None => {
+                            trace!("udp association for {} -> ... channel closed", self.peer_addr);
+                            break;
+                        }
+                    };
+
+                    self.dispatch_received_packet(&data).await;
                 }
-                Err(err) => {
-                    // Socket that connected to remote server returns an error, it should be ECONNREFUSED in most cases.
-                    // That indicates that the association on the server side have been dropped.
-                    //
-                    // There is no point to keep this socket. Drop it immediately.
-                    self.proxied_socket.lock().reset();
 
-                    error!(
-                        "udp failed to receive from {} outbound socket, error: {}",
-                        self.forward_addr, err
-                    );
-                    time::sleep(Duration::from_secs(1)).await;
-                    continue;
+                received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer) => {
+                    let (n, addr) = match received_opt {
+                        Ok(r) => r,
+                        Err(err) => {
+                            error!("udp relay {} <- ... failed, error: {}", self.peer_addr, err);
+                            // Socket failure. Reset for recreation.
+                            self.proxied_socket = None;
+                            continue;
+                        }
+                    };
+
+                    self.send_received_respond_packet(&addr, &proxied_buffer[..n]).await;
                 }
-            };
-
-            let data = &buffer[..n];
-
-            // Send back to client
-            if let Err(err) = self.inbound.send_to(data, self.peer_addr).await {
-                warn!(
-                    "udp failed to send back to client {}, from target {}, error: {}",
-                    self.peer_addr, self.forward_addr, err
-                );
             }
+        }
 
-            trace!(
-                "udp relay {} <- {} with {} bytes",
+        #[inline]
+        async fn receive_from_proxied_opt(
+            socket: &Option<MonProxySocket>,
+            buf: &mut Vec<u8>,
+        ) -> io::Result<(usize, Address)> {
+            match *socket {
+                None => future::pending().await,
+                Some(ref s) => {
+                    if buf.is_empty() {
+                        buf.resize(MAXIMUM_UDP_PAYLOAD_SIZE, 0);
+                    }
+                    s.recv(buf).await
+                }
+            }
+        }
+    }
+
+    async fn dispatch_received_packet(&mut self, data: &[u8]) {
+        trace!(
+            "udp relay {} -> {} with {} bytes",
+            self.peer_addr,
+            self.forward_addr,
+            data.len()
+        );
+
+        if let Err(err) = self.dispatch_received_proxied_packet(data).await {
+            error!(
+                "udp relay {} -> {} with {} bytes, error: {}",
                 self.peer_addr,
                 self.forward_addr,
-                data.len()
+                data.len(),
+                err
             );
+        }
+    }
+
+    async fn dispatch_received_proxied_packet(&mut self, data: &[u8]) -> io::Result<()> {
+        let socket = match self.proxied_socket {
+            Some(ref mut socket) => socket,
+            None => {
+                // Create a new connection to proxy server
+
+                let server = self.balancer.best_udp_server();
+                let svr_cfg = server.server_config();
+
+                let socket =
+                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts_ref())
+                        .await?;
+                let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
+
+                self.proxied_socket.insert(socket)
+            }
+        };
+
+        match socket.send(&self.forward_addr, data).await {
+            Ok(..) => return Ok(()),
+            Err(err) => {
+                debug!(
+                    "{} -> {} (proxied) sending {} bytes failed, error: {}",
+                    self.peer_addr,
+                    self.forward_addr,
+                    data.len(),
+                    err
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn send_received_respond_packet(&mut self, addr: &Address, data: &[u8]) {
+        trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, data.len(),);
+        // Keep association alive in map
+        let _ = self
+            .keepalive_tx
+            .send_timeout(self.peer_addr, Duration::from_secs(1))
+            .await;
+
+        // Send back to client
+        if let Err(err) = self.inbound.send_to(data, self.peer_addr).await {
+            warn!(
+                "udp failed to send back to client {}, from target {}, error: {}",
+                self.peer_addr, addr, err
+            );
+        } else {
+            trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());
         }
     }
 }
