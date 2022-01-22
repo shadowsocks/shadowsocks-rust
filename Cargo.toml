@@ -153,7 +153,7 @@ tokio = { version = "1", features = ["rt", "signal"] }
 
 ipnet = { version = "2.3", optional = true }
 
-mimalloc = { version = "0.1", optional = true }
+mimalloc = { version = "0.1", default-features = false, optional = true }
 tcmalloc = { version = "0.3", optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
