@@ -13,7 +13,7 @@ use byte_string::ByteStr;
 use ipnet::IpNet;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::config::Mode;
-use smoltcp::wire::{Icmpv4Packet, Icmpv6Packet, IpProtocol, TcpPacket, UdpPacket};
+use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
 use tokio::io::AsyncReadExt;
 use tun::{AsyncDevice, Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer};
 
@@ -267,32 +267,13 @@ impl Tun {
                 }
             }
             IpProtocol::Icmp | IpProtocol::Icmpv6 => {
-                self.handle_icmp_packet(&packet).await?;
+                // ICMP is handled by TCP's Interface.
+                // smoltcp's interface will always send replies to EchoRequest
+                self.tcp.drive_interface_state(frame).await;
             }
             _ => {
                 debug!("IP packet ignored (protocol: {:?})", packet.protocol());
                 return Ok(());
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn handle_icmp_packet(&self, packet: &IpPacket<&[u8]>) -> smoltcp::Result<()> {
-        match *packet {
-            IpPacket::Ipv4(ref ipv4) => {
-                let icmp = Icmpv4Packet::new_checked(ipv4.payload())?;
-                trace!("[TUN] received {}", icmp);
-            }
-            IpPacket::Ipv6(ref ipv6) => {
-                let icmp = Icmpv6Packet::new_checked(ipv6.payload())?;
-                trace!(
-                    "[TUN] received ICMPv6 {:?} code={} echo_ident={} echo_seq_no={}",
-                    icmp.msg_type(),
-                    icmp.msg_code(),
-                    icmp.echo_ident(),
-                    icmp.echo_seq_no()
-                );
             }
         }
 
