@@ -14,7 +14,7 @@ use parking_lot::Mutex as ParkingMutex;
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
-    phy::{Checksum, ChecksumCapabilities, DeviceCapabilities, Medium},
+    phy::{DeviceCapabilities, Medium},
     socket::{TcpSocket, TcpSocketBuffer, TcpState},
     storage::RingBuffer,
     time::{Duration, Instant},
@@ -197,14 +197,6 @@ impl TcpTun {
         let mut capabilities = DeviceCapabilities::default();
         capabilities.medium = Medium::Ip;
         capabilities.max_transmission_unit = mtu as usize;
-
-        // Disable Checksum verification for improving performance.
-        capabilities.checksum = ChecksumCapabilities::default();
-        capabilities.checksum.ipv4 = Checksum::Tx;
-        capabilities.checksum.tcp = Checksum::Tx;
-        capabilities.checksum.udp = Checksum::Tx;
-        capabilities.checksum.icmpv4 = Checksum::Tx;
-        capabilities.checksum.icmpv6 = Checksum::Tx;
 
         let (virt, iface_rx, iface_tx) = VirtTunDevice::new(capabilities);
 
