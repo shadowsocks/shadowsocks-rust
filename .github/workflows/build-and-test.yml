@@ -32,7 +32,7 @@ jobs:
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
           profile: minimal
           components: clippy
       - name: Build & Test (Default)
@@ -65,7 +65,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           target: aarch64-apple-darwin
-          toolchain: stable
+          toolchain: nightly
         if: runner.os == 'macOS'
 
       # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326

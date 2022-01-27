@@ -223,6 +223,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22a9137b95ea06864e018375b72adfb7db6e6f68cfc8df5a04d00288050485ee"
 
 [[package]]
+name = "ccm"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a9cf981c7e62b6fb02225592ee7ebf221e0b0b5317984a57a1e9d21af20e317"
+dependencies = [
+ "aead",
+ "cipher",
+ "ctr",
+ "subtle",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2005,11 +2017,12 @@ dependencies = [
 [[package]]
 name = "shadowsocks-crypto"
 version = "0.3.0"
-source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#87b7b9f60c14b6a1a8664c51ccfe4f2ccc9d6a98"
+source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#56ac78dcc1d2a29f7daeedf057204fc41202ba86"
 dependencies = [
  "aes",
  "aes-gcm",
  "aes-gcm-siv",
+ "ccm",
  "cfg-if",
  "chacha20",
  "chacha20poly1305",
