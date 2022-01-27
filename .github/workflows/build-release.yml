@@ -51,6 +51,10 @@ jobs:
             fi
           fi
 
+          if [[ "$compile_target" == "aarch64-"* ]]; then
+            compile_features="$compile_features -f armv8 -f neon"
+          fi
+
           cd build
           ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
 
@@ -65,7 +69,7 @@ jobs:
   build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: "local-redir local-tun"
+      BUILD_EXTRA_FEATURES: "local-redir local-tun armv8 neon"
       RUST_BACKTRACE: full
     strategy:
       matrix:

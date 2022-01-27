@@ -36,6 +36,11 @@ security-replay-attack-detect = ["bloomfilter", "spin"]
 # Enable IV printable prefix
 security-iv-printable-prefix = ["rand"]
 
+# Enable ARMv8 related optimizations
+armv8 = ["shadowsocks-crypto/armv8"]
+# Enable NEON releated optimizations
+neon = ["shadowsocks-crypto/neon"]
+
 [dependencies]
 log = "0.4"
 

@@ -73,6 +73,11 @@ security-replay-attack-detect = ["shadowsocks/security-replay-attack-detect"]
 # Enable IV printable prefix
 security-iv-printable-prefix = ["shadowsocks/security-iv-printable-prefix"]
 
+# Enable ARMv8 related optimizations
+armv8 = ["shadowsocks/armv8"]
+# Enable NEON releated optimizations
+neon = ["shadowsocks/neon"]
+
 [dependencies]
 log = "0.4"
 log4rs = "1.0"
