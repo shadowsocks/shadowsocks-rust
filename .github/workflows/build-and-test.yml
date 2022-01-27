@@ -35,6 +35,8 @@ jobs:
           toolchain: nightly
           profile: minimal
           components: clippy
+          default: true
+          override: true
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
       - name: Build & Test (Default) - shadowsocks
@@ -61,22 +63,22 @@ jobs:
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
             -A clippy::collapsible_else_if
-      - name: prepare AppleSilicon build
-        uses: actions-rs/toolchain@v1
-        with:
-          target: aarch64-apple-darwin
-          toolchain: nightly
-        if: runner.os == 'macOS'
+      # - name: prepare AppleSilicon build
+      #   uses: actions-rs/toolchain@v1
+      #   with:
+      #     target: aarch64-apple-darwin
+      #     toolchain: nightly
+      #   if: runner.os == 'macOS'
 
-      # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
-      - if: runner.os == 'macOS'
-        run: |
-          sudo xcode-select -s /Applications/Xcode_12.4.app &&
-          sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
+      # # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
+      # - if: runner.os == 'macOS'
+      #   run: |
+      #     sudo xcode-select -s /Applications/Xcode_12.4.app &&
+      #     sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
 
-      - name: Check compilation for Apple Silicon
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --target aarch64-apple-darwin
-        if: runner.os == 'macOS'
+      # - name: Check compilation for Apple Silicon
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: check
+      #     args: --target aarch64-apple-darwin
+      #   if: runner.os == 'macOS'
