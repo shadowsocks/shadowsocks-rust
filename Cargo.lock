@@ -786,9 +786,9 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94f41e9c77b6fc05b57497b960aad55942a9bbc5b20e1e623cf7fb1868f695d1"
+checksum = "796c3626b70dbdccf7b21612ab47b4c58b0f333c55d0ddb54cf9107a979a318d"
 dependencies = [
  "hmac",
 ]
@@ -1990,7 +1990,7 @@ dependencies = [
 [[package]]
 name = "shadowsocks-crypto"
 version = "0.3.0"
-source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#5742839fa7ddf367456d9bda88145cc65f396654"
+source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#f0a19f1a1079621a35c3c9b46e8a397ad6c7b512"
 dependencies = [
  "aes",
  "aes-gcm",
