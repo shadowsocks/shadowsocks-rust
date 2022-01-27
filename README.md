@@ -69,12 +69,6 @@ This project uses system (libc) memory allocator (Rust's default). But it also a
 Install from [crates.io](https://crates.io/crates/shadowsocks-rust):
 
 ```bash
-# Set default toolchain to nightly
-rustup default nightly
-# RECOMMEND: Check the rust-toolchain file in the project root and use the recommended nightly version
-# For example:
-# rustup default nightly-2021-06-03
-
 # Install from crates.io
 cargo install shadowsocks-rust
 ```
@@ -789,7 +783,7 @@ It supports the following features:
 - [x] Improved logging format (waiting for the new official log crate)
 - [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 - [x] Windows support.
-- [ ] Build with stable `rustc` (blocking by `crypto2`).
+- [x] Build with stable `rustc` <del>(blocking by `crypto2`)</del>.
 - [x] Support HTTP Proxy protocol
 - [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 - [x] Choose server based on delay #152

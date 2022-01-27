@@ -29,9 +29,10 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install Rust nightly
+      - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           profile: minimal
           components: clippy
       - name: Build & Test (Default)
@@ -64,6 +65,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           target: aarch64-apple-darwin
+          toolchain: stable
         if: runner.os == 'macOS'
 
       # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
