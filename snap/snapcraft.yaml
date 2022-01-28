@@ -43,6 +43,8 @@ parts:
   shadowsocks-rust:
     plugin: rust
     source: https://github.com/shadowsocks/shadowsocks-rust.git
+    rust-channel: nightly
+    rust-features: [local-tun, local-redir, armv8, neon]
     override-pull: |
       snapcraftctl pull
       snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`

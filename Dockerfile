@@ -8,7 +8,7 @@ WORKDIR /root/shadowsocks-rust
 
 ADD . .
 
-RUN rustup install "$(cat rust-toolchain)" && \
+RUN rustup install nightly && \
     case "$TARGETARCH" in \
     "386") \
         RUST_TARGET="i686-unknown-linux-musl" \
@@ -30,7 +30,7 @@ RUN rustup install "$(cat rust-toolchain)" && \
     wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ && \
     CC=/root/$MUSL-cross/bin/$MUSL-gcc && \
     rustup target add $RUST_TARGET && \
-    RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target $RUST_TARGET --release && \
+    RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "local-tun local-redir armv8 neon" && \
     mv target/$RUST_TARGET/release/ss* target/release/
 
 FROM alpine:3.14 AS sslocal

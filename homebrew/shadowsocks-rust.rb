@@ -15,7 +15,7 @@ class ShadowsocksRust < Formula
     def install
       ENV.with_build_environment do
         ENV["RUSTFLAGS"] = "-C target-cpu=native"
-        system "cargo", "install", *std_cargo_args
+        system "cargo", "install", *std_cargo_args, "--features", "local-tun local-redir"
       end
     end
   
