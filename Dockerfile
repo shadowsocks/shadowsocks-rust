@@ -8,7 +8,7 @@ WORKDIR /root/shadowsocks-rust
 
 ADD . .
 
-RUN rustup install nightly && \
+RUN rustup install nightly && rustup default nightly && \
     case "$TARGETARCH" in \
     "386") \
         RUST_TARGET="i686-unknown-linux-musl" \

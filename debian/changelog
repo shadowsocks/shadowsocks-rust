@@ -1,3 +1,21 @@
+shadowsocks-rust (1.13.0) unstable; urgency=medium
+
+  ## Features
+
+  - #706 `balancer.check_best_interval` could let ping balancer to ping only the choosen best server in this interval
+    - Recommended: Set a shorter interval in `balancer.check_best_interval` than `balancer.check_interval` to check much frequently the best server.
+    - `balancer.check_interval` controls the interval of checking all the available servers
+    - When server start, the "check best" strategy starts after it receives enough data for estimating all servers' scores
+  - #744 Refactored `local-tun`, using `smoltcp` as a user-space network stack
+
+  ## Miscelleneous
+
+  - Upgrade [`clap`](https://crates.io/crates/clap) (the command-line argument handling library) to v3.0
+  - #739 Support K8S deployment
+  - [shadowsocks-crypto](https://github.com/shadowsocks/shadowsocks-crypto) switch underlying encryption library to [RustCrypto](https://github.com/RustCrypto)
+    - Able to build with stable Rust
+    - Build for target `aarch64` with nightly, features `"armv8 neon"` should be enabled for hardware acceleration.
+
 shadowsocks-rust (1.12.5) unstable; urgency=medium
 
   ## Bug Fixes
