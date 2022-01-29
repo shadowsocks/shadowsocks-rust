@@ -109,6 +109,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "base16ct"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
+
+[[package]]
 name = "base64"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,10 +522,11 @@ dependencies = [
 
 [[package]]
 name = "elliptic-curve"
-version = "0.11.7"
+version = "0.11.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fcbfdf46fd1157b49be0c2170bab2784ca19233b35c2dc772d60247b72f2071"
+checksum = "23f80ad035a844638d4ce3d4a27ef4e00f2304e1a37f9f43c6a3c73622f39e79"
 dependencies = [
+ "base16ct",
  "crypto-bigint",
  "der",
  "generic-array 0.14.5",
@@ -813,9 +820,9 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "796c3626b70dbdccf7b21612ab47b4c58b0f333c55d0ddb54cf9107a979a318d"
+checksum = "158bc31e00a68e380286904cc598715f861f2b0ccf7aa6fe20c6d0c49ca5d0f6"
 dependencies = [
  "hmac",
 ]
@@ -1068,9 +1075,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.115"
+version = "0.2.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a8d982fa7a96a000f6ec4cfe966de9703eccde29750df2bb8949da91b0e818d"
+checksum = "565dbd88872dbe4cc8a46e527f26483c1d1f7afa6b884a3bd6cd893d4f98da74"
 
 [[package]]
 name = "libmimalloc-sys"
@@ -1089,9 +1096,9 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lock_api"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712a4d093c9976e24e7dbca41db895dabcbac38eb5f4045393d17a95bdfb1109"
+checksum = "88943dd7ef4a2e5a4bfa2753aaab3013e34ce2533d1996fb18ef591e315e2b3b"
 dependencies = [
  "scopeguard",
 ]
@@ -2036,9 +2043,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f9a6bec0435b22858734a1be996cc4d8913aa8a48ddcd8faacc781afce79b25"
+checksum = "748be76f2786bcf817d86c08c6cc2245e436e3ae0b064b581e3d4fc81700360c"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2056,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "build-time",
  "byte_string",
@@ -2388,9 +2395,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.15.0"
+version = "1.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbbf1c778ec206785635ce8ad57fe52b3009ae9e0c9f574a728f3049d3e55838"
+checksum = "0c27a64b625de6d309e8c57716ba93021dccf1b3b5c97edd6d3dd2d2135afc0a"
 dependencies = [
  "bytes",
  "libc",

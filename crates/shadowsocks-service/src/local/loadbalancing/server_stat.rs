@@ -106,9 +106,8 @@ impl ServerStat {
         self.latency_queue.push_back((score, now));
 
         // Removes stats that are not in the check window
-        let windows_left = now - self.check_window;
         while let Some((_, inst)) = self.latency_queue.front() {
-            if *inst < windows_left {
+            if now - *inst > self.check_window {
                 self.latency_queue.pop_front();
             } else {
                 break;
