@@ -54,6 +54,7 @@ struct TcpSocketControl {
 
 struct ManagerNotify {
     cond: ParkingCondvar,
+    mutex: ParkingMutex<()>,
     running: AtomicBool,
 }
 
@@ -61,6 +62,7 @@ impl ManagerNotify {
     fn new() -> ManagerNotify {
         ManagerNotify {
             cond: ParkingCondvar::new(),
+            mutex: ParkingMutex::new(()),
             running: AtomicBool::new(true),
         }
     }
@@ -77,18 +79,29 @@ impl ManagerNotify {
         self.running.store(false, Ordering::Relaxed);
         self.notify();
     }
+
+    fn wait(&self, timeout: Duration) {
+        let mut guard = self.mutex.lock();
+        self.cond.wait_for(&mut guard, timeout);
+    }
 }
 
 struct TcpSocketManager {
     iface: Interface<'static, VirtTunDevice>,
     manager_notify: Arc<ManagerNotify>,
-    sockets: HashMap<SocketHandle, Arc<ParkingMutex<TcpSocketControl>>>,
+    sockets: HashMap<SocketHandle, SharedTcpConnectionControl>,
+    socket_creation_rx: mpsc::UnboundedReceiver<TcpSocketCreation>,
 }
 
-type SharedTcpSocketManager = Arc<ParkingMutex<TcpSocketManager>>;
+type SharedTcpConnectionControl = Arc<ParkingMutex<TcpSocketControl>>;
+
+struct TcpSocketCreation {
+    control: SharedTcpConnectionControl,
+    socket: TcpSocket<'static>,
+}
 
 struct TcpConnection {
-    control: Arc<ParkingMutex<TcpSocketControl>>,
+    control: SharedTcpConnectionControl,
     manager_notify: Arc<ManagerNotify>,
 }
 
@@ -100,25 +113,27 @@ impl Drop for TcpConnection {
 }
 
 impl TcpConnection {
-    fn new(socket: TcpSocket<'static>, manager: SharedTcpSocketManager, tcp_opts: &TcpSocketOpts) -> TcpConnection {
+    fn new(
+        socket: TcpSocket<'static>,
+        socket_creation_tx: &mpsc::UnboundedSender<TcpSocketCreation>,
+        manager_notify: Arc<ManagerNotify>,
+        tcp_opts: &TcpSocketOpts,
+    ) -> TcpConnection {
         let send_buffer_size = tcp_opts.send_buffer_size.unwrap_or(DEFAULT_TCP_SEND_BUFFER_SIZE);
         let recv_buffer_size = tcp_opts.recv_buffer_size.unwrap_or(DEFAULT_TCP_RECV_BUFFER_SIZE);
 
-        let (control, manager_notify) = {
-            let mut manager = manager.lock();
-            let socket_handle = manager.iface.add_socket(socket);
+        let control = Arc::new(ParkingMutex::new(TcpSocketControl {
+            send_buffer: RingBuffer::new(vec![0u8; send_buffer_size as usize]),
+            send_waker: None,
+            recv_buffer: RingBuffer::new(vec![0u8; recv_buffer_size as usize]),
+            recv_waker: None,
+            is_closed: false,
+        }));
 
-            let control = Arc::new(ParkingMutex::new(TcpSocketControl {
-                send_buffer: RingBuffer::new(vec![0u8; send_buffer_size as usize]),
-                send_waker: None,
-                recv_buffer: RingBuffer::new(vec![0u8; recv_buffer_size as usize]),
-                recv_waker: None,
-                is_closed: false,
-            }));
-
-            manager.sockets.insert(socket_handle.clone(), control.clone());
-            (control, manager.manager_notify.clone())
-        };
+        let _ = socket_creation_tx.send(TcpSocketCreation {
+            control: control.clone(),
+            socket,
+        });
 
         TcpConnection {
             control,
@@ -212,9 +227,9 @@ impl AsyncWrite for TcpConnection {
 
 pub struct TcpTun {
     context: Arc<ServiceContext>,
-    manager: SharedTcpSocketManager,
     manager_handle: Option<JoinHandle<()>>,
     manager_notify: Arc<ManagerNotify>,
+    manager_socket_creation_tx: mpsc::UnboundedSender<TcpSocketCreation>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     iface_tx: mpsc::Sender<Vec<u8>>,
@@ -254,24 +269,29 @@ impl TcpTun {
             .finalize();
 
         let manager_notify = Arc::new(ManagerNotify::new());
-        let manager = Arc::new(ParkingMutex::new(TcpSocketManager {
+        let (manager_socket_creation_tx, manager_socket_creation_rx) = mpsc::unbounded_channel();
+        let mut manager = TcpSocketManager {
             iface,
             manager_notify: manager_notify.clone(),
             sockets: HashMap::new(),
-        }));
+            socket_creation_rx: manager_socket_creation_rx,
+        };
 
         let manager_handle = {
-            let manager = manager.clone();
-            let manager_notify = manager_notify.clone();
             thread::spawn(move || {
-                let mut manager_guard = manager.lock();
+                let TcpSocketManager {
+                    ref mut iface,
+                    ref mut sockets,
+                    ref mut socket_creation_rx,
+                    ref manager_notify,
+                    ..
+                } = manager;
 
                 while manager_notify.running() {
-                    let TcpSocketManager {
-                        ref mut iface,
-                        ref mut sockets,
-                        ..
-                    } = *manager_guard;
+                    while let Ok(TcpSocketCreation { control, socket }) = socket_creation_rx.try_recv() {
+                        let handle = iface.add_socket(socket);
+                        sockets.insert(handle, control);
+                    }
 
                     let before_poll = SmolInstant::now();
                     let updated_sockets = match iface.poll(before_poll) {
@@ -385,9 +405,9 @@ impl TcpTun {
                         .poll_delay(SmolInstant::now())
                         .unwrap_or(SmolDuration::from_millis(50));
 
-                    manager_notify
-                        .cond
-                        .wait_for(&mut manager_guard, Duration::from(next_duration));
+                    if next_duration.total_millis() != 0 {
+                        manager_notify.wait(Duration::from(next_duration));
+                    }
                 }
 
                 trace!("VirtDevice::poll thread exited");
@@ -396,9 +416,9 @@ impl TcpTun {
 
         TcpTun {
             context,
-            manager,
             manager_handle: Some(manager_handle),
             manager_notify,
+            manager_socket_creation_tx,
             balancer,
             iface_rx,
             iface_tx,
@@ -434,7 +454,12 @@ impl TcpTun {
 
             trace!("created TCP connection for {} <-> {}", src_addr, dst_addr);
 
-            let connection = TcpConnection::new(socket, self.manager.clone(), &accept_opts.tcp);
+            let connection = TcpConnection::new(
+                socket,
+                &self.manager_socket_creation_tx,
+                self.manager_notify.clone(),
+                &accept_opts.tcp,
+            );
 
             // establish a tunnel
             let context = self.context.clone();
