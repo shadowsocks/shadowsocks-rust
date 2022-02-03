@@ -24,6 +24,7 @@ use smoltcp::{
     time::{Duration as SmolDuration, Instant as SmolInstant},
     wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
 };
+use spin::Mutex as SpinMutex;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::mpsc,
@@ -93,7 +94,7 @@ struct TcpSocketManager {
     socket_creation_rx: mpsc::UnboundedReceiver<TcpSocketCreation>,
 }
 
-type SharedTcpConnectionControl = Arc<ParkingMutex<TcpSocketControl>>;
+type SharedTcpConnectionControl = Arc<SpinMutex<TcpSocketControl>>;
 
 struct TcpSocketCreation {
     control: SharedTcpConnectionControl,
@@ -122,7 +123,7 @@ impl TcpConnection {
         let send_buffer_size = tcp_opts.send_buffer_size.unwrap_or(DEFAULT_TCP_SEND_BUFFER_SIZE);
         let recv_buffer_size = tcp_opts.recv_buffer_size.unwrap_or(DEFAULT_TCP_RECV_BUFFER_SIZE);
 
-        let control = Arc::new(ParkingMutex::new(TcpSocketControl {
+        let control = Arc::new(SpinMutex::new(TcpSocketControl {
             send_buffer: RingBuffer::new(vec![0u8; send_buffer_size as usize]),
             send_waker: None,
             recv_buffer: RingBuffer::new(vec![0u8; recv_buffer_size as usize]),
@@ -164,14 +165,9 @@ impl AsyncRead for TcpConnection {
             return Poll::Pending;
         }
 
-        while !control.recv_buffer.is_empty() {
-            let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
-            if recv_buf.is_empty() {
-                break;
-            }
-            let n = control.recv_buffer.dequeue_slice(recv_buf);
-            buf.advance(n);
-        }
+        let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
+        let n = control.recv_buffer.dequeue_slice(recv_buf);
+        buf.advance(n);
 
         self.manager_notify.notify();
         Ok(()).into()
@@ -403,7 +399,7 @@ impl TcpTun {
 
                     let next_duration = iface
                         .poll_delay(SmolInstant::now())
-                        .unwrap_or(SmolDuration::from_millis(50));
+                        .unwrap_or(SmolDuration::from_millis(1));
 
                     if next_duration.total_millis() != 0 {
                         manager_notify.wait(Duration::from(next_duration));
