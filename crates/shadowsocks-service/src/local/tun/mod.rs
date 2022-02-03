@@ -140,7 +140,7 @@ impl Tun {
             self.mode,
         );
 
-        let mut packet_buffer = vec![0u8; mtu as usize + IFF_PI_PREFIX_LEN].into_boxed_slice();
+        let mut packet_buffer = vec![0u8; 65536 + IFF_PI_PREFIX_LEN].into_boxed_slice();
 
         loop {
             tokio::select! {

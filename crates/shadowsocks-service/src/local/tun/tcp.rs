@@ -4,27 +4,29 @@ use std::{
     mem,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     task::{Context, Poll, Waker},
-    time::Duration as StdDuration,
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use log::{error, trace};
-use parking_lot::Mutex as ParkingMutex;
+use parking_lot::{Condvar as ParkingCondvar, Mutex as ParkingMutex};
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
     phy::{DeviceCapabilities, Medium},
     socket::{TcpSocket, TcpSocketBuffer, TcpState},
     storage::RingBuffer,
-    time::{Duration, Instant},
+    time::{Duration as SmolDuration, Instant as SmolInstant},
     wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    sync::{mpsc, Notify},
-    task::JoinHandle,
-    time,
+    sync::mpsc,
 };
 
 use crate::local::{
@@ -50,9 +52,36 @@ struct TcpSocketControl {
     is_closed: bool,
 }
 
+struct ManagerNotify {
+    cond: ParkingCondvar,
+    running: AtomicBool,
+}
+
+impl ManagerNotify {
+    fn new() -> ManagerNotify {
+        ManagerNotify {
+            cond: ParkingCondvar::new(),
+            running: AtomicBool::new(true),
+        }
+    }
+
+    fn notify(&self) {
+        self.cond.notify_all();
+    }
+
+    fn running(&self) -> bool {
+        self.running.load(Ordering::Relaxed)
+    }
+
+    fn abort(&self) {
+        self.running.store(false, Ordering::Relaxed);
+        self.notify();
+    }
+}
+
 struct TcpSocketManager {
     iface: Interface<'static, VirtTunDevice>,
-    manager_notify: Arc<Notify>,
+    manager_notify: Arc<ManagerNotify>,
     sockets: HashMap<SocketHandle, Arc<ParkingMutex<TcpSocketControl>>>,
 }
 
@@ -60,7 +89,7 @@ type SharedTcpSocketManager = Arc<ParkingMutex<TcpSocketManager>>;
 
 struct TcpConnection {
     control: Arc<ParkingMutex<TcpSocketControl>>,
-    manager_notify: Arc<Notify>,
+    manager_notify: Arc<ManagerNotify>,
 }
 
 impl Drop for TcpConnection {
@@ -120,11 +149,16 @@ impl AsyncRead for TcpConnection {
             return Poll::Pending;
         }
 
-        let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
-        let n = control.recv_buffer.dequeue_slice(recv_buf);
-        buf.advance(n);
+        while !control.recv_buffer.is_empty() {
+            let recv_buf = unsafe { mem::transmute::<_, &mut [u8]>(buf.unfilled_mut()) };
+            if recv_buf.is_empty() {
+                break;
+            }
+            let n = control.recv_buffer.dequeue_slice(recv_buf);
+            buf.advance(n);
+        }
 
-        self.manager_notify.notify_one();
+        self.manager_notify.notify();
         Ok(()).into()
     }
 }
@@ -150,7 +184,7 @@ impl AsyncWrite for TcpConnection {
 
         let n = control.send_buffer.enqueue_slice(buf);
 
-        self.manager_notify.notify_one();
+        self.manager_notify.notify();
         Ok(n).into()
     }
 
@@ -179,8 +213,8 @@ impl AsyncWrite for TcpConnection {
 pub struct TcpTun {
     context: Arc<ServiceContext>,
     manager: SharedTcpSocketManager,
-    manager_handle: JoinHandle<()>,
-    manager_notify: Arc<Notify>,
+    manager_handle: Option<JoinHandle<()>>,
+    manager_notify: Arc<ManagerNotify>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     iface_tx: mpsc::Sender<Vec<u8>>,
@@ -188,7 +222,8 @@ pub struct TcpTun {
 
 impl Drop for TcpTun {
     fn drop(&mut self) {
-        self.manager_handle.abort();
+        self.manager_notify.abort();
+        let _ = self.manager_handle.take().unwrap().join();
     }
 }
 
@@ -218,7 +253,7 @@ impl TcpTun {
             .routes(iface_routes)
             .finalize();
 
-        let manager_notify = Arc::new(Notify::new());
+        let manager_notify = Arc::new(ManagerNotify::new());
         let manager = Arc::new(ParkingMutex::new(TcpSocketManager {
             iface,
             manager_notify: manager_notify.clone(),
@@ -228,140 +263,141 @@ impl TcpTun {
         let manager_handle = {
             let manager = manager.clone();
             let manager_notify = manager_notify.clone();
-            tokio::spawn(async move {
-                loop {
-                    let next_duration = {
-                        let TcpSocketManager {
-                            ref mut iface,
-                            ref mut sockets,
-                            ..
-                        } = *(manager.lock());
+            thread::spawn(move || {
+                while manager_notify.running() {
+                    let mut manager_guard = manager.lock();
 
-                        let before_poll = Instant::now();
-                        let updated_sockets = match iface.poll(before_poll) {
-                            Ok(u) => u,
-                            Err(err) => {
-                                error!("VirtDevice::poll error: {}", err);
-                                false
-                            }
-                        };
+                    let TcpSocketManager {
+                        ref mut iface,
+                        ref mut sockets,
+                        ..
+                    } = *manager_guard;
 
-                        let after_poll = Instant::now();
-
-                        if updated_sockets {
-                            trace!("VirtDevice::poll costed {}", after_poll - before_poll);
+                    let before_poll = SmolInstant::now();
+                    let updated_sockets = match iface.poll(before_poll) {
+                        Ok(u) => u,
+                        Err(err) => {
+                            error!("VirtDevice::poll error: {}", err);
+                            false
                         }
-
-                        // Check all the sockets' status
-                        let mut sockets_to_remove = Vec::new();
-
-                        for (socket_handle, control) in sockets.iter() {
-                            let socket_handle = socket_handle.clone();
-                            let socket = iface.get_socket::<TcpSocket>(socket_handle);
-                            let mut control = control.lock();
-
-                            #[inline]
-                            fn close_socket_control(control: &mut TcpSocketControl) {
-                                control.is_closed = true;
-                                if let Some(waker) = control.send_waker.take() {
-                                    waker.wake();
-                                }
-                                if let Some(waker) = control.recv_waker.take() {
-                                    waker.wake();
-                                }
-                            }
-
-                            if !socket.is_open() || socket.state() == TcpState::Closed {
-                                sockets_to_remove.push(socket_handle);
-                                close_socket_control(&mut *control);
-                                continue;
-                            }
-
-                            if control.is_closed {
-                                // Close the socket.
-                                socket.close();
-                                // sockets_to_remove.push(socket_handle);
-                                // close_socket_control(&mut *control);
-                                continue;
-                            }
-
-                            // Check if readable
-                            let mut has_received = false;
-                            while socket.can_recv() && !control.recv_buffer.is_full() {
-                                let result = socket.recv(|buffer| {
-                                    let n = control.recv_buffer.enqueue_slice(buffer);
-                                    (n, ())
-                                });
-
-                                match result {
-                                    Ok(..) => {
-                                        has_received = true;
-                                    }
-                                    Err(err) => {
-                                        error!("socket recv error: {}", err);
-                                        sockets_to_remove.push(socket_handle);
-                                        close_socket_control(&mut *control);
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if has_received {
-                                if let Some(waker) = control.recv_waker.take() {
-                                    waker.wake();
-                                }
-                            }
-
-                            // Check if writable
-                            let mut has_sent = false;
-                            while socket.can_send() && !control.send_buffer.is_empty() {
-                                let result = socket.send(|buffer| {
-                                    let n = control.send_buffer.dequeue_slice(buffer);
-                                    (n, ())
-                                });
-
-                                match result {
-                                    Ok(..) => {
-                                        has_sent = true;
-                                    }
-                                    Err(err) => {
-                                        error!("socket send error: {}", err);
-                                        sockets_to_remove.push(socket_handle);
-                                        close_socket_control(&mut *control);
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if has_sent {
-                                if let Some(waker) = control.send_waker.take() {
-                                    waker.wake();
-                                }
-                            }
-                        }
-
-                        for socket_handle in sockets_to_remove {
-                            sockets.remove(&socket_handle);
-                            iface.remove_socket(socket_handle);
-                        }
-
-                        let next_duration = iface.poll_delay(Instant::now()).unwrap_or(Duration::from_millis(50));
-
-                        next_duration
                     };
 
-                    tokio::select! {
-                        _ = time::sleep(StdDuration::from(next_duration)) => {}
-                        _ = manager_notify.notified() => {}
+                    let after_poll = SmolInstant::now();
+
+                    if updated_sockets {
+                        trace!("VirtDevice::poll costed {}", after_poll - before_poll);
                     }
+
+                    // Check all the sockets' status
+                    let mut sockets_to_remove = Vec::new();
+
+                    for (socket_handle, control) in sockets.iter() {
+                        let socket_handle = socket_handle.clone();
+                        let socket = iface.get_socket::<TcpSocket>(socket_handle);
+                        let mut control = control.lock();
+
+                        #[inline]
+                        fn close_socket_control(control: &mut TcpSocketControl) {
+                            control.is_closed = true;
+                            if let Some(waker) = control.send_waker.take() {
+                                waker.wake();
+                            }
+                            if let Some(waker) = control.recv_waker.take() {
+                                waker.wake();
+                            }
+                        }
+
+                        if !socket.is_open() || socket.state() == TcpState::Closed {
+                            sockets_to_remove.push(socket_handle);
+                            close_socket_control(&mut *control);
+                            continue;
+                        }
+
+                        if control.is_closed {
+                            // Close the socket.
+                            socket.close();
+                            // sockets_to_remove.push(socket_handle);
+                            // close_socket_control(&mut *control);
+                            continue;
+                        }
+
+                        // Check if readable
+                        let mut has_received = false;
+                        while socket.can_recv() && !control.recv_buffer.is_full() {
+                            let result = socket.recv(|buffer| {
+                                let n = control.recv_buffer.enqueue_slice(buffer);
+                                (n, ())
+                            });
+
+                            match result {
+                                Ok(..) => {
+                                    has_received = true;
+                                }
+                                Err(err) => {
+                                    error!("socket recv error: {}", err);
+                                    sockets_to_remove.push(socket_handle);
+                                    close_socket_control(&mut *control);
+                                    break;
+                                }
+                            }
+                        }
+
+                        if has_received {
+                            if let Some(waker) = control.recv_waker.take() {
+                                waker.wake();
+                            }
+                        }
+
+                        // Check if writable
+                        let mut has_sent = false;
+                        while socket.can_send() && !control.send_buffer.is_empty() {
+                            let result = socket.send(|buffer| {
+                                let n = control.send_buffer.dequeue_slice(buffer);
+                                (n, ())
+                            });
+
+                            match result {
+                                Ok(..) => {
+                                    has_sent = true;
+                                }
+                                Err(err) => {
+                                    error!("socket send error: {}", err);
+                                    sockets_to_remove.push(socket_handle);
+                                    close_socket_control(&mut *control);
+                                    break;
+                                }
+                            }
+                        }
+
+                        if has_sent {
+                            if let Some(waker) = control.send_waker.take() {
+                                waker.wake();
+                            }
+                        }
+                    }
+
+                    for socket_handle in sockets_to_remove {
+                        sockets.remove(&socket_handle);
+                        iface.remove_socket(socket_handle);
+                    }
+
+                    let next_duration = iface
+                        .poll_delay(SmolInstant::now())
+                        .unwrap_or(SmolDuration::from_millis(50));
+
+                    manager_notify
+                        .cond
+                        .wait_for(&mut manager_guard, Duration::from(next_duration));
                 }
+
+                trace!("VirtDevice::poll thread exited");
             })
         };
 
         TcpTun {
             context,
             manager,
-            manager_handle,
+            manager_handle: Some(manager_handle),
             manager_notify,
             balancer,
             iface_rx,
@@ -388,7 +424,9 @@ impl TcpTun {
             );
             socket.set_keep_alive(accept_opts.tcp.keepalive.map(From::from));
             // FIXME: This should follows system's setting. 7200 is Linux's default.
-            socket.set_timeout(Some(Duration::from_secs(7200)));
+            socket.set_timeout(Some(SmolDuration::from_secs(7200)));
+            // NO ACK delay
+            socket.set_ack_delay(None);
 
             if let Err(err) = socket.listen(dst_addr) {
                 return Err(io::Error::new(ErrorKind::Other, err));
@@ -417,7 +455,7 @@ impl TcpTun {
         }
 
         // Wake up and poll the interface.
-        self.manager_notify.notify_one();
+        self.manager_notify.notify();
     }
 
     pub async fn recv_packet(&mut self) -> Vec<u8> {
