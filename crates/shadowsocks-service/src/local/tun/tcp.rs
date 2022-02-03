@@ -264,9 +264,9 @@ impl TcpTun {
             let manager = manager.clone();
             let manager_notify = manager_notify.clone();
             thread::spawn(move || {
-                while manager_notify.running() {
-                    let mut manager_guard = manager.lock();
+                let mut manager_guard = manager.lock();
 
+                while manager_notify.running() {
                     let TcpSocketManager {
                         ref mut iface,
                         ref mut sockets,
