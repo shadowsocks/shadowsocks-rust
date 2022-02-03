@@ -9,12 +9,11 @@ use std::{
         Arc,
     },
     task::{Context, Poll, Waker},
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, Thread},
     time::Duration,
 };
 
 use log::{error, trace};
-use parking_lot::{Condvar as ParkingCondvar, Mutex as ParkingMutex};
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
@@ -54,42 +53,21 @@ struct TcpSocketControl {
 }
 
 struct ManagerNotify {
-    cond: ParkingCondvar,
-    mutex: ParkingMutex<()>,
-    running: AtomicBool,
+    thread: Thread,
 }
 
 impl ManagerNotify {
-    fn new() -> ManagerNotify {
-        ManagerNotify {
-            cond: ParkingCondvar::new(),
-            mutex: ParkingMutex::new(()),
-            running: AtomicBool::new(true),
-        }
+    fn new(thread: Thread) -> ManagerNotify {
+        ManagerNotify { thread }
     }
 
     fn notify(&self) {
-        self.cond.notify_all();
-    }
-
-    fn running(&self) -> bool {
-        self.running.load(Ordering::Relaxed)
-    }
-
-    fn abort(&self) {
-        self.running.store(false, Ordering::Relaxed);
-        self.notify();
-    }
-
-    fn wait(&self, timeout: Duration) {
-        let mut guard = self.mutex.lock();
-        self.cond.wait_for(&mut guard, timeout);
+        self.thread.unpark();
     }
 }
 
 struct TcpSocketManager {
     iface: Interface<'static, VirtTunDevice>,
-    manager_notify: Arc<ManagerNotify>,
     sockets: HashMap<SocketHandle, SharedTcpConnectionControl>,
     socket_creation_rx: mpsc::UnboundedReceiver<TcpSocketCreation>,
 }
@@ -226,6 +204,7 @@ pub struct TcpTun {
     manager_handle: Option<JoinHandle<()>>,
     manager_notify: Arc<ManagerNotify>,
     manager_socket_creation_tx: mpsc::UnboundedSender<TcpSocketCreation>,
+    manager_running: Arc<AtomicBool>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     iface_tx: mpsc::Sender<Vec<u8>>,
@@ -233,7 +212,7 @@ pub struct TcpTun {
 
 impl Drop for TcpTun {
     fn drop(&mut self) {
-        self.manager_notify.abort();
+        self.manager_running.store(false, Ordering::Relaxed);
         let _ = self.manager_handle.take().unwrap().join();
     }
 }
@@ -264,26 +243,27 @@ impl TcpTun {
             .routes(iface_routes)
             .finalize();
 
-        let manager_notify = Arc::new(ManagerNotify::new());
         let (manager_socket_creation_tx, manager_socket_creation_rx) = mpsc::unbounded_channel();
         let mut manager = TcpSocketManager {
             iface,
-            manager_notify: manager_notify.clone(),
             sockets: HashMap::new(),
             socket_creation_rx: manager_socket_creation_rx,
         };
 
+        let manager_running = Arc::new(AtomicBool::new(true));
+
         let manager_handle = {
+            let manager_running = manager_running.clone();
+
             thread::spawn(move || {
                 let TcpSocketManager {
                     ref mut iface,
                     ref mut sockets,
                     ref mut socket_creation_rx,
-                    ref manager_notify,
                     ..
                 } = manager;
 
-                while manager_notify.running() {
+                while manager_running.load(Ordering::Relaxed) {
                     while let Ok(TcpSocketCreation { control, socket }) = socket_creation_rx.try_recv() {
                         let handle = iface.add_socket(socket);
                         sockets.insert(handle, control);
@@ -402,7 +382,7 @@ impl TcpTun {
                         .unwrap_or(SmolDuration::from_millis(1));
 
                     if next_duration.total_millis() != 0 {
-                        manager_notify.wait(Duration::from(next_duration));
+                        thread::park_timeout(Duration::from(next_duration));
                     }
                 }
 
@@ -410,11 +390,14 @@ impl TcpTun {
             })
         };
 
+        let manager_notify = Arc::new(ManagerNotify::new(manager_handle.thread().clone()));
+
         TcpTun {
             context,
             manager_handle: Some(manager_handle),
             manager_notify,
             manager_socket_creation_tx,
+            manager_running,
             balancer,
             iface_rx,
             iface_tx,
