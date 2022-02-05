@@ -338,7 +338,7 @@ impl TcpTun {
                             }
                         }
 
-                        if has_received {
+                        if has_received && control.recv_waker.is_some() {
                             if let Some(waker) = control.recv_waker.take() {
                                 waker.wake();
                             }
@@ -365,7 +365,7 @@ impl TcpTun {
                             }
                         }
 
-                        if has_sent {
+                        if has_sent && control.send_waker.is_some() {
                             if let Some(waker) = control.send_waker.take() {
                                 waker.wake();
                             }
