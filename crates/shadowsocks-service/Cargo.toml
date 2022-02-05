@@ -89,7 +89,7 @@ once_cell = "1.8"
 thiserror = "1.0"
 arc-swap = "1.3"
 
-spin = { version = "0.9", features = ["std"] }
+spin = { version = "0.9" }
 lru_time_cache = "0.11"
 bytes = "1.0"
 byte_string = "1.0"

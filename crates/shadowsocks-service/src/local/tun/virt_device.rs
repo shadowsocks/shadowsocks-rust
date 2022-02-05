@@ -8,14 +8,16 @@ use tokio::sync::mpsc;
 
 pub struct VirtTunDevice {
     capabilities: DeviceCapabilities,
-    in_buf: mpsc::Receiver<Vec<u8>>,
+    in_buf: mpsc::UnboundedReceiver<Vec<u8>>,
     out_buf: mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl VirtTunDevice {
-    pub fn new(capabilities: DeviceCapabilities) -> (Self, mpsc::UnboundedReceiver<Vec<u8>>, mpsc::Sender<Vec<u8>>) {
+    pub fn new(
+        capabilities: DeviceCapabilities,
+    ) -> (Self, mpsc::UnboundedReceiver<Vec<u8>>, mpsc::UnboundedSender<Vec<u8>>) {
         let (iface_tx, iface_output) = mpsc::unbounded_channel();
-        let (iface_input, iface_rx) = mpsc::channel(512);
+        let (iface_input, iface_rx) = mpsc::unbounded_channel();
 
         (
             Self {

@@ -38,11 +38,9 @@ use crate::local::{
 
 use super::virt_device::VirtTunDevice;
 
-// NOTE: Default value is taken from Linux
-// recv: /proc/sys/net/ipv4/tcp_rmem 87380 bytes
-// send: /proc/sys/net/ipv4/tcp_wmem 16384 bytes
-const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 16384;
-const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 87380;
+// NOTE: Default buffer could contain 20 AEAD packets
+const DEFAULT_TCP_SEND_BUFFER_SIZE: u32 = 0x3FFF * 20;
+const DEFAULT_TCP_RECV_BUFFER_SIZE: u32 = 0x3FFF * 20;
 
 struct TcpSocketControl {
     send_buffer: RingBuffer<'static, u8>,
@@ -147,7 +145,9 @@ impl AsyncRead for TcpConnection {
         let n = control.recv_buffer.dequeue_slice(recv_buf);
         buf.advance(n);
 
-        self.manager_notify.notify();
+        if control.recv_buffer.is_empty() {
+            self.manager_notify.notify();
+        }
         Ok(()).into()
     }
 }
@@ -173,7 +173,9 @@ impl AsyncWrite for TcpConnection {
 
         let n = control.send_buffer.enqueue_slice(buf);
 
-        self.manager_notify.notify();
+        if control.send_buffer.is_full() {
+            self.manager_notify.notify();
+        }
         Ok(n).into()
     }
 
@@ -207,7 +209,7 @@ pub struct TcpTun {
     manager_running: Arc<AtomicBool>,
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
-    iface_tx: mpsc::Sender<Vec<u8>>,
+    iface_tx: mpsc::UnboundedSender<Vec<u8>>,
 }
 
 impl Drop for TcpTun {
@@ -278,10 +280,8 @@ impl TcpTun {
                         }
                     };
 
-                    let after_poll = SmolInstant::now();
-
                     if updated_sockets {
-                        trace!("VirtDevice::poll costed {}", after_poll - before_poll);
+                        trace!("VirtDevice::poll costed {}", SmolInstant::now() - before_poll);
                     }
 
                     // Check all the sockets' status
@@ -377,11 +377,8 @@ impl TcpTun {
                         iface.remove_socket(socket_handle);
                     }
 
-                    let next_duration = iface
-                        .poll_delay(SmolInstant::now())
-                        .unwrap_or(SmolDuration::from_millis(1));
-
-                    if next_duration.total_millis() != 0 {
+                    let next_duration = iface.poll_delay(before_poll).unwrap_or(SmolDuration::from_millis(5));
+                    if next_duration != SmolDuration::ZERO {
                         thread::park_timeout(Duration::from(next_duration));
                     }
                 }
@@ -422,10 +419,10 @@ impl TcpTun {
                 TcpSocketBuffer::new(vec![0u8; send_buffer_size as usize]),
             );
             socket.set_keep_alive(accept_opts.tcp.keepalive.map(From::from));
-            // FIXME: This should follows system's setting. 7200 is Linux's default.
+            // FIXME: It should follow system's setting. 7200 is Linux's default.
             socket.set_timeout(Some(SmolDuration::from_secs(7200)));
             // NO ACK delay
-            socket.set_ack_delay(None);
+            // socket.set_ack_delay(None);
 
             if let Err(err) = socket.listen(dst_addr) {
                 return Err(io::Error::new(ErrorKind::Other, err));
@@ -454,7 +451,7 @@ impl TcpTun {
     }
 
     pub async fn drive_interface_state(&mut self, frame: &[u8]) {
-        if let Err(..) = self.iface_tx.send(frame.to_vec()).await {
+        if let Err(..) = self.iface_tx.send(frame.to_vec()) {
             panic!("interface send channel closed unexpectly");
         }
 
