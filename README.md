@@ -9,6 +9,7 @@
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 [![archlinuxcn shadowsocks-rust-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
 [![archlinuxcn shadowsocks-rust-opt-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-opt-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+[![aur shadowsocks-rust](https://img.shields.io/aur/version/shadowsocks-rust)](https://aur.archlinux.org/packages/shadowsocks-rust)
 
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
 
