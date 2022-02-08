@@ -29,6 +29,11 @@ pub struct ConnectOpts {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fwmark: Option<u32>,
 
+    /// FreeBSD SO_USER_COOKIE
+    /// https://www.freebsd.org/cgi/man.cgi?query=setsockopt&sektion=2
+    #[cfg(target_os = "freebsd")]
+    pub user_cookie: Option<u32>,
+
     /// An IPC unix socket path for sending file descriptors to call `VpnService.protect`
     ///
     /// This is an [Android shadowsocks implementation](https://github.com/shadowsocks/shadowsocks-android) specific feature

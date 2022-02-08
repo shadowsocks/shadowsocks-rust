@@ -35,6 +35,24 @@ impl TcpStream {
             SocketAddr::V6(..) => TcpSocket::new_v6()?,
         };
 
+        // Set SO_USER_COOKIE for mark-based routing on FreeBSD
+        if let Some(user_cookie) = opts.user_cookie {
+            let ret = unsafe {
+                libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::SOL_SOCKET,
+                    libc::SO_USER_COOKIE,
+                    &user_cookie as *const _ as *const _,
+                    mem::size_of_val(&user_cookie) as libc::socklen_t,
+                )
+            };
+            if ret != 0 {
+                let err = io::Error::last_os_error();
+                error!("set SO_USER_COOKIE error: {}", err);
+                return Err(err);
+            }
+        }
+
         set_common_sockopt_for_connect(addr, &socket, opts)?;
 
         if !opts.tcp.fastopen {
