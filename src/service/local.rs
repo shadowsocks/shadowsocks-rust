@@ -113,7 +113,7 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
             .long("plugin")
             .takes_value(true)
             .requires("SERVER_ADDR")
-            .help("SIP003 (https://shadowsocks.org/en/spec/Plugin.html) plugin"),
+            .help("SIP003 (https://shadowsocks.org/en/wiki/Plugin.html) plugin"),
     )
     .arg(
         Arg::new("PLUGIN_OPT")
