@@ -61,6 +61,11 @@ impl TcpServer {
                     }
                 };
 
+            if self.context.check_client_blocked(&peer_addr) {
+                warn!("access denied from {} by ACL rules", peer_addr);
+                continue;
+            }
+
             let client = TcpServerClient {
                 context: self.context.clone(),
                 method: svr_cfg.method(),

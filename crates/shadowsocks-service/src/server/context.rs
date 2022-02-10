@@ -1,6 +1,6 @@
 //! Shadowsocks Local Server Context
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use shadowsocks::{
     config::ServerType,
@@ -97,6 +97,14 @@ impl ServiceContext {
         match self.acl {
             None => false,
             Some(ref acl) => acl.check_outbound_blocked(&self.context, addr).await,
+        }
+    }
+
+    /// Check if client should be blocked
+    pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
+        match self.acl {
+            None => false,
+            Some(ref acl) => acl.check_client_blocked(addr),
         }
     }
 

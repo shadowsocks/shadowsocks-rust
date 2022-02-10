@@ -112,8 +112,16 @@ impl UdpServer {
                 }
             };
 
+            if self.context.check_client_blocked(&peer_addr) {
+                warn!(
+                    "udp client {} outbound {} access denied by ACL rules",
+                    peer_addr, target_addr
+                );
+                continue;
+            }
+
             if self.context.check_outbound_blocked(&target_addr).await {
-                error!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
+                warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
                 continue;
             }
 
