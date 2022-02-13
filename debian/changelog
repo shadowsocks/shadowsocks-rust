@@ -1,3 +1,26 @@
+shadowsocks-rust (1.13.2) unstable; urgency=medium
+
+  ## Features
+
+  - (EXPERIMENTAL) Support setting `SO_USER_COOKIE` on FreeBSD
+    - Set cookie with `--outbound-user-cookie` command line option, working just like `--outbound-fwmark` on Linux
+  - (EXPERIMENTAL) Local `tun` interface refactored the `VirtDevice::poll` strategy
+    - Improve performance
+    - Still slow comparing to system's network stack
+
+  ## BUG Fixes
+
+  - #765 Updated broken Wiki URL for Plugins in command line help message
+  - #764 Regression of client blocking ACL strategy on `ssserver`
+    - Introduced since v1.9.0
+
+shadowsocks-rust (1.13.1) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - `Instant` subtraction may be overflowed in `PingBalancer`
+    - When `sslocal` has set multiple remote servers and the host system just reboots, it will crash.
+
 shadowsocks-rust (1.13.0) unstable; urgency=medium
 
   ## Features
