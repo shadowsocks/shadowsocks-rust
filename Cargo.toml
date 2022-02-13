@@ -164,7 +164,7 @@ jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.13.0", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.13.2", path = "./crates/shadowsocks-service" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.4"
