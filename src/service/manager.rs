@@ -66,6 +66,7 @@ pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
                 .takes_value(true)
                 .help("Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket"),
         )
+        .arg(Arg::new("SERVER_HOST").short('s').long("server-host").takes_value(true).help("Host name or IP address of your remote server"))
         .arg(
             Arg::new("MANAGER_ADDR")
                 .long("manager-addr")
