@@ -2,12 +2,18 @@ name: Build & Test
 
 on:
   push:
-    branches: [master]
+    branches: [ master ]
   pull_request:
-    branches: [master]
+    branches: [ master ]
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C debuginfo=1"
   RUST_LOG: "trace"
 
 jobs:
@@ -21,13 +27,17 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Search cache
+        uses: actions/cache@v2
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
+            ./target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -40,11 +50,11 @@ jobs:
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
       - name: Build & Test (Default) - shadowsocks
-        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-fail-fast
+        run: cargo test --verbose --manifest-path ./crates/shadowsocks/Cargo.toml --no-fail-fast
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
       - name: Build & Test (--no-default-features) - shadowsocks
-        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-default-features --no-fail-fast
+        run: cargo test --verbose --manifest-path ./crates/shadowsocks/Cargo.toml --no-default-features --no-fail-fast
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "local-http-rustls local-redir local-dns dns-over-tls dns-over-https stream-cipher local-tun"
@@ -52,8 +62,8 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher"
       - name: Build with All Features Enabled - shadowsocks
-        run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher"
-      - name: Clippy Check
+        run: cargo build --verbose --manifest-path ./crates/shadowsocks/Cargo.toml --features "stream-cipher"
+      - name: Clippy check
         uses: actions-rs/clippy-check@v1
         with:
           name: clippy-${{ matrix.platform }}
