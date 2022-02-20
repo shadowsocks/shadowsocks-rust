@@ -1,3 +1,10 @@
+shadowsocks-rust (1.13.3) unsable; urgency=medium
+
+  ## BUG Fixes
+
+  - #767 REGRESSION: `ssmanager` missing `--server-host` command line option since v1.13.0
+  - shadowsocks/shadowsocks-crypto#12 REGRESSION: `rc4-md5` method cipher IV length should be 16
+
 shadowsocks-rust (1.13.2) unstable; urgency=medium
 
   ## Features

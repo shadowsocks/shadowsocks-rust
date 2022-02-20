@@ -1991,7 +1991,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.13.1"
+version = "1.13.2"
 dependencies = [
  "arc-swap 1.5.0",
  "async-trait",
@@ -2026,9 +2026,9 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61b3d33b95f89d95837ecb0a0d5ec07cac499bc08cb2ec4c4b741097b3e6629e"
+checksum = "f5fa7f78b7e5570cb5fbb0e7b1466fda8bbcb9fef8b09ee816f89dd10ba3dd1d"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2078,7 +2078,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.13.2"
+version = "1.13.3"
 dependencies = [
  "arc-swap 1.5.0",
  "async-trait",
