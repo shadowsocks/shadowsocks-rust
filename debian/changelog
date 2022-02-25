@@ -1,4 +1,14 @@
-shadowsocks-rust (1.13.3) unsable; urgency=medium
+shadowsocks-rust (1.13.4) unstable; urgency=medium
+
+  ## Features
+
+  - Allow setting `"system"` in DNS configuration key `"dns"` to use system provided DNS API
+
+  ## BUG Fixes
+
+  - `ssservice` - fixed command line options when running it as symlink of `ssserver` and `ssmanager`
+
+shadowsocks-rust (1.13.3) unstable; urgency=medium
 
   ## BUG Fixes
 
