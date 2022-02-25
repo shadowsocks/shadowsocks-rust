@@ -590,6 +590,8 @@ Example configuration:
     // Value could be IP address of DNS server, for example, "8.8.8.8".
     // DNS client will automatically request port 53 with both TCP and UDP protocol.
     //
+    // - system, uses system provided API (`getaddrinfo` on *NIX)
+    //
     // It also allows some pre-defined well-known public DNS servers:
     // - google (TCP, UDP)
     // - cloudflare (TCP, UDP)

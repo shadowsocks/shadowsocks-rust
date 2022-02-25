@@ -1736,6 +1736,8 @@ impl Config {
     /// 2. Pre-defined. Like `google`, `cloudflare`
     pub fn set_dns_formatted(&mut self, dns: &str) -> Result<(), Error> {
         self.dns = match dns {
+            "system" => DnsConfig::System,
+
             #[cfg(feature = "trust-dns")]
             "google" => DnsConfig::TrustDns(ResolverConfig::google()),
 
