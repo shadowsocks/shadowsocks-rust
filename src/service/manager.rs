@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{App, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{Command, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -29,7 +29,7 @@ use crate::{
 };
 
 /// Defines command line options
-pub fn define_command_line_options(mut app: App<'_>) -> App<'_> {
+pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
     app = app
         .arg(
             Arg::new("CONFIG")
@@ -270,27 +270,27 @@ pub fn main(matches: &ArgMatches) {
 
         match matches.value_of_t::<u64>("TCP_KEEP_ALIVE") {
             Ok(keep_alive) => config.keep_alive = Some(Duration::from_secs(keep_alive)),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         match matches.value_of_t::<u32>("OUTBOUND_FWMARK") {
             Ok(mark) => config.outbound_fwmark = Some(mark),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         #[cfg(target_os = "freebsd")]
         match matches.value_of_t::<u32>("OUTBOUND_USER_COOKIE") {
             Ok(user_cookie) => config.outbound_user_cookie = Some(user_cookie),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         match matches.value_of_t::<String>("OUTBOUND_BIND_INTERFACE") {
             Ok(iface) => config.outbound_bind_interface = Some(iface),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
@@ -302,26 +302,26 @@ pub fn main(matches: &ArgMatches) {
                     config.manager = Some(ManagerConfig::new(addr));
                 }
             }
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         if let Some(ref mut manager_config) = config.manager {
             match matches.value_of_t::<CipherKind>("ENCRYPT_METHOD") {
                 Ok(m) => manager_config.method = Some(m),
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
                 Err(err) => err.exit(),
             }
 
             match matches.value_of_t::<u64>("TIMEOUT") {
                 Ok(t) => manager_config.timeout = Some(Duration::from_secs(t)),
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
                 Err(err) => err.exit(),
             }
 
             match matches.value_of_t::<ManagerServerHost>("SERVER_HOST") {
                 Ok(sh) => manager_config.server_host = sh,
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
                 Err(err) => err.exit(),
             }
 
@@ -336,14 +336,14 @@ pub fn main(matches: &ArgMatches) {
             #[cfg(unix)]
             match matches.value_of_t::<ManagerServerMode>("MANAGER_SERVER_MODE") {
                 Ok(server_mode) => manager_config.server_mode = server_mode,
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
                 Err(err) => err.exit(),
             }
 
             #[cfg(unix)]
             match matches.value_of_t::<PathBuf>("MANAGER_SERVER_WORKING_DIRECTORY") {
                 Ok(server_working_directory) => manager_config.server_working_directory = server_working_directory,
-                Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
                 Err(err) => err.exit(),
             }
         }
@@ -364,7 +364,7 @@ pub fn main(matches: &ArgMatches) {
         #[cfg(all(unix, not(target_os = "android")))]
         match matches.value_of_t::<u64>("NOFILE") {
             Ok(nofile) => config.nofile = Some(nofile),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
@@ -389,40 +389,40 @@ pub fn main(matches: &ArgMatches) {
 
         match matches.value_of_t::<u64>("UDP_TIMEOUT") {
             Ok(udp_timeout) => config.udp_timeout = Some(Duration::from_secs(udp_timeout)),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         match matches.value_of_t::<usize>("UDP_MAX_ASSOCIATIONS") {
             Ok(udp_max_assoc) => config.udp_max_associations = Some(udp_max_assoc),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         match matches.value_of_t::<u32>("INBOUND_SEND_BUFFER_SIZE") {
             Ok(bs) => config.inbound_send_buffer_size = Some(bs),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
         match matches.value_of_t::<u32>("INBOUND_RECV_BUFFER_SIZE") {
             Ok(bs) => config.inbound_recv_buffer_size = Some(bs),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
         match matches.value_of_t::<u32>("OUTBOUND_SEND_BUFFER_SIZE") {
             Ok(bs) => config.outbound_send_buffer_size = Some(bs),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
         match matches.value_of_t::<u32>("OUTBOUND_RECV_BUFFER_SIZE") {
             Ok(bs) => config.outbound_recv_buffer_size = Some(bs),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 
         match matches.value_of_t::<IpAddr>("OUTBOUND_BIND_ADDR") {
             Ok(bind_addr) => config.outbound_bind_addr = Some(bind_addr),
-            Err(ref err) if err.kind == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 

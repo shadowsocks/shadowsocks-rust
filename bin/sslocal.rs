@@ -4,11 +4,11 @@
 //! or you could specify a configuration file. The format of configuration file is defined
 //! in mod `config`.
 
-use clap::App;
+use clap::Command;
 use shadowsocks_rust::service::local;
 
 fn main() {
-    let mut app = App::new("shadowsocks")
+    let mut app = Command::new("shadowsocks")
         .version(shadowsocks_rust::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)");
     app = local::define_command_line_options(app);

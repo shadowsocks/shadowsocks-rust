@@ -183,7 +183,7 @@ impl Config {
         #[cfg(feature = "multi-threaded")]
         match matches.value_of_t::<usize>("WORKER_THREADS") {
             Ok(worker_count) => self.runtime.worker_count = Some(worker_count),
-            Err(ref err) if err.kind == clap::ErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == clap::ErrorKind::ArgumentNotFound => {}
             Err(err) => err.exit(),
         }
 

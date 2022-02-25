@@ -3,7 +3,7 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{
@@ -73,7 +73,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
 }
 
 fn main() {
-    let app = App::new("ssurl")
+    let app = Command::new("ssurl")
         .version(VERSION)
         .about("Encode and decode ShadowSocks URL")
         .arg(
