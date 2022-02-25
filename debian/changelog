@@ -1,3 +1,9 @@
+shadowsocks-rust (1.13.5) unstable; urgency=medium
+
+  ## Features
+
+  - #773 Set environment variable `SS_SYSTEM_DNS_RESOLVER_FORCE_BUILTIN` to use system's builtin DNS resolver
+
 shadowsocks-rust (1.13.4) unstable; urgency=medium
 
   ## Features

@@ -662,6 +662,7 @@ Example configuration:
 ### Environment Variables
 
 - `SS_SERVER_PASSWORD`: A default password for servers that created from command line argument (`--server-addr`)
+- `SS_SYSTEM_DNS_RESOLVER_FORCE_BUILTIN`: `"system"` DNS resolver force use system's builtin (`getaddrinfo` in *NIX)
 
 ## Supported Ciphers
 
