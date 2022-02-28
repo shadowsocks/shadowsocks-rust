@@ -70,7 +70,9 @@ impl DnsResolver {
 
                 // Query UDP then TCP
                 if self.mode.enable_udp() {
-                    match self.client_cache.lookup_local(ns, msg.clone(), &self.connect_opts, true)
+                    match self
+                        .client_cache
+                        .lookup_local(ns, msg.clone(), &self.connect_opts, true)
                         .await
                     {
                         Ok(msg) => return Ok(msg),
@@ -172,12 +174,13 @@ impl DnsResolve for DnsResolver {
 fn store_dns(res: Message, port: u16) -> Vec<SocketAddr> {
     let mut vaddr = Vec::new();
     for record in res.answers() {
-        match *record.rdata() {
-            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-            ref rdata => {
+        match record.data() {
+            Some(RData::A(addr)) => vaddr.push(SocketAddr::new((*addr).into(), port)),
+            Some(RData::AAAA(addr)) => vaddr.push(SocketAddr::new((*addr).into(), port)),
+            Some(rdata) => {
                 trace!("skipped rdata {:?}", rdata);
             }
+            None => {}
         }
     }
     vaddr
