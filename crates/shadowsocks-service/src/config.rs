@@ -1755,14 +1755,14 @@ impl Config {
             #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
             "quad9_https" => DnsConfig::TrustDns(ResolverConfig::quad9_https()),
 
-            nameservers => Config::parse_dns_nameservers(nameservers)?,
+            nameservers => self.parse_dns_nameservers(nameservers)?,
         };
 
         Ok(())
     }
 
     #[cfg(any(feature = "trust-dns", feature = "local-dns"))]
-    fn parse_dns_nameservers(nameservers: &str) -> Result<DnsConfig, Error> {
+    fn parse_dns_nameservers(&mut self, nameservers: &str) -> Result<DnsConfig, Error> {
         #[cfg(all(unix, feature = "local-dns"))]
         if let Some(nameservers) = nameservers.strip_prefix("unix://") {
             // A special DNS server only for shadowsocks-android
@@ -1834,6 +1834,7 @@ impl Config {
                     trust_nx_responses: false,
                     #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
                     tls_config: None,
+                    bind_addr: None,
                 });
             }
             if protocol.enable_tcp() {
@@ -1844,6 +1845,7 @@ impl Config {
                     trust_nx_responses: false,
                     #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
                     tls_config: None,
+                    bind_addr: None,
                 });
             }
         }
@@ -1856,7 +1858,7 @@ impl Config {
     }
 
     #[cfg(not(any(feature = "trust-dns", feature = "local-dns")))]
-    fn parse_dns_nameservers(_nameservers: &str) -> Result<DnsConfig, Error> {
+    fn parse_dns_nameservers(&mut self, _nameservers: &str) -> Result<DnsConfig, Error> {
         Ok(DnsConfig::System)
     }
 
