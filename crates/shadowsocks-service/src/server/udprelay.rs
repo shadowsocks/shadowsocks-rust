@@ -1,10 +1,17 @@
 //! Shadowsocks UDP server
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    io::{self, ErrorKind},
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use bytes::Bytes;
 use futures::future;
-use io::ErrorKind;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
@@ -16,33 +23,24 @@ use shadowsocks::{
     },
     ServerConfig,
 };
-use tokio::{
-    sync::{mpsc, Mutex},
-    task::JoinHandle,
-    time,
-};
+use tokio::{sync::mpsc, task::JoinHandle, time};
 
-use crate::net::MonProxySocket;
+use crate::{
+    local::net::{UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
+    net::MonProxySocket,
+};
 
 use super::context::ServiceContext;
 
 type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
-type SharedAssociationMap = Arc<Mutex<AssociationMap>>;
 
 pub struct UdpServer {
     context: Arc<ServiceContext>,
-    assoc_map: SharedAssociationMap,
-    cleanup_abortable: JoinHandle<()>,
-    keepalive_abortable: JoinHandle<()>,
+    assoc_map: AssociationMap,
     keepalive_tx: mpsc::Sender<SocketAddr>,
+    keepalive_rx: mpsc::Receiver<SocketAddr>,
+    time_to_live: Duration,
     accept_opts: AcceptOpts,
-}
-
-impl Drop for UdpServer {
-    fn drop(&mut self) {
-        self.cleanup_abortable.abort();
-        self.keepalive_abortable.abort();
-    }
 }
 
 impl UdpServer {
@@ -53,40 +51,19 @@ impl UdpServer {
         accept_opts: AcceptOpts,
     ) -> UdpServer {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
-        let assoc_map = Arc::new(Mutex::new(match capacity {
+        let assoc_map = match capacity {
             Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
             None => LruCache::with_expiry_duration(time_to_live),
-        }));
-
-        let cleanup_abortable = {
-            let assoc_map = assoc_map.clone();
-            tokio::spawn(async move {
-                loop {
-                    time::sleep(time_to_live).await;
-
-                    // cleanup expired associations. iter() will remove expired elements
-                    let _ = assoc_map.lock().await.iter();
-                }
-            })
         };
 
-        let (keepalive_tx, mut keepalive_rx) = mpsc::channel(64);
-
-        let keepalive_abortable = {
-            let assoc_map = assoc_map.clone();
-            tokio::spawn(async move {
-                while let Some(peer_addr) = keepalive_rx.recv().await {
-                    assoc_map.lock().await.get(&peer_addr);
-                }
-            })
-        };
+        let (keepalive_tx, keepalive_rx) = mpsc::channel(UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE);
 
         UdpServer {
             context,
             assoc_map,
-            cleanup_abortable,
-            keepalive_abortable,
             keepalive_tx,
+            keepalive_rx,
+            time_to_live,
             accept_opts,
         }
     }
@@ -103,36 +80,63 @@ impl UdpServer {
         let listener = Arc::new(socket);
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut cleanup_timer = time::interval(self.time_to_live);
+
         loop {
-            let (n, peer_addr, target_addr) = match listener.recv_from(&mut buffer).await {
-                Ok(s) => s,
-                Err(err) => {
-                    error!("udp server recv_from failed with error: {}", err);
-                    continue;
+            tokio::select! {
+                _ = cleanup_timer.tick() => {
+                    // cleanup expired associations. iter() will remove expired elements
+                    let _ = self.assoc_map.iter();
                 }
-            };
 
-            if self.context.check_client_blocked(&peer_addr) {
-                warn!(
-                    "udp client {} outbound {} access denied by ACL rules",
-                    peer_addr, target_addr
-                );
-                continue;
-            }
+                peer_addr_opt = self.keepalive_rx.recv() => {
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    self.assoc_map.get(&peer_addr);
+                }
 
-            if self.context.check_outbound_blocked(&target_addr).await {
-                warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
-                continue;
-            }
+                recv_result = listener.recv_from(&mut buffer) => {
+                    let (n, peer_addr, target_addr) = match recv_result {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error!("udp server recv_from failed with error: {}", err);
+                            continue;
+                        }
+                    };
 
-            let data = &buffer[..n];
-            if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, data).await {
-                error!(
-                    "udp packet relay {} with {} bytes failed, error: {}",
-                    peer_addr,
-                    data.len(),
-                    err
-                );
+                    if n == 0 {
+                        // For windows, it will generate a ICMP Port Unreachable Message
+                        // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
+                        // Which will result in recv_from return 0.
+                        //
+                        // It cannot be solved here, because `WSAGetLastError` is already set.
+                        //
+                        // See `relay::udprelay::utils::create_socket` for more detail.
+                        continue;
+                    }
+
+                    if self.context.check_client_blocked(&peer_addr) {
+                        warn!(
+                            "udp client {} outbound {} access denied by ACL rules",
+                            peer_addr, target_addr
+                        );
+                        continue;
+                    }
+
+                    if self.context.check_outbound_blocked(&target_addr).await {
+                        warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
+                        continue;
+                    }
+
+                    let data = &buffer[..n];
+                    if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, data).await {
+                        error!(
+                            "udp packet relay {} with {} bytes failed, error: {}",
+                            peer_addr,
+                            data.len(),
+                            err
+                        );
+                    }
+                }
             }
         }
     }
@@ -144,9 +148,7 @@ impl UdpServer {
         target_addr: Address,
         data: &[u8],
     ) -> io::Result<()> {
-        let mut assoc_map = self.assoc_map.lock().await;
-
-        if let Some(assoc) = assoc_map.get(&peer_addr) {
+        if let Some(assoc) = self.assoc_map.get(&peer_addr) {
             return assoc.try_send((target_addr, Bytes::copy_from_slice(data)));
         }
 
@@ -160,7 +162,7 @@ impl UdpServer {
         debug!("created udp association for {}", peer_addr);
 
         assoc.try_send((target_addr, Bytes::copy_from_slice(data)))?;
-        assoc_map.insert(peer_addr, assoc);
+        self.assoc_map.insert(peer_addr, assoc);
 
         Ok(())
     }
@@ -168,12 +170,14 @@ impl UdpServer {
 
 struct UdpAssociation {
     assoc_handle: JoinHandle<()>,
+    keepalive_handle: JoinHandle<()>,
     sender: mpsc::Sender<(Address, Bytes)>,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
         self.assoc_handle.abort();
+        self.keepalive_handle.abort();
     }
 }
 
@@ -184,8 +188,27 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> UdpAssociation {
-        let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_tx);
-        UdpAssociation { assoc_handle, sender }
+        let keepalive_flag = Arc::new(AtomicBool::new(false));
+
+        let keepalive_handle = {
+            let keepalive_flag = keepalive_flag.clone();
+            tokio::spawn(async move {
+                loop {
+                    time::sleep(Duration::from_secs(1)).await;
+                    if keepalive_flag.load(Ordering::Acquire) {
+                        let _ = keepalive_tx.send(peer_addr).await;
+                        keepalive_flag.store(false, Ordering::Release);
+                    }
+                }
+            })
+        };
+
+        let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_flag);
+        UdpAssociation {
+            assoc_handle,
+            keepalive_handle,
+            sender,
+        }
     }
 
     fn try_send(&self, data: (Address, Bytes)) -> io::Result<()> {
@@ -202,7 +225,7 @@ struct UdpAssociationContext {
     peer_addr: SocketAddr,
     outbound_ipv4_socket: Option<OutboundUdpSocket>,
     outbound_ipv6_socket: Option<OutboundUdpSocket>,
-    keepalive_tx: mpsc::Sender<SocketAddr>,
+    keepalive_flag: Arc<AtomicBool>,
     inbound: Arc<MonProxySocket>,
 }
 
@@ -217,19 +240,19 @@ impl UdpAssociationContext {
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
-        keepalive_tx: mpsc::Sender<SocketAddr>,
+        keepalive_flag: Arc<AtomicBool>,
     ) -> (JoinHandle<()>, mpsc::Sender<(Address, Bytes)>) {
-        // Pending packets 128 for each association should be good enough for a server.
+        // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
-        let (sender, receiver) = mpsc::channel(128);
+        let (sender, receiver) = mpsc::channel(UDP_ASSOCIATION_SEND_CHANNEL_SIZE);
 
         let mut assoc = UdpAssociationContext {
             context,
             peer_addr,
             outbound_ipv4_socket: None,
             outbound_ipv6_socket: None,
-            keepalive_tx,
+            keepalive_flag,
             inbound,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
@@ -381,16 +404,16 @@ impl UdpAssociationContext {
         trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, data.len());
 
         // Keep association alive in map
-        let _ = self
-            .keepalive_tx
-            .send_timeout(self.peer_addr, Duration::from_secs(1))
-            .await;
+        self.keepalive_flag.store(true, Ordering::Release);
 
         // Send back to client
         if let Err(err) = self.inbound.send_to(self.peer_addr, addr, data).await {
             warn!(
-                "udp failed to send back to client {}, from target {}, error: {}",
-                self.peer_addr, addr, err
+                "udp failed to send back {} bytes to client {}, from target {}, error: {}",
+                data.len(),
+                self.peer_addr,
+                addr,
+                err
             );
         } else {
             trace!("udp relay {} <- {} with {} bytes", self.peer_addr, addr, data.len());

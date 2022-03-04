@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use byteorder::{BigEndian, ByteOrder};
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use shadowsocks::{
     config::{ServerAddr, ServerType},
     context::Context,
@@ -20,7 +20,7 @@ use trust_dns_proto::{
 async fn main() {
     env_logger::init();
 
-    let matches = App::new("dns-pressure")
+    let matches = Command::new("dns-pressure")
         .arg(
             Arg::new("OUTBOUND_BIND_INTERFACE")
                 .long("outbound-bind-interface")

@@ -84,7 +84,7 @@ impl Socks5UdpServer {
         info!("shadowsocks socks5 UDP listening on {}", socket.local_addr()?);
 
         let listener = Arc::new(socket);
-        let manager = UdpAssociationManager::new(
+        let (mut manager, cleanup_interval, mut keepalive_rx) = UdpAssociationManager::new(
             self.context.clone(),
             Socks5UdpInboundWriter {
                 inbound: listener.clone(),
@@ -95,50 +95,66 @@ impl Socks5UdpServer {
         );
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut cleanup_timer = time::interval(cleanup_interval);
+
         loop {
-            let (n, peer_addr) = match listener.recv_from(&mut buffer).await {
-                Ok(s) => s,
-                Err(err) => {
-                    error!("udp server recv_from failed with error: {}", err);
-                    time::sleep(Duration::from_secs(1)).await;
-                    continue;
+            tokio::select! {
+                _ = cleanup_timer.tick() => {
+                    // cleanup expired associations. iter() will remove expired elements
+                    manager.cleanup_expired().await;
                 }
-            };
 
-            let data = &buffer[..n];
-
-            // PKT = UdpAssociateHeader + PAYLOAD
-            let mut cur = Cursor::new(data);
-            let header = match UdpAssociateHeader::read_from(&mut cur).await {
-                Ok(h) => h,
-                Err(..) => {
-                    error!("received invalid UDP associate packet: {:?}", ByteStr::new(data));
-                    continue;
+                peer_addr_opt = keepalive_rx.recv() => {
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    manager.keep_alive(&peer_addr).await;
                 }
-            };
 
-            if header.frag != 0 {
-                error!("received UDP associate with frag != 0, which is not supported by shadowsocks");
-                continue;
-            }
+                recv_result = listener.recv_from(&mut buffer) => {
+                    let (n, peer_addr) = match recv_result {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error!("udp server recv_from failed with error: {}", err);
+                            time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    };
 
-            let pos = cur.position() as usize;
-            let payload = &data[pos..];
+                    let data = &buffer[..n];
 
-            trace!(
-                "UDP ASSOCIATE {} -> {}, {} bytes",
-                peer_addr,
-                header.address,
-                payload.len()
-            );
+                    // PKT = UdpAssociateHeader + PAYLOAD
+                    let mut cur = Cursor::new(data);
+                    let header = match UdpAssociateHeader::read_from(&mut cur).await {
+                        Ok(h) => h,
+                        Err(..) => {
+                            error!("received invalid UDP associate packet: {:?}", ByteStr::new(data));
+                            continue;
+                        }
+                    };
 
-            if let Err(err) = manager.send_to(peer_addr, header.address, payload).await {
-                error!(
-                    "udp packet from {} relay {} bytes failed, error: {}",
-                    peer_addr,
-                    data.len(),
-                    err
-                );
+                    if header.frag != 0 {
+                        error!("received UDP associate with frag != 0, which is not supported by shadowsocks");
+                        continue;
+                    }
+
+                    let pos = cur.position() as usize;
+                    let payload = &data[pos..];
+
+                    trace!(
+                        "UDP ASSOCIATE {} -> {}, {} bytes",
+                        peer_addr,
+                        header.address,
+                        payload.len()
+                    );
+
+                    if let Err(err) = manager.send_to(peer_addr, header.address, payload).await {
+                        error!(
+                            "udp packet from {} relay {} bytes failed, error: {}",
+                            peer_addr,
+                            data.len(),
+                            err
+                        );
+                    }
+                }
             }
         }
     }

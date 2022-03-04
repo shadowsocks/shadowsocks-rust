@@ -30,19 +30,17 @@ impl UdpTun {
         balancer: PingBalancer,
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
-    ) -> UdpTun {
+    ) -> (UdpTun, Duration, mpsc::Receiver<SocketAddr>) {
         let (tun_tx, tun_rx) = mpsc::channel(64);
+        let (manager, cleanup_interval, keepalive_rx) = UdpAssociationManager::new(
+            context,
+            UdpTunInboundWriter::new(tun_tx),
+            time_to_live,
+            capacity,
+            balancer,
+        );
 
-        UdpTun {
-            tun_rx,
-            manager: UdpAssociationManager::new(
-                context,
-                UdpTunInboundWriter::new(tun_tx),
-                time_to_live,
-                capacity,
-                balancer,
-            ),
-        }
+        (UdpTun { tun_rx, manager }, cleanup_interval, keepalive_rx)
     }
 
     pub async fn handle_packet(
@@ -60,6 +58,16 @@ impl UdpTun {
             Some(b) => b,
             None => unreachable!("channel closed unexpectedly"),
         }
+    }
+
+    #[inline(always)]
+    pub async fn cleanup_expired(&mut self) {
+        self.manager.cleanup_expired().await;
+    }
+
+    #[inline(always)]
+    pub async fn keep_alive(&mut self, peer_addr: &SocketAddr) {
+        self.manager.keep_alive(peer_addr).await;
     }
 }
 

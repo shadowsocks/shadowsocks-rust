@@ -14,7 +14,7 @@ use ipnet::IpNet;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::config::Mode;
 use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
-use tokio::io::AsyncReadExt;
+use tokio::{io::AsyncReadExt, sync::mpsc, time};
 use tun::{AsyncDevice, Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
@@ -99,7 +99,7 @@ impl TunBuilder {
             Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),
         };
 
-        let udp = UdpTun::new(
+        let (udp, udp_cleanup_interval, udp_keepalive_rx) = UdpTun::new(
             self.context.clone(),
             self.balancer.clone(),
             self.udp_expiry_duration,
@@ -116,6 +116,8 @@ impl TunBuilder {
             device,
             tcp,
             udp,
+            udp_cleanup_interval,
+            udp_keepalive_rx,
             mode: self.mode,
         })
     }
@@ -125,6 +127,8 @@ pub struct Tun {
     device: AsyncDevice,
     tcp: TcpTun,
     udp: UdpTun,
+    udp_cleanup_interval: Duration,
+    udp_keepalive_rx: mpsc::Receiver<SocketAddr>,
     mode: Mode,
 }
 
@@ -141,6 +145,7 @@ impl Tun {
         );
 
         let mut packet_buffer = vec![0u8; 65536 + IFF_PI_PREFIX_LEN].into_boxed_slice();
+        let mut udp_cleanup_timer = time::interval(self.udp_cleanup_interval);
 
         loop {
             tokio::select! {
@@ -171,6 +176,17 @@ impl Tun {
                     } else {
                         trace!("[TUN] sent IP packet (UDP) {:?}", ByteStr::new(&packet));
                     }
+                }
+
+                // UDP cleanup expired associations
+                _ = udp_cleanup_timer.tick() => {
+                    self.udp.cleanup_expired().await;
+                }
+
+                // UDP keep-alive associations
+                peer_addr_opt = self.udp_keepalive_rx.recv() => {
+                    let peer_addr = peer_addr_opt.expect("UDP keep-alive channel closed unexpectly");
+                    self.udp.keep_alive(&peer_addr).await;
                 }
 
                 // TCP channel sent back

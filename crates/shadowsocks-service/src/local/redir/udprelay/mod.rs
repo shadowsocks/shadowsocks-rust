@@ -16,7 +16,7 @@ use shadowsocks::{
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{sync::Mutex, task::JoinHandle, time};
 
 use crate::{
     config::RedirType,
@@ -197,7 +197,7 @@ impl UdpRedir {
         );
 
         #[allow(clippy::needless_update)]
-        let manager = UdpAssociationManager::new(
+        let (mut manager, cleanup_interval, mut keepalive_rx) = UdpAssociationManager::new(
             self.context.clone(),
             UdpRedirInboundWriter::new(self.redir_ty, self.context.connect_opts_ref()),
             self.time_to_live,
@@ -206,52 +206,68 @@ impl UdpRedir {
         );
 
         let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+        let mut cleanup_timer = time::interval(cleanup_interval);
+
         loop {
-            let (recv_len, src, mut dst) = match listener.recv_dest_from(&mut pkt_buf).await {
-                Ok(o) => o,
-                Err(err) => {
-                    error!("recv_dest_from failed with err: {}", err);
-                    continue;
+            tokio::select! {
+                _ = cleanup_timer.tick() => {
+                    // cleanup expired associations. iter() will remove expired elements
+                    manager.cleanup_expired().await;
                 }
-            };
 
-            // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
-            // Copy bytes, because udp_associate runs in another tokio Task
-            let pkt = &pkt_buf[..recv_len];
-
-            trace!(
-                "received UDP packet from {}, destination {}, length {} bytes",
-                src,
-                dst,
-                recv_len
-            );
-
-            if recv_len == 0 {
-                // For windows, it will generate a ICMP Port Unreachable Message
-                // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
-                // Which will result in recv_from return 0.
-                //
-                // It cannot be solved here, because `WSAGetLastError` is already set.
-                //
-                // See `relay::udprelay::utils::create_socket` for more detail.
-                continue;
-            }
-
-            // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
-            if let SocketAddr::V6(ref a) = dst {
-                if let Some(v4) = to_ipv4_mapped(a.ip()) {
-                    dst = SocketAddr::new(IpAddr::from(v4), a.port());
+                peer_addr_opt = keepalive_rx.recv() => {
+                    let peer_addr = peer_addr_opt.expect("keep-alive channel closed unexpectly");
+                    manager.keep_alive(&peer_addr).await;
                 }
-            }
 
-            if let Err(err) = manager.send_to(src, Address::from(dst), pkt).await {
-                error!(
-                    "udp packet relay {} -> {} with {} bytes failed, error: {}",
-                    src,
-                    dst,
-                    pkt.len(),
-                    err
-                );
+                recv_result = listener.recv_dest_from(&mut pkt_buf) => {
+                    let (recv_len, src, mut dst) = match recv_result {
+                        Ok(o) => o,
+                        Err(err) => {
+                            error!("recv_dest_from failed with err: {}", err);
+                            continue;
+                        }
+                    };
+
+                    // Packet length is limited by MAXIMUM_UDP_PAYLOAD_SIZE, excess bytes will be discarded.
+                    // Copy bytes, because udp_associate runs in another tokio Task
+                    let pkt = &pkt_buf[..recv_len];
+
+                    trace!(
+                        "received UDP packet from {}, destination {}, length {} bytes",
+                        src,
+                        dst,
+                        recv_len
+                    );
+
+                    if recv_len == 0 {
+                        // For windows, it will generate a ICMP Port Unreachable Message
+                        // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
+                        // Which will result in recv_from return 0.
+                        //
+                        // It cannot be solved here, because `WSAGetLastError` is already set.
+                        //
+                        // See `relay::udprelay::utils::create_socket` for more detail.
+                        continue;
+                    }
+
+                    // Try to convert IPv4 mapped IPv6 address for dual-stack mode.
+                    if let SocketAddr::V6(ref a) = dst {
+                        if let Some(v4) = to_ipv4_mapped(a.ip()) {
+                            dst = SocketAddr::new(IpAddr::from(v4), a.port());
+                        }
+                    }
+
+                    if let Err(err) = manager.send_to(src, Address::from(dst), pkt).await {
+                        error!(
+                            "udp packet relay {} -> {} with {} bytes failed, error: {}",
+                            src,
+                            dst,
+                            pkt.len(),
+                            err
+                        );
+                    }
+                }
             }
         }
     }

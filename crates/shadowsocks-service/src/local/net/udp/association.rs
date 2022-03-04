@@ -4,7 +4,10 @@ use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
     net::SocketAddr,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -13,11 +16,7 @@ use bytes::Bytes;
 use futures::future;
 use log::{debug, error, trace, warn};
 use lru_time_cache::LruCache;
-use tokio::{
-    sync::{mpsc, Mutex},
-    task::JoinHandle,
-    time,
-};
+use tokio::{sync::mpsc, task::JoinHandle, time};
 
 use shadowsocks::{
     lookup_then,
@@ -29,7 +28,11 @@ use shadowsocks::{
 };
 
 use crate::{
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::udp::{UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
+    },
     net::MonProxySocket,
 };
 
@@ -44,7 +47,6 @@ pub trait UdpInboundWrite {
 }
 
 type AssociationMap<W> = LruCache<SocketAddr, UdpAssociation<W>>;
-type SharedAssociationMap<W> = Arc<Mutex<AssociationMap<W>>>;
 
 /// UDP association manager
 pub struct UdpAssociationManager<W>
@@ -53,21 +55,9 @@ where
 {
     respond_writer: W,
     context: Arc<ServiceContext>,
-    assoc_map: SharedAssociationMap<W>,
-    cleanup_abortable: JoinHandle<()>,
-    keepalive_abortable: JoinHandle<()>,
+    assoc_map: AssociationMap<W>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
-}
-
-impl<W> Drop for UdpAssociationManager<W>
-where
-    W: UdpInboundWrite + Clone + Send + Sync + Unpin + 'static,
-{
-    fn drop(&mut self) {
-        self.cleanup_abortable.abort();
-        self.keepalive_abortable.abort();
-    }
 }
 
 impl<W> UdpAssociationManager<W>
@@ -75,60 +65,41 @@ where
     W: UdpInboundWrite + Clone + Send + Sync + Unpin + 'static,
 {
     /// Create a new `UdpAssociationManager`
+    ///
+    /// Returns (`UdpAssociationManager`, Cleanup Interval, Keep-alive Receiver<SocketAddr>)
     pub fn new(
         context: Arc<ServiceContext>,
         respond_writer: W,
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
         balancer: PingBalancer,
-    ) -> UdpAssociationManager<W> {
+    ) -> (UdpAssociationManager<W>, Duration, mpsc::Receiver<SocketAddr>) {
         let time_to_live = time_to_live.unwrap_or(crate::DEFAULT_UDP_EXPIRY_DURATION);
-        let assoc_map = Arc::new(Mutex::new(match capacity {
+        let assoc_map = match capacity {
             Some(capacity) => LruCache::with_expiry_duration_and_capacity(time_to_live, capacity),
             None => LruCache::with_expiry_duration(time_to_live),
-        }));
-
-        let cleanup_abortable = {
-            let assoc_map = assoc_map.clone();
-            tokio::spawn(async move {
-                loop {
-                    time::sleep(time_to_live).await;
-
-                    // cleanup expired associations. iter() will remove expired elements
-                    let _ = assoc_map.lock().await.iter();
-                }
-            })
         };
 
-        let (keepalive_tx, mut keepalive_rx) = mpsc::channel(256);
+        let (keepalive_tx, keepalive_rx) = mpsc::channel(UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE);
 
-        let keepalive_abortable = {
-            let assoc_map = assoc_map.clone();
-            tokio::spawn(async move {
-                while let Some(peer_addr) = keepalive_rx.recv().await {
-                    assoc_map.lock().await.get(&peer_addr);
-                }
-            })
-        };
-
-        UdpAssociationManager {
-            respond_writer,
-            context,
-            assoc_map,
-            cleanup_abortable,
-            keepalive_abortable,
-            keepalive_tx,
-            balancer,
-        }
+        (
+            UdpAssociationManager {
+                respond_writer,
+                context,
+                assoc_map,
+                keepalive_tx,
+                balancer,
+            },
+            time_to_live,
+            keepalive_rx,
+        )
     }
 
     /// Sends `data` from `peer_addr` to `target_addr`
-    pub async fn send_to(&self, peer_addr: SocketAddr, target_addr: Address, data: &[u8]) -> io::Result<()> {
+    pub async fn send_to(&mut self, peer_addr: SocketAddr, target_addr: Address, data: &[u8]) -> io::Result<()> {
         // Check or (re)create an association
 
-        let mut assoc_map = self.assoc_map.lock().await;
-
-        if let Some(assoc) = assoc_map.get(&peer_addr) {
+        if let Some(assoc) = self.assoc_map.get(&peer_addr) {
             return assoc.try_send((target_addr, Bytes::copy_from_slice(data)));
         }
 
@@ -143,9 +114,19 @@ where
         debug!("created udp association for {}", peer_addr);
 
         assoc.try_send((target_addr, Bytes::copy_from_slice(data)))?;
-        assoc_map.insert(peer_addr, assoc);
+        self.assoc_map.insert(peer_addr, assoc);
 
         Ok(())
+    }
+
+    /// Cleanup expired associations
+    pub async fn cleanup_expired(&mut self) {
+        self.assoc_map.iter();
+    }
+
+    /// Keep-alive association
+    pub async fn keep_alive(&mut self, peer_addr: &SocketAddr) {
+        self.assoc_map.get(peer_addr);
     }
 }
 
@@ -154,6 +135,7 @@ where
     W: UdpInboundWrite + Send + Sync + Unpin + 'static,
 {
     assoc_handle: JoinHandle<()>,
+    keepalive_handle: JoinHandle<()>,
     sender: mpsc::Sender<(Address, Bytes)>,
     writer: PhantomData<W>,
 }
@@ -164,6 +146,7 @@ where
 {
     fn drop(&mut self) {
         self.assoc_handle.abort();
+        self.keepalive_handle.abort();
     }
 }
 
@@ -178,10 +161,26 @@ where
         balancer: PingBalancer,
         respond_writer: W,
     ) -> UdpAssociation<W> {
+        let keepalive_flag = Arc::new(AtomicBool::new(false));
+
+        let keepalive_handle = {
+            let keepalive_flag = keepalive_flag.clone();
+            tokio::spawn(async move {
+                loop {
+                    time::sleep(Duration::from_secs(1)).await;
+                    if keepalive_flag.load(Ordering::Acquire) {
+                        let _ = keepalive_tx.send(peer_addr).await;
+                        keepalive_flag.store(false, Ordering::Release);
+                    }
+                }
+            })
+        };
+
         let (assoc_handle, sender) =
-            UdpAssociationContext::create(context, peer_addr, keepalive_tx, balancer, respond_writer);
+            UdpAssociationContext::create(context, peer_addr, keepalive_flag, balancer, respond_writer);
         UdpAssociation {
             assoc_handle,
+            keepalive_handle,
             sender,
             writer: PhantomData,
         }
@@ -205,7 +204,7 @@ where
     bypassed_ipv4_socket: Option<ShadowUdpSocket>,
     bypassed_ipv6_socket: Option<ShadowUdpSocket>,
     proxied_socket: Option<MonProxySocket>,
-    keepalive_tx: mpsc::Sender<SocketAddr>,
+    keepalive_flag: Arc<AtomicBool>,
     balancer: PingBalancer,
     respond_writer: W,
 }
@@ -226,14 +225,14 @@ where
     fn create(
         context: Arc<ServiceContext>,
         peer_addr: SocketAddr,
-        keepalive_tx: mpsc::Sender<SocketAddr>,
+        keepalive_flag: Arc<AtomicBool>,
         balancer: PingBalancer,
         respond_writer: W,
     ) -> (JoinHandle<()>, mpsc::Sender<(Address, Bytes)>) {
-        // Pending packets 128 for each association should be good enough for a server.
+        // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
-        let (sender, receiver) = mpsc::channel(128);
+        let (sender, receiver) = mpsc::channel(UDP_ASSOCIATION_SEND_CHANNEL_SIZE);
 
         let mut assoc = UdpAssociationContext {
             context,
@@ -241,7 +240,7 @@ where
             bypassed_ipv4_socket: None,
             bypassed_ipv6_socket: None,
             proxied_socket: None,
-            keepalive_tx,
+            keepalive_flag,
             balancer,
             respond_writer,
         };
@@ -474,16 +473,15 @@ where
             if bypassed { "bypassed" } else { "proxied" },
             data.len(),
         );
+
         // Keep association alive in map
-        let _ = self
-            .keepalive_tx
-            .send_timeout(self.peer_addr, Duration::from_secs(1))
-            .await;
+        self.keepalive_flag.store(true, Ordering::Release);
 
         // Send back to client
         if let Err(err) = self.respond_writer.send_to(self.peer_addr, addr, data).await {
             warn!(
-                "udp failed to send back to client {}, from target {} ({}), error: {}",
+                "udp failed to send back {} bytes to client {}, from target {} ({}), error: {}",
+                data.len(),
                 self.peer_addr,
                 addr,
                 if bypassed { "bypassed" } else { "proxied" },
