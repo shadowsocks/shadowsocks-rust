@@ -3,10 +3,7 @@
 use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -170,14 +167,12 @@ impl UdpServer {
 
 struct UdpAssociation {
     assoc_handle: JoinHandle<()>,
-    keepalive_handle: JoinHandle<()>,
     sender: mpsc::Sender<(Address, Bytes)>,
 }
 
 impl Drop for UdpAssociation {
     fn drop(&mut self) {
         self.assoc_handle.abort();
-        self.keepalive_handle.abort();
     }
 }
 
@@ -188,27 +183,8 @@ impl UdpAssociation {
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> UdpAssociation {
-        let keepalive_flag = Arc::new(AtomicBool::new(false));
-
-        let keepalive_handle = {
-            let keepalive_flag = keepalive_flag.clone();
-            tokio::spawn(async move {
-                loop {
-                    time::sleep(Duration::from_secs(1)).await;
-                    if keepalive_flag.load(Ordering::Acquire) {
-                        let _ = keepalive_tx.send(peer_addr).await;
-                        keepalive_flag.store(false, Ordering::Release);
-                    }
-                }
-            })
-        };
-
-        let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_flag);
-        UdpAssociation {
-            assoc_handle,
-            keepalive_handle,
-            sender,
-        }
+        let (assoc_handle, sender) = UdpAssociationContext::create(context, inbound, peer_addr, keepalive_tx);
+        UdpAssociation { assoc_handle, sender }
     }
 
     fn try_send(&self, data: (Address, Bytes)) -> io::Result<()> {
@@ -225,7 +201,8 @@ struct UdpAssociationContext {
     peer_addr: SocketAddr,
     outbound_ipv4_socket: Option<OutboundUdpSocket>,
     outbound_ipv6_socket: Option<OutboundUdpSocket>,
-    keepalive_flag: Arc<AtomicBool>,
+    keepalive_tx: mpsc::Sender<SocketAddr>,
+    keepalive_flag: bool,
     inbound: Arc<MonProxySocket>,
 }
 
@@ -240,7 +217,7 @@ impl UdpAssociationContext {
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
         peer_addr: SocketAddr,
-        keepalive_flag: Arc<AtomicBool>,
+        keepalive_tx: mpsc::Sender<SocketAddr>,
     ) -> (JoinHandle<()>, mpsc::Sender<(Address, Bytes)>) {
         // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
@@ -252,7 +229,8 @@ impl UdpAssociationContext {
             peer_addr,
             outbound_ipv4_socket: None,
             outbound_ipv6_socket: None,
-            keepalive_flag,
+            keepalive_tx,
+            keepalive_flag: false,
             inbound,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
@@ -263,6 +241,7 @@ impl UdpAssociationContext {
     async fn dispatch_packet(&mut self, mut receiver: mpsc::Receiver<(Address, Bytes)>) {
         let mut outbound_ipv4_buffer = Vec::new();
         let mut outbound_ipv6_buffer = Vec::new();
+        let mut keepalive_interval = time::interval(Duration::from_secs(1));
 
         loop {
             tokio::select! {
@@ -306,6 +285,16 @@ impl UdpAssociationContext {
 
                     let addr = Address::from(addr);
                     self.send_received_respond_packet(&addr, &outbound_ipv6_buffer[..n]).await;
+                }
+
+                _ = keepalive_interval.tick() => {
+                    if self.keepalive_flag {
+                        if let Err(..) = self.keepalive_tx.try_send(self.peer_addr) {
+                            debug!("udp relay {} keep-alive failed, channel full or closed", self.peer_addr);
+                        } else {
+                            self.keepalive_flag = false;
+                        }
+                    }
                 }
             }
         }
@@ -404,7 +393,7 @@ impl UdpAssociationContext {
         trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, data.len());
 
         // Keep association alive in map
-        self.keepalive_flag.store(true, Ordering::Release);
+        self.keepalive_flag = true;
 
         // Send back to client
         if let Err(err) = self.inbound.send_to(self.peer_addr, addr, data).await {
