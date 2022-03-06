@@ -22,10 +22,7 @@ use shadowsocks::{
 };
 use tokio::{sync::mpsc, task::JoinHandle, time};
 
-use crate::{
-    local::net::{UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
-    net::MonProxySocket,
-};
+use crate::net::{MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE};
 
 use super::context::ServiceContext;
 

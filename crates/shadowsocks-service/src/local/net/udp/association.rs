@@ -25,12 +25,8 @@ use shadowsocks::{
 };
 
 use crate::{
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::udp::{UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
-    },
-    net::MonProxySocket,
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
+    net::{MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
 };
 
 /// Writer for sending packets back to client

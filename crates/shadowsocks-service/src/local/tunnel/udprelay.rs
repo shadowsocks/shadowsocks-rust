@@ -23,12 +23,8 @@ use shadowsocks::{
 use tokio::{net::UdpSocket, sync::mpsc, task::JoinHandle, time};
 
 use crate::{
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::{UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
-    },
-    net::MonProxySocket,
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
+    net::{MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
 };
 
 type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
