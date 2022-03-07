@@ -1,3 +1,13 @@
+shadowsocks-rust (1.14.0) unstable; urgency=medium
+
+  ## Features
+
+  - Optimization: UDP associations managment removes unnecessary locks
+
+  ## Breaking Changes
+
+  - `shadowsocks_service::local::net::udp::UdpAssociationManager::new` returns clean-up interval and keep-alive receiver. It is not recommended to use this directly in your Project, because the API may change occationally.
+
 shadowsocks-rust (1.13.5) unstable; urgency=medium
 
   ## Features
