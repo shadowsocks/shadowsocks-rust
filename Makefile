@@ -6,9 +6,9 @@ all: build
 
 build:
 ifeq (${TARGET}, release)
-	cargo build --release --features "local-tun local-redir armv8 neon"
+	cargo build --release --features "local-tun local-redir"
 else
-	cargo build --features "local-tun local-redir armv8 neon"
+	cargo build --features "local-tun local-redir"
 endif
 
 install:

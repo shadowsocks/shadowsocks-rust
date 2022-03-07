@@ -30,7 +30,7 @@ RUN rustup install nightly && rustup default nightly && \
     wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ && \
     CC=/root/$MUSL-cross/bin/$MUSL-gcc && \
     rustup target add $RUST_TARGET && \
-    RUSTFLAGS="-C linker=$CC -C strip=symbols" CC=$CC cargo build --target "$RUST_TARGET" --release --features "local-tun local-redir armv8 neon" && \
+    RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "local-tun local-redir armv8 neon" && \
     mv target/$RUST_TARGET/release/ss* target/release/
 
 FROM alpine:3.14 AS sslocal

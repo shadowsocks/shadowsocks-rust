@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: full
-      RUSTFLAGS: "-C strip=symbols"
     strategy:
       matrix:
         target:
@@ -81,7 +80,6 @@ jobs:
     env:
       BUILD_EXTRA_FEATURES: "local-redir local-tun armv8 neon"
       RUST_BACKTRACE: full
-      RUSTFLAGS: "-C strip=symbols"
     strategy:
       matrix:
         # os: [ubuntu-latest, macos-latest]
@@ -130,7 +128,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      RUSTFLAGS: "-C target-feature=+crt-static -C strip=symbols"
+      RUSTFLAGS: "-C target-feature=+crt-static"
       RUST_BACKTRACE: full
     steps:
       - uses: actions/checkout@v2
