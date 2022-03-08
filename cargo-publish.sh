@@ -13,8 +13,8 @@ cargo check
 for p in ${package_ordered:?}; do
     cargo update -p shadowsocks
     cargo update -p shadowsocks-service
-    echo "====> dry-run publish $p"
-    cargo publish --verbose --locked --dry-run --manifest-path "${p:?}/Cargo.toml"
+    #echo "====> dry-run publish $p"
+    #cargo publish --verbose --locked --dry-run --manifest-path "${p:?}/Cargo.toml"
     echo "====> publishing $p"
     cargo publish --verbose --locked --manifest-path "${p:?}/Cargo.toml"
 
