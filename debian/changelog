@@ -1,3 +1,9 @@
+shadowsocks-rust (1.14.1) unstable; urgency=medium
+
+  ## Miscellaneous
+
+  - `shadowsocks`, `shadowsocks-service` crates upgraded to Rust Edition 2021.
+
 shadowsocks-rust (1.14.0) unstable; urgency=medium
 
   ## Features
