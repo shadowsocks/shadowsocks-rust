@@ -466,6 +466,7 @@ Example configuration:
             // If not set, it will derive from the outer `mode`
             "mode": "tcp_and_udp",
             // OPTIONAL. Authentication configuration file
+            // Configuration file document could be found in the next section.
             "socks5_auth_config_path": "/path/to/auth.json"
         },
         {
@@ -657,6 +658,24 @@ Example configuration:
         "mode": "multi_thread",
         // Worker threads that are used in multi-thread runtime
         "worker_count": 10
+    }
+}
+```
+
+### SOCKS5 Authentication Configuration
+
+The configuration file is set by `socks5_auth_config_path` in `locals`.
+
+```jsonc
+{
+    // Password/Username Authentication (RFC1929)
+    "password": {
+        "users": [
+            {
+                "user_name": "USERNAME in UTF-8",
+                "password": "PASSWORD in UTF-8"
+            }
+        ]
     }
 }
 ```
