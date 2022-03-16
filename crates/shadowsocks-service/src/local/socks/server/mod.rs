@@ -141,15 +141,14 @@ impl Socks {
             let mode = self.mode;
             let socks5_auth = self.socks5_auth.clone();
 
-            tokio::spawn(Socks::handle_tcp_client(
-                context,
-                udp_bind_addr,
-                stream,
-                balancer,
-                peer_addr,
-                mode,
-                socks5_auth,
-            ));
+            tokio::spawn(async move {
+                if let Err(err) =
+                    Socks::handle_tcp_client(context, udp_bind_addr, stream, balancer, peer_addr, mode, socks5_auth)
+                        .await
+                {
+                    error!("socks5 tcp client handler error: {}", err);
+                }
+            });
         }
     }
 

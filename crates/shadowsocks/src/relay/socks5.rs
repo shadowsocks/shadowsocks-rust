@@ -167,6 +167,10 @@ pub enum Error {
     UnsupportedSocksVersion(u8),
     #[error("unsupported command {0:#x}")]
     UnsupportedCommand(u8),
+    #[error("unsupported username/password authentication version {0:#x}")]
+    UnsupportedPasswdAuthVersion(u8),
+    #[error("username/password authentication invalid request")]
+    PasswdAuthInvalidRequest,
     #[error("{0}")]
     Reply(Reply),
 }
@@ -192,6 +196,8 @@ impl Error {
             Error::AddressDomainInvalidEncoding => Reply::GeneralFailure,
             Error::UnsupportedSocksVersion(..) => Reply::GeneralFailure,
             Error::UnsupportedCommand(..) => Reply::CommandNotSupported,
+            Error::UnsupportedPasswdAuthVersion(..) => Reply::GeneralFailure,
+            Error::PasswdAuthInvalidRequest => Reply::GeneralFailure,
             Error::Reply(r) => r,
         }
     }
@@ -805,14 +811,14 @@ impl UdpAssociateHeader {
 /// | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
 /// +----+------+----------+------+----------+
 /// ```
-pub struct PasswordAuthenticationInitialRequest {
+pub struct PasswdAuthRequest {
     pub uname: Vec<u8>,
     pub passwd: Vec<u8>,
 }
 
-impl PasswordAuthenticationInitialRequest {
+impl PasswdAuthRequest {
     /// Create a Username/Password Authentication Request
-    pub fn new<U, P>(uname: U, passwd: P) -> PasswordAuthenticationInitialRequest
+    pub fn new<U, P>(uname: U, passwd: P) -> PasswdAuthRequest
     where
         U: Into<Vec<u8>>,
         P: Into<Vec<u8>>,
@@ -823,11 +829,11 @@ impl PasswordAuthenticationInitialRequest {
             uname.len() > 0 && uname.len() <= u8::MAX as usize && passwd.len() > 0 && passwd.len() <= u8::MAX as usize
         );
 
-        PasswordAuthenticationInitialRequest { uname, passwd }
+        PasswdAuthRequest { uname, passwd }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<PasswordAuthenticationInitialRequest, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthRequest, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -836,7 +842,7 @@ impl PasswordAuthenticationInitialRequest {
 
         // The only valid subnegociation version
         if ver_buf[0] != 0x01 {
-            return Err(Error::Reply(Reply::GeneralFailure));
+            return Err(Error::UnsupportedPasswdAuthVersion(ver_buf[0]));
         }
 
         let mut ulen_buf = [0u8; 1];
@@ -844,7 +850,7 @@ impl PasswordAuthenticationInitialRequest {
 
         let ulen = ulen_buf[0] as usize;
         if ulen == 0 {
-            return Err(Error::Reply(Reply::GeneralFailure));
+            return Err(Error::PasswdAuthInvalidRequest);
         }
 
         let mut uname = vec![0u8; ulen];
@@ -857,7 +863,7 @@ impl PasswordAuthenticationInitialRequest {
 
         let plen = plen_buf[0] as usize;
         if plen == 0 {
-            return Err(Error::Reply(Reply::GeneralFailure));
+            return Err(Error::PasswdAuthInvalidRequest);
         }
 
         let mut passwd = vec![0u8; plen];
@@ -865,7 +871,7 @@ impl PasswordAuthenticationInitialRequest {
             let _ = r.read_exact(&mut passwd).await?;
         }
 
-        Ok(PasswordAuthenticationInitialRequest { uname, passwd })
+        Ok(PasswdAuthRequest { uname, passwd })
     }
 
     /// Write to a writer
@@ -894,17 +900,17 @@ impl PasswordAuthenticationInitialRequest {
     }
 }
 
-pub struct PasswordAuthenticationResponse {
+pub struct PasswdAuthResponse {
     pub status: u8,
 }
 
-impl PasswordAuthenticationResponse {
-    pub fn new(status: u8) -> PasswordAuthenticationResponse {
-        PasswordAuthenticationResponse { status }
+impl PasswdAuthResponse {
+    pub fn new(status: u8) -> PasswdAuthResponse {
+        PasswdAuthResponse { status }
     }
 
     /// Read from a reader
-    pub async fn read_from<R>(r: &mut R) -> Result<PasswordAuthenticationResponse, Error>
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthResponse, Error>
     where
         R: AsyncRead + Unpin,
     {
@@ -912,10 +918,10 @@ impl PasswordAuthenticationResponse {
         let _ = r.read_exact(&mut buf);
 
         if buf[0] != 0x01 {
-            return Err(Error::Reply(Reply::GeneralFailure));
+            return Err(Error::UnsupportedPasswdAuthVersion(buf[0]));
         }
 
-        Ok(PasswordAuthenticationResponse { status: buf[1] })
+        Ok(PasswdAuthResponse { status: buf[1] })
     }
 
     /// Write to a writer

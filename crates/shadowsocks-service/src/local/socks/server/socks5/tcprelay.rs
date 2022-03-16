@@ -17,8 +17,8 @@ use shadowsocks::{
         Error as Socks5Error,
         HandshakeRequest,
         HandshakeResponse,
-        PasswordAuthenticationInitialRequest,
-        PasswordAuthenticationResponse,
+        PasswdAuthRequest,
+        PasswdAuthResponse,
         Reply,
         TcpRequestHeader,
         TcpResponseHeader,
@@ -112,10 +112,10 @@ impl Socks5TcpHandler {
 
         // Read initiation negociation
 
-        let init = match PasswordAuthenticationInitialRequest::read_from(stream).await {
+        let req = match PasswdAuthRequest::read_from(stream).await {
             Ok(i) => i,
             Err(err) => {
-                let rsp = PasswordAuthenticationResponse::new(err.as_reply().as_u8());
+                let rsp = PasswdAuthResponse::new(err.as_reply().as_u8());
                 let _ = rsp.write_to(stream).await;
 
                 return Err(Error::new(
@@ -125,10 +125,10 @@ impl Socks5TcpHandler {
             }
         };
 
-        let user_name = match str::from_utf8(&init.uname) {
+        let user_name = match str::from_utf8(&req.uname) {
             Ok(u) => u,
             Err(..) => {
-                let rsp = PasswordAuthenticationResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
+                let rsp = PasswdAuthResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
                 let _ = rsp.write_to(stream).await;
 
                 return Err(Error::new(
@@ -138,10 +138,10 @@ impl Socks5TcpHandler {
             }
         };
 
-        let password = match str::from_utf8(&init.passwd) {
+        let password = match str::from_utf8(&req.passwd) {
             Ok(u) => u,
             Err(..) => {
-                let rsp = PasswordAuthenticationResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
+                let rsp = PasswdAuthResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
                 let _ = rsp.write_to(stream).await;
 
                 return Err(Error::new(
@@ -158,12 +158,12 @@ impl Socks5TcpHandler {
                 password
             );
 
-            let rsp = PasswordAuthenticationResponse::new(0);
+            let rsp = PasswdAuthResponse::new(0);
             rsp.write_to(stream).await?;
 
             Ok(())
         } else {
-            let rsp = PasswordAuthenticationResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
+            let rsp = PasswdAuthResponse::new(PASSWORD_AUTH_STATUS_FAILURE);
             rsp.write_to(stream).await?;
 
             error!(
