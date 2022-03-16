@@ -27,7 +27,8 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor, validator,
+    monitor,
+    validator,
 };
 
 /// Defines command line options

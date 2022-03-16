@@ -199,6 +199,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
                 let mut server = Socks::with_context(context.clone());
                 server.set_mode(local_config.mode);
+                server.set_socks5_auth(local_config.socks5_auth);
 
                 if let Some(c) = config.udp_max_associations {
                     server.set_udp_capacity(c);

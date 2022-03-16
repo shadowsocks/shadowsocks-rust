@@ -103,7 +103,7 @@ pub enum Reply {
 impl Reply {
     #[inline]
     #[rustfmt::skip]
-    fn as_u8(self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         match self {
             Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
             Reply::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
@@ -120,7 +120,7 @@ impl Reply {
 
     #[inline]
     #[rustfmt::skip]
-    fn from_u8(code: u8) -> Reply {
+    pub fn from_u8(code: u8) -> Reply {
         match code {
             consts::SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
             consts::SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
@@ -791,5 +791,152 @@ impl UdpAssociateHeader {
     #[inline]
     pub fn serialized_len(&self) -> usize {
         3 + self.address.serialized_len()
+    }
+}
+
+/// Username/Password Authentication Inittial Negociation
+///
+/// https://datatracker.ietf.org/doc/html/rfc1929
+///
+/// ```plain
+/// +----+------+----------+------+----------+
+/// |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+/// +----+------+----------+------+----------+
+/// | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+/// +----+------+----------+------+----------+
+/// ```
+pub struct PasswordAuthenticationInitialRequest {
+    pub uname: Vec<u8>,
+    pub passwd: Vec<u8>,
+}
+
+impl PasswordAuthenticationInitialRequest {
+    /// Create a Username/Password Authentication Request
+    pub fn new<U, P>(uname: U, passwd: P) -> PasswordAuthenticationInitialRequest
+    where
+        U: Into<Vec<u8>>,
+        P: Into<Vec<u8>>,
+    {
+        let uname = uname.into();
+        let passwd = passwd.into();
+        assert!(
+            uname.len() > 0 && uname.len() <= u8::MAX as usize && passwd.len() > 0 && passwd.len() <= u8::MAX as usize
+        );
+
+        PasswordAuthenticationInitialRequest { uname, passwd }
+    }
+
+    /// Read from a reader
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswordAuthenticationInitialRequest, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut ver_buf = [0u8; 1];
+        let _ = r.read_exact(&mut ver_buf).await?;
+
+        // The only valid subnegociation version
+        if ver_buf[0] != 0x01 {
+            return Err(Error::Reply(Reply::GeneralFailure));
+        }
+
+        let mut ulen_buf = [0u8; 1];
+        let _ = r.read_exact(&mut ulen_buf).await?;
+
+        let ulen = ulen_buf[0] as usize;
+        if ulen == 0 {
+            return Err(Error::Reply(Reply::GeneralFailure));
+        }
+
+        let mut uname = vec![0u8; ulen];
+        if ulen > 0 {
+            let _ = r.read_exact(&mut uname).await?;
+        }
+
+        let mut plen_buf = [0u8; 1];
+        let _ = r.read_exact(&mut plen_buf).await?;
+
+        let plen = plen_buf[0] as usize;
+        if plen == 0 {
+            return Err(Error::Reply(Reply::GeneralFailure));
+        }
+
+        let mut passwd = vec![0u8; plen];
+        if plen > 0 {
+            let _ = r.read_exact(&mut passwd).await?;
+        }
+
+        Ok(PasswordAuthenticationInitialRequest { uname, passwd })
+    }
+
+    /// Write to a writer
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
+        self.write_to_buf(&mut buf);
+        w.write_all(&buf).await
+    }
+
+    /// Write to buffer
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(0x01);
+        buf.put_u8(self.uname.len() as u8);
+        buf.put_slice(&self.uname);
+        buf.put_u8(self.passwd.len() as u8);
+        buf.put_slice(&self.passwd);
+    }
+
+    /// Length in bytes
+    #[inline]
+    pub fn serialized_len(&self) -> usize {
+        1 + 1 + self.uname.len() + 1 + self.passwd.len()
+    }
+}
+
+pub struct PasswordAuthenticationResponse {
+    pub status: u8,
+}
+
+impl PasswordAuthenticationResponse {
+    pub fn new(status: u8) -> PasswordAuthenticationResponse {
+        PasswordAuthenticationResponse { status }
+    }
+
+    /// Read from a reader
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswordAuthenticationResponse, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut buf = [0u8; 2];
+        let _ = r.read_exact(&mut buf);
+
+        if buf[0] != 0x01 {
+            return Err(Error::Reply(Reply::GeneralFailure));
+        }
+
+        Ok(PasswordAuthenticationResponse { status: buf[1] })
+    }
+
+    /// Write to a writer
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
+        self.write_to_buf(&mut buf);
+        w.write_all(&buf).await
+    }
+
+    /// Write to buffer
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(0x01);
+        buf.put_u8(self.status);
+    }
+
+    /// Length in bytes
+    #[inline]
+    pub fn serialized_len(&self) -> usize {
+        2
     }
 }

@@ -464,7 +464,9 @@ Example configuration:
             "local_port": 1080,
             // OPTIONAL. Setting the `mode` for this specific local server instance.
             // If not set, it will derive from the outer `mode`
-            "mode": "tcp_and_udp"
+            "mode": "tcp_and_udp",
+            // OPTIONAL. Authentication configuration file
+            "socks5_auth_config_path": "/path/to/auth.json"
         },
         {
             // SOCKS5, SOCKS4/4a local server

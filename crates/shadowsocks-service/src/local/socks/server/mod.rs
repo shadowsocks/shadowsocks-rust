@@ -13,6 +13,8 @@ use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 use self::socks4::Socks4TcpHandler;
 use self::socks5::{Socks5TcpHandler, Socks5UdpServer};
 
+use super::config::Socks5AuthConfig;
+
 #[cfg(feature = "local-socks4")]
 mod socks4;
 mod socks5;
@@ -24,6 +26,7 @@ pub struct Socks {
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     udp_bind_addr: Option<ServerAddr>,
+    socks5_auth: Arc<Socks5AuthConfig>,
 }
 
 impl Default for Socks {
@@ -47,6 +50,7 @@ impl Socks {
             udp_expiry_duration: None,
             udp_capacity: None,
             udp_bind_addr: None,
+            socks5_auth: Arc::new(Socks5AuthConfig::default()),
         }
     }
 
@@ -71,6 +75,11 @@ impl Socks {
     /// * Otherwise, UDP relay will bind to this address
     pub fn set_udp_bind_addr(&mut self, a: ServerAddr) {
         self.udp_bind_addr = Some(a);
+    }
+
+    /// Set SOCKS5 Username/Password Authentication configuration
+    pub fn set_socks5_auth(&mut self, p: Socks5AuthConfig) {
+        self.socks5_auth = Arc::new(p);
     }
 
     /// Start serving
@@ -130,6 +139,7 @@ impl Socks {
             let context = self.context.clone();
             let udp_bind_addr = udp_bind_addr.clone();
             let mode = self.mode;
+            let socks5_auth = self.socks5_auth.clone();
 
             tokio::spawn(Socks::handle_tcp_client(
                 context,
@@ -138,6 +148,7 @@ impl Socks {
                 balancer,
                 peer_addr,
                 mode,
+                socks5_auth,
             ));
         }
     }
@@ -150,6 +161,7 @@ impl Socks {
         balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
+        socks5_auth: Arc<Socks5AuthConfig>,
     ) -> io::Result<()> {
         use std::io::ErrorKind;
 
@@ -166,7 +178,7 @@ impl Socks {
             }
 
             0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode);
+                let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode, socks5_auth);
                 handler.handle_socks5_client(stream, peer_addr).await
             }
 
