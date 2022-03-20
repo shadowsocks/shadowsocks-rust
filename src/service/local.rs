@@ -787,7 +787,7 @@ pub fn main(matches: &ArgMatches) {
         }
 
         let abort_signal = monitor::create_signal_monitor();
-        let server = instance.run();
+        let server = instance.wait_until_exit();
 
         tokio::pin!(abort_signal);
         tokio::pin!(server);

@@ -1,10 +1,18 @@
 //! Shadowsocks server
 
-use std::{io, sync::Arc, time::Duration};
+use std::{
+    future::Future,
+    io::{self, ErrorKind},
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use futures::{future, FutureExt};
+use futures::{future, ready};
 use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts};
+use tokio::task::JoinHandle;
 
 use crate::{
     config::{Config, ConfigType},
@@ -118,11 +126,38 @@ pub async fn run(config: Config) -> io::Result<()> {
         servers.push(server);
     }
 
+    if servers.len() == 1 {
+        let server = servers.pop().unwrap();
+        return server.run().await;
+    }
+
     let mut vfut = Vec::with_capacity(servers.len());
+
     for server in servers {
-        vfut.push(server.run().boxed());
+        vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
     }
 
     let (res, ..) = future::select_all(vfut).await;
     res
+}
+
+struct ServerHandle(JoinHandle<io::Result<()>>);
+
+impl Drop for ServerHandle {
+    #[inline]
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl Future for ServerHandle {
+    type Output = io::Result<()>;
+
+    #[inline]
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(Pin::new(&mut self.0).poll(cx)) {
+            Ok(res) => res.into(),
+            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
+        }
+    }
 }

@@ -3,21 +3,21 @@
 #[cfg(feature = "local-flow-stat")]
 use std::path::PathBuf;
 use std::{
+    future::Future,
     io::{self, ErrorKind},
+    pin::Pin,
     sync::Arc,
+    task::{Context, Poll},
     time::Duration,
 };
 
-use futures::{
-    future::BoxFuture,
-    stream::{FuturesUnordered, StreamExt},
-    FutureExt,
-};
+use futures::{future, ready};
 use log::trace;
 use shadowsocks::{
     config::Mode,
     net::{AcceptOpts, ConnectOpts},
 };
+use tokio::task::JoinHandle;
 
 #[cfg(feature = "local-flow-stat")]
 use crate::net::FlowStat;
@@ -52,17 +52,44 @@ pub mod utils;
 /// This is borrowed from Go's `net` library's default setting
 pub(crate) const LOCAL_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
 
+struct ServerHandle(JoinHandle<io::Result<()>>);
+
+impl Drop for ServerHandle {
+    #[inline]
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl Future for ServerHandle {
+    type Output = io::Result<()>;
+
+    #[inline]
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(Pin::new(&mut self.0).poll(cx)) {
+            Ok(res) => res.into(),
+            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
+        }
+    }
+}
+
 /// Local Server instance
 pub struct Server {
-    vfut: FuturesUnordered<BoxFuture<'static, io::Result<()>>>,
+    vfut: Vec<ServerHandle>,
     balancer: PingBalancer,
 }
 
 impl Server {
     /// Run local server
+    #[deprecated]
     pub async fn run(self) -> io::Result<()> {
-        let (res, _) = self.vfut.into_future().await;
-        res.unwrap()
+        self.wait_until_exit().await
+    }
+
+    /// Wait until any of the servers were exited
+    pub async fn wait_until_exit(self) -> io::Result<()> {
+        let (res, ..) = future::select_all(self.vfut).await;
+        res
     }
 
     /// Get the internal server balancer
@@ -145,7 +172,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
     let context = Arc::new(context);
 
-    let vfut = FuturesUnordered::new();
+    let mut vfut = Vec::new();
 
     // Create a service balancer for choosing between multiple servers
     let balancer = {
@@ -182,7 +209,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
         // For Android's flow statistic
 
         let report_fut = flow_report_task(stat_path, context.flow_stat());
-        vfut.push(report_fut.boxed());
+        vfut.push(ServerHandle(tokio::spawn(report_fut)));
     }
 
     for local_config in config.local {
@@ -211,7 +238,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                     server.set_udp_bind_addr(b.clone());
                 }
 
-                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move {
+                    server.run(&client_addr, balancer).await
+                })));
             }
             #[cfg(feature = "local-tunnel")]
             ProtocolType::Tunnel => {
@@ -235,7 +264,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                 server.set_mode(local_config.mode);
 
                 let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
-                vfut.push(async move { server.run(&client_addr, &udp_addr, balancer).await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move {
+                    server.run(&client_addr, &udp_addr, balancer).await
+                })));
             }
             #[cfg(feature = "local-http")]
             ProtocolType::Http => {
@@ -247,7 +278,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                 };
 
                 let server = Http::with_context(context.clone());
-                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move {
+                    server.run(&client_addr, balancer).await
+                })));
             }
             #[cfg(feature = "local-redir")]
             ProtocolType::Redir => {
@@ -270,7 +303,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                 server.set_udp_redir(local_config.udp_redir);
 
                 let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
-                vfut.push(async move { server.run(&client_addr, &udp_addr, balancer).await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move {
+                    server.run(&client_addr, &udp_addr, balancer).await
+                })));
             }
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => {
@@ -289,7 +324,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                 };
                 server.set_mode(local_config.mode);
 
-                vfut.push(async move { server.run(&client_addr, balancer).await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move {
+                    server.run(&client_addr, balancer).await
+                })));
             }
             #[cfg(feature = "local-tun")]
             ProtocolType::Tun => {
@@ -364,14 +401,10 @@ pub async fn create(config: Config) -> io::Result<Server> {
                     }
                 }
                 let server = builder.build().await?;
-                vfut.push(async move { server.run().await }.boxed());
+                vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
             }
         }
     }
-
-    // let (res, ..) = future::select_all(vfut).await;
-    // let (res, _) = vfut.into_future().await;
-    // res.unwrap()
 
     Ok(Server { vfut, balancer })
 }
@@ -421,5 +454,5 @@ async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::R
 
 /// Create then run a Local Server
 pub async fn run(config: Config) -> io::Result<()> {
-    create(config).await?.run().await
+    create(config).await?.wait_until_exit().await
 }
