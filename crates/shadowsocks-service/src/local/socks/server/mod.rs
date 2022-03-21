@@ -197,8 +197,9 @@ impl Socks {
         balancer: PingBalancer,
         peer_addr: SocketAddr,
         mode: Mode,
+        socks5_auth: Arc<Socks5AuthConfig>,
     ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode);
+        let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode, socks5_auth);
         handler.handle_socks5_client(stream, peer_addr).await
     }
 
