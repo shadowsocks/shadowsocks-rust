@@ -1,3 +1,11 @@
+shadowsocks-rust (1.14.2) unstable; urgency=medium
+
+  ## Features
+
+  - #788 `sslocal` SOCKS5 protocol supports RFC1929 Username/Password Authentication
+    - SECURITY: This is insecured because (a) shadowsocks' SOCKS5 UDP Association doesn't require a dynamic port for each authorized clients (b) Username and passwords are sent in plain text.
+  - RustCrypto/ring-compat#79 HKDF-SHA1 uses [ring](https://crates.io/crates/ring)'s assembly implementation
+
 shadowsocks-rust (1.14.1) unstable; urgency=medium
 
   ## Miscellaneous
