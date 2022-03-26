@@ -2069,6 +2069,7 @@ dependencies = [
  "ipnet",
  "jemallocator",
  "json5",
+ "libc",
  "log",
  "log4rs",
  "mimalloc",

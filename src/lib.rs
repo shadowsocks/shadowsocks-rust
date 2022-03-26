@@ -9,6 +9,7 @@ pub mod logging;
 pub mod monitor;
 pub mod password;
 pub mod service;
+pub mod sys;
 pub mod validator;
 
 /// Exit code when server exits unexpectly

@@ -22,7 +22,8 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor, validator,
+    monitor,
+    validator,
 };
 
 /// Defines command line options
@@ -369,7 +370,9 @@ pub fn main(matches: &ArgMatches) {
         #[cfg(all(unix, not(target_os = "android")))]
         match matches.value_of_t::<u64>("NOFILE") {
             Ok(nofile) => config.nofile = Some(nofile),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {
+                crate::sys::adjust_nofile();
+            }
             Err(err) => err.exit(),
         }
 

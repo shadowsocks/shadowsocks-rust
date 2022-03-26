@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process, time::Duration};
 
-use clap::{Command, Arg, ArgGroup, ArgMatches, ErrorKind as ClapErrorKind};
+use clap::{Arg, ArgGroup, ArgMatches, Command, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -364,7 +364,9 @@ pub fn main(matches: &ArgMatches) {
         #[cfg(all(unix, not(target_os = "android")))]
         match matches.value_of_t::<u64>("NOFILE") {
             Ok(nofile) => config.nofile = Some(nofile),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
+            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {
+                crate::sys::adjust_nofile();
+            }
             Err(err) => err.exit(),
         }
 
