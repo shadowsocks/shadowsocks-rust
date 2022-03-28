@@ -28,7 +28,7 @@ pub fn adjust_nofile() {
             // On older macOS, setrlimit with rlim_cur = infinity will fail.
             #[cfg(any(target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))]
             {
-                use std::{ffi::CString, ptr};
+                use std::ptr;
 
                 extern "C" {
                     fn sysctlbyname(
@@ -46,12 +46,12 @@ pub fn adjust_nofile() {
                 // kern.maxfiles                int32_t                 yes
                 // kern.maxfilesperproc         int32_t                 yes
 
-                let name = CString::new("kern.maxfilesperproc").unwrap();
+                let name = b"kern.maxfilesperproc\0";
                 let mut nfile: i32 = 0;
                 let mut nfile_len: libc::size_t = mem::size_of_val(&nfile);
 
                 let ret = sysctlbyname(
-                    name.as_ptr(),
+                    name.as_ptr() as *const _,
                     &mut nfile as *mut _ as *mut _,
                     &mut nfile_len,
                     ptr::null_mut(),
