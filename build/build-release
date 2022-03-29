@@ -70,7 +70,7 @@ function build() {
     fi
 
     if [[ $? != "0" ]]; then
-        exit $?
+        exit 1
     fi
 
     PKG_DIR="${CUR_DIR}/release"
@@ -96,7 +96,7 @@ function build() {
             "ssservice"
 
         if [[ $? != "0" ]]; then
-            exit $?
+            exit 1
         fi
 
         cd "${PKG_DIR}"
@@ -115,7 +115,7 @@ function build() {
             "ssservice.exe"
 
         if [[ $? != "0" ]]; then
-            exit $?
+            exit 1
         fi
 
         cd "${PKG_DIR}"
