@@ -51,7 +51,7 @@ if [[ "${BUILD_TARGET}" == *"-windows-"* ]]; then
     TARGET_SUFFIX=".exe"
 fi
 
-TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}", "ssservice${TARGET_SUFFIX}")
+TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}" "ssservice${TARGET_SUFFIX}")
 
 RELEASE_FOLDER="${ROOT_DIR}/release"
 RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${BUILD_TARGET}"
