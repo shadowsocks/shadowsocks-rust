@@ -2188,7 +2188,6 @@ checksum = "d2308a1657c8db1f5b4993bab4e620bdbe5623bd81f254cf60326767bb243237"
 dependencies = [
  "bitflags",
  "byteorder",
- "libc",
  "log",
  "managed",
  "rand_core",
