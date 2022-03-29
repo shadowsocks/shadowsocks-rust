@@ -99,10 +99,10 @@ impl Socks5TcpHandler {
 
         trace!("reply handshake {:?}", resp);
 
-        return Err(Error::new(
+        Err(Error::new(
             ErrorKind::Other,
             "currently shadowsocks-rust does not support authentication",
-        ));
+        ))
     }
 
     async fn check_auth_password(&self, stream: &mut TcpStream) -> io::Result<()> {
@@ -171,13 +171,13 @@ impl Socks5TcpHandler {
                 user_name, password
             );
 
-            return Err(Error::new(
+            Err(Error::new(
                 ErrorKind::Other,
                 format!(
                     "Username/Password Authentication failed, user: {}, password: {}",
                     user_name, password
                 ),
-            ));
+            ))
         }
     }
 

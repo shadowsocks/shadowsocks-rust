@@ -826,7 +826,10 @@ impl PasswdAuthRequest {
         let uname = uname.into();
         let passwd = passwd.into();
         assert!(
-            uname.len() > 0 && uname.len() <= u8::MAX as usize && passwd.len() > 0 && passwd.len() <= u8::MAX as usize
+            !uname.is_empty()
+                && uname.len() <= u8::MAX as usize
+                && !passwd.is_empty()
+                && passwd.len() <= u8::MAX as usize
         );
 
         PasswdAuthRequest { uname, passwd }
