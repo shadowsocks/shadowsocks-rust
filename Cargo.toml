@@ -74,7 +74,7 @@ server = ["shadowsocks-service/server"]
 # Enable manager server
 manager = ["shadowsocks-service/manager"]
 # Enable utility
-utility = []
+utility = ["qrcode"]
 # Enable service
 service = ["local", "server", "manager"]
 
@@ -146,7 +146,7 @@ thiserror = "1.0"
 
 clap = { version = "3.1", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
-qrcode = { version = "0.12", default-features = false }
+qrcode = { version = "0.12", default-features = false, optional = true }
 exitcode = "1"
 build-time = "0.1"
 directories = "4.0"
