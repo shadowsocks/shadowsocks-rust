@@ -2105,7 +2105,6 @@ dependencies = [
  "json5",
  "libc",
  "log",
- "log4rs",
  "lru_time_cache",
  "native-tls",
  "nix",
