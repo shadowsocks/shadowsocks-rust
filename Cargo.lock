@@ -2110,7 +2110,6 @@ dependencies = [
  "nix",
  "once_cell",
  "pin-project",
- "qrcode",
  "rand",
  "regex",
  "rustls-native-certs",
