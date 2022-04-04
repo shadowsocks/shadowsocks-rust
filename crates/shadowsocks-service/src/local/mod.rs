@@ -80,6 +80,11 @@ pub struct Server {
 }
 
 impl Server {
+    /// Create a shadowsocks local server
+    pub async fn create(config: Config) -> io::Result<Server> {
+        create(config).await
+    }
+
     /// Run local server
     #[deprecated]
     pub async fn run(self) -> io::Result<()> {
