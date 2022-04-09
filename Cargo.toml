@@ -151,7 +151,7 @@ exitcode = "1"
 build-time = "0.1"
 directories = "4.0"
 xdg = "2.4"
-rpassword = "5.0.1"
+rpassword = "6.0.1"
 libc = "0.2"
 
 futures = "0.3"
