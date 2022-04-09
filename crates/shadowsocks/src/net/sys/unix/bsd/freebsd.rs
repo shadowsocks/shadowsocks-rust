@@ -7,7 +7,7 @@ use std::{
     task::{self, Poll},
 };
 
-use log::error;
+use log::{error, warn};
 use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -166,6 +166,53 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
     Ok(())
 }
 
+/// Disable IP fragmentation
+#[inline]
+pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> io::Result<()> {
+    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+
+    // sys/netinet/in.h
+    const IP_DONTFRAG: libc::c_int = 67; // don't fragment packet
+
+    // sys/netinet6/in6.h
+    const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
+
+    unsafe {
+        match af {
+            AddrFamily::Ipv4 => {
+                let enable: i32 = 1;
+                let ret = libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IP,
+                    IP_DONTFRAG,
+                    &enable as *const _ as *const _,
+                    mem::size_of_val(&enable) as libc::socklen_t,
+                );
+
+                if ret < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            AddrFamily::Ipv6 => {
+                let enable: i32 = 1;
+                let ret = libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IPV6,
+                    IPV6_DONTFRAG,
+                    &enable as *const _ as *const _,
+                    mem::size_of_val(&enable) as libc::socklen_t,
+                );
+
+                if ret < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Create a `UdpSocket` for connecting to `addr`
 #[inline(always)]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
@@ -176,5 +223,10 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
 
-    UdpSocket::bind(bind_addr).await
+    let socket = UdpSocket::bind(bind_addr).await?;
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
+
+    Ok(socket)
 }

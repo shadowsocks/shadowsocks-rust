@@ -9,7 +9,7 @@ use std::{
     task::{self, Poll},
 };
 
-use log::error;
+use log::{error, warn};
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 use tokio::{
@@ -47,6 +47,10 @@ const TCP_FASTOPEN: DWORD = 15;
 // ws2ipdef.h
 // https://github.com/retep998/winapi-rs/pull/1007
 const IP_UNICAST_IF: DWORD = 31;
+
+// ws2ipdef.h
+const IP_MTU_DISCOVER: DWORD = 71; // Set/get path MTU discover state.
+const IPV6_MTU_DISCOVER: DWORD = 71; // Set/get path MTU discover state.
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
 #[pin_project(project = TcpStreamProj)]
@@ -270,6 +274,61 @@ fn disable_connection_reset(socket: &UdpSocket) -> io::Result<()> {
     Ok(())
 }
 
+/// Disable IP fragmentation
+#[inline]
+pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) -> io::Result<()> {
+    // This is an enum PMTUD_STATE
+    //
+    // ```c
+    // typedef enum _PMTUD_STATE {
+    //     IP_PMTUDISC_NOT_SET,
+    //     IP_PMTUDISC_DO,
+    //     IP_PMTUDISC_DONT,
+    //     IP_PMTUDISC_PROBE,
+    //     IP_PMTUDISC_MAX
+    // } PMTUD_STATE, *PPMTUD_STATE;
+    // ```
+    const IP_PMTUDISC_DO: DWORD = 1;
+
+    let handle = socket.as_raw_socket() as SOCKET;
+
+    unsafe {
+        // For Windows, IP_MTU_DISCOVER should be enabled for both IPv4 and IPv6 sockets
+        // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
+        let value: DWORD = IP_PMTUDISC_DO;
+        let ret = setsockopt(
+            handle,
+            IPPROTO_IP as c_int,
+            IP_MTU_DISCOVER as c_int,
+            &value as *const _ as *const c_char,
+            mem::size_of_val(&value) as c_int,
+        );
+
+        if ret == SOCKET_ERROR {
+            let err = io::Error::from_raw_os_error(WSAGetLastError());
+            return Err(err);
+        }
+
+        if af == AddrFamily::Ipv6 {
+            let value: DWORD = IP_PMTUDISC_DO;
+            let ret = setsockopt(
+                handle,
+                IPPROTO_IPV6 as c_int,
+                IPV6_MTU_DISCOVER as c_int,
+                &value as *const _ as *const c_char,
+                mem::size_of_val(&value) as c_int,
+            );
+
+            if ret == SOCKET_ERROR {
+                let err = io::Error::from_raw_os_error(WSAGetLastError());
+                return Err(err);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Create a `UdpSocket` binded to `addr`
 ///
 /// It also disables `WSAECONNRESET` for UDP socket
@@ -287,7 +346,15 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io
         UdpSocket::from_std(socket.into())?
     };
 
+    let addr_family = match addr {
+        SocketAddr::V4(..) => AddrFamily::Ipv4,
+        SocketAddr::V6(..) => AddrFamily::Ipv6,
+    };
+    if let Err(err) = set_disable_ip_fragmentation(addr_family, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
     disable_connection_reset(&socket)?;
+
     Ok(socket)
 }
 
@@ -302,6 +369,9 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> i
     };
 
     let socket = UdpSocket::bind(bind_addr).await?;
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
     disable_connection_reset(&socket)?;
 
     if let Some(ref iface) = opts.bind_interface {

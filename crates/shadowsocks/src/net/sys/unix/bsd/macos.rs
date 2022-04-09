@@ -8,7 +8,7 @@ use std::{
     task::{self, Poll},
 };
 
-use log::error;
+use log::{error, warn};
 use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -202,6 +202,45 @@ fn set_ip_bound_if<S: AsRawFd>(socket: &S, addr: SocketAddr, iface: &str) -> io:
     Ok(())
 }
 
+/// Disable IP fragmentation
+#[inline]
+pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> io::Result<()> {
+    unsafe {
+        match af {
+            AddrFamily::Ipv4 => {
+                let enable: i32 = 1;
+                let ret = libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IP,
+                    libc::IP_DONTFRAG,
+                    &enable as *const _ as *const _,
+                    mem::size_of_val(&enable) as libc::socklen_t,
+                );
+
+                if ret < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            AddrFamily::Ipv6 => {
+                let enable: i32 = 1;
+                let ret = libc::setsockopt(
+                    socket.as_raw_fd(),
+                    libc::IPPROTO_IPV6,
+                    libc::IPV6_DONTFRAG,
+                    &enable as *const _ as *const _,
+                    mem::size_of_val(&enable) as libc::socklen_t,
+                );
+
+                if ret < 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Create a `UdpSocket` for connecting to `addr`
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
@@ -212,6 +251,9 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
     };
 
     let socket = UdpSocket::bind(bind_addr).await?;
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
 
     // Set IP_BOUND_IF for BSD-like
     if let Some(ref iface) = config.bind_interface {

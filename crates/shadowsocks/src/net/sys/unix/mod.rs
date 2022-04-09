@@ -5,10 +5,11 @@ use std::{
 };
 
 use cfg_if::cfg_if;
+use log::warn;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 use tokio::net::UdpSocket;
 
-use crate::net::{is_dual_stack_addr, sys::socket_bind_dual_stack, ConnectOpts};
+use crate::net::{is_dual_stack_addr, sys::socket_bind_dual_stack, AddrFamily, ConnectOpts};
 
 cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "android"))] {
@@ -36,16 +37,26 @@ pub mod uds;
 pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io::Result<UdpSocket> {
     let set_dual_stack = is_dual_stack_addr(addr);
 
-    if !set_dual_stack {
-        UdpSocket::bind(addr).await
+    let socket = if !set_dual_stack {
+        UdpSocket::bind(addr).await?
     } else {
         let socket = Socket::new(Domain::for_address(*addr), Type::DGRAM, Some(Protocol::UDP))?;
         socket_bind_dual_stack(&socket, addr, ipv6_only)?;
 
         // UdpSocket::from_std requires socket to be non-blocked
         socket.set_nonblocking(true)?;
-        UdpSocket::from_std(socket.into())
+        UdpSocket::from_std(socket.into())?
+    };
+
+    let addr_family = match addr {
+        SocketAddr::V4(..) => AddrFamily::Ipv4,
+        SocketAddr::V6(..) => AddrFamily::Ipv6,
+    };
+    if let Err(err) = set_disable_ip_fragmentation(addr_family, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
     }
+
+    Ok(socket)
 }
 
 pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {

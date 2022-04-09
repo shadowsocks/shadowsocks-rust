@@ -2000,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.14.2"
+version = "1.14.3"
 dependencies = [
  "arc-swap 1.5.0",
  "async-trait",
@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.14.3"
+version = "1.14.4"
 dependencies = [
  "build-time",
  "byte_string",

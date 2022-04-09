@@ -8,7 +8,7 @@ use std::{
 };
 
 use cfg_if::cfg_if;
-use log::error;
+use log::{error, warn};
 use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
@@ -197,6 +197,45 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
     Ok(())
 }
 
+/// Disable IP fragmentation
+#[inline]
+pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> io::Result<()> {
+    // For Linux, IP_MTU_DISCOVER should be enabled for both IPv4 and IPv6 sockets
+    // https://man7.org/linux/man-pages/man7/ip.7.html
+
+    unsafe {
+        let value: i32 = libc::IP_PMTUDISC_DO;
+        let ret = libc::setsockopt(
+            socket.as_raw_fd(),
+            libc::IPPROTO_IP,
+            libc::IP_MTU_DISCOVER,
+            &value as *const _ as *const _,
+            mem::size_of_val(&value) as libc::socklen_t,
+        );
+
+        if ret < 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        if af == AddrFamily::Ipv6 {
+            let value: i32 = libc::IP_PMTUDISC_DO;
+            let ret = libc::setsockopt(
+                socket.as_raw_fd(),
+                libc::IPPROTO_IPV6,
+                libc::IPV6_MTU_DISCOVER,
+                &value as *const _ as *const _,
+                mem::size_of_val(&value) as libc::socklen_t,
+            );
+
+            if ret < 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Create a `UdpSocket` for connecting to `addr`
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
@@ -207,6 +246,9 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
     };
 
     let socket = UdpSocket::bind(bind_addr).await?;
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
+    }
 
     // Any traffic except localhost should be protected
     // This is a workaround for VPNService
