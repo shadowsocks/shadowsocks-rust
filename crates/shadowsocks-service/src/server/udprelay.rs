@@ -1,12 +1,10 @@
 //! Shadowsocks UDP server
 
 use std::{
+    cell::RefCell,
     io::{self, ErrorKind},
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -14,6 +12,7 @@ use bytes::Bytes;
 use futures::future;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use shadowsocks::{
     crypto::{CipherCategory, CipherKind},
     lookup_then,
@@ -337,6 +336,15 @@ impl Drop for UdpAssociationContext {
     }
 }
 
+thread_local! {
+    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
+}
+
+#[inline]
+fn generate_server_session_id() -> u64 {
+    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().gen())
+}
+
 impl UdpAssociationContext {
     fn create(
         context: Arc<ServiceContext>,
@@ -353,9 +361,6 @@ impl UdpAssociationContext {
         // being OOM.
         let (sender, receiver) = mpsc::channel(UDP_ASSOCIATION_SEND_CHANNEL_SIZE);
 
-        // Server Session ID allocats sequentially preventing duplication
-        static SERVER_SESSION_ID_ALLOCATOR: AtomicU64 = AtomicU64::new(1);
-
         let mut assoc = UdpAssociationContext {
             context,
             peer_addr,
@@ -365,7 +370,8 @@ impl UdpAssociationContext {
             keepalive_flag: false,
             inbound,
             client_session: client_session_id.map(ClientSessionContext::new),
-            server_session_id: SERVER_SESSION_ID_ALLOCATOR.fetch_add(1, Ordering::AcqRel),
+            // server_session_id must be generated randomly
+            server_session_id: generate_server_session_id(),
             server_packet_id: 0,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
