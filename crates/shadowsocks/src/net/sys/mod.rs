@@ -100,7 +100,7 @@ fn socket_bind_dual_stack_inner(socket: &Socket, addr: &SocketAddr, ipv6_only: b
         socket.bind(&saddr)?;
     } else {
         if let Err(err) = socket.set_only_v6(false) {
-            warn!("failed to set IPV6_V6ONLY: false for listener, error: {}", err);
+            warn!("failed to set IPV6_V6ONLY: false for socket, error: {}", err);
 
             // This is not a fatal error, just warn and skip
         }
@@ -115,7 +115,7 @@ fn socket_bind_dual_stack_inner(socket: &Socket, addr: &SocketAddr, ipv6_only: b
                 );
 
                 if let Err(err) = socket.set_only_v6(true) {
-                    warn!("failed to set IPV6_V6ONLY: true for listener, error: {}", err);
+                    warn!("failed to set IPV6_V6ONLY: true for socket, error: {}", err);
 
                     // This is not a fatal error, just warn and skip
                 }
