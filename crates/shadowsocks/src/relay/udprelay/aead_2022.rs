@@ -248,10 +248,8 @@ pub fn encrypt_client_payload_aead_2022(
         }
         let nonce = &mut dst[..nonce_size];
 
-        if nonce_size > 0 {
-            context.generate_nonce(nonce, false);
-            trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
-        }
+        context.generate_nonce(nonce, false);
+        trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
     }
 
     // Add header fields
@@ -346,7 +344,7 @@ pub fn encrypt_server_payload_aead_2022(
     let nonce_size = get_nonce_len(method);
 
     dst.reserve(
-        nonce_size + 8 + 8 + 1 + 8 + 2 + padding_size + addr.serialized_len() + payload.len() + method.tag_len(),
+        nonce_size + 8 + 8 + 1 + 8 + 8 + 2 + padding_size + addr.serialized_len() + payload.len() + method.tag_len(),
     );
 
     // Generate IV
@@ -356,10 +354,8 @@ pub fn encrypt_server_payload_aead_2022(
         }
         let nonce = &mut dst[..nonce_size];
 
-        if nonce_size > 0 {
-            context.generate_nonce(nonce, false);
-            trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
-        }
+        context.generate_nonce(nonce, false);
+        trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
     }
 
     // Add header fields
