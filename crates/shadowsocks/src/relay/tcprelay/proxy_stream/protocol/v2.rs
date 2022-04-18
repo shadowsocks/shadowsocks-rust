@@ -65,7 +65,7 @@ impl Aead2022TcpRequestHeader {
 
         let now = get_now_timestamp();
 
-        if timestamp > now || now - timestamp > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
+        if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
             return Err(io::Error::new(
                 ErrorKind::Other,
                 format!("received TCP request header with aged timestamp: {}", timestamp),
@@ -175,7 +175,7 @@ impl Aead2022TcpResponseHeader {
 
         let now = get_now_timestamp();
 
-        if timestamp > now || now - timestamp > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
+        if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
             return Err(io::Error::new(
                 ErrorKind::Other,
                 format!("received TCP response header with aged timestamp: {}", timestamp),

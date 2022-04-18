@@ -300,7 +300,7 @@ pub async fn decrypt_client_payload_aead_2022(
     let timestamp = cursor.get_u64();
 
     let now = get_now_timestamp();
-    if timestamp > now || now - timestamp > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
+    if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
         return Err(io::Error::new(
             ErrorKind::Other,
             format!("received TCP response header with aged timestamp: {}", timestamp),
@@ -407,7 +407,7 @@ pub async fn decrypt_server_payload_aead_2022(
     let timestamp = cursor.get_u64();
 
     let now = get_now_timestamp();
-    if timestamp > now || now - timestamp > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
+    if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
         return Err(io::Error::new(
             ErrorKind::Other,
             format!("received TCP response header with aged timestamp: {}", timestamp),

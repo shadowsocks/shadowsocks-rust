@@ -242,7 +242,7 @@ where
         Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
     };
 
-    if timestamp > now || now - timestamp > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
+    if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
         return Err(io::Error::new(
             ErrorKind::Other,
             format!("received TCP response header with aged timestamp: {}", timestamp),
