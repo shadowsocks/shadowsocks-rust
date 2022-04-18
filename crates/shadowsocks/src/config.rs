@@ -175,6 +175,39 @@ pub struct ServerConfig {
     weight: ServerWeight,
 }
 
+#[cfg(feature = "aead-cipher-2022")]
+#[inline]
+fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
+    if method.is_aead_2022() {
+        // AEAD 2022 password is a base64 form of enc_key
+        match base64::decode_config(password, base64::STANDARD) {
+            Ok(v) => {
+                if v.len() != enc_key.len() {
+                    panic!(
+                        "{} is expecting a {} bytes key, but password: {} ({} bytes after decode)",
+                        method,
+                        enc_key.len(),
+                        password,
+                        v.len()
+                    );
+                }
+                enc_key.copy_from_slice(&v);
+            }
+            Err(err) => {
+                panic!("{} password {} is not base64 encoded, error: {}", method, password, err);
+            }
+        }
+    } else {
+        openssl_bytes_to_key(password.as_bytes(), enc_key);
+    }
+}
+
+#[cfg(not(feature = "aead-cipher-2022"))]
+#[inline]
+fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
+    openssl_bytes_to_key(password.as_bytes(), enc_key);
+}
+
 impl ServerConfig {
     /// Create a new `ServerConfig`
     pub fn new<A, P>(addr: A, password: P, method: CipherKind) -> ServerConfig
@@ -185,7 +218,7 @@ impl ServerConfig {
         let password = password.into();
 
         let mut enc_key = vec![0u8; method.key_len()].into_boxed_slice();
-        openssl_bytes_to_key(password.as_bytes(), &mut enc_key);
+        make_derived_key(method, &password, &mut enc_key);
 
         ServerConfig {
             addr: addr.into(),
@@ -211,7 +244,7 @@ impl ServerConfig {
         self.password = password.into();
 
         let mut enc_key = vec![0u8; method.key_len()].into_boxed_slice();
-        openssl_bytes_to_key(self.password.as_bytes(), &mut enc_key);
+        make_derived_key(method, &self.password, &mut enc_key);
 
         self.enc_key = enc_key;
     }
@@ -399,7 +432,8 @@ impl ServerConfig {
             }
         };
 
-        let mut svrconfig = ServerConfig::new(addr, pwd.to_owned(), method.parse().unwrap());
+        let method = method.parse().expect("method");
+        let mut svrconfig = ServerConfig::new(addr, pwd.to_owned(), method);
 
         if let Some(q) = parsed.query() {
             let query = match serde_urlencoded::from_bytes::<Vec<(String, String)>>(q.as_bytes()) {
