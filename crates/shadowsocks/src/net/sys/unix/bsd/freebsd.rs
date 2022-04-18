@@ -9,6 +9,7 @@ use std::{
 
 use log::{error, warn};
 use pin_project::pin_project;
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
@@ -16,7 +17,7 @@ use tokio::{
 use tokio_tfo::TfoStream;
 
 use crate::net::{
-    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
+    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     AddrFamily,
     ConnectOpts,
 };
@@ -223,7 +224,17 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
 
-    let socket = UdpSocket::bind(bind_addr).await?;
+    let socket = if af != AddrFamily::Ipv6 {
+        UdpSocket::bind(bind_addr).await?
+    } else {
+        let socket = Socket::new(Domain::for_address(bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
+        socket_bind_dual_stack(&socket, &bind_addr, false)?;
+
+        // UdpSocket::from_std requires socket to be non-blocked
+        socket.set_nonblocking(true)?;
+        UdpSocket::from_std(socket.into())?
+    };
+
     if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
         warn!("failed to disable IP fragmentation, error: {}", err);
     }
