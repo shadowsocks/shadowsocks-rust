@@ -204,7 +204,7 @@ fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
 
 #[cfg(not(feature = "aead-cipher-2022"))]
 #[inline]
-fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
+fn make_derived_key(_method: CipherKind, password: &str, enc_key: &mut [u8]) {
     openssl_bytes_to_key(password.as_bytes(), enc_key);
 }
 

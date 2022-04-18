@@ -16,9 +16,11 @@ use tokio::{
     time,
 };
 
+#[cfg(feature = "aead-cipher-2022")]
+use crate::context::Context;
 use crate::{
     config::ServerConfig,
-    context::{Context, SharedContext},
+    context::SharedContext,
     crypto::CipherKind,
     net::{ConnectOpts, TcpStream as OutboundTcpStream},
     relay::{
@@ -268,8 +270,10 @@ where
 {
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        #[allow(unused_mut)]
         let mut this = self.project();
 
+        #[allow(clippy::never_loop)]
         loop {
             match this.reader_state {
                 ProxyClientStreamReadState::Established => {
@@ -349,6 +353,8 @@ fn make_first_packet_buffer(method: CipherKind, addr: &Address, buf: &[u8]) -> B
             }
         }
     }
+
+    let _ = method;
 
     // STREAM / AEAD protocol, append the Address before payload
     if buffer.is_empty() {

@@ -55,13 +55,20 @@ pub fn encrypt_client_payload(
 ) {
     match method.category() {
         CipherCategory::None => {
+            let _ = control;
             dst.reserve(addr.serialized_len() + payload.len());
             addr.write_to_buf(dst);
             dst.put_slice(payload);
         }
         #[cfg(feature = "stream-cipher")]
-        CipherCategory::Stream => encrypt_payload_stream(context, method, key, addr, payload, dst),
-        CipherCategory::Aead => encrypt_payload_aead(context, method, key, addr, payload, dst),
+        CipherCategory::Stream => {
+            let _ = control;
+            encrypt_payload_stream(context, method, key, addr, payload, dst)
+        }
+        CipherCategory::Aead => {
+            let _ = control;
+            encrypt_payload_aead(context, method, key, addr, payload, dst)
+        }
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => encrypt_client_payload_aead_2022(context, method, key, addr, control, payload, dst),
     }
@@ -79,13 +86,20 @@ pub fn encrypt_server_payload(
 ) {
     match method.category() {
         CipherCategory::None => {
+            let _ = control;
             dst.reserve(addr.serialized_len() + payload.len());
             addr.write_to_buf(dst);
             dst.put_slice(payload);
         }
         #[cfg(feature = "stream-cipher")]
-        CipherCategory::Stream => encrypt_payload_stream(context, method, key, addr, payload, dst),
-        CipherCategory::Aead => encrypt_payload_aead(context, method, key, addr, payload, dst),
+        CipherCategory::Stream => {
+            let _ = control;
+            encrypt_payload_stream(context, method, key, addr, payload, dst)
+        }
+        CipherCategory::Aead => {
+            let _ = control;
+            encrypt_payload_aead(context, method, key, addr, payload, dst)
+        }
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => encrypt_server_payload_aead_2022(context, method, key, addr, control, payload, dst),
     }

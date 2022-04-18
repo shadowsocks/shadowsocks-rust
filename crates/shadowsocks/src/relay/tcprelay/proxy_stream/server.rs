@@ -6,6 +6,7 @@ use std::{
     task::{self, Poll},
 };
 
+#[cfg(feature = "aead-cipher-2022")]
 use bytes::BytesMut;
 use futures::ready;
 use pin_project::pin_project;
@@ -121,8 +122,10 @@ where
 {
     #[inline]
     fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        #[allow(unused_mut)]
         let mut this = self.project();
 
+        #[allow(clippy::never_loop)]
         loop {
             match *this.writer_state {
                 ProxyServerStreamWriteState::Established => {
