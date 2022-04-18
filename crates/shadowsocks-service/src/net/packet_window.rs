@@ -20,6 +20,12 @@ pub struct PacketWindowFilter {
     packet_ring: [u64; RING_BLOCKS as usize],
 }
 
+impl Default for PacketWindowFilter {
+    fn default() -> PacketWindowFilter {
+        PacketWindowFilter::new()
+    }
+}
+
 impl PacketWindowFilter {
     /// Create an empty filter
     pub fn new() -> PacketWindowFilter {
@@ -53,7 +59,8 @@ impl PacketWindowFilter {
                 // Clear the whole filter
                 diff = RING_BLOCKS;
             }
-            for i in current + 1..current + diff {
+            for d in 1..=diff {
+                let i = current + d;
                 self.packet_ring[(i & BLOCK_MASK) as usize] = 0;
             }
             self.last_packet_id = packet_id;
@@ -69,5 +76,116 @@ impl PacketWindowFilter {
         let new = old | (1 << index_bit);
         self.packet_ring[index_block as usize] = new;
         old != new
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::cell::RefCell;
+
+    #[test]
+    fn test_packet_window() {
+        const REJECT_AFTER_MESSAGES: u64 = u64::MAX - (1u64 << 13);
+
+        let filter = RefCell::new(PacketWindowFilter::new());
+
+        let test_number = RefCell::new(0);
+        #[allow(non_snake_case)]
+        let T = |n: u64, expected: bool| {
+            *(test_number.borrow_mut()) += 1;
+            if filter.borrow_mut().validate_packet_id(n, REJECT_AFTER_MESSAGES) != expected {
+                panic!("Test {} failed, {} {}", test_number.borrow(), n, expected);
+            }
+        };
+
+        const T_LIM: u64 = WINDOW_SIZE + 1;
+
+        T(0, true); // 1
+        T(1, true); // 2
+        T(1, false); // 3
+        T(9, true); // 4
+        T(8, true); // 5
+        T(7, true); // 6
+        T(7, false); // 7
+        T(T_LIM, true); // 8
+        T(T_LIM - 1, true); // 9
+        T(T_LIM - 1, false); // 10
+        T(T_LIM - 2, true); // 11
+        T(2, true); // 12
+        T(2, false); // 13
+        T(T_LIM + 16, true); // 14
+        T(3, false); // 15
+        T(T_LIM + 16, false); // 16
+        T(T_LIM * 4, true); // 17
+        T(T_LIM * 4 - (T_LIM - 1), true); // 18
+        T(10, false); // 19
+        T(T_LIM * 4 - T_LIM, false); // 20
+        T(T_LIM * 4 - (T_LIM + 1), false); // 21
+        T(T_LIM * 4 - (T_LIM - 2), true); // 22
+        T(T_LIM * 4 + 1 - T_LIM, false); // 23
+        T(0, false); // 24
+        T(REJECT_AFTER_MESSAGES, false); // 25
+        T(REJECT_AFTER_MESSAGES - 1, true); // 26
+        T(REJECT_AFTER_MESSAGES, false); // 27
+        T(REJECT_AFTER_MESSAGES - 1, false); // 28
+        T(REJECT_AFTER_MESSAGES - 2, true); // 29
+        T(REJECT_AFTER_MESSAGES + 1, false); // 30
+        T(REJECT_AFTER_MESSAGES + 2, false); // 31
+        T(REJECT_AFTER_MESSAGES - 2, false); // 32
+        T(REJECT_AFTER_MESSAGES - 3, true); // 33
+        T(0, false); // 34
+
+        println!("Bulk test 1");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in 1..=WINDOW_SIZE {
+            T(i, true);
+        }
+        T(0, true);
+        T(0, false);
+
+        println!("Bulk test 2");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in 2..=WINDOW_SIZE + 1 {
+            T(i, true);
+        }
+        T(1, true);
+        T(0, false);
+
+        println!("Bulk test 3");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in (1..=WINDOW_SIZE + 1).rev() {
+            T(i, true);
+        }
+
+        println!("Bulk test 4");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in (2..=WINDOW_SIZE + 2).rev() {
+            T(i, true);
+        }
+        T(0, false);
+
+        println!("Bulk test 5");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in (1..=WINDOW_SIZE).rev() {
+            T(i, true);
+        }
+        T(WINDOW_SIZE + 1, true);
+        T(0, false);
+
+        println!("Bulk test 6");
+        filter.borrow_mut().reset();
+        *(test_number.borrow_mut()) = 0;
+        for i in (1..=WINDOW_SIZE).rev() {
+            T(i, true);
+        }
+        T(0, true);
+        T(WINDOW_SIZE + 1, true);
     }
 }

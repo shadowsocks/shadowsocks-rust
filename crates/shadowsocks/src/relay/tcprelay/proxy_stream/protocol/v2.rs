@@ -69,8 +69,7 @@ impl Aead2022TcpRequestHeader {
             return Err(io::Error::new(
                 ErrorKind::Other,
                 format!("received TCP request header with aged timestamp: {}", timestamp),
-            ))
-            .into();
+            ));
         }
 
         let addr = Address::read_from(reader).await?;
@@ -188,8 +187,7 @@ impl Aead2022TcpResponseHeader {
             return Err(io::Error::new(
                 ErrorKind::Other,
                 format!("received TCP response header with aged timestamp: {}", timestamp),
-            ))
-            .into();
+            ));
         }
 
         let salt_size = method.salt_len();

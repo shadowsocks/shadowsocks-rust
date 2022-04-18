@@ -37,14 +37,17 @@ use super::context::ServiceContext;
 #[derive(Debug, Clone, Copy)]
 enum NatKey {
     PeerAddr(SocketAddr),
+    #[cfg(feature = "aead-cipher-2022")]
     SessionId(u64),
 }
 
 type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
+#[cfg(feature = "aead-cipher-2022")]
 type SessionMap = LruCache<u64, UdpAssociation>;
 
 enum NatMap {
     Association(AssociationMap),
+    #[cfg(feature = "aead-cipher-2022")]
     Session(SessionMap),
 }
 
@@ -54,6 +57,7 @@ impl NatMap {
             NatMap::Association(ref mut m) => {
                 m.iter();
             }
+            #[cfg(feature = "aead-cipher-2022")]
             NatMap::Session(ref mut m) => {
                 m.iter();
             }
@@ -65,9 +69,11 @@ impl NatMap {
             (NatMap::Association(ref mut m), NatKey::PeerAddr(ref peer_addr)) => {
                 m.get(peer_addr);
             }
+            #[cfg(feature = "aead-cipher-2022")]
             (NatMap::Session(ref mut m), NatKey::SessionId(ref session_id)) => {
                 m.get(session_id);
             }
+            #[allow(unreachable_patterns)]
             _ => unreachable!("NatMap & NatKey mismatch"),
         }
     }
@@ -223,6 +229,7 @@ impl UdpServer {
                 assoc.try_send((peer_addr, target_addr, Bytes::copy_from_slice(data), control))?;
                 m.insert(peer_addr, assoc);
             }
+            #[cfg(feature = "aead-cipher-2022")]
             NatMap::Session(ref mut m) => {
                 let xcontrol = match control {
                     None => {
@@ -260,9 +267,11 @@ impl UdpServer {
     }
 }
 
+type UdpAssociationSendMessage = (SocketAddr, Address, Bytes, Option<UdpSocketControlData>);
+
 struct UdpAssociation {
     assoc_handle: JoinHandle<()>,
-    sender: mpsc::Sender<(SocketAddr, Address, Bytes, Option<UdpSocketControlData>)>,
+    sender: mpsc::Sender<UdpAssociationSendMessage>,
 }
 
 impl Drop for UdpAssociation {
@@ -282,6 +291,7 @@ impl UdpAssociation {
         UdpAssociation { assoc_handle, sender }
     }
 
+    #[cfg(feature = "aead-cipher-2022")]
     fn new_session(
         context: Arc<ServiceContext>,
         inbound: Arc<MonProxySocket>,
@@ -294,7 +304,7 @@ impl UdpAssociation {
         UdpAssociation { assoc_handle, sender }
     }
 
-    fn try_send(&self, data: (SocketAddr, Address, Bytes, Option<UdpSocketControlData>)) -> io::Result<()> {
+    fn try_send(&self, data: UdpAssociationSendMessage) -> io::Result<()> {
         if let Err(..) = self.sender.try_send(data) {
             let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
             return Err(err);
@@ -357,10 +367,7 @@ impl UdpAssociationContext {
         peer_addr: SocketAddr,
         keepalive_tx: mpsc::Sender<NatKey>,
         client_session_id: Option<u64>,
-    ) -> (
-        JoinHandle<()>,
-        mpsc::Sender<(SocketAddr, Address, Bytes, Option<UdpSocketControlData>)>,
-    ) {
+    ) -> (JoinHandle<()>, mpsc::Sender<UdpAssociationSendMessage>) {
         // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
         // being OOM.
@@ -384,10 +391,7 @@ impl UdpAssociationContext {
         (handle, sender)
     }
 
-    async fn dispatch_packet(
-        &mut self,
-        mut receiver: mpsc::Receiver<(SocketAddr, Address, Bytes, Option<UdpSocketControlData>)>,
-    ) {
+    async fn dispatch_packet(&mut self, mut receiver: mpsc::Receiver<UdpAssociationSendMessage>) {
         let mut outbound_ipv4_buffer = Vec::new();
         let mut outbound_ipv6_buffer = Vec::new();
         let mut keepalive_interval = time::interval(Duration::from_secs(1));
@@ -440,7 +444,10 @@ impl UdpAssociationContext {
                     if self.keepalive_flag {
                         let nat_key = match self.client_session {
                             None => NatKey::PeerAddr(self.peer_addr),
+                            #[cfg(feature = "aead-cipher-2022")]
                             Some(ref s) => NatKey::SessionId(s.client_session_id),
+                            #[cfg(not(feature = "aead-cipher-2022"))]
+                            Some(..) => unreachable!("client_session_id is not None but aead-cipher-2022 is not enabled"),
                         };
 
                         if let Err(..) = self.keepalive_tx.try_send(nat_key) {
