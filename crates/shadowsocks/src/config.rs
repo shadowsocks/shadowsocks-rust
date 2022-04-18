@@ -15,7 +15,7 @@ use log::error;
 use url::{self, Url};
 
 use crate::{
-    crypto::v1::{openssl_bytes_to_key, CipherKind},
+    crypto::{v1::openssl_bytes_to_key, CipherKind},
     plugin::PluginConfig,
     relay::socks5::Address,
 };

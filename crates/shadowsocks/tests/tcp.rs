@@ -16,7 +16,7 @@ use tokio::{
 use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::Context,
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     relay::{
         socks5::Address,
         tcprelay::{
@@ -44,7 +44,7 @@ async fn handle_tcp_tunnel_server_client(
         remote
     };
 
-    let (mut sr, mut sw) = stream.into_split();
+    let (mut sr, mut sw) = tokio::io::split(stream);
     let (mut mr, mut mw) = remote.split();
 
     let l2r = copy_from_encrypted(method, &mut sr, &mut mw);
@@ -70,7 +70,7 @@ async fn handle_tcp_tunnel_local_client(
     let remote = ProxyClientStream::connect(context, &svr_cfg, target_addr).await?;
 
     let (mut lr, mut lw) = stream.split();
-    let (mut sr, mut sw) = remote.into_split();
+    let (mut sr, mut sw) = tokio::io::split(remote);
 
     let l2s = copy_to_encrypted(svr_cfg.method(), &mut lr, &mut sw);
     let s2l = copy_from_encrypted(svr_cfg.method(), &mut sr, &mut lw);

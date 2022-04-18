@@ -7,7 +7,7 @@ use tokio::{net::UdpSocket, sync::Barrier};
 use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::{Context, SharedContext},
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     relay::{socks5::Address, udprelay::ProxySocket},
 };
 

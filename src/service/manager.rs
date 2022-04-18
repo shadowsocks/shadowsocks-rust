@@ -15,7 +15,7 @@ use shadowsocks_service::{
     run_manager,
     shadowsocks::{
         config::{ManagerAddr, Mode},
-        crypto::v1::{available_ciphers, CipherKind},
+        crypto::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
 };

@@ -66,7 +66,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerWeight},
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     plugin::PluginConfig,
 };
 #[cfg(feature = "trust-dns")]

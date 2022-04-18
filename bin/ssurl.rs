@@ -3,7 +3,7 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{

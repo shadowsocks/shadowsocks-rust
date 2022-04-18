@@ -8,7 +8,7 @@ use log::{error, info, trace};
 use shadowsocks::{
     config::{Mode, ServerConfig, ServerType},
     context::{Context, SharedContext},
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     dns_resolver::DnsResolver,
     manager::protocol::{
         self,

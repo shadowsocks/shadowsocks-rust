@@ -126,6 +126,9 @@ stream-cipher = ["shadowsocks-service/stream-cipher"]
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
 
+# Enable AEAD 2022
+aead-cipher-2022 = ["shadowsocks-service/aead-cipher-2022"]
+
 # Enable detection against replay attack
 security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]
 replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.

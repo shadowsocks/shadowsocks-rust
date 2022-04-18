@@ -1,6 +1,4 @@
-//! AEAD packet I/O facilities
-//!
-//! AEAD protocol is defined in <https://shadowsocks.org/en/spec/AEAD.html>.
+//! AEAD 2022 packet I/O facilities
 //!
 //! ```plain
 //! TCP request (before encryption)
@@ -48,11 +46,11 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     context::Context,
-    crypto::{v1::Cipher, CipherKind},
+    crypto::{v2::tcp::TcpCipher, CipherKind},
 };
 
-/// AEAD packet payload must be smaller than 0x3FFF
-pub const MAX_PACKET_SIZE: usize = 0x3FFF;
+/// AEAD packet payload must be smaller than 0xFFFF (u16::MAX)
+pub const MAX_PACKET_SIZE: usize = 0xFFFF;
 
 enum DecryptReadState {
     WaitSalt { key: Bytes },
@@ -64,7 +62,7 @@ enum DecryptReadState {
 /// Reader wrapper that will decrypt data automatically
 pub struct DecryptedReader {
     state: DecryptReadState,
-    cipher: Option<Cipher>,
+    cipher: Option<TcpCipher>,
     buffer: BytesMut,
     method: CipherKind,
     salt: Option<Bytes>,
@@ -85,7 +83,7 @@ impl DecryptedReader {
         } else {
             DecryptedReader {
                 state: DecryptReadState::ReadLength,
-                cipher: Some(Cipher::new(method, key, &[])),
+                cipher: Some(TcpCipher::new(method, key, &[])),
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
                 method,
                 salt: None,
@@ -172,7 +170,7 @@ impl DecryptedReader {
 
         trace!("got AEAD salt {:?}", ByteStr::new(salt));
 
-        let cipher = Cipher::new(self.method, key, salt);
+        let cipher = TcpCipher::new(self.method, key, salt);
 
         self.cipher = Some(cipher);
 
@@ -264,7 +262,7 @@ impl DecryptedReader {
         Ok(size).into()
     }
 
-    fn decrypt_length(cipher: &mut Cipher, m: &mut [u8]) -> io::Result<usize> {
+    fn decrypt_length(cipher: &mut TcpCipher, m: &mut [u8]) -> io::Result<usize> {
         let plen = {
             if !cipher.decrypt_packet(m) {
                 return Err(io::Error::new(ErrorKind::Other, "invalid tag-in"));
@@ -272,20 +270,6 @@ impl DecryptedReader {
 
             u16::from_be_bytes([m[0], m[1]]) as usize
         };
-
-        if plen > MAX_PACKET_SIZE {
-            // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
-            //
-            // AEAD TCP protocol have reserved the higher two bits for future use
-            let err = io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
-                    plen
-                ),
-            );
-            return Err(err);
-        }
 
         Ok(plen)
     }
@@ -298,7 +282,7 @@ enum EncryptWriteState {
 
 /// Writer wrapper that will encrypt data automatically
 pub struct EncryptedWriter {
-    cipher: Cipher,
+    cipher: TcpCipher,
     buffer: BytesMut,
     state: EncryptWriteState,
     salt: Bytes,
@@ -312,7 +296,7 @@ impl EncryptedWriter {
         buffer.put(nonce);
 
         EncryptedWriter {
-            cipher: Cipher::new(method, key, nonce),
+            cipher: TcpCipher::new(method, key, nonce),
             buffer,
             state: EncryptWriteState::AssemblePacket,
             salt: Bytes::copy_from_slice(nonce),

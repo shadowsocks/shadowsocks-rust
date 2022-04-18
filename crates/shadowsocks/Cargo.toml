@@ -31,6 +31,9 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 # WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
+# Enable AEAD 2022
+aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes"]
+
 # Enable detection against replay attack
 security-replay-attack-detect = ["bloomfilter", "spin"]
 # Enable IV printable prefix
@@ -72,11 +75,13 @@ trust-dns-resolver = { version = "0.21", optional = true }
 arc-swap = { version = "1.3", optional = true }
 notify = { version = "5.0.0-pre.13", optional = true }
 
+aes = { version = "0.8", optional = true }
+
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.3.3", features = ["ring"] }
+shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/shadowsocks-crypto.git", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.3.3", features = [] }
+shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/shadowsocks-crypto.git", features = [] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2", "netioapi"] }

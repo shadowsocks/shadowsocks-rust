@@ -17,7 +17,7 @@ use shadowsocks_service::{
     run_server,
     shadowsocks::{
         config::{ServerAddr, ServerConfig},
-        crypto::v1::CipherKind,
+        crypto::CipherKind,
     },
 };
 

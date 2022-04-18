@@ -31,9 +31,9 @@ impl Connector {
 }
 
 impl Service<Uri> for Connector {
-    type Response = ProxyHttpStream;
     type Error = io::Error;
     type Future = Connecting;
+    type Response = ProxyHttpStream;
 
     fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -67,7 +67,7 @@ impl Service<Uri> for Connector {
                     }
                 }
             }
-                .boxed(),
+            .boxed(),
         }
     }
 }

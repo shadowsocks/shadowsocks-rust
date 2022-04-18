@@ -13,17 +13,33 @@ use tokio::{
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     net::{AcceptOpts, ConnectOpts, UdpSocket as ShadowUdpSocket},
-    relay::socks5::Address,
+    relay::{socks5::Address, udprelay::options::UdpSocketControlData},
 };
 
-use super::crypto_io::{decrypt_payload, encrypt_payload};
+use super::crypto_io::{
+    decrypt_client_payload,
+    decrypt_server_payload,
+    encrypt_client_payload,
+    encrypt_server_payload,
+};
 
 static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
+static DEFAULT_SOCKET_CONTROL: Lazy<UdpSocketControlData> = Lazy::new(UdpSocketControlData::default);
+
+/// UDP socket type, defining whether the socket is used in Client or Server
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UdpSocketType {
+    /// Socket used for `Client -> Server`
+    Client,
+    /// Socket used for `Server -> Client`
+    Server,
+}
 
 /// UDP client for communicating with ShadowSocks' server
 pub struct ProxySocket {
+    socket_type: UdpSocketType,
     socket: UdpSocket,
     method: CipherKind,
     key: Box<[u8]>,
@@ -50,17 +66,28 @@ impl ProxySocket {
 
         trace!("connected udp remote {} with {:?}", svr_cfg.addr(), opts);
 
-        Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))
+        Ok(ProxySocket::from_socket(
+            UdpSocketType::Client,
+            context,
+            svr_cfg,
+            socket.into(),
+        ))
     }
 
     /// Create a `ProxySocket` from a `UdpSocket`
-    pub fn from_socket(context: SharedContext, svr_cfg: &ServerConfig, socket: UdpSocket) -> ProxySocket {
+    pub fn from_socket(
+        socket_type: UdpSocketType,
+        context: SharedContext,
+        svr_cfg: &ServerConfig,
+        socket: UdpSocket,
+    ) -> ProxySocket {
         let key = svr_cfg.key().to_vec().into_boxed_slice();
         let method = svr_cfg.method();
 
         // NOTE: svr_cfg.timeout() is not for this socket, but for associations.
 
         ProxySocket {
+            socket_type,
             socket,
             method,
             key,
@@ -91,17 +118,54 @@ impl ProxySocket {
                 .1
             }
         };
-        Ok(ProxySocket::from_socket(context, svr_cfg, socket.into()))
+        Ok(ProxySocket::from_socket(
+            UdpSocketType::Server,
+            context,
+            svr_cfg,
+            socket.into(),
+        ))
     }
 
     /// Send a UDP packet to addr through proxy
+    #[inline]
     pub async fn send(&self, addr: &Address, payload: &[u8]) -> io::Result<usize> {
+        self.send_with_ctrl(addr, &DEFAULT_SOCKET_CONTROL, payload).await
+    }
+
+    /// Send a UDP packet to addr through proxy
+    pub async fn send_with_ctrl(
+        &self,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        payload: &[u8],
+    ) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-        encrypt_payload(&self.context, self.method, &self.key, addr, payload, &mut send_buf);
+
+        match self.socket_type {
+            UdpSocketType::Client => encrypt_client_payload(
+                &self.context,
+                self.method,
+                &self.key,
+                addr,
+                control,
+                payload,
+                &mut send_buf,
+            ),
+            UdpSocketType::Server => encrypt_server_payload(
+                &self.context,
+                self.method,
+                &self.key,
+                addr,
+                control,
+                payload,
+                &mut send_buf,
+            ),
+        }
 
         trace!(
-            "UDP server client send to {}, payload length {} bytes, packet length {} bytes",
+            "UDP server client send to {}, control: {:?}, payload length {} bytes, packet length {} bytes",
             addr,
+            control,
             payload.len(),
             send_buf.len()
         );
@@ -128,12 +192,45 @@ impl ProxySocket {
 
     /// Send a UDP packet to target from proxy
     pub async fn send_to<A: ToSocketAddrs>(&self, target: A, addr: &Address, payload: &[u8]) -> io::Result<usize> {
+        self.send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload)
+            .await
+    }
+
+    /// Send a UDP packet to target from proxy
+    pub async fn send_to_with_ctrl<A: ToSocketAddrs>(
+        &self,
+        target: A,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        payload: &[u8],
+    ) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-        encrypt_payload(&self.context, self.method, &self.key, addr, payload, &mut send_buf);
+
+        match self.socket_type {
+            UdpSocketType::Client => encrypt_client_payload(
+                &self.context,
+                self.method,
+                &self.key,
+                addr,
+                control,
+                payload,
+                &mut send_buf,
+            ),
+            UdpSocketType::Server => encrypt_server_payload(
+                &self.context,
+                self.method,
+                &self.key,
+                addr,
+                control,
+                payload,
+                &mut send_buf,
+            ),
+        }
 
         trace!(
-            "UDP server client send to, addr {}, payload length {} bytes, packet length {} bytes",
+            "UDP server client send to, addr {}, control: {:?}, payload length {} bytes, packet length {} bytes",
             addr,
+            control,
             payload.len(),
             send_buf.len()
         );
@@ -164,6 +261,18 @@ impl ProxySocket {
     ///
     /// It is recommended to allocate a buffer to have at least 65536 bytes.
     pub async fn recv(&self, recv_buf: &mut [u8]) -> io::Result<(usize, Address, usize)> {
+        self.recv_with_ctrl(recv_buf).await.map(|(n, a, rn, _)| (n, a, rn))
+    }
+
+    /// Receive packet from Shadowsocks' UDP server
+    ///
+    /// This function will use `recv_buf` to store intermediate data, so it has to be big enough to store the whole shadowsocks' packet
+    ///
+    /// It is recommended to allocate a buffer to have at least 65536 bytes.
+    pub async fn recv_with_ctrl(
+        &self,
+        recv_buf: &mut [u8],
+    ) -> io::Result<(usize, Address, usize, Option<UdpSocketControlData>)> {
         // Waiting for response from server SERVER -> CLIENT
         let recv_n = match self.recv_timeout {
             None => self.socket.recv(recv_buf).await?,
@@ -174,16 +283,24 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr) = decrypt_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?;
+        let (n, addr, control) = match self.socket_type {
+            UdpSocketType::Client => {
+                decrypt_server_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
+            }
+            UdpSocketType::Server => {
+                decrypt_client_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
+            }
+        };
 
         trace!(
-            "UDP server client receive from {}, packet length {} bytes, payload length {} bytes",
+            "UDP server client receive from {}, control: {:?}, packet length {} bytes, payload length {} bytes",
             addr,
+            control,
             recv_n,
             n
         );
 
-        Ok((n, addr, recv_n))
+        Ok((n, addr, recv_n, control))
     }
 
     /// Receive packet from Shadowsocks' UDP server
@@ -192,6 +309,20 @@ impl ProxySocket {
     ///
     /// It is recommended to allocate a buffer to have at least 65536 bytes.
     pub async fn recv_from(&self, recv_buf: &mut [u8]) -> io::Result<(usize, SocketAddr, Address, usize)> {
+        self.recv_from_with_ctrl(recv_buf)
+            .await
+            .map(|(n, sa, a, rn, _)| (n, sa, a, rn))
+    }
+
+    /// Receive packet from Shadowsocks' UDP server
+    ///
+    /// This function will use `recv_buf` to store intermediate data, so it has to be big enough to store the whole shadowsocks' packet
+    ///
+    /// It is recommended to allocate a buffer to have at least 65536 bytes.
+    pub async fn recv_from_with_ctrl(
+        &self,
+        recv_buf: &mut [u8],
+    ) -> io::Result<(usize, SocketAddr, Address, usize, Option<UdpSocketControlData>)> {
         // Waiting for response from server SERVER -> CLIENT
         let (recv_n, target_addr) = match self.recv_timeout {
             None => self.socket.recv_from(recv_buf).await?,
@@ -201,17 +332,26 @@ impl ProxySocket {
                 Err(..) => return Err(io::ErrorKind::TimedOut.into()),
             },
         };
-        let (n, addr) = decrypt_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?;
+
+        let (n, addr, control) = match self.socket_type {
+            UdpSocketType::Client => {
+                decrypt_server_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
+            }
+            UdpSocketType::Server => {
+                decrypt_client_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
+            }
+        };
 
         trace!(
-            "UDP server client receive from {}, addr {}, packet length {} bytes, payload length {} bytes",
+            "UDP server client receive from {}, addr {}, control: {:?}, packet length {} bytes, payload length {} bytes",
             target_addr,
             addr,
+            control,
             recv_n,
             n,
         );
 
-        Ok((n, target_addr, addr, recv_n))
+        Ok((n, target_addr, addr, recv_n, control))
     }
 
     /// Get local addr of socket
