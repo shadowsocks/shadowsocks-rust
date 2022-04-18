@@ -41,7 +41,7 @@ pub enum Aead2022TcpStreamType {
 pub struct Aead2022TcpRequestHeader {
     pub addr: Address,
     pub timestamp: u64,
-    pub padding: Vec<u8>,
+    pub padding_size: u16,
 }
 
 impl Aead2022TcpRequestHeader {
@@ -78,16 +78,23 @@ impl Aead2022TcpRequestHeader {
         let mut padding_size_buffer = [0u8; 2];
         reader.read_exact(&mut padding_size_buffer).await?;
 
-        let padding_size = u16::from_be_bytes(padding_size_buffer) as usize;
-        let mut padding = vec![0u8; padding_size];
+        let padding_size = u16::from_be_bytes(padding_size_buffer);
         if padding_size > 0 {
-            reader.read_exact(&mut padding).await?;
+            let mut take_reader = reader.take(padding_size as u64);
+            let mut buffer = [0u8; 64];
+            loop {
+                match take_reader.read(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(..) => continue,
+                    Err(err) => return Err(err),
+                }
+            }
         }
 
         Ok(Aead2022TcpRequestHeader {
             addr,
             timestamp,
-            padding,
+            padding_size,
         })
     }
 
@@ -95,7 +102,7 @@ impl Aead2022TcpRequestHeader {
         Aead2022TcpRequestHeaderRef {
             addr: &self.addr,
             timestamp: self.timestamp,
-            padding: &self.padding,
+            padding_size: self.padding_size,
         }
         .write_to_buf(buf)
     }
@@ -104,7 +111,7 @@ impl Aead2022TcpRequestHeader {
         Aead2022TcpRequestHeaderRef {
             addr: &self.addr,
             timestamp: self.timestamp,
-            padding: &self.padding,
+            padding_size: self.padding_size,
         }
         .serialized_len()
     }
@@ -113,7 +120,7 @@ impl Aead2022TcpRequestHeader {
 pub struct Aead2022TcpRequestHeaderRef<'a> {
     pub addr: &'a Address,
     pub timestamp: u64,
-    pub padding: &'a [u8],
+    pub padding_size: u16,
 }
 
 impl<'a> Aead2022TcpRequestHeaderRef<'a> {
@@ -123,19 +130,21 @@ impl<'a> Aead2022TcpRequestHeaderRef<'a> {
         self.addr.write_to_buf(buf);
 
         assert!(
-            self.padding.len() <= MAX_PADDING_SIZE,
+            self.padding_size as usize <= MAX_PADDING_SIZE,
             "padding length must be in [0, {}]",
             MAX_PADDING_SIZE
         );
 
-        buf.put_u16(self.padding.len() as u16);
-        if !self.padding.is_empty() {
-            buf.put_slice(self.padding);
+        buf.put_u16(self.padding_size);
+        if self.padding_size > 0 {
+            unsafe {
+                buf.advance_mut(self.padding_size as usize);
+            }
         }
     }
 
     pub fn serialized_len(&self) -> usize {
-        1 + 8 + self.addr.serialized_len() + 2 + self.padding.len()
+        1 + 8 + self.addr.serialized_len() + 2 + self.padding_size as usize
     }
 }
 

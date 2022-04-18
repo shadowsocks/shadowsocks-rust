@@ -52,7 +52,6 @@ pub fn encrypt_payload_aead(
     addr.write_to_buf(dst);
     dst.put_slice(payload);
 
-    dst.reserve(method.tag_len());
     unsafe {
         dst.advance_mut(method.tag_len());
     }

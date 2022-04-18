@@ -59,7 +59,7 @@ use aes::{
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, BytesMut};
-use log::trace;
+use log::{error, trace};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 use crate::{
@@ -92,15 +92,6 @@ fn get_padding_size(payload: &[u8]) -> usize {
 }
 
 #[inline]
-fn fill_padding(padding: &mut [u8]) {
-    if padding.is_empty() {
-        return;
-    }
-
-    PADDING_RNG.with(|rng| rng.borrow_mut().fill(padding));
-}
-
-#[inline]
 pub fn get_now_timestamp() -> u64 {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(n) => n.as_secs(),
@@ -108,8 +99,7 @@ pub fn get_now_timestamp() -> u64 {
     }
 }
 
-fn encrypt_message(method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
-    packet.reserve(method.tag_len());
+fn encrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
     unsafe {
         packet.advance_mut(method.tag_len());
     }
@@ -131,6 +121,7 @@ fn encrypt_message(method: CipherKind, key: &[u8], packet: &mut BytesMut, sessio
 
             let mut cipher = {
                 let nonce = &packet[4..16];
+                let _ = context.check_nonce_replay(nonce);
                 UdpCipher::new(method, key, nonce, session_id)
             };
 
@@ -157,7 +148,7 @@ fn encrypt_message(method: CipherKind, key: &[u8], packet: &mut BytesMut, sessio
     }
 }
 
-fn decrypt_message(method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
+fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
     match method {
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => {
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
@@ -165,6 +156,11 @@ fn decrypt_message(method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
 
             let mut cipher = {
                 let nonce = &packet[..nonce_size];
+                if let Err(..) = context.check_nonce_replay(nonce) {
+                    error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
+                    return false;
+                }
+
                 // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
                 UdpCipher::new(method, key, nonce, 0)
             };
@@ -200,6 +196,12 @@ fn decrypt_message(method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
 
             let mut cipher = {
                 let nonce = &packet[4..16];
+
+                if let Err(..) = context.check_nonce_replay(nonce) {
+                    error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
+                    return false;
+                }
+
                 UdpCipher::new(method, key, nonce, session_id)
             };
 
@@ -241,7 +243,9 @@ pub fn encrypt_client_payload_aead_2022(
 
     // Generate IV
     if nonce_size > 0 {
-        dst.resize(nonce_size, 0);
+        unsafe {
+            dst.advance_mut(nonce_size);
+        }
         let nonce = &mut dst[..nonce_size];
 
         if nonce_size > 0 {
@@ -257,19 +261,19 @@ pub fn encrypt_client_payload_aead_2022(
     dst.put_u64(get_now_timestamp());
     dst.put_u16(padding_size as u16);
     if padding_size > 0 {
-        let mut padding = vec![0u8; padding_size];
-        fill_padding(&mut padding);
-        dst.put_slice(&padding);
+        unsafe {
+            dst.advance_mut(padding_size);
+        }
     }
     addr.write_to_buf(dst);
     dst.put_slice(payload);
 
-    encrypt_message(method, key, dst, control.client_session_id);
+    encrypt_message(context, method, key, dst, control.client_session_id);
 }
 
 /// Decrypt `Client -> Server` UDP AEAD protocol packet
 pub async fn decrypt_client_payload_aead_2022(
-    _context: &Context,
+    context: &Context,
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
@@ -281,7 +285,7 @@ pub async fn decrypt_client_payload_aead_2022(
         return Err(err);
     }
 
-    if !decrypt_message(method, key, payload) {
+    if !decrypt_message(context, method, key, payload) {
         return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
     }
 
@@ -347,7 +351,9 @@ pub fn encrypt_server_payload_aead_2022(
 
     // Generate IV
     if nonce_size > 0 {
-        dst.resize(nonce_size, 0);
+        unsafe {
+            dst.advance_mut(nonce_size);
+        }
         let nonce = &mut dst[..nonce_size];
 
         if nonce_size > 0 {
@@ -364,19 +370,19 @@ pub fn encrypt_server_payload_aead_2022(
     dst.put_u64(control.client_session_id);
     dst.put_u16(padding_size as u16);
     if padding_size > 0 {
-        let mut padding = vec![0u8; padding_size];
-        fill_padding(&mut padding);
-        dst.put_slice(&padding);
+        unsafe {
+            dst.advance_mut(padding_size);
+        }
     }
     addr.write_to_buf(dst);
     dst.put_slice(payload);
 
-    encrypt_message(method, key, dst, control.server_session_id);
+    encrypt_message(context, method, key, dst, control.server_session_id);
 }
 
 /// Decrypt `Server -> Client` UDP AEAD protocol packet
 pub async fn decrypt_server_payload_aead_2022(
-    _context: &Context,
+    context: &Context,
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
@@ -388,7 +394,7 @@ pub async fn decrypt_server_payload_aead_2022(
         return Err(err);
     }
 
-    if !decrypt_message(method, key, payload) {
+    if !decrypt_message(context, method, key, payload) {
         return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
     }
 
