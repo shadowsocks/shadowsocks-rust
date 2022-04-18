@@ -329,7 +329,7 @@ impl UdpAssociationContext {
 
                             if !session_context.packet_window_filter.validate_packet_id(packet_id, u64::MAX) {
                                 error!("udp {} packet_id {} out of window", self.peer_addr, packet_id);
-                                return;
+                                continue;
                             }
                     }
 
