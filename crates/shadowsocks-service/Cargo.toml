@@ -95,7 +95,7 @@ lru_time_cache = "0.11"
 bytes = "1.0"
 byte_string = "1.0"
 byteorder = "1.3"
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 
 futures = "0.3"
 tokio = { version = "1.5", features = ["io-util", "macros", "net", "parking_lot", "rt", "sync", "time"] }
