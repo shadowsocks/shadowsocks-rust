@@ -99,7 +99,7 @@ pub fn get_now_timestamp() -> u64 {
     }
 }
 
-fn encrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
+fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
     unsafe {
         packet.advance_mut(method.tag_len());
     }
@@ -109,21 +109,18 @@ fn encrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
             let nonce_size = ChaCha20Poly1305Cipher::nonce_size();
 
-            let mut cipher = {
-                let nonce = &packet[..nonce_size];
-                UdpCipher::new(method, key, nonce, session_id)
-            };
+            let mut cipher = UdpCipher::new(method, key, session_id);
 
-            cipher.encrypt_packet(&mut packet[nonce_size..]);
+            let (nonce, message) = packet.split_at_mut(nonce_size);
+            cipher.encrypt_packet(nonce, message);
         }
         CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
             // AES-*-GCM uses derived key, and part of the packet header as nonce
 
-            let mut cipher = {
-                let nonce = &packet[4..16];
-                let _ = context.check_nonce_replay(nonce);
-                UdpCipher::new(method, key, nonce, session_id)
-            };
+            let mut cipher = UdpCipher::new(method, key, session_id);
+
+            // Encrypt the rest of the packet with AEAD cipher (AES-*-GCM)
+            cipher.encrypt_packet(&[], packet);
 
             // [SessionID + PacketID] is encrypted with AES-ECB with PSK
             // No padding is required because these 2 fields are 128-bits, which is exactly the same as AES's block size
@@ -140,9 +137,6 @@ fn encrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
                 }
                 _ => unreachable!("{} is not an AES-*-GCM cipher", method),
             }
-
-            // Encrypt the rest of the packet with AEAD cipher (AES-*-GCM)
-            cipher.encrypt_packet(&mut packet[16..]);
         }
         _ => unreachable!("{} is not an AEAD 2022 cipher", method),
     }
@@ -154,18 +148,16 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
             let nonce_size = ChaCha20Poly1305Cipher::nonce_size();
 
-            let mut cipher = {
-                let nonce = &packet[..nonce_size];
-                if let Err(..) = context.check_nonce_replay(nonce) {
-                    error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
-                    return false;
-                }
+            let (nonce, message) = packet.split_at_mut(nonce_size);
+            if let Err(..) = context.check_nonce_replay(nonce) {
+                error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
+                return false;
+            }
 
-                // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
-                UdpCipher::new(method, key, nonce, 0)
-            };
+            // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
+            let mut cipher = UdpCipher::new(method, key, 0);
 
-            if !cipher.decrypt_packet(&mut packet[nonce_size..]) {
+            if !cipher.decrypt_packet(nonce, message) {
                 return false;
             }
         }
@@ -190,9 +182,12 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             }
 
             // Session ID is the first 64-bits
-            let session_id_buf = &packet[0..8];
-            let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
-            let session_id = u64::from_be(session_id_slice[0]);
+
+            let session_id = {
+                let session_id_buf = &packet[0..8];
+                let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
+                u64::from_be(session_id_slice[0])
+            };
 
             let mut cipher = {
                 let nonce = &packet[4..16];
@@ -202,10 +197,10 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
                     return false;
                 }
 
-                UdpCipher::new(method, key, nonce, session_id)
+                UdpCipher::new(method, key, session_id)
             };
 
-            if !cipher.decrypt_packet(&mut packet[16..]) {
+            if !cipher.decrypt_packet(&[], packet) {
                 return false;
             }
         }
