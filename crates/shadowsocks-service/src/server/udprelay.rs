@@ -25,7 +25,12 @@ use shadowsocks::{
 };
 use tokio::{sync::mpsc, task::JoinHandle, time};
 
-use crate::net::{MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE};
+use crate::net::{
+    packet_window::PacketWindowFilter,
+    MonProxySocket,
+    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
+};
 
 use super::context::ServiceContext;
 
@@ -299,7 +304,7 @@ impl UdpAssociation {
 }
 
 struct ClientContext {
-    last_packet_id: u64,
+    packet_window_filter: PacketWindowFilter,
 }
 
 struct ClientSessionContext {
@@ -500,7 +505,6 @@ impl UdpAssociationContext {
 
         if let Some(control) = control {
             // Check if Packet ID is in the window
-            const SERVER_UDP_PACKET_WINDOW_SIZE: u64 = 256;
 
             let session = self
                 .client_session
@@ -510,23 +514,16 @@ impl UdpAssociationContext {
                 .client_context_map
                 .entry(self.peer_addr)
                 .or_insert_with(|| ClientContext {
-                    last_packet_id: control.packet_id,
+                    packet_window_filter: PacketWindowFilter::new(),
                 });
 
             let packet_id = control.packet_id;
-            let smallest_packet_id = if session_context.last_packet_id <= SERVER_UDP_PACKET_WINDOW_SIZE {
-                0
-            } else {
-                session_context.last_packet_id - SERVER_UDP_PACKET_WINDOW_SIZE
-            };
-
-            if packet_id < smallest_packet_id {
+            if !session_context
+                .packet_window_filter
+                .validate_packet_id(packet_id, u64::MAX)
+            {
                 error!("udp client {} packet_id {} out of window", self.peer_addr, packet_id);
                 return;
-            }
-
-            if packet_id > session_context.last_packet_id {
-                session_context.last_packet_id = packet_id;
             }
         }
 
