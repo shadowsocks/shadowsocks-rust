@@ -2084,6 +2084,7 @@ dependencies = [
  "futures",
  "libc",
  "log",
+ "lru_time_cache",
  "nix",
  "notify",
  "once_cell",
@@ -2107,7 +2108,7 @@ dependencies = [
 [[package]]
 name = "shadowsocks-crypto"
 version = "0.4.0"
-source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#e3d3f56537c23a618a1523ca9448af9a9601216e"
+source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#d0d9914fbf01ac85cf1120cbc7888de6bd0e5817"
 dependencies = [
  "aes 0.7.5",
  "aes-gcm",

@@ -46,9 +46,13 @@
 
 use std::{
     cell::RefCell,
+    cmp::Ordering,
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
     io::{self, Cursor, ErrorKind, Seek, SeekFrom},
+    rc::Rc,
     slice,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use aes::{
@@ -60,6 +64,7 @@ use aes::{
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, BytesMut};
 use log::{error, trace};
+use lru_time_cache::LruCache;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 use crate::{
@@ -78,8 +83,51 @@ const SERVER_SOCKET_TYPE: u8 = 1;
 const MAX_PADDING_SIZE: usize = 900;
 const SERVER_PACKET_TIMESTAMP_MAX_DIFF: u64 = 30;
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+struct CipherKey {
+    method: CipherKind,
+    key: usize,
+    session_id: u64,
+}
+
+impl PartialOrd for CipherKey {
+    fn partial_cmp(&self, other: &CipherKey) -> Option<Ordering> {
+        let hash1 = {
+            let mut hasher = DefaultHasher::new();
+            self.hash(&mut hasher);
+            hasher.finish()
+        };
+        let hash2 = {
+            let mut hasher = DefaultHasher::new();
+            other.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        hash1.partial_cmp(&hash2)
+    }
+}
+
+impl Ord for CipherKey {
+    fn cmp(&self, other: &CipherKey) -> Ordering {
+        let hash1 = {
+            let mut hasher = DefaultHasher::new();
+            self.hash(&mut hasher);
+            hasher.finish()
+        };
+        let hash2 = {
+            let mut hasher = DefaultHasher::new();
+            other.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        hash1.cmp(&hash2)
+    }
+}
+
 thread_local! {
     static PADDING_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
+    static CIPHER_CACHE: RefCell<LruCache<CipherKey, Rc<UdpCipher>>> =
+        RefCell::new(LruCache::with_expiry_duration_and_capacity(Duration::from_secs(60), 102400));
 }
 
 #[inline]
@@ -99,6 +147,24 @@ pub fn get_now_timestamp() -> u64 {
     }
 }
 
+fn get_cipher(method: CipherKind, key: &[u8], session_id: u64) -> Rc<UdpCipher> {
+    CIPHER_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+
+        let cache_key = CipherKey {
+            method,
+            // The key is stored in ServerConfig structure, so the address of it won't change.
+            key: key.as_ptr() as usize,
+            session_id,
+        };
+
+        cache
+            .entry(cache_key)
+            .or_insert_with(|| Rc::new(UdpCipher::new(method, key, session_id)))
+            .clone()
+    })
+}
+
 fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
     unsafe {
         packet.advance_mut(method.tag_len());
@@ -109,7 +175,7 @@ fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
             let nonce_size = ChaCha20Poly1305Cipher::nonce_size();
 
-            let mut cipher = UdpCipher::new(method, key, session_id);
+            let cipher = get_cipher(method, key, session_id);
 
             let (nonce, message) = packet.split_at_mut(nonce_size);
             cipher.encrypt_packet(nonce, message);
@@ -117,10 +183,12 @@ fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &
         CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
             // AES-*-GCM uses derived key, and part of the packet header as nonce
 
-            let mut cipher = UdpCipher::new(method, key, session_id);
+            let cipher = get_cipher(method, key, session_id);
 
             // Encrypt the rest of the packet with AEAD cipher (AES-*-GCM)
-            cipher.encrypt_packet(&[], packet);
+            let (packet_header, message) = packet.split_at_mut(16);
+            let nonce = &packet_header[4..16];
+            cipher.encrypt_packet(nonce, message);
 
             // [SessionID + PacketID] is encrypted with AES-ECB with PSK
             // No padding is required because these 2 fields are 128-bits, which is exactly the same as AES's block size
@@ -155,7 +223,15 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             }
 
             // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
-            let mut cipher = UdpCipher::new(method, key, 0);
+            //
+            // But still, we get the session_id for cache
+            let session_id = {
+                let session_id_buf = &message[0..8];
+                let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
+                u64::from_be(session_id_slice[0])
+            };
+
+            let cipher = get_cipher(method, key, session_id);
 
             if !cipher.decrypt_packet(nonce, message) {
                 return false;
@@ -167,15 +243,18 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             // Decrypt the header block first
             // [SessionID + PacketID] is encrypted with AES-ECB with PSK
             // No padding is required because these 2 fields are 128-bits, which is exactly the same as AES's block size
+
+            let (packet_header, message) = packet.split_at_mut(16);
+
             match method {
                 CipherKind::AEAD2022_BLAKE3_AES_128_GCM => {
                     let cipher = Aes128::new_from_slice(key).expect("AES-128 init");
-                    let block = Block::from_mut_slice(&mut packet[0..16]);
+                    let block = Block::from_mut_slice(packet_header);
                     cipher.decrypt_block(block);
                 }
                 CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
                     let cipher = Aes256::new_from_slice(key).expect("AES-256 init");
-                    let block = Block::from_mut_slice(&mut packet[0..16]);
+                    let block = Block::from_mut_slice(packet_header);
                     cipher.decrypt_block(block);
                 }
                 _ => unreachable!("{} is not an AES-*-GCM cipher", method),
@@ -184,23 +263,23 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             // Session ID is the first 64-bits
 
             let session_id = {
-                let session_id_buf = &packet[0..8];
+                let session_id_buf = &packet_header[0..8];
                 let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
                 u64::from_be(session_id_slice[0])
             };
 
-            let mut cipher = {
-                let nonce = &packet[4..16];
+            let nonce = &packet_header[4..16];
 
+            let cipher = {
                 if let Err(..) = context.check_nonce_replay(nonce) {
                     error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
                     return false;
                 }
 
-                UdpCipher::new(method, key, session_id)
+                get_cipher(method, key, session_id)
             };
 
-            if !cipher.decrypt_packet(&[], packet) {
+            if !cipher.decrypt_packet(nonce, message) {
                 return false;
             }
         }
