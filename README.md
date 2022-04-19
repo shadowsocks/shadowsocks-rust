@@ -55,6 +55,8 @@ Related Projects:
 
 - `aead-cipher-extra` - Enable non-standard AEAD ciphers
 
+- `aead-cipher-2022` - Enable AEAD-2022 ciphers ([Draft](https://github.com/shadowsocks/shadowsocks-org/issues/194#issuecomment-1065833908))
+
 #### Memory Allocators
 
 This project uses system (libc) memory allocator (Rust's default). But it also allows you to use other famous allocators by features:
