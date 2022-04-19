@@ -517,12 +517,16 @@ impl UdpAssociationContext {
                 .client_session
                 .get_or_insert_with(|| ClientSessionContext::new(control.client_session_id));
 
-            let session_context = session
-                .client_context_map
-                .entry(self.peer_addr)
-                .or_insert_with(|| ClientContext {
+            let session_context = session.client_context_map.entry(self.peer_addr).or_insert_with(|| {
+                trace!(
+                    "udp client {} with session {} created",
+                    self.peer_addr,
+                    control.client_session_id
+                );
+                ClientContext {
                     packet_window_filter: PacketWindowFilter::new(),
-                });
+                }
+            });
 
             let packet_id = control.packet_id;
             if !session_context

@@ -65,6 +65,7 @@ default = [
     "local-tunnel",
     "local-socks4",
     "multi-threaded",
+    "aead-cipher-2022",
 ]
 
 # Enable local server

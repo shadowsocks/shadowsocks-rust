@@ -323,8 +323,16 @@ impl UdpAssociationContext {
                         let session_context = session
                             .server_session_map
                             .entry(control.server_session_id)
-                            .or_insert_with(|| ServerContext {
-                                packet_window_filter: PacketWindowFilter::new()
+                            .or_insert_with(|| {
+                                trace!(
+                                    "udp server with session {} for {} created",
+                                    control.client_session_id,
+                                    self.peer_addr,
+                                );
+
+                                ServerContext {
+                                    packet_window_filter: PacketWindowFilter::new()
+                                }
                             });
 
                             if !session_context.packet_window_filter.validate_packet_id(packet_id, u64::MAX) {
