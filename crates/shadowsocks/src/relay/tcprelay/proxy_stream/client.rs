@@ -16,8 +16,6 @@ use tokio::{
     time,
 };
 
-#[cfg(feature = "aead-cipher-2022")]
-use crate::context::Context;
 use crate::{
     config::ServerConfig,
     context::SharedContext,
@@ -28,6 +26,8 @@ use crate::{
         tcprelay::crypto_io::{CryptoRead, CryptoStream, CryptoWrite},
     },
 };
+#[cfg(feature = "aead-cipher-2022")]
+use crate::{context::Context, relay::get_aead_2022_padding_size};
 
 enum ProxyClientStreamWriteState {
     Connect(Address),
@@ -197,8 +197,8 @@ fn poll_read_aead_2022_header<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    use super::protocol::v2::{get_now_timestamp, Aead2022TcpStreamType, SERVER_STREAM_TIMESTAMP_MAX_DIFF};
     use bytes::Buf;
-    use std::time::SystemTime;
 
     // AEAD 2022 TCP Response Header
     //
@@ -207,9 +207,6 @@ where
     // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
     // | Request SALT (Variable ...)
     // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-
-    const SERVER_STREAM_TYPE: u8 = 1;
-    const SERVER_STREAM_TIMESTAMP_MAX_DIFF: u64 = 30;
 
     // Initialize buffer
     let method = stream.method();
@@ -230,7 +227,7 @@ where
     // Done reading TCP header, check all the fields
 
     let stream_type = header_buf.get_u8();
-    if stream_type != SERVER_STREAM_TYPE {
+    if stream_type != Aead2022TcpStreamType::Server as u8 {
         return Err(io::Error::new(
             ErrorKind::Other,
             format!("received TCP response header with wrong type {}", stream_type),
@@ -239,10 +236,7 @@ where
     }
 
     let timestamp = header_buf.get_u64();
-    let now = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(n) => n.as_secs(),
-        Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
-    };
+    let now = get_now_timestamp();
 
     if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
         return Err(io::Error::new(
@@ -317,30 +311,14 @@ fn make_first_packet_buffer(method: CipherKind, addr: &Address, buf: &[u8]) -> B
         //
         // Client -> Server TYPE=0
 
-        use rand::{rngs::SmallRng, Rng, SeedableRng};
-        use std::{cell::RefCell, time::SystemTime};
+        use super::protocol::v2::{get_now_timestamp, Aead2022TcpStreamType};
 
-        const CLIENT_STREAM_TYPE: u8 = 0;
-        const MAX_PADDING_SIZE: usize = 900;
-
-        thread_local! {
-            static PADDING_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
-        }
-
-        let padding_size = if buf.is_empty() {
-            PADDING_RNG.with(|rng| rng.borrow_mut().gen::<usize>() % MAX_PADDING_SIZE)
-        } else {
-            // If handshake with data buffer, then padding is not required and should be 0 for letting TFO work properly.
-            0
-        };
+        let padding_size = get_aead_2022_padding_size(buf);
 
         buffer.reserve(1 + 8 + addr_length + 2 + padding_size);
-        buffer.put_u8(CLIENT_STREAM_TYPE);
+        buffer.put_u8(Aead2022TcpStreamType::Client as u8);
 
-        let timestamp = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(n) => n.as_secs(),
-            Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
-        };
+        let timestamp = get_now_timestamp();
         buffer.put_u64(timestamp);
 
         addr.write_to_buf(&mut buffer);

@@ -63,24 +63,25 @@ use aes::{
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, BytesMut};
-use log::{error, trace};
+use log::{error, trace, warn};
 use lru_time_cache::LruCache;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use once_cell::sync::Lazy;
+use spin::Mutex as SpinMutex;
 
 use crate::{
+    config::ReplayAttackPolicy,
     context::Context,
     crypto::{
         v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
         CipherKind,
     },
-    relay::socks5::Address,
+    relay::{get_aead_2022_padding_size, socks5::Address},
 };
 
 use super::options::UdpSocketControlData;
 
 const CLIENT_SOCKET_TYPE: u8 = 0;
 const SERVER_SOCKET_TYPE: u8 = 1;
-const MAX_PADDING_SIZE: usize = 900;
 const SERVER_PACKET_TIMESTAMP_MAX_DIFF: u64 = 30;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -124,19 +125,12 @@ impl Ord for CipherKey {
     }
 }
 
-thread_local! {
-    static PADDING_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
-    static CIPHER_CACHE: RefCell<LruCache<CipherKey, Rc<UdpCipher>>> =
-        RefCell::new(LruCache::with_expiry_duration_and_capacity(Duration::from_secs(60), 102400));
-}
+const CIPHER_CACHE_DURATION: Duration = Duration::from_secs(30);
+const CIPHER_CACHE_LIMIT: usize = 102400;
 
-#[inline]
-fn get_padding_size(payload: &[u8]) -> usize {
-    if payload.is_empty() {
-        PADDING_RNG.with(|rng| rng.borrow_mut().gen::<usize>() % MAX_PADDING_SIZE)
-    } else {
-        0
-    }
+thread_local! {
+    static CIPHER_CACHE: RefCell<LruCache<CipherKey, Rc<UdpCipher>>> =
+        RefCell::new(LruCache::with_expiry_duration_and_capacity(CIPHER_CACHE_DURATION, CIPHER_CACHE_LIMIT));
 }
 
 #[inline]
@@ -163,6 +157,57 @@ fn get_cipher(method: CipherKind, key: &[u8], session_id: u64) -> Rc<UdpCipher> 
             .or_insert_with(|| Rc::new(UdpCipher::new(method, key, session_id)))
             .clone()
     })
+}
+
+fn check_and_record_nonce(method: CipherKind, key: &[u8], session_id: u64, nonce: &[u8]) -> bool {
+    static REPLAY_FILTER_RECORDER: Lazy<SpinMutex<LruCache<CipherKey, LruCache<Vec<u8>, ()>>>> = Lazy::new(|| {
+        SpinMutex::new(LruCache::with_expiry_duration_and_capacity(
+            CIPHER_CACHE_DURATION,
+            CIPHER_CACHE_LIMIT,
+        ))
+    });
+
+    let cache_key = CipherKey {
+        method,
+        // The key is stored in ServerConfig structure, so the address of it won't change.
+        key: key.as_ptr() as usize,
+        session_id,
+    };
+
+    const REPLAY_DETECT_NONCE_EXPIRE_DURATION: Duration = Duration::from_secs(SERVER_PACKET_TIMESTAMP_MAX_DIFF);
+
+    let mut session_map = REPLAY_FILTER_RECORDER.lock();
+
+    let session_nonce_map = session_map
+        .entry(cache_key)
+        .or_insert_with(|| LruCache::with_expiry_duration(REPLAY_DETECT_NONCE_EXPIRE_DURATION));
+
+    if session_nonce_map.get(nonce).is_some() {
+        return true;
+    }
+
+    session_nonce_map.insert(nonce.to_vec(), ());
+    false
+}
+
+#[inline]
+fn check_nonce_replay(context: &Context, method: CipherKind, key: &[u8], session_id: u64, nonce: &[u8]) -> bool {
+    match context.replay_attack_policy() {
+        ReplayAttackPolicy::Ignore => false,
+        ReplayAttackPolicy::Detect => {
+            if check_and_record_nonce(method, key, session_id, nonce) {
+                warn!("detected repeated nonce salt {:?}", ByteStr::new(nonce));
+            }
+            false
+        }
+        ReplayAttackPolicy::Reject => {
+            let replayed = check_and_record_nonce(method, key, session_id, nonce);
+            if replayed {
+                error!("detected repeated nonce salt {:?}", ByteStr::new(nonce));
+            }
+            replayed
+        }
+    }
 }
 
 fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
@@ -217,10 +262,6 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             let nonce_size = ChaCha20Poly1305Cipher::nonce_size();
 
             let (nonce, message) = packet.split_at_mut(nonce_size);
-            if let Err(..) = context.check_nonce_replay(nonce) {
-                error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
-                return false;
-            }
 
             // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
             //
@@ -230,6 +271,11 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
                 let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
                 u64::from_be(session_id_slice[0])
             };
+
+            if check_nonce_replay(context, method, key, session_id, nonce) {
+                error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
+                return false;
+            }
 
             let cipher = get_cipher(method, key, session_id);
 
@@ -271,7 +317,7 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
             let nonce = &packet_header[4..16];
 
             let cipher = {
-                if let Err(..) = context.check_nonce_replay(nonce) {
+                if check_nonce_replay(context, method, key, session_id, nonce) {
                     error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
                     return false;
                 }
@@ -308,7 +354,7 @@ pub fn encrypt_client_payload_aead_2022(
     payload: &[u8],
     dst: &mut BytesMut,
 ) {
-    let padding_size = get_padding_size(payload);
+    let padding_size = get_aead_2022_padding_size(payload);
     let nonce_size = get_nonce_len(method);
 
     dst.reserve(
@@ -322,7 +368,7 @@ pub fn encrypt_client_payload_aead_2022(
         }
         let nonce = &mut dst[..nonce_size];
 
-        context.generate_nonce(nonce, false);
+        context.generate_nonce(method, nonce, false);
         trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
     }
 
@@ -414,7 +460,7 @@ pub fn encrypt_server_payload_aead_2022(
     payload: &[u8],
     dst: &mut BytesMut,
 ) {
-    let padding_size = get_padding_size(payload);
+    let padding_size = get_aead_2022_padding_size(payload);
     let nonce_size = get_nonce_len(method);
 
     dst.reserve(
@@ -428,7 +474,7 @@ pub fn encrypt_server_payload_aead_2022(
         }
         let nonce = &mut dst[..nonce_size];
 
-        context.generate_nonce(nonce, false);
+        context.generate_nonce(method, nonce, false);
         trace!("UDP packet generated aead nonce {:?}", ByteStr::new(nonce));
     }
 

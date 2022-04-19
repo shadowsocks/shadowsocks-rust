@@ -1,4 +1,4 @@
-use crate::config::ServerType;
+use crate::{config::ServerType, crypto::CipherKind};
 
 /// A dummy protector against replay attack
 ///
@@ -14,7 +14,7 @@ impl ReplayProtector {
 
     /// Check if nonce exist or not
     #[inline(always)]
-    pub fn check_nonce_and_set(&self, _nonce: &[u8]) -> bool {
+    pub fn check_nonce_and_set(&self, _method: CipherKind, _nonce: &[u8]) -> bool {
         false
     }
 }

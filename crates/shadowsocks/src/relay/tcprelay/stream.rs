@@ -119,7 +119,7 @@ impl DecryptedReader {
         }
 
         let iv = &self.buffer[..iv_len];
-        context.check_nonce_replay(iv)?;
+        context.check_nonce_replay(self.method, iv)?;
 
         trace!("got stream iv {:?}", ByteStr::new(iv));
 

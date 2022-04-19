@@ -32,7 +32,7 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
-aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache"]
+aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache", "spin"]
 
 # Enable detection against replay attack
 security-replay-attack-detect = ["bloomfilter", "spin"]

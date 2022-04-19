@@ -169,13 +169,13 @@ impl<S> CryptoStream<S> {
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => {
                 let mut local_iv = vec![0u8; prev_len];
-                context.generate_nonce(&mut local_iv, true);
+                context.generate_nonce(method, &mut local_iv, true);
                 trace!("generated Stream cipher IV {:?}", ByteStr::new(&local_iv));
                 local_iv
             }
             CipherCategory::Aead => {
                 let mut local_salt = vec![0u8; prev_len];
-                context.generate_nonce(&mut local_salt, true);
+                context.generate_nonce(method, &mut local_salt, true);
                 trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
             }
@@ -183,7 +183,7 @@ impl<S> CryptoStream<S> {
             #[cfg(feature = "aead-cipher-2022")]
             CipherCategory::Aead2022 => {
                 let mut local_salt = vec![0u8; prev_len];
-                context.generate_nonce(&mut local_salt, true);
+                context.generate_nonce(method, &mut local_salt, true);
                 trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
             }

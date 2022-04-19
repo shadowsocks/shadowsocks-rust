@@ -1,8 +1,15 @@
+#[cfg(feature = "aead-cipher-2022")]
+use std::time::Duration;
+
 use bloomfilter::Bloom;
 use log::debug;
+#[cfg(feature = "aead-cipher-2022")]
+use lru_time_cache::LruCache;
 use spin::Mutex as SpinMutex;
 
-use crate::config::ServerType;
+#[cfg(feature = "aead-cipher-2022")]
+use crate::relay::tcprelay::proxy_stream::protocol::v2::SERVER_STREAM_TIMESTAMP_MAX_DIFF;
+use crate::{config::ServerType, crypto::CipherKind};
 
 // Entries for server's bloom filter
 //
@@ -98,6 +105,12 @@ pub struct ReplayProtector {
     // Check for duplicated IV/Nonce, for prevent replay attack
     // https://github.com/shadowsocks/shadowsocks-org/issues/44
     nonce_ppbloom: SpinMutex<PingPongBloom>,
+
+    // AEAD 2022 specific filter.
+    // AEAD 2022 TCP protocol has a timestamp, which can already reject most of the replay requests,
+    // so we only need to remember nonce that are in the valid time range
+    #[cfg(feature = "aead-cipher-2022")]
+    nonce_set: SpinMutex<LruCache<Vec<u8>, ()>>,
 }
 
 impl ReplayProtector {
@@ -105,15 +118,29 @@ impl ReplayProtector {
     pub fn new(config_type: ServerType) -> ReplayProtector {
         ReplayProtector {
             nonce_ppbloom: SpinMutex::new(PingPongBloom::new(config_type)),
+            #[cfg(feature = "aead-cipher-2022")]
+            nonce_set: SpinMutex::new(LruCache::with_expiry_duration(Duration::from_secs(
+                SERVER_STREAM_TIMESTAMP_MAX_DIFF,
+            ))),
         }
     }
 
     /// Check if nonce exist or not
     #[inline(always)]
-    pub fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
+    pub fn check_nonce_and_set(&self, method: CipherKind, nonce: &[u8]) -> bool {
         // Plain cipher doesn't have a nonce
         // Always treated as non-duplicated
         if nonce.is_empty() {
+            return false;
+        }
+
+        #[cfg(feature = "aead-cipher-2022")]
+        if method.is_aead_2022() {
+            let mut set = self.nonce_set.lock();
+            if set.get(nonce).is_some() {
+                return true;
+            }
+            set.insert(nonce.to_vec(), ());
             return false;
         }
 

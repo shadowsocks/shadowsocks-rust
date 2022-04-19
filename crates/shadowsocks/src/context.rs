@@ -7,7 +7,7 @@ use log::warn;
 
 use crate::{
     config::{ReplayAttackPolicy, ServerType},
-    crypto::v1::random_iv_or_salt,
+    crypto::{v1::random_iv_or_salt, CipherKind},
     dns_resolver::DnsResolver,
     security::replay::ReplayProtector,
 };
@@ -50,15 +50,15 @@ impl Context {
     ///
     /// If not, set into the current bloom filter
     #[inline(always)]
-    fn check_nonce_and_set(&self, nonce: &[u8]) -> bool {
+    fn check_nonce_and_set(&self, method: CipherKind, nonce: &[u8]) -> bool {
         match self.replay_policy {
             ReplayAttackPolicy::Ignore => false,
-            _ => self.replay_protector.check_nonce_and_set(nonce),
+            _ => self.replay_protector.check_nonce_and_set(method, nonce),
         }
     }
 
     /// Generate nonce (IV or SALT)
-    pub fn generate_nonce(&self, nonce: &mut [u8], unique: bool) {
+    pub fn generate_nonce(&self, method: CipherKind, nonce: &mut [u8], unique: bool) {
         if nonce.is_empty() {
             return;
         }
@@ -86,7 +86,7 @@ impl Context {
             }
 
             // Salt already exists, generate a new one.
-            if unique && self.check_nonce_and_set(nonce) {
+            if unique && self.check_nonce_and_set(method, nonce) {
                 continue;
             }
 
@@ -95,7 +95,7 @@ impl Context {
     }
 
     /// Check nonce replay
-    pub fn check_nonce_replay(&self, nonce: &[u8]) -> io::Result<()> {
+    pub fn check_nonce_replay(&self, method: CipherKind, nonce: &[u8]) -> io::Result<()> {
         if nonce.is_empty() {
             return Ok(());
         }
@@ -103,13 +103,13 @@ impl Context {
         match self.replay_policy {
             ReplayAttackPolicy::Ignore => Ok(()),
             ReplayAttackPolicy::Detect => {
-                if self.replay_protector.check_nonce_and_set(nonce) {
+                if self.replay_protector.check_nonce_and_set(method, nonce) {
                     warn!("detected repeated nonce (iv/salt) {:?}", ByteStr::new(nonce));
                 }
                 Ok(())
             }
             ReplayAttackPolicy::Reject => {
-                if self.replay_protector.check_nonce_and_set(nonce) {
+                if self.replay_protector.check_nonce_and_set(method, nonce) {
                     let err = io::Error::new(io::ErrorKind::Other, "detected repeated nonce (iv/salt)");
                     Err(err)
                 } else {
@@ -150,5 +150,10 @@ impl Context {
     /// Set policy against replay attack
     pub fn set_replay_attack_policy(&mut self, replay_policy: ReplayAttackPolicy) {
         self.replay_policy = replay_policy;
+    }
+
+    /// Get policy against replay attach
+    pub fn replay_attack_policy(&self) -> ReplayAttackPolicy {
+        self.replay_policy
     }
 }

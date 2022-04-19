@@ -41,7 +41,7 @@ pub fn encrypt_payload_stream(
     let iv = &mut dst[..iv_len];
 
     if iv_len > 0 {
-        context.generate_nonce(iv, false);
+        context.generate_nonce(method, iv, false);
         trace!("UDP packet generated stream iv {:?}", ByteStr::new(iv));
     }
 
