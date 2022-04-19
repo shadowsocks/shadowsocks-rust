@@ -40,7 +40,7 @@ impl ReplayProtector {
             nonce_ppbloom: SpinMutex::new(PingPongBloom::new(config_type)),
             #[cfg(feature = "aead-cipher-2022")]
             nonce_set: SpinMutex::new(LruCache::with_expiry_duration(Duration::from_secs(
-                SERVER_STREAM_TIMESTAMP_MAX_DIFF,
+                SERVER_STREAM_TIMESTAMP_MAX_DIFF * 2,
             ))),
         }
     }
