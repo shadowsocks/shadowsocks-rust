@@ -58,6 +58,7 @@ where
     assoc_map: AssociationMap<W>,
     keepalive_tx: mpsc::Sender<SocketAddr>,
     balancer: PingBalancer,
+    server_session_expire_duration: Duration,
 }
 
 impl<W> UdpAssociationManager<W>
@@ -89,6 +90,7 @@ where
                 assoc_map,
                 keepalive_tx,
                 balancer,
+                server_session_expire_duration: time_to_live,
             },
             time_to_live,
             keepalive_rx,
@@ -109,6 +111,7 @@ where
             self.keepalive_tx.clone(),
             self.balancer.clone(),
             self.respond_writer.clone(),
+            self.server_session_expire_duration,
         );
 
         debug!("created udp association for {}", peer_addr);
@@ -158,9 +161,16 @@ where
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
         respond_writer: W,
+        server_session_expire_duration: Duration,
     ) -> UdpAssociation<W> {
-        let (assoc_handle, sender) =
-            UdpAssociationContext::create(context, peer_addr, keepalive_tx, balancer, respond_writer);
+        let (assoc_handle, sender) = UdpAssociationContext::create(
+            context,
+            peer_addr,
+            keepalive_tx,
+            balancer,
+            respond_writer,
+            server_session_expire_duration,
+        );
         UdpAssociation {
             assoc_handle,
             sender,
@@ -187,26 +197,10 @@ struct ServerSessionContext {
     server_session_map: LruCache<u64, ServerContext>,
 }
 
-// Server shouldn't be remembered too long.
-//
-// Server session will only changed if
-// 1. Association expired
-// 2. Server restarted
-//
-// Normally there should only be 1 unqiue server session.
-pub const SERVER_SESSION_REMEMBER_DURATION: Duration = Duration::from_secs(60);
-
-// Remember 2 server sessions. When server restarts,
-// some of the packet on wire may be received later then those new ones.
-pub const SERVER_SESSION_REMEMBER_COUNT: usize = 2;
-
 impl ServerSessionContext {
-    fn new() -> ServerSessionContext {
+    fn new(session_expire_duration: Duration) -> ServerSessionContext {
         ServerSessionContext {
-            server_session_map: LruCache::with_expiry_duration_and_capacity(
-                SERVER_SESSION_REMEMBER_DURATION,
-                SERVER_SESSION_REMEMBER_COUNT,
-            ),
+            server_session_map: LruCache::with_expiry_duration(session_expire_duration),
         }
     }
 }
@@ -227,6 +221,7 @@ where
     client_session_id: u64,
     client_packet_id: u64,
     server_session: Option<ServerSessionContext>,
+    server_session_expire_duration: Duration,
 }
 
 impl<W> Drop for UdpAssociationContext<W>
@@ -257,6 +252,7 @@ where
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
         respond_writer: W,
+        server_session_expire_duration: Duration,
     ) -> (JoinHandle<()>, mpsc::Sender<(Address, Bytes)>) {
         // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
@@ -278,6 +274,7 @@ where
             client_session_id: generate_client_session_id(),
             client_packet_id: 1,
             server_session: None,
+            server_session_expire_duration,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
 
@@ -348,7 +345,9 @@ where
                     if let Some(control) = control_opt {
                         // Check if Packet ID is in the window
 
-                        let session = self.server_session.get_or_insert_with(ServerSessionContext::new);
+                        let session = self.server_session.get_or_insert_with(|| {
+                            ServerSessionContext::new(self.server_session_expire_duration)
+                        });
 
                         let packet_id = control.packet_id;
                         let session_context = session

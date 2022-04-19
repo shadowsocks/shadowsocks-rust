@@ -25,11 +25,7 @@ use shadowsocks::{
 use tokio::{net::UdpSocket, sync::mpsc, task::JoinHandle, time};
 
 use crate::{
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::udp::association::{SERVER_SESSION_REMEMBER_COUNT, SERVER_SESSION_REMEMBER_DURATION},
-    },
+    local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::{
         packet_window::PacketWindowFilter,
         MonProxySocket,
@@ -163,6 +159,7 @@ impl UdpTunnel {
             forward_addr.clone(),
             self.keepalive_tx.clone(),
             balancer.clone(),
+            self.time_to_live,
         );
 
         debug!("created udp association for {}", peer_addr);
@@ -193,9 +190,17 @@ impl UdpAssociation {
         forward_addr: Address,
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
+        server_session_expire_duration: Duration,
     ) -> UdpAssociation {
-        let (assoc_handle, sender) =
-            UdpAssociationContext::create(context, inbound, peer_addr, forward_addr, keepalive_tx, balancer);
+        let (assoc_handle, sender) = UdpAssociationContext::create(
+            context,
+            inbound,
+            peer_addr,
+            forward_addr,
+            keepalive_tx,
+            balancer,
+            server_session_expire_duration,
+        );
         UdpAssociation { assoc_handle, sender }
     }
 
@@ -219,12 +224,9 @@ struct ServerSessionContext {
 }
 
 impl ServerSessionContext {
-    fn new() -> ServerSessionContext {
+    fn new(server_session_expire_duration: Duration) -> ServerSessionContext {
         ServerSessionContext {
-            server_session_map: LruCache::with_expiry_duration_and_capacity(
-                SERVER_SESSION_REMEMBER_DURATION,
-                SERVER_SESSION_REMEMBER_COUNT,
-            ),
+            server_session_map: LruCache::with_expiry_duration(server_session_expire_duration),
         }
     }
 }
@@ -241,6 +243,7 @@ struct UdpAssociationContext {
     client_session_id: u64,
     client_packet_id: u64,
     server_session: Option<ServerSessionContext>,
+    server_session_expire_duration: Duration,
 }
 
 impl Drop for UdpAssociationContext {
@@ -266,6 +269,7 @@ impl UdpAssociationContext {
         forward_addr: Address,
         keepalive_tx: mpsc::Sender<SocketAddr>,
         balancer: PingBalancer,
+        server_session_expire_duration: Duration,
     ) -> (JoinHandle<()>, mpsc::Sender<Bytes>) {
         // Pending packets UDP_ASSOCIATION_SEND_CHANNEL_SIZE for each association should be good enough for a server.
         // If there are plenty of packets stuck in the channel, dropping excessive packets is a good way to protect the server from
@@ -286,6 +290,7 @@ impl UdpAssociationContext {
             client_session_id: generate_client_session_id(),
             client_packet_id: 1,
             server_session: None,
+            server_session_expire_duration,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
 
@@ -324,7 +329,9 @@ impl UdpAssociationContext {
                     if let Some(control) = control_opt {
                         // Check if Packet ID is in the window
 
-                        let session = self.server_session.get_or_insert_with(ServerSessionContext::new);
+                        let session = self.server_session.get_or_insert_with(|| {
+                            ServerSessionContext::new(self.server_session_expire_duration)
+                        });
 
                         let packet_id = control.packet_id;
                         let session_context = session
