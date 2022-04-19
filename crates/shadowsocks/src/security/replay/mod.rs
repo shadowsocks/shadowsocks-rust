@@ -4,8 +4,6 @@ use std::time::Duration;
 use cfg_if::cfg_if;
 #[cfg(feature = "aead-cipher-2022")]
 use lru_time_cache::LruCache;
-#[allow(unused_imports)]
-use spin::Mutex as SpinMutex;
 
 #[cfg(feature = "aead-cipher-2022")]
 use crate::relay::tcprelay::proxy_stream::protocol::v2::SERVER_STREAM_TIMESTAMP_MAX_DIFF;
@@ -22,13 +20,13 @@ pub struct ReplayProtector {
     // Check for duplicated IV/Nonce, for prevent replay attack
     // https://github.com/shadowsocks/shadowsocks-org/issues/44
     #[cfg(feature = "security-replay-attack-detect")]
-    nonce_ppbloom: SpinMutex<PingPongBloom>,
+    nonce_ppbloom: spin::Mutex<PingPongBloom>,
 
     // AEAD 2022 specific filter.
     // AEAD 2022 TCP protocol has a timestamp, which can already reject most of the replay requests,
     // so we only need to remember nonce that are in the valid time range
     #[cfg(feature = "aead-cipher-2022")]
-    nonce_set: SpinMutex<LruCache<Vec<u8>, ()>>,
+    nonce_set: spin::Mutex<LruCache<Vec<u8>, ()>>,
 }
 
 impl ReplayProtector {
@@ -37,9 +35,9 @@ impl ReplayProtector {
     pub fn new(config_type: ServerType) -> ReplayProtector {
         ReplayProtector {
             #[cfg(feature = "security-replay-attack-detect")]
-            nonce_ppbloom: SpinMutex::new(PingPongBloom::new(config_type)),
+            nonce_ppbloom: spin::Mutex::new(PingPongBloom::new(config_type)),
             #[cfg(feature = "aead-cipher-2022")]
-            nonce_set: SpinMutex::new(LruCache::with_expiry_duration(Duration::from_secs(
+            nonce_set: spin::Mutex::new(LruCache::with_expiry_duration(Duration::from_secs(
                 SERVER_STREAM_TIMESTAMP_MAX_DIFF * 2,
             ))),
         }
