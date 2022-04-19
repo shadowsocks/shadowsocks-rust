@@ -32,10 +32,10 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
-aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache", "spin"]
+aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache"]
 
 # Enable detection against replay attack
-security-replay-attack-detect = ["bloomfilter", "spin"]
+security-replay-attack-detect = ["bloomfilter"]
 # Enable IV printable prefix
 security-iv-printable-prefix = ["rand"]
 
@@ -54,7 +54,7 @@ byte_string = "1.0"
 base64 = "0.13"
 url = "2.2"
 once_cell = "1.8"
-spin = { version = "0.9", features = ["std"], optional = true }
+spin = { version = "0.9", features = ["std"] }
 pin-project = "1.0"
 bloomfilter = { version = "1.0.8", optional = true }
 thiserror = "1.0"

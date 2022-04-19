@@ -23,7 +23,7 @@ use shadowsocks::{
     relay::{
         socks5::Address,
         tcprelay::proxy_stream::ProxyClientStream,
-        udprelay::{proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+        udprelay::{options::UdpSocketControlData, proxy_socket::ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
     ServerConfig,
 };
@@ -882,7 +882,13 @@ impl PingChecker {
             self.context.connect_opts_ref(),
         )
         .await?;
-        client.send(&addr, DNS_QUERY).await?;
+
+        let control = UdpSocketControlData {
+            client_session_id: rand::random::<u64>(),
+            server_session_id: 0,
+            packet_id: 1,
+        };
+        client.send_with_ctrl(&addr, &control, DNS_QUERY).await?;
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let (n, ..) = client.recv(&mut buffer).await?;

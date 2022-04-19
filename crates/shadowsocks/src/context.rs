@@ -35,7 +35,7 @@ impl Context {
     pub fn new(config_type: ServerType) -> Context {
         Context {
             replay_protector: ReplayProtector::new(config_type),
-            replay_policy: ReplayAttackPolicy::Ignore,
+            replay_policy: ReplayAttackPolicy::Reject,
             dns_resolver: Arc::new(DnsResolver::system_resolver()),
             ipv6_first: false,
         }

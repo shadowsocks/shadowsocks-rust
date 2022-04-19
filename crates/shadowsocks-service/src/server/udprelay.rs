@@ -313,31 +313,16 @@ impl UdpAssociation {
     }
 }
 
-struct ClientContext {
-    packet_window_filter: PacketWindowFilter,
-}
-
 struct ClientSessionContext {
     client_session_id: u64,
-    client_context_map: LruCache<SocketAddr, ClientContext>,
+    packet_window_filter: PacketWindowFilter,
 }
 
 impl ClientSessionContext {
     fn new(client_session_id: u64) -> ClientSessionContext {
-        // Client shouldn't be remembered too long.
-        // If a client was switching between networks (like Wi-Fi and Cellular),
-        // when it switched back from another, the packet filter window will be too old.
-        const CLIENT_SESSION_REMEMBER_DURATION: Duration = Duration::from_secs(60);
-
-        // Wi-Fi & Cellular network device, so it is 2 for most users
-        const CLIENT_SESSION_REMEMBER_COUNT: usize = 2;
-
         ClientSessionContext {
             client_session_id,
-            client_context_map: LruCache::with_expiry_duration_and_capacity(
-                CLIENT_SESSION_REMEMBER_DURATION,
-                CLIENT_SESSION_REMEMBER_COUNT,
-            ),
+            packet_window_filter: PacketWindowFilter::new(),
         }
     }
 }
@@ -524,20 +509,9 @@ impl UdpAssociationContext {
         if let Some(control) = control {
             // Check if Packet ID is in the window
 
-            let session = self
+            let session_context = self
                 .client_session
                 .get_or_insert_with(|| ClientSessionContext::new(control.client_session_id));
-
-            let session_context = session.client_context_map.entry(self.peer_addr).or_insert_with(|| {
-                trace!(
-                    "udp client {} with session {} created",
-                    self.peer_addr,
-                    control.client_session_id
-                );
-                ClientContext {
-                    packet_window_filter: PacketWindowFilter::new(),
-                }
-            });
 
             let packet_id = control.packet_id;
             if !session_context

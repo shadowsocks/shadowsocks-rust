@@ -63,13 +63,10 @@ use aes::{
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, BytesMut};
-use log::{error, trace, warn};
+use log::trace;
 use lru_time_cache::LruCache;
-use once_cell::sync::Lazy;
-use spin::Mutex as SpinMutex;
 
 use crate::{
-    config::ReplayAttackPolicy,
     context::Context,
     crypto::{
         v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
@@ -159,57 +156,6 @@ fn get_cipher(method: CipherKind, key: &[u8], session_id: u64) -> Rc<UdpCipher> 
     })
 }
 
-fn check_and_record_nonce(method: CipherKind, key: &[u8], session_id: u64, nonce: &[u8]) -> bool {
-    static REPLAY_FILTER_RECORDER: Lazy<SpinMutex<LruCache<CipherKey, LruCache<Vec<u8>, ()>>>> = Lazy::new(|| {
-        SpinMutex::new(LruCache::with_expiry_duration_and_capacity(
-            CIPHER_CACHE_DURATION,
-            CIPHER_CACHE_LIMIT,
-        ))
-    });
-
-    let cache_key = CipherKey {
-        method,
-        // The key is stored in ServerConfig structure, so the address of it won't change.
-        key: key.as_ptr() as usize,
-        session_id,
-    };
-
-    const REPLAY_DETECT_NONCE_EXPIRE_DURATION: Duration = Duration::from_secs(SERVER_PACKET_TIMESTAMP_MAX_DIFF);
-
-    let mut session_map = REPLAY_FILTER_RECORDER.lock();
-
-    let session_nonce_map = session_map
-        .entry(cache_key)
-        .or_insert_with(|| LruCache::with_expiry_duration(REPLAY_DETECT_NONCE_EXPIRE_DURATION));
-
-    if session_nonce_map.get(nonce).is_some() {
-        return true;
-    }
-
-    session_nonce_map.insert(nonce.to_vec(), ());
-    false
-}
-
-#[inline]
-fn check_nonce_replay(context: &Context, method: CipherKind, key: &[u8], session_id: u64, nonce: &[u8]) -> bool {
-    match context.replay_attack_policy() {
-        ReplayAttackPolicy::Ignore => false,
-        ReplayAttackPolicy::Detect => {
-            if check_and_record_nonce(method, key, session_id, nonce) {
-                warn!("detected repeated nonce salt {:?}", ByteStr::new(nonce));
-            }
-            false
-        }
-        ReplayAttackPolicy::Reject => {
-            let replayed = check_and_record_nonce(method, key, session_id, nonce);
-            if replayed {
-                error!("detected repeated nonce salt {:?}", ByteStr::new(nonce));
-            }
-            replayed
-        }
-    }
-}
-
 fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &mut BytesMut, session_id: u64) {
     unsafe {
         packet.advance_mut(method.tag_len());
@@ -255,7 +201,7 @@ fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &
     }
 }
 
-fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
+fn decrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &mut [u8]) -> bool {
     match method {
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => {
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
@@ -271,11 +217,6 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
                 let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
                 u64::from_be(session_id_slice[0])
             };
-
-            if check_nonce_replay(context, method, key, session_id, nonce) {
-                error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
-                return false;
-            }
 
             let cipher = get_cipher(method, key, session_id);
 
@@ -316,14 +257,7 @@ fn decrypt_message(context: &Context, method: CipherKind, key: &[u8], packet: &m
 
             let nonce = &packet_header[4..16];
 
-            let cipher = {
-                if check_nonce_replay(context, method, key, session_id, nonce) {
-                    error!("detected replayed nonce: {:?}", ByteStr::new(nonce));
-                    return false;
-                }
-
-                get_cipher(method, key, session_id)
-            };
+            let cipher = get_cipher(method, key, session_id);
 
             if !cipher.decrypt_packet(nonce, message) {
                 return false;
