@@ -4,7 +4,7 @@ use std::time::Duration;
 use cfg_if::cfg_if;
 #[cfg(feature = "aead-cipher-2022")]
 use lru_time_cache::LruCache;
-#[allow(dead_code)]
+#[allow(unused_imports)]
 use spin::Mutex as SpinMutex;
 
 #[cfg(feature = "aead-cipher-2022")]
