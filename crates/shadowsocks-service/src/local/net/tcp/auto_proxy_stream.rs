@@ -11,12 +11,9 @@ use std::{
 use pin_project::pin_project;
 use shadowsocks::{
     net::TcpStream,
-    relay::{
-        socks5::Address,
-        tcprelay::proxy_stream::{ProxyClientStream, ProxyClientStreamReadHalf, ProxyClientStreamWriteHalf},
-    },
+    relay::{socks5::Address, tcprelay::proxy_stream::ProxyClientStream},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::ServerIdent},
@@ -158,95 +155,5 @@ impl AsyncWrite for AutoProxyClientStream {
 impl From<ProxyClientStream<MonProxyStream<TcpStream>>> for AutoProxyClientStream {
     fn from(s: ProxyClientStream<MonProxyStream<TcpStream>>) -> Self {
         AutoProxyClientStream::Proxied(s)
-    }
-}
-
-impl AutoProxyClientStream {
-    pub fn into_split(self) -> (AutoProxyClientStreamReadHalf, AutoProxyClientStreamWriteHalf) {
-        match self {
-            AutoProxyClientStream::Proxied(s) => {
-                let (r, w) = s.into_split();
-                (
-                    AutoProxyClientStreamReadHalf::Proxied(r),
-                    AutoProxyClientStreamWriteHalf::Proxied(w),
-                )
-            }
-            AutoProxyClientStream::Bypassed(s) => {
-                let (r, w) = tokio::io::split(s);
-                (
-                    AutoProxyClientStreamReadHalf::Bypassed(r),
-                    AutoProxyClientStreamWriteHalf::Bypassed(w),
-                )
-            }
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[pin_project(project = AutoProxyClientStreamReadHalfProj)]
-pub enum AutoProxyClientStreamReadHalf {
-    Proxied(#[pin] ProxyClientStreamReadHalf<MonProxyStream<TcpStream>>),
-    Bypassed(#[pin] ReadHalf<TcpStream>),
-}
-
-impl AutoProxyIo for AutoProxyClientStreamReadHalf {
-    fn is_proxied(&self) -> bool {
-        matches!(*self, AutoProxyClientStreamReadHalf::Proxied(..))
-    }
-}
-
-impl AsyncRead for AutoProxyClientStreamReadHalf {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        match self.project() {
-            AutoProxyClientStreamReadHalfProj::Proxied(s) => s.poll_read(cx, buf),
-            AutoProxyClientStreamReadHalfProj::Bypassed(s) => s.poll_read(cx, buf),
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[pin_project(project = AutoProxyClientStreamWriteHalfProj)]
-pub enum AutoProxyClientStreamWriteHalf {
-    Proxied(#[pin] ProxyClientStreamWriteHalf<MonProxyStream<TcpStream>>),
-    Bypassed(#[pin] WriteHalf<TcpStream>),
-}
-
-impl AutoProxyIo for AutoProxyClientStreamWriteHalf {
-    fn is_proxied(&self) -> bool {
-        matches!(*self, AutoProxyClientStreamWriteHalf::Proxied(..))
-    }
-}
-
-impl AsyncWrite for AutoProxyClientStreamWriteHalf {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        match self.project() {
-            AutoProxyClientStreamWriteHalfProj::Proxied(s) => s.poll_write(cx, buf),
-            AutoProxyClientStreamWriteHalfProj::Bypassed(s) => s.poll_write(cx, buf),
-        }
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
-        match self.project() {
-            AutoProxyClientStreamWriteHalfProj::Proxied(s) => s.poll_flush(cx),
-            AutoProxyClientStreamWriteHalfProj::Bypassed(s) => s.poll_flush(cx),
-        }
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
-        match self.project() {
-            AutoProxyClientStreamWriteHalfProj::Proxied(s) => s.poll_shutdown(cx),
-            AutoProxyClientStreamWriteHalfProj::Bypassed(s) => s.poll_shutdown(cx),
-        }
-    }
-
-    fn poll_write_vectored(
-        self: Pin<&mut Self>,
-        cx: &mut task::Context<'_>,
-        bufs: &[IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        match self.project() {
-            AutoProxyClientStreamWriteHalfProj::Proxied(s) => s.poll_write_vectored(cx, bufs),
-            AutoProxyClientStreamWriteHalfProj::Bypassed(s) => s.poll_write_vectored(cx, bufs),
-        }
     }
 }

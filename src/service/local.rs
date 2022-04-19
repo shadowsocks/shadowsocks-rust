@@ -18,7 +18,7 @@ use shadowsocks_service::{
     local::loadbalancing::PingBalancer,
     shadowsocks::{
         config::{Mode, ServerAddr, ServerConfig},
-        crypto::v1::{available_ciphers, CipherKind},
+        crypto::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
 };

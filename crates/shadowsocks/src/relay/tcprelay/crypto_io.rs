@@ -13,10 +13,12 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
 use crate::{
     context::Context,
-    crypto::v1::{CipherCategory, CipherKind},
+    crypto::{CipherCategory, CipherKind},
 };
 
 use super::aead::{DecryptedReader as AeadDecryptedReader, EncryptedWriter as AeadEncryptedWriter};
+#[cfg(feature = "aead-cipher-2022")]
+use super::aead_2022::{DecryptedReader as Aead2022DecryptedReader, EncryptedWriter as Aead2022EncryptedWriter};
 #[cfg(feature = "stream-cipher")]
 use super::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
@@ -27,6 +29,8 @@ pub enum DecryptedReader {
     Aead(AeadDecryptedReader),
     #[cfg(feature = "stream-cipher")]
     Stream(StreamDecryptedReader),
+    #[cfg(feature = "aead-cipher-2022")]
+    Aead2022(Aead2022DecryptedReader),
 }
 
 impl DecryptedReader {
@@ -37,6 +41,8 @@ impl DecryptedReader {
             CipherCategory::Stream => DecryptedReader::Stream(StreamDecryptedReader::new(method, key)),
             CipherCategory::Aead => DecryptedReader::Aead(AeadDecryptedReader::new(method, key)),
             CipherCategory::None => DecryptedReader::None,
+            #[cfg(feature = "aead-cipher-2022")]
+            CipherCategory::Aead2022 => DecryptedReader::Aead2022(Aead2022DecryptedReader::new(method, key)),
         }
     }
 
@@ -57,6 +63,20 @@ impl DecryptedReader {
             DecryptedReader::Stream(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
             DecryptedReader::Aead(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
             DecryptedReader::None => Pin::new(stream).poll_read(cx, buf),
+            #[cfg(feature = "aead-cipher-2022")]
+            DecryptedReader::Aead2022(ref mut reader) => reader.poll_read_decrypted(cx, context, stream, buf),
+        }
+    }
+
+    /// Get received IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn nonce(&self) -> Option<&[u8]> {
+        match *self {
+            #[cfg(feature = "stream-cipher")]
+            DecryptedReader::Stream(ref reader) => reader.iv(),
+            DecryptedReader::Aead(ref reader) => reader.salt(),
+            DecryptedReader::None => None,
+            #[cfg(feature = "aead-cipher-2022")]
+            DecryptedReader::Aead2022(ref reader) => reader.salt(),
         }
     }
 }
@@ -67,6 +87,8 @@ pub enum EncryptedWriter {
     Aead(AeadEncryptedWriter),
     #[cfg(feature = "stream-cipher")]
     Stream(StreamEncryptedWriter),
+    #[cfg(feature = "aead-cipher-2022")]
+    Aead2022(Aead2022EncryptedWriter),
 }
 
 impl EncryptedWriter {
@@ -77,6 +99,8 @@ impl EncryptedWriter {
             CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, key, nonce)),
             CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, key, nonce)),
             CipherCategory::None => EncryptedWriter::None,
+            #[cfg(feature = "aead-cipher-2022")]
+            CipherCategory::Aead2022 => EncryptedWriter::Aead2022(Aead2022EncryptedWriter::new(method, key, nonce)),
         }
     }
 
@@ -96,6 +120,20 @@ impl EncryptedWriter {
             EncryptedWriter::Stream(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf),
             EncryptedWriter::Aead(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf),
             EncryptedWriter::None => Pin::new(stream).poll_write(cx, buf),
+            #[cfg(feature = "aead-cipher-2022")]
+            EncryptedWriter::Aead2022(ref mut writer) => writer.poll_write_encrypted(cx, stream, buf),
+        }
+    }
+
+    /// Get sent IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn nonce(&self) -> &[u8] {
+        match *self {
+            #[cfg(feature = "stream-cipher")]
+            EncryptedWriter::Stream(ref writer) => writer.iv(),
+            EncryptedWriter::Aead(ref writer) => writer.salt(),
+            EncryptedWriter::None => &[],
+            #[cfg(feature = "aead-cipher-2022")]
+            EncryptedWriter::Aead2022(ref writer) => writer.salt(),
         }
     }
 }
@@ -123,6 +161,8 @@ impl<S> CryptoStream<S> {
             CipherCategory::Stream => method.iv_len(),
             CipherCategory::Aead => method.salt_len(),
             CipherCategory::None => 0,
+            #[cfg(feature = "aead-cipher-2022")]
+            CipherCategory::Aead2022 => method.salt_len(),
         };
 
         let iv = match category {
@@ -140,6 +180,13 @@ impl<S> CryptoStream<S> {
                 local_salt
             }
             CipherCategory::None => Vec::new(),
+            #[cfg(feature = "aead-cipher-2022")]
+            CipherCategory::Aead2022 => {
+                let mut local_salt = vec![0u8; prev_len];
+                context.generate_nonce(&mut local_salt, true);
+                trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
+                local_salt
+            }
         };
 
         CryptoStream {
@@ -173,6 +220,31 @@ impl<S> CryptoStream<S> {
     pub fn into_inner(self) -> S {
         self.stream
     }
+
+    /// Get received IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn received_nonce(&self) -> Option<&[u8]> {
+        self.dec.nonce()
+    }
+
+    /// Get sent IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn sent_nonce(&self) -> &[u8] {
+        self.enc.nonce()
+    }
+}
+
+/// Cryptographic reader trait
+pub trait CryptoRead {
+    fn poll_read_decrypted(
+        self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        context: &Context,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>>;
+}
+
+/// Cryptographic writer trait
+pub trait CryptoWrite {
+    fn poll_write_encrypted(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>>;
 }
 
 impl<S> CryptoStream<S> {
@@ -182,19 +254,44 @@ impl<S> CryptoStream<S> {
     }
 }
 
-impl<S> CryptoStream<S>
+impl<S> CryptoRead for CryptoStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     /// Attempt to read decrypted data from `stream`
     #[inline]
-    pub fn poll_read_decrypted(
-        &mut self,
+    fn poll_read_decrypted(
+        mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         context: &Context,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        self.dec.poll_read_decrypted(cx, context, &mut self.stream, buf)
+        let CryptoStream {
+            ref mut dec,
+            ref mut stream,
+            ..
+        } = *self;
+        dec.poll_read_decrypted(cx, context, stream, buf)
+    }
+}
+
+impl<S> CryptoWrite for CryptoStream<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    /// Attempt to write encrypted data to `stream`
+    #[inline]
+    fn poll_write_encrypted(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let CryptoStream {
+            ref mut enc,
+            ref mut stream,
+            ..
+        } = *self;
+        enc.poll_write_encrypted(cx, stream, buf)
     }
 }
 
@@ -202,12 +299,6 @@ impl<S> CryptoStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Attempt to write encrypted data to `stream`
-    #[inline]
-    pub fn poll_write_encrypted(&mut self, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        self.enc.poll_write_encrypted(cx, &mut self.stream, buf)
-    }
-
     /// Polls `flush` on the underlying stream
     #[inline]
     pub fn poll_flush(&mut self, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
@@ -260,15 +351,30 @@ impl<S> CryptoStreamReadHalf<S>
 where
     S: AsyncRead + Unpin,
 {
+    /// Get received IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn nonce(&self) -> Option<&[u8]> {
+        self.dec.nonce()
+    }
+}
+
+impl<S> CryptoRead for CryptoStreamReadHalf<S>
+where
+    S: AsyncRead + Unpin,
+{
     /// Attempt to read decrypted data from `stream`
     #[inline]
-    pub fn poll_read_decrypted(
-        &mut self,
+    fn poll_read_decrypted(
+        mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         context: &Context,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        self.dec.poll_read_decrypted(cx, context, &mut self.reader, buf)
+        let CryptoStreamReadHalf {
+            ref mut dec,
+            ref mut reader,
+            ..
+        } = *self;
+        dec.poll_read_decrypted(cx, context, reader, buf)
     }
 }
 
@@ -283,18 +389,37 @@ impl<S> CryptoStreamWriteHalf<S> {
     pub fn method(&self) -> CipherKind {
         self.method
     }
+
+    /// Get sent IV (Stream) or Salt (AEAD, AEAD2022)
+    pub fn sent_nonce(&self) -> &[u8] {
+        self.enc.nonce()
+    }
+}
+
+impl<S> CryptoWrite for CryptoStreamWriteHalf<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    /// Attempt to write encrypted data to `stream`
+    #[inline]
+    fn poll_write_encrypted(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let CryptoStreamWriteHalf {
+            ref mut enc,
+            ref mut writer,
+            ..
+        } = *self;
+        enc.poll_write_encrypted(cx, writer, buf)
+    }
 }
 
 impl<S> CryptoStreamWriteHalf<S>
 where
     S: AsyncWrite + Unpin,
 {
-    /// Attempt to write encrypted data to `stream`
-    #[inline]
-    pub fn poll_write_encrypted(&mut self, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        self.enc.poll_write_encrypted(cx, &mut self.writer, buf)
-    }
-
     /// Polls `flush` on the underlying stream
     #[inline]
     pub fn poll_flush(&mut self, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {

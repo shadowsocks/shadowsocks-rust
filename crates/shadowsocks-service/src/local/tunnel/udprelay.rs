@@ -1,6 +1,7 @@
 //! UDP Tunnel server
 
 use std::{
+    cell::RefCell,
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
@@ -11,12 +12,13 @@ use bytes::Bytes;
 use futures::future;
 use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
     relay::{
         socks5::Address,
-        udprelay::{ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
+        udprelay::{options::UdpSocketControlData, ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
     },
     ServerAddr,
 };
@@ -24,7 +26,12 @@ use tokio::{net::UdpSocket, sync::mpsc, task::JoinHandle, time};
 
 use crate::{
     local::{context::ServiceContext, loadbalancing::PingBalancer},
-    net::{MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE, UDP_ASSOCIATION_SEND_CHANNEL_SIZE},
+    net::{
+        packet_window::PacketWindowFilter,
+        MonProxySocket,
+        UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+        UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
+    },
 };
 
 type AssociationMap = LruCache<SocketAddr, UdpAssociation>;
@@ -197,6 +204,24 @@ impl UdpAssociation {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ServerContext {
+    packet_window_filter: PacketWindowFilter,
+}
+
+#[derive(Clone)]
+struct ServerSessionContext {
+    server_session_map: LruCache<u64, ServerContext>,
+}
+
+impl ServerSessionContext {
+    fn new() -> ServerSessionContext {
+        ServerSessionContext {
+            server_session_map: LruCache::with_expiry_duration_and_capacity(Duration::from_secs(30 * 60), 5),
+        }
+    }
+}
+
 struct UdpAssociationContext {
     context: Arc<ServiceContext>,
     peer_addr: SocketAddr,
@@ -206,12 +231,24 @@ struct UdpAssociationContext {
     keepalive_flag: bool,
     balancer: PingBalancer,
     inbound: Arc<UdpSocket>,
+    client_session_id: u64,
+    client_packet_id: u64,
+    server_session: Option<ServerSessionContext>,
 }
 
 impl Drop for UdpAssociationContext {
     fn drop(&mut self) {
         debug!("udp association for {} is closed", self.peer_addr);
     }
+}
+
+thread_local! {
+    static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
+}
+
+#[inline]
+fn generate_client_session_id() -> u64 {
+    CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().gen())
 }
 
 impl UdpAssociationContext {
@@ -237,6 +274,11 @@ impl UdpAssociationContext {
             keepalive_flag: false,
             balancer,
             inbound,
+            // client_session_id must be random generated,
+            // server use this ID to identify every independent clients.
+            client_session_id: generate_client_session_id(),
+            client_packet_id: 1,
+            server_session: None,
         };
         let handle = tokio::spawn(async move { assoc.dispatch_packet(receiver).await });
 
@@ -262,7 +304,7 @@ impl UdpAssociationContext {
                 }
 
                 received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer) => {
-                    let (n, addr) = match received_opt {
+                    let (n, addr, control_opt) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {
                             error!("udp relay {} <- ... failed, error: {}", self.peer_addr, err);
@@ -271,6 +313,33 @@ impl UdpAssociationContext {
                             continue;
                         }
                     };
+
+                    if let Some(control) = control_opt {
+                        // Check if Packet ID is in the window
+
+                        let session = self.server_session.get_or_insert_with(ServerSessionContext::new);
+
+                        let packet_id = control.packet_id;
+                        let session_context = session
+                            .server_session_map
+                            .entry(control.server_session_id)
+                            .or_insert_with(|| {
+                                trace!(
+                                    "udp server with session {} for {} created",
+                                    control.client_session_id,
+                                    self.peer_addr,
+                                );
+
+                                ServerContext {
+                                    packet_window_filter: PacketWindowFilter::new()
+                                }
+                            });
+
+                            if !session_context.packet_window_filter.validate_packet_id(packet_id, u64::MAX) {
+                                error!("udp {} packet_id {} out of window", self.peer_addr, packet_id);
+                                continue;
+                            }
+                    }
 
                     self.send_received_respond_packet(&addr, &proxied_buffer[..n]).await;
                 }
@@ -291,14 +360,14 @@ impl UdpAssociationContext {
         async fn receive_from_proxied_opt(
             socket: &Option<MonProxySocket>,
             buf: &mut Vec<u8>,
-        ) -> io::Result<(usize, Address)> {
+        ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
             match *socket {
                 None => future::pending().await,
                 Some(ref s) => {
                     if buf.is_empty() {
                         buf.resize(MAXIMUM_UDP_PAYLOAD_SIZE, 0);
                     }
-                    s.recv(buf).await
+                    s.recv_with_ctrl(buf).await
                 }
             }
         }
@@ -341,7 +410,27 @@ impl UdpAssociationContext {
             }
         };
 
-        match socket.send(&self.forward_addr, data).await {
+        // Increase Packet ID before send
+        self.client_packet_id = match self.client_packet_id.checked_add(1) {
+            Some(i) => i,
+            None => {
+                warn!(
+                    "{} -> {} (proxied) sending {} bytes failed, packet id overflowed",
+                    self.peer_addr,
+                    self.forward_addr,
+                    data.len(),
+                );
+                return Ok(());
+            }
+        };
+
+        let control = UdpSocketControlData {
+            client_session_id: self.client_session_id,
+            server_session_id: 0,
+            packet_id: self.client_packet_id,
+        };
+
+        match socket.send_with_ctrl(&self.forward_addr, &control, data).await {
             Ok(..) => return Ok(()),
             Err(err) => {
                 debug!(

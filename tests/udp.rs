@@ -11,7 +11,7 @@ use shadowsocks_service::{
     local::socks::client::socks5::Socks5UdpClient,
     run_local,
     run_server,
-    shadowsocks::{config::Mode, crypto::v1::CipherKind, relay::socks5::Address, ServerConfig},
+    shadowsocks::{config::Mode, crypto::CipherKind, relay::socks5::Address, ServerConfig},
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";

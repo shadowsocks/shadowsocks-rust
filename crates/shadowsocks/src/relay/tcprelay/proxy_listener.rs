@@ -11,7 +11,7 @@ use tokio::{
 use crate::{
     config::{ServerAddr, ServerConfig},
     context::SharedContext,
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     net::{AcceptOpts, TcpListener},
     relay::tcprelay::proxy_stream::server::ProxyServerStream,
 };

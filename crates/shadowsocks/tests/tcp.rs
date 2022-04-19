@@ -16,7 +16,7 @@ use tokio::{
 use shadowsocks::{
     config::{ServerConfig, ServerType},
     context::Context,
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     relay::{
         socks5::Address,
         tcprelay::{
@@ -32,7 +32,7 @@ async fn handle_tcp_tunnel_server_client(
     method: CipherKind,
     mut stream: ProxyServerStream<TcpStream>,
 ) -> io::Result<()> {
-    let addr = Address::read_from(&mut stream).await?;
+    let addr = stream.handshake().await?;
 
     let mut remote = {
         let remote = match addr {
@@ -44,7 +44,7 @@ async fn handle_tcp_tunnel_server_client(
         remote
     };
 
-    let (mut sr, mut sw) = stream.into_split();
+    let (mut sr, mut sw) = tokio::io::split(stream);
     let (mut mr, mut mw) = remote.split();
 
     let l2r = copy_from_encrypted(method, &mut sr, &mut mw);
@@ -70,7 +70,7 @@ async fn handle_tcp_tunnel_local_client(
     let remote = ProxyClientStream::connect(context, &svr_cfg, target_addr).await?;
 
     let (mut lr, mut lw) = stream.split();
-    let (mut sr, mut sw) = remote.into_split();
+    let (mut sr, mut sw) = tokio::io::split(remote);
 
     let l2s = copy_to_encrypted(svr_cfg.method(), &mut lr, &mut sw);
     let s2l = copy_from_encrypted(svr_cfg.method(), &mut sr, &mut lw);
@@ -184,4 +184,38 @@ async fn tcp_tunnel_none() {
     tcp_tunnel_example(server_addr, local_addr, "p$p", CipherKind::NONE)
         .await
         .unwrap();
+}
+
+#[cfg(feature = "aead-cipher-2022")]
+#[tokio::test]
+async fn tcp_tunnel_aead_2022_aes() {
+    let _ = env_logger::try_init();
+
+    let server_addr = "127.0.0.1:34001".parse::<SocketAddr>().unwrap();
+    let local_addr = "127.0.0.1:34101".parse::<SocketAddr>().unwrap();
+    tcp_tunnel_example(
+        server_addr,
+        local_addr,
+        "3L69X4PF2eSL/JSLkoWnXg==",
+        CipherKind::AEAD2022_BLAKE3_AES_128_GCM,
+    )
+    .await
+    .unwrap();
+}
+
+#[cfg(feature = "aead-cipher-2022")]
+#[tokio::test]
+async fn tcp_tunnel_aead_2022_chacha20() {
+    let _ = env_logger::try_init();
+
+    let server_addr = "127.0.0.1:35001".parse::<SocketAddr>().unwrap();
+    let local_addr = "127.0.0.1:35101".parse::<SocketAddr>().unwrap();
+    tcp_tunnel_example(
+        server_addr,
+        local_addr,
+        "VUw3mGWIpil2z2DKiyauE2Sp9KyE2ab8dulciawe74o",
+        CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305,
+    )
+    .await
+    .unwrap();
 }

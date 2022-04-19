@@ -13,7 +13,7 @@ use shadowsocks_service::{
     run_server,
     shadowsocks::{
         config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
-        crypto::v1::{available_ciphers, CipherKind},
+        crypto::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
 };

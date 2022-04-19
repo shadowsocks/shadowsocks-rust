@@ -14,7 +14,7 @@ use futures::ready;
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::crypto::v1::{CipherCategory, CipherKind};
+use crate::crypto::{CipherCategory, CipherKind};
 
 #[derive(Debug)]
 struct CopyBuffer {
@@ -146,6 +146,8 @@ fn encrypted_read_buffer_size(method: CipherKind) -> usize {
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => 1 << 14,
         CipherCategory::None => 1 << 14,
+        #[cfg(feature = "aead-cipher-2022")]
+        CipherCategory::Aead2022 => super::aead_2022::MAX_PACKET_SIZE + method.tag_len(),
     }
 }
 
@@ -155,6 +157,8 @@ fn plain_read_buffer_size(method: CipherKind) -> usize {
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => 1 << 14,
         CipherCategory::None => 1 << 14,
+        #[cfg(feature = "aead-cipher-2022")]
+        CipherCategory::Aead2022 => super::aead_2022::MAX_PACKET_SIZE,
     }
 }
 

@@ -51,8 +51,14 @@ use std::time::Duration;
 
 pub use self::proxy_socket::ProxySocket;
 
+mod aead;
+#[cfg(feature = "aead-cipher-2022")]
+mod aead_2022;
 mod crypto_io;
+pub mod options;
 pub mod proxy_socket;
+#[cfg(feature = "stream-cipher")]
+mod stream;
 
 /// The maximum UDP payload size (defined in the original shadowsocks Python)
 ///
