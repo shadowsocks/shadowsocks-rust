@@ -25,7 +25,11 @@ use shadowsocks::{
 use tokio::{net::UdpSocket, sync::mpsc, task::JoinHandle, time};
 
 use crate::{
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::udp::association::{SERVER_SESSION_REMEMBER_COUNT, SERVER_SESSION_REMEMBER_DURATION},
+    },
     net::{
         packet_window::PacketWindowFilter,
         MonProxySocket,
@@ -217,7 +221,10 @@ struct ServerSessionContext {
 impl ServerSessionContext {
     fn new() -> ServerSessionContext {
         ServerSessionContext {
-            server_session_map: LruCache::with_expiry_duration_and_capacity(Duration::from_secs(30 * 60), 5),
+            server_session_map: LruCache::with_expiry_duration_and_capacity(
+                SERVER_SESSION_REMEMBER_DURATION,
+                SERVER_SESSION_REMEMBER_COUNT,
+            ),
         }
     }
 }

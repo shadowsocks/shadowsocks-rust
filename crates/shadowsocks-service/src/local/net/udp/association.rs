@@ -187,10 +187,26 @@ struct ServerSessionContext {
     server_session_map: LruCache<u64, ServerContext>,
 }
 
+// Server shouldn't be remembered too long.
+//
+// Server session will only changed if
+// 1. Association expired
+// 2. Server restarted
+//
+// Normally there should only be 1 unqiue server session.
+pub const SERVER_SESSION_REMEMBER_DURATION: Duration = Duration::from_secs(60);
+
+// Remember 2 server sessions. When server restarts,
+// some of the packet on wire may be received later then those new ones.
+pub const SERVER_SESSION_REMEMBER_COUNT: usize = 2;
+
 impl ServerSessionContext {
     fn new() -> ServerSessionContext {
         ServerSessionContext {
-            server_session_map: LruCache::with_expiry_duration_and_capacity(Duration::from_secs(30 * 60), 5),
+            server_session_map: LruCache::with_expiry_duration_and_capacity(
+                SERVER_SESSION_REMEMBER_DURATION,
+                SERVER_SESSION_REMEMBER_COUNT,
+            ),
         }
     }
 }

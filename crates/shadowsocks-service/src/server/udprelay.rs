@@ -324,9 +324,20 @@ struct ClientSessionContext {
 
 impl ClientSessionContext {
     fn new(client_session_id: u64) -> ClientSessionContext {
+        // Client shouldn't be remembered too long.
+        // If a client was switching between networks (like Wi-Fi and Cellular),
+        // when it switched back from another, the packet filter window will be too old.
+        const CLIENT_SESSION_REMEMBER_DURATION: Duration = Duration::from_secs(60);
+
+        // Wi-Fi & Cellular network device, so it is 2 for most users
+        const CLIENT_SESSION_REMEMBER_COUNT: usize = 2;
+
         ClientSessionContext {
             client_session_id,
-            client_context_map: LruCache::with_expiry_duration_and_capacity(Duration::from_secs(30 * 60), 10),
+            client_context_map: LruCache::with_expiry_duration_and_capacity(
+                CLIENT_SESSION_REMEMBER_DURATION,
+                CLIENT_SESSION_REMEMBER_COUNT,
+            ),
         }
     }
 }
