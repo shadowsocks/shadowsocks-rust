@@ -9,7 +9,7 @@ use std::{
     fs::File,
     io::{self, BufRead, BufReader, Error, ErrorKind},
     net::{IpAddr, SocketAddr},
-    path::Path,
+    path::{Path, PathBuf},
     str,
 };
 
@@ -321,6 +321,7 @@ pub struct AccessControl {
     black_list: Rules,
     white_list: Rules,
     mode: Mode,
+    file_path: PathBuf,
 }
 
 impl AccessControl {
@@ -328,7 +329,10 @@ impl AccessControl {
     pub fn load_from_file<P: AsRef<Path>>(p: P) -> io::Result<AccessControl> {
         trace!("ACL loading from {:?}", p.as_ref());
 
-        let fp = File::open(p)?;
+        let file_path_ref = p.as_ref();
+        let file_path = file_path_ref.to_path_buf();
+
+        let fp = File::open(file_path_ref)?;
         let r = BufReader::new(fp);
 
         let mut mode = Mode::BlackList;
@@ -421,7 +425,13 @@ impl AccessControl {
             black_list: bypass.into_rules()?,
             white_list: proxy.into_rules()?,
             mode,
+            file_path,
         })
+    }
+
+    /// Get ACL file path
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
     }
 
     /// Check if domain name is in proxy_list.

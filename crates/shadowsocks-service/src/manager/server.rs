@@ -366,16 +366,21 @@ impl Manager {
         let manager_addr = self.svr_cfg.addr.to_string();
 
         // Start server process
-        let child_result = Command::new(&self.svr_cfg.server_program)
+        let mut child_command = Command::new(&self.svr_cfg.server_program);
+        child_command
             .arg("-c")
             .arg(&config_file_path)
             .arg("--daemonize")
             .arg("--daemonize-pid")
             .arg(&pid_path)
             .arg("--manager-addr")
-            .arg(&manager_addr)
-            .kill_on_drop(false)
-            .spawn();
+            .arg(&manager_addr);
+
+        if let Some(ref acl) = self.acl {
+            child_command.arg("--acl").arg(acl.file_path().to_str().expect("acl"));
+        }
+
+        let child_result = child_command.kill_on_drop(false).spawn();
 
         if let Err(err) = child_result {
             error!(
