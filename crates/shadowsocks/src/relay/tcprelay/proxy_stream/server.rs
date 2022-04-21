@@ -39,6 +39,7 @@ pub struct ProxyServerStream<S> {
     stream: CryptoStream<S>,
     context: SharedContext,
     writer_state: ProxyServerStreamWriteState,
+    has_handshaked: bool,
 }
 
 impl<S> ProxyServerStream<S> {
@@ -62,6 +63,7 @@ impl<S> ProxyServerStream<S> {
             stream: CryptoStream::from_stream(&context, stream, method, key),
             context,
             writer_state,
+            has_handshaked: false,
         }
     }
 
@@ -89,7 +91,13 @@ where
     ///
     /// This method should be called only once after accepted.
     pub async fn handshake(&mut self) -> io::Result<Address> {
+        if self.has_handshaked {
+            return Err(io::Error::new(io::ErrorKind::Other, "stream is already handshaked"));
+        }
+
         let header = TcpRequestHeader::read_from(self.stream.method(), self).await?;
+        self.has_handshaked = true;
+
         // TODO: Check header is not in a standalone AEAD package
         Ok(header.addr())
     }
@@ -101,6 +109,10 @@ where
 {
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        if !self.has_handshaked {
+            return Err(io::Error::new(io::ErrorKind::Other, "stream is not handshaked yet")).into();
+        }
+
         let this = self.project();
         ready!(this.stream.poll_read_decrypted(cx, this.context, buf))?;
 
