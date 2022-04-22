@@ -127,7 +127,7 @@ impl UdpTunnel {
                         .send_packet(&listener, peer_addr, &balancer, forward_addr, data)
                         .await
                     {
-                        error!(
+                        debug!(
                             "udp packet relay {} -> {} with {} bytes failed, error: {}",
                             peer_addr,
                             forward_addr,

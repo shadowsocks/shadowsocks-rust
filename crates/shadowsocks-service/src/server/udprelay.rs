@@ -191,7 +191,7 @@ impl UdpServer {
 
                     let data = &buffer[..n];
                     if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, data).await {
-                        error!(
+                        debug!(
                             "udp packet relay {} with {} bytes failed, error: {}",
                             peer_addr,
                             data.len(),

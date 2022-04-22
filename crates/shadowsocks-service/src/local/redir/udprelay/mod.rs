@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use shadowsocks::{
     lookup_then,
@@ -259,7 +259,7 @@ impl UdpRedir {
                     }
 
                     if let Err(err) = manager.send_to(src, Address::from(dst), pkt).await {
-                        error!(
+                        debug!(
                             "udp packet relay {} -> {} with {} bytes failed, error: {}",
                             src,
                             dst,

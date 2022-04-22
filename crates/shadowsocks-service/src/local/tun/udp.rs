@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use etherparse::PacketBuilder;
-use log::trace;
+use log::{debug, trace};
 use shadowsocks::relay::socks5::Address;
 use tokio::sync::mpsc;
 
@@ -50,7 +50,16 @@ impl UdpTun {
         payload: &[u8],
     ) -> io::Result<()> {
         trace!("UDP {} -> {} payload.size: {} bytes", src_addr, dst_addr, payload.len());
-        self.manager.send_to(src_addr, dst_addr.into(), payload).await
+        if let Err(err) = self.manager.send_to(src_addr, dst_addr.into(), payload).await {
+            debug!(
+                "UDP {} -> {} payload.size: {} bytes failed, error: {}",
+                src_addr,
+                dst_addr,
+                payload.len(),
+                err,
+            );
+        }
+        Ok(())
     }
 
     pub async fn recv_packet(&mut self) -> BytesMut {

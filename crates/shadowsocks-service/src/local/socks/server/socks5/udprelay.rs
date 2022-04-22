@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use shadowsocks::{
     lookup_then,
     net::UdpSocket as ShadowUdpSocket,
@@ -147,7 +147,7 @@ impl Socks5UdpServer {
                     );
 
                     if let Err(err) = manager.send_to(peer_addr, header.address, payload).await {
-                        error!(
+                        debug!(
                             "udp packet from {} relay {} bytes failed, error: {}",
                             peer_addr,
                             data.len(),
