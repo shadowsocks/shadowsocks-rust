@@ -51,7 +51,7 @@ async fn tcp_tunnel_tfo() {
             debug!("accepted {}", peer_addr);
 
             tokio::spawn(async move {
-                let addr = Address::read_from(&mut stream).await.unwrap();
+                let addr = stream.handshake().await.unwrap();
                 let remote = match addr {
                     Address::SocketAddress(a) => TcpStream::connect(a).await.unwrap(),
                     Address::DomainNameAddress(name, port) => TcpStream::connect((name.as_str(), port)).await.unwrap(),
