@@ -128,6 +128,8 @@ aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
 
 # Enable AEAD 2022
 aead-cipher-2022 = ["shadowsocks-service/aead-cipher-2022"]
+# Enable AEAD 2022 with extra ciphers
+aead-cipher-2022-extra = ["shadowsocks-service/aead-cipher-2022-extra"]
 
 # Enable detection against replay attack (Stream / AEAD)
 security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]

@@ -66,6 +66,8 @@ use bytes::{Buf, BufMut, BytesMut};
 use log::trace;
 use lru_time_cache::LruCache;
 
+#[cfg(feature = "aead-cipher-2022-extra")]
+use crate::crypto::v2::udp::ChaCha8Poly1305Cipher;
 use crate::{
     context::Context,
     crypto::{
@@ -171,6 +173,16 @@ fn encrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &
             let (nonce, message) = packet.split_at_mut(nonce_size);
             cipher.encrypt_packet(nonce, message);
         }
+        #[cfg(feature = "aead-cipher-2022-extra")]
+        CipherKind::AEAD2022_BLAKE3_CHACHA8_POLY1305 => {
+            // ChaCha8-Poly1305 uses PSK as key, prepended nonce in packet
+            let nonce_size = ChaCha8Poly1305Cipher::nonce_size();
+
+            let cipher = get_cipher(method, key, session_id);
+
+            let (nonce, message) = packet.split_at_mut(nonce_size);
+            cipher.encrypt_packet(nonce, message);
+        }
         CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
             // AES-*-GCM uses derived key, and part of the packet header as nonce
 
@@ -206,6 +218,28 @@ fn decrypt_message(_context: &Context, method: CipherKind, key: &[u8], packet: &
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => {
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
             let nonce_size = ChaCha20Poly1305Cipher::nonce_size();
+
+            let (nonce, message) = packet.split_at_mut(nonce_size);
+
+            // NOTE: ChaCha20-Poly1305's session_id is not required because it uses PSK directly
+            //
+            // But still, we get the session_id for cache
+            let session_id = {
+                let session_id_buf = &message[0..8];
+                let session_id_slice: &[u64] = unsafe { slice::from_raw_parts(session_id_buf.as_ptr() as *const _, 1) };
+                u64::from_be(session_id_slice[0])
+            };
+
+            let cipher = get_cipher(method, key, session_id);
+
+            if !cipher.decrypt_packet(nonce, message) {
+                return false;
+            }
+        }
+        #[cfg(feature = "aead-cipher-2022-extra")]
+        CipherKind::AEAD2022_BLAKE3_CHACHA8_POLY1305 => {
+            // ChaCha8-Poly1305 uses PSK as key, prepended nonce in packet
+            let nonce_size = ChaCha8Poly1305Cipher::nonce_size();
 
             let (nonce, message) = packet.split_at_mut(nonce_size);
 
@@ -274,6 +308,8 @@ fn get_nonce_len(method: CipherKind) -> usize {
     match method {
         CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM => 0,
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => method.nonce_len(),
+        #[cfg(feature = "aead-cipher-2022-extra")]
+        CipherKind::AEAD2022_BLAKE3_CHACHA8_POLY1305 => method.nonce_len(),
         _ => unreachable!("{} is not an AEAD 2022 cipher", method),
     }
 }

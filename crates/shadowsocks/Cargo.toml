@@ -33,6 +33,8 @@ aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
 aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache"]
+# Enable AEAD 2022 with extra ciphers
+aead-cipher-2022-extra = ["shadowsocks-crypto/v2-extra"]
 
 # Enable detection against replay attack
 security-replay-attack-detect = ["bloomfilter"]
