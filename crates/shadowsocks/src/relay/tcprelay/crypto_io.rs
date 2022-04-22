@@ -230,6 +230,18 @@ impl<S> CryptoStream<S> {
     pub fn sent_nonce(&self) -> &[u8] {
         self.enc.nonce()
     }
+
+    /// Get remaining bytes in the current data chunk
+    ///
+    /// Returning (DataChunkCount, RemainingBytes)
+    #[cfg(feature = "aead-cipher-2022")]
+    pub(crate) fn current_data_chunk_remaining(&self) -> (u64, usize) {
+        if let DecryptedReader::Aead2022(ref dec) = self.dec {
+            dec.current_data_chunk_remaining()
+        } else {
+            panic!("only AEAD-2022 protocol has data chunk counter");
+        }
+    }
 }
 
 /// Cryptographic reader trait

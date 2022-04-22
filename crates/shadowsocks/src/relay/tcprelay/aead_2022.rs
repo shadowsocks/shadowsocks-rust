@@ -66,6 +66,7 @@ pub struct DecryptedReader {
     buffer: BytesMut,
     method: CipherKind,
     salt: Option<Bytes>,
+    data_chunk_count: u64,
 }
 
 impl DecryptedReader {
@@ -79,6 +80,7 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(method.salt_len()),
                 method,
                 salt: None,
+                data_chunk_count: 0,
             }
         } else {
             DecryptedReader {
@@ -87,6 +89,7 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
                 method,
                 salt: None,
+                data_chunk_count: 0,
             }
         }
     }
@@ -130,6 +133,7 @@ impl DecryptedReader {
                     ready!(self.poll_read_data(cx, context, stream, length))?;
 
                     self.state = DecryptReadState::BufferedData { pos: 0 };
+                    self.data_chunk_count = self.data_chunk_count.wrapping_add(1);
                 }
                 DecryptReadState::BufferedData { ref mut pos } => {
                     if *pos < self.buffer.len() {
@@ -272,6 +276,16 @@ impl DecryptedReader {
         };
 
         Ok(plen)
+    }
+
+    /// Get remaining bytes in the current data chunk
+    ///
+    /// Returning (DataChunkCount, RemainingBytes)
+    pub fn current_data_chunk_remaining(&self) -> (u64, usize) {
+        match self.state {
+            DecryptReadState::BufferedData { pos } => (self.data_chunk_count, self.buffer.len() - pos),
+            _ => (self.data_chunk_count, 0),
+        }
     }
 }
 

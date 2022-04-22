@@ -95,10 +95,35 @@ where
             return Err(io::Error::new(io::ErrorKind::Other, "stream is already handshaked"));
         }
 
-        let header = TcpRequestHeader::read_from(self.stream.method(), self).await?;
         self.has_handshaked = true;
+        let header = TcpRequestHeader::read_from(self.stream.method(), self).await?;
 
-        // TODO: Check header is not in a standalone AEAD package
+        #[cfg(feature = "aead-cipher-2022")]
+        if let TcpRequestHeader::Aead2022(ref header) = header {
+            use log::warn;
+
+            // AEAD-2022 SPEC
+            //
+            // Padding: If the client is not sending payload along with the header, a random padding MUST be added.
+            //
+            // Check here preventing security risk causing by misimplementation clients.
+            if header.padding_size == 0 {
+                let (chunk_count, chunk_remaining) = self.stream.current_data_chunk_remaining();
+                if chunk_count == 1 && chunk_remaining == 0 {
+                    // Header is the end of the data chunk, so no payload is in the first chunk, and padding == 0.
+                    // REJECT insecure clients.
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "no payload in first data chunk, and padding is 0",
+                    ));
+                } else if chunk_count > 1 {
+                    warn!(
+                        "tcp header is separated in {} chunks, client is not following the AEAD-2022 spec",
+                        chunk_count,
+                    );
+                }
+            }
+        }
         Ok(header.addr())
     }
 }
