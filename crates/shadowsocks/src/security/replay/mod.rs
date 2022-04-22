@@ -62,6 +62,8 @@ impl ReplayProtector {
             return false;
         }
 
+        let _ = method;
+
         cfg_if! {
             if #[cfg(feature = "security-replay-attack-detect")] {
                 let mut ppbloom = self.nonce_ppbloom.lock();
