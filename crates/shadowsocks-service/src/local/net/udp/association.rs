@@ -301,7 +301,7 @@ where
                     self.dispatch_received_packet(&target_addr, &data).await;
                 }
 
-                received_opt = receive_from_bypassed_opt(&self.bypassed_ipv4_socket, &mut bypassed_ipv4_buffer) => {
+                received_opt = receive_from_bypassed_opt(&self.bypassed_ipv4_socket, &mut bypassed_ipv4_buffer), if self.bypassed_ipv4_socket.is_some() => {
                     let (n, addr) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {
@@ -316,7 +316,7 @@ where
                     self.send_received_respond_packet(&addr, &bypassed_ipv4_buffer[..n], true).await;
                 }
 
-                received_opt = receive_from_bypassed_opt(&self.bypassed_ipv6_socket, &mut bypassed_ipv6_buffer) => {
+                received_opt = receive_from_bypassed_opt(&self.bypassed_ipv6_socket, &mut bypassed_ipv6_buffer), if self.bypassed_ipv6_socket.is_some() => {
                     let (n, addr) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {
@@ -331,7 +331,7 @@ where
                     self.send_received_respond_packet(&addr, &bypassed_ipv6_buffer[..n], true).await;
                 }
 
-                received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer) => {
+                received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer), if self.proxied_socket.is_some() => {
                     let (n, addr, control_opt) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {

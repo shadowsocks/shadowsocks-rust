@@ -506,7 +506,7 @@ impl UdpAssociationContext {
                     self.dispatch_received_packet(peer_addr, &target_addr, &data, &control).await;
                 }
 
-                received_opt = receive_from_outbound_opt(&self.outbound_ipv4_socket, &mut outbound_ipv4_buffer) => {
+                received_opt = receive_from_outbound_opt(&self.outbound_ipv4_socket, &mut outbound_ipv4_buffer), if self.outbound_ipv4_socket.is_some() => {
                     let (n, addr) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {
@@ -521,7 +521,7 @@ impl UdpAssociationContext {
                     self.send_received_respond_packet(&addr, &outbound_ipv4_buffer[..n]).await;
                 }
 
-                received_opt = receive_from_outbound_opt(&self.outbound_ipv6_socket, &mut outbound_ipv6_buffer) => {
+                received_opt = receive_from_outbound_opt(&self.outbound_ipv6_socket, &mut outbound_ipv6_buffer), if self.outbound_ipv6_socket.is_some() => {
                     let (n, addr) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {

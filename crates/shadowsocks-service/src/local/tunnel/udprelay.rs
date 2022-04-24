@@ -315,7 +315,7 @@ impl UdpAssociationContext {
                     self.dispatch_received_packet(&data).await;
                 }
 
-                received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer) => {
+                received_opt = receive_from_proxied_opt(&self.proxied_socket, &mut proxied_buffer), if self.proxied_socket.is_some() => {
                     let (n, addr, control_opt) = match received_opt {
                         Ok(r) => r,
                         Err(err) => {
