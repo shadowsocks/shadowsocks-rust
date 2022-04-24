@@ -141,9 +141,104 @@ impl UdpServer {
         let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
         let listener = Arc::new(socket);
 
-        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         let mut cleanup_timer = time::interval(self.time_to_live);
 
+        let mut orx_opt = None;
+
+        let cpus = num_cpus::get();
+        let mut other_cores = Vec::new();
+        if cpus > 1 {
+            let (otx, orx) = mpsc::channel(64);
+            orx_opt = Some(orx);
+
+            other_cores.reserve(cpus - 1);
+            trace!("udp server starting extra {} recv workers", cpus - 1);
+
+            for _ in 1..cpus {
+                let otx = otx.clone();
+                let listener = listener.clone();
+                let context = self.context.clone();
+
+                other_cores.push(tokio::spawn(async move {
+                    let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
+
+                    loop {
+                        let (n, peer_addr, target_addr, control) = match listener.recv_from_with_ctrl(&mut buffer).await
+                        {
+                            Ok(s) => s,
+                            Err(err) => {
+                                error!("udp server recv_from failed with error: {}", err);
+                                continue;
+                            }
+                        };
+
+                        if n == 0 {
+                            // For windows, it will generate a ICMP Port Unreachable Message
+                            // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
+                            // Which will result in recv_from return 0.
+                            //
+                            // It cannot be solved here, because `WSAGetLastError` is already set.
+                            //
+                            // See `relay::udprelay::utils::create_socket` for more detail.
+                            continue;
+                        }
+
+                        if context.check_client_blocked(&peer_addr) {
+                            warn!(
+                                "udp client {} outbound {} access denied by ACL rules",
+                                peer_addr, target_addr
+                            );
+                            continue;
+                        }
+
+                        if context.check_outbound_blocked(&target_addr).await {
+                            warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
+                            continue;
+                        }
+
+                        let r = otx
+                            .send((peer_addr, target_addr, control, Bytes::copy_from_slice(&buffer[..n])))
+                            .await;
+
+                        // If Result is error, the channel receiver is closed. We should exit the task.
+                        if r.is_err() {
+                            break;
+                        }
+                    }
+                }));
+            }
+        }
+
+        struct MulticoreTaskGuard<'a> {
+            tasks: &'a mut Vec<JoinHandle<()>>,
+        }
+
+        impl Drop for MulticoreTaskGuard<'_> {
+            fn drop(&mut self) {
+                for task in self.tasks.iter_mut() {
+                    task.abort();
+                }
+            }
+        }
+
+        let _guard = MulticoreTaskGuard {
+            tasks: &mut other_cores,
+        };
+
+        #[inline]
+        async fn multicore_recv(
+            orx_opt: &mut Option<mpsc::Receiver<(SocketAddr, Address, Option<UdpSocketControlData>, Bytes)>>,
+        ) -> (SocketAddr, Address, Option<UdpSocketControlData>, Bytes) {
+            match orx_opt {
+                None => future::pending().await,
+                Some(ref mut orx) => match orx.recv().await {
+                    Some(t) => t,
+                    None => unreachable!("multicore sender should keep at least 1"),
+                },
+            }
+        }
+
+        let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
         loop {
             tokio::select! {
                 _ = cleanup_timer.tick() => {
@@ -190,11 +285,24 @@ impl UdpServer {
                     }
 
                     let data = &buffer[..n];
-                    if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, data).await {
+                    if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, Bytes::copy_from_slice(data)).await {
                         debug!(
                             "udp packet relay {} with {} bytes failed, error: {}",
                             peer_addr,
                             data.len(),
+                            err
+                        );
+                    }
+                }
+
+                recv_result = multicore_recv(&mut orx_opt) => {
+                    let (peer_addr, target_addr, control, data) = recv_result;
+                    let data_len = data.len();
+                    if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, data).await {
+                        debug!(
+                            "udp packet relay {} with {} bytes failed, error: {}",
+                            peer_addr,
+                            data_len,
                             err
                         );
                     }
@@ -209,12 +317,12 @@ impl UdpServer {
         peer_addr: SocketAddr,
         target_addr: Address,
         control: Option<UdpSocketControlData>,
-        data: &[u8],
+        data: Bytes,
     ) -> io::Result<()> {
         match self.assoc_map {
             NatMap::Association(ref mut m) => {
                 if let Some(assoc) = m.get(&peer_addr) {
-                    return assoc.try_send((peer_addr, target_addr, Bytes::copy_from_slice(data), control));
+                    return assoc.try_send((peer_addr, target_addr, data.into(), control));
                 }
 
                 let assoc = UdpAssociation::new_association(
@@ -226,7 +334,7 @@ impl UdpServer {
 
                 debug!("created udp association for {}", peer_addr);
 
-                assoc.try_send((peer_addr, target_addr, Bytes::copy_from_slice(data), control))?;
+                assoc.try_send((peer_addr, target_addr, data.into(), control))?;
                 m.insert(peer_addr, assoc);
             }
             #[cfg(feature = "aead-cipher-2022")]
@@ -242,7 +350,7 @@ impl UdpServer {
                 let client_session_id = xcontrol.client_session_id;
 
                 if let Some(assoc) = m.get(&client_session_id) {
-                    return assoc.try_send((peer_addr, target_addr, Bytes::copy_from_slice(data), control));
+                    return assoc.try_send((peer_addr, target_addr, data.into(), control));
                 }
 
                 let assoc = UdpAssociation::new_session(
@@ -258,7 +366,7 @@ impl UdpServer {
                     peer_addr, client_session_id
                 );
 
-                assoc.try_send((peer_addr, target_addr, Bytes::copy_from_slice(data), control))?;
+                assoc.try_send((peer_addr, target_addr, data.into(), control))?;
                 m.insert(client_session_id, assoc);
             }
         }

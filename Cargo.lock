@@ -2299,6 +2299,7 @@ dependencies = [
  "lru_time_cache",
  "native-tls",
  "nix 0.23.1",
+ "num_cpus",
  "once_cell",
  "pin-project",
  "rand",
