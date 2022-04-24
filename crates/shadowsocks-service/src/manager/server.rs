@@ -82,6 +82,7 @@ pub struct Manager {
     acl: Option<Arc<AccessControl>>,
     ipv6_first: bool,
     security: SecurityConfig,
+    worker_count: usize,
 }
 
 impl Manager {
@@ -103,6 +104,7 @@ impl Manager {
             acl: None,
             ipv6_first: false,
             security: SecurityConfig::default(),
+            worker_count: 1,
         }
     }
 
@@ -150,6 +152,14 @@ impl Manager {
     /// Set security config
     pub fn set_security_config(&mut self, security: SecurityConfig) {
         self.security = security;
+    }
+
+    /// Set runtime worker count
+    ///
+    /// Should be replaced with tokio's metric API when it is stablized.
+    /// https://github.com/tokio-rs/tokio/issues/4073
+    pub fn set_worker_count(&mut self, worker_count: usize) {
+        self.worker_count = worker_count;
     }
 
     /// Start serving
@@ -234,6 +244,8 @@ impl Manager {
         }
 
         server.set_security_config(&self.security);
+
+        server.set_worker_count(self.worker_count);
 
         let server_port = server.config().addr().port();
 

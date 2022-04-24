@@ -1082,6 +1082,11 @@ pub struct Config {
     /// Configuration file path, the actual path of the configuration.
     /// This is normally for auto-reloading if implementation supports.
     pub config_path: Option<PathBuf>,
+
+    #[doc(hidden)]
+    /// Workers in runtime
+    /// It should be replaced with metrics APIs: https://github.com/tokio-rs/tokio/issues/4073
+    pub worker_count: usize,
 }
 
 /// Configuration parsing error kind
@@ -1192,6 +1197,8 @@ impl Config {
             balancer: BalancerConfig::default(),
 
             config_path: None,
+
+            worker_count: 1,
         }
     }
 

@@ -86,6 +86,7 @@ pub struct UdpServer {
     keepalive_rx: mpsc::Receiver<NatKey>,
     time_to_live: Duration,
     accept_opts: AcceptOpts,
+    worker_count: usize,
 }
 
 impl UdpServer {
@@ -127,7 +128,13 @@ impl UdpServer {
             keepalive_rx,
             time_to_live,
             accept_opts,
+            worker_count: 1,
         }
+    }
+
+    #[inline]
+    pub fn set_worker_count(&mut self, worker_count: usize) {
+        self.worker_count = worker_count;
     }
 
     pub async fn run(mut self, svr_cfg: &ServerConfig) -> io::Result<()> {
@@ -145,13 +152,13 @@ impl UdpServer {
 
         let mut orx_opt = None;
 
-        let cpus = num_cpus::get();
-        let mut other_cores = Vec::new();
+        let cpus = self.worker_count;
+        let mut other_receivers = Vec::new();
         if cpus > 1 {
-            let (otx, orx) = mpsc::channel(64);
+            let (otx, orx) = mpsc::channel((cpus - 1) * 16);
             orx_opt = Some(orx);
 
-            other_cores.reserve(cpus - 1);
+            other_receivers.reserve(cpus - 1);
             trace!("udp server starting extra {} recv workers", cpus - 1);
 
             for _ in 1..cpus {
@@ -159,49 +166,21 @@ impl UdpServer {
                 let listener = listener.clone();
                 let context = self.context.clone();
 
-                other_cores.push(tokio::spawn(async move {
+                other_receivers.push(tokio::spawn(async move {
                     let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
 
                     loop {
-                        let (n, peer_addr, target_addr, control) = match listener.recv_from_with_ctrl(&mut buffer).await
-                        {
-                            Ok(s) => s,
-                            Err(err) => {
-                                error!("udp server recv_from failed with error: {}", err);
-                                continue;
-                            }
-                        };
+                        let (n, peer_addr, target_addr, control) =
+                            match UdpServer::recv_one_packet(&context, &listener, &mut buffer).await {
+                                Some(s) => s,
+                                None => continue,
+                            };
 
-                        if n == 0 {
-                            // For windows, it will generate a ICMP Port Unreachable Message
-                            // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
-                            // Which will result in recv_from return 0.
-                            //
-                            // It cannot be solved here, because `WSAGetLastError` is already set.
-                            //
-                            // See `relay::udprelay::utils::create_socket` for more detail.
-                            continue;
-                        }
-
-                        if context.check_client_blocked(&peer_addr) {
-                            warn!(
-                                "udp client {} outbound {} access denied by ACL rules",
-                                peer_addr, target_addr
-                            );
-                            continue;
-                        }
-
-                        if context.check_outbound_blocked(&target_addr).await {
-                            warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
-                            continue;
-                        }
-
-                        let r = otx
+                        if let Err(..) = otx
                             .send((peer_addr, target_addr, control, Bytes::copy_from_slice(&buffer[..n])))
-                            .await;
-
-                        // If Result is error, the channel receiver is closed. We should exit the task.
-                        if r.is_err() {
+                            .await
+                        {
+                            // If Result is error, the channel receiver is closed. We should exit the task.
                             break;
                         }
                     }
@@ -222,7 +201,7 @@ impl UdpServer {
         }
 
         let _guard = MulticoreTaskGuard {
-            tasks: &mut other_cores,
+            tasks: &mut other_receivers,
         };
 
         #[inline]
@@ -251,38 +230,11 @@ impl UdpServer {
                     self.assoc_map.keep_alive(&peer_addr);
                 }
 
-                recv_result = listener.recv_from_with_ctrl(&mut buffer) => {
+                recv_result = UdpServer::recv_one_packet(&self.context, &listener, &mut buffer) => {
                     let (n, peer_addr, target_addr, control) = match recv_result {
-                        Ok(s) => s,
-                        Err(err) => {
-                            error!("udp server recv_from failed with error: {}", err);
-                            continue;
-                        }
+                        Some(s) => s,
+                        None => continue,
                     };
-
-                    if n == 0 {
-                        // For windows, it will generate a ICMP Port Unreachable Message
-                        // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
-                        // Which will result in recv_from return 0.
-                        //
-                        // It cannot be solved here, because `WSAGetLastError` is already set.
-                        //
-                        // See `relay::udprelay::utils::create_socket` for more detail.
-                        continue;
-                    }
-
-                    if self.context.check_client_blocked(&peer_addr) {
-                        warn!(
-                            "udp client {} outbound {} access denied by ACL rules",
-                            peer_addr, target_addr
-                        );
-                        continue;
-                    }
-
-                    if self.context.check_outbound_blocked(&target_addr).await {
-                        warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
-                        continue;
-                    }
 
                     let data = &buffer[..n];
                     if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, Bytes::copy_from_slice(data)).await {
@@ -295,7 +247,7 @@ impl UdpServer {
                     }
                 }
 
-                recv_result = multicore_recv(&mut orx_opt) => {
+                recv_result = multicore_recv(&mut orx_opt), if orx_opt.is_some() => {
                     let (peer_addr, target_addr, control, data) = recv_result;
                     let data_len = data.len();
                     if let Err(err) = self.send_packet(&listener, peer_addr, target_addr, control, data).await {
@@ -309,6 +261,46 @@ impl UdpServer {
                 }
             }
         }
+    }
+
+    async fn recv_one_packet(
+        context: &ServiceContext,
+        l: &MonProxySocket,
+        buffer: &mut [u8],
+    ) -> Option<(usize, SocketAddr, Address, Option<UdpSocketControlData>)> {
+        let (n, peer_addr, target_addr, control) = match l.recv_from_with_ctrl(buffer).await {
+            Ok(s) => s,
+            Err(err) => {
+                error!("udp server recv_from failed with error: {}", err);
+                return None;
+            }
+        };
+
+        if n == 0 {
+            // For windows, it will generate a ICMP Port Unreachable Message
+            // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-recvfrom
+            // Which will result in recv_from return 0.
+            //
+            // It cannot be solved here, because `WSAGetLastError` is already set.
+            //
+            // See `relay::udprelay::utils::create_socket` for more detail.
+            return None;
+        }
+
+        if context.check_client_blocked(&peer_addr) {
+            warn!(
+                "udp client {} outbound {} access denied by ACL rules",
+                peer_addr, target_addr
+            );
+            return None;
+        }
+
+        if context.check_outbound_blocked(&target_addr).await {
+            warn!("udp client {} outbound {} blocked by ACL rules", peer_addr, target_addr);
+            return None;
+        }
+
+        Some((n, peer_addr, target_addr, control))
     }
 
     async fn send_packet(

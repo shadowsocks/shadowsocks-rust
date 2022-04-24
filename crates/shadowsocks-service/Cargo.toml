@@ -110,7 +110,6 @@ async-trait = "0.1"
 
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
-num_cpus = "1.13"
 
 hyper = { version = "0.14.16", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }

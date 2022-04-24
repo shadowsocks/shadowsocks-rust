@@ -121,6 +121,10 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.set_ipv6_first(config.ipv6_first);
         }
 
+        if config.worker_count >= 1 {
+            server.set_worker_count(config.worker_count);
+        }
+
         server.set_security_config(&config.security);
 
         servers.push(server);
