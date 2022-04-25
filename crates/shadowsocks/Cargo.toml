@@ -94,7 +94,7 @@ sendfd = { version = "0.4", features = ["tokio"] }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = "0.23"
+nix = "0.24"
 
 [dev-dependencies]
 env_logger = "0.9"
