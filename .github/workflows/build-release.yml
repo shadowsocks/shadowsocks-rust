@@ -24,7 +24,6 @@ jobs:
           - armv7-linux-androideabi
           - armv7-unknown-linux-gnueabi
           - armv7-unknown-linux-musleabi
-          - armv7-unknown-linux-musleabihf
           - arm-unknown-linux-gnueabi
           - arm-unknown-linux-gnueabihf
           - arm-unknown-linux-musleabi
