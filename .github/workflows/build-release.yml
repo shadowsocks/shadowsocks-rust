@@ -21,9 +21,6 @@ jobs:
           - x86_64-unknown-linux-musl
           - armv7-unknown-linux-musleabihf
           - armv7-unknown-linux-gnueabihf
-          - armv7-linux-androideabi
-          - armv7-unknown-linux-gnueabi
-          - armv7-unknown-linux-musleabi
           - arm-unknown-linux-gnueabi
           - arm-unknown-linux-gnueabihf
           - arm-unknown-linux-musleabi
