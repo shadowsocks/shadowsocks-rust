@@ -536,7 +536,7 @@ Example configuration:
     ],
 
     // Server configuration
-    // listen on [::] for dual stack support
+    // listen on :: for dual stack support, no need add [] around.
     "server": "::",
     // Change to use your custom port number
     "server_port": 8388,
