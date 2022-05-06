@@ -87,7 +87,7 @@ shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/sh
 shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/shadowsocks-crypto.git", features = [] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["mswsock", "winsock2", "netioapi"] }
+windows-sys = { version = "0.36", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_IO"] }
 
 [target.'cfg(unix)'.dependencies]
 sendfd = { version = "0.4", features = ["tokio"] }

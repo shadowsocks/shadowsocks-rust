@@ -1,5 +1,5 @@
 use std::{
-    ffi::CString,
+    ffi::{c_void, CString},
     io::{self, ErrorKind},
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -17,20 +17,33 @@ use tokio::{
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
 };
 use tokio_tfo::TfoStream;
-use winapi::{
-    ctypes::{c_char, c_int},
-    shared::{
-        minwindef::{BOOL, DWORD, FALSE, LPDWORD, LPVOID},
-        netioapi::if_nametoindex,
-        ntdef::PCSTR,
-        ws2def::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP},
-        ws2ipdef::IPV6_UNICAST_IF,
-    },
-    um::{
-        mswsock::SIO_UDP_CONNRESET,
-        winsock2::{setsockopt, WSAGetLastError, WSAIoctl, SOCKET, SOCKET_ERROR},
+use windows_sys::{
+    core::PCSTR,
+    Win32::{
+        Foundation::BOOL,
+        NetworkManagement::IpHelper::if_nametoindex,
+        Networking::WinSock::{
+            setsockopt,
+            WSAGetLastError,
+            WSAIoctl,
+            IPPROTO_IP,
+            IPPROTO_IPV6,
+            IPPROTO_TCP,
+            IPV6_MTU_DISCOVER,
+            IPV6_UNICAST_IF,
+            IP_MTU_DISCOVER,
+            IP_PMTUDISC_DO,
+            IP_UNICAST_IF,
+            SIO_UDP_CONNRESET,
+            SOCKET,
+            SOCKET_ERROR,
+            TCP_FASTOPEN,
+        },
     },
 };
+
+// BOOL values
+const FALSE: BOOL = 0;
 
 use crate::net::{
     is_dual_stack_addr,
@@ -38,19 +51,6 @@ use crate::net::{
     AddrFamily,
     ConnectOpts,
 };
-
-// ws2ipdef.h
-// FIXME: Use winapi's definition if issue resolved
-// https://github.com/retep998/winapi-rs/issues/856
-const TCP_FASTOPEN: DWORD = 15;
-
-// ws2ipdef.h
-// https://github.com/retep998/winapi-rs/pull/1007
-const IP_UNICAST_IF: DWORD = 31;
-
-// ws2ipdef.h
-const IP_MTU_DISCOVER: DWORD = 71; // Set/get path MTU discover state.
-const IPV6_MTU_DISCOVER: DWORD = 71; // Set/get path MTU discover state.
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
 #[pin_project(project = TcpStreamProj)]
@@ -167,15 +167,15 @@ impl AsyncWrite for TcpStream {
 ///
 /// TCP_FASTOPEN is supported since Windows 10
 pub fn set_tcp_fastopen<S: AsRawSocket>(socket: &S) -> io::Result<()> {
-    let enable: DWORD = 1;
+    let enable: u32 = 1;
 
     unsafe {
         let ret = setsockopt(
             socket.as_raw_socket() as SOCKET,
-            IPPROTO_TCP as c_int,
-            TCP_FASTOPEN as c_int,
-            &enable as *const _ as *const c_char,
-            mem::size_of_val(&enable) as c_int,
+            IPPROTO_TCP as i32,
+            TCP_FASTOPEN as i32,
+            &enable as *const _ as PCSTR,
+            mem::size_of_val(&enable) as i32,
         );
 
         if ret == SOCKET_ERROR {
@@ -204,22 +204,20 @@ fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: SocketAddr, iface: &str) 
         }
 
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
-        let if_index = if_index as DWORD;
-
         let ret = match addr {
             SocketAddr::V4(..) => setsockopt(
                 handle,
-                IPPROTO_IP as c_int,
-                IP_UNICAST_IF as c_int,
-                &if_index as *const _ as *const c_char,
-                mem::size_of_val(&if_index) as c_int,
+                IPPROTO_IP as i32,
+                IP_UNICAST_IF as i32,
+                &if_index as *const _ as PCSTR,
+                mem::size_of_val(&if_index) as i32,
             ),
             SocketAddr::V6(..) => setsockopt(
                 handle,
-                IPPROTO_IPV6 as c_int,
-                IPV6_UNICAST_IF as c_int,
-                &if_index as *const _ as *const c_char,
-                mem::size_of_val(&if_index) as c_int,
+                IPPROTO_IPV6 as i32,
+                IPV6_UNICAST_IF as i32,
+                &if_index as *const _ as PCSTR,
+                mem::size_of_val(&if_index) as i32,
             ),
         };
 
@@ -247,17 +245,17 @@ fn disable_connection_reset(socket: &UdpSocket) -> io::Result<()> {
         // It is not an error. Could be ignored completely.
         // We have to ignore it here because it will crash the server.
 
-        let mut bytes_returned: DWORD = 0;
-        let mut enable: BOOL = FALSE;
+        let mut bytes_returned: u32 = 0;
+        let enable: BOOL = FALSE;
 
         let ret = WSAIoctl(
             handle,
             SIO_UDP_CONNRESET,
-            &mut enable as *mut _ as LPVOID,
-            mem::size_of_val(&enable) as DWORD,
+            &enable as *const _ as *const c_void,
+            mem::size_of_val(&enable) as u32,
             ptr::null_mut(),
             0,
-            &mut bytes_returned as *mut _ as LPDWORD,
+            &mut bytes_returned as *mut _,
             ptr::null_mut(),
             None,
         );
@@ -277,31 +275,18 @@ fn disable_connection_reset(socket: &UdpSocket) -> io::Result<()> {
 /// Disable IP fragmentation
 #[inline]
 pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) -> io::Result<()> {
-    // This is an enum PMTUD_STATE
-    //
-    // ```c
-    // typedef enum _PMTUD_STATE {
-    //     IP_PMTUDISC_NOT_SET,
-    //     IP_PMTUDISC_DO,
-    //     IP_PMTUDISC_DONT,
-    //     IP_PMTUDISC_PROBE,
-    //     IP_PMTUDISC_MAX
-    // } PMTUD_STATE, *PPMTUD_STATE;
-    // ```
-    const IP_PMTUDISC_DO: DWORD = 1;
-
     let handle = socket.as_raw_socket() as SOCKET;
 
     unsafe {
         // For Windows, IP_MTU_DISCOVER should be enabled for both IPv4 and IPv6 sockets
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
-        let value: DWORD = IP_PMTUDISC_DO;
+        let value = IP_PMTUDISC_DO;
         let ret = setsockopt(
             handle,
-            IPPROTO_IP as c_int,
-            IP_MTU_DISCOVER as c_int,
-            &value as *const _ as *const c_char,
-            mem::size_of_val(&value) as c_int,
+            IPPROTO_IP as i32,
+            IP_MTU_DISCOVER as i32,
+            &value as *const _ as PCSTR,
+            mem::size_of_val(&value) as i32,
         );
 
         if ret == SOCKET_ERROR {
@@ -310,13 +295,13 @@ pub fn set_disable_ip_fragmentation<S: AsRawSocket>(af: AddrFamily, socket: &S) 
         }
 
         if af == AddrFamily::Ipv6 {
-            let value: DWORD = IP_PMTUDISC_DO;
+            let value = IP_PMTUDISC_DO;
             let ret = setsockopt(
                 handle,
-                IPPROTO_IPV6 as c_int,
-                IPV6_MTU_DISCOVER as c_int,
-                &value as *const _ as *const c_char,
-                mem::size_of_val(&value) as c_int,
+                IPPROTO_IPV6 as i32,
+                IPV6_MTU_DISCOVER as i32,
+                &value as *const _ as PCSTR,
+                mem::size_of_val(&value) as i32,
             );
 
             if ret == SOCKET_ERROR {
