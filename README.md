@@ -7,8 +7,8 @@
 
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
-[![archlinuxcn shadowsocks-rust-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
-[![archlinuxcn shadowsocks-rust-opt-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-opt-git&query=%24.latest.pkgver&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+[![archlinuxcn shadowsocks-rust-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-git&query=%24.version&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fv2%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+[![archlinuxcn shadowsocks-rust-opt-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-opt-git&query=%24.version&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fv2%2Fpackages%2Fshadowsocks-rust-opt-git)](https://build.archlinuxcn.org/)
 [![aur shadowsocks-rust](https://img.shields.io/aur/version/shadowsocks-rust)](https://aur.archlinux.org/packages/shadowsocks-rust)
 
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
@@ -690,6 +690,11 @@ The configuration file is set by `socks5_auth_config_path` in `locals`.
 - `SS_SYSTEM_DNS_RESOLVER_FORCE_BUILTIN`: `"system"` DNS resolver force use system's builtin (`getaddrinfo` in *NIX)
 
 ## Supported Ciphers
+
+### AEAD 2022 Ciphers
+
+- `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`
+- `2022-blake3-chacha20-poly1305`, `2022-blake3-chacha8-poly1305`
 
 ### AEAD Ciphers
 
