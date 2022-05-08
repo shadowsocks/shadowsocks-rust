@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.15.0"
+version = "1.15.0-alpha.1"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -65,6 +65,7 @@ default = [
     "local-tunnel",
     "local-socks4",
     "multi-threaded",
+    "aead-cipher-2022",
 ]
 
 # Enable local server

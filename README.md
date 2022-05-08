@@ -57,7 +57,7 @@ Related Projects:
 
 - `aead-cipher-extra` - Enable non-standard AEAD ciphers
 
-- `aead-cipher-2022` - Enable AEAD-2022 ciphers ([Draft](https://github.com/shadowsocks/shadowsocks-org/issues/194#issuecomment-1065833908))
+- `aead-cipher-2022` - Enable AEAD-2022 ciphers ([SIP022](https://github.com/shadowsocks/shadowsocks-org/issues/196))
 
 - `aead-cipher-2022-extra` - Enable AEAD-2022 extra ciphers (non-standard ciphers)
 

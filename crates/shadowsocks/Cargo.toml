@@ -81,10 +81,10 @@ notify = { version = "5.0.0-pre.15", optional = true }
 aes = { version = "0.8", optional = true }
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/shadowsocks-crypto.git", features = ["ring"] }
+shadowsocks-crypto = { version = "0.4", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.4", git = "https://github.com/shadowsocks/shadowsocks-crypto.git", features = [] }
+shadowsocks-crypto = { version = "0.4", features = [] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.36", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_IO"] }

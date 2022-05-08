@@ -342,9 +342,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.16"
+version = "3.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f52d4f8e4a1419219935762e32913b4430f37cb0c0200ad17a89ee18c0188a9f"
+checksum = "47582c09be7c8b32c0ab3a6181825ababb713fde6fff20fc573a3870dd45c6a0"
 dependencies = [
  "atty",
  "bitflags",
@@ -2081,7 +2081,8 @@ dependencies = [
 [[package]]
 name = "shadowsocks-crypto"
 version = "0.4.0"
-source = "git+https://github.com/shadowsocks/shadowsocks-crypto.git#b06dc2bf69ca8d1139e55b7fee8cf16b581fd422"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daff9970653117a16e317197c0e9b81eeaca0d138eb824c3243a6aa8cf61a645"
 dependencies = [
  "aes 0.7.5",
  "aes-gcm",
