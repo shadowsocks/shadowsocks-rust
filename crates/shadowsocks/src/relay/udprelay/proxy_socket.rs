@@ -5,10 +5,7 @@ use std::{io, net::SocketAddr, time::Duration};
 use bytes::BytesMut;
 use log::{trace, warn};
 use once_cell::sync::Lazy;
-use tokio::{
-    net::{ToSocketAddrs, UdpSocket},
-    time,
-};
+use tokio::{net::ToSocketAddrs, time};
 
 use crate::{
     config::{ServerAddr, ServerConfig},
@@ -40,7 +37,7 @@ pub enum UdpSocketType {
 /// UDP client for communicating with ShadowSocks' server
 pub struct ProxySocket {
     socket_type: UdpSocketType,
-    socket: UdpSocket,
+    socket: ShadowUdpSocket,
     method: CipherKind,
     key: Box<[u8]>,
     send_timeout: Option<Duration>,
@@ -70,17 +67,20 @@ impl ProxySocket {
             UdpSocketType::Client,
             context,
             svr_cfg,
-            socket.into(),
+            socket,
         ))
     }
 
     /// Create a `ProxySocket` from a `UdpSocket`
-    pub fn from_socket(
+    pub fn from_socket<S>(
         socket_type: UdpSocketType,
         context: SharedContext,
         svr_cfg: &ServerConfig,
-        socket: UdpSocket,
-    ) -> ProxySocket {
+        socket: S,
+    ) -> ProxySocket
+    where
+        S: Into<ShadowUdpSocket>,
+    {
         let key = svr_cfg.key().to_vec().into_boxed_slice();
         let method = svr_cfg.method();
 
@@ -88,7 +88,7 @@ impl ProxySocket {
 
         ProxySocket {
             socket_type,
-            socket,
+            socket: socket.into(),
             method,
             key,
             send_timeout: None,
@@ -122,8 +122,25 @@ impl ProxySocket {
             UdpSocketType::Server,
             context,
             svr_cfg,
-            socket.into(),
+            socket,
         ))
+    }
+
+    fn encrypt_send_buffer(
+        &self,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        payload: &[u8],
+        send_buf: &mut BytesMut,
+    ) {
+        match self.socket_type {
+            UdpSocketType::Client => {
+                encrypt_client_payload(&self.context, self.method, &self.key, addr, control, payload, send_buf)
+            }
+            UdpSocketType::Server => {
+                encrypt_server_payload(&self.context, self.method, &self.key, addr, control, payload, send_buf)
+            }
+        }
     }
 
     /// Send a UDP packet to addr through proxy
@@ -140,27 +157,7 @@ impl ProxySocket {
         payload: &[u8],
     ) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-
-        match self.socket_type {
-            UdpSocketType::Client => encrypt_client_payload(
-                &self.context,
-                self.method,
-                &self.key,
-                addr,
-                control,
-                payload,
-                &mut send_buf,
-            ),
-            UdpSocketType::Server => encrypt_server_payload(
-                &self.context,
-                self.method,
-                &self.key,
-                addr,
-                control,
-                payload,
-                &mut send_buf,
-            ),
-        }
+        self.encrypt_send_buffer(addr, control, payload, &mut send_buf);
 
         trace!(
             "UDP server client send to {}, control: {:?}, payload length {} bytes, packet length {} bytes",
@@ -205,27 +202,7 @@ impl ProxySocket {
         payload: &[u8],
     ) -> io::Result<usize> {
         let mut send_buf = BytesMut::new();
-
-        match self.socket_type {
-            UdpSocketType::Client => encrypt_client_payload(
-                &self.context,
-                self.method,
-                &self.key,
-                addr,
-                control,
-                payload,
-                &mut send_buf,
-            ),
-            UdpSocketType::Server => encrypt_server_payload(
-                &self.context,
-                self.method,
-                &self.key,
-                addr,
-                control,
-                payload,
-                &mut send_buf,
-            ),
-        }
+        self.encrypt_send_buffer(addr, control, payload, &mut send_buf);
 
         trace!(
             "UDP server client send to, addr {}, control: {:?}, payload length {} bytes, packet length {} bytes",
@@ -253,6 +230,16 @@ impl ProxySocket {
         }
 
         Ok(send_len)
+    }
+
+    async fn decrypt_recv_buffer(
+        &self,
+        recv_buf: &mut [u8],
+    ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
+        match self.socket_type {
+            UdpSocketType::Client => decrypt_server_payload(&self.context, self.method, &self.key, recv_buf).await,
+            UdpSocketType::Server => decrypt_client_payload(&self.context, self.method, &self.key, recv_buf).await,
+        }
     }
 
     /// Receive packet from Shadowsocks' UDP server
@@ -283,14 +270,7 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr, control) = match self.socket_type {
-            UdpSocketType::Client => {
-                decrypt_server_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
-            }
-            UdpSocketType::Server => {
-                decrypt_client_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
-            }
-        };
+        let (n, addr, control) = self.decrypt_recv_buffer(&mut recv_buf[..recv_n]).await?;
 
         trace!(
             "UDP server client receive from {}, control: {:?}, packet length {} bytes, payload length {} bytes",
@@ -333,14 +313,7 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr, control) = match self.socket_type {
-            UdpSocketType::Client => {
-                decrypt_server_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
-            }
-            UdpSocketType::Server => {
-                decrypt_client_payload(&self.context, self.method, &self.key, &mut recv_buf[..recv_n]).await?
-            }
-        };
+        let (n, addr, control) = self.decrypt_recv_buffer(&mut recv_buf[..recv_n]).await?;
 
         trace!(
             "UDP server client receive from {}, addr {}, control: {:?}, packet length {} bytes, payload length {} bytes",
