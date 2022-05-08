@@ -13,6 +13,8 @@
 
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
 
+[![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/tree/master/pkgs/tools/networking/shadowsocks-rust)
+
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
