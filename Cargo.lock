@@ -2058,7 +2058,6 @@ dependencies = [
  "libc",
  "log",
  "lru_time_cache",
- "nix",
  "notify",
  "once_cell",
  "pin-project",
@@ -2102,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.15.0"
+version = "1.15.0-alpha.2"
 dependencies = [
  "build-time",
  "byte_string",
@@ -2473,9 +2472,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tfo"
-version = "0.1.9"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4279aec5ded232170bf39130dd0e0deaed2c9f31cd3b5db1f2021056bcf5f94a"
+checksum = "be94e60e867516c53352c93b4b7762b68464bd24c62588f7f10c22fb9d02b6c9"
 dependencies = [
  "cfg-if",
  "futures",
@@ -2485,7 +2484,7 @@ dependencies = [
  "pin-project",
  "socket2",
  "tokio",
- "winapi",
+ "windows-sys",
 ]
 
 [[package]]

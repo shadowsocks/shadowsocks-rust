@@ -72,7 +72,7 @@ async-trait = "0.1"
 
 socket2 = { version = "0.4", features = ["all"] }
 tokio = { version = "1.9.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
-tokio-tfo = "0.1.8"
+tokio-tfo = "0.2.0"
 
 trust-dns-resolver = { version = "0.21", optional = true }
 arc-swap = { version = "1.3", optional = true }
@@ -91,10 +91,6 @@ windows-sys = { version = "0.36", features = ["Win32_Foundation", "Win32_Network
 
 [target.'cfg(unix)'.dependencies]
 sendfd = { version = "0.4", features = ["tokio"] }
-
-# Just for the ioctl call macro
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = "0.24"
 
 [dev-dependencies]
 env_logger = "0.9"
