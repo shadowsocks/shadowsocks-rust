@@ -2101,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.15.0-alpha.2"
+version = "1.15.0-alpha.3"
 dependencies = [
  "build-time",
  "byte_string",
