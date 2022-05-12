@@ -370,15 +370,17 @@ impl ServerConfig {
 
     /// Get [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
     pub fn to_url(&self) -> String {
-        let mut user_info = format!("{}:{}", self.method(), self.password());
-
         cfg_if! {
             if #[cfg(feature = "aead-cipher-2022")] {
-                if !self.method().is_aead_2022() {
-                    user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
-                }
+                let user_info = if !self.method().is_aead_2022() {
+                    let user_info = format!("{}:{}", self.method(), self.password());
+                    encode_config(&user_info, URL_SAFE_NO_PAD)
+                } else {
+                    format!("{}:{}", self.method(), percent_encoding::utf8_percent_encode(self.password(), percent_encoding::NON_ALPHANUMERIC))
+                };
             } else {
-                user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+                let mut user_info = format!("{}:{}", self.method(), self.password());
+                user_info = encode_config(&user_info, URL_SAFE_NO_PAD)
             }
         }
 
@@ -390,9 +392,10 @@ impl ServerConfig {
                 plugin += opt;
             }
 
-            let plugin_param = [("plugin", &plugin)];
-            url += "/?";
-            url += &serde_urlencoded::to_string(&plugin_param).unwrap();
+            url += "/?plugin=";
+            for c in percent_encoding::utf8_percent_encode(&plugin, percent_encoding::NON_ALPHANUMERIC) {
+                url.push_str(c);
+            }
         }
 
         if let Some(remark) = self.remarks() {
