@@ -395,6 +395,13 @@ impl ServerConfig {
             url += &serde_urlencoded::to_string(&plugin_param).unwrap();
         }
 
+        if let Some(remark) = self.remarks() {
+            url += "#";
+            for c in percent_encoding::utf8_percent_encode(remark, percent_encoding::NON_ALPHANUMERIC) {
+                url.push_str(c);
+            }
+        }
+
         url
     }
 
