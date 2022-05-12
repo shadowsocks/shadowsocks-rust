@@ -11,6 +11,7 @@ use std::{
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
+use cfg_if::cfg_if;
 use log::error;
 use url::{self, Url};
 
@@ -369,10 +370,19 @@ impl ServerConfig {
 
     /// Get [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
     pub fn to_url(&self) -> String {
-        let user_info = format!("{}:{}", self.method(), self.password());
-        let encoded_user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+        let mut user_info = format!("{}:{}", self.method(), self.password());
 
-        let mut url = format!("ss://{}@{}", encoded_user_info, self.addr());
+        cfg_if! {
+            if #[cfg(feature = "aead-cipher-2022")] {
+                if !self.method().is_aead_2022() {
+                    user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+                }
+            } else {
+                user_info = encode_config(&user_info, URL_SAFE_NO_PAD);
+            }
+        }
+
+        let mut url = format!("ss://{}@{}", user_info, self.addr());
         if let Some(c) = self.plugin() {
             let mut plugin = c.plugin.clone();
             if let Some(ref opt) = c.plugin_opts {
