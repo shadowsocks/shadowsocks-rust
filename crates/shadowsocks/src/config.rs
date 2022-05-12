@@ -433,7 +433,7 @@ impl ServerConfig {
                 let m = match percent_encoding::percent_decode_str(user_info).decode_utf8() {
                     Ok(m) => m,
                     Err(err) => {
-                        error!("failed to parse percent-encoding method in userinfo, err: {}", err);
+                        error!("failed to parse percent-encoded method in userinfo, err: {}", err);
                         return Err(UrlParseError::InvalidAuthInfo);
                     }
                 };
@@ -441,7 +441,7 @@ impl ServerConfig {
                 let p = match percent_encoding::percent_decode_str(password).decode_utf8() {
                     Ok(m) => m,
                     Err(err) => {
-                        error!("failed to parse percent-encoding password in userinfo, err: {}", err);
+                        error!("failed to parse percent-encoded password in userinfo, err: {}", err);
                         return Err(UrlParseError::InvalidAuthInfo);
                     }
                 };
