@@ -8,6 +8,7 @@ use std::{
 };
 
 use byte_string::ByteStr;
+use bytes::Bytes;
 use log::trace;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 
@@ -22,6 +23,15 @@ use super::aead_2022::{DecryptedReader as Aead2022DecryptedReader, EncryptedWrit
 #[cfg(feature = "stream-cipher")]
 use super::stream::{DecryptedReader as StreamDecryptedReader, EncryptedWriter as StreamEncryptedWriter};
 
+/// The type of TCP stream
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StreamType {
+    /// Client -> Server
+    Client,
+    /// Server -> Client
+    Server,
+}
+
 /// Reader for reading encrypted data stream from shadowsocks' tunnel
 #[allow(clippy::large_enum_variant)]
 pub enum DecryptedReader {
@@ -35,14 +45,18 @@ pub enum DecryptedReader {
 
 impl DecryptedReader {
     /// Create a new reader for reading encrypted data
-    pub fn new(method: CipherKind, key: &[u8]) -> DecryptedReader {
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> DecryptedReader {
+        if cfg!(not(feature = "aead-cipher-2022")) {
+            let _ = stream_ty;
+        }
+
         match method.category() {
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => DecryptedReader::Stream(StreamDecryptedReader::new(method, key)),
             CipherCategory::Aead => DecryptedReader::Aead(AeadDecryptedReader::new(method, key)),
             CipherCategory::None => DecryptedReader::None,
             #[cfg(feature = "aead-cipher-2022")]
-            CipherCategory::Aead2022 => DecryptedReader::Aead2022(Aead2022DecryptedReader::new(method, key)),
+            CipherCategory::Aead2022 => DecryptedReader::Aead2022(Aead2022DecryptedReader::new(stream_ty, method, key)),
         }
     }
 
@@ -79,6 +93,18 @@ impl DecryptedReader {
             DecryptedReader::Aead2022(ref reader) => reader.salt(),
         }
     }
+
+    /// Get received request Salt (AEAD2022)
+    pub fn request_nonce(&self) -> Option<&[u8]> {
+        match *self {
+            #[cfg(feature = "stream-cipher")]
+            DecryptedReader::Stream(..) => None,
+            DecryptedReader::Aead(..) => None,
+            DecryptedReader::None => None,
+            #[cfg(feature = "aead-cipher-2022")]
+            DecryptedReader::Aead2022(ref reader) => reader.request_salt(),
+        }
+    }
 }
 
 /// Writer for writing encrypted data stream into shadowsocks' tunnel
@@ -93,14 +119,20 @@ pub enum EncryptedWriter {
 
 impl EncryptedWriter {
     /// Create a new writer for writing encrypted data
-    pub fn new(method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+    pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+        if cfg!(not(feature = "aead-cipher-2022")) {
+            let _ = stream_ty;
+        }
+
         match method.category() {
             #[cfg(feature = "stream-cipher")]
             CipherCategory::Stream => EncryptedWriter::Stream(StreamEncryptedWriter::new(method, key, nonce)),
             CipherCategory::Aead => EncryptedWriter::Aead(AeadEncryptedWriter::new(method, key, nonce)),
             CipherCategory::None => EncryptedWriter::None,
             #[cfg(feature = "aead-cipher-2022")]
-            CipherCategory::Aead2022 => EncryptedWriter::Aead2022(Aead2022EncryptedWriter::new(method, key, nonce)),
+            CipherCategory::Aead2022 => {
+                EncryptedWriter::Aead2022(Aead2022EncryptedWriter::new(stream_ty, method, key, nonce))
+            }
         }
     }
 
@@ -136,6 +168,18 @@ impl EncryptedWriter {
             EncryptedWriter::Aead2022(ref writer) => writer.salt(),
         }
     }
+
+    /// Set request nonce (for server stream of AEAD2022)
+    pub fn set_request_nonce(&mut self, request_nonce: Bytes) {
+        match *self {
+            #[cfg(feature = "aead-cipher-2022")]
+            EncryptedWriter::Aead2022(ref mut writer) => writer.set_request_salt(request_nonce),
+            _ => {
+                let _ = request_nonce;
+                panic!("only AEAD-2022 cipher could send request salt");
+            }
+        }
+    }
 }
 
 /// A bidirectional stream for read/write encrypted data in shadowsocks' tunnel
@@ -148,7 +192,13 @@ pub struct CryptoStream<S> {
 
 impl<S> CryptoStream<S> {
     /// Create a new CryptoStream with the underlying stream connection
-    pub fn from_stream(context: &Context, stream: S, method: CipherKind, key: &[u8]) -> CryptoStream<S> {
+    pub fn from_stream(
+        context: &Context,
+        stream: S,
+        stream_ty: StreamType,
+        method: CipherKind,
+        key: &[u8],
+    ) -> CryptoStream<S> {
         let category = method.category();
 
         if category == CipherCategory::None {
@@ -191,8 +241,8 @@ impl<S> CryptoStream<S> {
 
         CryptoStream {
             stream,
-            dec: DecryptedReader::new(method, key),
-            enc: EncryptedWriter::new(method, key, &iv),
+            dec: DecryptedReader::new(stream_ty, method, key),
+            enc: EncryptedWriter::new(stream_ty, method, key, &iv),
             method,
         }
     }
@@ -222,13 +272,37 @@ impl<S> CryptoStream<S> {
     }
 
     /// Get received IV (Stream) or Salt (AEAD, AEAD2022)
+    #[inline]
     pub fn received_nonce(&self) -> Option<&[u8]> {
         self.dec.nonce()
     }
 
     /// Get sent IV (Stream) or Salt (AEAD, AEAD2022)
+    #[inline]
     pub fn sent_nonce(&self) -> &[u8] {
         self.enc.nonce()
+    }
+
+    /// Received request salt from server (AEAD2022)
+    #[inline]
+    pub fn received_request_nonce(&self) -> Option<&[u8]> {
+        self.dec.request_nonce()
+    }
+
+    /// Set request nonce (for server stream of AEAD2022)
+    #[inline]
+    pub fn set_request_nonce(&mut self, request_nonce: &[u8]) {
+        self.enc.set_request_nonce(Bytes::copy_from_slice(request_nonce))
+    }
+
+    pub(crate) fn set_request_nonce_with_received(&mut self) -> bool {
+        match self.dec.nonce() {
+            None => false,
+            Some(nonce) => {
+                self.enc.set_request_nonce(Bytes::copy_from_slice(nonce));
+                true
+            }
+        }
     }
 
     /// Get remaining bytes in the current data chunk

@@ -124,11 +124,16 @@ impl TcpServerClient {
             Err(err) => {
                 // https://github.com/shadowsocks/shadowsocks-rust/issues/292
                 //
-                // Keep connection open.
+                // Keep connection open. Except AEAD-2022
                 warn!(
                     "handshake failed, maybe wrong method or key, or under replay attacks. peer: {}, error: {}",
                     self.peer_addr, err
                 );
+
+                #[cfg(feature = "aead-cipher-2022")]
+                if self.method.is_aead_2022() {
+                    return Ok(());
+                }
 
                 // Unwrap and get the plain stream.
                 // Otherwise it will keep reporting decryption error before reaching EOF.

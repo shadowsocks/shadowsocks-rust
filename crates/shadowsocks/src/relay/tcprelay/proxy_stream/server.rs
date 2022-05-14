@@ -6,8 +6,6 @@ use std::{
     task::{self, Poll},
 };
 
-#[cfg(feature = "aead-cipher-2022")]
-use bytes::BytesMut;
 use futures::ready;
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -18,7 +16,7 @@ use crate::{
     relay::{
         socks5::Address,
         tcprelay::{
-            crypto_io::{CryptoRead, CryptoStream, CryptoWrite},
+            crypto_io::{CryptoRead, CryptoStream, CryptoWrite, StreamType},
             proxy_stream::protocol::TcpRequestHeader,
         },
     },
@@ -27,8 +25,6 @@ use crate::{
 enum ProxyServerStreamWriteState {
     #[cfg(feature = "aead-cipher-2022")]
     PrepareHeader(Option<std::task::Waker>),
-    #[cfg(feature = "aead-cipher-2022")]
-    WriteHeader(BytesMut, usize),
     Established,
 }
 
@@ -60,7 +56,7 @@ impl<S> ProxyServerStream<S> {
         let writer_state = ProxyServerStreamWriteState::Established;
 
         ProxyServerStream {
-            stream: CryptoStream::from_stream(&context, stream, method, key),
+            stream: CryptoStream::from_stream(&context, stream, StreamType::Server, method, key),
             context,
             writer_state,
             has_handshaked: false,
@@ -170,42 +166,17 @@ where
                 }
                 #[cfg(feature = "aead-cipher-2022")]
                 ProxyServerStreamWriteState::PrepareHeader(ref mut waker) => {
-                    match this.stream.received_nonce() {
-                        None => {
-                            // Reader didn't receive the salt from client yet.
-                            if let Some(waker) = waker.take() {
-                                if !waker.will_wake(cx.waker()) {
-                                    waker.wake();
-                                }
-                            }
-                            *waker = Some(cx.waker().clone());
-                            return Poll::Pending;
-                        }
-                        Some(nonce) => {
-                            use crate::relay::tcprelay::proxy_stream::protocol::v2::{
-                                get_now_timestamp,
-                                Aead2022TcpResponseHeaderRef,
-                            };
-
-                            let header = Aead2022TcpResponseHeaderRef {
-                                timestamp: get_now_timestamp(),
-                                request_salt: nonce,
-                            };
-
-                            let mut buffer = BytesMut::with_capacity(header.serialized_len());
-                            header.write_to_buf(&mut buffer);
-
-                            *(this.writer_state) = ProxyServerStreamWriteState::WriteHeader(buffer, 0);
-                        }
-                    }
-                }
-                #[cfg(feature = "aead-cipher-2022")]
-                ProxyServerStreamWriteState::WriteHeader(ref buf, ref mut buf_pos) => {
-                    let n = ready!(this.stream.as_mut().poll_write_encrypted(cx, &buf[*buf_pos..]))?;
-                    *buf_pos += n;
-
-                    if *buf_pos >= buf.len() {
+                    if this.stream.set_request_nonce_with_received() {
                         *(this.writer_state) = ProxyServerStreamWriteState::Established;
+                    } else {
+                        // Reader didn't receive the salt from client yet.
+                        if let Some(waker) = waker.take() {
+                            if !waker.will_wake(cx.waker()) {
+                                waker.wake();
+                            }
+                        }
+                        *waker = Some(cx.waker().clone());
+                        return Poll::Pending;
                     }
                 }
             }

@@ -7,6 +7,7 @@ use std::{
 };
 
 use bytes::{BufMut, BytesMut};
+use cfg_if::cfg_if;
 use futures::ready;
 use log::trace;
 use once_cell::sync::Lazy;
@@ -16,6 +17,8 @@ use tokio::{
     time,
 };
 
+#[cfg(feature = "aead-cipher-2022")]
+use crate::relay::get_aead_2022_padding_size;
 use crate::{
     config::ServerConfig,
     context::SharedContext,
@@ -23,11 +26,9 @@ use crate::{
     net::{ConnectOpts, TcpStream as OutboundTcpStream},
     relay::{
         socks5::Address,
-        tcprelay::crypto_io::{CryptoRead, CryptoStream, CryptoWrite},
+        tcprelay::crypto_io::{CryptoRead, CryptoStream, CryptoWrite, StreamType},
     },
 };
-#[cfg(feature = "aead-cipher-2022")]
-use crate::{context::Context, relay::get_aead_2022_padding_size};
 
 enum ProxyClientStreamWriteState {
     Connect(Address),
@@ -37,7 +38,7 @@ enum ProxyClientStreamWriteState {
 
 enum ProxyClientStreamReadState {
     #[cfg(feature = "aead-cipher-2022")]
-    WaitHeader(BytesMut, usize),
+    CheckRequestNonce,
     Established,
 }
 
@@ -149,7 +150,7 @@ where
         A: Into<Address>,
     {
         let addr = addr.into();
-        let stream = CryptoStream::from_stream(&context, stream, svr_cfg.method(), svr_cfg.key());
+        let stream = CryptoStream::from_stream(&context, stream, StreamType::Client, svr_cfg.method(), svr_cfg.key());
 
         #[cfg(not(feature = "aead-cipher-2022"))]
         let reader_state = ProxyClientStreamReadState::Established;
@@ -157,7 +158,7 @@ where
         #[cfg(feature = "aead-cipher-2022")]
         let reader_state = if svr_cfg.method().is_aead_2022() {
             // AEAD 2022 has a respond header
-            ProxyClientStreamReadState::WaitHeader(BytesMut::new(), 0)
+            ProxyClientStreamReadState::CheckRequestNonce
         } else {
             ProxyClientStreamReadState::Established
         };
@@ -186,78 +187,6 @@ where
     }
 }
 
-#[cfg(feature = "aead-cipher-2022")]
-fn poll_read_aead_2022_header<S>(
-    context: &Context,
-    mut stream: Pin<&mut CryptoStream<S>>,
-    cx: &mut task::Context<'_>,
-    header_buf: &mut BytesMut,
-    header_pos: &mut usize,
-) -> Poll<io::Result<()>>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    use super::protocol::v2::{get_now_timestamp, Aead2022TcpStreamType, SERVER_STREAM_TIMESTAMP_MAX_DIFF};
-    use bytes::Buf;
-
-    // AEAD 2022 TCP Response Header
-    //
-    // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-    // | TYPE  | UNIX TIMESTAMP                                                |
-    // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-    // | Request SALT (Variable ...)
-    // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-
-    // Initialize buffer
-    let method = stream.method();
-    if header_buf.is_empty() {
-        header_buf.resize(1 + 8 + method.salt_len(), 0);
-        *header_pos = 0;
-    }
-
-    while *header_pos < header_buf.len() {
-        let remaining_buf = &mut header_buf[*header_pos..];
-        let mut read_buf = ReadBuf::new(remaining_buf);
-
-        ready!(stream.as_mut().poll_read_decrypted(cx, context, &mut read_buf))?;
-
-        *header_pos += read_buf.filled().len();
-    }
-
-    // Done reading TCP header, check all the fields
-
-    let stream_type = header_buf.get_u8();
-    if stream_type != Aead2022TcpStreamType::Server as u8 {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("received TCP response header with wrong type {}", stream_type),
-        ))
-        .into();
-    }
-
-    let timestamp = header_buf.get_u64();
-    let now = get_now_timestamp();
-
-    if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("received TCP response header with aged timestamp: {}", timestamp),
-        ))
-        .into();
-    }
-
-    let salt = &header_buf[..];
-    if salt != stream.sent_nonce() {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            "received TCP response header with unmatched salt",
-        ))
-        .into();
-    }
-
-    Ok(()).into()
-}
-
 impl<S> AsyncRead for ProxyClientStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -274,15 +203,19 @@ where
                     return this.stream.poll_read_decrypted(cx, this.context, buf);
                 }
                 #[cfg(feature = "aead-cipher-2022")]
-                ProxyClientStreamReadState::WaitHeader(ref mut buf, ref mut buf_pos) => {
-                    ready!(poll_read_aead_2022_header(
-                        this.context,
-                        this.stream.as_mut(),
-                        cx,
-                        buf,
-                        buf_pos,
-                    ))?;
+                ProxyClientStreamReadState::CheckRequestNonce => {
+                    ready!(this.stream.as_mut().poll_read_decrypted(cx, this.context, buf))?;
+
+                    if Some(this.stream.sent_nonce()) != this.stream.received_request_nonce() {
+                        return Err(io::Error::new(
+                            ErrorKind::Other,
+                            "received TCP response header with unmatched salt",
+                        ))
+                        .into();
+                    }
+
                     *(this.reader_state) = ProxyClientStreamReadState::Established;
+                    return Ok(()).into();
                 }
             }
         }
@@ -297,32 +230,27 @@ fn make_first_packet_buffer(method: CipherKind, addr: &Address, buf: &[u8]) -> B
     let addr_length = addr.serialized_len();
     let mut buffer = BytesMut::new();
 
+    cfg_if! {
+        if #[cfg(feature = "aead-cipher-2022")] {
+            let padding_size = get_aead_2022_padding_size(buf);
+            let header_length = if method.is_aead_2022() {
+                addr_length + 2 + padding_size + buf.len()
+            } else {
+                addr_length + buf.len()
+            };
+        } else {
+            let _ = method;
+            let header_length = addr_length + buf.len();
+        }
+    }
+
+    buffer.reserve(header_length);
+
+    // STREAM / AEAD / AEAD2022 protocol, append the Address before payload
+    addr.write_to_buf(&mut buffer);
+
     #[cfg(feature = "aead-cipher-2022")]
     if method.is_aead_2022() {
-        // TCP Request Header
-        //
-        // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-        // | TYPE  | UNIX TIMESTAMP                                                |
-        // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-        // | ADDR (Variable ...)
-        // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-        // | PADDING SIZE  | PADDING (Variable ...)
-        // +-------+-------+-------+-------+-------+-------+-------+-------+-------+
-        //
-        // Client -> Server TYPE=0
-
-        use super::protocol::v2::{get_now_timestamp, Aead2022TcpStreamType};
-
-        let padding_size = get_aead_2022_padding_size(buf);
-
-        buffer.reserve(1 + 8 + addr_length + 2 + padding_size);
-        buffer.put_u8(Aead2022TcpStreamType::Client as u8);
-
-        let timestamp = get_now_timestamp();
-        buffer.put_u64(timestamp);
-
-        addr.write_to_buf(&mut buffer);
-
         buffer.put_u16(padding_size as u16);
 
         if padding_size > 0 {
@@ -330,14 +258,6 @@ fn make_first_packet_buffer(method: CipherKind, addr: &Address, buf: &[u8]) -> B
                 buffer.advance_mut(padding_size);
             }
         }
-    }
-
-    let _ = method;
-
-    // STREAM / AEAD protocol, append the Address before payload
-    if buffer.is_empty() {
-        buffer.reserve(addr_length + buf.len());
-        addr.write_to_buf(&mut buffer);
     }
 
     buffer.put_slice(buf);
