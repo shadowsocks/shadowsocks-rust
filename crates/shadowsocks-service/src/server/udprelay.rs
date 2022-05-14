@@ -204,10 +204,10 @@ impl UdpServer {
             tasks: &mut other_receivers,
         };
 
+        type QueuedDataType = (SocketAddr, Address, Option<UdpSocketControlData>, Bytes);
+
         #[inline]
-        async fn multicore_recv(
-            orx_opt: &mut Option<mpsc::Receiver<(SocketAddr, Address, Option<UdpSocketControlData>, Bytes)>>,
-        ) -> (SocketAddr, Address, Option<UdpSocketControlData>, Bytes) {
+        async fn multicore_recv(orx_opt: &mut Option<mpsc::Receiver<QueuedDataType>>) -> QueuedDataType {
             match orx_opt {
                 None => future::pending().await,
                 Some(ref mut orx) => match orx.recv().await {
@@ -222,7 +222,7 @@ impl UdpServer {
             tokio::select! {
                 _ = cleanup_timer.tick() => {
                     // cleanup expired associations. iter() will remove expired elements
-                    let _ = self.assoc_map.cleanup_expired();
+                    self.assoc_map.cleanup_expired();
                 }
 
                 peer_addr_opt = self.keepalive_rx.recv() => {
@@ -314,7 +314,7 @@ impl UdpServer {
         match self.assoc_map {
             NatMap::Association(ref mut m) => {
                 if let Some(assoc) = m.get(&peer_addr) {
-                    return assoc.try_send((peer_addr, target_addr, data.into(), control));
+                    return assoc.try_send((peer_addr, target_addr, data, control));
                 }
 
                 let assoc = UdpAssociation::new_association(
@@ -326,7 +326,7 @@ impl UdpServer {
 
                 debug!("created udp association for {}", peer_addr);
 
-                assoc.try_send((peer_addr, target_addr, data.into(), control))?;
+                assoc.try_send((peer_addr, target_addr, data, control))?;
                 m.insert(peer_addr, assoc);
             }
             #[cfg(feature = "aead-cipher-2022")]
@@ -342,7 +342,7 @@ impl UdpServer {
                 let client_session_id = xcontrol.client_session_id;
 
                 if let Some(assoc) = m.get(&client_session_id) {
-                    return assoc.try_send((peer_addr, target_addr, data.into(), control));
+                    return assoc.try_send((peer_addr, target_addr, data, control));
                 }
 
                 let assoc = UdpAssociation::new_session(
@@ -358,7 +358,7 @@ impl UdpServer {
                     peer_addr, client_session_id
                 );
 
-                assoc.try_send((peer_addr, target_addr, data.into(), control))?;
+                assoc.try_send((peer_addr, target_addr, data, control))?;
                 m.insert(client_session_id, assoc);
             }
         }

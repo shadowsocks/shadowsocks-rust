@@ -220,7 +220,7 @@ impl DecryptedReader {
         let mut read_buf = ReadBuf::new(&mut self.buffer[..header_len]);
         ready!(Pin::new(stream).poll_read(cx, &mut read_buf))?;
         let header_buf = read_buf.filled_mut();
-        if header_buf.len() == 0 {
+        if header_buf.is_empty() {
             // EOF.
             return Ok(None).into();
         } else if header_buf.len() != header_len {
