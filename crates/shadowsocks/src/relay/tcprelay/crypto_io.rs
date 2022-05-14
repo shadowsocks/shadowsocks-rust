@@ -295,6 +295,7 @@ impl<S> CryptoStream<S> {
         self.enc.set_request_nonce(Bytes::copy_from_slice(request_nonce))
     }
 
+    #[cfg(feature = "aead-cipher-2022")]
     pub(crate) fn set_request_nonce_with_received(&mut self) -> bool {
         match self.dec.nonce() {
             None => false,

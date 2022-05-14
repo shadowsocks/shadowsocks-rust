@@ -1,14 +1,35 @@
 //! UDP socket wrappers
 
 use std::{
-    io::{self, ErrorKind, IoSlice, IoSliceMut},
+    io,
     net::SocketAddr,
     ops::{Deref, DerefMut},
+};
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
+use std::{
+    io::{ErrorKind, IoSlice, IoSliceMut},
     task::{Context as TaskContext, Poll},
 };
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
 use futures::{future, ready};
 use pin_project::pin_project;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
 use tokio::io::Interest;
 
 use crate::{context::Context, relay::socks5::Address, ServerAddr};
