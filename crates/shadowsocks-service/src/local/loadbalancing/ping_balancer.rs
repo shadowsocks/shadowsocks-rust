@@ -374,8 +374,6 @@ impl PingBalancerContext {
     }
 
     async fn checker_task(self: Arc<Self>) {
-        assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
-
         if !self.probing_required() {
             self.checker_task_dummy().await
         } else {
