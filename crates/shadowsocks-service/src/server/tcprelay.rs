@@ -132,6 +132,12 @@ impl TcpServerClient {
 
                 #[cfg(feature = "aead-cipher-2022")]
                 if self.method.is_aead_2022() {
+                    // Set SO_LINGER(0) for misbehave clients, which will eventually receive RST. (ECONNRESET)
+                    // This will also prevent the socket entering TIME_WAIT state.
+
+                    let stream = self.stream.into_inner().into_inner();
+                    let _ = stream.set_linger(Some(Duration::ZERO));
+
                     return Ok(());
                 }
 
