@@ -104,6 +104,11 @@ impl PingBalancerBuilder {
     }
 
     fn find_best_idx(servers: &[Arc<ServerIdent>], mode: Mode) -> (usize, usize) {
+        if servers.is_empty() {
+            trace!("init without any TCP and UDP servers");
+            return (0, 0);
+        }
+
         let mut best_tcp_idx = 0;
         let mut best_udp_idx = 0;
 
@@ -157,8 +162,6 @@ impl PingBalancerBuilder {
     }
 
     pub async fn build(self) -> io::Result<PingBalancer> {
-        assert!(!self.servers.is_empty(), "build PingBalancer without any servers");
-
         if let Some(intv) = self.check_best_interval {
             if intv > self.check_interval {
                 return Err(io::Error::new(
@@ -215,11 +218,18 @@ struct PingBalancerContext {
 
 impl PingBalancerContext {
     fn best_tcp_server(&self) -> Arc<ServerIdent> {
+        assert!(!self.is_empty(), "no available server");
         self.servers[self.best_tcp_idx.load(Ordering::Relaxed)].clone()
     }
 
     fn best_udp_server(&self) -> Arc<ServerIdent> {
+        assert!(!self.is_empty(), "no available server");
         self.servers[self.best_udp_idx.load(Ordering::Relaxed)].clone()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.servers.is_empty()
     }
 }
 
@@ -328,8 +338,9 @@ impl PingBalancerContext {
     }
 
     async fn init_score(&self) {
-        assert!(!self.servers.is_empty(), "check PingBalancer without any servers");
-
+        if self.servers.is_empty() {
+            return;
+        }
         self.check_once(true).await;
     }
 
@@ -342,6 +353,10 @@ impl PingBalancerContext {
     }
 
     fn probing_required(&self) -> bool {
+        if self.servers.is_empty() {
+            return false;
+        }
+
         let mut tcp_count = 0;
         let mut udp_count = 0;
 
@@ -376,6 +391,9 @@ impl PingBalancerContext {
     /// Check each servers' score and update the best server's index
     async fn check_once(&self, first_run: bool) {
         let servers = &self.servers;
+        if servers.is_empty() {
+            return;
+        }
 
         let mut vfut_tcp = Vec::with_capacity(servers.len());
         let mut vfut_udp = Vec::with_capacity(servers.len());
@@ -496,6 +514,9 @@ impl PingBalancerContext {
     /// Check the best server only
     async fn check_best_server(&self) {
         let servers = &self.servers;
+        if servers.is_empty() {
+            return;
+        }
 
         let mut vfut = Vec::new();
 
@@ -687,6 +708,13 @@ impl PingBalancer {
     pub fn best_udp_server(&self) -> Arc<ServerIdent> {
         let context = self.inner.context.load();
         context.best_udp_server()
+    }
+
+    /// Check if there is no available server
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        let context = self.inner.context.load();
+        context.is_empty()
     }
 
     /// Get the server list

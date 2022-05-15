@@ -10,7 +10,7 @@ use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
     net::AutoProxyClientStream,
-    utils::establish_tcp_tunnel,
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
 pub async fn run_tcp_tunnel(
@@ -61,6 +61,13 @@ async fn handle_tcp_client(
     peer_addr: SocketAddr,
     forward_addr: Address,
 ) -> io::Result<()> {
+    if balancer.is_empty() {
+        trace!("establishing tcp tunnel {} <-> {} direct", peer_addr, forward_addr);
+
+        let mut remote = AutoProxyClientStream::connect_bypassed(context, &forward_addr).await?;
+        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, &forward_addr).await;
+    }
+
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
     trace!(
@@ -72,6 +79,5 @@ async fn handle_tcp_client(
     );
 
     let mut remote = AutoProxyClientStream::connect_proxied(context, &server, &forward_addr).await?;
-
     establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &forward_addr).await
 }

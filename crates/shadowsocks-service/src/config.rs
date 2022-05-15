@@ -1936,15 +1936,6 @@ impl Config {
                 local_config.check_integrity()?;
             }
 
-            if self.server.is_empty() {
-                let err = Error::new(
-                    ErrorKind::MissingField,
-                    "missing `servers` for client configuration",
-                    None,
-                );
-                return Err(err);
-            }
-
             // Balancer related checks
             if let Some(rtt) = self.balancer.max_server_rtt {
                 if rtt.as_secs() == 0 {

@@ -21,7 +21,7 @@ use crate::{
         loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
-        utils::{establish_tcp_tunnel, to_ipv4_mapped},
+        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed, to_ipv4_mapped},
     },
 };
 
@@ -37,6 +37,11 @@ async fn establish_client_tcp_redir<'a>(
     peer_addr: SocketAddr,
     addr: &Address,
 ) -> io::Result<()> {
+    if balancer.is_empty() {
+        let mut remote = AutoProxyClientStream::connect_bypassed(context, addr).await?;
+        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, addr).await;
+    }
+
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
 

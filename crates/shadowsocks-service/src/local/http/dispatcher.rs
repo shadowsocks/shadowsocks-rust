@@ -22,8 +22,8 @@ use shadowsocks::relay::socks5::Address;
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
-    net::AutoProxyClientStream,
-    utils::establish_tcp_tunnel,
+    net::{AutoProxyClientStream, AutoProxyIo},
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
 use super::{
@@ -101,10 +101,24 @@ impl HttpDispatcher {
             // Connect to Shadowsocks' remote
             //
             // FIXME: What STATUS should I return for connection error?
-            let server = self.balancer.best_tcp_server();
-            let mut stream = AutoProxyClientStream::connect(self.context, server.as_ref(), &host).await?;
+            let mut server_opt = None;
+            let mut stream = if self.balancer.is_empty() {
+                AutoProxyClientStream::connect_bypassed(self.context, &host).await?
+            } else {
+                let server = self.balancer.best_tcp_server();
 
-            debug!("CONNECT relay connected {} <-> {}", self.client_addr, host);
+                let stream = AutoProxyClientStream::connect(self.context, server.as_ref(), &host).await?;
+                server_opt = Some(server);
+
+                stream
+            };
+
+            debug!(
+                "CONNECT relay connected {} <-> {} ({})",
+                self.client_addr,
+                host,
+                if stream.is_bypassed() { "bypassed" } else { "proxied" }
+            );
 
             // Upgrade to a TCP tunnel
             //
@@ -118,14 +132,19 @@ impl HttpDispatcher {
                     Ok(mut upgraded) => {
                         trace!("CONNECT tunnel upgrade success, {} <-> {}", client_addr, host);
 
-                        let _ = establish_tcp_tunnel(
-                            server.server_config(),
-                            &mut upgraded,
-                            &mut stream,
-                            client_addr,
-                            &host,
-                        )
-                        .await;
+                        let _ = match server_opt {
+                            Some(server) => {
+                                establish_tcp_tunnel(
+                                    server.server_config(),
+                                    &mut upgraded,
+                                    &mut stream,
+                                    client_addr,
+                                    &host,
+                                )
+                                .await
+                            }
+                            None => establish_tcp_tunnel_bypassed(&mut upgraded, &mut stream, client_addr, &host).await,
+                        };
                     }
                     Err(e) => {
                         error!(
@@ -153,7 +172,7 @@ impl HttpDispatcher {
 
             // Set keep-alive for connection with remote
             set_conn_keep_alive(version, self.req.headers_mut(), conn_keep_alive);
-            let client = if self.context.check_target_bypassed(&host).await {
+            let client = if self.balancer.is_empty() || self.context.check_target_bypassed(&host).await {
                 trace!("bypassed {} -> {} {:?}", self.client_addr, host, self.req);
                 HttpClientEnum::Bypass(self.bypass_client)
             } else {

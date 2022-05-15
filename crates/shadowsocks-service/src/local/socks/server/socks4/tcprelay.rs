@@ -17,7 +17,7 @@ use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
     net::AutoProxyClientStream,
-    utils::establish_tcp_tunnel,
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
 use crate::local::socks::socks4::{
@@ -95,11 +95,20 @@ impl Socks4TcpHandler {
             return Ok(());
         }
 
-        let server = self.balancer.best_tcp_server();
-        let svr_cfg = server.server_config();
         let target_addr = target_addr.into();
+        let mut server_opt = None;
+        let server_result = if self.balancer.is_empty() {
+            AutoProxyClientStream::connect_bypassed(self.context, &target_addr).await
+        } else {
+            let server = self.balancer.best_tcp_server();
 
-        let mut remote = match AutoProxyClientStream::connect(self.context, &server, &target_addr).await {
+            let r = AutoProxyClientStream::connect(self.context, &server, &target_addr).await;
+            server_opt = Some(server);
+
+            r
+        };
+
+        let mut remote = match server_result {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let handshake_rsp = HandshakeResponse::new(ResultCode::RequestGranted);
@@ -132,6 +141,12 @@ impl Socks4TcpHandler {
         // UNWRAP.
         let mut stream = stream.into_inner();
 
-        establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
+        match server_opt {
+            Some(server) => {
+                let svr_cfg = server.server_config();
+                establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
+            }
+            None => establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, &target_addr).await,
+        }
     }
 }

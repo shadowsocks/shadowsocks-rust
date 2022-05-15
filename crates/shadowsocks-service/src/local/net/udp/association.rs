@@ -421,7 +421,7 @@ where
 
     async fn dispatch_received_packet(&mut self, target_addr: &Address, data: &[u8]) {
         // Check if target should be bypassed. If so, send packets directly.
-        let bypassed = self.context.check_target_bypassed(target_addr).await;
+        let bypassed = self.balancer.is_empty() || self.context.check_target_bypassed(target_addr).await;
 
         trace!(
             "udp relay {} -> {} ({}) with {} bytes",

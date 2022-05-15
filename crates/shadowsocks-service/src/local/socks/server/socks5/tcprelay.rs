@@ -33,7 +33,7 @@ use crate::{
         loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         socks::config::Socks5AuthConfig,
-        utils::establish_tcp_tunnel,
+        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
     },
     net::utils::ignore_until_end,
 };
@@ -251,10 +251,19 @@ impl Socks5TcpHandler {
             return Ok(());
         }
 
-        let server = self.balancer.best_tcp_server();
-        let svr_cfg = server.server_config();
+        let mut server_opt = None;
+        let remote_result = if self.balancer.is_empty() {
+            AutoProxyClientStream::connect_bypassed(self.context.clone(), &target_addr).await
+        } else {
+            let server = self.balancer.best_tcp_server();
 
-        let mut remote = match AutoProxyClientStream::connect(self.context.clone(), &server, &target_addr).await {
+            let r = AutoProxyClientStream::connect(self.context.clone(), &server, &target_addr).await;
+            server_opt = Some(server);
+
+            r
+        };
+
+        let mut remote = match remote_result {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let header =
@@ -280,7 +289,13 @@ impl Socks5TcpHandler {
             }
         };
 
-        establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
+        match server_opt {
+            Some(server) => {
+                let svr_cfg = server.server_config();
+                establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
+            }
+            None => establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, &target_addr).await,
+        }
     }
 
     async fn handle_udp_associate(self, mut stream: TcpStream, client_addr: Address) -> io::Result<()> {

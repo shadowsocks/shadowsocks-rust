@@ -33,7 +33,7 @@ use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
     net::AutoProxyClientStream,
-    utils::{establish_tcp_tunnel, to_ipv4_mapped},
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed, to_ipv4_mapped},
 };
 
 use super::virt_device::VirtTunDevice;
@@ -477,11 +477,15 @@ async fn establish_client_tcp_redir<'a>(
     peer_addr: SocketAddr,
     addr: &Address,
 ) -> io::Result<()> {
+    if balancer.is_empty() {
+        let mut remote = AutoProxyClientStream::connect_bypassed(context, addr).await?;
+        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, addr).await;
+    }
+
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
 
     let mut remote = AutoProxyClientStream::connect(context, &server, addr).await?;
-
     establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, addr).await
 }
 

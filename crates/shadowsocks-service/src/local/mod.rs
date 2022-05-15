@@ -106,7 +106,6 @@ impl Server {
 /// Starts a shadowsocks local server
 pub async fn create(config: Config) -> io::Result<Server> {
     assert!(config.config_type == ConfigType::Local && !config.local.is_empty());
-    assert!(!config.server.is_empty());
 
     trace!("{:?}", config);
 

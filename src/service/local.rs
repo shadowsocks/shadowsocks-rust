@@ -738,16 +738,6 @@ pub fn main(matches: &ArgMatches) {
             return;
         }
 
-        if config.server.is_empty() {
-            eprintln!(
-                "missing proxy servers, consider specifying it by \
-                    --server-addr, --encrypt-method, --password command line option, \
-                        or --server-url command line option, \
-                        or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
-            );
-            return;
-        }
-
         if let Err(err) = config.check_integrity() {
             eprintln!("config integrity check failed, {}", err);
             return;

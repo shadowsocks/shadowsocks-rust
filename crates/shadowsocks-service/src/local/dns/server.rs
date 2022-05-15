@@ -325,6 +325,11 @@ fn check_name_in_proxy_list(acl: &AccessControl, name: &Name) -> Option<bool> {
 
 /// given the query, determine whether remote/local query should be used, or inconclusive
 fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, query: &Query) -> Option<bool> {
+    // No server was configured, then always resolve with local
+    if balancer.is_empty() {
+        return Some(false);
+    }
+
     // Check if we are trying to make queries for remote servers
     //
     // This happens normally because VPN or TUN device receives DNS queries from local servers' plugins
