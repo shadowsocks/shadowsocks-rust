@@ -206,12 +206,24 @@ where
                 ProxyClientStreamReadState::CheckRequestNonce => {
                     ready!(this.stream.as_mut().poll_read_decrypted(cx, this.context, buf))?;
 
-                    if Some(this.stream.sent_nonce()) != this.stream.received_request_nonce() {
-                        return Err(io::Error::new(
-                            ErrorKind::Other,
-                            "received TCP response header with unmatched salt",
-                        ))
-                        .into();
+                    // REQUEST_NONCE should be in the respond packet (header) of AEAD-2022.
+                    //
+                    // If received_request_nonce() is None, then:
+                    // 1. method.salt_len() == 0, no checking required.
+                    // 2. TCP stream read() returns EOF before receiving the header, no checking required.
+                    //
+                    // poll_read_decrypted will wait until the first non-zero size data chunk.
+                    let method = this.stream.method();
+                    if method.salt_len() > 0 {
+                        if let Some(request_nonce) = this.stream.received_request_nonce() {
+                            if this.stream.sent_nonce() != request_nonce {
+                                return Err(io::Error::new(
+                                    ErrorKind::Other,
+                                    "received TCP response header with unmatched salt",
+                                ))
+                                .into();
+                            }
+                        }
                     }
 
                     *(this.reader_state) = ProxyClientStreamReadState::Established;
