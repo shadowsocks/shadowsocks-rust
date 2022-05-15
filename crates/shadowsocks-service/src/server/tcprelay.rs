@@ -105,7 +105,7 @@ struct TcpServerClient {
 impl TcpServerClient {
     async fn serve(mut self) -> io::Result<()> {
         // let target_addr = match Address::read_from(&mut self.stream).await {
-        let target_addr = match self.stream.handshake().await {
+        let target_addr = match timeout_fut(self.timeout, self.stream.handshake()).await {
             Ok(a) => a,
             // Err(Socks5Error::IoError(ref err)) if err.kind() == ErrorKind::UnexpectedEof => {
             //     debug!(
@@ -117,6 +117,13 @@ impl TcpServerClient {
             Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
                 debug!(
                     "handshake failed, received EOF before a complete target Address, peer: {}",
+                    self.peer_addr
+                );
+                return Ok(());
+            }
+            Err(err) if err.kind() == ErrorKind::TimedOut => {
+                debug!(
+                    "handshake failed, timeout before a complete target Address, peer: {}",
                     self.peer_addr
                 );
                 return Ok(());
