@@ -265,7 +265,8 @@ struct SSServerExtConfig {
     #[serde(alias = "port")]
     server_port: u16,
 
-    password: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    password: Option<String>,
     method: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1461,7 +1462,7 @@ impl Config {
         // Standard config
         // Server
         match (config.server, config.server_port, config.password, &config.method) {
-            (Some(address), Some(port), Some(pwd), Some(m)) => {
+            (Some(address), Some(port), pwd_opt, Some(m)) => {
                 let addr = match address.parse::<Ipv4Addr>() {
                     Ok(v4) => ServerAddr::SocketAddr(SocketAddr::V4(SocketAddrV4::new(v4, port))),
                     Err(..) => match address.parse::<Ipv6Addr>() {
@@ -1483,7 +1484,21 @@ impl Config {
                 };
 
                 // Only "password" support getting from environment variable.
-                let password = read_variable_field_value(&pwd);
+                let password = match pwd_opt {
+                    Some(ref pwd) => read_variable_field_value(pwd),
+                    None => {
+                        if method.is_none() {
+                            String::new().into()
+                        } else {
+                            let err = Error::new(
+                                ErrorKind::MissingField,
+                                "`password` is required",
+                                Some(format!("`password` is required for method {}", method)),
+                            );
+                            return Err(err);
+                        }
+                    }
+                };
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
                 nsvr.set_mode(global_mode);
@@ -1553,7 +1568,21 @@ impl Config {
                 };
 
                 // Only "password" support getting from environment variable.
-                let password = read_variable_field_value(&svr.password);
+                let password = match svr.password {
+                    Some(ref pwd) => read_variable_field_value(pwd),
+                    None => {
+                        if method.is_none() {
+                            String::new().into()
+                        } else {
+                            let err = Error::new(
+                                ErrorKind::MissingField,
+                                "`password` is required",
+                                Some(format!("`password` is required for method {}", method)),
+                            );
+                            return Err(err);
+                        }
+                    }
+                };
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
 
@@ -2161,7 +2190,11 @@ impl fmt::Display for Config {
                     ServerAddr::DomainName(.., port) => port,
                 });
                 jconf.method = Some(svr.method().to_string());
-                jconf.password = Some(svr.password().to_string());
+                jconf.password = if svr.method().is_none() {
+                    None
+                } else {
+                    Some(svr.password().to_string())
+                };
                 jconf.plugin = svr.plugin().map(|p| p.plugin.to_string());
                 jconf.plugin_opts = svr.plugin().and_then(|p| p.plugin_opts.clone());
                 jconf.plugin_args = svr.plugin().and_then(|p| {
@@ -2188,7 +2221,11 @@ impl fmt::Display for Config {
                             ServerAddr::SocketAddr(ref sa) => sa.port(),
                             ServerAddr::DomainName(.., port) => port,
                         },
-                        password: svr.password().to_string(),
+                        password: if svr.method().is_none() {
+                            None
+                        } else {
+                            Some(svr.password().to_string())
+                        },
                         method: svr.method().to_string(),
                         disabled: None,
                         plugin: svr.plugin().map(|p| p.plugin.to_string()),

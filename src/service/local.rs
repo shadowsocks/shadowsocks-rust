@@ -416,18 +416,24 @@ pub fn main(matches: &ArgMatches) {
         };
 
         if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
+            let method = matches.value_of_t_or_exit::<CipherKind>("ENCRYPT_METHOD");
+
             let password = match matches.value_of_t::<String>("PASSWORD") {
                 Ok(pwd) => read_variable_field_value(&pwd).into(),
                 Err(err) => {
                     // NOTE: svr_addr should have been checked by crate::validator
-                    match crate::password::read_server_password(svr_addr) {
-                        Ok(pwd) => pwd,
-                        Err(..) => err.exit(),
+                    if method.is_none() {
+                        // If method doesn't need a key (none, plain), then we can leave it empty
+                        String::new()
+                    } else {
+                        match crate::password::read_server_password(svr_addr) {
+                            Ok(pwd) => pwd,
+                            Err(..) => err.exit(),
+                        }
                     }
                 }
             };
 
-            let method = matches.value_of_t_or_exit::<CipherKind>("ENCRYPT_METHOD");
             let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
 
             let timeout = match matches.value_of_t::<u64>("TIMEOUT") {
