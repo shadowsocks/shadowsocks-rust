@@ -100,22 +100,17 @@ impl Context {
             return Ok(());
         }
 
-        match self.replay_policy {
-            ReplayAttackPolicy::Default => {
-                #[cfg(feature = "aead-cipher-2022")]
-                if method.is_aead_2022() {
-                    return if self.replay_protector.check_nonce_and_set(method, nonce) {
-                        let err = io::Error::new(io::ErrorKind::Other, "detected repeated nonce (iv/salt)");
-                        Err(err)
-                    } else {
-                        Ok(())
-                    };
-                }
+        #[allow(unused_mut)]
+        let mut replay_policy = self.replay_policy;
 
-                // AEAD, Stream should ignore by default
-                Ok(())
-            }
-            ReplayAttackPolicy::Ignore => Ok(()),
+        #[cfg(feature = "aead-cipher-2022")]
+        if method.is_aead_2022() {
+            // AEAD-2022 can't be ignored.
+            replay_policy = ReplayAttackPolicy::Reject;
+        }
+
+        match replay_policy {
+            ReplayAttackPolicy::Default | ReplayAttackPolicy::Ignore => Ok(()),
             ReplayAttackPolicy::Detect => {
                 if self.replay_protector.check_nonce_and_set(method, nonce) {
                     warn!("detected repeated nonce (iv/salt) {:?}", ByteStr::new(nonce));
