@@ -817,6 +817,12 @@ impl From<PathBuf> for ManagerAddr {
 /// Policy for handling replay attack requests
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ReplayAttackPolicy {
+    /// Default strategy based on protocol
+    ///
+    /// SIP022 (AEAD-2022): Reject
+    /// SIP004 (AEAD): Ignore
+    /// Stream: Ignore
+    Default,
     /// Ignore it completely
     Ignore,
     /// Try to detect replay attack and warn about it
@@ -827,13 +833,14 @@ pub enum ReplayAttackPolicy {
 
 impl Default for ReplayAttackPolicy {
     fn default() -> ReplayAttackPolicy {
-        ReplayAttackPolicy::Ignore
+        ReplayAttackPolicy::Default
     }
 }
 
 impl Display for ReplayAttackPolicy {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            ReplayAttackPolicy::Default => f.write_str("default"),
             ReplayAttackPolicy::Ignore => f.write_str("ignore"),
             ReplayAttackPolicy::Detect => f.write_str("detect"),
             ReplayAttackPolicy::Reject => f.write_str("reject"),
@@ -856,6 +863,7 @@ impl FromStr for ReplayAttackPolicy {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "default" => Ok(ReplayAttackPolicy::Default),
             "ignore" => Ok(ReplayAttackPolicy::Ignore),
             "detect" => Ok(ReplayAttackPolicy::Detect),
             "reject" => Ok(ReplayAttackPolicy::Reject),
