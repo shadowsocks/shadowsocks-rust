@@ -233,7 +233,11 @@ impl DecryptedReader {
             // EOF.
             return Ok(None).into();
         } else if header_buf.len() != header_len {
-            return Err(io::Error::new(ErrorKind::InvalidData, "header too short")).into();
+            return Err(io::Error::new(
+                ErrorKind::Other,
+                format!("header too short, {}B, should >= {}B", header_buf.len(), header_len),
+            ))
+            .into();
         }
 
         let (salt, header_chunk) = header_buf.split_at_mut(salt_len);
@@ -255,7 +259,14 @@ impl DecryptedReader {
             StreamType::Server => 0,
         };
         if stream_ty != expected_stream_ty {
-            return Err(io::Error::new(ErrorKind::Other, "invalid stream type")).into();
+            return Err(io::Error::new(
+                ErrorKind::Other,
+                format!(
+                    "invalid stream type {:#x}, expecting {:#x}",
+                    stream_ty, expected_stream_ty
+                ),
+            ))
+            .into();
         }
 
         let timestamp = header_reader.get_u64();
@@ -277,6 +288,14 @@ impl DecryptedReader {
         }
 
         let data_length = header_reader.get_u16();
+
+        trace!(
+            "got AEAD header stream_type: {}, timestamp: {}, length: {}, request_salt: {:?}",
+            stream_ty,
+            timestamp,
+            data_length,
+            self.request_salt.as_deref().map(ByteStr::new)
+        );
 
         // Check repeated salt after first successful decryption #442
         //
