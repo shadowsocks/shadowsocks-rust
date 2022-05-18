@@ -4,7 +4,7 @@ use std::{
     cell::RefCell,
     io::{self, ErrorKind},
     marker::PhantomData,
-    net::SocketAddr,
+    net::{SocketAddr, SocketAddrV6},
     sync::Arc,
     time::Duration,
 };
@@ -19,7 +19,7 @@ use tokio::{sync::mpsc, task::JoinHandle, time};
 
 use shadowsocks::{
     lookup_then,
-    net::UdpSocket as ShadowUdpSocket,
+    net::{AddrFamily, UdpSocket as ShadowUdpSocket},
     relay::{
         udprelay::{options::UdpSocketControlData, ProxySocket, MAXIMUM_UDP_PAYLOAD_SIZE},
         Address,
@@ -466,25 +466,58 @@ where
         }
     }
 
-    async fn send_received_bypassed_packet(&mut self, target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        let socket = match target_addr {
-            SocketAddr::V4(..) => match self.bypassed_ipv4_socket {
+    async fn send_received_bypassed_packet(&mut self, mut target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
+        const UDP_SOCKET_SUPPORT_DUAL_STACK: bool = cfg!(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "watchos",
+            target_os = "tvos",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "netbsd",
+        ));
+
+        let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK {
+            match self.bypassed_ipv6_socket {
                 Some(ref mut socket) => socket,
                 None => {
                     let socket =
-                        ShadowUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
-                    self.bypassed_ipv4_socket.insert(socket)
-                }
-            },
-            SocketAddr::V6(..) => match self.bypassed_ipv6_socket {
-                Some(ref mut socket) => socket,
-                None => {
-                    let socket =
-                        ShadowUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref()).await?;
+                        ShadowUdpSocket::connect_any_with_opts(AddrFamily::Ipv6, self.context.connect_opts_ref())
+                            .await?;
                     self.bypassed_ipv6_socket.insert(socket)
                 }
-            },
+            }
+        } else {
+            match target_addr {
+                SocketAddr::V4(..) => match self.bypassed_ipv4_socket {
+                    Some(ref mut socket) => socket,
+                    None => {
+                        let socket =
+                            ShadowUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
+                                .await?;
+                        self.bypassed_ipv4_socket.insert(socket)
+                    }
+                },
+                SocketAddr::V6(..) => match self.bypassed_ipv6_socket {
+                    Some(ref mut socket) => socket,
+                    None => {
+                        let socket =
+                            ShadowUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
+                                .await?;
+                        self.bypassed_ipv6_socket.insert(socket)
+                    }
+                },
+            }
         };
+
+        if UDP_SOCKET_SUPPORT_DUAL_STACK {
+            if let SocketAddr::V4(saddr) = target_addr {
+                let mapped_ip = saddr.ip().to_ipv6_mapped();
+                target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
+            }
+        }
 
         let n = socket.send_to(data, target_addr).await?;
         if n != data.len() {
