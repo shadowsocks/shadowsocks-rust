@@ -477,6 +477,7 @@ where
             target_os = "freebsd",
             // target_os = "dragonfly",
             // target_os = "netbsd",
+            target_os = "windows",
         ));
 
         let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK {
