@@ -655,8 +655,8 @@ impl UdpAssociationContext {
             target_os = "watchos",
             target_os = "tvos",
             target_os = "freebsd",
-            target_os = "dragonfly",
-            target_os = "netbsd",
+            // target_os = "dragonfly",
+            // target_os = "netbsd",
         ));
 
         let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK {

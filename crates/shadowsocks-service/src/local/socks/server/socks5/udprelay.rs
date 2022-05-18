@@ -2,7 +2,7 @@
 
 use std::{
     io::{self, Cursor},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -26,6 +26,7 @@ use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
     net::{UdpAssociationManager, UdpInboundWrite},
+    utils::to_ipv4_mapped,
 };
 
 #[derive(Clone)]
@@ -36,6 +37,22 @@ struct Socks5UdpInboundWriter {
 #[async_trait]
 impl UdpInboundWrite for Socks5UdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
+        let remote_addr = match remote_addr {
+            Address::SocketAddress(sa) => {
+                // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
+                let saddr = match *sa {
+                    SocketAddr::V4(..) => *sa,
+                    SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
+                        Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
+                        None => *sa,
+                    },
+                };
+
+                Address::SocketAddress(saddr)
+            }
+            daddr => daddr.clone(),
+        };
+
         // Reassemble packet
         let mut payload_buffer = BytesMut::new();
         let header = UdpAssociateHeader::new(0, remote_addr.clone());
