@@ -539,10 +539,12 @@ where
         self.client_packet_id = match self.client_packet_id.checked_add(1) {
             Some(i) => i,
             None => {
-                // FIXME: client_packet_id overflowed. What's the properly to handle this?
+                // FIXME: client_packet_id overflowed. What's the proper way to handle this?
                 //
-                // Reopen a new session is not a perfect way, because the remote target will receive packets from a different address.
+                // Reopen a new session is not perfect, because the remote target will receive packets from a different address.
                 // For most application protocol, like QUIC, it is fine to change client address.
+                //
+                // But it will happen only when a client continously send 18446744073709551616 packets without renewing the socket.
 
                 let new_session_id = generate_client_session_id();
 
