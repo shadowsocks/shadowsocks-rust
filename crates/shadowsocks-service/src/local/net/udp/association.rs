@@ -272,7 +272,7 @@ where
             // client_session_id must be random generated,
             // server use this ID to identify every independent clients.
             client_session_id: generate_client_session_id(),
-            client_packet_id: 1,
+            client_packet_id: 0,
             server_session: None,
             server_session_expire_duration,
         };
@@ -535,6 +535,30 @@ where
     }
 
     async fn dispatch_received_proxied_packet(&mut self, target_addr: &Address, data: &[u8]) -> io::Result<()> {
+        // Increase Packet ID before send
+        self.client_packet_id = match self.client_packet_id.checked_add(1) {
+            Some(i) => i,
+            None => {
+                // FIXME: client_packet_id overflowed. What's the properly to handle this?
+                //
+                // Reopen a new session is not a perfect way, because the remote target will receive packets from a different address.
+                // For most application protocol, like QUIC, it is fine to change client address.
+
+                let new_session_id = generate_client_session_id();
+
+                warn!(
+                    "{} -> {} (proxied) packet id overflowed. socket reset and session renewed ({} -> {})",
+                    self.peer_addr, target_addr, self.client_session_id, new_session_id
+                );
+
+                self.proxied_socket.take();
+                self.client_packet_id = 1;
+                self.client_session_id = new_session_id;
+
+                self.client_packet_id
+            }
+        };
+
         let socket = match self.proxied_socket {
             Some(ref mut socket) => socket,
             None => {
@@ -549,20 +573,6 @@ where
                 let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
 
                 self.proxied_socket.insert(socket)
-            }
-        };
-
-        // Increase Packet ID before send
-        self.client_packet_id = match self.client_packet_id.checked_add(1) {
-            Some(i) => i,
-            None => {
-                warn!(
-                    "{} -> {} (proxied) sending {} bytes failed, packet id overflowed",
-                    self.peer_addr,
-                    target_addr,
-                    data.len(),
-                );
-                return Ok(());
             }
         };
 

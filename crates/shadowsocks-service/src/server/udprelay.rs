@@ -742,6 +742,10 @@ impl UdpAssociationContext {
                 self.server_packet_id = match self.server_packet_id.checked_add(1) {
                     Some(i) => i,
                     None => {
+                        // FIXME: server_packet_id overflowed. There is no way to recover from this error.
+                        //
+                        // Application clients may open a new session when it couldn't receive proper respond.
+
                         warn!(
                             "udp failed to send back {} bytes to client {}, from target {}, server packet id overflowed",
                             data.len(),
