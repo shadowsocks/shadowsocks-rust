@@ -73,14 +73,11 @@ impl Context {
             {
                 const SECURITY_PRINTABLE_PREFIX_LEN: usize = 6;
                 if nonce.len() >= SECURITY_PRINTABLE_PREFIX_LEN {
-                    use rand::Rng;
+                    // Printable characters use base64 letters instead
+                    static ASCII_PRINTABLE_CHARS: &[u8] = br##"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/"##;
 
-                    // Printable characters follows definition of isprint in C/C++
-                    static ASCII_PRINTABLE_CHARS: &[u8] = br##"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ "##;
-
-                    let mut rng = rand::thread_rng();
                     for b in nonce.iter_mut().take(SECURITY_PRINTABLE_PREFIX_LEN) {
-                        *b = ASCII_PRINTABLE_CHARS[rng.gen_range::<usize, _>(0..ASCII_PRINTABLE_CHARS.len())];
+                        *b = ASCII_PRINTABLE_CHARS[(*b as usize) % ASCII_PRINTABLE_CHARS.len()];
                     }
                 }
             }
@@ -165,4 +162,20 @@ impl Context {
     pub fn replay_attack_policy(&self) -> ReplayAttackPolicy {
         self.replay_policy
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::ServerType;
+    use crate::context::Context;
+    use byte_string::ByteStr;
+
+    #[test]
+    fn generate_nonce() {
+        let mut salt = vec![0u8; 64];
+        let context = Context::new(ServerType::Server);
+        context.generate_nonce(&mut salt, false);
+        println!("generate nonce printable ascii: {:?}", ByteStr::new(&salt));
+    }
+
 }
