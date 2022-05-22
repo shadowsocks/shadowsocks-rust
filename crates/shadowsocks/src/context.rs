@@ -169,12 +169,13 @@ mod tests {
     use crate::config::ServerType;
     use crate::context::Context;
     use byte_string::ByteStr;
+    use shadowsocks_crypto::CipherKind;
 
     #[test]
     fn generate_nonce() {
         let mut salt = vec![0u8; 64];
         let context = Context::new(ServerType::Server);
-        context.generate_nonce(&mut salt, false);
+        context.generate_nonce(CipherKind::NONE, &mut salt, false);
         println!("generate nonce printable ascii: {:?}", ByteStr::new(&salt));
     }
 
