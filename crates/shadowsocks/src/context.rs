@@ -175,7 +175,7 @@ mod tests {
     fn generate_nonce() {
         let mut salt = vec![0u8; 64];
         let context = Context::new(ServerType::Server);
-        context.generate_nonce(CipherKind::NONE, &mut salt, false);
+        context.generate_nonce(CipherKind::AES_128_GCM, &mut salt, false);
         println!("generate nonce printable ascii: {:?}", ByteStr::new(&salt));
     }
 
