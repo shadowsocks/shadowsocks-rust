@@ -19,7 +19,7 @@ This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 shadowsocks is a fast tunnel proxy that helps you bypass firewalls.
 
 | Library                                                                 | Description                                                                                                                                                                                                                                                 |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [**shadowsocks**](https://crates.io/crates/shadowsocks)                 | [![crates.io](https://img.shields.io/crates/v/shadowsocks.svg)](https://crates.io/crates/shadowsocks) [![docs.rs](https://img.shields.io/docsrs/shadowsocks)](https://docs.rs/shadowsocks) shadowsocks core protocol                                        |
 | [**shadowsocks-service**](https://crates.io/crates/shadowsocks-service) | [![crates.io](https://img.shields.io/crates/v/shadowsocks-service.svg)](https://crates.io/crates/shadowsocks-service) [![docs.rs](https://img.shields.io/docsrs/shadowsocks-service)](https://docs.rs/shadowsocks-service) Services for serving shadowsocks |
 | [**shadowsocks-rust**](https://crates.io/crates/shadowsocks-rust)       | [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust) Binaries running common shadowsocks services                                                                                                |
@@ -29,6 +29,11 @@ Related Projects:
 - [spyophobia/shadowsocks-gtk-rs](https://github.com/spyophobia/shadowsocks-gtk-rs) A GUI on Linux for `sslocal` using GTK, [discussion](https://github.com/shadowsocks/shadowsocks-rust/issues/664)
 - [honwen/openwrt-shadowsocks-rust](https://github.com/honwen/openwrt-shadowsocks-rust) OpenWRT solution for `sslocal`, [discussion](https://github.com/honwen/openwrt-shadowsocks-rust)
 - [cg31/shadowsocks-windows-gui-rust](https://github.com/cg31/shadowsocks-windows-gui-rust) Windows GUI client, [discussion](https://github.com/shadowsocks/shadowsocks-rust/issues/375)
+
+<details>
+<summary>
+<b>I want to compile the source</b> 
+</summary>
 
 ## Build & Install
 
@@ -88,6 +93,54 @@ Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-r
 - `build-windows`: Build for `x86_64-pc-windows-msvc`
 - `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
 - `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
+
+### **Build from source**
+
+Use cargo to build. NOTE: **RAM >= 2GiB**
+
+```bash
+cargo build --release
+```
+
+Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
+
+```bash
+make install TARGET=release
+```
+
+Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be installed to `/usr/local/bin` (variable PREFIX).
+
+For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
+
+### **target-cpu optimization**
+
+If you are building for your current CPU platform (for example, build and run on your personal computer), it is recommended to set `target-cpu=native` feature to let `rustc` generate and optimize code for the CPU running the compiler.
+
+```bash
+export RUSTFLAGS="-C target-cpu=native"
+```
+
+### **Build standalone binaries**
+
+Requirements:
+
+- Docker
+
+```bash
+./build/build-release
+```
+
+Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
+
+- `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
+- `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
+
+Read `Cargo.toml` for more details.
+
+</details>
+
+<details>
+<summary><b>I want to run it in the third party container</b></summary>
 
 ### **Docker**
 
@@ -188,54 +241,16 @@ image:
   tag: "latest"
 ```
 
-### **Build from source**
+</details>
 
-Use cargo to build. NOTE: **RAM >= 2GiB**
-
-```bash
-cargo build --release
-```
-
-Then `sslocal` and `ssserver` will appear in `./target/(debug|release)/`, it works similarly as the two binaries in the official ShadowSocks' implementation.
-
-```bash
-make install TARGET=release
-```
-
-Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be installed to `/usr/local/bin` (variable PREFIX).
-
-For Windows users, if you have encountered any problem in building, check and discuss in [#102](https://github.com/shadowsocks/shadowsocks-rust/issues/102).
-
-### **target-cpu optimization**
-
-If you are building for your current CPU platform (for example, build and run on your personal computer), it is recommended to set `target-cpu=native` feature to let `rustc` generate and optimize code for the CPU running the compiler.
-
-```bash
-export RUSTFLAGS="-C target-cpu=native"
-```
-
-### **Build standalone binaries**
-
-Requirements:
-
-- Docker
-
-```bash
-./build/build-release
-```
-
-Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
-
-- `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
-- `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
-
-Read `Cargo.toml` for more details.
+<details>
+<summary><b>I just want to use it</b></summary>
 
 ## Getting Started
 
 Create a ShadowSocks' configuration file. Example
 
-```jsonc
+```json5
 {
     "server": "my_server_ip",
     "server_port": 8388,
@@ -252,7 +267,7 @@ Detailed explanation could be found in [shadowsocks' documentation](https://gith
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one server. You can also disable individual servers.
 
-```jsonc
+```json5
 {
     "servers": [
         {
@@ -429,31 +444,44 @@ For manager UI, check more details in the [shadowsocks-manager](https://github.c
 
 Example configuration:
 
-```jsonc
+```json5
 {
-    // Required option
-    // Address that ssmanager is listening on
-    "manager_address": "127.0.0.1",
-    "manager_port": 6100,
+  // Required option
+  // Address that ssmanager is listening on
+  "manager_address": "127.0.0.1",
+  "manager_port": 6100,
+  "servers": [
+    // These servers will be started automatically when ssmanager is started
+  ],
+  // Outbound socket binds to this IP address
+  // For choosing different network interface on the same machine
+  "local_address": "xxx.xxx.xxx.xxx",
+  // Other options that may be passed directly to new servers
+}
+```
 
-    // Or bind to a Unix Domain Socket
-    "manager_address": "/tmp/shadowsocks-manager.sock",
+Or bind to a Unix Domain Socket
 
-    "servers": [
-        // These servers will be started automatically when ssmanager is started
-    ],
+```json5
+{
+  // Required option
+  // Address that ssmanager is listening on
+  "manager_address": "/tmp/shadowsocks-manager.sock",
+  "manager_port": 6100,
 
-    // Outbound socket binds to this IP address
-    // For choosing different network interface on the same machine
-    "local_address": "xxx.xxx.xxx.xxx",
-
-    // Other options that may be passed directly to new servers
+  "servers": [
+    // These servers will be started automatically when ssmanager is started
+  ],
+  // Outbound socket binds to this IP address
+  // For choosing different network interface on the same machine
+  "local_address": "xxx.xxx.xxx.xxx",
+  // Other options that may be passed directly to new servers
 }
 ```
 
 ## Configuration
 
-```jsonc
+```json5
 {
     // LOCAL: Listen address. This is exactly the same as `locals[0]`
     // SERVER: Bind address for remote sockets, mostly used for choosing interface
@@ -671,7 +699,7 @@ Example configuration:
 
 The configuration file is set by `socks5_auth_config_path` in `locals`.
 
-```jsonc
+```json5
 {
     // Password/Username Authentication (RFC1929)
     "password": {
@@ -792,6 +820,7 @@ The configuration file is set by `socks5_auth_config_path` in `locals`.
   ```plain
   ss://YWVzLTI1Ni1jZmI6cGFzc3dvcmQ@127.0.0.1:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dwww.baidu.com
   ```
+</details>
 
 ## Notes
 
