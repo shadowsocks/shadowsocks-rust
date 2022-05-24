@@ -178,10 +178,17 @@ struct SSConfig {
     fast_open: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    outbound_fwmark: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     security: Option<SSSecurityConfig>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     balancer: Option<SSBalancerConfig>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acl: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -1759,6 +1766,12 @@ impl Config {
             nconfig.ipv6_only = o;
         }
 
+        // SO_MARK
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if let Some(fwmark) = config.outbound_fwmark {
+            nconfig.outbound_fwmark = Some(fwmark);
+        }
+
         // Security
         if let Some(sec) = config.security {
             if let Some(replay_attack) = sec.replay_attack {
@@ -1780,6 +1793,21 @@ impl Config {
                 check_interval: balancer.check_interval.map(Duration::from_secs),
                 check_best_interval: balancer.check_best_interval.map(Duration::from_secs),
             };
+        }
+
+        if let Some(acl_path) = config.acl {
+            let acl = match AccessControl::load_from_file(&acl_path) {
+                Ok(acl) => acl,
+                Err(err) => {
+                    let err = Error::new(
+                        ErrorKind::Invalid,
+                        "acl loading failed",
+                        Some(format!("file {}, error: {}", acl_path, err)),
+                    );
+                    return Err(err);
+                }
+            };
+            nconfig.acl = Some(acl);
         }
 
         Ok(nconfig)
@@ -2337,6 +2365,11 @@ impl fmt::Display for Config {
             jconf.ipv6_only = Some(self.ipv6_only);
         }
 
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            jconf.outbound_fwmark = self.outbound_fwmark;
+        }
+
         // Security
         if self.security.replay_attack.policy != ReplayAttackPolicy::default() {
             jconf.security = Some(SSSecurityConfig {
@@ -2353,6 +2386,11 @@ impl fmt::Display for Config {
                 check_interval: self.balancer.check_interval.as_ref().map(Duration::as_secs),
                 check_best_interval: self.balancer.check_best_interval.as_ref().map(Duration::as_secs),
             });
+        }
+
+        // ACL
+        if let Some(ref acl) = self.acl {
+            jconf.acl = Some(acl.file_path().to_str().unwrap().to_owned());
         }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())
