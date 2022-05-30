@@ -111,7 +111,7 @@ async-trait = "0.1"
 socket2 = { version = "0.4", features = ["all"] }
 libc = "0.2"
 
-hyper = { version = "0.14.16", optional = true, features = ["full"] }
+hyper = { version = "0.14.19", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
 trust-dns-resolver = { version = "0.21", optional = true, features = ["serde-config"] }
