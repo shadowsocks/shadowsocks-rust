@@ -29,11 +29,14 @@ use tokio::{
     sync::mpsc,
 };
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::AutoProxyClientStream,
-    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed, to_ipv4_mapped},
+use crate::{
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::AutoProxyClientStream,
+        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
+    },
+    net::utils::to_ipv4_mapped,
 };
 
 use super::virt_device::VirtTunDevice;

@@ -12,11 +12,13 @@ use log::{debug, trace};
 use shadowsocks::relay::socks5::Address;
 use tokio::sync::mpsc;
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::{UdpAssociationManager, UdpInboundWrite},
-    utils::to_ipv4_mapped,
+use crate::{
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::{UdpAssociationManager, UdpInboundWrite},
+    },
+    net::utils::to_ipv4_mapped,
 };
 
 pub struct UdpTun {
@@ -97,12 +99,16 @@ impl UdpInboundWrite for UdpTunInboundWriter {
         let addr = match *remote_addr {
             Address::SocketAddress(sa) => {
                 // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
-                match sa {
-                    SocketAddr::V4(..) => sa,
-                    SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
-                        Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
-                        None => sa,
-                    },
+                if sa.is_ipv4() {
+                    match sa {
+                        SocketAddr::V4(..) => sa,
+                        SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
+                            Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
+                            None => sa,
+                        },
+                    }
+                } else {
+                    sa
                 }
             }
             Address::DomainNameAddress(..) => {

@@ -27,6 +27,7 @@ use tokio::{sync::mpsc, task::JoinHandle, time};
 
 use crate::net::{
     packet_window::PacketWindowFilter,
+    utils::to_ipv4_mapped,
     MonProxySocket,
     UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
@@ -518,7 +519,7 @@ impl UdpAssociationContext {
                     };
 
                     let addr = Address::from(addr);
-                    self.send_received_respond_packet(&addr, &outbound_ipv4_buffer[..n]).await;
+                    self.send_received_respond_packet(addr, &outbound_ipv4_buffer[..n]).await;
                 }
 
                 received_opt = receive_from_outbound_opt(&self.outbound_ipv6_socket, &mut outbound_ipv6_buffer), if self.outbound_ipv6_socket.is_some() => {
@@ -533,7 +534,7 @@ impl UdpAssociationContext {
                     };
 
                     let addr = Address::from(addr);
-                    self.send_received_respond_packet(&addr, &outbound_ipv6_buffer[..n]).await;
+                    self.send_received_respond_packet(addr, &outbound_ipv6_buffer[..n]).await;
                 }
 
                 _ = keepalive_interval.tick() => {
@@ -714,16 +715,27 @@ impl UdpAssociationContext {
         Ok(())
     }
 
-    async fn send_received_respond_packet(&mut self, addr: &Address, data: &[u8]) {
+    async fn send_received_respond_packet(&mut self, mut addr: Address, data: &[u8]) {
         trace!("udp relay {} <- {} received {} bytes", self.peer_addr, addr, data.len());
 
         // Keep association alive in map
         self.keepalive_flag = true;
 
+        // Convert IPv4-mapped-IPv6 to IPv4
+        //
+        // It is an undefined behavior in shadowsocks' protocol about how to handle IPv4-mapped-IPv6.
+        // But for some implementations, they may expect the target address to be IPv4, because
+        // the peer address is IPv4 when calling `sendto`.
+        if let Address::SocketAddress(SocketAddr::V6(ref v6)) = addr {
+            if let Some(v4) = to_ipv4_mapped(v6.ip()) {
+                addr = Address::SocketAddress(SocketAddr::new(v4.into(), v6.port()));
+            }
+        }
+
         match self.client_session {
             None => {
                 // Naive route, send data directly back to client without session
-                if let Err(err) = self.inbound.send_to(self.peer_addr, addr, data).await {
+                if let Err(err) = self.inbound.send_to(self.peer_addr, &addr, data).await {
                     warn!(
                         "udp failed to send back {} bytes to client {}, from target {}, error: {}",
                         data.len(),
@@ -764,7 +776,7 @@ impl UdpAssociationContext {
 
                 if let Err(err) = self
                     .inbound
-                    .send_to_with_ctrl(self.peer_addr, addr, &control, data)
+                    .send_to_with_ctrl(self.peer_addr, &addr, &control, data)
                     .await
                 {
                     warn!(

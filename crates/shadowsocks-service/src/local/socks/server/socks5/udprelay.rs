@@ -22,11 +22,13 @@ use shadowsocks::{
 };
 use tokio::{net::UdpSocket, time};
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::{UdpAssociationManager, UdpInboundWrite},
-    utils::to_ipv4_mapped,
+use crate::{
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::{UdpAssociationManager, UdpInboundWrite},
+    },
+    net::utils::to_ipv4_mapped,
 };
 
 #[derive(Clone)]
@@ -38,7 +40,7 @@ struct Socks5UdpInboundWriter {
 impl UdpInboundWrite for Socks5UdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let remote_addr = match remote_addr {
-            Address::SocketAddress(sa) => {
+            Address::SocketAddress(sa) if peer_addr.is_ipv4() => {
                 // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
                 let saddr = match *sa {
                     SocketAddr::V4(..) => *sa,

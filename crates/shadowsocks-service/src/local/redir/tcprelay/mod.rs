@@ -21,8 +21,9 @@ use crate::{
         loadbalancing::PingBalancer,
         net::AutoProxyClientStream,
         redir::redir_ext::{TcpListenerRedirExt, TcpStreamRedirExt},
-        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed, to_ipv4_mapped},
+        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
     },
+    net::utils::to_ipv4_mapped,
 };
 
 mod sys;

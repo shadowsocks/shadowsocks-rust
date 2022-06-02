@@ -25,8 +25,8 @@ use crate::{
         loadbalancing::PingBalancer,
         net::{UdpAssociationManager, UdpInboundWrite},
         redir::redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
-        utils::to_ipv4_mapped,
     },
+    net::utils::to_ipv4_mapped,
 };
 
 use self::sys::UdpRedirSocket;
@@ -96,13 +96,11 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let addr = match *remote_addr {
             Address::SocketAddress(sa) => {
-                // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
                 match sa {
-                    SocketAddr::V4(..) => sa,
-                    SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
-                        Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
-                        None => sa,
-                    },
+                    // Converts IPv4 address to IPv4-mapped-IPv6
+                    // All sockets will be created in IPv6 (nearly all modern OS supports IPv6 sockets)
+                    SocketAddr::V4(ref v4) => SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port()),
+                    SocketAddr::V6(..) => sa,
                 }
             }
             Address::DomainNameAddress(..) => {
@@ -135,6 +133,12 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
         };
 
         // Send back to client
+        // peer_addr must be converted to IPv4-mapped-IPv6 because the inbound socket is always an IPv6 socket
+        let peer_addr = match peer_addr {
+            SocketAddr::V4(ref v4) => SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port()),
+            SocketAddr::V6(..) => peer_addr,
+        };
+
         inbound.send_to(data, peer_addr).await.map(|n| {
             if n < data.len() {
                 warn!(
