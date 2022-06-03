@@ -40,7 +40,7 @@ struct Socks5UdpInboundWriter {
 impl UdpInboundWrite for Socks5UdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         let remote_addr = match remote_addr {
-            Address::SocketAddress(sa) if peer_addr.is_ipv4() => {
+            Address::SocketAddress(sa) => {
                 // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
                 let saddr = match *sa {
                     SocketAddr::V4(..) => *sa,

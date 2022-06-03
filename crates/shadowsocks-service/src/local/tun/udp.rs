@@ -99,16 +99,24 @@ impl UdpInboundWrite for UdpTunInboundWriter {
         let addr = match *remote_addr {
             Address::SocketAddress(sa) => {
                 // Try to convert IPv4 mapped IPv6 address if server is running on dual-stack mode
-                if sa.is_ipv4() {
-                    match sa {
-                        SocketAddr::V4(..) => sa,
-                        SocketAddr::V6(ref v6) => match to_ipv4_mapped(v6.ip()) {
+                match (peer_addr, sa) {
+                    (SocketAddr::V4(..), SocketAddr::V4(..)) | (SocketAddr::V6(..), SocketAddr::V6(..)) => sa,
+                    (SocketAddr::V4(..), SocketAddr::V6(v6)) => {
+                        // If peer is IPv4, then remote_addr can only be IPv4-mapped-IPv6
+                        match to_ipv4_mapped(v6.ip()) {
                             Some(v4) => SocketAddr::new(IpAddr::from(v4), v6.port()),
-                            None => sa,
-                        },
+                            None => {
+                                return Err(io::Error::new(
+                                    ErrorKind::InvalidData,
+                                    "source and destination type unmatch",
+                                ));
+                            }
+                        }
                     }
-                } else {
-                    sa
+                    (SocketAddr::V6(..), SocketAddr::V4(v4)) => {
+                        // Convert remote_addr to IPv4-mapped-IPv6
+                        SocketAddr::new(IpAddr::from(v4.ip().to_ipv6_mapped()), v4.port())
+                    }
                 }
             }
             Address::DomainNameAddress(..) => {
