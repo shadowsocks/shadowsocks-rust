@@ -81,6 +81,14 @@ cargo install shadowsocks-rust
 
 then you can find `sslocal` and `ssserver` in `$CARGO_HOME/bin`.
 
+### **Install using Homebrew**
+
+For macOS and Linux, you can install it using [Homebrew](https://brew.sh/):
+
+```bash
+brew install shadowsocks-rust
+```
+
 ### **Download release**
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
