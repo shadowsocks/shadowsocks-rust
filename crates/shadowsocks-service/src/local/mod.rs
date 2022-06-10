@@ -1,7 +1,5 @@
 //! Shadowsocks Local Server
 
-#[cfg(feature = "local-flow-stat")]
-use std::path::PathBuf;
 use std::{
     future::Future,
     io::{self, ErrorKind},
@@ -20,7 +18,7 @@ use shadowsocks::{
 use tokio::task::JoinHandle;
 
 #[cfg(feature = "local-flow-stat")]
-use crate::net::FlowStat;
+use crate::{config::LocalFlowStatAddress, net::FlowStat};
 use crate::{
     config::{Config, ConfigType, ProtocolType},
     dns::build_dns_resolver,
@@ -209,10 +207,10 @@ pub async fn create(config: Config) -> io::Result<Server> {
     };
 
     #[cfg(feature = "local-flow-stat")]
-    if let Some(stat_path) = config.stat_path {
+    if let Some(stat_addr) = config.local_stat_addr {
         // For Android's flow statistic
 
-        let report_fut = flow_report_task(stat_path, context.flow_stat());
+        let report_fut = flow_report_task(stat_addr, context.flow_stat());
         vfut.push(ServerHandle(tokio::spawn(report_fut)));
     }
 
@@ -414,29 +412,18 @@ pub async fn create(config: Config) -> io::Result<Server> {
 }
 
 #[cfg(feature = "local-flow-stat")]
-async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::Result<()> {
+async fn flow_report_task(stat_addr: LocalFlowStatAddress, flow_stat: Arc<FlowStat>) -> io::Result<()> {
     use std::slice;
 
     use log::debug;
-    use tokio::{io::AsyncWriteExt, net::UnixStream, time};
+    use tokio::{io::AsyncWriteExt, time};
 
-    // Android's flow statistic report RPC
+    // Local flow statistic report RPC
     let timeout = Duration::from_secs(1);
 
     loop {
         // keep it as libev's default, 0.5 seconds
         time::sleep(Duration::from_millis(500)).await;
-        let mut stream = match time::timeout(timeout, UnixStream::connect(&stat_path)).await {
-            Ok(Ok(s)) => s,
-            Ok(Err(err)) => {
-                debug!("send client flow statistic error: {}", err);
-                continue;
-            }
-            Err(..) => {
-                debug!("send client flow statistic error: timeout");
-                continue;
-            }
-        };
 
         let tx = flow_stat.tx();
         let rx = flow_stat.rx();
@@ -444,13 +431,57 @@ async fn flow_report_task(stat_path: PathBuf, flow_stat: Arc<FlowStat>) -> io::R
         let buf: [u64; 2] = [tx as u64, rx as u64];
         let buf = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 16) };
 
-        match time::timeout(timeout, stream.write_all(buf)).await {
-            Ok(Ok(..)) => {}
-            Ok(Err(err)) => {
-                debug!("send client flow statistic error: {}", err);
+        match stat_addr {
+            #[cfg(unix)]
+            LocalFlowStatAddress::UnixStreamPath(ref stat_path) => {
+                use tokio::net::UnixStream;
+
+                let mut stream = match time::timeout(timeout, UnixStream::connect(stat_path)).await {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(err)) => {
+                        debug!("send client flow statistic error: {}", err);
+                        continue;
+                    }
+                    Err(..) => {
+                        debug!("send client flow statistic error: timeout");
+                        continue;
+                    }
+                };
+
+                match time::timeout(timeout, stream.write_all(buf)).await {
+                    Ok(Ok(..)) => {}
+                    Ok(Err(err)) => {
+                        debug!("send client flow statistic error: {}", err);
+                    }
+                    Err(..) => {
+                        debug!("send client flow statistic error: timeout");
+                    }
+                }
             }
-            Err(..) => {
-                debug!("send client flow statistic error: timeout");
+            LocalFlowStatAddress::TcpStreamAddr(stat_addr) => {
+                use tokio::net::TcpStream;
+
+                let mut stream = match time::timeout(timeout, TcpStream::connect(stat_addr)).await {
+                    Ok(Ok(s)) => s,
+                    Ok(Err(err)) => {
+                        debug!("send client flow statistic error: {}", err);
+                        continue;
+                    }
+                    Err(..) => {
+                        debug!("send client flow statistic error: timeout");
+                        continue;
+                    }
+                };
+
+                match time::timeout(timeout, stream.write_all(buf)).await {
+                    Ok(Ok(..)) => {}
+                    Ok(Err(err)) => {
+                        debug!("send client flow statistic error: {}", err);
+                    }
+                    Err(..) => {
+                        debug!("send client flow statistic error: timeout");
+                    }
+                }
             }
         }
     }

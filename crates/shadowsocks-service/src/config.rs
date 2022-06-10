@@ -1000,6 +1000,17 @@ pub struct BalancerConfig {
     pub check_best_interval: Option<Duration>,
 }
 
+/// Address for local to report flow statistic data
+#[cfg(feature = "local-flow-stat")]
+#[derive(Debug, Clone)]
+pub enum LocalFlowStatAddress {
+    /// UNIX Domain Socket address
+    #[cfg(unix)]
+    UnixStreamPath(PathBuf),
+    /// TCP Stream Address
+    TcpStreamAddr(SocketAddr),
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -1079,7 +1090,7 @@ pub struct Config {
 
     /// Flow statistic report Unix socket path (only for Android)
     #[cfg(feature = "local-flow-stat")]
-    pub stat_path: Option<PathBuf>,
+    pub local_stat_addr: Option<LocalFlowStatAddress>,
 
     /// Replay attack policy
     pub security: SecurityConfig,
@@ -1198,7 +1209,7 @@ impl Config {
             acl: None,
 
             #[cfg(feature = "local-flow-stat")]
-            stat_path: None,
+            local_stat_addr: None,
 
             security: SecurityConfig::default(),
 

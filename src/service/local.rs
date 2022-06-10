@@ -260,11 +260,23 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
 
     #[cfg(feature = "local-flow-stat")]
     {
+        #[cfg(unix)]
+        {
+            app = app.arg(
+                Arg::new("STAT_PATH")
+                    .long("stat-path")
+                    .takes_value(true)
+                    .conflicts_with("STAT_ADDR")
+                    .help("Specify socket path (unix domain socket) for sending traffic statistic"),
+            );
+        }
+
         app = app.arg(
-            Arg::new("STAT_PATH")
-                .long("stat-path")
+            Arg::new("STAT_ADDR")
+                .long("stat-addr")
                 .takes_value(true)
-                .help("Specify socket path (unix domain socket) for sending traffic statistic"),
+                .validator(validator::validate_socket_addr)
+                .help("Specify socket address IP:PORT (TCP) for sending traffic statistic"),
         );
     }
 
@@ -468,8 +480,18 @@ pub fn main(matches: &ArgMatches) {
 
         #[cfg(feature = "local-flow-stat")]
         {
+            use shadowsocks_service::config::LocalFlowStatAddress;
+            use std::net::SocketAddr;
+
+            #[cfg(unix)]
             if let Some(stat_path) = matches.value_of("STAT_PATH") {
-                config.stat_path = Some(From::from(stat_path));
+                config.local_stat_addr = Some(LocalFlowStatAddress::UnixStreamPath(From::from(stat_path)));
+            }
+
+            match matches.value_of_t::<SocketAddr>("STAT_ADDR") {
+                Ok(stat_addr) => config.local_stat_addr = Some(LocalFlowStatAddress::TcpStreamAddr(stat_addr)),
+                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
+                Err(err) => err.exit(),
             }
         }
 
