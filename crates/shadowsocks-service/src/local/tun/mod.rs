@@ -134,13 +134,13 @@ pub struct Tun {
 
 impl Tun {
     pub async fn run(mut self) -> io::Result<()> {
-        let mtu = self.device.get_ref().mtu().expect("mtu");
-        assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
+        if let Ok(mtu) = self.device.get_ref().mtu() {
+            assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
+        }
 
         info!(
-            "shadowsocks tun device {}, mtu {}, mode {}",
+            "shadowsocks tun device {}, mode {}",
             self.device.get_ref().name(),
-            mtu,
             self.mode,
         );
 
