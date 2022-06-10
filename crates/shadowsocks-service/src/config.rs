@@ -255,6 +255,9 @@ struct SSLocalExtConfig {
     #[cfg(feature = "local-tun")]
     #[serde(skip_serializing_if = "Option::is_none")]
     tun_interface_address: Option<String>,
+    #[cfg(all(feature = "local-tun", unix))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tun_device_fd_from_path: Option<String>,
 
     /// SOCKS5
     #[cfg(feature = "local")]
@@ -1460,6 +1463,11 @@ impl Config {
                             local_config.tun_interface_name = Some(tun_interface_name);
                         }
 
+                        #[cfg(all(feature = "local-tun", unix))]
+                        if let Some(tun_device_fd_from_path) = local.tun_device_fd_from_path {
+                            local_config.tun_device_fd_from_path = Some(From::from(tun_device_fd_from_path));
+                        }
+
                         #[cfg(feature = "local")]
                         if let Some(socks5_auth_config_path) = local.socks5_auth_config_path {
                             local_config.socks5_auth = Socks5AuthConfig::load_from_file(&socks5_auth_config_path)?;
@@ -2203,6 +2211,11 @@ impl fmt::Display for Config {
                         tun_interface_name: local.tun_interface_name.clone(),
                         #[cfg(feature = "local-tun")]
                         tun_interface_address: local.tun_interface_address.as_ref().map(ToString::to_string),
+                        #[cfg(all(feature = "local-tun", unix))]
+                        tun_device_fd_from_path: local
+                            .tun_device_fd_from_path
+                            .as_ref()
+                            .map(|p| p.to_str().expect("tun_device_fd_from_path is not utf-8").to_owned()),
 
                         #[cfg(feature = "local")]
                         socks5_auth_config_path: None,
