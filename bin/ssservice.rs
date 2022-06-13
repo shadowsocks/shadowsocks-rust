@@ -7,12 +7,12 @@
 //! *It should be notice that the extended configuration file is not suitable for the server
 //! side.*
 
-use std::{env, path::Path};
+use std::{env, path::Path, process::ExitCode};
 
 use clap::Command;
 use shadowsocks_rust::service::{local, manager, server};
 
-fn main() {
+fn main() -> ExitCode {
     let app = Command::new("shadowsocks")
         .version(shadowsocks_rust::VERSION)
         .about("A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)");
