@@ -624,12 +624,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9feedaea5a9f602932e78b512b2fde69aaefd2ef4fd5fd744238f7424b246186"
 
 [[package]]
-name = "exitcode"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de853764b47027c2e862a995c34978ffa63c1501f2e15f987ba11bd4f9bba193"
-
-[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2092,7 +2086,6 @@ dependencies = [
  "daemonize",
  "directories",
  "env_logger",
- "exitcode",
  "futures",
  "ipnet",
  "jemallocator",
@@ -2108,6 +2101,7 @@ dependencies = [
  "serde",
  "shadowsocks-service",
  "snmalloc-rs",
+ "sysexits",
  "tcmalloc",
  "thiserror",
  "tokio",
@@ -2284,6 +2278,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "sysexits"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c24dea646d0a2a4209a2d960275fd4416be9ab32c77927f51279a621e2b629"
 
 [[package]]
 name = "tcmalloc"

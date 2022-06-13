@@ -1,6 +1,6 @@
 //! Local server launchers
 
-use std::{net::IpAddr, path::PathBuf, process, time::Duration};
+use std::{net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
 
 use clap::{Arg, ArgGroup, ArgMatches, Command, ErrorKind as ClapErrorKind};
 use futures::future::{self, Either};
@@ -376,7 +376,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
 }
 
 /// Program entrance `main`
-pub fn main(matches: &ArgMatches) {
+pub fn main(matches: &ArgMatches) -> ExitCode {
     let (config, runtime) = {
         let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
             if !matches.is_present("SERVER_CONFIG") {
@@ -397,7 +397,7 @@ pub fn main(matches: &ArgMatches) {
                 Ok(c) => c,
                 Err(err) => {
                     eprintln!("loading config {:?}, {}", config_path, err);
-                    process::exit(crate::EXIT_CODE_LOAD_CONFIG_FAILURE);
+                    return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
                 }
             },
             None => ServiceConfig::default(),
@@ -421,7 +421,7 @@ pub fn main(matches: &ArgMatches) {
                 Ok(cfg) => cfg,
                 Err(err) => {
                     eprintln!("loading config {:?}, {}", cpath, err);
-                    process::exit(crate::EXIT_CODE_LOAD_CONFIG_FAILURE);
+                    return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
                 }
             },
             None => Config::new(ConfigType::Local),
@@ -703,7 +703,7 @@ pub fn main(matches: &ArgMatches) {
                 Ok(acl) => acl,
                 Err(err) => {
                     eprintln!("loading ACL \"{}\", {}", acl_file, err);
-                    process::exit(crate::EXIT_CODE_LOAD_ACL_FAILURE);
+                    return crate::EXIT_CODE_LOAD_ACL_FAILURE.into();
                 }
             };
             config.acl = Some(acl);
@@ -763,12 +763,12 @@ pub fn main(matches: &ArgMatches) {
                 "missing `local_address`, consider specifying it by --local-addr command line option, \
                     or \"local_address\" and \"local_port\" in configuration file"
             );
-            return;
+            return ExitCode::SUCCESS;
         }
 
         if let Err(err) = config.check_integrity() {
             eprintln!("config integrity check failed, {}", err);
-            return;
+            return ExitCode::SUCCESS;
         }
 
         #[cfg(unix)]
@@ -816,17 +816,17 @@ pub fn main(matches: &ArgMatches) {
             // Server future resolved without an error. This should never happen.
             Either::Left((Ok(..), ..)) => {
                 eprintln!("server exited unexpectedly");
-                process::exit(crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY);
+                crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY.into()
             }
             // Server future resolved with error, which are listener errors in most cases
             Either::Left((Err(err), ..)) => {
                 eprintln!("server aborted with {}", err);
-                process::exit(crate::EXIT_CODE_SERVER_ABORTED);
+                crate::EXIT_CODE_SERVER_ABORTED.into()
             }
             // The abort signal future resolved. Means we should just exit.
-            Either::Right(_) => (),
+            Either::Right(_) => ExitCode::SUCCESS,
         }
-    });
+    })
 }
 
 #[cfg(unix)]

@@ -153,7 +153,7 @@ thiserror = "1.0"
 clap = { version = "3.1", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false, optional = true }
-exitcode = "1"
+sysexits = "0.3"
 build-time = "0.1"
 directories = "4.0"
 xdg = "2.4"
