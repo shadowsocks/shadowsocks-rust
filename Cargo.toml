@@ -9,6 +9,7 @@ documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
+rust-version = "1.61"
 
 [badges]
 maintenance = { status = "passively-maintained" }
