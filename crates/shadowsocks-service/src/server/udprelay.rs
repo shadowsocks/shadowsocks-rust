@@ -417,6 +417,7 @@ impl UdpAssociation {
 struct ClientSessionContext {
     client_session_id: u64,
     packet_window_filter: PacketWindowFilter,
+    client_user_hash: Option<Bytes>,
 }
 
 impl ClientSessionContext {
@@ -424,6 +425,7 @@ impl ClientSessionContext {
         ClientSessionContext {
             client_session_id,
             packet_window_filter: PacketWindowFilter::new(),
+            client_user_hash: None,
         }
     }
 }
@@ -622,6 +624,8 @@ impl UdpAssociationContext {
                 error!("udp client {} packet_id {} out of window", self.peer_addr, packet_id);
                 return;
             }
+
+            session_context.client_user_hash = control.user_hash.clone();
         }
 
         if let Err(err) = self.dispatch_received_outbound_packet(target_addr, data).await {
@@ -768,11 +772,11 @@ impl UdpAssociationContext {
                     }
                 };
 
-                let control = UdpSocketControlData {
-                    client_session_id: client_session.client_session_id,
-                    server_session_id: self.server_session_id,
-                    packet_id: self.server_packet_id,
-                };
+                let mut control = UdpSocketControlData::default();
+                control.client_session_id = client_session.client_session_id;
+                control.server_session_id = self.server_session_id;
+                control.packet_id = self.server_packet_id;
+                control.user_hash = client_session.client_user_hash.clone();
 
                 if let Err(err) = self
                     .inbound

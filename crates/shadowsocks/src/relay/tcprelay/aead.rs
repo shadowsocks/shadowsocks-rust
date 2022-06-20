@@ -68,6 +68,7 @@ pub struct DecryptedReader {
     buffer: BytesMut,
     method: CipherKind,
     salt: Option<Bytes>,
+    has_handshaked: bool,
 }
 
 impl DecryptedReader {
@@ -81,6 +82,7 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(method.salt_len()),
                 method,
                 salt: None,
+                has_handshaked: false,
             }
         } else {
             DecryptedReader {
@@ -89,6 +91,7 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
                 method,
                 salt: None,
+                has_handshaked: false,
             }
         }
     }
@@ -117,6 +120,7 @@ impl DecryptedReader {
                     self.buffer.clear();
                     self.state = DecryptReadState::ReadLength;
                     self.buffer.reserve(2 + self.method.tag_len());
+                    self.has_handshaked = true;
                 }
                 DecryptReadState::ReadLength => match ready!(self.poll_read_length(cx, stream))? {
                     None => {
@@ -288,6 +292,11 @@ impl DecryptedReader {
         }
 
         Ok(plen)
+    }
+
+    /// Check if handshake finished
+    pub fn handshaked(&self) -> bool {
+        self.has_handshaked
     }
 }
 

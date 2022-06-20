@@ -578,11 +578,9 @@ where
             }
         };
 
-        let control = UdpSocketControlData {
-            client_session_id: self.client_session_id,
-            server_session_id: 0,
-            packet_id: self.client_packet_id,
-        };
+        let mut control = UdpSocketControlData::default();
+        control.client_session_id = self.client_session_id;
+        control.packet_id = self.client_packet_id;
 
         match socket.send_with_ctrl(target_addr, &control, data).await {
             Ok(..) => return Ok(()),

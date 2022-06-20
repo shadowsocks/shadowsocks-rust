@@ -65,7 +65,16 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "local-tunnel", feature = "local-dns"))]
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
-    config::{ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerWeight},
+    config::{
+        ManagerAddr,
+        Mode,
+        ReplayAttackPolicy,
+        ServerAddr,
+        ServerConfig,
+        ServerUser,
+        ServerUserManager,
+        ServerWeight,
+    },
     crypto::CipherKind,
     plugin::PluginConfig,
 };
@@ -266,6 +275,12 @@ struct SSLocalExtConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct SSServerUserConfig {
+    name: String,
+    password: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct SSServerExtConfig {
     // SIP008 https://github.com/shadowsocks/shadowsocks-org/issues/89
     //
@@ -278,6 +293,9 @@ struct SSServerExtConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<String>,
     method: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    users: Option<Vec<SSServerUserConfig>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     disabled: Option<bool>,
@@ -1612,6 +1630,29 @@ impl Config {
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
 
+                // Extensible Identity Header, Users
+                if let Some(users) = svr.users {
+                    let mut user_manager = ServerUserManager::new();
+
+                    for user in users {
+                        let key = match base64::decode_config(&user.password, base64::STANDARD) {
+                            Ok(k) => k,
+                            Err(..) => {
+                                let err = Error::new(
+                                    ErrorKind::Malformed,
+                                    "`users[].password` should be base64 encoded",
+                                    None,
+                                );
+                                return Err(err);
+                            }
+                        };
+
+                        user_manager.add_user(ServerUser::new(user.name, key));
+                    }
+
+                    nsvr.set_user_manager(user_manager);
+                }
+
                 match svr.mode {
                     Some(mode) => match mode.parse::<Mode>() {
                         Ok(mode) => nsvr.set_mode(mode),
@@ -2087,6 +2128,21 @@ impl Config {
                     }
                 }
             }
+
+            // Users' key must match key length
+            if let Some(user_manager) = server.user_manager() {
+                let key_len = server.method().key_len();
+                for user in user_manager.users_iter() {
+                    if user.key().len() != key_len {
+                        let err = Error::new(
+                            ErrorKind::Malformed,
+                            "`users[].password` length must be exactly the same as method's key length",
+                            None,
+                        );
+                        return Err(err);
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -2279,6 +2335,16 @@ impl fmt::Display for Config {
                             Some(svr.password().to_string())
                         },
                         method: svr.method().to_string(),
+                        users: svr.user_manager().map(|m| {
+                            let mut vu = Vec::new();
+                            for u in m.users_iter() {
+                                vu.push(SSServerUserConfig {
+                                    name: u.name().to_owned(),
+                                    password: base64::encode(u.key()),
+                                });
+                            }
+                            vu
+                        }),
                         disabled: None,
                         plugin: svr.plugin().map(|p| p.plugin.to_string()),
                         plugin_opts: svr.plugin().and_then(|p| p.plugin_opts.clone()),

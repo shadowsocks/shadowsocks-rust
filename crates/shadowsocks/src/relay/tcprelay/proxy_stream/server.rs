@@ -3,14 +3,17 @@
 use std::{
     io,
     pin::Pin,
+    sync::Arc,
     task::{self, Poll},
 };
 
+use bytes::Bytes;
 use futures::ready;
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
+    config::ServerUserManager,
     context::SharedContext,
     crypto::CipherKind,
     relay::{
@@ -44,6 +47,7 @@ impl<S> ProxyServerStream<S> {
         stream: S,
         method: CipherKind,
         key: &[u8],
+        user_manager: Option<Arc<ServerUserManager>>,
     ) -> ProxyServerStream<S> {
         #[cfg(feature = "aead-cipher-2022")]
         let writer_state = if method.is_aead_2022() {
@@ -55,8 +59,17 @@ impl<S> ProxyServerStream<S> {
         #[cfg(not(feature = "aead-cipher-2022"))]
         let writer_state = ProxyServerStreamWriteState::Established;
 
+        static EMPTY_IDENTITY: [Bytes; 0] = [];
         ProxyServerStream {
-            stream: CryptoStream::from_stream(&context, stream, StreamType::Server, method, key),
+            stream: CryptoStream::from_stream_with_identity(
+                &context,
+                stream,
+                StreamType::Server,
+                method,
+                key,
+                &EMPTY_IDENTITY,
+                user_manager,
+            ),
             context,
             writer_state,
             has_handshaked: false,

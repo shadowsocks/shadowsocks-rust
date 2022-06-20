@@ -127,6 +127,7 @@ smoltcp = { version = "0.8", optional = true, default-features = false, features
 
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
+base64 = "0.13"
 
 shadowsocks = { version = "1.15.0", path = "../shadowsocks", default-features = false }
 

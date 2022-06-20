@@ -21,9 +21,10 @@
 //! ```
 use std::io::{self, Cursor, ErrorKind};
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::{
+    config::ServerUserManager,
     context::Context,
     crypto::{CipherCategory, CipherKind},
     relay::socks5::Address,
@@ -50,12 +51,14 @@ pub fn encrypt_client_payload(
     key: &[u8],
     addr: &Address,
     control: &UdpSocketControlData,
+    identity_keys: &[Bytes],
     payload: &[u8],
     dst: &mut BytesMut,
 ) {
     match method.category() {
         CipherCategory::None => {
             let _ = control;
+            let _ = identity_keys;
             dst.reserve(addr.serialized_len() + payload.len());
             addr.write_to_buf(dst);
             dst.put_slice(payload);
@@ -63,14 +66,18 @@ pub fn encrypt_client_payload(
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => {
             let _ = control;
+            let _ = identity_keys;
             encrypt_payload_stream(context, method, key, addr, payload, dst)
         }
         CipherCategory::Aead => {
             let _ = control;
+            let _ = identity_keys;
             encrypt_payload_aead(context, method, key, addr, payload, dst)
         }
         #[cfg(feature = "aead-cipher-2022")]
-        CipherCategory::Aead2022 => encrypt_client_payload_aead_2022(context, method, key, addr, control, payload, dst),
+        CipherCategory::Aead2022 => {
+            encrypt_client_payload_aead_2022(context, method, key, addr, control, identity_keys, payload, dst)
+        }
     }
 }
 
@@ -111,9 +118,11 @@ pub async fn decrypt_client_payload(
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
+    user_manager: Option<&ServerUserManager>,
 ) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
     match method.category() {
         CipherCategory::None => {
+            let _ = user_manager;
             let mut cur = Cursor::new(payload);
             match Address::read_from(&mut cur).await {
                 Ok(address) => {
@@ -129,14 +138,20 @@ pub async fn decrypt_client_payload(
             }
         }
         #[cfg(feature = "stream-cipher")]
-        CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload)
-            .await
-            .map(|(n, a)| (n, a, None)),
-        CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload)
-            .await
-            .map(|(n, a)| (n, a, None)),
+        CipherCategory::Stream => {
+            let _ = user_manager;
+            decrypt_payload_stream(context, method, key, payload)
+                .await
+                .map(|(n, a)| (n, a, None))
+        }
+        CipherCategory::Aead => {
+            let _ = user_manager;
+            decrypt_payload_aead(context, method, key, payload)
+                .await
+                .map(|(n, a)| (n, a, None))
+        }
         #[cfg(feature = "aead-cipher-2022")]
-        CipherCategory::Aead2022 => decrypt_client_payload_aead_2022(context, method, key, payload)
+        CipherCategory::Aead2022 => decrypt_client_payload_aead_2022(context, method, key, payload, user_manager)
             .await
             .map(|(n, a, c)| (n, a, Some(c))),
     }

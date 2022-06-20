@@ -150,7 +150,15 @@ where
         A: Into<Address>,
     {
         let addr = addr.into();
-        let stream = CryptoStream::from_stream(&context, stream, StreamType::Client, svr_cfg.method(), svr_cfg.key());
+        let stream = CryptoStream::from_stream_with_identity(
+            &context,
+            stream,
+            StreamType::Client,
+            svr_cfg.method(),
+            svr_cfg.key(),
+            svr_cfg.identity_keys(),
+            None,
+        );
 
         #[cfg(not(feature = "aead-cipher-2022"))]
         let reader_state = ProxyClientStreamReadState::Established;

@@ -589,6 +589,29 @@ Example configuration:
             "method": "chacha20-ietf-poly1305",
             // Read the actual password from environment variable PASSWORD_FROM_ENV
             "password": "${PASSWORD_FROM_ENV}"
+        },
+        {
+            // AEAD-2022
+            "server": "::",
+            "server_port": 8390,
+            "method": "2022-blake3-aes-256-gcm",
+            "password": "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU=",
+            // For Server (OPTIONAL)
+            // Support multiple users with Extensible Identity Header
+            // https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+            "users": [
+                {
+                    "name": "username",
+                    // User's password must have the same length as server's password
+                    "password": "4w0GKJ9U3Ox7CIXGU4A3LDQAqP6qrp/tUi/ilpOR9p4="
+                }
+            ],
+            // For Client (OPTIONAL)
+            // If EIH enabled, then "password" should have the following format: iPSK:iPSK:iPSK:uPSK
+            // - iPSK is one of the middle relay servers' PSK, for the last `ssserver`, it must be server's PSK ("password")
+            // - uPSK is the user's PSK ("password")
+            // Example:
+            // "password": "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU=:4w0GKJ9U3Ox7CIXGU4A3LDQAqP6qrp/tUi/ilpOR9p4="
         }
     ],
 

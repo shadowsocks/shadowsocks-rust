@@ -902,18 +902,14 @@ impl PingChecker {
 
         let addr = Address::SocketAddress(SocketAddr::new(Ipv4Addr::new(8, 8, 8, 8).into(), 53));
 
-        let client = ProxySocket::connect_with_opts(
-            self.context.context(),
-            self.server.server_config(),
-            self.context.connect_opts_ref(),
-        )
-        .await?;
+        let svr_cfg = self.server.server_config();
 
-        let control = UdpSocketControlData {
-            client_session_id: rand::random::<u64>(),
-            server_session_id: 0,
-            packet_id: 1,
-        };
+        let client =
+            ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts_ref()).await?;
+
+        let mut control = UdpSocketControlData::default();
+        control.client_session_id = rand::random::<u64>();
+        control.packet_id = 1;
         client.send_with_ctrl(&addr, &control, DNS_QUERY).await?;
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];

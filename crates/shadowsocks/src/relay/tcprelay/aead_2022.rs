@@ -48,19 +48,27 @@ use std::{
     marker::Unpin,
     pin::Pin,
     slice,
+    sync::Arc,
     task::{self, Poll},
     time::SystemTime,
     u16,
 };
 
+use aes::{
+    cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
+    Aes128,
+    Aes256,
+    Block,
+};
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::ready;
-use log::trace;
+use log::{error, trace};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::{crypto_io::StreamType, proxy_stream::protocol::v2::SERVER_STREAM_TIMESTAMP_MAX_DIFF};
 use crate::{
+    config::ServerUserManager,
     context::Context,
     crypto::{v2::tcp::TcpCipher, CipherKind},
 };
@@ -73,8 +81,18 @@ fn get_now_timestamp() -> u64 {
     }
 }
 
+#[inline]
+fn method_support_eih(method: CipherKind) -> bool {
+    matches!(
+        method,
+        CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM
+    )
+}
+
 /// AEAD packet payload must be smaller than 0xFFFF (u16::MAX)
 pub const MAX_PACKET_SIZE: usize = 0xFFFF;
+
+const AEAD2022_EIH_SUBKEY_CONTEXT: &str = "shadowsocks 2022 identity subkey";
 
 enum DecryptReadState {
     ReadHeader { key: Bytes },
@@ -93,10 +111,22 @@ pub struct DecryptedReader {
     salt: Option<Bytes>,
     request_salt: Option<Bytes>,
     data_chunk_count: u64,
+    user_manager: Option<Arc<ServerUserManager>>,
+    user_key: Option<Bytes>,
+    has_handshaked: bool,
 }
 
 impl DecryptedReader {
     pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8]) -> DecryptedReader {
+        DecryptedReader::with_user_manager(stream_ty, method, key, None)
+    }
+
+    pub fn with_user_manager(
+        stream_ty: StreamType,
+        method: CipherKind,
+        key: &[u8],
+        user_manager: Option<Arc<ServerUserManager>>,
+    ) -> DecryptedReader {
         if method.salt_len() > 0 {
             DecryptedReader {
                 stream_ty,
@@ -109,6 +139,9 @@ impl DecryptedReader {
                 salt: None,
                 request_salt: None,
                 data_chunk_count: 0,
+                user_manager,
+                user_key: None,
+                has_handshaked: false,
             }
         } else {
             DecryptedReader {
@@ -122,6 +155,9 @@ impl DecryptedReader {
                 salt: None,
                 request_salt: None,
                 data_chunk_count: 0,
+                user_manager,
+                user_key: None,
+                has_handshaked: false,
             }
         }
     }
@@ -166,6 +202,7 @@ impl DecryptedReader {
                             self.buffer.clear();
                             self.state = DecryptReadState::ReadData { length };
                             self.buffer.reserve(length + self.method.tag_len());
+                            self.has_handshaked = true;
                         }
                     }
                 }
@@ -222,7 +259,10 @@ impl DecryptedReader {
             StreamType::Client => salt_len,
             StreamType::Server => 0,
         };
-        let header_len = salt_len + 1 + 8 + request_salt_len + 2 + self.method.tag_len();
+        let require_eih =
+            self.stream_ty == StreamType::Server && method_support_eih(self.method) && self.user_manager.is_some();
+        let eih_len = if require_eih { 16 } else { 0 };
+        let header_len = salt_len + eih_len + 1 + 8 + request_salt_len + 2 + self.method.tag_len();
         if self.buffer.len() < header_len {
             self.buffer.resize(header_len, 0);
         }
@@ -240,11 +280,65 @@ impl DecryptedReader {
             .into();
         }
 
-        let (salt, header_chunk) = header_buf.split_at_mut(salt_len);
+        let (salt, mut header_chunk) = header_buf.split_at_mut(salt_len);
 
         trace!("got AEAD salt {:?}", ByteStr::new(salt));
 
-        let mut cipher = TcpCipher::new(self.method, key, salt);
+        // Extensible Identity Header
+        // https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+        let mut cipher = if require_eih {
+            if let Some(ref user_manager) = self.user_manager {
+                // Assume we have at least 1 EIH
+                if header_chunk.len() < 16 {
+                    error!("expecting EIH, but header chunk len: {}", header_chunk.len());
+                    return Err(io::Error::new(ErrorKind::Other, "header too short, expecting EIH")).into();
+                }
+
+                let (eih, remain_header_chunk) = header_chunk.split_at_mut(16);
+                header_chunk = remain_header_chunk;
+
+                let key_material = [key, salt].concat();
+                let identity_sub_key = blake3::derive_key(AEAD2022_EIH_SUBKEY_CONTEXT, &key_material);
+                let mut user_hash = Block::from([0u8; 16]);
+                match self.method {
+                    CipherKind::AEAD2022_BLAKE3_AES_128_GCM => {
+                        let cipher = Aes128::new_from_slice(&identity_sub_key[0..16]).expect("AES-128");
+                        cipher.decrypt_block_b2b(Block::from_slice(eih), &mut user_hash);
+                    }
+                    CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
+                        let cipher = Aes256::new_from_slice(&identity_sub_key[0..32]).expect("AES-256");
+                        cipher.decrypt_block_b2b(Block::from_slice(eih), &mut user_hash);
+                    }
+                    _ => unreachable!("{} doesn't support EIH", self.method),
+                }
+
+                let user_hash = user_hash.as_slice();
+                trace!(
+                    "server EIH {:?}, hash: {:?}",
+                    ByteStr::new(eih),
+                    ByteStr::new(user_hash)
+                );
+
+                match user_manager.get_user_by_hash(user_hash) {
+                    None => {
+                        return Err(io::Error::new(
+                            ErrorKind::Other,
+                            format!("user with identity {:?} not found", ByteStr::new(user_hash)),
+                        ))
+                        .into();
+                    }
+                    Some(user) => {
+                        trace!("user {} choosen by EIH", user.name());
+                        self.user_key = Some(Bytes::copy_from_slice(user.key()));
+                        TcpCipher::new(self.method, user.key(), salt)
+                    }
+                }
+            } else {
+                unreachable!("user_manager must not be None")
+            }
+        } else {
+            TcpCipher::new(self.method, key, salt)
+        };
 
         // Decrypt the header chunk
         if !cipher.decrypt_packet(header_chunk) {
@@ -402,6 +496,16 @@ impl DecryptedReader {
             _ => (self.data_chunk_count, 0),
         }
     }
+
+    /// Get authenticated user key
+    pub fn user_key(&self) -> Option<&[u8]> {
+        self.user_key.as_deref()
+    }
+
+    /// Check if handshake finished
+    pub fn handshaked(&self) -> bool {
+        self.has_handshaked
+    }
 }
 
 enum EncryptWriteState {
@@ -414,6 +518,7 @@ enum EncryptWriteState {
 pub struct EncryptedWriter {
     stream_ty: StreamType,
     cipher: TcpCipher,
+    method: CipherKind,
     buffer: BytesMut,
     state: EncryptWriteState,
     salt: Bytes,
@@ -423,13 +528,85 @@ pub struct EncryptedWriter {
 impl EncryptedWriter {
     /// Creates a new EncryptedWriter
     pub fn new(stream_ty: StreamType, method: CipherKind, key: &[u8], nonce: &[u8]) -> EncryptedWriter {
+        static EMPTY_IDENTITY: [Bytes; 0] = [];
+        EncryptedWriter::with_identity(stream_ty, method, key, nonce, &EMPTY_IDENTITY)
+    }
+
+    /// Creates a new EncryptedWriter with identities
+    pub fn with_identity(
+        stream_ty: StreamType,
+        method: CipherKind,
+        key: &[u8],
+        nonce: &[u8],
+        identity_keys: &[Bytes],
+    ) -> EncryptedWriter {
         // nonce should be sent with the first packet
-        let mut buffer = BytesMut::with_capacity(nonce.len());
+        let mut buffer = BytesMut::with_capacity(nonce.len() + identity_keys.len() * 16);
         buffer.put(nonce);
+
+        // Extensible Identity Headers
+        // https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+        #[inline]
+        fn make_eih(method: CipherKind, sub_key: &[u8], ipsk: &[u8], buffer: &mut BytesMut) {
+            let ipsk_hash = blake3::hash(ipsk);
+            let ipsk_plain_text = &ipsk_hash.as_bytes()[0..16];
+
+            match method {
+                CipherKind::AEAD2022_BLAKE3_AES_128_GCM => {
+                    let enc_key = &sub_key[0..16];
+                    let cipher = Aes128::new_from_slice(enc_key).expect("AES-128");
+
+                    let ipsk_plain_text = Block::from_slice(ipsk_plain_text);
+                    let mut block = Block::from([0u8; 16]);
+                    cipher.encrypt_block_b2b(ipsk_plain_text, &mut block);
+
+                    trace!(
+                        "client EIH {:?}, hash: {:?}",
+                        ByteStr::new(block.as_slice()),
+                        ByteStr::new(ipsk_plain_text)
+                    );
+                    buffer.put(block.as_slice());
+                }
+                CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
+                    let enc_key = &sub_key[0..32];
+                    let cipher = Aes256::new_from_slice(enc_key).expect("AES-256");
+
+                    let ipsk_plain_text = Block::from_slice(ipsk_plain_text);
+                    let mut block = Block::from([0u8; 16]);
+                    cipher.encrypt_block_b2b(ipsk_plain_text, &mut block);
+
+                    trace!(
+                        "client EIH {:?}, hash: {:?}",
+                        ByteStr::new(block.as_slice()),
+                        ByteStr::new(ipsk_plain_text)
+                    );
+                    buffer.put(block.as_slice());
+                }
+                _ => unreachable!("{} doesn't support EIH", method),
+            }
+        }
+
+        if stream_ty == StreamType::Client && method_support_eih(method) {
+            let mut sub_key: Option<[u8; blake3::OUT_LEN]> = None;
+
+            for ipsk in identity_keys {
+                if let Some(ref sub_key) = sub_key {
+                    make_eih(method, sub_key, ipsk, &mut buffer);
+                }
+
+                let key_material = [ipsk, nonce].concat();
+                sub_key = Some(blake3::derive_key(AEAD2022_EIH_SUBKEY_CONTEXT, &key_material));
+            }
+
+            if let Some(ref sub_key) = sub_key {
+                make_eih(method, sub_key, key, &mut buffer);
+            }
+        }
 
         EncryptedWriter {
             stream_ty,
             cipher: TcpCipher::new(method, key, nonce),
+            method,
             buffer,
             state: EncryptWriteState::AssembleHeader,
             salt: Bytes::copy_from_slice(nonce),
@@ -446,6 +623,11 @@ impl EncryptedWriter {
     pub fn set_request_salt(&mut self, request_salt: Bytes) {
         debug_assert!(self.stream_ty == StreamType::Server);
         self.request_salt = Some(request_salt);
+    }
+
+    /// Reset cipher with key
+    pub fn reset_cipher_with_key(&mut self, key: &[u8]) {
+        self.cipher = TcpCipher::new(self.method, key, &self.salt);
     }
 
     /// Attempt to write encrypted data into the writer
