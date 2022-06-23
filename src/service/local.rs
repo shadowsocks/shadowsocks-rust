@@ -27,8 +27,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    validator,
+    monitor, validator,
 };
 
 /// Defines command line options
@@ -763,12 +762,12 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 "missing `local_address`, consider specifying it by --local-addr command line option, \
                     or \"local_address\" and \"local_port\" in configuration file"
             );
-            return ExitCode::SUCCESS;
+            return crate::EXIT_CODE_INSUFFICIENT_PARAMS.into();
         }
 
         if let Err(err) = config.check_integrity() {
             eprintln!("config integrity check failed, {}", err);
-            return ExitCode::SUCCESS;
+            return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
         }
 
         #[cfg(unix)]
