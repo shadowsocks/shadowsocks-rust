@@ -9,7 +9,7 @@
 //! +-------+----------+
 //! ```
 
-use std::io::{self, Cursor, ErrorKind};
+use std::io::Cursor;
 
 use byte_string::ByteStr;
 use bytes::{BufMut, BytesMut};
@@ -18,8 +18,20 @@ use log::trace;
 use crate::{
     context::Context,
     crypto::{v1::Cipher, CipherKind},
-    relay::socks5::Address,
+    relay::socks5::{Address, Error as Socks5Error},
 };
+
+/// Stream protocol error
+#[derive(thiserror::Error, Debug)]
+pub enum ProtocolError {
+    #[error("packet too short, at least {0} bytes, but only {1} bytes")]
+    PacketTooShort(usize, usize),
+    #[error("invalid address in packet, {0}")]
+    InvalidAddress(Socks5Error),
+}
+
+/// Stream protocol result
+pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 /// Encrypt UDP stream protocol packet
 pub fn encrypt_payload_stream(
@@ -59,13 +71,12 @@ pub async fn decrypt_payload_stream(
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
-) -> io::Result<(usize, Address)> {
+) -> ProtocolResult<(usize, Address)> {
     let plen = payload.len();
     let iv_len = method.iv_len();
 
     if plen < iv_len {
-        let err = io::Error::new(ErrorKind::InvalidData, "udp packet too short for iv");
-        return Err(err);
+        return Err(ProtocolError::PacketTooShort(iv_len, plen));
     }
 
     let (iv, data) = payload.split_at_mut(iv_len);
@@ -85,16 +96,13 @@ pub async fn decrypt_payload_stream(
     Ok((data_length, addr))
 }
 
-async fn parse_packet(buf: &[u8]) -> io::Result<(usize, Address)> {
+async fn parse_packet(buf: &[u8]) -> ProtocolResult<(usize, Address)> {
     let mut cur = Cursor::new(buf);
     match Address::read_from(&mut cur).await {
         Ok(address) => {
             let pos = cur.position() as usize;
             Ok((pos, address))
         }
-        Err(..) => {
-            let err = io::Error::new(ErrorKind::InvalidData, "parse udp packet Address failed");
-            Err(err)
-        }
+        Err(err) => Err(ProtocolError::InvalidAddress(err)),
     }
 }

@@ -49,7 +49,7 @@ use std::{
     cmp::Ordering,
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    io::{self, Cursor, ErrorKind, Read, Seek, SeekFrom},
+    io::{self, Cursor, Read, Seek, SeekFrom},
     rc::Rc,
     slice,
     time::{Duration, SystemTime},
@@ -75,7 +75,10 @@ use crate::{
         v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
         CipherKind,
     },
-    relay::{get_aead_2022_padding_size, socks5::Address},
+    relay::{
+        get_aead_2022_padding_size,
+        socks5::{Address, Error as Socks5Error},
+    },
 };
 
 use super::options::UdpSocketControlData;
@@ -83,6 +86,28 @@ use super::options::UdpSocketControlData;
 const CLIENT_SOCKET_TYPE: u8 = 0;
 const SERVER_SOCKET_TYPE: u8 = 1;
 const SERVER_PACKET_TIMESTAMP_MAX_DIFF: u64 = 30;
+
+/// AEAD 2022 protocol error
+#[derive(thiserror::Error, Debug)]
+pub enum ProtocolError {
+    #[error("packet too short, at least {0} bytes, but found {1} bytes")]
+    PacketTooShort(usize, usize),
+    #[error("invalid address in packet, {0}")]
+    InvalidAddress(Socks5Error),
+    #[error("decrypt payload error")]
+    DecryptPayloadError,
+    #[error("invalid client user identity {:?}", ByteStr::new(&.0))]
+    InvalidClientUser(Bytes),
+    #[error("invalid socket type, expecting {0:#x}, but found {1:#x}")]
+    InvalidSocketType(u8, u8),
+    #[error("invalid timestamp {0}")]
+    InvalidTimestamp(u64),
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+}
+
+/// AEAD 2022 protocol result
+pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 struct CipherKey {
@@ -241,7 +266,7 @@ fn decrypt_message(
     key: &[u8],
     packet: &mut [u8],
     user_manager: Option<&ServerUserManager>,
-) -> bool {
+) -> ProtocolResult<()> {
     match method {
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => {
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
@@ -261,7 +286,7 @@ fn decrypt_message(
             let cipher = get_cipher(method, key, session_id);
 
             if !cipher.decrypt_packet(nonce, message) {
-                return false;
+                return Err(ProtocolError::DecryptPayloadError);
             }
         }
         #[cfg(feature = "aead-cipher-2022-extra")]
@@ -283,7 +308,7 @@ fn decrypt_message(
             let cipher = get_cipher(method, key, session_id);
 
             if !cipher.decrypt_packet(nonce, message) {
-                return false;
+                return Err(ProtocolError::DecryptPayloadError);
             }
         }
         CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM => {
@@ -352,7 +377,7 @@ fn decrypt_message(
                     match user_manager.get_user_by_hash(&eih) {
                         None => {
                             error!("user with identity {:?} not found", ByteStr::new(&eih));
-                            return false;
+                            return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(&eih)));
                         }
                         Some(user) => {
                             trace!("user {} choosen by EIH", user.name());
@@ -368,13 +393,13 @@ fn decrypt_message(
 
             let nonce = &packet_header[4..16];
             if !cipher.decrypt_packet(nonce, message) {
-                return false;
+                return Err(ProtocolError::DecryptPayloadError);
             }
         }
         _ => unreachable!("{} is not an AEAD 2022 cipher", method),
     }
 
-    true
+    Ok(())
 }
 
 #[inline]
@@ -519,20 +544,18 @@ pub async fn decrypt_client_payload_aead_2022(
     key: &[u8],
     payload: &mut [u8],
     user_manager: Option<&ServerUserManager>,
-) -> io::Result<(usize, Address, UdpSocketControlData)> {
+) -> ProtocolResult<(usize, Address, UdpSocketControlData)> {
     let nonce_len = get_nonce_len(method);
     let tag_len = method.tag_len();
     let require_eih = method_support_eih(method) && user_manager.is_some();
     let eih_len = if require_eih { 16 } else { 0 };
 
-    if payload.len() < nonce_len + tag_len + 8 + 8 + eih_len + 1 + 8 + 2 {
-        let err = io::Error::new(ErrorKind::InvalidData, "udp packet too short");
-        return Err(err);
+    let header_len = nonce_len + tag_len + 8 + 8 + eih_len + 1 + 8 + 2;
+    if payload.len() < header_len {
+        return Err(ProtocolError::PacketTooShort(header_len, payload.len()));
     }
 
-    if !decrypt_message(context, method, key, payload, user_manager) {
-        return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
-    }
+    decrypt_message(context, method, key, payload, user_manager)?;
 
     let data = &payload[nonce_len..payload.len() - tag_len];
     let mut cursor = Cursor::new(data);
@@ -553,19 +576,13 @@ pub async fn decrypt_client_payload_aead_2022(
 
     let socket_type = cursor.get_u8();
     if socket_type != CLIENT_SOCKET_TYPE {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("invalid socket type {}", socket_type),
-        ));
+        return Err(ProtocolError::InvalidSocketType(CLIENT_SOCKET_TYPE, socket_type));
     }
     let timestamp = cursor.get_u64();
 
     let now = get_now_timestamp();
     if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("received TCP response header with aged timestamp: {}", timestamp),
-        ));
+        return Err(ProtocolError::InvalidTimestamp(timestamp));
     }
 
     let padding_size = cursor.get_u16() as usize;
@@ -580,7 +597,10 @@ pub async fn decrypt_client_payload_aead_2022(
         user_hash,
     };
 
-    let addr = Address::read_from(&mut cursor).await?;
+    let addr = match Address::read_from(&mut cursor).await {
+        Ok(a) => a,
+        Err(err) => return Err(ProtocolError::InvalidAddress(err)),
+    };
 
     let payload_start = cursor.position() as usize;
     let payload_len = data.len() - payload_start;
@@ -642,17 +662,15 @@ pub async fn decrypt_server_payload_aead_2022(
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
-) -> io::Result<(usize, Address, UdpSocketControlData)> {
+) -> ProtocolResult<(usize, Address, UdpSocketControlData)> {
     let nonce_len = get_nonce_len(method);
     let tag_len = method.tag_len();
-    if payload.len() < nonce_len + tag_len + 8 + 8 + 1 + 8 + 2 {
-        let err = io::Error::new(ErrorKind::InvalidData, "udp packet too short");
-        return Err(err);
+    let header_len = nonce_len + tag_len + 8 + 8 + 1 + 8 + 2;
+    if payload.len() < header_len {
+        return Err(ProtocolError::PacketTooShort(header_len, payload.len()));
     }
 
-    if !decrypt_message(context, method, key, payload, None) {
-        return Err(io::Error::new(io::ErrorKind::Other, "invalid tag-in"));
-    }
+    decrypt_message(context, method, key, payload, None)?;
 
     let data = &payload[nonce_len..payload.len() - tag_len];
     let mut cursor = Cursor::new(data);
@@ -661,19 +679,13 @@ pub async fn decrypt_server_payload_aead_2022(
     let packet_id = cursor.get_u64();
     let socket_type = cursor.get_u8();
     if socket_type != SERVER_SOCKET_TYPE {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("invalid socket type {}", socket_type),
-        ));
+        return Err(ProtocolError::InvalidSocketType(SERVER_SOCKET_TYPE, socket_type));
     }
     let timestamp = cursor.get_u64();
 
     let now = get_now_timestamp();
     if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("received TCP response header with aged timestamp: {}", timestamp),
-        ));
+        return Err(ProtocolError::InvalidTimestamp(timestamp));
     }
 
     let client_session_id = cursor.get_u64();
@@ -690,7 +702,10 @@ pub async fn decrypt_server_payload_aead_2022(
         user_hash: None,
     };
 
-    let addr = Address::read_from(&mut cursor).await?;
+    let addr = match Address::read_from(&mut cursor).await {
+        Ok(a) => a,
+        Err(err) => return Err(ProtocolError::InvalidAddress(err)),
+    };
 
     let payload_start = cursor.position() as usize;
     let payload_len = data.len() - payload_start;

@@ -19,7 +19,7 @@
 //! | Fixed  | Variable  |   Fixed   |
 //! +--------+-----------+-----------+
 //! ```
-use std::io::{self, Cursor, ErrorKind};
+use std::io::Cursor;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
@@ -27,7 +27,7 @@ use crate::{
     config::ServerUserManager,
     context::Context,
     crypto::{CipherCategory, CipherKind},
-    relay::socks5::Address,
+    relay::socks5::{Address, Error as Socks5Error},
 };
 
 #[cfg(feature = "aead-cipher-2022")]
@@ -43,6 +43,24 @@ use super::{
     aead::{decrypt_payload_aead, encrypt_payload_aead},
     options::UdpSocketControlData,
 };
+
+/// UDP shadowsocks protocol errors
+#[derive(thiserror::Error, Debug)]
+pub enum ProtocolError {
+    #[error("invalid address in packet, {0}")]
+    InvalidAddress(Socks5Error),
+    #[cfg(feature = "stream-cipher")]
+    #[error(transparent)]
+    StreamError(#[from] super::stream::ProtocolError),
+    #[error(transparent)]
+    AeadError(#[from] super::aead::ProtocolError),
+    #[cfg(feature = "aead-cipher-2022")]
+    #[error(transparent)]
+    Aead2022Error(#[from] super::aead_2022::ProtocolError),
+}
+
+/// UDP shadowsocks protocol errors
+pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 /// Encrypt `Client -> Server` payload into ShadowSocks UDP encrypted packet
 pub fn encrypt_client_payload(
@@ -119,7 +137,7 @@ pub async fn decrypt_client_payload(
     key: &[u8],
     payload: &mut [u8],
     user_manager: Option<&ServerUserManager>,
-) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
+) -> ProtocolResult<(usize, Address, Option<UdpSocketControlData>)> {
     match method.category() {
         CipherCategory::None => {
             let _ = user_manager;
@@ -131,10 +149,7 @@ pub async fn decrypt_client_payload(
                     payload.copy_within(pos.., 0);
                     Ok((payload.len() - pos, address, None))
                 }
-                Err(..) => {
-                    let err = io::Error::new(ErrorKind::InvalidData, "parse udp packet Address failed");
-                    Err(err)
-                }
+                Err(err) => Err(ProtocolError::InvalidAddress(err)),
             }
         }
         #[cfg(feature = "stream-cipher")]
@@ -143,17 +158,20 @@ pub async fn decrypt_client_payload(
             decrypt_payload_stream(context, method, key, payload)
                 .await
                 .map(|(n, a)| (n, a, None))
+                .map_err(Into::into)
         }
         CipherCategory::Aead => {
             let _ = user_manager;
             decrypt_payload_aead(context, method, key, payload)
                 .await
                 .map(|(n, a)| (n, a, None))
+                .map_err(Into::into)
         }
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => decrypt_client_payload_aead_2022(context, method, key, payload, user_manager)
             .await
-            .map(|(n, a, c)| (n, a, Some(c))),
+            .map(|(n, a, c)| (n, a, Some(c)))
+            .map_err(Into::into),
     }
 }
 
@@ -163,7 +181,7 @@ pub async fn decrypt_server_payload(
     method: CipherKind,
     key: &[u8],
     payload: &mut [u8],
-) -> io::Result<(usize, Address, Option<UdpSocketControlData>)> {
+) -> ProtocolResult<(usize, Address, Option<UdpSocketControlData>)> {
     match method.category() {
         CipherCategory::None => {
             let mut cur = Cursor::new(payload);
@@ -174,22 +192,22 @@ pub async fn decrypt_server_payload(
                     payload.copy_within(pos.., 0);
                     Ok((payload.len() - pos, address, None))
                 }
-                Err(..) => {
-                    let err = io::Error::new(ErrorKind::InvalidData, "parse udp packet Address failed");
-                    Err(err)
-                }
+                Err(err) => Err(ProtocolError::InvalidAddress(err)),
             }
         }
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload)
             .await
-            .map(|(n, a)| (n, a, None)),
+            .map(|(n, a)| (n, a, None))
+            .map_err(Into::into),
         CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload)
             .await
-            .map(|(n, a)| (n, a, None)),
+            .map(|(n, a)| (n, a, None))
+            .map_err(Into::into),
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => decrypt_server_payload_aead_2022(context, method, key, payload)
             .await
-            .map(|(n, a, c)| (n, a, Some(c))),
+            .map(|(n, a, c)| (n, a, Some(c)))
+            .map_err(Into::into),
     }
 }

@@ -208,7 +208,10 @@ where
         loop {
             match this.reader_state {
                 ProxyClientStreamReadState::Established => {
-                    return this.stream.poll_read_decrypted(cx, this.context, buf);
+                    return this
+                        .stream
+                        .poll_read_decrypted(cx, this.context, buf)
+                        .map_err(Into::into);
                 }
                 #[cfg(feature = "aead-cipher-2022")]
                 ProxyClientStreamReadState::CheckRequestNonce => {
@@ -326,7 +329,7 @@ where
                     return Ok(buf.len()).into();
                 }
                 ProxyClientStreamWriteState::Connected => {
-                    return this.stream.poll_write_encrypted(cx, buf);
+                    return this.stream.poll_write_encrypted(cx, buf).map_err(Into::into);
                 }
             }
         }
@@ -334,11 +337,11 @@ where
 
     #[inline]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.project().stream.poll_flush(cx)
+        self.project().stream.poll_flush(cx).map_err(Into::into)
     }
 
     #[inline]
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.project().stream.poll_shutdown(cx)
+        self.project().stream.poll_shutdown(cx).map_err(Into::into)
     }
 }
