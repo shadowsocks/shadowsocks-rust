@@ -103,7 +103,7 @@ pub enum ProtocolError {
     HeaderTooShort(usize, usize),
     #[error("missing extended identity header")]
     MissingExtendedIdentityHeader,
-    #[error("invalid client user identity {:?}", ByteStr::new(&.0))]
+    #[error("invalid client user identity {:?}", ByteStr::new(.0))]
     InvalidClientUser(Bytes),
     #[error("decrypt header chunk failed")]
     DecryptHeaderChunkError,
@@ -477,7 +477,7 @@ impl DecryptedReader {
             let n = read_buf.filled().len();
             if n == 0 {
                 if !self.buffer.is_empty() {
-                    return Err(io::Error::from(ErrorKind::UnexpectedEof).into()).into();
+                    return Err(ErrorKind::UnexpectedEof.into()).into();
                 } else {
                     return Ok(0).into();
                 }

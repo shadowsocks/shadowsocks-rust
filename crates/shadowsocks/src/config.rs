@@ -215,6 +215,12 @@ impl ServerUserManager {
     }
 }
 
+impl Default for ServerUserManager {
+    fn default() -> ServerUserManager {
+        ServerUserManager::new()
+    }
+}
+
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -331,7 +337,7 @@ where
     let mut enc_key = vec![0u8; method.key_len()].into_boxed_slice();
     make_derived_key(method, &password, &mut enc_key);
 
-    return (password, enc_key, Vec::new());
+    (password, enc_key, Vec::new())
 }
 
 impl ServerConfig {

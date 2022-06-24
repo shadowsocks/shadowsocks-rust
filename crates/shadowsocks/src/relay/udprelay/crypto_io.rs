@@ -63,6 +63,7 @@ pub enum ProtocolError {
 pub type ProtocolResult<T> = Result<T, ProtocolError>;
 
 /// Encrypt `Client -> Server` payload into ShadowSocks UDP encrypted packet
+#[allow(clippy::too_many_arguments)]
 pub fn encrypt_client_payload(
     context: &Context,
     method: CipherKind,

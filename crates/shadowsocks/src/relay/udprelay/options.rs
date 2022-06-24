@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 #[non_exhaustive]
 pub struct UdpSocketControlData {
     /// Session ID in client.
@@ -17,15 +17,4 @@ pub struct UdpSocketControlData {
     pub packet_id: u64,
     /// Extensible Identity Header user's hash
     pub user_hash: Option<Bytes>,
-}
-
-impl Default for UdpSocketControlData {
-    fn default() -> UdpSocketControlData {
-        UdpSocketControlData {
-            client_session_id: 0,
-            server_session_id: 0,
-            packet_id: 0,
-            user_hash: None,
-        }
-    }
 }

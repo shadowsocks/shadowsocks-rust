@@ -52,7 +52,7 @@ pub enum ProxySocketError {
     ProtocolError(ProtocolError),
     #[error("peer: {0}, {1}")]
     ProtocolErrorWithPeer(SocketAddr, ProtocolError),
-    #[error("invalid server user identity {:?}", ByteStr::new(&.0))]
+    #[error("invalid server user identity {:?}", ByteStr::new(.0))]
     InvalidServerUser(Bytes),
 }
 

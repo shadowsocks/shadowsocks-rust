@@ -96,7 +96,7 @@ pub enum ProtocolError {
     InvalidAddress(Socks5Error),
     #[error("decrypt payload error")]
     DecryptPayloadError,
-    #[error("invalid client user identity {:?}", ByteStr::new(&.0))]
+    #[error("invalid client user identity {:?}", ByteStr::new(.0))]
     InvalidClientUser(Bytes),
     #[error("invalid socket type, expecting {0:#x}, but found {1:#x}")]
     InvalidSocketType(u8, u8),
@@ -374,10 +374,10 @@ fn decrypt_message(
                         eih[i] ^= session_id_packet_id[i];
                     }
 
-                    match user_manager.get_user_by_hash(&eih) {
+                    match user_manager.get_user_by_hash(eih) {
                         None => {
-                            error!("user with identity {:?} not found", ByteStr::new(&eih));
-                            return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(&eih)));
+                            error!("user with identity {:?} not found", ByteStr::new(eih));
+                            return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(eih)));
                         }
                         Some(user) => {
                             trace!("user {} chosen by EIH", user.name());
@@ -414,6 +414,7 @@ fn get_nonce_len(method: CipherKind) -> usize {
 }
 
 /// Encrypt `Client -> Server` UDP AEAD protocol packet
+#[allow(clippy::too_many_arguments)]
 pub fn encrypt_client_payload_aead_2022(
     context: &Context,
     method: CipherKind,
@@ -508,7 +509,7 @@ pub fn encrypt_client_payload_aead_2022(
             .map(AsRef::as_ref)
             .zip(identity_keys.iter().map(AsRef::as_ref).skip(1).chain(Some(key)))
         {
-            trace!("DST: {:?}", ByteStr::new(&dst));
+            trace!("DST: {:?}", ByteStr::new(dst));
             let session_id_packet_id = &dst[nonce_size..nonce_size + 16];
 
             let mut identity_header = [0u8; 16];
