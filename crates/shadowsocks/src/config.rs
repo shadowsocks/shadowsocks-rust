@@ -182,7 +182,7 @@ impl ServerUser {
 /// Server multi-users manager
 #[derive(Clone, Debug)]
 pub struct ServerUserManager {
-    users: HashMap<Bytes, ServerUser>,
+    users: HashMap<Bytes, Arc<ServerUser>>,
 }
 
 impl ServerUserManager {
@@ -196,12 +196,17 @@ impl ServerUserManager {
         // https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
         let hash = blake3::hash(user.key());
         let user_hash = Bytes::from(hash.as_bytes()[0..16].to_owned());
-        self.users.insert(user_hash, user);
+        self.users.insert(user_hash, Arc::new(user));
     }
 
     /// Get user by hash key
     pub fn get_user_by_hash(&self, user_hash: &[u8]) -> Option<&ServerUser> {
-        self.users.get(user_hash)
+        self.users.get(user_hash).map(AsRef::as_ref)
+    }
+
+    /// Get user by hash key cloned
+    pub fn clone_user_by_hash(&self, user_hash: &[u8]) -> Option<Arc<ServerUser>> {
+        self.users.get(user_hash).cloned()
     }
 
     /// Number of users
@@ -211,7 +216,7 @@ impl ServerUserManager {
 
     /// Iterate users
     pub fn users_iter(&self) -> impl Iterator<Item = &ServerUser> {
-        self.users.iter().map(|(_, v)| v)
+        self.users.iter().map(|(_, v)| v.as_ref())
     }
 }
 
@@ -295,6 +300,18 @@ fn make_derived_key(_method: CipherKind, password: &str, enc_key: &mut [u8]) {
     openssl_bytes_to_key(password.as_bytes(), enc_key);
 }
 
+/// Check if method supports Extended Identity Header
+///
+/// https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+#[cfg(feature = "aead-cipher-2022")]
+#[inline]
+pub fn method_support_eih(method: CipherKind) -> bool {
+    matches!(
+        method,
+        CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM
+    )
+}
+
 fn password_to_keys<P>(method: CipherKind, password: P) -> (String, Box<[u8]>, Vec<Bytes>)
 where
     P: Into<String>,
@@ -302,10 +319,7 @@ where
     let password = password.into();
 
     #[cfg(feature = "aead-cipher-2022")]
-    if matches!(
-        method,
-        CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM
-    ) {
+    if method_support_eih(method) {
         // Extensible Identity Headers
         // iPSK1:iPSK2:iPSK3:...:uPSK
 

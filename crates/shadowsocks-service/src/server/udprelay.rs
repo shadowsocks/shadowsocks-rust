@@ -14,6 +14,7 @@ use log::{debug, error, info, trace, warn};
 use lru_time_cache::LruCache;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use shadowsocks::{
+    config::ServerUser,
     crypto::{CipherCategory, CipherKind},
     lookup_then,
     net::{AcceptOpts, AddrFamily, UdpSocket as OutboundUdpSocket},
@@ -417,7 +418,7 @@ impl UdpAssociation {
 struct ClientSessionContext {
     client_session_id: u64,
     packet_window_filter: PacketWindowFilter,
-    client_user_hash: Option<Bytes>,
+    client_user: Option<Arc<ServerUser>>,
 }
 
 impl ClientSessionContext {
@@ -425,7 +426,7 @@ impl ClientSessionContext {
         ClientSessionContext {
             client_session_id,
             packet_window_filter: PacketWindowFilter::new(),
-            client_user_hash: None,
+            client_user: None,
         }
     }
 }
@@ -625,7 +626,7 @@ impl UdpAssociationContext {
                 return;
             }
 
-            session_context.client_user_hash = control.user_hash.clone();
+            session_context.client_user = control.user.clone();
         }
 
         if let Err(err) = self.dispatch_received_outbound_packet(target_addr, data).await {
@@ -776,7 +777,7 @@ impl UdpAssociationContext {
                 control.client_session_id = client_session.client_session_id;
                 control.server_session_id = self.server_session_id;
                 control.packet_id = self.server_packet_id;
-                control.user_hash = client_session.client_user_hash.clone();
+                control.user = client_session.client_user.clone();
 
                 if let Err(err) = self
                     .inbound

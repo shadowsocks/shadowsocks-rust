@@ -1,8 +1,10 @@
 //! UDP Socket options and extra data
 
-use bytes::Bytes;
+use std::sync::Arc;
 
-#[derive(Debug, Clone, Eq, PartialEq, Default)]
+use crate::config::ServerUser;
+
+#[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct UdpSocketControlData {
     /// Session ID in client.
@@ -15,6 +17,6 @@ pub struct UdpSocketControlData {
     pub server_session_id: u64,
     /// Packet counter
     pub packet_id: u64,
-    /// Extensible Identity Header user's hash
-    pub user_hash: Option<Bytes>,
+    /// Server user instance
+    pub user: Option<Arc<ServerUser>>,
 }

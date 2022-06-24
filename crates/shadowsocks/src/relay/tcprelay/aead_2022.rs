@@ -68,7 +68,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use super::{crypto_io::StreamType, proxy_stream::protocol::v2::SERVER_STREAM_TIMESTAMP_MAX_DIFF};
 use crate::{
-    config::ServerUserManager,
+    config::{method_support_eih, ServerUserManager},
     context::Context,
     crypto::{v2::tcp::TcpCipher, CipherKind},
 };
@@ -79,14 +79,6 @@ fn get_now_timestamp() -> u64 {
         Ok(n) => n.as_secs(),
         Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
     }
-}
-
-#[inline]
-fn method_support_eih(method: CipherKind) -> bool {
-    matches!(
-        method,
-        CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM
-    )
 }
 
 /// AEAD packet payload must be smaller than 0xFFFF (u16::MAX)

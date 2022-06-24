@@ -49,9 +49,10 @@ use std::{
     cmp::Ordering,
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    io::{self, Cursor, Read, Seek, SeekFrom},
+    io::{self, Cursor, Seek, SeekFrom},
     rc::Rc,
     slice,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -69,7 +70,7 @@ use lru_time_cache::LruCache;
 #[cfg(feature = "aead-cipher-2022-extra")]
 use crate::crypto::v2::udp::ChaCha8Poly1305Cipher;
 use crate::{
-    config::ServerUserManager,
+    config::{method_support_eih, ServerUser, ServerUserManager},
     context::Context,
     crypto::{
         v2::udp::{ChaCha20Poly1305Cipher, UdpCipher},
@@ -166,14 +167,6 @@ pub fn get_now_timestamp() -> u64 {
     }
 }
 
-#[inline]
-fn method_support_eih(method: CipherKind) -> bool {
-    matches!(
-        method,
-        CipherKind::AEAD2022_BLAKE3_AES_128_GCM | CipherKind::AEAD2022_BLAKE3_AES_256_GCM
-    )
-}
-
 fn get_cipher(method: CipherKind, key: &[u8], session_id: u64) -> Rc<UdpCipher> {
     CIPHER_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -266,7 +259,9 @@ fn decrypt_message(
     key: &[u8],
     packet: &mut [u8],
     user_manager: Option<&ServerUserManager>,
-) -> ProtocolResult<()> {
+) -> ProtocolResult<Option<Arc<ServerUser>>> {
+    let mut client_user = None;
+
     match method {
         CipherKind::AEAD2022_BLAKE3_CHACHA20_POLY1305 => {
             // ChaCha20-Poly1305 uses PSK as key, prepended nonce in packet
@@ -374,14 +369,16 @@ fn decrypt_message(
                         eih[i] ^= session_id_packet_id[i];
                     }
 
-                    match user_manager.get_user_by_hash(eih) {
+                    match user_manager.clone_user_by_hash(eih) {
                         None => {
                             error!("user with identity {:?} not found", ByteStr::new(eih));
                             return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(eih)));
                         }
                         Some(user) => {
                             trace!("user {} chosen by EIH", user.name());
-                            get_cipher(method, user.key(), session_id)
+                            let cipher = get_cipher(method, user.key(), session_id);
+                            client_user = Some(user);
+                            cipher
                         }
                     }
                 } else {
@@ -399,7 +396,7 @@ fn decrypt_message(
         _ => unreachable!("{} is not an AEAD 2022 cipher", method),
     }
 
-    Ok(())
+    Ok(client_user)
 }
 
 #[inline]
@@ -556,7 +553,7 @@ pub async fn decrypt_client_payload_aead_2022(
         return Err(ProtocolError::PacketTooShort(header_len, payload.len()));
     }
 
-    decrypt_message(context, method, key, payload, user_manager)?;
+    let user = decrypt_message(context, method, key, payload, user_manager)?;
 
     let data = &payload[nonce_len..payload.len() - tag_len];
     let mut cursor = Cursor::new(data);
@@ -564,15 +561,8 @@ pub async fn decrypt_client_payload_aead_2022(
     let client_session_id = cursor.get_u64();
     let packet_id = cursor.get_u64();
 
-    let mut user_hash = None;
     if require_eih {
-        let mut eih = BytesMut::with_capacity(16);
-        unsafe {
-            eih.set_len(16);
-        }
-        cursor.read_exact(&mut eih)?;
-
-        user_hash = Some(eih.freeze());
+        cursor.advance(16);
     }
 
     let socket_type = cursor.get_u8();
@@ -595,7 +585,7 @@ pub async fn decrypt_client_payload_aead_2022(
         client_session_id,
         server_session_id: 0,
         packet_id,
-        user_hash,
+        user,
     };
 
     let addr = match Address::read_from(&mut cursor).await {
@@ -671,7 +661,8 @@ pub async fn decrypt_server_payload_aead_2022(
         return Err(ProtocolError::PacketTooShort(header_len, payload.len()));
     }
 
-    decrypt_message(context, method, key, payload, None)?;
+    let user = decrypt_message(context, method, key, payload, None)?;
+    debug_assert!(user.is_none(), "server respond packet shouldn't have EIH");
 
     let data = &payload[nonce_len..payload.len() - tag_len];
     let mut cursor = Cursor::new(data);
@@ -700,7 +691,7 @@ pub async fn decrypt_server_payload_aead_2022(
         client_session_id,
         server_session_id,
         packet_id,
-        user_hash: None,
+        user: None,
     };
 
     let addr = match Address::read_from(&mut cursor).await {

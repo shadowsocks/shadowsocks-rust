@@ -196,18 +196,9 @@ impl ProxySocket {
             UdpSocketType::Server => {
                 let mut key = self.key.as_ref();
 
-                if let Some(ref user_hash) = control.user_hash {
-                    if let Some(ref user_manager) = self.user_manager {
-                        match user_manager.get_user_by_hash(user_hash) {
-                            None => {
-                                return Err(ProxySocketError::InvalidServerUser(user_hash.clone()));
-                            }
-                            Some(user) => {
-                                trace!("udp encrypt with user {} identity", user.name());
-                                key = user.key();
-                            }
-                        }
-                    }
+                if let Some(ref user) = control.user {
+                    trace!("udp encrypt with user {} identity", user.name());
+                    key = user.key();
                 }
 
                 encrypt_server_payload(&self.context, self.method, key, addr, control, payload, send_buf)
