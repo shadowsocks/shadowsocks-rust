@@ -380,7 +380,7 @@ fn decrypt_message(
                             return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(&eih)));
                         }
                         Some(user) => {
-                            trace!("user {} choosen by EIH", user.name());
+                            trace!("user {} chosen by EIH", user.name());
                             get_cipher(method, user.key(), session_id)
                         }
                     }

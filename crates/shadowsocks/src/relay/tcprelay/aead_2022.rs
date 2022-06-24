@@ -355,7 +355,7 @@ impl DecryptedReader {
                         return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(user_hash))).into();
                     }
                     Some(user) => {
-                        trace!("user {} choosen by EIH", user.name());
+                        trace!("user {} chosen by EIH", user.name());
                         self.user_key = Some(Bytes::copy_from_slice(user.key()));
                         TcpCipher::new(self.method, user.key(), salt)
                     }
