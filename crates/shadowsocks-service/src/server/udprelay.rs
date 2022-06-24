@@ -272,10 +272,7 @@ impl UdpServer {
         let (n, peer_addr, target_addr, control) = match l.recv_from_with_ctrl(buffer).await {
             Ok(s) => s,
             Err(err) => {
-                error!(
-                    "udp server recv_from failed, maybe wrong method or key, or under replay attacks. {}",
-                    err
-                );
+                error!("udp server recv packet failed. {}", err);
                 return None;
             }
         };

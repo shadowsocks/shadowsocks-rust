@@ -116,14 +116,14 @@ impl TcpServerClient {
             // }
             Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
                 debug!(
-                    "handshake failed, received EOF before a complete target Address, peer: {}",
+                    "tcp handshake failed, received EOF before a complete target Address, peer: {}",
                     self.peer_addr
                 );
                 return Ok(());
             }
             Err(err) if err.kind() == ErrorKind::TimedOut => {
                 debug!(
-                    "handshake failed, timeout before a complete target Address, peer: {}",
+                    "tcp handshake failed, timeout before a complete target Address, peer: {}",
                     self.peer_addr
                 );
                 return Ok(());
@@ -132,10 +132,7 @@ impl TcpServerClient {
                 // https://github.com/shadowsocks/shadowsocks-rust/issues/292
                 //
                 // Keep connection open. Except AEAD-2022
-                warn!(
-                    "handshake failed, maybe wrong method or key, or under replay attacks. peer: {}, error: {}",
-                    self.peer_addr, err
-                );
+                warn!("tcp handshake failed. peer: {}, {}", self.peer_addr, err);
 
                 #[cfg(feature = "aead-cipher-2022")]
                 if self.method.is_aead_2022() {
@@ -148,6 +145,8 @@ impl TcpServerClient {
                     return Ok(());
                 }
 
+                debug!("tcp silent-drop peer: {}", self.peer_addr);
+
                 // Unwrap and get the plain stream.
                 // Otherwise it will keep reporting decryption error before reaching EOF.
                 //
@@ -157,7 +156,7 @@ impl TcpServerClient {
                 let res = ignore_until_end(&mut stream).await;
 
                 trace!(
-                    "silent-drop peer: {} is now closing with result {:?}",
+                    "tcp silent-drop peer: {} is now closing with result {:?}",
                     self.peer_addr,
                     res
                 );
