@@ -101,8 +101,8 @@ pub enum ProtocolError {
     InvalidClientUser(Bytes),
     #[error("invalid socket type, expecting {0:#x}, but found {1:#x}")]
     InvalidSocketType(u8, u8),
-    #[error("invalid timestamp {0}")]
-    InvalidTimestamp(u64),
+    #[error("invalid timestamp {0} - now {1} = {}", *.0 as i64 - *.1 as i64)]
+    InvalidTimestamp(u64, u64),
     #[error(transparent)]
     IoError(#[from] io::Error),
 }
@@ -375,7 +375,7 @@ fn decrypt_message(
                             return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(eih)));
                         }
                         Some(user) => {
-                            trace!("user {} chosen by EIH", user.name());
+                            trace!("{:?} chosen by EIH", user);
                             let cipher = get_cipher(method, user.key(), session_id);
                             client_user = Some(user);
                             cipher
@@ -472,12 +472,6 @@ pub fn encrypt_client_payload_aead_2022(
 
             identity_header.copy_from_slice(plain_text);
 
-            trace!(
-                "identity_header: {:?}, session_id_packet_id: {:?}",
-                ByteStr::new(identity_header),
-                ByteStr::new(session_id_packet_id)
-            );
-
             for i in 0..16 {
                 identity_header[i] ^= session_id_packet_id[i];
             }
@@ -506,7 +500,6 @@ pub fn encrypt_client_payload_aead_2022(
             .map(AsRef::as_ref)
             .zip(identity_keys.iter().map(AsRef::as_ref).skip(1).chain(Some(key)))
         {
-            trace!("DST: {:?}", ByteStr::new(dst));
             let session_id_packet_id = &dst[nonce_size..nonce_size + 16];
 
             let mut identity_header = [0u8; 16];
@@ -573,7 +566,7 @@ pub async fn decrypt_client_payload_aead_2022(
 
     let now = get_now_timestamp();
     if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
-        return Err(ProtocolError::InvalidTimestamp(timestamp));
+        return Err(ProtocolError::InvalidTimestamp(timestamp, now));
     }
 
     let padding_size = cursor.get_u16() as usize;
@@ -677,7 +670,7 @@ pub async fn decrypt_server_payload_aead_2022(
 
     let now = get_now_timestamp();
     if now.abs_diff(timestamp) > SERVER_PACKET_TIMESTAMP_MAX_DIFF {
-        return Err(ProtocolError::InvalidTimestamp(timestamp));
+        return Err(ProtocolError::InvalidTimestamp(timestamp, now));
     }
 
     let client_session_id = cursor.get_u64();

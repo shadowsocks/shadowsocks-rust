@@ -197,7 +197,7 @@ impl ProxySocket {
                 let mut key = self.key.as_ref();
 
                 if let Some(ref user) = control.user {
-                    trace!("udp encrypt with user {} identity", user.name());
+                    trace!("udp encrypt with {:?} identity", user);
                     key = user.key();
                 }
 

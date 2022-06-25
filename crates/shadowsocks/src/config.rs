@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::{
     collections::HashMap,
     error,
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     net::SocketAddr,
     str::FromStr,
     sync::Arc,
@@ -13,6 +13,7 @@ use std::{
 };
 
 use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
+use byte_string::ByteStr;
 use bytes::Bytes;
 use cfg_if::cfg_if;
 use log::error;
@@ -149,10 +150,21 @@ impl ServerWeight {
 }
 
 /// Server's user
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ServerUser {
     name: String,
     key: Bytes,
+    identity_hash: Bytes,
+}
+
+impl Debug for ServerUser {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("ServerUser")
+            .field("name", &self.name)
+            .field("key", &base64::encode(&self.key))
+            .field("identity_hash", &ByteStr::new(&self.identity_hash))
+            .finish()
+    }
 }
 
 impl ServerUser {
@@ -162,9 +174,16 @@ impl ServerUser {
         N: Into<String>,
         K: Into<Bytes>,
     {
+        let name = name.into();
+        let key = key.into();
+
+        let hash = blake3::hash(&key);
+        let identity_hash = Bytes::from(hash.as_bytes()[0..16].to_owned());
+
         ServerUser {
-            name: name.into(),
-            key: key.into(),
+            name,
+            key,
+            identity_hash,
         }
     }
 
@@ -176,6 +195,20 @@ impl ServerUser {
     /// Encryption key of user
     pub fn key(&self) -> &[u8] {
         self.key.as_ref()
+    }
+
+    /// User's identity hash
+    ///
+    /// https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+    pub fn identity_hash(&self) -> &[u8] {
+        self.identity_hash.as_ref()
+    }
+
+    /// User's identity hash
+    ///
+    /// https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
+    pub fn clone_identity_hash(&self) -> Bytes {
+        self.identity_hash.clone()
     }
 }
 
@@ -193,10 +226,7 @@ impl ServerUserManager {
 
     /// Add a new user
     pub fn add_user(&mut self, user: ServerUser) {
-        // https://github.com/Shadowsocks-NET/shadowsocks-specs/blob/main/2022-2-shadowsocks-2022-extensible-identity-headers.md
-        let hash = blake3::hash(user.key());
-        let user_hash = Bytes::from(hash.as_bytes()[0..16].to_owned());
-        self.users.insert(user_hash, Arc::new(user));
+        self.users.insert(user.clone_identity_hash(), Arc::new(user));
     }
 
     /// Get user by hash key

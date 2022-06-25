@@ -105,8 +105,8 @@ pub enum ProtocolError {
     DecryptLengthError,
     #[error("invalid stream type, expecting {0:#x}, but found {1:#x}")]
     InvalidStreamType(u8, u8),
-    #[error("invalid timestamp")]
-    InvalidTimestamp(u64),
+    #[error("invalid timestamp {0} - now {1} = {}", *.0 as i64 - *.1 as i64)]
+    InvalidTimestamp(u64, u64),
 }
 
 /// AEAD 2022 Protocol result
@@ -347,7 +347,7 @@ impl DecryptedReader {
                         return Err(ProtocolError::InvalidClientUser(Bytes::copy_from_slice(user_hash))).into();
                     }
                     Some(user) => {
-                        trace!("user {} chosen by EIH", user.name());
+                        trace!("{:?} chosen by EIH", user);
                         self.user_key = Some(Bytes::copy_from_slice(user.key()));
                         TcpCipher::new(self.method, user.key(), salt)
                     }
@@ -378,7 +378,7 @@ impl DecryptedReader {
         let timestamp = header_reader.get_u64();
         let now = get_now_timestamp();
         if now.abs_diff(timestamp) > SERVER_STREAM_TIMESTAMP_MAX_DIFF {
-            return Err(ProtocolError::InvalidTimestamp(timestamp)).into();
+            return Err(ProtocolError::InvalidTimestamp(timestamp, now)).into();
         }
 
         // Server respond packet will contain a request salt
