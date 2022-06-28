@@ -34,5 +34,3 @@ jobs:
           target: ${{ matrix.bin }}
           tags: ${{ steps.metadata.outputs.tags }}
           push: true
-          context: .
-          file: ./docker/Dockerfile
