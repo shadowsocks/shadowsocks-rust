@@ -399,10 +399,15 @@ impl DecryptedReader {
             self.request_salt.as_deref().map(ByteStr::new)
         );
 
-        // Check repeated salt after first successful decryption #442
-        //
-        // If we check salt right here will allow attacker to flood our filter and eventually block all of our legitimate clients' requests.
-        context.check_nonce_replay(self.method, salt)?;
+        // Salt doesn't need to be checked in client, because it has request_salt in respond header
+        if self.stream_ty == StreamType::Server {
+            // Check repeated salt after first successful decryption #442
+            //
+            // If we check salt right here will allow attacker to flood our filter and eventually block all of our legitimate clients' requests.
+
+            context.check_nonce_replay(self.method, salt)?;
+        }
+
         self.salt = Some(Bytes::copy_from_slice(salt));
 
         self.cipher = Some(cipher);

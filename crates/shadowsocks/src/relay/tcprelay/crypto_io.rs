@@ -369,8 +369,10 @@ impl<S> CryptoStream<S> {
             CipherCategory::None => Vec::new(),
             #[cfg(feature = "aead-cipher-2022")]
             CipherCategory::Aead2022 => {
+                // AEAD-2022 has a request-salt in respond header, so the generated salt doesn't need to be remembered.
+
                 let mut local_salt = vec![0u8; prev_len];
-                context.generate_nonce(method, &mut local_salt, true);
+                context.generate_nonce(method, &mut local_salt, false);
                 trace!("generated AEAD cipher salt {:?}", ByteStr::new(&local_salt));
                 local_salt
             }
