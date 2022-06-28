@@ -85,8 +85,15 @@ pub fn run_as_user(uname: &str) {
     };
 
     unsafe {
-        let pwd = match uname.parse::<u32>() {
-            Ok(uid) => libc::getpwuid(uid),
+        let pwd = match uname.parse::<libc::uid_t>() {
+            Ok(uid) => {
+                let mut pwd = libc::getpwuid(uid);
+                if pwd.is_null() {
+                    let uname = CString::new(uname).expect("username");
+                    pwd = libc::getpwnam(uname.as_ptr())
+                }
+                pwd
+            }
             Err(..) => {
                 let uname = CString::new(uname).expect("username");
                 libc::getpwnam(uname.as_ptr())
