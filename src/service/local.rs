@@ -27,7 +27,8 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor, validator,
+    monitor,
+    validator,
 };
 
 /// Defines command line options
@@ -369,6 +370,17 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
                     .validator(validator::validate_usize)
                     .help("Sets the number of worker threads the `Runtime` will use"),
             );
+    }
+
+    #[cfg(unix)]
+    {
+        app = app.arg(
+            Arg::new("USER")
+                .long("user")
+                .short('a')
+                .takes_value(true)
+                .help("Run as another user"),
+        );
     }
 
     app
@@ -775,6 +787,12 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             use crate::daemonize;
             daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
         }
+
+        #[cfg(unix)]
+        if let Some(uname) = matches.value_of("USER") {
+            crate::sys::run_as_user(uname);
+        }
+        crate::sys::check_run_from_root();
 
         info!("shadowsocks local {} build {}", crate::VERSION, crate::BUILD_TIME);
 

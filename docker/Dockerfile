@@ -10,22 +10,22 @@ ADD . .
 
 RUN rustup install nightly && rustup default nightly && \
     case "$TARGETARCH" in \
-    "386") \
+        "386") \
         RUST_TARGET="i686-unknown-linux-musl" \
         MUSL="i686-linux-musl" \
-        ;; \
+    ;; \
     "amd64") \
         RUST_TARGET="x86_64-unknown-linux-musl" \
         MUSL="x86_64-linux-musl" \
-        ;; \
+    ;; \
     "arm64") \
         RUST_TARGET="aarch64-unknown-linux-musl" \
         MUSL="aarch64-linux-musl" \
-        ;; \
+    ;; \
     *) \
         echo "Doesn't support $TARGETARCH architecture" \
         exit 1 \
-        ;; \
+    ;; \
     esac && \
     wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ && \
     CC=/root/$MUSL-cross/bin/$MUSL-gcc && \
@@ -36,19 +36,21 @@ RUN rustup install nightly && rustup default nightly && \
 FROM alpine:3.14 AS sslocal
 
 COPY --from=build /root/shadowsocks-rust/target/release/sslocal /usr/bin
-
 COPY --from=build /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
+COPY --from=build /root/shadowsocks-rust/docker/docker-entrypoint.sh /
 
 USER nobody
 
-ENTRYPOINT [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
+ENTRYPOINT [ "/docker-entrypoint.sh" ]
+CMD [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
 
 FROM alpine:3.14 AS ssserver
 
 COPY --from=build /root/shadowsocks-rust/target/release/ssserver /usr/bin
-
 COPY --from=build /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
+COPY --from=build /root/shadowsocks-rust/docker/docker-entrypoint.sh /
 
 USER nobody
 
-ENTRYPOINT [ "ssserver", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
+ENTRYPOINT [ "/docker-entrypoint.sh" ]
+CMD [ "ssserver", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
