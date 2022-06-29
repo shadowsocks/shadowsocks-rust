@@ -173,7 +173,6 @@ impl Socks5UdpServer {
                             err
                         );
                     }
-                    tokio::task::yield_now().await
                 }
             }
         }
