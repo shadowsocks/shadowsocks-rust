@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.53.0-buster AS build
+FROM --platform=$BUILDPLATFORM rust:1.53.0-buster AS builder
 
 ARG TARGETARCH
 
@@ -35,22 +35,18 @@ RUN rustup install nightly && rustup default nightly && \
 
 FROM alpine:3.14 AS sslocal
 
-COPY --from=build /root/shadowsocks-rust/target/release/sslocal /usr/bin
-COPY --from=build /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
-COPY --from=build /root/shadowsocks-rust/docker/docker-entrypoint.sh /
+COPY --from=builder /root/shadowsocks-rust/target/release/sslocal /usr/local/bin/
+COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
+COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/local/bin/
 
-USER nobody
-
-ENTRYPOINT [ "/docker-entrypoint.sh" ]
+ENTRYPOINT [ "docker-entrypoint.sh" ]
 CMD [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
 
 FROM alpine:3.14 AS ssserver
 
-COPY --from=build /root/shadowsocks-rust/target/release/ssserver /usr/bin
-COPY --from=build /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
-COPY --from=build /root/shadowsocks-rust/docker/docker-entrypoint.sh /
+COPY --from=builder /root/shadowsocks-rust/target/release/ssserver /usr/local/bin/
+COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
+COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/local/bin/
 
-USER nobody
-
-ENTRYPOINT [ "/docker-entrypoint.sh" ]
-CMD [ "ssserver", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
+ENTRYPOINT [ "docker-entrypoint.sh" ]
+CMD [ "ssserver", "--log-without-time", "-a", "nobody", "-c", "/etc/shadowsocks-rust/config.json" ]
