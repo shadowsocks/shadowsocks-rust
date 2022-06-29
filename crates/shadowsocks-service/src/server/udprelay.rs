@@ -185,7 +185,6 @@ impl UdpServer {
                             // If Result is error, the channel receiver is closed. We should exit the task.
                             break;
                         }
-                        tokio::task::yield_now().await
                     }
                 }));
             }
