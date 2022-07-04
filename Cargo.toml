@@ -151,7 +151,7 @@ serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 thiserror = "1.0"
 
-clap = { version = "3.1", features = ["wrap_help", "suggestions"] }
+clap = { version = "3.2", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false, optional = true }
 sysexits = "0.3"
