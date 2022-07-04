@@ -1909,9 +1909,9 @@ dependencies = [
 
 [[package]]
 name = "sendfd"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc5d81e3352c1f4971e6e9d2c604fac7f5ecda6035a6b33e0fa1f89b90c7a852"
+checksum = "604b71b8fc267e13bb3023a2c901126c8f349393666a6d98ac1ae5729b701798"
 dependencies = [
  "libc",
  "tokio",
