@@ -477,7 +477,6 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         if let Some(uname) = matches.value_of("USER") {
             crate::sys::run_as_user(uname);
         }
-        crate::sys::check_run_from_root();
 
         info!("shadowsocks server {} build {}", crate::VERSION, crate::BUILD_TIME);
 

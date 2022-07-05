@@ -146,16 +146,3 @@ pub fn run_as_user(uname: &str) {
         }
     }
 }
-
-/// Check if running from a root user
-#[inline(always)]
-pub fn check_run_from_root() {
-    #[cfg(unix)]
-    unsafe {
-        use log::warn;
-
-        if libc::geteuid() == 0 {
-            warn!("running from root user");
-        }
-    }
-}
