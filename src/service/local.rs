@@ -38,7 +38,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .short('c')
             .long("config")
             .takes_value(true)
-            .help("Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)"),
+            .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html)"),
     )
     .arg(
         Arg::new("LOCAL_ADDR")
@@ -113,7 +113,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .long("plugin")
             .takes_value(true)
             .requires("SERVER_ADDR")
-            .help("SIP003 (https://shadowsocks.org/en/wiki/Plugin.html) plugin"),
+            .help("SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
     )
     .arg(
         Arg::new("PLUGIN_OPT")
@@ -127,7 +127,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .long("server-url")
             .takes_value(true)
             .validator(validator::validate_server_url)
-            .help("Server address in SIP002 (https://shadowsocks.org/en/wiki/SIP002-URI-Scheme.html) URL"),
+            .help("Server address in SIP002 (https://shadowsocks.org/guide/sip002.html) URL"),
     )
     .group(ArgGroup::new("SERVER_CONFIG")
         .arg("SERVER_ADDR").arg("URL").multiple(true))
