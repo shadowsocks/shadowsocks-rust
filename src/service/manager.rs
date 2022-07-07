@@ -36,7 +36,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
                 .short('c')
                 .long("config")
                 .takes_value(true)
-                .help("Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html), the only required fields are \"manager_address\" and \"manager_port\". Servers defined will be created when process is started."),
+                .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html), the only required fields are \"manager_address\" and \"manager_port\". Servers defined will be created when process is started."),
         )
         .arg(
             Arg::new("UDP_ONLY")
@@ -83,7 +83,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
                 .long("plugin")
                 .takes_value(true)
                 .requires("SERVER_ADDR")
-                .help("Default SIP003 (https://shadowsocks.org/en/wiki/Plugin.html) plugin"),
+                .help("Default SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
         )
         .arg(
             Arg::new("PLUGIN_OPT")

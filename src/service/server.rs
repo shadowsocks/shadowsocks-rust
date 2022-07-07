@@ -34,7 +34,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
                 .short('c')
                 .long("config")
                 .takes_value(true)
-                .help("Shadowsocks configuration file (https://shadowsocks.org/en/config/quick-guide.html)"),
+                .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html)"),
         )
         .arg(
             Arg::new("OUTBOUND_BIND_ADDR")
@@ -106,7 +106,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
                 .long("plugin")
                 .takes_value(true)
                 .requires("SERVER_ADDR")
-                .help("SIP003 (https://shadowsocks.org/en/wiki/Plugin.html) plugin"),
+                .help("SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
         )
         .arg(
             Arg::new("PLUGIN_OPT")
@@ -457,7 +457,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             eprintln!(
                 "missing proxy servers, consider specifying it by \
                     --server-addr, --encrypt-method, --password command line option, \
-                        or configuration file, check more details in https://shadowsocks.org/en/config/quick-guide.html"
+                        or configuration file, check more details in https://shadowsocks.org/guide/configs.html"
             );
             return crate::EXIT_CODE_INSUFFICIENT_PARAMS.into();
         }
