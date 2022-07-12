@@ -156,7 +156,7 @@ impl DnsResolve for DnsResolver {
 
                     match res_v6 {
                         Ok(res) => vaddr = store_dns(res, port),
-                        Err(err) => debug!("failed to resolve A records, error: {}", err),
+                        Err(err) => debug!("failed to resolve AAAA records, error: {}", err),
                     }
                 }
 
