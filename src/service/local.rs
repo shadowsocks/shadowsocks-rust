@@ -559,16 +559,20 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
 
             #[cfg(feature = "local-redir")]
             {
-                match matches.value_of_t::<RedirType>("TCP_REDIR") {
-                    Ok(tcp_redir) => local_config.tcp_redir = tcp_redir,
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if RedirType::tcp_default() != RedirType::NotSupported {
+                    match matches.value_of_t::<RedirType>("TCP_REDIR") {
+                        Ok(tcp_redir) => local_config.tcp_redir = tcp_redir,
+                        Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
+                        Err(err) => err.exit(),
+                    }
                 }
 
-                match matches.value_of_t::<RedirType>("UDP_REDIR") {
-                    Ok(udp_redir) => local_config.udp_redir = udp_redir,
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if RedirType::udp_default() != RedirType::NotSupported {
+                    match matches.value_of_t::<RedirType>("UDP_REDIR") {
+                        Ok(udp_redir) => local_config.udp_redir = udp_redir,
+                        Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
+                        Err(err) => err.exit(),
+                    }
                 }
             }
 
