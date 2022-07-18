@@ -619,9 +619,12 @@ dependencies = [
 
 [[package]]
 name = "etherparse"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9feedaea5a9f602932e78b512b2fde69aaefd2ef4fd5fd744238f7424b246186"
+checksum = "5d7819a365c91ec3832951c660cddfd0e2b760b67078a836bbe0987057e0c6a9"
+dependencies = [
+ "arrayvec",
+]
 
 [[package]]
 name = "fake-simd"
