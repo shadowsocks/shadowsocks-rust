@@ -158,7 +158,7 @@ sysexits = "0.3"
 build-time = "0.1"
 directories = "4.0"
 xdg = "2.4"
-rpassword = "6.0"
+rpassword = "7.0"
 libc = { version = "0.2", features = ["extra_traits"] }
 
 futures = "0.3"
