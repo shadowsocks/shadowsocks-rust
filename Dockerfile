@@ -28,6 +28,7 @@ RUN case "$TARGETARCH" in \
     ;; \
     esac \
     && wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ \
+    && PATH="/root/$MUSL-cross/bin:$PATH" \
     && CC=/root/$MUSL-cross/bin/$MUSL-gcc \
     && rustup target add $RUST_TARGET \
     && RUSTFLAGS="-C linker=$CC" \
