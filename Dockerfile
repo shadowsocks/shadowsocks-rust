@@ -30,8 +30,8 @@ RUN case "$TARGETARCH" in \
     && wget -qO- "https://musl.cc/$MUSL-cross.tgz" | tar -xzC /root/ \
     && PATH="/root/$MUSL-cross/bin:$PATH" \
     && CC=/root/$MUSL-cross/bin/$MUSL-gcc \
-    && rustup target add $RUST_TARGET \
     && rustup override set nightly \
+    && rustup target add $RUST_TARGET \
     && RUSTFLAGS="-C linker=$CC" \
     && CC=$CC \
     && cargo build --target "$RUST_TARGET" --release --features "local-tun local-redir armv8 neon stream-cipher aead-cipher-2022" \
