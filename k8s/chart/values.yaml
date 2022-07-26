@@ -18,12 +18,14 @@ servers:
 # Whether to download v2ray and xray plugin.
 downloadPlugins: false
 
-# Name of the ConfigMap with config.json configuration for shadowsocks-rust. 
+# Name of the ConfigMap with config.json configuration for shadowsocks-rust.
 configMapName: ""
 
 service:
   # Change to LoadBalancer if you are behind a cloud provider like aws, gce, or tke.
   type: ClusterIP
+  # external-dns.alpha.kubernetes.io/hostname: socks.example.com
+  annotations: {}
 
 # Bind shadowsocks port port to host, i.e., we can use host:port to access shawdowsocks server.
 hostPort: false

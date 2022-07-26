@@ -4,6 +4,10 @@ metadata:
   name: {{ include "shadowsocks-rust.fullname" . }}
   labels:
     {{- include "shadowsocks-rust.labels" . | nindent 4 }}
+  annotations:
+    {{- range $key, $value := .Values.service.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
