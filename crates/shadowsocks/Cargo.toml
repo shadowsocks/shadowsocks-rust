@@ -77,7 +77,7 @@ tokio-tfo = "0.2.0"
 
 trust-dns-resolver = { version = "0.21", optional = true }
 arc-swap = { version = "1.5", optional = true }
-notify = { version = "5.0.0-pre.15", optional = true }
+notify = { version = "5.0.0-pre.16", optional = true }
 
 aes = { version = "0.8", optional = true }
 blake3 = "1.3"
