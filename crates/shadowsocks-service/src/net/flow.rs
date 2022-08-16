@@ -2,9 +2,9 @@
 
 use std::sync::atomic::Ordering;
 
-#[cfg(not(any(target_arch = "mips", target_arch = "powerpc")))]
+#[cfg(target_has_atomic = "64")]
 type FlowCounter = std::sync::atomic::AtomicU64;
-#[cfg(any(target_arch = "mips", target_arch = "powerpc"))]
+#[cfg(not(target_has_atomic = "64"))]
 type FlowCounter = std::sync::atomic::AtomicU32;
 
 /// Connection flow statistic
