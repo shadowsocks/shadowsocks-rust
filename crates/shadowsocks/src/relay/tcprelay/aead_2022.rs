@@ -50,7 +50,6 @@ use std::{
     slice,
     sync::Arc,
     task::{self, Poll},
-    time::SystemTime,
     u16,
 };
 
@@ -62,6 +61,7 @@ use aes::{
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use coarsetime::Clock;
 use futures::ready;
 use log::{error, trace};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -74,11 +74,8 @@ use crate::{
 };
 
 #[inline]
-fn get_now_timestamp() -> u64 {
-    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(n) => n.as_secs(),
-        Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
-    }
+pub fn get_now_timestamp() -> u64 {
+    Clock::now_since_epoch().as_secs()
 }
 
 /// AEAD packet payload must be smaller than 0xFFFF (u16::MAX)

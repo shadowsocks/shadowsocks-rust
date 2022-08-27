@@ -53,7 +53,7 @@ use std::{
     rc::Rc,
     slice,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use aes::{
@@ -64,6 +64,7 @@ use aes::{
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use coarsetime::Clock;
 use log::{error, trace};
 use lru_time_cache::LruCache;
 
@@ -161,10 +162,7 @@ thread_local! {
 
 #[inline]
 pub fn get_now_timestamp() -> u64 {
-    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(n) => n.as_secs(),
-        Err(_) => panic!("SystemTime::now() is before UNIX Epoch!"),
-    }
+    Clock::now_since_epoch().as_secs()
 }
 
 fn get_cipher(method: CipherKind, key: &[u8], session_id: u64) -> Rc<UdpCipher> {
