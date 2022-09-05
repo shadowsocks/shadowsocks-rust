@@ -12,7 +12,7 @@ shadowsocks = { version = "1.12.3", path = "../shadowsocks" }
 
 clap = { version = "3", features = ["wrap_help", "suggestions"] }
 tokio = { version = "1", features = ["full"] }
-trust-dns-proto = "0.21"
+trust-dns-proto = "0.22"
 rand = "0.8"
 env_logger = "0.9"
 byteorder = "1.3"
