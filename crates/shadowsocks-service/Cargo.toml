@@ -114,7 +114,7 @@ tower = { version = "0.4", optional = true }
 
 trust-dns-resolver = { version = "0.22", optional = true, features = ["serde-config"] }
 
-idna = "0.2"
+idna = "0.3"
 ipnet = "2.3"
 iprange = "0.6"
 regex = "1.4"

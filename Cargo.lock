@@ -2058,7 +2058,7 @@ dependencies = [
  "etherparse",
  "futures",
  "hyper",
- "idna 0.2.3",
+ "idna 0.3.0",
  "ipnet",
  "iprange",
  "json5",
