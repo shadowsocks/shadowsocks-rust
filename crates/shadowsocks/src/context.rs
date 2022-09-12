@@ -66,22 +66,6 @@ impl Context {
         loop {
             random_iv_or_salt(nonce);
 
-            // SECURITY: First 6 bytes of payload should be printable characters
-            // Observation shows that prepending 6 bytes of printable characters to random payload will exempt it from blocking.
-            // by 2022-01-13 gfw.report et al.
-            #[cfg(feature = "security-iv-printable-prefix")]
-            {
-                const SECURITY_PRINTABLE_PREFIX_LEN: usize = 6;
-                if nonce.len() >= SECURITY_PRINTABLE_PREFIX_LEN {
-                    // Printable characters use base64 letters instead
-                    static ASCII_PRINTABLE_CHARS: &[u8] = br##"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/"##;
-
-                    for b in nonce.iter_mut().take(SECURITY_PRINTABLE_PREFIX_LEN) {
-                        *b = ASCII_PRINTABLE_CHARS[(*b as usize) % ASCII_PRINTABLE_CHARS.len()];
-                    }
-                }
-            }
-
             // Salt already exists, generate a new one.
             if unique && self.check_nonce_and_set(method, nonce) {
                 continue;
@@ -162,21 +146,4 @@ impl Context {
     pub fn replay_attack_policy(&self) -> ReplayAttackPolicy {
         self.replay_policy
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::config::ServerType;
-    use crate::context::Context;
-    use byte_string::ByteStr;
-    use shadowsocks_crypto::CipherKind;
-
-    #[test]
-    fn generate_nonce() {
-        let mut salt = vec![0u8; 64];
-        let context = Context::new(ServerType::Server);
-        context.generate_nonce(CipherKind::AES_128_GCM, &mut salt, false);
-        println!("generate nonce printable ascii: {:?}", ByteStr::new(&salt));
-    }
-
 }

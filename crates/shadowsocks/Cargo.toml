@@ -38,8 +38,6 @@ aead-cipher-2022-extra = ["aead-cipher-2022", "shadowsocks-crypto/v2-extra"]
 
 # Enable detection against replay attack
 security-replay-attack-detect = ["bloomfilter"]
-# Enable IV printable prefix
-security-iv-printable-prefix = ["rand"]
 
 # Enable ARMv8 related optimizations
 armv8 = ["shadowsocks-crypto/armv8"]

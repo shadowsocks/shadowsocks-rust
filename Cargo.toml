@@ -136,8 +136,6 @@ aead-cipher-2022-extra = ["shadowsocks-service/aead-cipher-2022-extra"]
 # Enable detection against replay attack (Stream / AEAD)
 security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]
 replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.
-# Enable IV printable prefix
-security-iv-printable-prefix = ["shadowsocks-service/security-iv-printable-prefix"]
 
 # Enable ARMv8 related optimizations
 armv8 = ["shadowsocks-service/armv8"]
