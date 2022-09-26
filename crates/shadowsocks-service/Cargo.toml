@@ -86,7 +86,7 @@ log = "0.4"
 
 cfg-if = "1"
 pin-project = "1.0"
-once_cell = "1.13"
+once_cell = "1.15"
 thiserror = "1.0"
 arc-swap = "1.5"
 
