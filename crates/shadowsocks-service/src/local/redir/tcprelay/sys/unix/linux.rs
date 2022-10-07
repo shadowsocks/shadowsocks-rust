@@ -43,13 +43,13 @@ impl TcpListenerRedirExt for TcpListener {
 
                 let set_dual_stack = is_dual_stack_addr(&addr);
                 if set_dual_stack {
-                    // Transparent socket shouldn't support dual-stack.
-
+                    // Redirect doesn't support dual-stack
                     if let Err(err) = set_ipv6_only(&socket, true) {
-                        warn!("failed to set IPV6_V6ONLY, error: {}", err);
+                        warn!("set IPV6_V6ONLY=true failed, error: {}", err);
                     }
                 }
 
+                // bind, listen as original
                 socket.bind(addr)?;
 
                 // mio's default backlog is 1024
@@ -120,12 +120,41 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
                     }
                 }
             }
+
             Ok(())
         })?;
 
         // Convert sockaddr_storage to SocketAddr
         Ok(target_addr.as_socket().expect("SocketAddr"))
     }
+}
+
+fn set_ip_transparent(level: libc::c_int, socket: &TcpSocket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_TRANSPARENT,
+        libc::IPPROTO_IPV6 => libc::IPV6_TRANSPARENT,
+        _ => unreachable!("level can only be IPPROTO_IP and IPPROTO_IPV6"),
+    };
+
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
 }
 
 async fn create_redir_listener(addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
@@ -136,31 +165,12 @@ async fn create_redir_listener(addr: SocketAddr, accept_opts: AcceptOpts) -> io:
 
     // For Linux 2.4+ TPROXY
     // Sockets have to set IP_TRANSPARENT, IPV6_TRANSPARENT for retrieving original destination by getsockname()
-    unsafe {
-        let fd = socket.as_raw_fd();
+    let level = match addr {
+        SocketAddr::V4(..) => libc::IPPROTO_IP,
+        SocketAddr::V6(..) => libc::IPPROTO_IPV6,
+    };
 
-        let enable: libc::c_int = 1;
-        let ret = match addr {
-            SocketAddr::V4(..) => libc::setsockopt(
-                fd,
-                libc::IPPROTO_IP,
-                libc::IP_TRANSPARENT,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-            SocketAddr::V6(..) => libc::setsockopt(
-                fd,
-                libc::IPPROTO_IPV6,
-                libc::IPV6_TRANSPARENT,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-        };
-
-        if ret != 0 {
-            return Err(Error::last_os_error());
-        }
-    }
+    set_ip_transparent(level, &socket)?;
 
     // On platforms with Berkeley-derived sockets, this allows to quickly
     // rebind a socket, without needing to wait for the OS to clean up the
@@ -174,15 +184,41 @@ async fn create_redir_listener(addr: SocketAddr, accept_opts: AcceptOpts) -> io:
 
     let set_dual_stack = is_dual_stack_addr(&addr);
     if set_dual_stack {
-        // Transparent socket shouldn't support dual-stack.
+        // set IP_TRANSPARENT before bind()
+        set_ip_transparent(libc::IPPROTO_IP, &socket)?;
 
-        if let Err(err) = set_ipv6_only(&socket, true) {
-            warn!("failed to set IPV6_V6ONLY, error: {}", err);
+        // Try to bind dual-stack address
+        match set_ipv6_only(&socket, false) {
+            Ok(..) => {
+                // bind()
+                if let Err(err) = socket.bind(addr) {
+                    warn!(
+                        "bind() dual-stack address {} failed, error: {}, fallback to IPV6_V6ONLY=true",
+                        addr, err
+                    );
+
+                    if let Err(err) = set_ipv6_only(&socket, true) {
+                        warn!(
+                            "set IPV6_V6ONLY=true failed, error: {}, bind() to {} directly",
+                            err, addr
+                        );
+                    }
+
+                    socket.bind(addr)?;
+                }
+            }
+            Err(err) => {
+                warn!(
+                    "set IPV6_V6ONLY=false failed, error: {}, bind() to {} directly",
+                    err, addr
+                );
+                socket.bind(addr)?;
+            }
         }
+    } else {
+        // bind, listen as original
+        socket.bind(addr)?;
     }
-
-    // bind, listen as original
-    socket.bind(addr)?;
 
     // listen backlogs = 1024 as mio's default
     let listener = socket.listen(1024)?;

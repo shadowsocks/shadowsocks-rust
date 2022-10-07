@@ -75,15 +75,44 @@ impl UdpRedirSocket {
             socket.set_reuse_port(true)?;
         }
 
+        let sock_addr = SockAddr::from(addr);
+
         if is_dual_stack_addr(&addr) {
-            // Transparent socket shouldn't support dual-stack.
+            // set IP_TRANSPARENT & IP_RECVORIGDSTADDR before bind()
 
-            if let Err(err) = set_ipv6_only(&socket, true) {
-                warn!("failed to set IPV6_V6ONLY, error: {}", err);
+            set_ip_transparent(libc::SOL_IP, &socket)?;
+            set_ip_recvorigdstaddr(libc::SOL_IP, &socket)?;
+            set_ip_mtu_discover(libc::IPPROTO_IP, &socket)?;
+
+            match set_ipv6_only(&socket, false) {
+                Ok(..) => {
+                    if let Err(err) = socket.bind(&sock_addr) {
+                        warn!(
+                            "bind() dual-stack address {} failed, error: {}, fallback to IPV6_V6ONLY=true",
+                            addr, err
+                        );
+
+                        if let Err(err) = set_ipv6_only(&socket, true) {
+                            warn!(
+                                "set IPV6_V6ONLY=true failed, error: {}, bind() to {} directly",
+                                err, addr
+                            );
+                        }
+
+                        socket.bind(&sock_addr)?;
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "set IPV6_V6ONLY=false failed, error: {}, bind() to {} directly",
+                        err, addr
+                    );
+                    socket.bind(&sock_addr)?;
+                }
             }
+        } else {
+            socket.bind(&sock_addr)?;
         }
-
-        socket.bind(&SockAddr::from(addr))?;
 
         let io = AsyncFd::new(socket.into())?;
         Ok(UdpRedirSocket { io })
@@ -138,53 +167,100 @@ impl AsRawFd for UdpRedirSocket {
     }
 }
 
-fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
+fn set_ip_transparent(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     let fd = socket.as_raw_fd();
 
-    let enable: libc::c_int = 1;
-    unsafe {
-        // 1. Set IP_TRANSPARENT, IPV6_TRANSPARENT to allow binding to non-local addresses
-        let ret = match *addr {
-            SocketAddr::V4(..) => libc::setsockopt(
-                fd,
-                libc::SOL_IP,
-                libc::IP_TRANSPARENT,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-            SocketAddr::V6(..) => libc::setsockopt(
-                fd,
-                libc::SOL_IPV6,
-                libc::IPV6_TRANSPARENT,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-        };
-        if ret != 0 {
-            return Err(Error::last_os_error());
-        }
+    let opt = match level {
+        libc::SOL_IP => libc::IP_TRANSPARENT,
+        libc::SOL_IPV6 => libc::IPV6_TRANSPARENT,
+        _ => unreachable!("invalid sockopt level {}", level),
+    };
 
-        // 2. Set IP_RECVORIGDSTADDR, IPV6_RECVORIGDSTADDR
-        let ret = match *addr {
-            SocketAddr::V4(..) => libc::setsockopt(
-                fd,
-                libc::SOL_IP,
-                libc::IP_RECVORIGDSTADDR,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-            SocketAddr::V6(..) => libc::setsockopt(
-                fd,
-                libc::SOL_IPV6,
-                libc::IPV6_RECVORIGDSTADDR,
-                &enable as *const _ as *const _,
-                mem::size_of_val(&enable) as libc::socklen_t,
-            ),
-        };
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
         if ret != 0 {
             return Err(Error::last_os_error());
         }
     }
+
+    Ok(())
+}
+
+fn set_ip_recvorigdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let opt = match level {
+        libc::SOL_IP => libc::IP_RECVORIGDSTADDR,
+        libc::SOL_IPV6 => libc::IPV6_RECVORIGDSTADDR,
+        _ => unreachable!("invalid sockopt level {}", level),
+    };
+
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret != 0 {
+            return Err(Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+fn set_ip_mtu_discover(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_MTU_DISCOVER,
+        libc::IPPROTO_IPV6 => libc::IPV6_MTU_DISCOVER,
+        _ => unreachable!("invalid sockopt level {}", level),
+    };
+
+    let value: libc::c_int = libc::IP_PMTUDISC_DO;
+    unsafe {
+        let ret = libc::setsockopt(
+            fd,
+            level,
+            opt,
+            &value as *const _ as *const _,
+            mem::size_of_val(&value) as libc::socklen_t,
+        );
+
+        if ret < 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
+    // Set IP_TRANSPARENT, IPV6_TRANSPARENT to allow binding to non-local addresses
+
+    let level = match *addr {
+        SocketAddr::V4(..) => libc::SOL_IP,
+        SocketAddr::V6(..) => libc::SOL_IPV6,
+    };
+
+    set_ip_transparent(level, socket)?;
+    set_ip_recvorigdstaddr(level, socket)?;
+    set_ip_mtu_discover(level, socket)?;
 
     Ok(())
 }

@@ -61,15 +61,43 @@ impl UdpRedirSocket {
             socket.set_reuse_port(true)?;
         }
 
+        let sock_addr = SockAddr::from(addr);
+
         if is_dual_stack_addr(&addr) {
-            // Transparent socket shouldn't support dual-stack.
+            // set IP_ORIGDSTADDR before bind()
 
-            if let Err(err) = set_ipv6_only(&socket, true) {
-                warn!("failed to set IPV6_V6ONLY, error: {}", err);
+            set_ip_origdstaddr(libc::IPPROTO_IP, &socket)?;
+            set_disable_ip_fragmentation(libc::IPPROTO_IP, &socket)?;
+
+            match set_ipv6_only(&socket, false) {
+                Ok(..) => {
+                    if let Err(err) = socket.bind(&sock_addr) {
+                        warn!(
+                            "bind() dual-stack address {} failed, error: {}, fallback to IPV6_V6ONLY=true",
+                            addr, err
+                        );
+
+                        if let Err(err) = set_ipv6_only(&socket, true) {
+                            warn!(
+                                "set IPV6_V6ONLY=true failed, error: {}, bind() to {} directly",
+                                err, addr
+                            );
+                        }
+
+                        socket.bind(&sock_addr)?;
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "set IPV6_V6ONLY=false failed, error: {}, bind() to {} directly",
+                        err, addr
+                    );
+                    socket.bind(&sock_addr)?;
+                }
             }
+        } else {
+            socket.bind(&sock_addr)?;
         }
-
-        socket.bind(&SockAddr::from(addr))?;
 
         let io = AsyncFd::new(socket.into())?;
         Ok(UdpRedirSocket { io })
@@ -170,22 +198,20 @@ fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
     Ok(())
 }
 
-fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
+fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+
     let fd = socket.as_raw_fd();
 
     let enable: libc::c_int = 1;
 
+    let opt = match level {
+        libc::IPPROTO_IP => libc::IP_ORIGDSTADDR,
+        libc::IPPROTO_IPV6 => libc::IPV6_ORIGDSTADDR,
+        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
+    };
+
     unsafe {
-        // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
-        let (level, opt) = match *addr {
-            SocketAddr::V4(..) => (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR),
-            SocketAddr::V6(..) => (libc::IPPROTO_IPV6, libc::IPV6_ORIGDSTADDR),
-        };
-
-        // 1. BINDANY
-        set_bindany(level, socket)?;
-
-        // 2. set ORIGDSTADDR for retrieving original destination address
         let ret = libc::setsockopt(
             fd,
             level,
@@ -196,6 +222,63 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
         if ret != 0 {
             return Err(Error::last_os_error());
         }
+    }
+
+    Ok(())
+}
+
+fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Result<()> {
+    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+
+    // sys/netinet/in.h
+    const IP_DONTFRAG: libc::c_int = 67; // don't fragment packet
+
+    // sys/netinet6/in6.h
+    const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
+
+    let opt = match level {
+        libc::IPPROTO_IP => IP_DONTFRAG,
+        libc::IPPROTO_IPV6 => IPV6_DONTFRAG,
+        _ => unreachable!("level can only be IPPROTO_IP or IPPROTO_IPV6"),
+    };
+
+    unsafe {
+        let ret = libc::setsockopt(
+            socket.as_raw_fd(),
+            level,
+            opt,
+            &enable as *const _ as *const _,
+            mem::size_of_val(&enable) as libc::socklen_t,
+        );
+
+        if ret < 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
+    let fd = socket.as_raw_fd();
+
+    let enable: libc::c_int = 1;
+
+    unsafe {
+        // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+        let level = match *addr {
+            SocketAddr::V4(..) => libc::IPPROTO_IP,
+            SocketAddr::V6(..) => libc::IPPROTO_IPV6,
+        };
+
+        // 1. BINDANY
+        set_bindany(level, socket)?;
+
+        // 2. set ORIGDSTADDR for retrieving original destination address
+        set_ip_origdstaddr(level, socket)?;
+
+        // 3. disable IP fragmentation
+        set_disable_ip_fragmentation(level, socket)?;
     }
 
     Ok(())
