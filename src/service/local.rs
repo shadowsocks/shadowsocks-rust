@@ -2,7 +2,7 @@
 
 use std::{net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
 
-use clap::{Arg, ArgGroup, ArgMatches, Command, ErrorKind as ClapErrorKind};
+use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{self, runtime::Builder};
@@ -28,29 +28,34 @@ use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
     monitor,
-    validator,
+    vparser,
 };
 
 /// Defines command line options
-pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
+pub fn define_command_line_options(mut app: Command) -> Command {
     app = app.arg(
         Arg::new("CONFIG")
             .short('c')
             .long("config")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(PathBuf))
+            .value_hint(ValueHint::FilePath)
             .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html)"),
     )
     .arg(
         Arg::new("LOCAL_ADDR")
             .short('b')
             .long("local-addr")
-            .takes_value(true)
-            .validator(validator::validate_server_addr)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_parser(vparser::parse_server_addr)
             .help("Local address, listen only to this address if specified"),
     )
     .arg(
         Arg::new("UDP_ONLY")
             .short('u')
+            .action(ArgAction::SetTrue)
             .conflicts_with("TCP_AND_UDP")
             .requires("LOCAL_ADDR")
             .help("Server mode UDP_ONLY"),
@@ -58,28 +63,31 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
     .arg(
         Arg::new("TCP_AND_UDP")
             .short('U')
+            .action(ArgAction::SetTrue)
             .help("Server mode TCP_AND_UDP"),
     )
     .arg(
         Arg::new("PROTOCOL")
             .long("protocol")
-            .takes_value(true)
-            .possible_values(ProtocolType::available_protocols())
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_parser(PossibleValuesParser::new(ProtocolType::available_protocols()))
             .help("Protocol for communicating with clients (SOCKS5 by default)"),
     )
     .arg(
         Arg::new("UDP_BIND_ADDR")
             .long("udp-bind-addr")
-            .takes_value(true)
-            .validator(validator::validate_server_addr)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_parser(vparser::parse_server_addr)
             .help("UDP relay's bind address, default is the same as local-addr"),
     )
     .arg(
         Arg::new("SERVER_ADDR")
             .short('s')
             .long("server-addr")
-            .takes_value(true)
-            .validator(validator::validate_server_addr)
+            .num_args(1)
+            .action(ArgAction::Set)
             .requires("ENCRYPT_METHOD")
             .help("Server address"),
     )
@@ -87,7 +95,8 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         Arg::new("PASSWORD")
             .short('k')
             .long("password")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
             .requires("SERVER_ADDR")
             .help("Server's password"),
     )
@@ -95,38 +104,45 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         Arg::new("ENCRYPT_METHOD")
             .short('m')
             .long("encrypt-method")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
             .requires("SERVER_ADDR")
-            .possible_values(available_ciphers())
+            .value_parser(PossibleValuesParser::new(available_ciphers()))
             .help("Server's encryption method"),
     )
     .arg(
         Arg::new("TIMEOUT")
             .long("timeout")
-            .takes_value(true)
-            .validator(validator::validate_u64)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_parser(clap::value_parser!(u64))
             .requires("SERVER_ADDR")
             .help("Server's timeout seconds for TCP relay"),
     )
     .arg(
         Arg::new("PLUGIN")
             .long("plugin")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_hint(ValueHint::CommandName)
             .requires("SERVER_ADDR")
             .help("SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
     )
     .arg(
         Arg::new("PLUGIN_OPT")
             .long("plugin-opts")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
             .requires("PLUGIN")
             .help("Set SIP003 plugin options"),
     )
     .arg(
         Arg::new("URL")
             .long("server-url")
-            .takes_value(true)
-            .validator(validator::validate_server_url)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_hint(ValueHint::Url)
+            .value_parser(vparser::parse_server_url)
             .help("Server address in SIP002 (https://shadowsocks.org/guide/sip002.html) URL"),
     )
     .group(ArgGroup::new("SERVER_CONFIG")
@@ -134,24 +150,27 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
     .arg(
         Arg::new("ACL")
             .long("acl")
-            .takes_value(true)
+            .num_args(1)
+            .action(ArgAction::Set)
+            .value_hint(ValueHint::FilePath)
             .help("Path to ACL (Access Control List)"),
     )
-    .arg(Arg::new("DNS").long("dns").takes_value(true).help("DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\""))
-    .arg(Arg::new("TCP_NO_DELAY").long("tcp-no-delay").alias("no-delay").help("Set TCP_NODELAY option for sockets"))
-    .arg(Arg::new("TCP_FAST_OPEN").long("tcp-fast-open").alias("fast-open").help("Enable TCP Fast Open (TFO)"))
-    .arg(Arg::new("TCP_KEEP_ALIVE").long("tcp-keep-alive").takes_value(true).validator(validator::validate_u64).help("Set TCP keep alive timeout seconds"))
-    .arg(Arg::new("UDP_TIMEOUT").long("udp-timeout").takes_value(true).validator(validator::validate_u64).help("Timeout seconds for UDP relay"))
-    .arg(Arg::new("UDP_MAX_ASSOCIATIONS").long("udp-max-associations").takes_value(true).validator(validator::validate_u64).help("Maximum associations to be kept simultaneously for UDP relay"))
-    .arg(Arg::new("INBOUND_SEND_BUFFER_SIZE").long("inbound-send-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set inbound sockets' SO_SNDBUF option"))
-    .arg(Arg::new("INBOUND_RECV_BUFFER_SIZE").long("inbound-recv-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set inbound sockets' SO_RCVBUF option"))
-    .arg(Arg::new("OUTBOUND_SEND_BUFFER_SIZE").long("outbound-send-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set outbound sockets' SO_SNDBUF option"))
-    .arg(Arg::new("OUTBOUND_RECV_BUFFER_SIZE").long("outbound-recv-buffer-size").takes_value(true).validator(validator::validate_u32).help("Set outbound sockets' SO_RCVBUF option"))
-    .arg(Arg::new("OUTBOUND_BIND_ADDR").long("outbound-bind-addr").takes_value(true).alias("bind-addr").validator(validator::validate_ip_addr).help("Bind address, outbound socket will bind this address"))
-    .arg(Arg::new("OUTBOUND_BIND_INTERFACE").long("outbound-bind-interface").takes_value(true).help("Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket"))
+    .arg(Arg::new("DNS").long("dns").num_args(1).action(ArgAction::Set).help("DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\""))
+    .arg(Arg::new("TCP_NO_DELAY").long("tcp-no-delay").alias("no-delay").action(ArgAction::SetTrue).help("Set TCP_NODELAY option for sockets"))
+    .arg(Arg::new("TCP_FAST_OPEN").long("tcp-fast-open").alias("fast-open").action(ArgAction::SetTrue).help("Enable TCP Fast Open (TFO)"))
+    .arg(Arg::new("TCP_KEEP_ALIVE").long("tcp-keep-alive").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u64)).help("Set TCP keep alive timeout seconds"))
+    .arg(Arg::new("UDP_TIMEOUT").long("udp-timeout").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u64)).help("Timeout seconds for UDP relay"))
+    .arg(Arg::new("UDP_MAX_ASSOCIATIONS").long("udp-max-associations").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(usize)).help("Maximum associations to be kept simultaneously for UDP relay"))
+    .arg(Arg::new("INBOUND_SEND_BUFFER_SIZE").long("inbound-send-buffer-size").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u32)).help("Set inbound sockets' SO_SNDBUF option"))
+    .arg(Arg::new("INBOUND_RECV_BUFFER_SIZE").long("inbound-recv-buffer-size").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u32)).help("Set inbound sockets' SO_RCVBUF option"))
+    .arg(Arg::new("OUTBOUND_SEND_BUFFER_SIZE").long("outbound-send-buffer-size").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u32)).help("Set outbound sockets' SO_SNDBUF option"))
+    .arg(Arg::new("OUTBOUND_RECV_BUFFER_SIZE").long("outbound-recv-buffer-size").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u32)).help("Set outbound sockets' SO_RCVBUF option"))
+    .arg(Arg::new("OUTBOUND_BIND_ADDR").long("outbound-bind-addr").num_args(1).alias("bind-addr").action(ArgAction::Set).value_parser(vparser::parse_ip_addr).help("Bind address, outbound socket will bind this address"))
+    .arg(Arg::new("OUTBOUND_BIND_INTERFACE").long("outbound-bind-interface").num_args(1).action(ArgAction::Set).help("Set SO_BINDTODEVICE / IP_BOUND_IF / IP_UNICAST_IF option for outbound socket"))
     .arg(
         Arg::new("IPV6_FIRST")
             .short('6')
+            .action(ArgAction::SetTrue)
             .help("Resolve hostname to IPv6 address first"),
     );
 
@@ -161,18 +180,22 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .arg(
                 Arg::new("VERBOSE")
                     .short('v')
-                    .multiple_occurrences(true)
+                    .action(ArgAction::Count)
                     .help("Set log level"),
             )
             .arg(
                 Arg::new("LOG_WITHOUT_TIME")
                     .long("log-without-time")
+                    .action(ArgAction::SetTrue)
                     .help("Log without datetime prefix"),
             )
             .arg(
                 Arg::new("LOG_CONFIG")
                     .long("log-config")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .value_hint(ValueHint::FilePath)
                     .help("log4rs configuration file"),
             );
     }
@@ -183,9 +206,10 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             Arg::new("FORWARD_ADDR")
                 .short('f')
                 .long("forward-addr")
-                .takes_value(true)
+                .num_args(1)
+                .action(ArgAction::Set)
                 .requires("LOCAL_ADDR")
-                .validator(validator::validate_address)
+                .value_parser(vparser::parse_address)
                 .required_if_eq("PROTOCOL", "tunnel")
                 .help("Forwarding data directly to this address (for tunnel)"),
         );
@@ -197,7 +221,8 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             Arg::new("NOFILE")
                 .short('n')
                 .long("nofile")
-                .takes_value(true)
+                .num_args(1)
+                .action(ArgAction::Set)
                 .help("Set RLIMIT_NOFILE with both soft and hard limit"),
         );
     }
@@ -207,8 +232,9 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         app = app.arg(
             Arg::new("OUTBOUND_FWMARK")
                 .long("outbound-fwmark")
-                .takes_value(true)
-                .validator(validator::validate_u32)
+                .num_args(1)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(u32))
                 .help("Set SO_MARK option for outbound sockets"),
         );
     }
@@ -218,8 +244,9 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         app = app.arg(
             Arg::new("OUTBOUND_USER_COOKIE")
                 .long("outbound-user-cookie")
-                .takes_value(true)
-                .validator(validator::validate_u32)
+                .num_args(1)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(u32))
                 .help("Set SO_USER_COOKIE option for outbound sockets"),
         );
     }
@@ -230,9 +257,10 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             app = app.arg(
                 Arg::new("TCP_REDIR")
                     .long("tcp-redir")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .requires("LOCAL_ADDR")
-                    .possible_values(RedirType::tcp_available_types())
+                    .value_parser(PossibleValuesParser::new(RedirType::tcp_available_types()))
                     .help("TCP redir (transparent proxy) type"),
             );
         }
@@ -241,9 +269,10 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             app = app.arg(
                 Arg::new("UDP_REDIR")
                     .long("udp-redir")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .requires("LOCAL_ADDR")
-                    .possible_values(RedirType::udp_available_types())
+                    .value_parser(PossibleValuesParser::new(RedirType::udp_available_types()))
                     .help("UDP redir (transparent proxy) type"),
             );
         }
@@ -254,6 +283,7 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         app = app.arg(
             Arg::new("VPN_MODE")
                 .long("vpn")
+                .action(ArgAction::SetTrue)
                 .help("Enable VPN mode (only for Android)"),
         );
     }
@@ -265,7 +295,9 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             app = app.arg(
                 Arg::new("STAT_PATH")
                     .long("stat-path")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_hint(ValueHint::FilePath)
                     .conflicts_with("STAT_ADDR")
                     .help("Specify socket path (unix domain socket) for sending traffic statistic"),
             );
@@ -274,8 +306,9 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
         app = app.arg(
             Arg::new("STAT_ADDR")
                 .long("stat-addr")
-                .takes_value(true)
-                .validator(validator::validate_socket_addr)
+                .num_args(1)
+                .action(ArgAction::Set)
+                .value_parser(vparser::parse_socket_addr)
                 .help("Specify socket address IP:PORT (TCP) for sending traffic statistic"),
         );
     }
@@ -286,19 +319,21 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .arg(
                 Arg::new("LOCAL_DNS_ADDR")
                     .long("local-dns-addr")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .required_if_eq("PROTOCOL", "dns")
                     .requires("LOCAL_ADDR")
-                    .validator(validator::validate_name_server_addr)
+                    .value_parser(vparser::parse_name_server_addr)
                     .help("Specify the address of local DNS server, send queries directly"),
             )
             .arg(
                 Arg::new("REMOTE_DNS_ADDR")
                     .long("remote-dns-addr")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .required_if_eq("PROTOCOL", "dns")
                     .requires("LOCAL_ADDR")
-                    .validator(validator::validate_address)
+                    .value_parser(vparser::parse_address)
                     .help("Specify the address of remote DNS server, send queries through shadowsocks' tunnel"),
             );
 
@@ -307,9 +342,10 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             app = app.arg(
                 Arg::new("DNS_LOCAL_ADDR")
                     .long("dns-addr")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .requires_all(&["LOCAL_ADDR", "REMOTE_DNS_ADDR"])
-                    .validator(validator::validate_server_addr)
+                    .value_parser(vparser::parse_server_addr)
                     .help("DNS address, listen to this address if specified"),
             );
         }
@@ -321,14 +357,16 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .arg(
                 Arg::new("TUN_INTERFACE_NAME")
                     .long("tun-interface-name")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
                     .help("Tun interface name, allocate one if not specify"),
             )
             .arg(
                 Arg::new("TUN_INTERFACE_ADDRESS")
                     .long("tun-interface-address")
-                    .takes_value(true)
-                    .validator(validator::validate_ipnet)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(vparser::parse_ipnet)
                     .help("Tun interface address (network)"),
             );
 
@@ -337,7 +375,10 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             app = app.arg(
                 Arg::new("TUN_DEVICE_FD_FROM_PATH")
                     .long("tun-device-fd-from-path")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .value_hint(ValueHint::AnyPath)
                     .help("Tun device file descriptor will be transferred from this unix domain socket path"),
             );
         }
@@ -346,11 +387,20 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
     #[cfg(unix)]
     {
         app = app
-            .arg(Arg::new("DAEMONIZE").short('d').long("daemonize").help("Daemonize"))
+            .arg(
+                Arg::new("DAEMONIZE")
+                    .short('d')
+                    .long("daemonize")
+                    .action(ArgAction::SetTrue)
+                    .help("Daemonize"),
+            )
             .arg(
                 Arg::new("DAEMONIZE_PID_PATH")
                     .long("daemonize-pid")
-                    .takes_value(true)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(PathBuf))
+                    .value_hint(ValueHint::FilePath)
                     .help("File path to store daemonized process's PID"),
             );
     }
@@ -361,13 +411,15 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             .arg(
                 Arg::new("SINGLE_THREADED")
                     .long("single-threaded")
+                    .action(ArgAction::SetTrue)
                     .help("Run the program all in one thread"),
             )
             .arg(
                 Arg::new("WORKER_THREADS")
                     .long("worker-threads")
-                    .takes_value(true)
-                    .validator(validator::validate_usize)
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(usize))
                     .help("Sets the number of worker threads the `Runtime` will use"),
             );
     }
@@ -378,7 +430,9 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
             Arg::new("USER")
                 .long("user")
                 .short('a')
-                .takes_value(true)
+                .num_args(1)
+                .action(ArgAction::Set)
+                .value_hint(ValueHint::Username)
                 .help("Run as another user"),
         );
     }
@@ -389,8 +443,8 @@ pub fn define_command_line_options(mut app: Command<'_>) -> Command<'_> {
 /// Program entrance `main`
 pub fn main(matches: &ArgMatches) -> ExitCode {
     let (config, runtime) = {
-        let config_path_opt = matches.value_of("CONFIG").map(PathBuf::from).or_else(|| {
-            if !matches.is_present("SERVER_CONFIG") {
+        let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
+            if !matches.contains_id("SERVER_CONFIG") {
                 match crate::config::get_default_config_path() {
                     None => None,
                     Some(p) => {
@@ -438,42 +492,40 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             None => Config::new(ConfigType::Local),
         };
 
-        if let Some(svr_addr) = matches.value_of("SERVER_ADDR") {
-            let method = matches.value_of_t_or_exit::<CipherKind>("ENCRYPT_METHOD");
+        if let Some(svr_addr) = matches.get_one::<String>("SERVER_ADDR") {
+            let method = matches
+                .get_one::<String>("ENCRYPT_METHOD")
+                .map(|x| x.parse::<CipherKind>().expect("method"))
+                .expect("`method` is required");
 
-            let password = match matches.value_of_t::<String>("PASSWORD") {
-                Ok(pwd) => read_variable_field_value(&pwd).into(),
-                Err(err) => {
-                    // NOTE: svr_addr should have been checked by crate::validator
+            let password = match matches.get_one::<String>("PASSWORD") {
+                Some(pwd) => read_variable_field_value(pwd).into(),
+                None => {
+                    // NOTE: svr_addr should have been checked by crate::vparser
                     if method.is_none() {
                         // If method doesn't need a key (none, plain), then we can leave it empty
                         String::new()
                     } else {
                         match crate::password::read_server_password(svr_addr) {
                             Ok(pwd) => pwd,
-                            Err(..) => err.exit(),
+                            Err(..) => panic!("`password` is required for server {}", svr_addr),
                         }
                     }
                 }
             };
 
             let svr_addr = svr_addr.parse::<ServerAddr>().expect("server-addr");
-
-            let timeout = match matches.value_of_t::<u64>("TIMEOUT") {
-                Ok(t) => Some(Duration::from_secs(t)),
-                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => None,
-                Err(err) => err.exit(),
-            };
+            let timeout = matches.get_one::<u64>("TIMEOUT").map(|x| Duration::from_secs(*x));
 
             let mut sc = ServerConfig::new(svr_addr, password, method);
             if let Some(timeout) = timeout {
                 sc.set_timeout(timeout);
             }
 
-            if let Some(p) = matches.value_of("PLUGIN") {
+            if let Some(p) = matches.get_one::<String>("PLUGIN").cloned() {
                 let plugin = PluginConfig {
-                    plugin: p.to_owned(),
-                    plugin_opts: matches.value_of("PLUGIN_OPT").map(ToOwned::to_owned),
+                    plugin: p,
+                    plugin_opts: matches.get_one::<String>("PLUGIN_OPT").cloned(),
                     plugin_args: Vec::new(),
                 };
 
@@ -483,10 +535,8 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             config.server.push(sc);
         }
 
-        match matches.value_of_t::<ServerConfig>("URL") {
-            Ok(svr_addr) => config.server.push(svr_addr),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(svr_addr) = matches.get_one::<ServerConfig>("URL").cloned() {
+            config.server.push(svr_addr);
         }
 
         #[cfg(feature = "local-flow-stat")]
@@ -495,26 +545,24 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             use std::net::SocketAddr;
 
             #[cfg(unix)]
-            if let Some(stat_path) = matches.value_of("STAT_PATH") {
+            if let Some(stat_path) = matches.get_one::<String>("STAT_PATH") {
                 config.local_stat_addr = Some(LocalFlowStatAddress::UnixStreamPath(From::from(stat_path)));
             }
 
-            match matches.value_of_t::<SocketAddr>("STAT_ADDR") {
-                Ok(stat_addr) => config.local_stat_addr = Some(LocalFlowStatAddress::TcpStreamAddr(stat_addr)),
-                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                Err(err) => err.exit(),
+            if let Some(stat_addr) = matches.get_one::<SocketAddr>("STAT_ADDR").cloned() {
+                config.local_stat_addr = Some(LocalFlowStatAddress::TcpStreamAddr(stat_addr));
             }
         }
 
         #[cfg(target_os = "android")]
-        if matches.is_present("VPN_MODE") {
+        if matches.get_flag("VPN_MODE") {
             // A socket `protect_path` in CWD
             // Same as shadowsocks-libev's android.c
             config.outbound_vpn_protect_path = Some(From::from("protect_path"));
         }
 
-        if matches.value_of("LOCAL_ADDR").is_some() || matches.value_of("PROTOCOL").is_some() {
-            let protocol = match matches.value_of("PROTOCOL") {
+        if matches.get_raw("LOCAL_ADDR").is_some() || matches.get_raw("PROTOCOL").is_some() {
+            let protocol = match matches.get_one::<String>("PROTOCOL").map(|s| s.as_str()) {
                 Some("socks") => ProtocolType::Socks,
                 #[cfg(feature = "local-http")]
                 Some("http") => ProtocolType::Http,
@@ -531,47 +579,38 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             };
 
             let mut local_config = LocalConfig::new(protocol);
-            match matches.value_of_t::<ServerAddr>("LOCAL_ADDR") {
-                Ok(local_addr) => local_config.addr = Some(local_addr),
-                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {
+            match matches.get_one::<ServerAddr>("LOCAL_ADDR").cloned() {
+                Some(local_addr) => local_config.addr = Some(local_addr),
+                None => {
                     #[cfg(feature = "local-tun")]
                     if protocol == ProtocolType::Tun {
                         // `tun` protocol doesn't need --local-addr
                     } else {
-                        err.exit();
+                        panic!("`local-addr` is required for protocol {}", protocol.as_str());
                     }
                 }
-                Err(err) => err.exit(),
             }
 
-            match matches.value_of_t::<ServerAddr>("UDP_BIND_ADDR") {
-                Ok(udp_bind_addr) => local_config.udp_addr = Some(udp_bind_addr),
-                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                Err(err) => err.exit(),
+            if let Some(udp_bind_addr) = matches.get_one::<ServerAddr>("UDP_BIND_ADDR").cloned() {
+                local_config.udp_addr = Some(udp_bind_addr);
             }
 
             #[cfg(feature = "local-tunnel")]
-            match matches.value_of_t::<Address>("FORWARD_ADDR") {
-                Ok(addr) => local_config.forward_addr = Some(addr),
-                Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                Err(err) => err.exit(),
+            if let Some(addr) = matches.get_one::<Address>("FORWARD_ADDR").cloned() {
+                local_config.forward_addr = Some(addr);
             }
 
             #[cfg(feature = "local-redir")]
             {
                 if RedirType::tcp_default() != RedirType::NotSupported {
-                    match matches.value_of_t::<RedirType>("TCP_REDIR") {
-                        Ok(tcp_redir) => local_config.tcp_redir = tcp_redir,
-                        Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                        Err(err) => err.exit(),
+                    if let Some(tcp_redir) = matches.get_one::<String>("TCP_REDIR") {
+                        local_config.tcp_redir = tcp_redir.parse::<RedirType>().expect("tcp-redir");
                     }
                 }
 
                 if RedirType::udp_default() != RedirType::NotSupported {
-                    match matches.value_of_t::<RedirType>("UDP_REDIR") {
-                        Ok(udp_redir) => local_config.udp_redir = udp_redir,
-                        Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                        Err(err) => err.exit(),
+                    if let Some(udp_redir) = matches.get_one::<String>("UDP_REDIR") {
+                        local_config.udp_redir = udp_redir.parse::<RedirType>().expect("udp-redir");
                     }
                 }
             }
@@ -603,16 +642,12 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                     }
                 }
 
-                match matches.value_of_t::<NameServerAddr>("LOCAL_DNS_ADDR") {
-                    Ok(addr) => local_config.local_dns_addr = Some(addr),
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if let Some(addr) = matches.get_one::<NameServerAddr>("LOCAL_DNS_ADDR").cloned() {
+                    local_config.local_dns_addr = Some(addr);
                 }
 
-                match matches.value_of_t::<RemoteDnsAddress>("REMOTE_DNS_ADDR") {
-                    Ok(addr) => local_config.remote_dns_addr = Some(addr.0),
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if let Some(addr) = matches.get_one::<RemoteDnsAddress>("REMOTE_DNS_ADDR").cloned() {
+                    local_config.remote_dns_addr = Some(addr.0);
                 }
             }
 
@@ -621,18 +656,14 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 // Start a DNS local server binding to DNS_LOCAL_ADDR
                 //
                 // This is a special route only for shadowsocks-android
-                match matches.value_of_t::<ServerAddr>("DNS_LOCAL_ADDR") {
-                    Ok(addr) => {
-                        let mut local_dns_config = LocalConfig::new_with_addr(addr, ProtocolType::Dns);
+                if let Some(addr) = matches.get_one::<ServerAddr>("DNS_LOCAL_ADDR").cloned() {
+                    let mut local_dns_config = LocalConfig::new_with_addr(addr, ProtocolType::Dns);
 
-                        // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
-                        local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
-                        local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
+                    // The `local_dns_addr` and `remote_dns_addr` are for this DNS server (for compatibility)
+                    local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
+                    local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
 
-                        config.local.push(local_dns_config);
-                    }
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                    config.local.push(local_dns_config);
                 }
             }
 
@@ -640,80 +671,67 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             {
                 use ipnet::IpNet;
 
-                match matches.value_of_t::<IpNet>("TUN_INTERFACE_ADDRESS") {
-                    Ok(tun_address) => local_config.tun_interface_address = Some(tun_address),
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if let Some(tun_address) = matches.get_one::<IpNet>("TUN_INTERFACE_ADDRESS").cloned() {
+                    local_config.tun_interface_address = Some(tun_address);
                 }
-                match matches.value_of_t::<String>("TUN_INTERFACE_NAME") {
-                    Ok(tun_name) => local_config.tun_interface_name = Some(tun_name),
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if let Some(tun_name) = matches.get_one::<String>("TUN_INTERFACE_NAME").cloned() {
+                    local_config.tun_interface_name = Some(tun_name);
                 }
 
                 #[cfg(unix)]
-                match matches.value_of_t::<PathBuf>("TUN_DEVICE_FD_FROM_PATH") {
-                    Ok(fd_path) => local_config.tun_device_fd_from_path = Some(fd_path),
-                    Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-                    Err(err) => err.exit(),
+                if let Some(fd_path) = matches.get_one::<PathBuf>("TUN_DEVICE_FD_FROM_PATH").cloned() {
+                    local_config.tun_device_fd_from_path = Some(fd_path);
                 }
             }
 
-            if matches.is_present("UDP_ONLY") {
+            if matches.get_flag("UDP_ONLY") {
                 local_config.mode = Mode::UdpOnly;
             }
 
-            if matches.is_present("TCP_AND_UDP") {
+            if matches.get_flag("TCP_AND_UDP") {
                 local_config.mode = Mode::TcpAndUdp;
             }
 
             config.local.push(local_config);
         }
 
-        if matches.is_present("TCP_NO_DELAY") {
+        if matches.get_flag("TCP_NO_DELAY") {
             config.no_delay = true;
         }
 
-        if matches.is_present("TCP_FAST_OPEN") {
+        if matches.get_flag("TCP_FAST_OPEN") {
             config.fast_open = true;
         }
 
-        match matches.value_of_t::<u64>("TCP_KEEP_ALIVE") {
-            Ok(keep_alive) => config.keep_alive = Some(Duration::from_secs(keep_alive)),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(keep_alive) = matches.get_one::<u64>("TCP_KEEP_ALIVE") {
+            config.keep_alive = Some(Duration::from_secs(*keep_alive));
         }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        match matches.value_of_t::<u32>("OUTBOUND_FWMARK") {
-            Ok(mark) => config.outbound_fwmark = Some(mark),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(mark) = matches.get_one::<u32>("OUTBOUND_FWMARK") {
+            config.outbound_fwmark = Some(*mark);
         }
 
         #[cfg(target_os = "freebsd")]
-        match matches.value_of_t::<u32>("OUTBOUND_USER_COOKIE") {
-            Ok(user_cookie) => config.outbound_user_cookie = Some(user_cookie),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(user_cookie) = matches.get_one::<u32>("OUTBOUND_USER_COOKIE") {
+            config.outbound_user_cookie = Some(*user_cookie);
         }
 
-        match matches.value_of_t::<String>("OUTBOUND_BIND_INTERFACE") {
-            Ok(iface) => config.outbound_bind_interface = Some(iface),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(iface) = matches.get_one::<String>("OUTBOUND_BIND_INTERFACE").cloned() {
+            config.outbound_bind_interface = Some(iface);
         }
 
         #[cfg(all(unix, not(target_os = "android")))]
-        match matches.value_of_t::<u64>("NOFILE") {
-            Ok(nofile) => config.nofile = Some(nofile),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {
-                crate::sys::adjust_nofile();
+        match matches.get_one::<u64>("NOFILE") {
+            Some(nofile) => config.nofile = Some(*nofile),
+            None => {
+                if config.nofile.is_none() {
+                    crate::sys::adjust_nofile();
+                }
             }
-            Err(err) => err.exit(),
         }
 
-        if let Some(acl_file) = matches.value_of("ACL") {
+        if let Some(acl_file) = matches.get_one::<String>("ACL") {
             let acl = match AccessControl::load_from_file(acl_file) {
                 Ok(acl) => acl,
                 Err(err) => {
@@ -724,51 +742,37 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             config.acl = Some(acl);
         }
 
-        if let Some(dns) = matches.value_of("DNS") {
+        if let Some(dns) = matches.get_one::<String>("DNS") {
             config.set_dns_formatted(dns).expect("dns");
         }
 
-        if matches.is_present("IPV6_FIRST") {
+        if matches.get_flag("IPV6_FIRST") {
             config.ipv6_first = true;
         }
 
-        match matches.value_of_t::<u64>("UDP_TIMEOUT") {
-            Ok(udp_timeout) => config.udp_timeout = Some(Duration::from_secs(udp_timeout)),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(udp_timeout) = matches.get_one::<u64>("UDP_TIMEOUT") {
+            config.udp_timeout = Some(Duration::from_secs(*udp_timeout));
         }
 
-        match matches.value_of_t::<usize>("UDP_MAX_ASSOCIATIONS") {
-            Ok(udp_max_assoc) => config.udp_max_associations = Some(udp_max_assoc),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(udp_max_assoc) = matches.get_one::<usize>("UDP_MAX_ASSOCIATIONS") {
+            config.udp_max_associations = Some(*udp_max_assoc);
         }
 
-        match matches.value_of_t::<u32>("INBOUND_SEND_BUFFER_SIZE") {
-            Ok(bs) => config.inbound_send_buffer_size = Some(bs),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(bs) = matches.get_one::<u32>("INBOUND_SEND_BUFFER_SIZE") {
+            config.inbound_send_buffer_size = Some(*bs);
         }
-        match matches.value_of_t::<u32>("INBOUND_RECV_BUFFER_SIZE") {
-            Ok(bs) => config.inbound_recv_buffer_size = Some(bs),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(bs) = matches.get_one::<u32>("INBOUND_RECV_BUFFER_SIZE") {
+            config.inbound_recv_buffer_size = Some(*bs);
         }
-        match matches.value_of_t::<u32>("OUTBOUND_SEND_BUFFER_SIZE") {
-            Ok(bs) => config.outbound_send_buffer_size = Some(bs),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(bs) = matches.get_one::<u32>("OUTBOUND_SEND_BUFFER_SIZE") {
+            config.outbound_send_buffer_size = Some(*bs);
         }
-        match matches.value_of_t::<u32>("OUTBOUND_RECV_BUFFER_SIZE") {
-            Ok(bs) => config.outbound_recv_buffer_size = Some(bs),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(bs) = matches.get_one::<u32>("OUTBOUND_RECV_BUFFER_SIZE") {
+            config.outbound_recv_buffer_size = Some(*bs);
         }
 
-        match matches.value_of_t::<IpAddr>("OUTBOUND_BIND_ADDR") {
-            Ok(bind_addr) => config.outbound_bind_addr = Some(bind_addr),
-            Err(ref err) if err.kind() == ClapErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(bind_addr) = matches.get_one::<IpAddr>("OUTBOUND_BIND_ADDR") {
+            config.outbound_bind_addr = Some(*bind_addr);
         }
 
         // DONE READING options
@@ -787,13 +791,13 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         }
 
         #[cfg(unix)]
-        if matches.is_present("DAEMONIZE") || matches.is_present("DAEMONIZE_PID_PATH") {
+        if matches.get_flag("DAEMONIZE") || matches.get_raw("DAEMONIZE_PID_PATH").is_some() {
             use crate::daemonize;
-            daemonize::daemonize(matches.value_of("DAEMONIZE_PID_PATH"));
+            daemonize::daemonize(matches.get_one::<PathBuf>("DAEMONIZE_PID_PATH"));
         }
 
         #[cfg(unix)]
-        if let Some(uname) = matches.value_of("USER") {
+        if let Some(uname) = matches.get_one::<String>("USER") {
             crate::sys::run_as_user(uname);
         }
 
@@ -878,3 +882,17 @@ fn launch_reload_server_task(config_path: PathBuf, balancer: PingBalancer) {
 
 #[cfg(not(unix))]
 fn launch_reload_server_task(_: PathBuf, _: PingBalancer) {}
+
+#[cfg(test)]
+mod test {
+    use clap::Command;
+
+    #[test]
+    fn verify_local_command() {
+        let mut app = Command::new("shadowsocks")
+            .version(crate::VERSION)
+            .about("A fast tunnel proxy that helps you bypass firewalls. (https://shadowsocks.org)");
+        app = super::define_command_line_options(app);
+        app.debug_assert();
+    }
+}

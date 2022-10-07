@@ -161,30 +161,28 @@ impl Config {
     pub fn set_options(&mut self, matches: &ArgMatches) {
         #[cfg(feature = "logging")]
         {
-            let debug_level = matches.occurrences_of("VERBOSE");
+            let debug_level = matches.get_count("VERBOSE");
             if debug_level > 0 {
                 self.log.level = debug_level as u32;
             }
 
-            if matches.is_present("LOG_WITHOUT_TIME") {
+            if matches.get_flag("LOG_WITHOUT_TIME") {
                 self.log.format.without_time = true;
             }
 
-            if let Some(log_config) = matches.value_of("LOG_CONFIG") {
-                self.log.config_path = Some(log_config.into());
+            if let Some(log_config) = matches.get_one::<PathBuf>("LOG_CONFIG").cloned() {
+                self.log.config_path = Some(log_config);
             }
         }
 
         #[cfg(feature = "multi-threaded")]
-        if matches.is_present("SINGLE_THREADED") {
+        if matches.get_flag("SINGLE_THREADED") {
             self.runtime.mode = RuntimeMode::SingleThread;
         }
 
         #[cfg(feature = "multi-threaded")]
-        match matches.value_of_t::<usize>("WORKER_THREADS") {
-            Ok(worker_count) => self.runtime.worker_count = Some(worker_count),
-            Err(ref err) if err.kind() == clap::ErrorKind::ArgumentNotFound => {}
-            Err(err) => err.exit(),
+        if let Some(worker_count) = matches.get_one::<usize>("WORKER_THREADS") {
+            self.runtime.worker_count = Some(*worker_count);
         }
 
         let _ = matches;

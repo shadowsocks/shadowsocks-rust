@@ -3,7 +3,7 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command, ValueHint};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{
@@ -80,7 +80,8 @@ fn main() {
             Arg::new("ENCODE_CONFIG_PATH")
                 .short('e')
                 .long("encode")
-                .takes_value(true)
+                .action(ArgAction::Set)
+                .value_hint(ValueHint::FilePath)
                 .conflicts_with("DECODE_CONFIG_PATH")
                 .required_unless_present("DECODE_CONFIG_PATH")
                 .help("Encode the server configuration in the provided JSON file"),
@@ -89,7 +90,8 @@ fn main() {
             Arg::new("DECODE_CONFIG_PATH")
                 .short('d')
                 .long("decode")
-                .takes_value(true)
+                .action(ArgAction::Set)
+                .value_hint(ValueHint::FilePath)
                 .required_unless_present("ENCODE_CONFIG_PATH")
                 .help("Decode the server configuration from the provide ShadowSocks URL"),
         )
@@ -97,15 +99,16 @@ fn main() {
             Arg::new("QRCODE")
                 .short('c')
                 .long("qrcode")
+                .action(ArgAction::SetTrue)
                 .help("Generate the QRCode with the provided configuration"),
         );
     let matches = app.get_matches();
 
-    let need_qrcode = matches.is_present("QRCODE");
+    let need_qrcode = matches.get_flag("QRCODE");
 
-    if let Some(file) = matches.value_of("ENCODE_CONFIG_PATH") {
+    if let Some(file) = matches.get_one::<String>("ENCODE_CONFIG_PATH") {
         encode(file, need_qrcode);
-    } else if let Some(encoded) = matches.value_of("DECODE_CONFIG_PATH") {
+    } else if let Some(encoded) = matches.get_one::<String>("DECODE_CONFIG_PATH") {
         decode(encoded, need_qrcode);
     } else {
         println!("Use -h for more detail");
