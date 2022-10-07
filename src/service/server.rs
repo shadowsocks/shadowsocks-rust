@@ -202,6 +202,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .long("nofile")
                 .num_args(1)
                 .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(u64))
                 .help("Set RLIMIT_NOFILE with both soft and hard limit"),
         );
     }
