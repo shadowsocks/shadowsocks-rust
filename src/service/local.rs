@@ -9,7 +9,7 @@ use tokio::{self, runtime::Builder};
 
 #[cfg(feature = "local-redir")]
 use shadowsocks_service::config::RedirType;
-#[cfg(any(feature = "local-dns", feature = "local-tunnel"))]
+#[cfg(feature = "local-tunnel")]
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
@@ -30,6 +30,44 @@ use crate::{
     monitor,
     vparser,
 };
+
+#[cfg(feature = "local-dns")]
+mod local_value_parser {
+    use std::{
+        net::{IpAddr, SocketAddr},
+        str::FromStr,
+    };
+
+    use shadowsocks_service::shadowsocks::relay::socks5::{Address, AddressError};
+
+    #[derive(Debug, Clone)]
+    pub struct RemoteDnsAddress(pub Address);
+
+    impl FromStr for RemoteDnsAddress {
+        type Err = AddressError;
+
+        fn from_str(a: &str) -> Result<RemoteDnsAddress, Self::Err> {
+            if let Ok(ip) = a.parse::<IpAddr>() {
+                return Ok(RemoteDnsAddress(Address::SocketAddress(SocketAddr::new(ip, 53))));
+            }
+
+            if let Ok(saddr) = a.parse::<SocketAddr>() {
+                return Ok(RemoteDnsAddress(Address::SocketAddress(saddr)));
+            }
+
+            if a.find(':').is_some() {
+                a.parse::<Address>().map(RemoteDnsAddress)
+            } else {
+                Ok(RemoteDnsAddress(Address::DomainNameAddress(a.to_owned(), 53)))
+            }
+        }
+    }
+
+    #[inline]
+    pub fn parse_remote_dns_address(s: &str) -> Result<RemoteDnsAddress, AddressError> {
+        s.parse::<RemoteDnsAddress>()
+    }
+}
 
 /// Defines command line options
 pub fn define_command_line_options(mut app: Command) -> Command {
@@ -333,7 +371,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                     .action(ArgAction::Set)
                     .required_if_eq("PROTOCOL", "dns")
                     .requires("LOCAL_ADDR")
-                    .value_parser(vparser::parse_address)
+                    .value_parser(self::local_value_parser::parse_remote_dns_address)
                     .help("Specify the address of remote DNS server, send queries through shadowsocks' tunnel"),
             );
 
@@ -617,30 +655,9 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
 
             #[cfg(feature = "local-dns")]
             {
-                use shadowsocks_service::{local::dns::NameServerAddr, shadowsocks::relay::socks5::AddressError};
-                use std::{net::SocketAddr, str::FromStr};
+                use shadowsocks_service::local::dns::NameServerAddr;
 
-                struct RemoteDnsAddress(Address);
-
-                impl FromStr for RemoteDnsAddress {
-                    type Err = AddressError;
-
-                    fn from_str(a: &str) -> Result<RemoteDnsAddress, Self::Err> {
-                        if let Ok(ip) = a.parse::<IpAddr>() {
-                            return Ok(RemoteDnsAddress(Address::SocketAddress(SocketAddr::new(ip, 53))));
-                        }
-
-                        if let Ok(saddr) = a.parse::<SocketAddr>() {
-                            return Ok(RemoteDnsAddress(Address::SocketAddress(saddr)));
-                        }
-
-                        if a.find(':').is_some() {
-                            a.parse::<Address>().map(RemoteDnsAddress)
-                        } else {
-                            Ok(RemoteDnsAddress(Address::DomainNameAddress(a.to_owned(), 53)))
-                        }
-                    }
-                }
+                use self::local_value_parser::RemoteDnsAddress;
 
                 if let Some(addr) = matches.get_one::<NameServerAddr>("LOCAL_DNS_ADDR").cloned() {
                     local_config.local_dns_addr = Some(addr);

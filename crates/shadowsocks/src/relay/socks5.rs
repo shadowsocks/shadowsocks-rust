@@ -394,6 +394,8 @@ impl Display for AddressError {
     }
 }
 
+impl std::error::Error for AddressError {}
+
 impl FromStr for Address {
     type Err = AddressError;
 
