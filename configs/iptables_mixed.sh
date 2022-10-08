@@ -9,6 +9,13 @@ ip6tables-save | grep -v shadowsocks- | ip6tables-restore
 ipset create chnip hash:net family inet -exist
 ipset restore < /usr/local/etc/chnip.ipset
 
+# Create gfwlist ipset
+ipset create gfwlist hash:ip family inet timeout 7200 -exist
+ipset create bypasslist hash:ip family inet timeout 7200 -exist
+
+SHADOWSOCKS_REDIR_IP=0.0.0.0
+SHADOWSOCKS_REDIR_PORT=60080
+
 readonly IPV4_RESERVED_IPADDRS="\
 0/8 \
 10/8 \
@@ -37,10 +44,14 @@ for addr in ${IPV4_RESERVED_IPADDRS}; do
 done
 # Bypass sslocal's outbound data
 iptables -t nat -A shadowsocks-nat -m mark --mark 0xff/0xff -j RETURN
+iptables -t nat -A shadowsocks-nat -m owner --uid-owner shadowsocks -j RETURN
+# Proxy gfwlist
+iptables -t nat -A shadowsocks-nat -m set --match-set gfwlist dst -p tcp -j REDIRECT --to-ports ${SHADOWSOCKS_REDIR_PORT}
 # Bypass CN IPs
 iptables -t nat -A shadowsocks-nat -m set --match-set chnip dst -p tcp -j RETURN
+iptables -t nat -A shadowsocks-nat -m set --match-set bypasslist dst -p tcp -j RETURN
 # Redirect TCP to 60080
-iptables -t nat -A shadowsocks-nat -p tcp -j REDIRECT --to-ports 60080
+iptables -t nat -A shadowsocks-nat -p tcp -j REDIRECT --to-ports ${SHADOWSOCKS_REDIR_PORT}
 # Local TCP -> shadowsocks-nat
 iptables -t nat -A OUTPUT -p tcp -j shadowsocks-nat
 # LAN TCP -> shadowsocks-nat
@@ -62,10 +73,13 @@ done
 
 # Bypass sslocal's outbound data
 iptables -t mangle -A shadowsocks-tproxy -m mark --mark 0xff/0xff -j RETURN
+# Proxy gfwlist
+iptables -t mangle -A shadowsocks-tproxy -m set --match-set gfwlist dst -p udp -j TPROXY --on-ip ${SHADOWSOCKS_REDIR_IP} --on-port ${SHADOWSOCKS_REDIR_PORT} --tproxy-mark 0x01/0x01
 # Bypass CN IPs
 iptables -t mangle -A shadowsocks-tproxy -m set --match-set chnip dst -p udp -j RETURN
+iptables -t mangle -A shadowsocks-tproxy -m set --match-set bypasslist dst -p udp -j RETURN
 # TPROXY UDP to 60080
-iptables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-ip 0.0.0.0 --on-port 60080 --tproxy-mark 0x01/0x01
+iptables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-ip ${SHADOWSOCKS_REDIR_IP} --on-port ${SHADOWSOCKS_REDIR_PORT} --tproxy-mark 0x01/0x01
 
 # TPROXY for Local
 iptables -t mangle -N shadowsocks-tproxy-mark
@@ -76,6 +90,9 @@ done
 
 # Bypass sslocal's outbound data
 iptables -t mangle -A shadowsocks-tproxy-mark -m mark --mark 0xff/0xff -j RETURN
+iptables -t mangle -A shadowsocks-tproxy-mark -m owner --uid-owner shadowsocks -j RETURN
+# Proxy gfwlist
+iptables -t mangle -A shadowsocks-tproxy-mark -m set --match-set gfwlist dst -j MARK --set-xmark 0x01/0xffffffff
 # Bypass CN IPs
 iptables -t mangle -A shadowsocks-tproxy-mark -m set --match-set chnip dst -j RETURN
 # Set MARK and reroute
@@ -102,6 +119,13 @@ iptables -t mangle -A OUTPUT -p udp -j shadowsocks-tproxy-mark
 ipset create chnip6 hash:net family inet6 -exist
 ipset restore < /usr/local/etc/chnip6.ipset
 
+# Create gfwlist6 ipset
+ipset create gfwlist6 hash:ip family inet6 timeout 7200 -exist
+ipset create bypasslist6 hash:ip family inet6 timeout 7200 -exist
+
+SHADOWSOCKS6_REDIR_IP=::
+SHADOWSOCKS6_REDIR_PORT=60081
+
 readonly IPV6_RESERVED_IPADDRS="\
 ::/128 \
 ::1/128 \
@@ -127,10 +151,14 @@ for addr in ${IPV6_RESERVED_IPADDRS}; do
 done
 # Bypass sslocal's outbound data
 ip6tables -t nat -A shadowsocks-nat -m mark --mark 0xff/0xff -j RETURN
+ip6tables -t nat -A shadowsocks-nat -m owner --uid-owner shadowsocks -j RETURN
+# Proxy gfwlist6
+ip6tables -t nat -A shadowsocks-nat -m set --match-set gfwlist6 dst -p tcp -j REDIRECT --to-ports ${SHADOWSOCKS6_REDIR_PORT}
 # Bypass CN IPs
 ip6tables -t nat -A shadowsocks-nat -m set --match-set chnip6 dst -p tcp -j RETURN
-# Redirect TCP to 60080
-ip6tables -t nat -A shadowsocks-nat -p tcp -j REDIRECT --to-ports 60081
+ip6tables -t nat -A shadowsocks-nat -m set --match-set bypasslist6 dst -p tcp -j RETURN
+# Redirect TCP to 60081
+ip6tables -t nat -A shadowsocks-nat -p tcp -j REDIRECT --to-ports ${SHADOWSOCKS6_REDIR_PORT}
 # Local TCP -> shadowsocks-nat
 ip6tables -t nat -A OUTPUT -p tcp -j shadowsocks-nat
 # LAN TCP -> shadowsocks-nat
@@ -152,10 +180,13 @@ done
 
 # Bypass sslocal's outbound data
 ip6tables -t mangle -A shadowsocks-tproxy -m mark --mark 0xff/0xff -j RETURN
+# Proxy gfwlist6
+ip6tables -t mangle -A shadowsocks-tproxy -m set --match-set gfwlist6 dst -p udp -j TPROXY --on-ip ${SHADOWSOCKS6_REDIR_IP} --on-port ${SHADOWSOCKS6_REDIR_PORT} --tproxy-mark 0x01/0x01
 # Bypass CN IPs
 ip6tables -t mangle -A shadowsocks-tproxy -m set --match-set chnip6 dst -p udp -j RETURN
-# TPROXY UDP to 60080
-ip6tables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-ip :: --on-port 60081 --tproxy-mark 0x01/0x01
+ip6tables -t mangle -A shadowsocks-tproxy -m set --match-set bypasslist6 dst -p udp -j RETURN
+# TPROXY UDP to 60081
+ip6tables -t mangle -A shadowsocks-tproxy -p udp -j TPROXY --on-ip ${SHADOWSOCKS6_REDIR_IP} --on-port ${SHADOWSOCKS6_REDIR_PORT} --tproxy-mark 0x01/0x01
 
 # TPROXY for Local
 ip6tables -t mangle -N shadowsocks-tproxy-mark
@@ -166,6 +197,9 @@ done
 
 # Bypass sslocal's outbound data
 ip6tables -t mangle -A shadowsocks-tproxy-mark -m mark --mark 0xff/0xff -j RETURN
+ip6tables -t mangle -A shadowsocks-tproxy-mark -m owner --uid-owner shadowsocks -j RETURN
+# Proxy gfwlist6
+ip6tables -t mangle -A shadowsocks-tproxy-mark -m set --match-set gfwlist6 dst -j MARK --set-xmark 0x01/0xffffffff
 # Bypass CN IPs
 ip6tables -t mangle -A shadowsocks-tproxy-mark -m set --match-set chnip6 dst -j RETURN
 # Set MARK and reroute

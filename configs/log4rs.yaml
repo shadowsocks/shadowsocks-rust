@@ -19,7 +19,7 @@ appenders:
         pattern: shadowsocks.{}.log
         count: 5
 root:
-  level: debug
+  level: info
   appenders:
     - stdout
     - file
