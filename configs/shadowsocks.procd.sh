@@ -49,7 +49,7 @@ start_service() {
 
     mkdir -p ${SHADOWSOCKS_LOG_FILE_PATH}
     if id "shadowsocks" &>/dev/null; then
-        chown shadowsocks:users -R ${SHADOWSOCKS_LOG_FILE_PATH}
+        chown shadowsocks:shadowsocks -R ${SHADOWSOCKS_LOG_FILE_PATH}
     fi
 
     SHADOWSOCKS_CONFIG_PATH="/usr/local/etc/shadowsocks.json"
@@ -71,8 +71,11 @@ start_service() {
 
     if id "shadowsocks" &>/dev/null; then
         if [ -x /sbin/ujail -a -e ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH} ]; then
-            procd_add_jail shadowsocks log requirejail
+            procd_add_jail shadowsocks requirejail
+            procd_add_jail_mount ${SHADOWSOCKS_CONFIG_PATH}
+            procd_add_jail_mount ${SHADOWSOCKS_LOG_CONFIG_PATH}
             procd_set_param user shadowsocks
+            procd_set_param group shadowsocks
             procd_set_param capabilities ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH}
             procd_set_param no_new_privs 1
             procd_set_param command ${SHADOWSOCKS_COMMAND}
@@ -108,8 +111,11 @@ start_service() {
 
     if id "shadowsocks" &>/dev/null; then
         if [ -x /sbin/ujail -a -e ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH} ]; then
-            procd_add_jail shadowsocks6 log requirejail
+            procd_add_jail shadowsocks6 requirejail
+            procd_add_jail_mount ${SHADOWSOCKS6_CONFIG_PATH}
+            procd_add_jail_mount ${SHADOWSOCKS6_LOG_CONFIG_PATH}
             procd_set_param user shadowsocks
+            procd_set_param group shadowsocks
             procd_set_param capabilities ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH}
             procd_set_param no_new_privs 1
             procd_set_param command ${SHADOWSOCKS6_COMMAND}
