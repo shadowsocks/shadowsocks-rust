@@ -326,41 +326,16 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.22"
+version = "4.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86447ad904c7fb335a790c9d7fe3d0d971dc523b8ccd1561a520de9a85302750"
+checksum = "4ed45cc2c62a3eff523e718d8576ba762c83a3146151093283ac62ae11933a73"
 dependencies = [
  "atty",
  "bitflags",
- "clap_lex 0.2.4",
- "indexmap",
+ "clap_lex",
  "strsim",
  "termcolor",
  "terminal_size",
- "textwrap",
-]
-
-[[package]]
-name = "clap"
-version = "4.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b1a0a4208c6c483b952ad35c6eed505fc13b46f08f631b81e828084a9318d74"
-dependencies = [
- "atty",
- "bitflags",
- "clap_lex 0.3.0",
- "strsim",
- "termcolor",
- "terminal_size",
-]
-
-[[package]]
-name = "clap_lex"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
-dependencies = [
- "os_str_bytes",
 ]
 
 [[package]]
@@ -2085,7 +2060,7 @@ dependencies = [
  "byte_string",
  "byteorder",
  "cfg-if",
- "clap 4.0.10",
+ "clap",
  "daemonize",
  "directories",
  "env_logger",
@@ -2161,7 +2136,7 @@ name = "shadowsocks-tools"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "clap 3.2.22",
+ "clap",
  "env_logger",
  "rand",
  "shadowsocks",
@@ -2338,15 +2313,6 @@ checksum = "8440c860cf79def6164e4a0a983bcc2305d82419177a0e0c71930d049e3ac5a1"
 dependencies = [
  "rustix",
  "windows-sys 0.36.1",
-]
-
-[[package]]
-name = "textwrap"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949517c0cf1bf4ee812e2e07e08ab448e3ae0d23472aee8a06c985f0c8815b16"
-dependencies = [
- "terminal_size",
 ]
 
 [[package]]
