@@ -541,6 +541,19 @@ Example configuration:
             //
             // It has to be a host address in CIDR form
             "tun_interface_address": "10.255.0.1/24"
+        },
+        {
+            // Transparent Proxy (redir) local server (feature = "local-redir")
+            "protocol": "redir",
+            // OPTIONAL: TCP type, may be different between platforms
+            // Linux/Android: redirect (default), tproxy
+            // FreeBSD/OpenBSD: pf (default), ipfw
+            // NetBSD/macOS/Solaris: pf (default), ipfw
+            "tcp_redir": "tproxy",
+            // OPTIONAL: UDP type, may be different between platforms
+            // Linux/Android: tproxy (default)
+            // FreeBSD/OpenBSD: pf (default)
+            "udp_redir": "tproxy"
         }
     ],
 
