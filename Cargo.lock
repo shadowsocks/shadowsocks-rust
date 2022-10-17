@@ -2062,6 +2062,7 @@ dependencies = [
 name = "shadowsocks-rust"
 version = "1.15.0-alpha.9"
 dependencies = [
+ "base64",
  "build-time",
  "byte_string",
  "byteorder",
@@ -2080,6 +2081,7 @@ dependencies = [
  "mimalloc",
  "num_cpus",
  "qrcode",
+ "rand",
  "rpassword",
  "rpmalloc",
  "serde",

@@ -1,5 +1,6 @@
 //! Service launchers
 
+pub mod genkey;
 #[cfg(feature = "local")]
 pub mod local;
 #[cfg(feature = "manager")]
