@@ -144,7 +144,7 @@ neon = ["shadowsocks-service/neon"]
 
 [dependencies]
 log = "0.4"
-log4rs = { version = "1.0", optional = true }
+log4rs = { version = "1.2", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 thiserror = "1.0"
