@@ -668,7 +668,15 @@ impl ServerConfig {
                 (m, p)
             }
             None => {
-                let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
+                let decoded_user_info = match percent_encoding::percent_decode_str(user_info).decode_utf8() {
+                    Ok(m) => m,
+                    Err(err) => {
+                        error!("failed to parse percent-encoded userinfo, err: {}", err);
+                        return Err(UrlParseError::InvalidAuthInfo);
+                    }
+                };
+
+                let account = match decode_config(decoded_user_info.to_string(), URL_SAFE_NO_PAD) {
                     Ok(account) => match String::from_utf8(account) {
                         Ok(ac) => ac,
                         Err(..) => return Err(UrlParseError::InvalidAuthInfo),
