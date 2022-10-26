@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
+use base64::{decode_config, encode_config, URL_SAFE, URL_SAFE_NO_PAD};
 use byte_string::ByteStr;
 use bytes::Bytes;
 use cfg_if::cfg_if;
@@ -668,7 +668,29 @@ impl ServerConfig {
                 (m, p)
             }
             None => {
-                let account = match decode_config(user_info, URL_SAFE_NO_PAD) {
+                // userinfo is not required to be percent encoded, but some implementation did.
+                // If the base64 library have padding = added to the encoded string, then it will become %3D.
+
+                let decoded_user_info = match percent_encoding::percent_decode_str(user_info).decode_utf8() {
+                    Ok(m) => m,
+                    Err(err) => {
+                        error!("failed to parse percent-encoded userinfo, err: {}", err);
+                        return Err(UrlParseError::InvalidAuthInfo);
+                    }
+                };
+
+                // reborrow to fit AsRef<[u8]>
+                let decoded_user_info: &str = &decoded_user_info;
+
+                let base64_config = if decoded_user_info.ends_with('=') {
+                    // Some implementation, like outline,
+                    // or those with Python (base64 in Python will still have '=' padding for URL safe encode)
+                    URL_SAFE
+                } else {
+                    URL_SAFE_NO_PAD
+                };
+
+                let account = match decode_config(decoded_user_info, base64_config) {
                     Ok(account) => match String::from_utf8(account) {
                         Ok(ac) => ac,
                         Err(..) => return Err(UrlParseError::InvalidAuthInfo),
