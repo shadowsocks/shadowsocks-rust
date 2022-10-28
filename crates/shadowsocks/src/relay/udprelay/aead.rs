@@ -77,7 +77,7 @@ pub fn encrypt_payload_aead(
 }
 
 /// Decrypt UDP AEAD protocol packet
-pub async fn decrypt_payload_aead(
+pub fn decrypt_payload_aead(
     _context: &Context,
     method: CipherKind,
     key: &[u8],
@@ -109,7 +109,7 @@ pub async fn decrypt_payload_aead(
     let data_len = data.len() - tag_len;
     let data = &mut data[..data_len];
 
-    let (dn, addr) = parse_packet(data).await?;
+    let (dn, addr) = parse_packet(data)?;
 
     let data_length = data_len - dn;
     let data_start_idx = salt_len + dn;
@@ -120,9 +120,10 @@ pub async fn decrypt_payload_aead(
     Ok((data_length, addr))
 }
 
-async fn parse_packet(buf: &[u8]) -> ProtocolResult<(usize, Address)> {
+#[inline]
+fn parse_packet(buf: &[u8]) -> ProtocolResult<(usize, Address)> {
     let mut cur = Cursor::new(buf);
-    match Address::read_from(&mut cur).await {
+    match Address::read_cursor(&mut cur) {
         Ok(address) => {
             let pos = cur.position() as usize;
             Ok((pos, address))
