@@ -66,7 +66,7 @@ pub fn encrypt_payload_stream(
 }
 
 /// Decrypt UDP stream protocol packet
-pub async fn decrypt_payload_stream(
+pub fn decrypt_payload_stream(
     _context: &Context,
     method: CipherKind,
     key: &[u8],
@@ -87,7 +87,7 @@ pub async fn decrypt_payload_stream(
 
     assert!(cipher.decrypt_packet(data));
 
-    let (dn, addr) = parse_packet(data).await?;
+    let (dn, addr) = parse_packet(data)?;
 
     let data_start_idx = iv_len + dn;
     let data_length = payload.len() - data_start_idx;
@@ -96,9 +96,10 @@ pub async fn decrypt_payload_stream(
     Ok((data_length, addr))
 }
 
-async fn parse_packet(buf: &[u8]) -> ProtocolResult<(usize, Address)> {
+#[inline]
+fn parse_packet(buf: &[u8]) -> ProtocolResult<(usize, Address)> {
     let mut cur = Cursor::new(buf);
-    match Address::read_from(&mut cur).await {
+    match Address::read_cursor(&mut cur) {
         Ok(address) => {
             let pos = cur.position() as usize;
             Ok((pos, address))

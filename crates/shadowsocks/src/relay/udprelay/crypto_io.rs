@@ -132,7 +132,7 @@ pub fn encrypt_server_payload(
 }
 
 /// Decrypt `Client -> Server` payload from ShadowSocks UDP encrypted packet
-pub async fn decrypt_client_payload(
+pub fn decrypt_client_payload(
     context: &Context,
     method: CipherKind,
     key: &[u8],
@@ -143,7 +143,7 @@ pub async fn decrypt_client_payload(
         CipherCategory::None => {
             let _ = user_manager;
             let mut cur = Cursor::new(payload);
-            match Address::read_from(&mut cur).await {
+            match Address::read_cursor(&mut cur) {
                 Ok(address) => {
                     let pos = cur.position() as usize;
                     let payload = cur.into_inner();
@@ -157,27 +157,24 @@ pub async fn decrypt_client_payload(
         CipherCategory::Stream => {
             let _ = user_manager;
             decrypt_payload_stream(context, method, key, payload)
-                .await
                 .map(|(n, a)| (n, a, None))
                 .map_err(Into::into)
         }
         CipherCategory::Aead => {
             let _ = user_manager;
             decrypt_payload_aead(context, method, key, payload)
-                .await
                 .map(|(n, a)| (n, a, None))
                 .map_err(Into::into)
         }
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => decrypt_client_payload_aead_2022(context, method, key, payload, user_manager)
-            .await
             .map(|(n, a, c)| (n, a, Some(c)))
             .map_err(Into::into),
     }
 }
 
 /// Decrypt `Server -> Client` payload from ShadowSocks UDP encrypted packet
-pub async fn decrypt_server_payload(
+pub fn decrypt_server_payload(
     context: &Context,
     method: CipherKind,
     key: &[u8],
@@ -186,7 +183,7 @@ pub async fn decrypt_server_payload(
     match method.category() {
         CipherCategory::None => {
             let mut cur = Cursor::new(payload);
-            match Address::read_from(&mut cur).await {
+            match Address::read_cursor(&mut cur) {
                 Ok(address) => {
                     let pos = cur.position() as usize;
                     let payload = cur.into_inner();
@@ -198,16 +195,13 @@ pub async fn decrypt_server_payload(
         }
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload)
-            .await
             .map(|(n, a)| (n, a, None))
             .map_err(Into::into),
         CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload)
-            .await
             .map(|(n, a)| (n, a, None))
             .map_err(Into::into),
         #[cfg(feature = "aead-cipher-2022")]
         CipherCategory::Aead2022 => decrypt_server_payload_aead_2022(context, method, key, payload)
-            .await
             .map(|(n, a, c)| (n, a, Some(c)))
             .map_err(Into::into),
     }

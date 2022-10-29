@@ -4,14 +4,15 @@ use std::{
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
+    task::{ready, Context, Poll},
     time::Duration,
 };
 
 use byte_string::ByteStr;
 use bytes::{Bytes, BytesMut};
-use log::{trace, warn};
+use log::{info, trace, warn};
 use once_cell::sync::Lazy;
-use tokio::{net::ToSocketAddrs, time};
+use tokio::{io::ReadBuf, net::ToSocketAddrs, time};
 
 use crate::{
     config::{ServerAddr, ServerConfig, ServerUserManager},
@@ -254,6 +255,95 @@ impl ProxySocket {
         Ok(send_len)
     }
 
+    /// poll family functions
+    /// the send_timeout is ignored.
+    pub fn poll_send(&self, addr: &Address, payload: &[u8], cx: &mut Context<'_>) -> Poll<ProxySocketResult<usize>> {
+        self.poll_send_with_ctrl(addr, &DEFAULT_SOCKET_CONTROL, payload, cx)
+    }
+
+    pub fn poll_send_with_ctrl(
+        &self,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        payload: &[u8],
+        cx: &mut Context<'_>,
+    ) -> Poll<ProxySocketResult<usize>> {
+        let mut send_buf = BytesMut::with_capacity(payload.len() + 256);
+
+        self.encrypt_send_buffer(addr, control, &self.identity_keys, payload, &mut send_buf)?;
+
+        trace!(
+            "UDP server client send to {}, control: {:?}, payload length {} bytes, packet length {} bytes",
+            addr,
+            control,
+            payload.len(),
+            send_buf.len()
+        );
+
+        let n_send_buf = send_buf.len();
+
+        match self.socket.poll_send(cx, &mut send_buf.freeze()).map_err(|x| x.into()) {
+            Poll::Ready(Ok(l)) => {
+                if l == n_send_buf {
+                    Poll::Ready(Ok(payload.len()))
+                } else {
+                    Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero).into()))
+                }
+            }
+            x => x,
+        }
+    }
+
+    pub fn poll_send_to(
+        &self,
+        target: SocketAddr,
+        addr: &Address,
+        payload: &[u8],
+        cx: &mut Context<'_>,
+    ) -> Poll<ProxySocketResult<usize>> {
+        self.poll_send_to_with_ctrl(target, addr, &DEFAULT_SOCKET_CONTROL, payload, cx)
+    }
+
+    pub fn poll_send_to_with_ctrl(
+        &self,
+        target: SocketAddr,
+        addr: &Address,
+        control: &UdpSocketControlData,
+        payload: &[u8],
+        cx: &mut Context<'_>,
+    ) -> Poll<ProxySocketResult<usize>> {
+        let mut send_buf = BytesMut::with_capacity(payload.len() + 256);
+
+        self.encrypt_send_buffer(addr, control, &self.identity_keys, payload, &mut send_buf)?;
+
+        info!(
+            "UDP server client send to {}, payload length {} bytes, packet length {} bytes",
+            target,
+            payload.len(),
+            send_buf.len()
+        );
+
+        let n_send_buf = send_buf.len();
+        match self
+            .socket
+            .poll_send_to(cx, &mut send_buf.freeze(), target)
+            .map_err(|x| x.into())
+        {
+            Poll::Ready(Ok(l)) => {
+                if l == n_send_buf {
+                    Poll::Ready(Ok(payload.len()))
+                } else {
+                    Poll::Ready(Err(io::Error::from(ErrorKind::WriteZero).into()))
+                }
+            }
+            x => x,
+        }
+    }
+
+    pub fn poll_send_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
+        self.socket.poll_send_ready(cx).map_err(|x| x.into())
+    }
+
     /// Send a UDP packet to target from proxy
     pub async fn send_to<A: ToSocketAddrs>(
         &self,
@@ -305,15 +395,15 @@ impl ProxySocket {
         Ok(send_len)
     }
 
-    async fn decrypt_recv_buffer(
+    fn decrypt_recv_buffer(
         &self,
         recv_buf: &mut [u8],
         user_manager: Option<&ServerUserManager>,
     ) -> ProtocolResult<(usize, Address, Option<UdpSocketControlData>)> {
         match self.socket_type {
-            UdpSocketType::Client => decrypt_server_payload(&self.context, self.method, &self.key, recv_buf).await,
+            UdpSocketType::Client => decrypt_server_payload(&self.context, self.method, &self.key, recv_buf),
             UdpSocketType::Server => {
-                decrypt_client_payload(&self.context, self.method, &self.key, recv_buf, user_manager).await
+                decrypt_client_payload(&self.context, self.method, &self.key, recv_buf, user_manager)
             }
         }
     }
@@ -346,10 +436,7 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr, control) = match self
-            .decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref())
-            .await
-        {
+        let (n, addr, control) = match self.decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref()) {
             Ok(x) => x,
             Err(err) => return Err(ProxySocketError::ProtocolError(err)),
         };
@@ -395,10 +482,7 @@ impl ProxySocket {
             },
         };
 
-        let (n, addr, control) = match self
-            .decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref())
-            .await
-        {
+        let (n, addr, control) = match self.decrypt_recv_buffer(&mut recv_buf[..recv_n], self.user_manager.as_deref()) {
             Ok(x) => x,
             Err(err) => return Err(ProxySocketError::ProtocolErrorWithPeer(target_addr, err)),
         };
@@ -413,6 +497,60 @@ impl ProxySocket {
         );
 
         Ok((n, target_addr, addr, recv_n, control))
+    }
+
+    /// poll family functions.
+    /// the recv_timeout is ignored.
+    pub fn poll_recv(
+        &self,
+        cx: &mut Context<'_>,
+        recv_buf: &mut ReadBuf,
+    ) -> Poll<ProxySocketResult<(usize, Address, usize)>> {
+        self.poll_recv_with_ctrl(cx, recv_buf)
+            .map(|r| r.map(|(n, a, rn, _)| (n, a, rn)))
+    }
+
+    /// poll family functions
+    pub fn poll_recv_with_ctrl(
+        &self,
+        cx: &mut Context<'_>,
+        recv_buf: &mut ReadBuf,
+    ) -> Poll<ProxySocketResult<(usize, Address, usize, Option<UdpSocketControlData>)>> {
+        ready!(self.socket.poll_recv(cx, recv_buf))?;
+
+        let n_recv = recv_buf.filled().len();
+
+        match self.decrypt_recv_buffer(recv_buf.filled_mut(), self.user_manager.as_deref()) {
+            Ok(x) => Poll::Ready(Ok((x.0, x.1, n_recv, x.2))),
+            Err(err) => return Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
+        }
+    }
+
+    pub fn poll_recv_from(
+        &self,
+        cx: &mut Context<'_>,
+        recv_buf: &mut ReadBuf,
+    ) -> Poll<ProxySocketResult<(usize, SocketAddr, Address, usize)>> {
+        self.poll_recv_from_with_ctrl(cx, recv_buf)
+            .map(|r| r.map(|(n, sa, a, rn, _)| (n, sa, a, rn)))
+    }
+
+    pub fn poll_recv_from_with_ctrl(
+        &self,
+        cx: &mut Context<'_>,
+        recv_buf: &mut ReadBuf,
+    ) -> Poll<ProxySocketResult<(usize, SocketAddr, Address, usize, Option<UdpSocketControlData>)>> {
+        let src = ready!(self.socket.poll_recv_from(cx, recv_buf))?;
+
+        let n_recv = recv_buf.filled().len();
+        match self.decrypt_recv_buffer(recv_buf.filled_mut(), self.user_manager.as_deref()) {
+            Ok(x) => Poll::Ready(Ok((x.0, src, x.1, n_recv, x.2))),
+            Err(err) => return Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
+        }
+    }
+
+    pub fn poll_recv_ready(&self, cx: &mut Context<'_>) -> Poll<ProxySocketResult<()>> {
+        self.socket.poll_recv_ready(cx).map_err(|x| x.into())
     }
 
     /// Get local addr of socket

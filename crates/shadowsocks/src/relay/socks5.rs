@@ -12,7 +12,7 @@ use std::{
     vec,
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use self::consts::{
@@ -213,6 +213,47 @@ pub enum Address {
 }
 
 impl Address {
+    /// read from a cursor
+    pub fn read_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> Result<Address, Error> {
+        if cur.remaining() < 2 {
+            return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+        }
+
+        let atyp = cur.get_u8();
+        match atyp {
+            consts::SOCKS5_ADDR_TYPE_IPV4 => {
+                if cur.remaining() < 4 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                }
+                let addr = Ipv4Addr::from(cur.get_u32());
+                let port = cur.get_u16();
+                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(addr, port))))
+            }
+            consts::SOCKS5_ADDR_TYPE_IPV6 => {
+                if cur.remaining() < 16 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                }
+                let addr = Ipv6Addr::from(cur.get_u128());
+                let port = cur.get_u16();
+                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                    addr, port, 0, 0,
+                ))))
+            }
+            consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                let domain_len = cur.get_u8() as usize;
+                if cur.remaining() < domain_len {
+                    return Err(Error::AddressDomainInvalidEncoding);
+                }
+                let mut buf = vec![0u8; domain_len];
+                cur.copy_to_slice(&mut buf);
+                let port = cur.get_u16();
+                let addr = String::from_utf8(buf).map_err(|_| Error::AddressDomainInvalidEncoding)?;
+                Ok(Address::DomainNameAddress(addr, port))
+            }
+            _ => Err(Error::AddressTypeNotSupported(atyp)),
+        }
+    }
+
     /// Parse from a `AsyncRead`
     pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
     where
