@@ -522,7 +522,7 @@ impl ProxySocket {
 
         match self.decrypt_recv_buffer(recv_buf.filled_mut(), self.user_manager.as_deref()) {
             Ok(x) => Poll::Ready(Ok((x.0, x.1, n_recv, x.2))),
-            Err(err) => return Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
+            Err(err) => Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
         }
     }
 
@@ -545,7 +545,7 @@ impl ProxySocket {
         let n_recv = recv_buf.filled().len();
         match self.decrypt_recv_buffer(recv_buf.filled_mut(), self.user_manager.as_deref()) {
             Ok(x) => Poll::Ready(Ok((x.0, src, x.1, n_recv, x.2))),
-            Err(err) => return Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
+            Err(err) => Poll::Ready(Err(ProxySocketError::ProtocolError(err))),
         }
     }
 
