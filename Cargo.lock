@@ -2220,19 +2220,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shadowsocks-tools"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "clap",
- "env_logger",
- "rand",
- "shadowsocks",
- "tokio",
- "trust-dns-proto",
-]
-
-[[package]]
 name = "signal-hook-registry"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
