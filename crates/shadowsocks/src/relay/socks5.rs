@@ -16,10 +16,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI,
-    SOCKS5_AUTH_METHOD_NONE,
-    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
-    SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 #[rustfmt::skip]
@@ -247,7 +244,7 @@ impl Address {
                 let mut buf = vec![0u8; domain_len];
                 cur.copy_to_slice(&mut buf);
                 let port = cur.get_u16();
-                let addr = String::from_utf8(buf).map_err(|x| Error::AddressDomainInvalidEncoding)?;
+                let addr = String::from_utf8(buf).map_err(|_| Error::AddressDomainInvalidEncoding)?;
                 Ok(Address::DomainNameAddress(addr, port))
             }
             _ => Err(Error::AddressTypeNotSupported(atyp)),

@@ -32,9 +32,7 @@ use crate::{
 
 #[cfg(feature = "aead-cipher-2022")]
 use super::aead_2022::{
-    decrypt_client_payload_aead_2022,
-    decrypt_server_payload_aead_2022,
-    encrypt_client_payload_aead_2022,
+    decrypt_client_payload_aead_2022, decrypt_server_payload_aead_2022, encrypt_client_payload_aead_2022,
     encrypt_server_payload_aead_2022,
 };
 #[cfg(feature = "stream-cipher")]
@@ -195,7 +193,6 @@ pub fn decrypt_server_payload(
         }
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => decrypt_payload_stream(context, method, key, payload)
-            .await
             .map(|(n, a)| (n, a, None))
             .map_err(Into::into),
         CipherCategory::Aead => decrypt_payload_aead(context, method, key, payload)

@@ -23,11 +23,7 @@ use crate::{
 };
 
 use super::crypto_io::{
-    decrypt_client_payload,
-    decrypt_server_payload,
-    encrypt_client_payload,
-    encrypt_server_payload,
-    ProtocolError,
+    decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
     ProtocolResult,
 };
 
@@ -255,6 +251,8 @@ impl ProxySocket {
         Ok(send_len)
     }
 
+    /// poll family functions
+    /// the send_timeout is ignored.
     pub fn poll_send(&self, addr: &Address, payload: &[u8], cx: &mut Context<'_>) -> Poll<ProxySocketResult<usize>> {
         self.poll_send_with_ctrl(addr, &DEFAULT_SOCKET_CONTROL, payload, cx)
     }
@@ -497,7 +495,8 @@ impl ProxySocket {
         Ok((n, target_addr, addr, recv_n, control))
     }
 
-    /// poll family functions
+    /// poll family functions.
+    /// the recv_timeout is ignored.
     pub fn poll_recv(
         &self,
         cx: &mut Context<'_>,
