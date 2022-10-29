@@ -58,7 +58,22 @@ impl UdpRedirSocket {
         socket.set_nonblocking(true)?;
         socket.set_reuse_address(true)?;
         if reuse_port {
-            socket.set_reuse_port(true)?;
+            if let Err(err) = socket.set_reuse_port(true) {
+                if let Some(errno) = err.raw_os_error() {
+                    match errno {
+                        libc::ENOPROTOOPT => {
+                            trace!("failed to set SO_REUSEPORT, error: {}", err);
+                        }
+                        _ => {
+                            error!("failed to set SO_REUSEPORT, error: {}", err);
+                            return Err(err);
+                        }
+                    }
+                } else {
+                    error!("failed to set SO_REUSEPORT, error: {}", err);
+                    return Err(err);
+                }
+            }
         }
 
         let sock_addr = SockAddr::from(addr);
