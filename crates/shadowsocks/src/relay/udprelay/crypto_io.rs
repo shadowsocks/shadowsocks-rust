@@ -32,7 +32,9 @@ use crate::{
 
 #[cfg(feature = "aead-cipher-2022")]
 use super::aead_2022::{
-    decrypt_client_payload_aead_2022, decrypt_server_payload_aead_2022, encrypt_client_payload_aead_2022,
+    decrypt_client_payload_aead_2022,
+    decrypt_server_payload_aead_2022,
+    encrypt_client_payload_aead_2022,
     encrypt_server_payload_aead_2022,
 };
 #[cfg(feature = "stream-cipher")]
