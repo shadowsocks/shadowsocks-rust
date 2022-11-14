@@ -1211,9 +1211,9 @@ checksum = "fc7fcc620a3bff7cdd7a365be3376c97191aeaccc2a603e600951e452615bf89"
 
 [[package]]
 name = "libmimalloc-sys"
-version = "0.1.26"
+version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc093ab289b0bfda3aa1bdfab9c9542be29c7ef385cfcbe77f8c9813588eb48"
+checksum = "c37567b180c1af25924b303ddf1ee4467653783440c62360beb2b322a4d93361"
 dependencies = [
  "cc",
 ]
@@ -1350,9 +1350,9 @@ dependencies = [
 
 [[package]]
 name = "mimalloc"
-version = "0.1.30"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ce6a4b40d3bff9eb3ce9881ca0737a85072f9f975886082640cd46a75cdb35"
+checksum = "b32d6a9ac92d0239d7bfa31137fb47634ac7272a3c11bcee91379ac100781670"
 dependencies = [
  "libmimalloc-sys",
 ]
