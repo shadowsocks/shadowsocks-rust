@@ -156,7 +156,7 @@ sysexits = "0.3"
 build-time = "0.1"
 directories = "4.0"
 xdg = "2.4"
-rpassword = "7.0"
+rpassword = "7.2"
 libc = { version = "0.2", features = ["extra_traits"] }
 rand = "0.8"
 
