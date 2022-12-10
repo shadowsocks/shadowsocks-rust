@@ -115,7 +115,7 @@ iprange = "0.6"
 regex = "1.4"
 
 tun = { version = "0.5.3", optional = true, features = ["async"] }
-etherparse = { version = "0.12", optional = true }
+etherparse = { version = "0.13", optional = true }
 smoltcp = { version = "0.8", optional = true, default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-icmp", "socket-udp", "socket-tcp"] }
 
 serde = { version = "1.0", features = ["derive"] }
