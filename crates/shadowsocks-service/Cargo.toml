@@ -76,11 +76,6 @@ aead-cipher-2022-extra = ["shadowsocks/aead-cipher-2022-extra"]
 # Enable detection against replay attack
 security-replay-attack-detect = ["shadowsocks/security-replay-attack-detect"]
 
-# Enable ARMv8 related optimizations
-armv8 = ["shadowsocks/armv8"]
-# Enable NEON releated optimizations
-neon = ["shadowsocks/neon"]
-
 [dependencies]
 log = "0.4"
 
