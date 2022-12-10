@@ -109,7 +109,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
     // Warning for Stream Ciphers
     #[cfg(feature = "stream-cipher")]
-    for server in config.server.iter() {
+    for inst in config.server.iter() {
+        let server = &inst.config;
+
         if server.method().is_stream() {
             log::warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
                     DO NOT USE. It will be removed in the future.", server.method(), server.addr());
@@ -124,6 +126,8 @@ pub async fn create(config: Config) -> io::Result<Server> {
         }
     }
 
+    // Global ServiceContext template
+    // Each Local instance will hold a copy of its fields
     let mut context = ServiceContext::new();
 
     let mut connect_opts = ConnectOpts {
@@ -165,14 +169,12 @@ pub async fn create(config: Config) -> io::Result<Server> {
     }
 
     if let Some(acl) = config.acl {
-        context.set_acl(acl);
+        context.set_acl(Arc::new(acl));
     }
 
     context.set_security_config(&config.security);
 
     assert!(!config.local.is_empty(), "no valid local server configuration");
-
-    let context = Arc::new(context);
 
     let mut vfut = Vec::new();
 
@@ -181,10 +183,11 @@ pub async fn create(config: Config) -> io::Result<Server> {
         let mut mode = Mode::TcpOnly;
 
         for local in &config.local {
-            mode = mode.merge(local.mode);
+            mode = mode.merge(local.config.mode);
         }
 
-        let mut balancer_builder = PingBalancerBuilder::new(context.clone(), mode);
+        // Load balancer will hold an individual ServiceContext
+        let mut balancer_builder = PingBalancerBuilder::new(Arc::new(context.clone()), mode);
 
         // max_server_rtt have to be set before add_server
         if let Some(rtt) = config.balancer.max_server_rtt {
@@ -200,7 +203,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
         }
 
         for server in config.server {
-            balancer_builder.add_server(server);
+            balancer_builder.add_server(server.config);
         }
 
         balancer_builder.build().await?
@@ -214,7 +217,19 @@ pub async fn create(config: Config) -> io::Result<Server> {
         vfut.push(ServerHandle(tokio::spawn(report_fut)));
     }
 
-    for local_config in config.local {
+    for local_instance in config.local {
+        let local_config = local_instance.config;
+
+        // Clone from global ServiceContext instance
+        // It will shares Shadowsocks' global context, and FlowStat, DNS reverse cache
+        let mut context = context.clone();
+
+        // Private ACL
+        if let Some(acl) = local_instance.acl {
+            context.set_acl(Arc::new(acl))
+        }
+
+        let context = Arc::new(context);
         let balancer = balancer.clone();
 
         match local_config.protocol {

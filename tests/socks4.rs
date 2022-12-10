@@ -11,10 +11,9 @@ use tokio::{
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, LocalConfig, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::Socks4TcpClient,
-    run_local,
-    run_server,
+    run_local, run_server,
     shadowsocks::{
         config::{ServerAddr, ServerConfig},
         crypto::CipherKind,
@@ -40,16 +39,24 @@ impl Socks4TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
                 cfg
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local = vec![LocalConfig::new_with_addr(
+                cfg.local = vec![LocalInstanceConfig::with_local_config(LocalConfig::new_with_addr(
                     ServerAddr::from(local_addr),
                     ProtocolType::Socks,
-                )];
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
+                ))];
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
                 cfg
             },
         }

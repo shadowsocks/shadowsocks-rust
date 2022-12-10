@@ -13,7 +13,10 @@ use shadowsocks_service::config::RedirType;
 use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{read_variable_field_value, Config, ConfigType, LocalConfig, ProtocolType},
+    config::{
+        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
+        ServerInstanceConfig,
+    },
     create_local,
     local::loadbalancing::PingBalancer,
     shadowsocks::{
@@ -27,8 +30,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 #[cfg(feature = "local-dns")]
@@ -571,11 +573,11 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 sc.set_plugin(plugin);
             }
 
-            config.server.push(sc);
+            config.server.push(ServerInstanceConfig::with_server_config(sc));
         }
 
         if let Some(svr_addr) = matches.get_one::<ServerConfig>("URL").cloned() {
-            config.server.push(svr_addr);
+            config.server.push(ServerInstanceConfig::with_server_config(svr_addr));
         }
 
         #[cfg(feature = "local-flow-stat")]
@@ -710,7 +712,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 local_config.mode = Mode::TcpAndUdp;
             }
 
-            config.local.push(local_config);
+            config.local.push(LocalInstanceConfig::with_local_config(local_config));
         }
 
         if matches.get_flag("TCP_NO_DELAY") {
@@ -888,7 +890,7 @@ fn launch_reload_server_task(config_path: PathBuf, balancer: PingBalancer) {
                 }
             };
 
-            let servers = config.server;
+            let servers: Vec<ServerConfig> = config.server.into_iter().map(|s| s.config).collect();
             info!("auto-reload {} with {} servers", config_path.display(), servers.len());
 
             if let Err(err) = balancer.reset_servers(servers).await {

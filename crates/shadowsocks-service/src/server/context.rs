@@ -13,6 +13,7 @@ use shadowsocks::{
 use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
 
 /// Server Service Context
+#[derive(Clone)]
 pub struct ServiceContext {
     context: SharedContext,
     connect_opts: ConnectOpts,

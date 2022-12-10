@@ -9,7 +9,7 @@ use tokio::{self, runtime::Builder};
 
 use shadowsocks_service::{
     acl::AccessControl,
-    config::{read_variable_field_value, Config, ConfigType, ManagerConfig},
+    config::{read_variable_field_value, Config, ConfigType, ManagerConfig, ServerInstanceConfig},
     run_server,
     shadowsocks::{
         config::{ManagerAddr, Mode, ServerAddr, ServerConfig},
@@ -22,8 +22,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 /// Defines command line options
@@ -369,7 +368,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 sc.set_mode(Mode::TcpAndUdp);
             }
 
-            config.server.push(sc);
+            config.server.push(ServerInstanceConfig::with_server_config(sc));
         }
 
         if matches.get_flag("TCP_NO_DELAY") {

@@ -41,7 +41,9 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     // Warning for Stream Ciphers
     #[cfg(feature = "stream-cipher")]
-    for server in config.server.iter() {
+    for inst in config.server.iter() {
+        let server = &inst.config;
+
         if server.method().is_stream() {
             log::warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
                     DO NOT USE. It will be removed in the future.", server.method(), server.addr());
@@ -93,7 +95,8 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     let acl = config.acl.map(Arc::new);
 
-    for svr_cfg in config.server {
+    for inst in config.server {
+        let svr_cfg = inst.config;
         let mut server = Server::new(svr_cfg);
 
         if let Some(ref r) = resolver {
@@ -113,8 +116,13 @@ pub async fn run(config: Config) -> io::Result<()> {
             server.set_manager_addr(m.addr.clone());
         }
 
-        if let Some(ref acl) = acl {
-            server.set_acl(acl.clone());
+        match inst.acl {
+            Some(acl) => server.set_acl(Arc::new(acl)),
+            None => {
+                if let Some(ref acl) = acl {
+                    server.set_acl(acl.clone());
+                }
+            }
         }
 
         if config.ipv6_first {

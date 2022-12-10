@@ -11,22 +11,12 @@ use shadowsocks::{
     crypto::CipherKind,
     dns_resolver::DnsResolver,
     manager::protocol::{
-        self,
-        AddRequest,
-        AddResponse,
-        ErrorResponse,
-        ListResponse,
-        ManagerRequest,
-        PingResponse,
-        RemoveRequest,
-        RemoveResponse,
-        ServerUserConfig,
-        StatRequest,
+        self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
+        RemoveResponse, ServerUserConfig, StatRequest,
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener,
-    ServerAddr,
+    ManagerListener, ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -332,7 +322,7 @@ impl Manager {
 
         use tokio::process::Command;
 
-        use crate::config::{Config, ConfigType};
+        use crate::config::{Config, ConfigType, ServerInstanceConfig};
 
         // Lock the map first incase there are multiple requests to create one server instance
         let mut servers = self.servers.lock().await;
@@ -351,8 +341,13 @@ impl Manager {
         let config_file_path = self.server_config_path(port);
         let pid_path = self.server_pid_path(port);
 
+        let server_instance = ServerInstanceConfig {
+            config: svr_cfg.clone(),
+            acl: None, // Set with --acl command line argument
+        };
+
         let mut config = Config::new(ConfigType::Server);
-        config.server.push(svr_cfg.clone());
+        config.server.push(server_instance);
 
         trace!("created standalone server with config {:?}", config);
 
@@ -618,7 +613,7 @@ impl Manager {
                                 continue;
                             }
 
-                            let svr_cfg = config.server[0].clone();
+                            let svr_cfg = config.server[0].config.clone();
 
                             vac.insert(ServerInstance {
                                 mode: ServerInstanceMode::Standalone { flow_stat: *flow },

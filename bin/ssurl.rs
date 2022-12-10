@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command, ValueHint};
 use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{
-    config::{Config, ConfigType},
+    config::{Config, ConfigType, ServerInstanceConfig},
     shadowsocks::config::ServerConfig,
 };
 
@@ -48,12 +48,12 @@ fn encode(filename: &str, need_qrcode: bool) {
     let config = Config::load_from_file(filename, ConfigType::Server).unwrap();
 
     for svr in config.server {
-        let encoded = svr.to_url();
+        let encoded = svr.config.to_url();
 
         println!("{}", encoded);
 
         if need_qrcode {
-            let encoded = svr.to_qrcode_url();
+            let encoded = svr.config.to_qrcode_url();
             print_qrcode(&encoded);
         }
     }
@@ -63,7 +63,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     let svrconfig = ServerConfig::from_url(encoded).unwrap();
 
     let mut config = Config::new(ConfigType::Server);
-    config.server.push(svrconfig);
+    config.server.push(ServerInstanceConfig::with_server_config(svrconfig));
 
     println!("{}", config);
 

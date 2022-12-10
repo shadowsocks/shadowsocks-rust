@@ -81,8 +81,8 @@ pub async fn run(config: Config) -> io::Result<()> {
         manager.set_acl(Arc::new(acl));
     }
 
-    for svr_cfg in config.server {
-        manager.add_server(svr_cfg).await;
+    for svr_inst in config.server {
+        manager.add_server(svr_inst.config).await;
     }
 
     manager.run().await
