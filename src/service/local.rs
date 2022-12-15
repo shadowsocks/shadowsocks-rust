@@ -683,7 +683,9 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                     local_dns_config.local_dns_addr = local_config.local_dns_addr.take();
                     local_dns_config.remote_dns_addr = local_config.remote_dns_addr.take();
 
-                    config.local.push(local_dns_config);
+                    config
+                        .local
+                        .push(LocalInstanceConfig::with_local_config(local_dns_config));
                 }
             }
 
