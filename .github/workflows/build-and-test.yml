@@ -28,7 +28,6 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
-          components: clippy
           default: true
           override: true
       - name: Build & Test (Default)
@@ -47,32 +46,3 @@ jobs:
         run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022"
       - name: Build with All Features Enabled - shadowsocks
         run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-2022"
-      - name: Clippy Check
-        uses: actions-rs/clippy-check@v1
-        with:
-          name: clippy-${{ matrix.platform }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: |
-            --features "local-http-rustls local-redir local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
-            -W clippy::absurd_extreme_comparisons
-            -W clippy::erasing_op
-            -A clippy::collapsible_else_if
-      # - name: prepare AppleSilicon build
-      #   uses: actions-rs/toolchain@v1
-      #   with:
-      #     target: aarch64-apple-darwin
-      #     toolchain: nightly
-      #   if: runner.os == 'macOS'
-
-      # # https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
-      # - if: runner.os == 'macOS'
-      #   run: |
-      #     sudo xcode-select -s /Applications/Xcode_12.4.app &&
-      #     sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
-
-      # - name: Check compilation for Apple Silicon
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     command: check
-      #     args: --target aarch64-apple-darwin
-      #   if: runner.os == 'macOS'

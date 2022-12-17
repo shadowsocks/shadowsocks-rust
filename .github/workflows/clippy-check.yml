@@ -1,0 +1,43 @@
+name: Clippy Check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: "trace"
+
+jobs:
+  clippy-check:
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          profile: minimal
+          components: clippy
+          default: true
+          override: true
+      - name: Clippy Check
+        uses: actions-rs/clippy-check@v1
+        with:
+          name: clippy-${{ matrix.platform }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: |
+            --features "local-http-rustls local-redir local-flow-stat local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
+            -W clippy::absurd_extreme_comparisons
+            -W clippy::erasing_op
+            -A clippy::collapsible_else_if
