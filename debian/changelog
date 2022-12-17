@@ -1,3 +1,31 @@
+shadowsocks-rust (1.15.0) unstable; urgency=medium
+
+  ## Features
+
+  - #811 AEAD-2022 protocol ([SIP022](https://github.com/shadowsocks/shadowsocks-org/issues/196))
+      - WARN: This is still a draft protocol, use it at your own risk.
+  - SIP002 Extended Format: Allowing unencoded user-info in URL, https://github.com/shadowsocks/shadowsocks-org/issues/27#issuecomment-1124853747
+  - #810 Manager standalone mode support bypassing ACL files
+  - #818 Allow `sslocal` run without any `servers`, which will bypass all connections and packets
+  - #838 `"password"` is optional for `none` / `plain` method
+  - redir-local: Enable dual-stack support on Linux (TProxy) and FreeBSD
+  - Disable `md5-asm` and `sha1-asm`: https://github.com/shadowsocks/shadowsocks-crypto/issues/16
+  - `"acl"` and `"outbound_fwmark"` are available in configuration file
+
+  ## Miscellaneous
+
+  - shadowsocks/shadowsocks-org#204 Remove `security-iv-printable-prefix` experimental feature
+  - Upgrade [clap](https://crates.io/crates/clap) to v4.0.
+  - UDP association channel size shrinked to 1024, which could save a lot of memory for each associations
+
+  ## Enhancements
+
+  - #855 Properly handle IPv4-mapped-IPv6 addresses in UDP assocations
+      - `ssserver` always convert IPv4-mapped-IPv6 addresses to IPv4 in UDP respond target addresses
+      - `sslocal`
+          - `tun`, `socks5` always convert IPv4-mapped-IPv6 addresses to IPv4
+          - `redir` always use IPv6 sockets for sending back packets
+
 shadowsocks-rust (1.14.3) unstable; urgency=medium
 
   ## Features
