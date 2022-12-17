@@ -31,7 +31,7 @@ RUN case "$TARGETARCH" in \
     && PATH="/root/$MUSL-cross/bin:$PATH" \
     && CC=/root/$MUSL-cross/bin/$MUSL-gcc \
     && echo "CC=$CC" \
-    && rustup override set nightly \
+    && rustup override set stable \
     && rustup target add "$RUST_TARGET" \
     && RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "local-tun local-redir stream-cipher aead-cipher-2022" \
     && mv target/$RUST_TARGET/release/ss* target/release/
