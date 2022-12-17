@@ -130,13 +130,13 @@ async fn socks5_relay_aead() {
     svr.run().await;
 
     let mut c = Socks5TcpClient::connect(
-        Address::DomainNameAddress("www.example.com".to_owned(), 80),
+        Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80),
         svr.client_addr(),
     )
     .await
     .unwrap();
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
     c.write_all(req).await.unwrap();
     c.flush().await.unwrap();
 

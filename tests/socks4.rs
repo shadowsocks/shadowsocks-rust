@@ -90,9 +90,9 @@ async fn socks4_relay_connect() {
     let svr = Socks4TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD);
     svr.run().await;
 
-    static HTTP_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    static HTTP_REQUEST: &[u8] = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
 
-    let mut c = Socks4TcpClient::connect(("www.example.com", 80), LOCAL_ADDR, Vec::new())
+    let mut c = Socks4TcpClient::connect(("detectportal.firefox.com", 80), LOCAL_ADDR, Vec::new())
         .await
         .unwrap();
 

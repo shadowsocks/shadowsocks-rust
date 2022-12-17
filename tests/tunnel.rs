@@ -11,8 +11,7 @@ use tokio::{
 
 use shadowsocks_service::{
     config::{Config, ConfigType},
-    run_local,
-    run_server,
+    run_local, run_server,
 };
 
 #[tokio::test]
@@ -26,7 +25,7 @@ async fn tcp_tunnel() {
                     "local_port": 9110,
                     "local_address": "127.0.0.1",
                     "protocol": "tunnel",
-                    "forward_address": "www.example.com",
+                    "forward_address": "detectportal.firefox.com",
                     "forward_port": 80
                 }
             ],
@@ -55,10 +54,10 @@ async fn tcp_tunnel() {
 
     time::sleep(Duration::from_secs(1)).await;
 
-    // Connect it directly, because it is now established a TCP tunnel with www.example.com
+    // Connect it directly, because it is now established a TCP tunnel with detectportal.firefox.com
     let mut stream = TcpStream::connect("127.0.0.1:9110").await.unwrap();
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
     stream.write_all(req).await.unwrap();
     stream.flush().await.unwrap();
 
