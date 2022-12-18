@@ -37,7 +37,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         rng.fill_bytes(&mut key);
 
         let encoded_key = base64::encode(&key);
-        println!("{}", encoded_key);
+        println!("{encoded_key}");
     }
 
     ExitCode::SUCCESS

@@ -14,7 +14,12 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{
-        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
+        read_variable_field_value,
+        Config,
+        ConfigType,
+        LocalConfig,
+        LocalInstanceConfig,
+        ProtocolType,
         ServerInstanceConfig,
     },
     create_local,
@@ -30,7 +35,8 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor, vparser,
+    monitor,
+    vparser,
 };
 
 #[cfg(feature = "local-dns")]
@@ -489,7 +495,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 match crate::config::get_default_config_path() {
                     None => None,
                     Some(p) => {
-                        println!("loading default config {:?}", p);
+                        println!("loading default config {p:?}");
                         Some(p)
                     }
                 }
@@ -502,7 +508,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             Some(ref config_path) => match ServiceConfig::load_from_file(config_path) {
                 Ok(c) => c,
                 Err(err) => {
-                    eprintln!("loading config {:?}, {}", config_path, err);
+                    eprintln!("loading config {config_path:?}, {err}");
                     return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
                 }
             },
@@ -526,7 +532,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Local) {
                 Ok(cfg) => cfg,
                 Err(err) => {
-                    eprintln!("loading config {:?}, {}", cpath, err);
+                    eprintln!("loading config {cpath:?}, {err}");
                     return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
                 }
             },
@@ -549,7 +555,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                     } else {
                         match crate::password::read_server_password(svr_addr) {
                             Ok(pwd) => pwd,
-                            Err(..) => panic!("`password` is required for server {}", svr_addr),
+                            Err(..) => panic!("`password` is required for server {svr_addr}"),
                         }
                     }
                 }
@@ -615,7 +621,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 Some("dns") => ProtocolType::Dns,
                 #[cfg(feature = "local-tun")]
                 Some("tun") => ProtocolType::Tun,
-                Some(p) => panic!("not supported `protocol` \"{}\"", p),
+                Some(p) => panic!("not supported `protocol` \"{p}\""),
                 None => ProtocolType::Socks,
             };
 
@@ -757,7 +763,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             let acl = match AccessControl::load_from_file(acl_file) {
                 Ok(acl) => acl,
                 Err(err) => {
-                    eprintln!("loading ACL \"{}\", {}", acl_file, err);
+                    eprintln!("loading ACL \"{acl_file}\", {err}");
                     return crate::EXIT_CODE_LOAD_ACL_FAILURE.into();
                 }
             };
@@ -808,7 +814,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         }
 
         if let Err(err) = config.check_integrity() {
-            eprintln!("config integrity check failed, {}", err);
+            eprintln!("config integrity check failed, {err}");
             return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
         }
 
@@ -866,7 +872,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             }
             // Server future resolved with error, which are listener errors in most cases
             Either::Left((Err(err), ..)) => {
-                eprintln!("server aborted with {}", err);
+                eprintln!("server aborted with {err}");
                 crate::EXIT_CODE_SERVER_ABORTED.into()
             }
             // The abort signal future resolved. Means we should just exit.

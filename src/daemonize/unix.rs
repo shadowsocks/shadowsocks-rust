@@ -9,9 +9,9 @@ use log::error;
 /// and follow the exact behavior in shadowsocks-libev
 pub fn daemonize<F: AsRef<Path>>(pid_path: Option<F>) {
     let pwd = current_dir()
-        .unwrap_or_else(|err| panic!("cannot get current working directory, {:?}", err))
+        .unwrap_or_else(|err| panic!("cannot get current working directory, {err:?}"))
         .canonicalize()
-        .unwrap_or_else(|err| panic!("cannot get absolute path to working directory, {:?}", err));
+        .unwrap_or_else(|err| panic!("cannot get absolute path to working directory, {err:?}"));
     let mut d = Daemonize::new().umask(0).working_directory(pwd);
 
     if let Some(p) = pid_path {

@@ -142,7 +142,6 @@ pub fn run_as_user(uname: &str) {
                 pwd.pw_uid,
                 err
             );
-            return;
         }
     }
 }

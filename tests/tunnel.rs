@@ -11,7 +11,8 @@ use tokio::{
 
 use shadowsocks_service::{
     config::{Config, ConfigType},
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 #[tokio::test]
@@ -137,7 +138,7 @@ async fn udp_tunnel() {
     let n = socket.recv(&mut buf).await.unwrap();
 
     let recv_payload = &buf[..n];
-    println!("Got reply from server: {:?}", ByteStr::new(&recv_payload));
+    println!("Got reply from server: {:?}", ByteStr::new(recv_payload));
 
     assert_eq!(MESSAGE, recv_payload);
 }

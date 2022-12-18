@@ -21,25 +21,25 @@ fn print_qrcode(encoded: &str) {
     let qrcode = QrCode::new(encoded.as_bytes()).unwrap();
 
     for _ in 0..qrcode.width() + 2 {
-        print!("{}", WHITE);
+        print!("{WHITE}");
     }
     println!();
 
     for y in 0..qrcode.width() {
-        print!("{}", WHITE);
+        print!("{WHITE}");
         for x in 0..qrcode.width() {
             let color = match qrcode[(x, y)] {
                 Color::Light => WHITE,
                 Color::Dark => BLACK,
             };
 
-            print!("{}", color);
+            print!("{color}");
         }
-        println!("{}", WHITE);
+        println!("{WHITE}");
     }
 
     for _ in 0..qrcode.width() + 2 {
-        print!("{}", WHITE);
+        print!("{WHITE}");
     }
     println!();
 }
@@ -50,7 +50,7 @@ fn encode(filename: &str, need_qrcode: bool) {
     for svr in config.server {
         let encoded = svr.config.to_url();
 
-        println!("{}", encoded);
+        println!("{encoded}");
 
         if need_qrcode {
             let encoded = svr.config.to_qrcode_url();
@@ -65,7 +65,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     let mut config = Config::new(ConfigType::Server);
     config.server.push(ServerInstanceConfig::with_server_config(svrconfig));
 
-    println!("{}", config);
+    println!("{config}");
 
     if need_qrcode {
         print_qrcode(encoded);

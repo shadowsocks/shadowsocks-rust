@@ -11,12 +11,22 @@ use shadowsocks::{
     crypto::CipherKind,
     dns_resolver::DnsResolver,
     manager::protocol::{
-        self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
-        RemoveResponse, ServerUserConfig, StatRequest,
+        self,
+        AddRequest,
+        AddResponse,
+        ErrorResponse,
+        ListResponse,
+        ManagerRequest,
+        PingResponse,
+        RemoveRequest,
+        RemoveResponse,
+        ServerUserConfig,
+        StatRequest,
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener, ServerAddr,
+    ManagerListener,
+    ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
