@@ -23,7 +23,11 @@ use crate::{
 };
 
 use super::crypto_io::{
-    decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
+    decrypt_client_payload,
+    decrypt_server_payload,
+    encrypt_client_payload,
+    encrypt_server_payload,
+    ProtocolError,
     ProtocolResult,
 };
 

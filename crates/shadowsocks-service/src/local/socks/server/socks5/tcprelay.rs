@@ -173,9 +173,7 @@ impl Socks5TcpHandler {
 
             Err(Error::new(
                 ErrorKind::Other,
-                format!(
-                    "Username/Password Authentication failed, user: {user_name}, password: {password}"
-                ),
+                format!("Username/Password Authentication failed, user: {user_name}, password: {password}"),
             ))
         }
     }

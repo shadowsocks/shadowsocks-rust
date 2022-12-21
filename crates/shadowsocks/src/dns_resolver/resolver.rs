@@ -345,10 +345,7 @@ impl DnsResolver {
             DnsResolver::System => match lookup_host((addr, port)).await {
                 Ok(v) => Ok(EitherResolved::Tokio(v)),
                 Err(err) => {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("dns resolve {addr}:{port} error: {err}"),
-                    );
+                    let err = Error::new(ErrorKind::Other, format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)
                 }
             },
@@ -358,10 +355,7 @@ impl DnsResolver {
                     lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
                 )),
                 Err(err) => {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("dns resolve {addr}:{port} error: {err}"),
-                    );
+                    let err = Error::new(ErrorKind::Other, format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)
                 }
             },
@@ -371,20 +365,14 @@ impl DnsResolver {
                     lookup_result.into_iter().map(move |ip| SocketAddr::new(ip, port)),
                 )),
                 Err(err) => {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("dns resolve {addr}:{port} error: {err}"),
-                    );
+                    let err = Error::new(ErrorKind::Other, format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)
                 }
             },
             DnsResolver::Custom(ref resolver) => match resolver.resolve(addr, port).await {
                 Ok(v) => Ok(EitherResolved::Custom(v.into_iter())),
                 Err(err) => {
-                    let err = Error::new(
-                        ErrorKind::Other,
-                        format!("dns resolve {addr}:{port} error: {err}"),
-                    );
+                    let err = Error::new(ErrorKind::Other, format!("dns resolve {addr}:{port} error: {err}"));
                     Err(err)
                 }
             },
