@@ -16,10 +16,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use self::consts::{
-    SOCKS5_AUTH_METHOD_GSSAPI,
-    SOCKS5_AUTH_METHOD_NONE,
-    SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE,
-    SOCKS5_AUTH_METHOD_PASSWORD,
+    SOCKS5_AUTH_METHOD_GSSAPI, SOCKS5_AUTH_METHOD_NONE, SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, SOCKS5_AUTH_METHOD_PASSWORD,
 };
 
 #[rustfmt::skip]
@@ -148,7 +145,7 @@ impl fmt::Display for Reply {
             Reply::GeneralFailure          => write!(f, "General failure"),
             Reply::HostUnreachable         => write!(f, "Host unreachable"),
             Reply::NetworkUnreachable      => write!(f, "Network unreachable"),
-            Reply::OtherReply(u)           => write!(f, "Other reply ({})", u),
+            Reply::OtherReply(u)           => write!(f, "Other reply ({u})"),
             Reply::TtlExpired              => write!(f, "TTL expired"),
         }
     }
@@ -380,8 +377,8 @@ impl Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -390,8 +387,8 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -961,7 +958,7 @@ impl PasswdAuthResponse {
         R: AsyncRead + Unpin,
     {
         let mut buf = [0u8; 2];
-        let _ = r.read_exact(&mut buf);
+        let _ = r.read_exact(&mut buf).await;
 
         if buf[0] != 0x01 {
             return Err(Error::UnsupportedPasswdAuthVersion(buf[0]));

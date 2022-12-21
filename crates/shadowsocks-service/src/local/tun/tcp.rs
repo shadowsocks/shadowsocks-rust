@@ -291,7 +291,7 @@ impl TcpTun {
                     let mut sockets_to_remove = Vec::new();
 
                     for (socket_handle, control) in sockets.iter() {
-                        let socket_handle = socket_handle.clone();
+                        let socket_handle = *socket_handle;
                         let socket = iface.get_socket::<TcpSocket>(socket_handle);
                         let mut control = control.lock();
 
@@ -308,7 +308,7 @@ impl TcpTun {
 
                         if !socket.is_open() || socket.state() == TcpState::Closed {
                             sockets_to_remove.push(socket_handle);
-                            close_socket_control(&mut *control);
+                            close_socket_control(&mut control);
                             continue;
                         }
 
@@ -335,7 +335,7 @@ impl TcpTun {
                                 Err(err) => {
                                     error!("socket recv error: {}", err);
                                     sockets_to_remove.push(socket_handle);
-                                    close_socket_control(&mut *control);
+                                    close_socket_control(&mut control);
                                     break;
                                 }
                             }
@@ -362,7 +362,7 @@ impl TcpTun {
                                 Err(err) => {
                                     error!("socket send error: {}", err);
                                     sockets_to_remove.push(socket_handle);
-                                    close_socket_control(&mut *control);
+                                    close_socket_control(&mut control);
                                     break;
                                 }
                             }

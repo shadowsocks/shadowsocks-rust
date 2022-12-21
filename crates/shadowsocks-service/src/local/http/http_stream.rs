@@ -34,7 +34,7 @@ impl ProxyHttpStream {
         let cx = match TlsConnector::builder().request_alpns(&["h2", "http/1.1"]).build() {
             Ok(c) => c,
             Err(err) => {
-                return Err(io::Error::new(ErrorKind::Other, format!("tls build: {}", err)));
+                return Err(io::Error::new(ErrorKind::Other, format!("tls build: {err}")));
             }
         };
         let cx = tokio_native_tls::TlsConnector::from(cx);
@@ -45,7 +45,7 @@ impl ProxyHttpStream {
                     Ok(Some(alpn)) => alpn == b"h2",
                     Ok(None) => false,
                     Err(err) => {
-                        let ierr = io::Error::new(ErrorKind::Other, format!("tls alpn negotiate: {}", err));
+                        let ierr = io::Error::new(ErrorKind::Other, format!("tls alpn negotiate: {err}"));
                         return Err(ierr);
                     }
                 };
@@ -53,7 +53,7 @@ impl ProxyHttpStream {
                 Ok(ProxyHttpStream::Https(s, negotiated_h2))
             }
             Err(err) => {
-                let ierr = io::Error::new(ErrorKind::Other, format!("tls connect: {}", err));
+                let ierr = io::Error::new(ErrorKind::Other, format!("tls connect: {err}"));
                 Err(ierr)
             }
         }

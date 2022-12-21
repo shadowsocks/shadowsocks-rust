@@ -23,11 +23,7 @@ use crate::{
 };
 
 use super::crypto_io::{
-    decrypt_client_payload,
-    decrypt_server_payload,
-    encrypt_client_payload,
-    encrypt_server_payload,
-    ProtocolError,
+    decrypt_client_payload, decrypt_server_payload, encrypt_client_payload, encrypt_server_payload, ProtocolError,
     ProtocolResult,
 };
 
@@ -282,7 +278,7 @@ impl ProxySocket {
 
         let n_send_buf = send_buf.len();
 
-        match self.socket.poll_send(cx, &mut send_buf.freeze()).map_err(|x| x.into()) {
+        match self.socket.poll_send(cx, &send_buf).map_err(|x| x.into()) {
             Poll::Ready(Ok(l)) => {
                 if l == n_send_buf {
                     Poll::Ready(Ok(payload.len()))
@@ -324,11 +320,7 @@ impl ProxySocket {
         );
 
         let n_send_buf = send_buf.len();
-        match self
-            .socket
-            .poll_send_to(cx, &mut send_buf.freeze(), target)
-            .map_err(|x| x.into())
-        {
+        match self.socket.poll_send_to(cx, &send_buf, target).map_err(|x| x.into()) {
             Poll::Ready(Ok(l)) => {
                 if l == n_send_buf {
                     Poll::Ready(Ok(payload.len()))

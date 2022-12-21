@@ -273,6 +273,6 @@ pub static PF: Lazy<PacketFilter> = Lazy::new(|| match PacketFilter::open() {
         panic!("open /dev/pf permission denied, consider restart with root user");
     }
     Err(err) => {
-        panic!("open /dev/pf {}", err);
+        panic!("open /dev/pf {err}");
     }
 });

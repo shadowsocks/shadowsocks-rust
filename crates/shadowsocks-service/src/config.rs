@@ -1359,7 +1359,7 @@ impl Config {
                                 let err = Error::new(
                                     ErrorKind::Malformed,
                                     "`protocol` invalid",
-                                    Some(format!("unrecognized protocol {}", p)),
+                                    Some(format!("unrecognized protocol {p}")),
                                 );
                                 return Err(err);
                             }
@@ -1390,7 +1390,7 @@ impl Config {
                                     let err = Error::new(
                                         ErrorKind::Malformed,
                                         "`protocol` invalid",
-                                        Some(format!("unrecognized protocol {}", p)),
+                                        Some(format!("unrecognized protocol {p}")),
                                     );
                                     return Err(err);
                                 }
@@ -1549,7 +1549,7 @@ impl Config {
                                     let err = Error::new(
                                         ErrorKind::Invalid,
                                         "acl loading failed",
-                                        Some(format!("file {}, error: {}", acl_path, err)),
+                                        Some(format!("file {acl_path}, error: {err}")),
                                     );
                                     return Err(err);
                                 }
@@ -1587,7 +1587,7 @@ impl Config {
                         let err = Error::new(
                             ErrorKind::Invalid,
                             "unsupported method",
-                            Some(format!("`{}` is not a supported method", m)),
+                            Some(format!("`{m}` is not a supported method")),
                         );
                         return Err(err);
                     }
@@ -1603,7 +1603,7 @@ impl Config {
                             let err = Error::new(
                                 ErrorKind::MissingField,
                                 "`password` is required",
-                                Some(format!("`password` is required for method {}", method)),
+                                Some(format!("`password` is required for method {method}")),
                             );
                             return Err(err);
                         }
@@ -1692,7 +1692,7 @@ impl Config {
                             let err = Error::new(
                                 ErrorKind::MissingField,
                                 "`password` is required",
-                                Some(format!("`password` is required for method {}", method)),
+                                Some(format!("`password` is required for method {method}")),
                             );
                             return Err(err);
                         }
@@ -1794,7 +1794,7 @@ impl Config {
                             let err = Error::new(
                                 ErrorKind::Invalid,
                                 "acl loading failed",
-                                Some(format!("file {}, error: {}", acl_path, err)),
+                                Some(format!("file {acl_path}, error: {err}")),
                             );
                             return Err(err);
                         }
@@ -1849,7 +1849,7 @@ impl Config {
                         let err = Error::new(
                             ErrorKind::Invalid,
                             "unsupported method",
-                            Some(format!("`{}` is not a supported method", m)),
+                            Some(format!("`{m}` is not a supported method")),
                         );
                         return Err(err);
                     }
@@ -1954,7 +1954,7 @@ impl Config {
                     let err = Error::new(
                         ErrorKind::Invalid,
                         "acl loading failed",
-                        Some(format!("file {}, error: {}", acl_path, err)),
+                        Some(format!("file {acl_path}, error: {err}")),
                     );
                     return Err(err);
                 }

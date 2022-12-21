@@ -269,7 +269,7 @@ impl ParsingRules {
             .size_limit(REGEX_SIZE_LIMIT)
             .unicode(false)
             .build()
-            .map_err(|err| Error::new(ErrorKind::Other, format!("{} regex error: {}", name, err)))
+            .map_err(|err| Error::new(ErrorKind::Other, format!("{name} regex error: {err}")))
     }
 
     fn into_rules(self) -> io::Result<Rules> {

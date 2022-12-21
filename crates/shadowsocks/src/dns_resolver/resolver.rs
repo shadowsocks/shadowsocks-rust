@@ -145,19 +145,24 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
 
     static DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
 
+    if !Path::new(DNS_RESOLV_FILE_PATH).exists() {
+        trace!("resolv file {DNS_RESOLV_FILE_PATH} doesn't exist");
+        return Ok(());
+    }
+
     let (tx, mut rx) = watch::channel::<Event>(Event::default());
 
     let mut watcher: RecommendedWatcher =
         notify::recommended_watcher(move |ev_result: NotifyResult<Event>| match ev_result {
             Ok(ev) => {
-                trace!("received {} event {:?}", DNS_RESOLV_FILE_PATH, ev);
+                trace!("received {DNS_RESOLV_FILE_PATH} event {ev:?}");
 
                 if let EventKind::Modify(..) = ev.kind {
                     tx.send(ev).expect("watcher.send");
                 }
             }
             Err(err) => {
-                error!("watching {} error: {}", DNS_RESOLV_FILE_PATH, err);
+                error!("watching {DNS_RESOLV_FILE_PATH} error: {err}");
             }
         })?;
 
@@ -168,7 +173,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
     let mut update_task: Option<JoinHandle<()>> = None;
 
     while rx.changed().await.is_ok() {
-        trace!("received notify {} changed", DNS_RESOLV_FILE_PATH);
+        trace!("received notify {DNS_RESOLV_FILE_PATH} changed");
 
         // Kill the pending task
         if let Some(t) = update_task.take() {
@@ -184,12 +189,12 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
 
                 match create_resolver(None, resolver.ipv6_first).await {
                     Ok(r) => {
-                        debug!("auto-reload {}", DNS_RESOLV_FILE_PATH);
+                        debug!("auto-reload {DNS_RESOLV_FILE_PATH}");
 
                         resolver.resolver.store(Arc::new(r));
                     }
                     Err(err) => {
-                        error!("failed to reload {}, error: {}", DNS_RESOLV_FILE_PATH, err);
+                        error!("failed to reload {DNS_RESOLV_FILE_PATH}, error: {err}");
                     }
                 }
             })
@@ -198,7 +203,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
         update_task = Some(task);
     }
 
-    error!("auto-reload {} task exited unexpectedly", DNS_RESOLV_FILE_PATH);
+    error!("auto-reload {DNS_RESOLV_FILE_PATH} task exited unexpectedly");
 
     Ok(())
 }
@@ -342,7 +347,7 @@ impl DnsResolver {
                 Err(err) => {
                     let err = Error::new(
                         ErrorKind::Other,
-                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                        format!("dns resolve {addr}:{port} error: {err}"),
                     );
                     Err(err)
                 }
@@ -355,7 +360,7 @@ impl DnsResolver {
                 Err(err) => {
                     let err = Error::new(
                         ErrorKind::Other,
-                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                        format!("dns resolve {addr}:{port} error: {err}"),
                     );
                     Err(err)
                 }
@@ -368,7 +373,7 @@ impl DnsResolver {
                 Err(err) => {
                     let err = Error::new(
                         ErrorKind::Other,
-                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                        format!("dns resolve {addr}:{port} error: {err}"),
                     );
                     Err(err)
                 }
@@ -378,7 +383,7 @@ impl DnsResolver {
                 Err(err) => {
                     let err = Error::new(
                         ErrorKind::Other,
-                        format!("dns resolve {}:{} error: {}", addr, port, err),
+                        format!("dns resolve {addr}:{port} error: {err}"),
                     );
                     Err(err)
                 }

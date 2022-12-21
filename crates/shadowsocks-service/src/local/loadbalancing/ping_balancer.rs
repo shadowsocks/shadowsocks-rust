@@ -457,19 +457,17 @@ impl PingBalancerContext {
                     "chose best TCP server {}",
                     ServerConfigFormatter::new(servers[best_idx].server_config())
                 );
+            } else if best_idx != old_best_idx {
+                info!(
+                    "switched best TCP server from {} to {}",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                    ServerConfigFormatter::new(servers[best_idx].server_config())
+                );
             } else {
-                if best_idx != old_best_idx {
-                    info!(
-                        "switched best TCP server from {} to {}",
-                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
-                        ServerConfigFormatter::new(servers[best_idx].server_config())
-                    );
-                } else {
-                    debug!(
-                        "kept best TCP server {}",
-                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
-                    );
-                }
+                debug!(
+                    "kept best TCP server {}",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                );
             }
         }
 
@@ -492,19 +490,17 @@ impl PingBalancerContext {
                     "chose best UDP server {}",
                     ServerConfigFormatter::new(servers[best_idx].server_config())
                 );
+            } else if best_idx != old_best_idx {
+                info!(
+                    "switched best UDP server from {} to {}",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config()),
+                    ServerConfigFormatter::new(servers[best_idx].server_config())
+                );
             } else {
-                if best_idx != old_best_idx {
-                    info!(
-                        "switched best UDP server from {} to {}",
-                        ServerConfigFormatter::new(servers[old_best_idx].server_config()),
-                        ServerConfigFormatter::new(servers[best_idx].server_config())
-                    );
-                } else {
-                    debug!(
-                        "kept best UDP server {}",
-                        ServerConfigFormatter::new(servers[old_best_idx].server_config())
-                    );
-                }
+                debug!(
+                    "kept best UDP server {}",
+                    ServerConfigFormatter::new(servers[old_best_idx].server_config())
+                );
             }
         }
     }

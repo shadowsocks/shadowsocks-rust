@@ -75,8 +75,7 @@ impl<'a> Aead2022TcpRequestHeaderRef<'a> {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         assert!(
             self.padding_size as usize <= MAX_PADDING_SIZE,
-            "padding length must be in [0, {}]",
-            MAX_PADDING_SIZE
+            "padding length must be in [0, {MAX_PADDING_SIZE}]"
         );
 
         buf.put_u16(self.padding_size);

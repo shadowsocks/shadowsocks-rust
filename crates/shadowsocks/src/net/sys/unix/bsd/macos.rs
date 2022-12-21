@@ -367,7 +367,7 @@ pub fn batch_recvmsg<S: AsRawFd>(sock: &S, msgs: &mut [BatchRecvMessage<'_>]) ->
         let hdr = &vec_msg_hdr[idx];
         let name = &vec_msg_name[idx];
         msg.addr = name.as_socket().expect("SockAddr.as_socket");
-        msg.data_len = hdr.msg_datalen as usize;
+        msg.data_len = hdr.msg_datalen;
     }
 
     Ok(ret as usize)
@@ -439,7 +439,7 @@ pub fn batch_sendmsg<S: AsRawFd>(sock: &S, msgs: &mut [BatchSendMessage<'_>]) ->
     for idx in 0..ret as usize {
         let msg = &mut msgs[idx];
         let hdr = &vec_msg_hdr[idx];
-        msg.data_len = hdr.msg_datalen as usize;
+        msg.data_len = hdr.msg_datalen;
     }
 
     Ok(ret as usize)

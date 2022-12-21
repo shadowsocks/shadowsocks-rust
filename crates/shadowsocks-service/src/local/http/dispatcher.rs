@@ -192,7 +192,7 @@ impl HttpDispatcher {
                         method, self.client_addr, host, err
                     );
 
-                    let mut resp = Response::new(Body::from(format!("relay failed to {}", host)));
+                    let mut resp = Response::new(Body::from(format!("relay failed to {host}")));
                     *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     return Ok(resp);
                 }

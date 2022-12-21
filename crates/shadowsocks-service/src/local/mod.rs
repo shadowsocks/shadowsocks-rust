@@ -443,7 +443,7 @@ async fn flow_report_task(stat_addr: LocalFlowStatAddress, flow_stat: Arc<FlowSt
         let tx = flow_stat.tx();
         let rx = flow_stat.rx();
 
-        let buf: [u64; 2] = [tx as u64, rx as u64];
+        let buf: [u64; 2] = [tx, rx];
         let buf = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 16) };
 
         match stat_addr {

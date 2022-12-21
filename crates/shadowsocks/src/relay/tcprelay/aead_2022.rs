@@ -194,16 +194,7 @@ impl DecryptedReader {
     }
 
     pub fn request_salt(&self) -> Option<&[u8]> {
-        match self.request_salt.as_deref() {
-            Some(n) => {
-                if n.is_empty() {
-                    None
-                } else {
-                    Some(n)
-                }
-            }
-            None => None,
-        }
+        self.request_salt.as_deref().filter(|&n| !n.is_empty())
     }
 
     /// Attempt to read decrypted data from stream

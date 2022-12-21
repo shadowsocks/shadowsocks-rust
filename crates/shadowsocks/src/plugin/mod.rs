@@ -242,6 +242,6 @@ mod test {
     fn generate_random_port() {
         let loop_ip = Ipv4Addr::LOCALHOST.into();
         let addr = get_local_port(loop_ip).unwrap();
-        println!("{:?}", addr);
+        println!("{addr:?}");
     }
 }
