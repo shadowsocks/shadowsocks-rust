@@ -1,3 +1,13 @@
+shadowsocks-rust (1.15.2) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - #1060 ACL supports checking IPv4-mapped-IPv6 addresses with IPv4 rules
+
+  ## Miscellaneous
+
+  - Code style and potential bug fixes with clippy check
+
 shadowsocks-rust (1.15.0) unstable; urgency=medium
 
   ## Features
