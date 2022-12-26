@@ -157,7 +157,7 @@ rand = "0.8"
 
 futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }
-num_cpus = "1.13"
+num_cpus = "1.15"
 
 ipnet = { version = "2.7", optional = true }
 
