@@ -69,7 +69,7 @@ tokio = { version = "1.9.0", features = ["io-util", "macros", "net", "parking_lo
 tokio-tfo = "0.2.0"
 
 trust-dns-resolver = { version = "0.22", optional = true }
-arc-swap = { version = "1.5", optional = true }
+arc-swap = { version = "1.6", optional = true }
 notify = { version = "5.0.0-pre.15", optional = true }
 
 aes = { version = "0.8", optional = true }
