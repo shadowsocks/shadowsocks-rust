@@ -480,7 +480,9 @@ Example configuration:
             "mode": "tcp_and_udp",
             // OPTIONAL. Authentication configuration file
             // Configuration file document could be found in the next section.
-            "socks5_auth_config_path": "/path/to/auth.json"
+            "socks5_auth_config_path": "/path/to/auth.json",
+            // OPTIONAL. Instance specific ACL
+            "acl": "/path/to/acl/file.acl",
         },
         {
             // SOCKS5, SOCKS4/4a local server
@@ -594,6 +596,9 @@ Example configuration:
             // The higher weight, the server may rank higher.
             "tcp_weight": 1.0,
             "udp_weight": 1.0,
+
+            // OPTIONAL. Instance specific ACL
+            "acl": "/path/to/acl/file.acl",
         },
         {
             // Same key as basic format "server" and "server_port"
@@ -675,6 +680,16 @@ Example configuration:
     // Set IPV6_V6ONLY for all IPv6 listener sockets
     // Only valid for locals and servers listening on `::`
     "ipv6_only": false,
+
+    // Outbound socket options
+    // Linux Only (SO_MARK)
+    "outbound_fwmark": 255,
+    // FreeBSD only (SO_USER_COOKIE)
+    "outbound_user_cookie": 255,
+    // `SO_BINDTODEVICE` (Linux), `IP_BOUND_IF` (BSD), `IP_UNICAST_IF` (Windows) socket option for outbound sockets
+    "outbound_bind_interface": "eth1",
+    // Outbound socket bind() to this IP (choose a specific interface)
+    "outbound_bind_addr": "11.22.33.44",
 
     // Balancer customization
     "balancer": {

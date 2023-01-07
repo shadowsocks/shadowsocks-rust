@@ -66,14 +66,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr,
-        Mode,
-        ReplayAttackPolicy,
-        ServerAddr,
-        ServerConfig,
-        ServerUser,
-        ServerUserManager,
-        ServerWeight,
+        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerUser, ServerUserManager, ServerWeight,
     },
     crypto::CipherKind,
     plugin::PluginConfig,
@@ -189,6 +182,16 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg(any(target_os = "linux", target_os = "android"))]
     outbound_fwmark: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(target_os = "freebsd")]
+    outbound_user_cookie: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outbound_bind_addr: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outbound_bind_interface: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     security: Option<SSSecurityConfig>,
@@ -1924,6 +1927,26 @@ impl Config {
             nconfig.outbound_fwmark = Some(fwmark);
         }
 
+        // SO_USER_COOKIE
+        #[cfg(target_os = "freebsd")]
+        if let Some(user_cookie) = config.outbound_user_cookie {
+            nconfig.outbound_user_cookie = Some(user_cookie);
+        }
+
+        // Outbound bind() address
+        if let Some(bind_addr) = config.outbound_bind_addr {
+            match bind_addr.parse::<IpAddr>() {
+                Ok(b) => nconfig.outbound_bind_addr = Some(b),
+                Err(..) => {
+                    let err = Error::new(ErrorKind::Invalid, "invalid outbound_bind_addr", None);
+                    return Err(err);
+                }
+            }
+        }
+
+        // Bind device / interface
+        nconfig.outbound_bind_interface = config.outbound_bind_interface;
+
         // Security
         if let Some(sec) = config.security {
             if let Some(replay_attack) = sec.replay_attack {
@@ -2580,6 +2603,14 @@ impl fmt::Display for Config {
         {
             jconf.outbound_fwmark = self.outbound_fwmark;
         }
+
+        #[cfg(target_os = "freebsd")]
+        {
+            jconf.outbound_user_cookie = self.outbound_user_cookie;
+        }
+
+        jconf.outbound_bind_addr = self.outbound_bind_addr.map(|i| i.to_string());
+        jconf.outbound_bind_interface = self.outbound_bind_interface.clone();
 
         // Security
         if self.security.replay_attack.policy != ReplayAttackPolicy::default() {
