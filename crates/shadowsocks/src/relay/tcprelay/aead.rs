@@ -254,8 +254,9 @@ impl DecryptedReader {
         }
 
         // Check repeated salt after first successful decryption #442
-        if let Some(ref salt) = self.salt {
-            context.check_nonce_replay(self.method, salt)?;
+        if self.salt.is_some() {
+            let salt = self.salt.take().unwrap();
+            context.check_nonce_replay(self.method, &salt)?;
         }
 
         // Remote TAG
