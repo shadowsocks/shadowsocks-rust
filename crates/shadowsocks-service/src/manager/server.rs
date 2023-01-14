@@ -1,5 +1,7 @@
 //! Shadowsocks Manager server
 
+use base64::{Engine as _};
+
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
@@ -469,7 +471,7 @@ impl Manager {
             let mut user_manager = ServerUserManager::new();
 
             for user in users.iter() {
-                let key = match base64::decode_config(&user.password, base64::STANDARD) {
+                let key = match base64::engine::general_purpose::STANDARD.decode(&user.password) {
                     Ok(key) => key,
                     Err(..) => {
                         error!(
@@ -522,7 +524,7 @@ impl Manager {
                 for user in user_manager.users_iter() {
                     vu.push(ServerUserConfig {
                         name: user.name().to_owned(),
-                        password: base64::encode(user.key()),
+                        password: base64::engine::general_purpose::STANDARD.encode(user.key()),
                     });
                 }
 
