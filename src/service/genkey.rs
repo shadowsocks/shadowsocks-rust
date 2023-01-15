@@ -2,7 +2,7 @@
 
 use std::process::ExitCode;
 
-use base64::{Engine as _};
+use base64::Engine as _;
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgMatches, Command};
 use rand::RngCore;
 

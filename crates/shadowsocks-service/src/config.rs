@@ -41,7 +41,7 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-use base64::{Engine as _};
+use base64::Engine as _;
 use std::{
     borrow::Cow,
     convert::{From, Infallible},
@@ -67,7 +67,14 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerUser, ServerUserManager, ServerWeight,
+        ManagerAddr,
+        Mode,
+        ReplayAttackPolicy,
+        ServerAddr,
+        ServerConfig,
+        ServerUser,
+        ServerUserManager,
+        ServerWeight,
     },
     crypto::CipherKind,
     plugin::PluginConfig,

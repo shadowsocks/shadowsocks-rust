@@ -12,7 +12,10 @@ use std::{
     time::Duration,
 };
 
-use base64::{Engine as _, engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD}};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use byte_string::ByteStr;
 use bytes::Bytes;
 use cfg_if::cfg_if;
@@ -161,7 +164,7 @@ impl Debug for ServerUser {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ServerUser")
             .field("name", &self.name)
-            .field("key", &base64::engine::general_purpose::STANDARD.encode(&self.key))
+            .field("key", &STANDARD.encode(&self.key))
             .field("identity_hash", &ByteStr::new(&self.identity_hash))
             .finish()
     }
@@ -302,7 +305,7 @@ pub struct ServerConfig {
 fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
     if method.is_aead_2022() {
         // AEAD 2022 password is a base64 form of enc_key
-        match base64::engine::general_purpose::STANDARD.decode(password) {
+        match STANDARD.decode(password) {
             Ok(v) => {
                 if v.len() != enc_key.len() {
                     panic!(
@@ -363,7 +366,7 @@ where
         make_derived_key(method, upsk, &mut enc_key);
 
         for ipsk in split_iter {
-            match base64::engine::general_purpose::STANDARD.decode(ipsk) {
+            match STANDARD.decode(ipsk) {
                 Ok(v) => {
                     identity_keys.push(Bytes::from(v));
                 }
@@ -579,7 +582,7 @@ impl ServerConfig {
                 };
             } else {
                 let mut user_info = format!("{}:{}", self.method(), self.password());
-                user_info = encode_config(&user_info, URL_SAFE_NO_PAD)
+                user_info = URL_SAFE_NO_PAD.encode(&user_info)
             }
         }
 
