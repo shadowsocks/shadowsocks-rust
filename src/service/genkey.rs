@@ -2,6 +2,7 @@
 
 use std::process::ExitCode;
 
+use base64::{Engine as _};
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgMatches, Command};
 use rand::RngCore;
 
@@ -36,7 +37,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         let mut rng = rand::thread_rng();
         rng.fill_bytes(&mut key);
 
-        let encoded_key = base64::encode(&key);
+        let encoded_key = base64::engine::general_purpose::STANDARD.encode(&key);
         println!("{encoded_key}");
     }
 
