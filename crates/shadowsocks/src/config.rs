@@ -12,7 +12,10 @@ use std::{
     time::Duration,
 };
 
-use base64::{decode_config, encode_config, URL_SAFE, URL_SAFE_NO_PAD};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use byte_string::ByteStr;
 use bytes::Bytes;
 use cfg_if::cfg_if;
@@ -161,7 +164,7 @@ impl Debug for ServerUser {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("ServerUser")
             .field("name", &self.name)
-            .field("key", &base64::encode(&self.key))
+            .field("key", &STANDARD.encode(&self.key))
             .field("identity_hash", &ByteStr::new(&self.identity_hash))
             .finish()
     }
@@ -302,7 +305,7 @@ pub struct ServerConfig {
 fn make_derived_key(method: CipherKind, password: &str, enc_key: &mut [u8]) {
     if method.is_aead_2022() {
         // AEAD 2022 password is a base64 form of enc_key
-        match base64::decode_config(password, base64::STANDARD) {
+        match STANDARD.decode(password) {
             Ok(v) => {
                 if v.len() != enc_key.len() {
                     panic!(
@@ -363,7 +366,7 @@ where
         make_derived_key(method, upsk, &mut enc_key);
 
         for ipsk in split_iter {
-            match base64::decode_config(ipsk, base64::STANDARD) {
+            match STANDARD.decode(ipsk) {
                 Ok(v) => {
                     identity_keys.push(Bytes::from(v));
                 }
@@ -564,7 +567,7 @@ impl ServerConfig {
     /// ```
     pub fn to_qrcode_url(&self) -> String {
         let param = format!("{}:{}@{}", self.method(), self.password(), self.addr());
-        format!("ss://{}", encode_config(param, URL_SAFE_NO_PAD))
+        format!("ss://{}", URL_SAFE_NO_PAD.encode(param))
     }
 
     /// Get [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) URL
@@ -573,13 +576,13 @@ impl ServerConfig {
             if #[cfg(feature = "aead-cipher-2022")] {
                 let user_info = if !self.method().is_aead_2022() {
                     let user_info = format!("{}:{}", self.method(), self.password());
-                    encode_config(&user_info, URL_SAFE_NO_PAD)
+                    URL_SAFE_NO_PAD.encode(&user_info)
                 } else {
                     format!("{}:{}", self.method(), percent_encoding::utf8_percent_encode(self.password(), percent_encoding::NON_ALPHANUMERIC))
                 };
             } else {
                 let mut user_info = format!("{}:{}", self.method(), self.password());
-                user_info = encode_config(&user_info, URL_SAFE_NO_PAD)
+                user_info = URL_SAFE_NO_PAD.encode(&user_info)
             }
         }
 
@@ -629,7 +632,7 @@ impl ServerConfig {
                 None => return Err(UrlParseError::MissingHost),
             };
 
-            let mut decoded_body = match decode_config(encoded, URL_SAFE_NO_PAD) {
+            let mut decoded_body = match URL_SAFE_NO_PAD.decode(encoded) {
                 Ok(b) => match String::from_utf8(b) {
                     Ok(b) => b,
                     Err(..) => return Err(UrlParseError::InvalidServerAddr),
@@ -690,7 +693,7 @@ impl ServerConfig {
                     URL_SAFE_NO_PAD
                 };
 
-                let account = match decode_config(decoded_user_info, base64_config) {
+                let account = match base64_config.decode(decoded_user_info) {
                     Ok(account) => match String::from_utf8(account) {
                         Ok(ac) => ac,
                         Err(..) => return Err(UrlParseError::InvalidAuthInfo),
