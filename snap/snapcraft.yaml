@@ -16,6 +16,7 @@ apps:
   sslocal-daemon:
     command: bin/sslocal
     daemon: simple
+    install-mode: disable
     plugs: [network, network-bind, home]
 
   ssserver:
@@ -25,6 +26,7 @@ apps:
   ssserver-daemon:
     command: bin/ssserver
     daemon: simple
+    install-mode: disable
     plugs: [network, network-bind, home]
 
   ssurl:
