@@ -115,37 +115,35 @@ impl DnsClientCache {
         svr_cfg: Option<&ServerConfig>,
     ) -> Result<Message, ProtoError> {
         let mut last_err = None;
-        let mut dns_res: io::Result<DnsClient>;
         for _ in 0..self.retry_count {
-            match dck {
-                DnsClientKey::TcpLocal(tcp_l) => {
-                    dns_res = DnsClient::connect_tcp_local(*tcp_l, connect_opts.unwrap()).await;
+            match self.get_client_or_create(dck, async {
+                match dck {
+                    DnsClientKey::TcpLocal(tcp_l) => {
+                        DnsClient::connect_tcp_local(*tcp_l, connect_opts.unwrap()).await
+                    }
+                    DnsClientKey::UdpLocal(udp_l) => {
+                        DnsClient::connect_udp_local(*udp_l, connect_opts.unwrap()).await
+                    }
+                    DnsClientKey::TcpRemote(tcp_l) => {
+                        DnsClient::connect_tcp_remote(
+                            context.unwrap().context(),
+                            svr_cfg.unwrap(),
+                            tcp_l,
+                            context.unwrap().connect_opts_ref(),
+                            context.unwrap().flow_stat(),
+                        ).await
+                    }
+                    DnsClientKey::UdpRemote(udp_l) => {
+                        DnsClient::connect_udp_remote(
+                            context.unwrap().context(),
+                            svr_cfg.unwrap(),
+                            udp_l.clone(),
+                            context.unwrap().connect_opts_ref(),
+                            context.unwrap().flow_stat(),
+                        ).await
+                    }
                 }
-                DnsClientKey::UdpLocal(udp_l) => {
-                    dns_res = DnsClient::connect_udp_local(*udp_l, connect_opts.unwrap()).await;
-                }
-                DnsClientKey::TcpRemote(tcp_l) => {
-                    dns_res = DnsClient::connect_tcp_remote(
-                        context.unwrap().context(),
-                        svr_cfg.unwrap(),
-                        tcp_l,
-                        context.unwrap().connect_opts_ref(),
-                        context.unwrap().flow_stat(),
-                    )
-                    .await;
-                }
-                DnsClientKey::UdpRemote(udp_l) => {
-                    dns_res = DnsClient::connect_udp_remote(
-                        context.unwrap().context(),
-                        svr_cfg.unwrap(),
-                        udp_l.clone(),
-                        context.unwrap().connect_opts_ref(),
-                        context.unwrap().flow_stat(),
-                    )
-                    .await;
-                }
-            }
-            match self.get_client_or_create(dck, async { dns_res }).await {
+            }).await {
                 Ok(mut client) => match client.lookup_timeout(msg.clone(), self.timeout).await {
                     Ok(msg) => {
                         self.save_client(dck.clone(), client).await;
