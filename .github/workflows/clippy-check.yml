@@ -30,7 +30,7 @@ jobs:
           rustup default nightly
           rustup override set nightly
       - name: Clippy Check
-        uses: actions-rs/clippy-check@v1
+        uses: kristof-mattei/clippy-check@main
         with:
           name: clippy-${{ matrix.platform }}
           token: ${{ secrets.GITHUB_TOKEN }}
