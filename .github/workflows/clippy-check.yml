@@ -30,7 +30,7 @@ jobs:
           rustup default nightly
           rustup override set nightly
       - name: Clippy Check
-        uses: kristof-mattei/clippy-check@main
+        uses: actions-rs-plus/clippy-check@main
         with:
           args: |
             --features "local-http-rustls local-redir local-flow-stat local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
