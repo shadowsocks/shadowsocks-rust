@@ -356,6 +356,9 @@ pub async fn create(config: Config) -> io::Result<Server> {
                 if let Some(address) = local_config.tun_interface_address {
                     builder = builder.address(address);
                 }
+                if let Some(address) = local_config.tun_interface_destination {
+                    builder = builder.destination(address);
+                }
                 if let Some(name) = local_config.tun_interface_name {
                     builder = builder.name(&name);
                 }

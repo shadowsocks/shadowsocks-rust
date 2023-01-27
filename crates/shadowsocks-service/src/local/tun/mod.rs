@@ -58,6 +58,11 @@ impl TunBuilder {
         self
     }
 
+    pub fn destination(mut self, addr: IpNet) -> TunBuilder {
+        self.tun_config.destination(addr.addr());
+        self
+    }
+
     pub fn name(mut self, name: &str) -> TunBuilder {
         self.tun_config.name(name);
         self
