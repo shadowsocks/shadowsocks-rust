@@ -61,11 +61,7 @@ pub fn parse_ipnet(v: &str) -> Result<IpNet, String> {
     match v.parse::<IpNet>() {
         Err(..) => Err("should be a CIDR address like 10.1.2.3/24".to_owned()),
         Ok(n) => {
-            if n.trunc() == n {
-                Err("should be a valid CIDR address with a host like 10.1.2.3/24".to_owned())
-            } else {
-                Ok(n)
-            }
+            Ok(n)
         }
     }
 }

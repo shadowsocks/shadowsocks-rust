@@ -415,6 +415,14 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                     .action(ArgAction::Set)
                     .value_parser(vparser::parse_ipnet)
                     .help("Tun interface address (network)"),
+            )
+            .arg(
+                Arg::new("TUN_INTERFACE_DESTINATION")
+                    .long("tun-interface-destination")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(vparser::parse_ipnet)
+                    .help("Tun interface destination address (network)"),
             );
 
         #[cfg(unix)]
@@ -701,6 +709,9 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
 
                 if let Some(tun_address) = matches.get_one::<IpNet>("TUN_INTERFACE_ADDRESS").cloned() {
                     local_config.tun_interface_address = Some(tun_address);
+                }
+                if let Some(tun_address) = matches.get_one::<IpNet>("TUN_INTERFACE_DESTINATION").cloned() {
+                    local_config.tun_interface_destination = Some(tun_address);
                 }
                 if let Some(tun_name) = matches.get_one::<String>("TUN_INTERFACE_NAME").cloned() {
                     local_config.tun_interface_name = Some(tun_name);
