@@ -65,6 +65,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
         manager.set_dns_resolver(Arc::new(resolver));
     }
+    manager.set_ipv6_first(config.ipv6_first);
 
     manager.set_connect_opts(connect_opts);
     manager.set_accept_opts(accept_opts);
