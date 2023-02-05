@@ -3,7 +3,10 @@
 use std::{
     io::{self, ErrorKind},
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -93,14 +96,29 @@ impl UdpRedirInboundWriter {
 
 #[async_trait]
 impl UdpInboundWrite for UdpRedirInboundWriter {
-    async fn send_to(&self, peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
-        let addr = match *remote_addr {
+    async fn send_to(&self, mut peer_addr: SocketAddr, remote_addr: &Address, data: &[u8]) -> io::Result<()> {
+        // If IPv6 Transparent Proxy is supported on the current platform,
+        // then we should always use IPv6 sockets for sending IPv4 packets.
+        static SUPPORT_IPV6_TRANSPARENT: AtomicBool = AtomicBool::new(true);
+
+        let mut addr = match *remote_addr {
             Address::SocketAddress(sa) => {
-                match sa {
-                    // Converts IPv4 address to IPv4-mapped-IPv6
-                    // All sockets will be created in IPv6 (nearly all modern OS supports IPv6 sockets)
-                    SocketAddr::V4(ref v4) => SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port()),
-                    SocketAddr::V6(..) => sa,
+                if SUPPORT_IPV6_TRANSPARENT.load(Ordering::Relaxed) {
+                    match sa {
+                        // Converts IPv4 address to IPv4-mapped-IPv6
+                        // All sockets will be created in IPv6 (nearly all modern OS supports IPv6 sockets)
+                        SocketAddr::V4(ref v4) => SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port()),
+                        SocketAddr::V6(..) => sa,
+                    }
+                } else {
+                    match sa {
+                        // Converts IPv4-mapped-IPv6 to IPv4
+                        SocketAddr::V4(..) => sa,
+                        SocketAddr::V6(ref v6) => match v6.ip().to_ipv4_mapped() {
+                            Some(v4) => SocketAddr::new(v4.into(), v6.port()),
+                            None => sa,
+                        },
+                    }
                 }
             }
             Address::DomainNameAddress(..) => {
@@ -122,7 +140,34 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
                 //
                 // This socket has to set SO_REUSEADDR and SO_REUSEPORT.
                 // Outbound addresses could be connected from different source addresses.
-                let inbound = UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?;
+                let inbound = match UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts) {
+                    Ok(s) => s,
+                    #[cfg(unix)]
+                    Err(err) => match err.raw_os_error() {
+                        None => return Err(err),
+                        // https://github.com/shadowsocks/shadowsocks-rust/issues/988
+                        // IPV6_TRANSPARENT was supported since 2.6.37.
+                        Some(libc::ENOPROTOOPT) if addr.is_ipv6() => {
+                            SUPPORT_IPV6_TRANSPARENT.store(false, Ordering::Relaxed);
+
+                            addr = match *remote_addr {
+                                Address::SocketAddress(sa) => {
+                                    if sa.is_ipv4() {
+                                        sa
+                                    } else {
+                                        return Err(err);
+                                    }
+                                }
+                                Address::DomainNameAddress(..) => unreachable!(),
+                            };
+
+                            UdpRedirSocket::bind_nonlocal(self.redir_ty, addr, &self.socket_opts)?
+                        }
+                        Some(_) => return Err(err),
+                    },
+                    #[cfg(not(unix))]
+                    Err(err) => return Err(err),
+                };
 
                 // UDP socket could be shared between threads and is safe to be manipulated by multiple threads
                 let inbound = Arc::new(inbound);
@@ -132,12 +177,24 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
             }
         };
 
-        // Send back to client
-        // peer_addr must be converted to IPv4-mapped-IPv6 because the inbound socket is always an IPv6 socket
-        let peer_addr = match peer_addr {
-            SocketAddr::V4(ref v4) => SocketAddr::new(v4.ip().to_ipv6_mapped().into(), v4.port()),
-            SocketAddr::V6(..) => peer_addr,
-        };
+        match (addr, peer_addr) {
+            (SocketAddr::V4(..), SocketAddr::V4(..)) | (SocketAddr::V6(..), SocketAddr::V6(..)) => {}
+            (SocketAddr::V4(..), SocketAddr::V6(v6_peer_addr)) => {
+                if let Some(v4_ip) = v6_peer_addr.ip().to_ipv4_mapped() {
+                    peer_addr = SocketAddr::new(v4_ip.into(), v6_peer_addr.port());
+                } else {
+                    warn!(
+                        "udp redir send back {} bytes, remote: {}, peer: {}, protocol not match",
+                        data.len(),
+                        addr,
+                        peer_addr
+                    );
+                }
+            }
+            (SocketAddr::V6(..), SocketAddr::V4(v4_peer_addr)) => {
+                peer_addr = SocketAddr::new(v4_peer_addr.ip().to_ipv6_mapped().into(), v4_peer_addr.port());
+            }
+        }
 
         inbound.send_to(data, peer_addr).await.map(|n| {
             if n < data.len() {

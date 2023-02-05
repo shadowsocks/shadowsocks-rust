@@ -60,9 +60,7 @@ pub fn parse_server_url(v: &str) -> Result<ServerConfig, String> {
 pub fn parse_ipnet(v: &str) -> Result<IpNet, String> {
     match v.parse::<IpNet>() {
         Err(..) => Err("should be a CIDR address like 10.1.2.3/24".to_owned()),
-        Ok(n) => {
-            Ok(n)
-        }
+        Ok(n) => Ok(n),
     }
 }
 
