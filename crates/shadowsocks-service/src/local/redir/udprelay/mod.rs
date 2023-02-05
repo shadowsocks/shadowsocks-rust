@@ -152,10 +152,13 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
 
                             addr = match *remote_addr {
                                 Address::SocketAddress(sa) => {
-                                    if sa.is_ipv4() {
-                                        sa
-                                    } else {
-                                        return Err(err);
+                                    match sa {
+                                        // Converts IPv4-mapped-IPv6 to IPv4
+                                        SocketAddr::V4(..) => sa,
+                                        SocketAddr::V6(ref v6) => match v6.ip().to_ipv4_mapped() {
+                                            Some(v4) => SocketAddr::new(v4.into(), v6.port()),
+                                            None => return Err(err),
+                                        },
                                     }
                                 }
                                 Address::DomainNameAddress(..) => unreachable!(),
