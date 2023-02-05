@@ -119,7 +119,6 @@ struct SSBalancerConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-#[serde(deny_unknown_fields)]
 struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     server: Option<String>,
