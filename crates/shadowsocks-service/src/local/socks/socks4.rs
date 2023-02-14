@@ -108,7 +108,7 @@ impl fmt::Display for ResultCode {
             ResultCode::RequestRejectedDifferentUserId => {
                 f.write_str("request rejected because the client program and identd report different user-ids")
             }
-            ResultCode::Other(code) => write!(f, "other result code {}", code),
+            ResultCode::Other(code) => write!(f, "other result code {code}"),
         }
     }
 }
@@ -126,8 +126,8 @@ impl fmt::Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -136,8 +136,8 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }

@@ -118,7 +118,7 @@ impl ProxyHttpStream {
             Err(_) => {
                 return Err(io::Error::new(
                     ErrorKind::InvalidInput,
-                    format!("invalid dnsname \"{}\"", domain),
+                    format!("invalid dnsname \"{domain}\""),
                 ));
             }
         };
