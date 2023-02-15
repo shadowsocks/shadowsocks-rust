@@ -13,3 +13,4 @@
 /.idea
 /.devcontainer
 .DS_Store
+domains.toml

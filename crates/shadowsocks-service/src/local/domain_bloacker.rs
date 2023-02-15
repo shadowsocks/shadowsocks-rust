@@ -159,7 +159,7 @@ async fn wait_flush() {
         }
     }
 }
-pub fn load_config(){
+pub fn load_config() {
     let config: TrafficControllerConfig = ConfigLoader::load_file(&get_config_path());
     let mut ctl = TRAFFIC_CONTROLLER.write().unwrap();
     ctl.ban_domain_list.clear();
@@ -237,8 +237,16 @@ impl TrafficController {
             } else {
                 if let Ok(mut s1) = String::from_utf8(s.clone()) {
                     s.clear();
-                    // CONNECT メソッドっぽいやつが来た
-                    if s1.starts_with("CONNECT") {
+                    let mut is_http_traffic = false;
+                    // HTTP メソッドっぽいやつが来た
+                    for method in [
+                        "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH",
+                    ] {
+                        if s1.starts_with(method) {
+                            is_http_traffic = true;
+                        }
+                    }
+                    if is_http_traffic {
                         loop {
                             let s1_new = s1.replace("  ", " ");
                             if s1 == s1_new {
@@ -251,11 +259,12 @@ impl TrafficController {
                             for domain in &self.ban_domain_list {
                                 // 部分一致すればブロックする。
                                 if !domain.allow_time.with_in_range() && split[1].contains(&domain.domain_str) {
-                                    println!("診断時間を超過しているため、通信をブロックしました。");
-                                    return Err(std::io::Error::new(
-                                        std::io::ErrorKind::BrokenPipe,
-                                        "診断時間を超過しています。通信を停止します。",
-                                    ));
+                                    let s = format!(
+                                        "診断時間を超過しているため、 {} への通信をブロックしました。",
+                                        split[1]
+                                    );
+                                    println!("{}", s);
+                                    return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, s));
                                 }
                             }
                         }
