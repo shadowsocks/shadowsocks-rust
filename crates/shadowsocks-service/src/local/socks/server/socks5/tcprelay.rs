@@ -214,13 +214,19 @@ impl Socks5TcpHandler {
         // 3. Handle Command
         match header.command {
             Command::TcpConnect => {
+                {
+                    let tc = crate::local::domain_bloacker::TRAFFIC_CONTROLLER.read().unwrap();
+                    tc.allow_access(addr.to_string())?;
+                }
                 debug!("CONNECT {}", addr);
 
                 self.handle_tcp_connect(stream, peer_addr, addr).await
             }
             Command::UdpAssociate => {
-                debug!("UDP ASSOCIATE from {}", addr);
-
+                {
+                    let tc = crate::local::domain_bloacker::TRAFFIC_CONTROLLER.read().unwrap();
+                    tc.allow_access(addr.to_string())?;
+                }
                 self.handle_udp_associate(stream, addr).await
             }
             Command::TcpBind => {

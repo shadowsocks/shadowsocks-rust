@@ -53,7 +53,7 @@ where
                 // Send the first packet.
                 {
                     let tc = crate::local::domain_bloacker::TRAFFIC_CONTROLLER.read().unwrap();
-                    tc.allow_access(&buffer[..n])?;
+                    tc.allow_access_for_buffer(&buffer[..n])?;
                 }
                 shadow.write_all(&buffer[..n]).await?;
             }

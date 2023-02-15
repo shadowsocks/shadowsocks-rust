@@ -65,6 +65,10 @@ impl Socks4TcpHandler {
 
         match handshake_req.cd {
             Command::Connect => {
+                {
+                    let tc = crate::local::domain_bloacker::TRAFFIC_CONTROLLER.read().unwrap();
+                    tc.allow_access(handshake_req.dst.to_string())?;
+                }
                 debug!("CONNECT {}", handshake_req.dst);
 
                 self.handle_socks4_connect(s, peer_addr, handshake_req.dst).await

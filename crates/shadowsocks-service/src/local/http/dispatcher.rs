@@ -95,7 +95,10 @@ impl HttpDispatcher {
         if Method::CONNECT == self.req.method() {
             // Establish a TCP tunnel
             // https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01
-
+            {
+                let tc = crate::local::domain_bloacker::TRAFFIC_CONTROLLER.read().unwrap();
+                tc.allow_access(host.to_string())?;
+            }
             debug!("HTTP CONNECT {}", host);
 
             // Connect to Shadowsocks' remote

@@ -220,7 +220,18 @@ impl TrafficController {
             ban_domain_list: Vec::new(),
         }
     }
-    pub fn allow_access(&self, buff: &[u8]) -> std::result::Result<(), std::io::Error> {
+    pub fn allow_access<S: Into<String>>(&self, domain_string: S) -> std::result::Result<(), std::io::Error> {
+        let domain_string = domain_string.into();
+        for domain in &self.ban_domain_list {
+            // 部分一致すればブロックする。
+            if !domain.allow_time.with_in_range() && domain_string.contains(&domain.domain_str) {
+                let s = format!("診断時間を超過しているため、 {} への通信をブロックしました。", domain_string);
+                return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, s));
+            }
+        }
+        Ok(())
+    }
+    pub fn allow_access_for_buffer(&self, buff: &[u8]) -> std::result::Result<(), std::io::Error> {
         let mut s = Vec::new();
         const REQUEST_LINE_MAX: usize = 2048;
         let mut cnt = 0;
@@ -256,17 +267,7 @@ impl TrafficController {
                         }
                         let split = s1.split(" ").collect::<Vec<&str>>();
                         if split.len() == 3 {
-                            for domain in &self.ban_domain_list {
-                                // 部分一致すればブロックする。
-                                if !domain.allow_time.with_in_range() && split[1].contains(&domain.domain_str) {
-                                    let s = format!(
-                                        "診断時間を超過しているため、 {} への通信をブロックしました。",
-                                        split[1]
-                                    );
-                                    println!("{}", s);
-                                    return Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, s));
-                                }
-                            }
+                            return self.allow_access(split[1]);
                         }
                     }
                 }
