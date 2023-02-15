@@ -14,6 +14,7 @@ pub enum HttpClientEnum {
 
 impl HttpClientEnum {
     pub fn send(&self, req: Request<Body>) -> ResponseFuture {
+        dbg!(req.method());
         match self {
             HttpClientEnum::Proxy(c) => c.request(req),
             HttpClientEnum::Bypass(b) => b.request(req),

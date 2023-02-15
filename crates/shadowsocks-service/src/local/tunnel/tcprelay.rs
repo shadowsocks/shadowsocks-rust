@@ -77,7 +77,6 @@ async fn handle_tcp_client(
         svr_cfg.external_addr(),
         svr_cfg.addr(),
     );
-
     let mut remote = AutoProxyClientStream::connect_proxied(context, &server, &forward_addr).await?;
     establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &forward_addr).await
 }

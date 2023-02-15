@@ -1,0 +1,8 @@
+[[domain_list]]
+start_time = "17:30"
+end_time = "13:50"
+domain = "yodobashi.com"
+[[domain_list]]
+start_time = "13:50"
+end_time = "17:30"
+domain = "github.com"

@@ -137,6 +137,8 @@ security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-det
 replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.
 
 [dependencies]
+notify = "5.1.0"
+toolbox={path="./libtoolbox"}
 log = "0.4"
 log4rs = { version = "1.2", optional = true }
 serde = { version = "1.0", features = ["derive"] }

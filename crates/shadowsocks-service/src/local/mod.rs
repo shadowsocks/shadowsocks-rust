@@ -43,6 +43,7 @@ pub mod socks;
 pub mod tun;
 #[cfg(feature = "local-tunnel")]
 pub mod tunnel;
+pub mod domain_bloacker;
 pub mod utils;
 
 /// Default TCP Keep Alive timeout

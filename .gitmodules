@@ -1,0 +1,3 @@
+[submodule "libtoolbox"]
+	path = libtoolbox
+	url = https://github.com/segfo/libtoolbox
