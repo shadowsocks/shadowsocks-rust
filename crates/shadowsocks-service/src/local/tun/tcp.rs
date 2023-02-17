@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     io::{self, ErrorKind},
     mem,
     net::{IpAddr, SocketAddr},
@@ -16,9 +16,9 @@ use std::{
 use log::{error, trace};
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
-    iface::{Interface, InterfaceBuilder, Routes, SocketHandle},
+    iface::{Config as InterfaceConfig, Interface, SocketHandle, SocketSet},
     phy::{DeviceCapabilities, Medium},
-    socket::{TcpSocket, TcpSocketBuffer, TcpState},
+    socket::{tcp::Socket as TcpSocket, tcp::SocketBuffer as TcpSocketBuffer, tcp::State as TcpState},
     storage::RingBuffer,
     time::{Duration as SmolDuration, Instant as SmolInstant},
     wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
@@ -68,7 +68,8 @@ impl ManagerNotify {
 }
 
 struct TcpSocketManager {
-    iface: Interface<'static, VirtTunDevice>,
+    device: VirtTunDevice,
+    iface: Interface,
     sockets: HashMap<SocketHandle, SharedTcpConnectionControl>,
     socket_creation_rx: mpsc::UnboundedReceiver<TcpSocketCreation>,
 }
@@ -228,28 +229,32 @@ impl TcpTun {
         capabilities.medium = Medium::Ip;
         capabilities.max_transmission_unit = mtu as usize;
 
-        let (virt, iface_rx, iface_tx) = VirtTunDevice::new(capabilities);
+        let (mut device, iface_rx, iface_tx) = VirtTunDevice::new(capabilities);
 
-        let iface_builder = InterfaceBuilder::new(virt, vec![]);
-        let iface_ipaddrs = [
-            IpCidr::new(IpAddress::v4(0, 0, 0, 1), 0),
-            IpCidr::new(IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1), 0),
-        ];
-        let mut iface_routes = Routes::new(BTreeMap::new());
-        iface_routes
+        let mut iface_config = InterfaceConfig::default();
+        iface_config.random_seed = rand::random();
+        let mut iface = Interface::new(iface_config, &mut device);
+        iface.update_ip_addrs(|ip_addrs| {
+            ip_addrs
+                .push(IpCidr::new(IpAddress::v4(0, 0, 0, 1), 0))
+                .expect("iface IPv4");
+            ip_addrs
+                .push(IpCidr::new(IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1), 0))
+                .expect("iface IPv6");
+        });
+        iface
+            .routes_mut()
             .add_default_ipv4_route(Ipv4Address::new(0, 0, 0, 1))
-            .expect("IPv4 route");
-        iface_routes
+            .expect("IPv4 default route");
+        iface
+            .routes_mut()
             .add_default_ipv6_route(Ipv6Address::new(0, 0, 0, 0, 0, 0, 0, 1))
-            .expect("IPv6 route");
-        let iface = iface_builder
-            .any_ip(true)
-            .ip_addrs(iface_ipaddrs)
-            .routes(iface_routes)
-            .finalize();
+            .expect("IPv6 default route");
+        iface.set_any_ip(true);
 
         let (manager_socket_creation_tx, manager_socket_creation_rx) = mpsc::unbounded_channel();
         let mut manager = TcpSocketManager {
+            device,
             iface,
             sockets: HashMap::new(),
             socket_creation_rx: manager_socket_creation_rx,
@@ -262,26 +267,23 @@ impl TcpTun {
 
             thread::spawn(move || {
                 let TcpSocketManager {
+                    ref mut device,
                     ref mut iface,
                     ref mut sockets,
                     ref mut socket_creation_rx,
                     ..
                 } = manager;
 
+                let mut socket_set = SocketSet::new(vec![]);
+
                 while manager_running.load(Ordering::Relaxed) {
                     while let Ok(TcpSocketCreation { control, socket }) = socket_creation_rx.try_recv() {
-                        let handle = iface.add_socket(socket);
+                        let handle = socket_set.add(socket);
                         sockets.insert(handle, control);
                     }
 
                     let before_poll = SmolInstant::now();
-                    let updated_sockets = match iface.poll(before_poll) {
-                        Ok(u) => u,
-                        Err(err) => {
-                            error!("VirtDevice::poll error: {}", err);
-                            false
-                        }
-                    };
+                    let updated_sockets = iface.poll(before_poll, device, &mut socket_set);
 
                     if updated_sockets {
                         trace!("VirtDevice::poll costed {}", SmolInstant::now() - before_poll);
@@ -292,7 +294,7 @@ impl TcpTun {
 
                     for (socket_handle, control) in sockets.iter() {
                         let socket_handle = *socket_handle;
-                        let socket = iface.get_socket::<TcpSocket>(socket_handle);
+                        let socket = socket_set.get_mut::<TcpSocket>(socket_handle);
                         let mut control = control.lock();
 
                         #[inline]
@@ -333,7 +335,7 @@ impl TcpTun {
                                     has_received = true;
                                 }
                                 Err(err) => {
-                                    error!("socket recv error: {}", err);
+                                    error!("socket recv error: {:?}", err);
                                     sockets_to_remove.push(socket_handle);
                                     close_socket_control(&mut control);
                                     break;
@@ -360,7 +362,7 @@ impl TcpTun {
                                     has_sent = true;
                                 }
                                 Err(err) => {
-                                    error!("socket send error: {}", err);
+                                    error!("socket send error: {:?}", err);
                                     sockets_to_remove.push(socket_handle);
                                     close_socket_control(&mut control);
                                     break;
@@ -377,10 +379,12 @@ impl TcpTun {
 
                     for socket_handle in sockets_to_remove {
                         sockets.remove(&socket_handle);
-                        iface.remove_socket(socket_handle);
+                        socket_set.remove(socket_handle);
                     }
 
-                    let next_duration = iface.poll_delay(before_poll).unwrap_or(SmolDuration::from_millis(5));
+                    let next_duration = iface
+                        .poll_delay(before_poll, &socket_set)
+                        .unwrap_or(SmolDuration::from_millis(5));
                     if next_duration != SmolDuration::ZERO {
                         thread::park_timeout(Duration::from(next_duration));
                     }
@@ -428,7 +432,7 @@ impl TcpTun {
             // socket.set_ack_delay(None);
 
             if let Err(err) = socket.listen(dst_addr) {
-                return Err(io::Error::new(ErrorKind::Other, err));
+                return Err(io::Error::new(ErrorKind::Other, format!("listen error: {:?}", err)));
             }
 
             trace!("created TCP connection for {} <-> {}", src_addr, dst_addr);
