@@ -11,12 +11,11 @@ pub enum IpPacket<T: AsRef<[u8]>> {
 }
 
 impl<T: AsRef<[u8]> + Copy> IpPacket<T> {
-    pub fn new_checked(packet: T) -> smoltcp::Result<Option<IpPacket<T>>> {
+    pub fn new_checked(packet: T) -> smoltcp::wire::Result<Option<IpPacket<T>>> {
         let buffer = packet.as_ref();
         match IpVersion::of_packet(buffer)? {
             IpVersion::Ipv4 => Ok(Some(IpPacket::Ipv4(Ipv4Packet::new_checked(packet)?))),
             IpVersion::Ipv6 => Ok(Some(IpPacket::Ipv6(Ipv6Packet::new_checked(packet)?))),
-            _ => Ok(None),
         }
     }
 
@@ -36,7 +35,7 @@ impl<T: AsRef<[u8]> + Copy> IpPacket<T> {
 
     pub fn protocol(&self) -> IpProtocol {
         match *self {
-            IpPacket::Ipv4(ref packet) => packet.protocol(),
+            IpPacket::Ipv4(ref packet) => packet.next_header(),
             IpPacket::Ipv6(ref packet) => packet.next_header(),
         }
     }
