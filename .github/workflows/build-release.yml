@@ -56,7 +56,7 @@ jobs:
           fi
 
           if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
-            sudo apt-get update -y && sudo apt-get install -y upx;
+            wget -q https://github.com/upx/upx/releases/download/v4.0.2/upx-4.0.2-amd64_linux.tar.xz -O /tmp/upx-4.0.2.tar.xz&&mkdir -p /tmp/upx&&xz -d -c /tmp/upx-4.0.2.tar.xz | tar -x -C /tmp/upx; chmod +x /tmp/upx/upx-4.0.2-amd64_linux/upx&&export PATH=/tmp/upx/upx-4.0.2-amd64_linux:$PATH;
             if [[ "$?" == "0" ]]; then
               compile_compress="-u"
             fi

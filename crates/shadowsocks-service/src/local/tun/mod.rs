@@ -206,7 +206,7 @@ impl Tun {
         }
     }
 
-    async fn handle_tun_frame(&mut self, frame: &[u8]) -> smoltcp::Result<()> {
+    async fn handle_tun_frame(&mut self, frame: &[u8]) -> smoltcp::wire::Result<()> {
         let packet = match IpPacket::new_checked(frame)? {
             Some(packet) => packet,
             None => {
