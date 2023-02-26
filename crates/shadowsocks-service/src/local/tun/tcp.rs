@@ -18,7 +18,7 @@ use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Config as InterfaceConfig, Interface, SocketHandle, SocketSet},
     phy::{DeviceCapabilities, Medium},
-    socket::{tcp::Socket as TcpSocket, tcp::SocketBuffer as TcpSocketBuffer, tcp::State as TcpState},
+    socket::tcp::{Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState},
     storage::RingBuffer,
     time::{Duration as SmolDuration, Instant as SmolInstant},
     wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},

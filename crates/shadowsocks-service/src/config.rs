@@ -41,7 +41,6 @@
 //!
 //! These defined server will be used with a load balancing algorithm.
 
-use base64::Engine as _;
 use std::{
     borrow::Cow,
     convert::{From, Infallible},
@@ -1725,8 +1724,8 @@ impl Config {
                     let mut user_manager = ServerUserManager::new();
 
                     for user in users {
-                        let key = match base64::engine::general_purpose::STANDARD.decode(&user.password) {
-                            Ok(k) => k,
+                        let user = match ServerUser::with_encoded_key(user.name, &user.password) {
+                            Ok(u) => u,
                             Err(..) => {
                                 let err = Error::new(
                                     ErrorKind::Malformed,
@@ -1737,7 +1736,7 @@ impl Config {
                             }
                         };
 
-                        user_manager.add_user(ServerUser::new(user.name, key));
+                        user_manager.add_user(user);
                     }
 
                     nsvr.set_user_manager(user_manager);
@@ -2498,7 +2497,7 @@ impl fmt::Display for Config {
                             for u in m.users_iter() {
                                 vu.push(SSServerUserConfig {
                                     name: u.name().to_owned(),
-                                    password: base64::engine::general_purpose::STANDARD.encode(u.key()),
+                                    password: u.encoded_key(),
                                 });
                             }
                             vu

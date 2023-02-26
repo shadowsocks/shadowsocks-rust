@@ -1,12 +1,9 @@
 //! Shadowsocks Manager server
 
-use base64::Engine as _;
-
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{collections::HashMap, io, net::SocketAddr, sync::Arc, time::Duration};
 
-use base64::engine::general_purpose::STANDARD;
 use log::{error, info, trace};
 use shadowsocks::{
     config::{Mode, ServerConfig, ServerType, ServerUser, ServerUserManager},
@@ -14,22 +11,12 @@ use shadowsocks::{
     crypto::CipherKind,
     dns_resolver::DnsResolver,
     manager::protocol::{
-        self,
-        AddRequest,
-        AddResponse,
-        ErrorResponse,
-        ListResponse,
-        ManagerRequest,
-        PingResponse,
-        RemoveRequest,
-        RemoveResponse,
-        ServerUserConfig,
-        StatRequest,
+        self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
+        RemoveResponse, ServerUserConfig, StatRequest,
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener,
-    ServerAddr,
+    ManagerListener, ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -472,8 +459,8 @@ impl Manager {
             let mut user_manager = ServerUserManager::new();
 
             for user in users.iter() {
-                let key = match STANDARD.decode(&user.password) {
-                    Ok(key) => key,
+                let user = match ServerUser::with_encoded_key(&user.name, &user.password) {
+                    Ok(u) => u,
                     Err(..) => {
                         error!(
                             "users[].password must be encoded with base64, but found: {}",
@@ -487,7 +474,7 @@ impl Manager {
                     }
                 };
 
-                user_manager.add_user(ServerUser::new(&user.name, key));
+                user_manager.add_user(user);
             }
 
             svr_cfg.set_user_manager(user_manager);
@@ -525,7 +512,7 @@ impl Manager {
                 for user in user_manager.users_iter() {
                     vu.push(ServerUserConfig {
                         name: user.name().to_owned(),
-                        password: STANDARD.encode(user.key()),
+                        password: user.encoded_key(),
                     });
                 }
 
