@@ -35,7 +35,7 @@ use tokio::io::Interest;
 use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
-    sys::{create_inbound_udp_socket, create_outbound_udp_socket},
+    sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
     AcceptOpts,
     AddrFamily,
     ConnectOpts,
@@ -127,6 +127,16 @@ impl UdpSocket {
         Ok(UdpSocket(socket))
     }
 
+    /// Binds to a specific address with opts
+    pub async fn connect_any_with_opts<AF: Into<AddrFamily>>(af: AF, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+        create_outbound_udp_socket(af.into(), opts).await.map(UdpSocket)
+    }
+
+    /// Binds to a specific address with opts as an outbound socket
+    pub async fn bind_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+        bind_outbound_udp_socket(addr, opts).await.map(UdpSocket)
+    }
+
     /// Binds to a specific address (inbound)
     #[inline]
     pub async fn listen(addr: &SocketAddr) -> io::Result<UdpSocket> {
@@ -137,11 +147,6 @@ impl UdpSocket {
     pub async fn listen_with_opts(addr: &SocketAddr, opts: AcceptOpts) -> io::Result<UdpSocket> {
         let socket = create_inbound_udp_socket(addr, opts.ipv6_only).await?;
         Ok(UdpSocket(socket))
-    }
-
-    /// Binds to a specific address with opts
-    pub async fn connect_any_with_opts<AF: Into<AddrFamily>>(af: AF, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-        create_outbound_udp_socket(af.into(), opts).await.map(UdpSocket)
     }
 
     /// Batch send packets

@@ -23,8 +23,20 @@ use windows_sys::{
         Foundation::BOOL,
         NetworkManagement::IpHelper::if_nametoindex,
         Networking::WinSock::{
-            setsockopt, WSAGetLastError, WSAIoctl, IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, IPV6_MTU_DISCOVER,
-            IPV6_UNICAST_IF, IP_MTU_DISCOVER, IP_PMTUDISC_DO, IP_UNICAST_IF, SIO_UDP_CONNRESET, SOCKET, SOCKET_ERROR,
+            setsockopt,
+            WSAGetLastError,
+            WSAIoctl,
+            IPPROTO_IP,
+            IPPROTO_IPV6,
+            IPPROTO_TCP,
+            IPV6_MTU_DISCOVER,
+            IPV6_UNICAST_IF,
+            IP_MTU_DISCOVER,
+            IP_PMTUDISC_DO,
+            IP_UNICAST_IF,
+            SIO_UDP_CONNRESET,
+            SOCKET,
+            SOCKET_ERROR,
             TCP_FASTOPEN,
         },
     },
@@ -36,7 +48,9 @@ const FALSE: BOOL = 0;
 use crate::net::{
     is_dual_stack_addr,
     sys::{set_common_sockopt_for_connect, socket_bind_dual_stack},
-    AcceptOpts, AddrFamily, ConnectOpts,
+    AcceptOpts,
+    AddrFamily,
+    ConnectOpts,
 };
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
@@ -55,7 +69,7 @@ impl TcpStream {
 
         // Binds to a specific network interface (device)
         if let Some(ref iface) = opts.bind_interface {
-            set_ip_unicast_if(&socket, addr, iface)?;
+            set_ip_unicast_if(&socket, &addr, iface)?;
         }
 
         set_common_sockopt_for_connect(addr, &socket, opts)?;
@@ -183,7 +197,7 @@ pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &Ac
     }
 }
 
-fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: SocketAddr, iface: &str) -> io::Result<()> {
+fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
     let handle = socket.as_raw_socket() as SOCKET;
 
     unsafe {
@@ -348,10 +362,17 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> i
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
 
+    bind_outbound_udp_socket(&bind_addr, opts).await
+}
+
+/// Create a `UdpSocket` binded to `bind_addr`
+pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
+    let af = AddrFamily::from(bind_addr);
+
     let socket = if af != AddrFamily::Ipv6 {
         UdpSocket::bind(bind_addr).await?
     } else {
-        let socket = Socket::new(Domain::for_address(bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
+        let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
         socket_bind_dual_stack(&socket, &bind_addr, false)?;
 
         // UdpSocket::from_std requires socket to be non-blocked

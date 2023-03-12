@@ -65,7 +65,7 @@ impl TcpStream {
     async fn connect_with_socket(socket: TcpSocket, addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
         // Binds to a specific network interface (device)
         if let Some(ref iface) = opts.bind_interface {
-            set_ip_bound_if(&socket, addr, iface)?;
+            set_ip_bound_if(&socket, &addr, iface)?;
         }
 
         set_common_sockopt_for_connect(addr, &socket, opts)?;
@@ -230,7 +230,7 @@ pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &Ac
     }
 }
 
-fn set_ip_bound_if<S: AsRawFd>(socket: &S, addr: SocketAddr, iface: &str) -> io::Result<()> {
+fn set_ip_bound_if<S: AsRawFd>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
     const IP_BOUND_IF: libc::c_int = 25; // bsd/netinet/in.h
     const IPV6_BOUND_IF: libc::c_int = 125; // bsd/netinet6/in6.h
 
@@ -319,7 +319,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> i
     Ok(())
 }
 
-/// Create a `UdpSocket` for connecting to `addr`
+/// Create a `UdpSocket` with specific address family
+#[inline]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
         (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
@@ -328,10 +329,17 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
 
+    bind_outbound_udp_socket(&bind_addr, config).await
+}
+
+/// Create a `UdpSocket` binded to `bind_addr`
+pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOpts) -> io::Result<UdpSocket> {
+    let af = AddrFamily::from(bind_addr);
+
     let socket = if af != AddrFamily::Ipv6 {
         UdpSocket::bind(bind_addr).await?
     } else {
-        let socket = Socket::new(Domain::for_address(bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
+        let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
         socket_bind_dual_stack(&socket, &bind_addr, false)?;
 
         // UdpSocket::from_std requires socket to be non-blocked

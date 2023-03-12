@@ -23,7 +23,7 @@ pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: 
                 };
 
                 if !force_system_builtin {
-                    return match DnsResolver::trust_dns_system_resolver(ipv6_first).await {
+                    return match DnsResolver::trust_dns_system_resolver(connect_opts.clone()).await {
                         Ok(r) => Some(r),
                         Err(err) => {
                             warn!(
@@ -41,7 +41,7 @@ pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: 
             None
         }
         #[cfg(feature = "trust-dns")]
-        DnsConfig::TrustDns(dns) => match DnsResolver::trust_dns_resolver(dns, ipv6_first).await {
+        DnsConfig::TrustDns(dns) => match DnsResolver::trust_dns_resolver(dns, connect_opts.clone()).await {
             Ok(r) => Some(r),
             Err(err) => {
                 use log::warn;

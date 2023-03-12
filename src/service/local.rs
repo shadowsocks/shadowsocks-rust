@@ -183,7 +183,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .help("Set SIP003 plugin options"),
     )
     .arg(
-        Arg::new("URL")
+        Arg::new("SERVER_URL")
             .long("server-url")
             .num_args(1)
             .action(ArgAction::Set)
@@ -192,7 +192,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .help("Server address in SIP002 (https://shadowsocks.org/guide/sip002.html) URL"),
     )
     .group(ArgGroup::new("SERVER_CONFIG")
-        .arg("SERVER_ADDR").arg("URL").multiple(true))
+        .arg("SERVER_ADDR").arg("SERVER_URL").multiple(true))
     .arg(
         Arg::new("ACL")
             .long("acl")
@@ -591,7 +591,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             config.server.push(ServerInstanceConfig::with_server_config(sc));
         }
 
-        if let Some(svr_addr) = matches.get_one::<ServerConfig>("URL").cloned() {
+        if let Some(svr_addr) = matches.get_one::<ServerConfig>("SERVER_URL").cloned() {
             config.server.push(ServerInstanceConfig::with_server_config(svr_addr));
         }
 

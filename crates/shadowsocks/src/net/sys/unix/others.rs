@@ -78,8 +78,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawFd>(_af: AddrFamily, _socket: &S) ->
     Ok(())
 }
 
-/// Create a `UdpSocket` for connecting to `addr`
-#[inline(always)]
+/// Create a `UdpSocket` with specific address family
+#[inline]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
         (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
@@ -87,6 +87,13 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
+
+    bind_outbound_udp_socket(&bind_addr, config).await
+}
+
+/// Create a `UdpSocket` binded to `bind_addr`
+pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, _config: &ConnectOpts) -> io::Result<UdpSocket> {
+    let af = AddrFamily::from(bind_addr);
 
     let socket = UdpSocket::bind(bind_addr).await?;
     let _ = set_disable_ip_fragmentation(af, &socket);
