@@ -1,3 +1,20 @@
+shadowsocks-rust (1.15.3) unstable; urgency=medium
+
+  ## Features
+
+  - local-tun: Support `tun_interface_destination` for configuring Tun device's destination address
+  - Support `outbound_fwmark`, `outbound_user_cookie`, `outbound_bind_interface` and `outbound_bind_addr` in configuration file
+
+  ## Bug Fixed
+
+  - local-tun: #1138 Fixed TCP state management
+  - local-redir: #988 UDP compatible with Linux < 2.6.37 (without `IPV6_TRANSPARENT`)
+  - manager: #1101 Set missing `ipv6_first` for servers
+
+  ## Miscellaneous
+
+  - Snap: #1088 Disable Snap daemon by default
+
 shadowsocks-rust (1.15.2) unstable; urgency=medium
 
   ## Bug Fixes
