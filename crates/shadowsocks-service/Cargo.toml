@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.15.3"
+version = "1.16.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -107,7 +107,8 @@ libc = "0.2.141"
 hyper = { version = "0.14.25", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-trust-dns-resolver = { version = "0.22", optional = true, features = ["serde-config"] }
+# trust-dns-resolver = { version = "0.22", optional = true, features = ["serde-config"] }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, features = ["serde-config"] }
 
 idna = "0.3"
 ipnet = "2.7"
@@ -121,7 +122,7 @@ smoltcp = { version = "0.9", optional = true, default-features = false, features
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 
-shadowsocks = { version = "1.15.3", path = "../shadowsocks", default-features = false }
+shadowsocks = { version = "1.16.0", path = "../shadowsocks", default-features = false }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]

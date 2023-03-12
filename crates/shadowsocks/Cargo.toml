@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks"
-version = "1.15.3"
+version = "1.16.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -68,7 +68,8 @@ socket2 = { version = "0.5", features = ["all"] }
 tokio = { version = "1.9.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
 tokio-tfo = "0.2.0"
 
-trust-dns-resolver = { version = "0.22", optional = true }
+# trust-dns-resolver = { version = "0.22", optional = true }
+trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true }
 arc-swap = { version = "1.6", optional = true }
 notify = { version = "5.1.0", optional = true }
 

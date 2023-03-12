@@ -2112,26 +2112,12 @@ impl Config {
             };
 
             if protocol.enable_udp() {
-                c.add_name_server(NameServerConfig {
-                    socket_addr,
-                    protocol: Protocol::Udp,
-                    tls_dns_name: None,
-                    trust_nx_responses: false,
-                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
-                    tls_config: None,
-                    bind_addr: None,
-                });
+                let ns_config = NameServerConfig::new(socket_addr, Protocol::Udp);
+                c.add_name_server(ns_config);
             }
             if protocol.enable_tcp() {
-                c.add_name_server(NameServerConfig {
-                    socket_addr,
-                    protocol: Protocol::Tcp,
-                    tls_dns_name: None,
-                    trust_nx_responses: false,
-                    #[cfg(any(feature = "dns-over-tls", feature = "dns-over-https"))]
-                    tls_config: None,
-                    bind_addr: None,
-                });
+                let ns_config = NameServerConfig::new(socket_addr, Protocol::Tcp);
+                c.add_name_server(ns_config);
             }
         }
 

@@ -413,8 +413,8 @@ fn should_forward_by_response(
                         return true;
                     }
                     let forward = match $rec.data() {
-                        Some(RData::A(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V4(*ip)),
-                        Some(RData::AAAA(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V6(*ip)),
+                        Some(RData::A(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
+                        Some(RData::AAAA(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
                         // MX records cause type A additional section processing for the host specified by EXCHANGE.
                         Some(RData::MX(mx)) => examine_name!(mx.exchange(), $is_answer),
                         // NS records cause both the usual additional section processing to locate a type A record...
@@ -498,8 +498,16 @@ impl DnsClient {
                 for rec in result.answers() {
                     trace!("dns answer: {:?}", rec);
                     match rec.data() {
-                        Some(RData::A(ip)) => self.context.add_to_reverse_lookup_cache((*ip).into(), forward).await,
-                        Some(RData::AAAA(ip)) => self.context.add_to_reverse_lookup_cache((*ip).into(), forward).await,
+                        Some(RData::A(ip)) => {
+                            self.context
+                                .add_to_reverse_lookup_cache(Ipv4Addr::from(*ip).into(), forward)
+                                .await
+                        }
+                        Some(RData::AAAA(ip)) => {
+                            self.context
+                                .add_to_reverse_lookup_cache(Ipv6Addr::from(*ip).into(), forward)
+                                .await
+                        }
                         _ => (),
                     }
                 }
