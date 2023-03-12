@@ -149,7 +149,7 @@ impl AsyncRead for TcpConnection {
         let n = control.recv_buffer.dequeue_slice(recv_buf);
         buf.advance(n);
 
-        if control.recv_buffer.is_empty() {
+        if n > 0 {
             self.manager_notify.notify();
         }
         Ok(()).into()
@@ -177,7 +177,7 @@ impl AsyncWrite for TcpConnection {
 
         let n = control.send_buffer.enqueue_slice(buf);
 
-        if control.send_buffer.is_full() {
+        if n > 0 {
             self.manager_notify.notify();
         }
         Ok(n).into()
