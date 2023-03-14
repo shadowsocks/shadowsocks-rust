@@ -21,21 +21,17 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          profile: minimal
-          components: clippy
-          default: true
-          override: true
+        run: |
+          rustup set profile minimal
+          rustup toolchain install nightly --component clippy
+          rustup default nightly
+          rustup override set nightly
       - name: Clippy Check
-        uses: actions-rs/clippy-check@v1
+        uses: actions-rs-plus/clippy-check@main
         with:
-          name: clippy-${{ matrix.platform }}
-          token: ${{ secrets.GITHUB_TOKEN }}
           args: |
             --features "local-http-rustls local-redir local-flow-stat local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
             -W clippy::absurd_extreme_comparisons
