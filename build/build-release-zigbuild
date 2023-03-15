@@ -38,7 +38,7 @@ fi
 
 if [[ "${use_upx}" = true ]]; then
     if [[ -z "$upx" ]] && command -v upx &> /dev/null; then
-        upx="upx --lzma --best"
+        upx="upx -9"
     fi
 
     if [[ "x$upx" == "x" ]]; then
