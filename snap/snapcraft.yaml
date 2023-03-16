@@ -11,13 +11,13 @@ architectures: [amd64, arm64, armhf, i386, ppc64el]
 apps:
   sslocal:
     command: bin/sslocal
-    plugs: [network, network-bind, home]
+    plugs: [network, network-bind, network-control, home]
 
   sslocal-daemon:
     command: bin/sslocal
     daemon: simple
     install-mode: disable
-    plugs: [network, network-bind, home]
+    plugs: [network, network-bind, network-control, home]
 
   ssserver:
     command: bin/ssserver
