@@ -38,18 +38,19 @@ RUN case "$TARGETARCH" in \
 
 FROM alpine:3.17 AS sslocal
 
-COPY --from=builder /root/shadowsocks-rust/target/release/sslocal /usr/local/bin/
+# NOTE: Please be careful to change the path of these binaries, refer to #1149 for more information.
+COPY --from=builder /root/shadowsocks-rust/target/release/sslocal /usr/bin/
 COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
-COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/local/bin/
+COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/bin/
 
 ENTRYPOINT [ "docker-entrypoint.sh" ]
 CMD [ "sslocal", "--log-without-time", "-c", "/etc/shadowsocks-rust/config.json" ]
 
 FROM alpine:3.17 AS ssserver
 
-COPY --from=builder /root/shadowsocks-rust/target/release/ssserver /usr/local/bin/
+COPY --from=builder /root/shadowsocks-rust/target/release/ssserver /usr/bin/
 COPY --from=builder /root/shadowsocks-rust/examples/config.json /etc/shadowsocks-rust/
-COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/local/bin/
+COPY --from=builder /root/shadowsocks-rust/docker/docker-entrypoint.sh /usr/bin/
 
 ENTRYPOINT [ "docker-entrypoint.sh" ]
 
