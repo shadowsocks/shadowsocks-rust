@@ -239,6 +239,7 @@ pub struct TcpTun {
     balancer: PingBalancer,
     iface_rx: mpsc::UnboundedReceiver<Vec<u8>>,
     iface_tx: mpsc::UnboundedSender<Vec<u8>>,
+    iface_tx_avail: Arc<AtomicBool>,
 }
 
 impl Drop for TcpTun {
@@ -255,7 +256,7 @@ impl TcpTun {
         capabilities.medium = Medium::Ip;
         capabilities.max_transmission_unit = mtu as usize;
 
-        let (mut device, iface_rx, iface_tx) = VirtTunDevice::new(capabilities);
+        let (mut device, iface_rx, iface_tx, iface_tx_avail) = VirtTunDevice::new(capabilities);
 
         let mut iface_config = InterfaceConfig::default();
         iface_config.random_seed = rand::random();
@@ -444,11 +445,13 @@ impl TcpTun {
                         socket_set.remove(socket_handle);
                     }
 
-                    let next_duration = iface
-                        .poll_delay(before_poll, &socket_set)
-                        .unwrap_or(SmolDuration::from_millis(5));
-                    if next_duration != SmolDuration::ZERO {
-                        thread::park_timeout(Duration::from(next_duration));
+                    if !device.recv_available() {
+                        let next_duration = iface
+                            .poll_delay(before_poll, &socket_set)
+                            .unwrap_or(SmolDuration::from_millis(5));
+                        if next_duration != SmolDuration::ZERO {
+                            thread::park_timeout(Duration::from(next_duration));
+                        }
                     }
                 }
 
@@ -467,6 +470,7 @@ impl TcpTun {
             balancer,
             iface_rx,
             iface_tx,
+            iface_tx_avail,
         }
     }
 
@@ -525,6 +529,7 @@ impl TcpTun {
         }
 
         // Wake up and poll the interface.
+        self.iface_tx_avail.store(true, Ordering::Release);
         self.manager_notify.notify();
     }
 
