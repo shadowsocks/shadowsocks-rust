@@ -9,7 +9,7 @@ use log::warn;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
 use tokio::net::UdpSocket;
 
-use crate::net::{is_dual_stack_addr, sys::socket_bind_dual_stack, AddrFamily, ConnectOpts};
+use crate::net::{is_dual_stack_addr, sys::socket_bind_dual_stack, AcceptOpts, AddrFamily, ConnectOpts, TcpSocketOpts};
 
 cfg_if! {
     if #[cfg(any(target_os = "linux", target_os = "android"))] {
@@ -59,44 +59,81 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io
     Ok(socket)
 }
 
-pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {
-    let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
-
-    macro_rules! try_sockopt {
-        ($socket:ident . $func:ident ($($arg:expr),*)) => {
-            match $socket . $func ($($arg),*) {
-                Ok(e) => e,
-                Err(err) => {
-                    let _ = socket.into_raw_fd();
-                    return Err(err);
-                }
-            }
-        };
+#[inline]
+fn set_tcp_keepalive(socket: &Socket, tcp: &TcpSocketOpts) -> io::Result<()> {
+    cfg_if! {
+        if #[cfg(any(target_os = "linux", target_os = "android"))] {
+            // FIXME: Linux Kernel doesn't support setting TCP Keep Alive.
+            // SO_KEEPALIVE works fine. But TCP_KEEPIDLE, TCP_KEEPINTV are not supported.
+            let support_tcp_keepalive_intv = !tcp.mptcp;
+        } else {
+            let support_tcp_keepalive_intv = true;
+        }
     }
 
-    if opts.tcp.nodelay {
-        try_sockopt!(socket.set_nodelay(true));
-    }
-
-    if let Some(keepalive_duration) = opts.tcp.keepalive {
+    if let Some(intv) = tcp.keepalive {
         #[allow(unused_mut)]
-        let mut keepalive = TcpKeepalive::new().with_time(keepalive_duration);
+        let mut keepalive = TcpKeepalive::new();
 
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "linux",
-            target_os = "netbsd",
-            target_vendor = "apple",
-        ))]
-        {
-            keepalive = keepalive.with_interval(keepalive_duration);
+        if support_tcp_keepalive_intv {
+            keepalive = keepalive.with_time(intv);
+
+            #[cfg(any(
+                target_os = "freebsd",
+                target_os = "fuchsia",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_vendor = "apple",
+            ))]
+            {
+                keepalive = keepalive.with_interval(intv);
+            }
         }
 
-        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
+        socket.set_tcp_keepalive(&keepalive)?;
     }
 
+    Ok(())
+}
+
+#[inline(always)]
+fn socket_call_warp<S: AsRawFd, F: FnOnce(&Socket) -> io::Result<()>>(stream: &S, f: F) -> io::Result<()> {
+    let socket = unsafe { Socket::from_raw_fd(stream.as_raw_fd()) };
+    let result = f(&socket);
     let _ = socket.into_raw_fd();
+    result
+}
+
+pub fn set_common_sockopt_after_connect<S: AsRawFd>(stream: &S, opts: &ConnectOpts) -> io::Result<()> {
+    socket_call_warp(stream, |socket| set_common_sockopt_after_connect_impl(socket, opts))
+}
+
+fn set_common_sockopt_after_connect_impl(socket: &Socket, opts: &ConnectOpts) -> io::Result<()> {
+    if opts.tcp.nodelay {
+        socket.set_nodelay(true)?;
+    }
+
+    set_tcp_keepalive(socket, &opts.tcp)?;
+
+    Ok(())
+}
+
+pub fn set_common_sockopt_after_accept<S: AsRawFd>(stream: &S, opts: &AcceptOpts) -> io::Result<()> {
+    socket_call_warp(stream, |socket| set_common_sockopt_after_accept_impl(socket, opts))
+}
+
+fn set_common_sockopt_after_accept_impl(socket: &Socket, opts: &AcceptOpts) -> io::Result<()> {
+    if let Some(buf_size) = opts.tcp.send_buffer_size {
+        socket.set_send_buffer_size(buf_size as usize)?;
+    }
+
+    if let Some(buf_size) = opts.tcp.recv_buffer_size {
+        socket.set_recv_buffer_size(buf_size as usize)?;
+    }
+
+    socket.set_nodelay(opts.tcp.nodelay)?;
+
+    set_tcp_keepalive(socket, &opts.tcp)?;
 
     Ok(())
 }

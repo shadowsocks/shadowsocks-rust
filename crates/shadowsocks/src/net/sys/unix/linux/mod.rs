@@ -2,7 +2,7 @@ use std::{
     io,
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    os::unix::io::{AsRawFd, RawFd},
+    os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     pin::Pin,
     ptr,
     sync::atomic::{AtomicBool, Ordering},
@@ -22,6 +22,7 @@ use tokio_tfo::TfoStream;
 use crate::net::{
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
+    AcceptOpts,
     AddrFamily,
     ConnectOpts,
 };
@@ -35,11 +36,24 @@ pub enum TcpStream {
 
 impl TcpStream {
     pub async fn connect(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+        if opts.tcp.mptcp {
+            return TcpStream::connect_mptcp(addr, opts).await;
+        }
+
         let socket = match addr {
             SocketAddr::V4(..) => TcpSocket::new_v4()?,
             SocketAddr::V6(..) => TcpSocket::new_v6()?,
         };
 
+        TcpStream::connect_with_socket(socket, addr, opts).await
+    }
+
+    async fn connect_mptcp(addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
+        let socket = create_mptcp_socket(&addr)?;
+        TcpStream::connect_with_socket(socket, addr, opts).await
+    }
+
+    async fn connect_with_socket(socket: TcpSocket, addr: SocketAddr, opts: &ConnectOpts) -> io::Result<TcpStream> {
         // Any traffic to localhost should not be protected
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
@@ -199,6 +213,31 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn create_mptcp_socket(bind_addr: &SocketAddr) -> io::Result<TcpSocket> {
+    unsafe {
+        let family = match bind_addr {
+            SocketAddr::V4(..) => libc::AF_INET,
+            SocketAddr::V6(..) => libc::AF_INET6,
+        };
+        let fd = libc::socket(family, libc::SOCK_STREAM, libc::IPPROTO_MPTCP);
+        let socket = Socket::from_raw_fd(fd);
+        socket.set_nonblocking(true)?;
+        Ok(TcpSocket::from_raw_fd(socket.into_raw_fd()))
+    }
+}
+
+/// Create a TCP socket for listening
+pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, accept_opts: &AcceptOpts) -> io::Result<TcpSocket> {
+    if accept_opts.tcp.mptcp {
+        create_mptcp_socket(bind_addr)
+    } else {
+        match bind_addr {
+            SocketAddr::V4(..) => TcpSocket::new_v4(),
+            SocketAddr::V6(..) => TcpSocket::new_v6(),
+        }
+    }
 }
 
 /// Disable IP fragmentation
