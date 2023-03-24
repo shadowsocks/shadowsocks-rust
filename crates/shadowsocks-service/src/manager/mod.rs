@@ -51,6 +51,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.nodelay = config.no_delay;
     connect_opts.tcp.fastopen = config.fast_open;
     connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
+    connect_opts.tcp.mptcp = config.mptcp;
 
     let mut accept_opts = AcceptOpts {
         ipv6_only: config.ipv6_only,
@@ -61,6 +62,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.nodelay = config.no_delay;
     accept_opts.tcp.fastopen = config.fast_open;
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
+    accept_opts.tcp.mptcp = config.mptcp;
 
     if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts).await {
         manager.set_dns_resolver(Arc::new(resolver));

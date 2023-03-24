@@ -147,6 +147,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
     connect_opts.tcp.nodelay = config.no_delay;
     connect_opts.tcp.fastopen = config.fast_open;
     connect_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
+    connect_opts.tcp.mptcp = config.mptcp;
     context.set_connect_opts(connect_opts);
 
     let mut accept_opts = AcceptOpts {
@@ -158,6 +159,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
     accept_opts.tcp.nodelay = config.no_delay;
     accept_opts.tcp.fastopen = config.fast_open;
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
+    accept_opts.tcp.mptcp = config.mptcp;
     context.set_accept_opts(accept_opts);
 
     if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, context.connect_opts_ref()).await {

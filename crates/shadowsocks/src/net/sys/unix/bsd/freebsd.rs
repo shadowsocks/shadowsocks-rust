@@ -21,6 +21,7 @@ use tokio_tfo::TfoStream;
 use crate::net::{
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
+    AcceptOpts,
     AddrFamily,
     ConnectOpts,
 };
@@ -168,6 +169,14 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Create a TCP socket for listening
+pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &AcceptOpts) -> io::Result<TcpSocket> {
+    match bind_addr {
+        SocketAddr::V4(..) => TcpSocket::new_v4(),
+        SocketAddr::V6(..) => TcpSocket::new_v6(),
+    }
 }
 
 /// Disable IP fragmentation

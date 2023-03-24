@@ -14,6 +14,7 @@ use tokio::{
 
 use crate::net::{
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
+    AcceptOpts,
     AddrFamily,
     ConnectOpts,
 };
@@ -93,7 +94,16 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
     Ok(socket)
 }
 
+/// Enable TCP Fast Open
 pub fn set_tcp_fastopen<S: AsRawFd>(_: &S) -> io::Result<()> {
     let err = io::Error::new(ErrorKind::Other, "TFO is not supported in this platform");
     Err(err)
+}
+
+/// Create a TCP socket for listening
+pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &AcceptOpts) -> io::Result<TcpSocket> {
+    match bind_addr {
+        SocketAddr::V4(..) => TcpSocket::new_v4(),
+        SocketAddr::V6(..) => TcpSocket::new_v6(),
+    }
 }

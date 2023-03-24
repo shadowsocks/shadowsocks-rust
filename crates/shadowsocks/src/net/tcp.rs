@@ -1,7 +1,7 @@
 //! TcpStream wrappers that supports connecting with options
 
 #[cfg(unix)]
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket};
 use std::{
@@ -14,17 +14,22 @@ use std::{
 
 use futures::{future, ready};
 use pin_project::pin_project;
-use socket2::{Socket, TcpKeepalive};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::{TcpListener as TokioTcpListener, TcpSocket, TcpStream as TokioTcpStream},
+    net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream},
 };
 
 use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
     is_dual_stack_addr,
-    sys::{set_tcp_fastopen, socket_bind_dual_stack, TcpStream as SysTcpStream},
+    sys::{
+        create_inbound_tcp_socket,
+        set_common_sockopt_after_accept,
+        set_tcp_fastopen,
+        socket_bind_dual_stack,
+        TcpStream as SysTcpStream,
+    },
     AcceptOpts,
     ConnectOpts,
 };
@@ -128,10 +133,7 @@ pub struct TcpListener {
 impl TcpListener {
     /// Creates a new TcpListener, which will be bound to the specified address.
     pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
-        let socket = match *addr {
-            SocketAddr::V4(..) => TcpSocket::new_v4()?,
-            SocketAddr::V6(..) => TcpSocket::new_v6()?,
-        };
+        let socket = create_inbound_tcp_socket(addr, &accept_opts).await?;
 
         // On platforms with Berkeley-derived sockets, this allows to quickly
         // rebind a socket, without needing to wait for the OS to clean up the
@@ -174,7 +176,7 @@ impl TcpListener {
     /// Polls to accept a new incoming connection to this listener.
     pub fn poll_accept(&self, cx: &mut task::Context<'_>) -> Poll<io::Result<(TokioTcpStream, SocketAddr)>> {
         let (stream, peer_addr) = ready!(self.inner.poll_accept(cx))?;
-        setsockopt_with_opt(&stream, &self.accept_opts)?;
+        set_common_sockopt_after_accept(&stream, &self.accept_opts)?;
         Poll::Ready(Ok((stream, peer_addr)))
     }
 
@@ -207,97 +209,6 @@ impl From<TcpListener> for TokioTcpListener {
     fn from(listener: TcpListener) -> TokioTcpListener {
         listener.inner
     }
-}
-
-#[cfg(unix)]
-fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
-    let socket = unsafe { Socket::from_raw_fd(f.as_raw_fd()) };
-
-    macro_rules! try_sockopt {
-        ($socket:ident . $func:ident ($($arg:expr),*)) => {
-            match $socket . $func ($($arg),*) {
-                Ok(e) => e,
-                Err(err) => {
-                    let _ = socket.into_raw_fd();
-                    return Err(err);
-                }
-            }
-        };
-    }
-
-    if let Some(buf_size) = opts.tcp.send_buffer_size {
-        try_sockopt!(socket.set_send_buffer_size(buf_size as usize));
-    }
-
-    if let Some(buf_size) = opts.tcp.recv_buffer_size {
-        try_sockopt!(socket.set_recv_buffer_size(buf_size as usize));
-    }
-
-    try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
-
-    if let Some(keepalive_duration) = opts.tcp.keepalive {
-        #[allow(unused_mut)]
-        let mut keepalive = TcpKeepalive::new().with_time(keepalive_duration);
-
-        #[cfg(any(
-            target_os = "freebsd",
-            target_os = "fuchsia",
-            target_os = "linux",
-            target_os = "netbsd",
-            target_vendor = "apple",
-        ))]
-        {
-            keepalive = keepalive.with_interval(keepalive_duration);
-        }
-
-        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
-    }
-
-    let _ = socket.into_raw_fd();
-    Ok(())
-}
-
-#[cfg(windows)]
-fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
-    let socket = unsafe { Socket::from_raw_socket(f.as_raw_socket()) };
-
-    macro_rules! try_sockopt {
-        ($socket:ident . $func:ident ($($arg:expr),*)) => {
-            match $socket . $func ($($arg),*) {
-                Ok(e) => e,
-                Err(err) => {
-                    let _ = socket.into_raw_socket();
-                    return Err(err);
-                }
-            }
-        };
-    }
-
-    if let Some(buf_size) = opts.tcp.send_buffer_size {
-        try_sockopt!(socket.set_send_buffer_size(buf_size as usize));
-    }
-
-    if let Some(buf_size) = opts.tcp.recv_buffer_size {
-        try_sockopt!(socket.set_recv_buffer_size(buf_size as usize));
-    }
-
-    try_sockopt!(socket.set_nodelay(opts.tcp.nodelay));
-
-    if let Some(keepalive_duration) = opts.tcp.keepalive {
-        let keepalive = TcpKeepalive::new()
-            .with_time(keepalive_duration)
-            .with_interval(keepalive_duration);
-        try_sockopt!(socket.set_tcp_keepalive(&keepalive));
-    }
-
-    let _ = socket.into_raw_socket();
-    Ok(())
-}
-
-#[cfg(all(not(windows), not(unix)))]
-fn setsockopt_with_opt(f: &tokio::net::TcpStream, opts: &AcceptOpts) -> io::Result<()> {
-    f.set_nodelay(opts.tcp.nodelay)?;
-    Ok(())
 }
 
 #[cfg(unix)]

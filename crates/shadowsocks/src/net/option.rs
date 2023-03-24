@@ -20,6 +20,14 @@ pub struct TcpSocketOpts {
     /// `SO_KEEPALIVE` and sets `TCP_KEEPIDLE`, `TCP_KEEPINTVL` and `TCP_KEEPCNT` respectively,
     /// enables keep-alive messages on connection-oriented sockets
     pub keepalive: Option<Duration>,
+
+    /// Enable Multipath-TCP (mptcp)
+    /// https://en.wikipedia.org/wiki/Multipath_TCP
+    ///
+    /// Currently only supported on
+    /// - macOS (iOS, watchOS, ...) with Client Support only.
+    /// - Linux (>5.19)
+    pub mptcp: bool,
 }
 
 /// Options for connecting to remote server

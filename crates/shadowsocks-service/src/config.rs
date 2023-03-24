@@ -171,6 +171,7 @@ struct SSConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     no_delay: Option<bool>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     keep_alive: Option<u64>,
 
@@ -185,6 +186,9 @@ struct SSConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     fast_open: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mptcp: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1123,6 +1127,8 @@ pub struct Config {
     ///
     /// If this is not set, sockets will be set with a default timeout
     pub keep_alive: Option<Duration>,
+    /// Multipath-TCP
+    pub mptcp: bool,
 
     /// `RLIMIT_NOFILE` option for *nix systems
     #[cfg(all(unix, not(target_os = "android")))]
@@ -1260,6 +1266,7 @@ impl Config {
             no_delay: false,
             fast_open: false,
             keep_alive: None,
+            mptcp: false,
 
             #[cfg(all(unix, not(target_os = "android")))]
             nofile: None,
@@ -1912,6 +1919,11 @@ impl Config {
         // TCP Keep-Alive
         if let Some(d) = config.keep_alive {
             nconfig.keep_alive = Some(Duration::from_secs(d));
+        }
+
+        // Multipath-TCP
+        if let Some(b) = config.mptcp {
+            nconfig.mptcp = b;
         }
 
         // UDP
@@ -2585,6 +2597,10 @@ impl fmt::Display for Config {
 
         if let Some(keepalive) = self.keep_alive {
             jconf.keep_alive = Some(keepalive.as_secs());
+        }
+
+        if self.mptcp {
+            jconf.mptcp = Some(self.mptcp);
         }
 
         match self.dns {
