@@ -101,7 +101,7 @@ webpki-roots = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.6.1", optional = true }
 async-trait = "0.1"
 
-socket2 = { version = "0.4", features = ["all"] }
+socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2"
 
 hyper = { version = "0.14.25", optional = true, features = ["full"] }
