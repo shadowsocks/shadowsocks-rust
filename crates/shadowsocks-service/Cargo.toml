@@ -128,7 +128,7 @@ shadowsocks = { version = "1.15.3", path = "../shadowsocks", default-features = 
 nix = "0.26"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.45", features = ["Win32_Networking_WinSock"] }
+windows-sys = { version = "0.48", features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 byteorder = "1.3"

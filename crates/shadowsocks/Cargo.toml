@@ -82,7 +82,7 @@ shadowsocks-crypto = { version = "0.5.1", features = ["ring"] }
 shadowsocks-crypto = { version = "0.5.1", features = [] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.45", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_IO"] }
+windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_IO"] }
 
 [target.'cfg(unix)'.dependencies]
 sendfd = { version = "0.4", features = ["tokio"] }
