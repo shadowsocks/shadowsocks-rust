@@ -283,7 +283,7 @@ fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> 
 
 fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
     unsafe {
-        let (_, addr) = SockAddr::init(|dst_addr, dst_addr_len| {
+        let (_, addr) = SockAddr::try_init(|dst_addr, dst_addr_len| {
             let mut cmsg: *mut libc::cmsghdr = libc::CMSG_FIRSTHDR(msg);
             while !cmsg.is_null() {
                 let rcmsg = &*cmsg;
@@ -352,7 +352,7 @@ fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, Sock
             return Err(Error::last_os_error());
         }
 
-        let (_, src_saddr) = SockAddr::init(|a, l| {
+        let (_, src_saddr) = SockAddr::try_init(|a, l| {
             ptr::copy_nonoverlapping(msg.msg_name, a as *mut _, msg.msg_namelen as usize);
             *l = msg.msg_namelen;
             Ok(())

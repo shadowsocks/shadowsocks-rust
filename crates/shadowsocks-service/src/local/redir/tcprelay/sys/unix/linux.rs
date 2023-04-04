@@ -43,14 +43,38 @@ impl TcpListenerRedirExt for TcpListener {
 
                 let set_dual_stack = is_dual_stack_addr(&addr);
                 if set_dual_stack {
-                    // Redirect doesn't support dual-stack
-                    if let Err(err) = set_ipv6_only(&socket, true) {
-                        warn!("set IPV6_V6ONLY=true failed, error: {}", err);
-                    }
-                }
+                    // Try to bind dual-stack address
+                    match set_ipv6_only(&socket, false) {
+                        Ok(..) => {
+                            // bind()
+                            if let Err(err) = socket.bind(addr) {
+                                warn!(
+                                    "bind() dual-stack address {} failed, error: {}, fallback to IPV6_V6ONLY=true",
+                                    addr, err
+                                );
 
-                // bind, listen as original
-                socket.bind(addr)?;
+                                if let Err(err) = set_ipv6_only(&socket, true) {
+                                    warn!(
+                                        "set IPV6_V6ONLY=true failed, error: {}, bind() to {} directly",
+                                        err, addr
+                                    );
+                                }
+
+                                socket.bind(addr)?;
+                            }
+                        }
+                        Err(err) => {
+                            warn!(
+                                "set IPV6_V6ONLY=false failed, error: {}, bind() to {} directly",
+                                err, addr
+                            );
+                            socket.bind(addr)?;
+                        }
+                    }
+                } else {
+                    // bind, listen as original
+                    socket.bind(addr)?;
+                }
 
                 // mio's default backlog is 1024
                 let listener = socket.listen(1024)?;
@@ -90,35 +114,42 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
     let fd = s.as_raw_fd();
 
     unsafe {
-        let (_, target_addr) = SockAddr::init(|target_addr, target_addr_len| {
-            match s.local_addr()? {
-                SocketAddr::V4(..) => {
-                    let ret = libc::getsockopt(
-                        fd,
-                        libc::SOL_IP,
-                        libc::SO_ORIGINAL_DST,
-                        target_addr as *mut _,
-                        target_addr_len, // libc::socklen_t
-                    );
-                    if ret != 0 {
-                        let err = Error::last_os_error();
-                        return Err(err);
-                    }
-                }
-                SocketAddr::V6(..) => {
-                    let ret = libc::getsockopt(
-                        fd,
-                        libc::SOL_IPV6,
-                        libc::IP6T_SO_ORIGINAL_DST,
-                        target_addr as *mut _,
-                        target_addr_len, // libc::socklen_t
-                    );
+        let (_, target_addr) = SockAddr::try_init(|target_addr, target_addr_len| {
+            // No suffcient method to know whether the destination IPv4 or IPv6.
+            // Follow the method in shadowsocks-libev.
 
-                    if ret != 0 {
-                        let err = Error::last_os_error();
-                        return Err(err);
-                    }
+            let ret = libc::getsockopt(
+                fd,
+                libc::SOL_IPV6,
+                libc::IP6T_SO_ORIGINAL_DST,
+                target_addr as *mut _,
+                target_addr_len, // libc::socklen_t
+            );
+
+            if ret == 0 {
+                return Ok(());
+            } else {
+                let err = Error::last_os_error();
+                match err.raw_os_error() {
+                    None => return Err(err),
+                    // ENOPROTOOPT: IP6T_SO_ORIGINAL_DST doesn't exists
+                    // ENOENT: Destination address is not IPv6
+                    Some(libc::ENOPROTOOPT) | Some(libc::ENOENT) => {}
+                    Some(..) => return Err(err),
                 }
+            }
+
+            let ret = libc::getsockopt(
+                fd,
+                libc::SOL_IP,
+                libc::SO_ORIGINAL_DST,
+                target_addr as *mut _,
+                target_addr_len, // libc::socklen_t
+            );
+
+            if ret != 0 {
+                let err = Error::last_os_error();
+                return Err(err);
             }
 
             Ok(())

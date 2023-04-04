@@ -42,7 +42,7 @@ security-replay-attack-detect = ["bloomfilter"]
 [dependencies]
 log = "0.4"
 
-libc = "0.2.94"
+libc = "0.2.141"
 bytes = "1.2"
 cfg-if = "1"
 byte_string = "1.0"
@@ -64,7 +64,7 @@ percent-encoding = "2.1"
 futures = "0.3"
 async-trait = "0.1"
 
-socket2 = { version = "0.4", features = ["all"] }
+socket2 = { version = "0.5", features = ["all"] }
 tokio = { version = "1.9.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
 tokio-tfo = "0.2.0"
 
