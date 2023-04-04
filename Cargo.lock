@@ -2505,9 +2505,9 @@ dependencies = [
 
 [[package]]
 name = "sysexits"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c02b4068e6e6551e290df467a3c5984fc5d37060e9ff796493e16ecd8fb6e822"
+checksum = "0f7c6c1db48f72860030ef7ec0db89fca0d44c2e04db22b052380b60baf764e5"
 
 [[package]]
 name = "tcmalloc"
