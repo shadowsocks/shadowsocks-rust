@@ -148,6 +148,8 @@ struct SSConfig {
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin_mode: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
@@ -326,6 +328,8 @@ struct SSServerExtConfig {
     plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugin_args: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugin_mode: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     timeout: Option<u64>,
@@ -1646,6 +1650,20 @@ impl Config {
                             plugin: p.clone(),
                             plugin_opts: config.plugin_opts.clone(),
                             plugin_args: config.plugin_args.clone().unwrap_or_default(),
+                            plugin_mode: match config.plugin_mode {
+                                None => Mode::TcpOnly,
+                                Some(ref mode) => match mode.parse::<Mode>() {
+                                    Ok(m) => m,
+                                    Err(..) => {
+                                        let e = Error::new(
+                                            ErrorKind::Malformed,
+                                            "malformed `plugin_mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
+                                            None,
+                                        );
+                                        return Err(e);
+                                    }
+                                },
+                            },
                         };
                         nsvr.set_plugin(plugin);
                     }
@@ -1773,6 +1791,20 @@ impl Config {
                             plugin: p,
                             plugin_opts: svr.plugin_opts,
                             plugin_args: svr.plugin_args.unwrap_or_default(),
+                            plugin_mode: match svr.plugin_mode {
+                                None => Mode::TcpOnly,
+                                Some(ref mode) => match mode.parse::<Mode>() {
+                                    Ok(m) => m,
+                                    Err(..) => {
+                                        let e = Error::new(
+                                            ErrorKind::Malformed,
+                                            "malformed `plugin_mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
+                                            None,
+                                        );
+                                        return Err(e);
+                                    }
+                                },
+                            },
                         };
                         nsvr.set_plugin(plugin);
                     }
@@ -1889,6 +1921,20 @@ impl Config {
                         plugin: p,
                         plugin_opts: config.plugin_opts,
                         plugin_args: config.plugin_args.unwrap_or_default(),
+                        plugin_mode: match config.plugin_mode {
+                            None => Mode::TcpOnly,
+                            Some(ref mode) => match mode.parse::<Mode>() {
+                                Ok(m) => m,
+                                Err(..) => {
+                                    let e = Error::new(
+                                        ErrorKind::Malformed,
+                                        "malformed `plugin_mode`, must be one of `tcp_only`, `udp_only` and `tcp_and_udp`",
+                                        None,
+                                    );
+                                    return Err(e);
+                                }
+                            },
+                        },
                     });
                 }
             }
@@ -2461,6 +2507,13 @@ impl fmt::Display for Config {
                         Some(p.plugin_args.clone())
                     }
                 });
+                jconf.plugin_mode = match svr.plugin() {
+                    None => None,
+                    Some(p) => match p.plugin_mode {
+                        Mode::TcpOnly => None,
+                        _ => Some(p.plugin_mode.to_string()),
+                    },
+                };
                 jconf.timeout = svr.timeout().map(|t| t.as_secs());
                 jconf.mode = Some(svr.mode().to_string());
 
@@ -2510,6 +2563,13 @@ impl fmt::Display for Config {
                                 Some(p.plugin_args.clone())
                             }
                         }),
+                        plugin_mode: match svr.plugin() {
+                            None => None,
+                            Some(p) => match p.plugin_mode {
+                                Mode::TcpOnly => None,
+                                _ => Some(p.plugin_mode.to_string()),
+                            },
+                        },
                         timeout: svr.timeout().map(|t| t.as_secs()),
                         remarks: svr.remarks().map(ToOwned::to_owned),
                         id: svr.id().map(ToOwned::to_owned),

@@ -37,6 +37,8 @@ pub struct ServerConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub users: Option<Vec<ServerUserConfig>>,

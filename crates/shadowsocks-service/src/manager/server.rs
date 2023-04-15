@@ -256,7 +256,7 @@ impl Manager {
             info!(
                 "closed managed server listening on {}, inbound address {}",
                 v.svr_cfg.addr(),
-                v.svr_cfg.external_addr()
+                v.svr_cfg.tcp_external_addr()
             );
         }
 
@@ -444,6 +444,18 @@ impl Manager {
                 plugin: plugin.clone(),
                 plugin_opts: req.plugin_opts.clone(),
                 plugin_args: Vec::new(),
+                plugin_mode: match req.plugin_mode {
+                    None => Mode::TcpOnly,
+                    Some(ref mode) => match mode.parse::<Mode>() {
+                        Ok(m) => m,
+                        Err(..) => {
+                            error!("unrecognized plugin_mode \"{}\", req: {:?}", mode, req);
+
+                            let err = format!("unrecognized plugin_mode \"{}\"", mode);
+                            return Ok(AddResponse(err));
+                        }
+                    },
+                },
             };
             svr_cfg.set_plugin(p);
         } else if let Some(ref plugin) = self.svr_cfg.plugin {
@@ -536,6 +548,7 @@ impl Manager {
                 no_delay: None,
                 plugin: None,
                 plugin_opts: None,
+                plugin_mode: None,
                 mode: None,
                 users,
             };

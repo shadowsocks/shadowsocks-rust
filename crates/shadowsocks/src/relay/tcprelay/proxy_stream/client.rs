@@ -115,7 +115,7 @@ where
             Some(d) => {
                 match time::timeout(
                     d,
-                    OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts),
+                    OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.tcp_external_addr(), opts),
                 )
                 .await
                 {
@@ -129,13 +129,13 @@ where
                     }
                 }
             }
-            None => OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts).await?,
+            None => OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.tcp_external_addr(), opts).await?,
         };
 
         trace!(
             "connected tcp remote {} (outbound: {}) with {:?}",
             svr_cfg.addr(),
-            svr_cfg.external_addr(),
+            svr_cfg.tcp_external_addr(),
             opts
         );
 

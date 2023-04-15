@@ -30,7 +30,7 @@ where
             "established tcp tunnel {} <-> {} through sever {} (outbound: {})",
             peer_addr,
             target_addr,
-            svr_cfg.external_addr(),
+            svr_cfg.tcp_external_addr(),
             svr_cfg.addr(),
         );
     } else {

@@ -74,7 +74,7 @@ async fn handle_tcp_client(
         "establishing tcp tunnel {} <-> {} through sever {} (outbound: {})",
         peer_addr,
         forward_addr,
-        svr_cfg.external_addr(),
+        svr_cfg.tcp_external_addr(),
         svr_cfg.addr(),
     );
 

@@ -541,9 +541,24 @@ impl ServerConfig {
         self.plugin_addr.as_ref()
     }
 
-    /// Get server's external address
-    pub fn external_addr(&self) -> &ServerAddr {
-        self.plugin_addr.as_ref().unwrap_or(&self.addr)
+    /// Get server's TCP external address
+    pub fn tcp_external_addr(&self) -> &ServerAddr {
+        if let Some(plugin) = self.plugin() {
+            if plugin.plugin_mode.enable_tcp() {
+                return self.plugin_addr.as_ref().unwrap_or(&self.addr);
+            }
+        }
+        &self.addr
+    }
+
+    /// Get server's UDP external address
+    pub fn udp_external_addr(&self) -> &ServerAddr {
+        if let Some(plugin) = self.plugin() {
+            if plugin.plugin_mode.enable_udp() {
+                return self.plugin_addr.as_ref().unwrap_or(&self.addr);
+            }
+        }
+        &self.addr
     }
 
     /// Set timeout
@@ -790,6 +805,7 @@ impl ServerConfig {
                             plugin: p.to_owned(),
                             plugin_opts: vsp.next().map(ToOwned::to_owned),
                             plugin_args: Vec::new(), // SIP002 doesn't have arguments for plugins
+                            plugin_mode: Mode::TcpOnly, // SIP002 doesn't support SIP003u
                         };
                         svrconfig.set_plugin(plugin);
                     }

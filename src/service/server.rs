@@ -354,6 +354,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                     plugin: p,
                     plugin_opts: matches.get_one::<String>("PLUGIN_OPT").cloned(),
                     plugin_args: Vec::new(),
+                    plugin_mode: Mode::TcpOnly,
                 };
 
                 sc.set_plugin(plugin);
