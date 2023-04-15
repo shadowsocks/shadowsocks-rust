@@ -61,36 +61,38 @@ pub async fn create_inbound_udp_socket(addr: &SocketAddr, ipv6_only: bool) -> io
 
 #[inline]
 fn set_tcp_keepalive(socket: &Socket, tcp: &TcpSocketOpts) -> io::Result<()> {
-    cfg_if! {
-        if #[cfg(any(target_os = "linux", target_os = "android"))] {
-            // FIXME: Linux Kernel doesn't support setting TCP Keep Alive.
-            // SO_KEEPALIVE works fine. But TCP_KEEPIDLE, TCP_KEEPINTV are not supported.
-            let support_tcp_keepalive_intv = !tcp.mptcp;
-        } else {
-            let support_tcp_keepalive_intv = true;
-        }
-    }
-
     if let Some(intv) = tcp.keepalive {
         #[allow(unused_mut)]
-        let mut keepalive = TcpKeepalive::new();
+        let mut keepalive = TcpKeepalive::new().with_time(intv);
 
-        if support_tcp_keepalive_intv {
-            keepalive = keepalive.with_time(intv);
-
-            #[cfg(any(
-                target_os = "freebsd",
-                target_os = "fuchsia",
-                target_os = "linux",
-                target_os = "netbsd",
-                target_vendor = "apple",
-            ))]
-            {
-                keepalive = keepalive.with_interval(intv);
-            }
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_os = "netbsd",
+            target_vendor = "apple",
+        ))]
+        {
+            keepalive = keepalive.with_interval(intv);
         }
 
-        socket.set_tcp_keepalive(&keepalive)?;
+        cfg_if! {
+            if #[cfg(any(target_os = "linux", target_os = "android"))] {
+                // FIXME: Linux Kernel doesn't support setting TCP Keep Alive. (MPTCP)
+                // SO_KEEPALIVE works fine. But TCP_KEEPIDLE, TCP_KEEPINTV are not supported.
+                // https://github.com/multipath-tcp/mptcp_net-next/issues/383
+                // https://github.com/multipath-tcp/mptcp_net-next/issues/353
+                if let Err(err) = socket.set_tcp_keepalive(&keepalive) {
+                    log::debug!("set TCP keep-alive with time & interval failed with error: {:?}", err);
+
+                    // Try again without time & interval
+                    let keepalive = TcpKeepalive::new();
+                    socket.set_tcp_keepalive(&keepalive)?;
+                }
+            } else {
+                socket.set_tcp_keepalive(&keepalive)?;
+            }
+        }
     }
 
     Ok(())
