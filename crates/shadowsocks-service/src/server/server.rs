@@ -129,27 +129,27 @@ impl Server {
     pub async fn run(mut self) -> io::Result<()> {
         let vfut = FuturesUnordered::new();
 
-        if self.svr_cfg.mode().enable_tcp() {
-            if let Some(plugin_cfg) = self.svr_cfg.plugin() {
-                let plugin = Plugin::start(plugin_cfg, self.svr_cfg.addr(), PluginMode::Server)?;
-                self.svr_cfg.set_plugin_addr(plugin.local_addr().into());
-                vfut.push(
-                    async move {
-                        match plugin.join().await {
-                            Ok(status) => {
-                                error!("plugin exited with status: {}", status);
-                                Ok(())
-                            }
-                            Err(err) => {
-                                error!("plugin exited with error: {}", err);
-                                Err(err)
-                            }
+        if let Some(plugin_cfg) = self.svr_cfg.plugin() {
+            let plugin = Plugin::start(plugin_cfg, self.svr_cfg.addr(), PluginMode::Server)?;
+            self.svr_cfg.set_plugin_addr(plugin.local_addr().into());
+            vfut.push(
+                async move {
+                    match plugin.join().await {
+                        Ok(status) => {
+                            error!("plugin exited with status: {}", status);
+                            Ok(())
+                        }
+                        Err(err) => {
+                            error!("plugin exited with error: {}", err);
+                            Err(err)
                         }
                     }
-                    .boxed(),
-                );
-            }
+                }
+                .boxed(),
+            );
+        }
 
+        if self.svr_cfg.mode().enable_tcp() {
             let tcp_fut = self.run_tcp_server().boxed();
             vfut.push(tcp_fut);
         }

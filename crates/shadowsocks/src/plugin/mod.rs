@@ -92,20 +92,22 @@ impl Plugin {
                 match mode {
                     PluginMode::Client => {
                         debug!(
-                            "started plugin \"{}\" on {} <-> {} ({})",
+                            "started plugin \"{}\" on {} <-> {} ({}) {}",
                             c.plugin,
                             local_addr,
                             remote_addr,
-                            process.id().unwrap_or(0)
+                            process.id().unwrap_or(0),
+                            c.plugin_mode
                         );
                     }
                     PluginMode::Server => {
                         debug!(
-                            "started plugin \"{}\" on {} <-> {} ({})",
+                            "started plugin \"{}\" on {} <-> {} ({}) {}",
                             c.plugin,
                             remote_addr,
                             local_addr,
-                            process.id().unwrap_or(0)
+                            process.id().unwrap_or(0),
+                            c.plugin_mode
                         );
                     }
                 }
