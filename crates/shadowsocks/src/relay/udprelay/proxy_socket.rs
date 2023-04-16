@@ -100,7 +100,12 @@ impl ProxySocket {
 
         let socket = ShadowUdpSocket::connect_server_with_opts(&context, svr_cfg.udp_external_addr(), opts).await?;
 
-        trace!("connected udp remote {} with {:?}", svr_cfg.udp_external_addr(), opts);
+        trace!(
+            "connected udp remote {} (outbound: {}) with {:?}",
+            svr_cfg.addr(),
+            svr_cfg.udp_external_addr(),
+            opts
+        );
 
         Ok(ProxySocket::from_socket(
             UdpSocketType::Client,

@@ -143,8 +143,9 @@ impl UdpServer {
         let socket = ProxySocket::bind_with_opts(self.context.context(), svr_cfg, self.accept_opts.clone()).await?;
 
         info!(
-            "shadowsocks udp server listening on {}",
+            "shadowsocks udp server listening on {}, inbound address {}",
             socket.local_addr().expect("listener.local_addr"),
+            svr_cfg.addr(),
         );
 
         let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
