@@ -568,6 +568,11 @@ Example configuration:
     "password": "your-password",
     "plugin": "v2ray-plugin",
     "plugin_opts": "mode=quic;host=github.com",
+    "plugin_args": [
+        // Each line is an argument passed to "plugin"
+        "--verbose"
+    ],
+    "plugin_mode": "tcp_and_udp", // SIP003u, default is "tcp_only"
     // Server: TCP socket timeout in seconds.
     // Client: TCP connection timeout in seconds.
     // Omit this field if you don't have specific needs.
@@ -588,6 +593,8 @@ Example configuration:
             "password": "your-password",
             "plugin": "...",
             "plugin_opts": "...",
+            "plugin_args": [],
+            "plugin_mode": "...",
             "timeout": 7200,
 
             // Customized weight for local server's balancer
@@ -863,6 +870,7 @@ It supports the following features:
 - [x] Load balancing (multiple servers) and server delay checking
 - [x] [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30) AEAD ciphers
 - [x] [SIP003](https://github.com/shadowsocks/shadowsocks-org/issues/28) Plugins
+- [x] [SIP003u](https://github.com/shadowsocks/shadowsocks-org/issues/180) Plugin with UDP support
 - [x] [SIP002](https://github.com/shadowsocks/shadowsocks-org/issues/27) Extension ss URLs
 - [x] [SIP022](https://github.com/shadowsocks/shadowsocks-org/issues/196) AEAD 2022 ciphers
 - [x] HTTP Proxy Supports ([RFC 7230](http://tools.ietf.org/html/rfc7230) and [CONNECT](https://tools.ietf.org/html/draft-luotonen-web-proxy-tunneling-01))
