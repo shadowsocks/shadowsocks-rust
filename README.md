@@ -241,13 +241,19 @@ Read `Cargo.toml` for more details.
 
 ## Getting Started
 
+Generate a safe and secured password for a specific encryption method (`aes-128-gcm` in the example) with:
+
+```bash
+ssservice genkey -m "aes-128-gcm"
+```
+
 Create a ShadowSocks' configuration file. Example
 
 ```jsonc
 {
     "server": "my_server_ip",
     "server_port": 8388,
-    "password": "mypassword",
+    "password": "rwQc8qPXVsRpGx3uW+Y3Lj4Y42yF9Bs0xg1pmx8/+bo=",
     "method": "aes-256-gcm",
     // ONLY FOR `sslocal`
     // Delete these lines if you are running `ssserver` or `ssmanager`
@@ -266,21 +272,21 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
         {
             "address": "127.0.0.1",
             "port": 8388,
-            "password": "hello-world",
+            "password": "rwQc8qPXVsRpGx3uW+Y3Lj4Y42yF9Bs0xg1pmx8/+bo=",
             "method": "aes-256-gcm",
             "timeout": 7200
         },
         {
             "address": "127.0.0.1",
             "port": 8389,
-            "password": "hello-kitty",
+            "password": "/dliNXn5V4jg6vBW4MnC1I8Jljg9x7vSihmk6UZpRBM=",
             "method": "chacha20-ietf-poly1305"
         },
         {
             "disabled": true,
             "address": "eg.disable.me",
             "port": 8390,
-            "password": "hello-internet",
+            "password": "mGvbWWay8ueP9IHnV5F1uWGN2BRToiVCAWJmWOTLU24=",
             "method": "chacha20-ietf-poly1305"
         }
     ],
