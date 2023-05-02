@@ -150,7 +150,7 @@ qrcode = { version = "0.12", default-features = false, optional = true }
 sysexits = "0.5"
 build-time = "0.1"
 directories = "5.0"
-xdg = "2.4"
+xdg = "2.5"
 rpassword = "7.0"
 libc = { version = "0.2", features = ["extra_traits"] }
 rand = "0.8"
