@@ -97,7 +97,9 @@ pub struct Server {
     dns_servers: Vec<Dns>,
     #[cfg(feature = "local-redir")]
     redir_servers: Vec<Redir>,
+    #[cfg(feature = "local-flow-stat")]
     local_stat_addr: Option<LocalFlowStatAddress>,
+    #[cfg(feature = "local-flow-stat")]
     flow_stat: Arc<FlowStat>,
 }
 
@@ -223,7 +225,9 @@ impl Server {
             dns_servers: Vec::new(),
             #[cfg(feature = "local-redir")]
             redir_servers: Vec::new(),
+            #[cfg(feature = "local-flow-stat")]
             local_stat_addr: config.local_stat_addr,
+            #[cfg(feature = "local-flow-stat")]
             flow_stat: context.flow_stat(),
         };
 
