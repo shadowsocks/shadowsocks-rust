@@ -30,51 +30,65 @@ impl UdpInboundWrite for TunnelUdpInboundWriter {
     }
 }
 
-pub struct UdpTunnel {
+pub struct TunnelUdpServer {
     context: Arc<ServiceContext>,
     time_to_live: Option<Duration>,
     capacity: Option<usize>,
+    listener: Arc<UdpSocket>,
+    balancer: PingBalancer,
+    forward_addr: Address,
 }
 
-impl UdpTunnel {
-    pub fn new(context: Arc<ServiceContext>, time_to_live: Option<Duration>, capacity: Option<usize>) -> UdpTunnel {
-        UdpTunnel {
-            context,
-            time_to_live,
-            capacity,
-        }
-    }
-
-    pub async fn run(
-        &mut self,
+impl TunnelUdpServer {
+    pub(crate) async fn new(
+        context: Arc<ServiceContext>,
         client_config: &ServerAddr,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
         balancer: PingBalancer,
-        forward_addr: &Address,
-    ) -> io::Result<()> {
-        let socket = match *client_config {
+        forward_addr: Address,
+    ) -> io::Result<TunnelUdpServer> {
+        let socket = match client_config {
             ServerAddr::SocketAddr(ref saddr) => {
-                ShadowUdpSocket::listen_with_opts(saddr, self.context.accept_opts()).await?
+                ShadowUdpSocket::listen_with_opts(saddr, context.accept_opts()).await?
             }
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    ShadowUdpSocket::listen_with_opts(&addr, self.context.accept_opts()).await
+                lookup_then!(context.context_ref(), dname, *port, |addr| {
+                    ShadowUdpSocket::listen_with_opts(&addr, context.accept_opts()).await
                 })?
                 .1
             }
         };
         let socket: UdpSocket = socket.into();
-
-        info!("shadowsocks UDP tunnel listening on {}", socket.local_addr()?);
-
         let listener = Arc::new(socket);
+
+        Ok(TunnelUdpServer {
+            context,
+            time_to_live,
+            capacity,
+            listener,
+            balancer,
+            forward_addr,
+        })
+    }
+
+    /// Get server's local address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start serving
+    pub async fn run(self) -> io::Result<()> {
+        info!("shadowsocks UDP tunnel listening on {}", self.listener.local_addr()?);
+
         let (mut manager, cleanup_interval, mut keepalive_rx) = UdpAssociationManager::new(
             self.context.clone(),
             TunnelUdpInboundWriter {
-                inbound: listener.clone(),
+                inbound: self.listener.clone(),
             },
             self.time_to_live,
             self.capacity,
-            balancer,
+            self.balancer,
         );
 
         let mut buffer = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
@@ -92,7 +106,7 @@ impl UdpTunnel {
                     manager.keep_alive(&peer_addr).await;
                 }
 
-                recv_result = listener.recv_from(&mut buffer) => {
+                recv_result = self.listener.recv_from(&mut buffer) => {
                     let (n, peer_addr) = match recv_result {
                         Ok(s) => s,
                         Err(err) => {
@@ -114,13 +128,13 @@ impl UdpTunnel {
                     }
 
                     let data = &buffer[..n];
-                    if let Err(err) = manager.send_to(peer_addr, forward_addr.clone(), data)
+                    if let Err(err) = manager.send_to(peer_addr, self.forward_addr.clone(), data)
                         .await
                     {
                         debug!(
                             "udp packet relay {} -> {} with {} bytes failed, error: {}",
                             peer_addr,
-                            forward_addr,
+                            self.forward_addr,
                             data.len(),
                             err
                         );
