@@ -22,8 +22,7 @@ use shadowsocks_service::{
         ProtocolType,
         ServerInstanceConfig,
     },
-    create_local,
-    local::loadbalancing::PingBalancer,
+    local::{loadbalancing::PingBalancer, Server},
     shadowsocks::{
         config::{Mode, ServerAddr, ServerConfig},
         crypto::{available_ciphers, CipherKind},
@@ -869,14 +868,14 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
     runtime.block_on(async move {
         let config_path = config.config_path.clone();
 
-        let instance = create_local(config).await.expect("create local");
+        let instance = Server::new(config).await.expect("create local");
 
         if let Some(config_path) = config_path {
             launch_reload_server_task(config_path, instance.server_balancer().clone());
         }
 
         let abort_signal = monitor::create_signal_monitor();
-        let server = instance.wait_until_exit();
+        let server = instance.run();
 
         tokio::pin!(abort_signal);
         tokio::pin!(server);
