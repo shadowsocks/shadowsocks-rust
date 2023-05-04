@@ -221,40 +221,46 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
     }
 }
 
-pub struct UdpRedir {
+pub struct RedirUdpServer {
     context: Arc<ServiceContext>,
     redir_ty: RedirType,
     time_to_live: Option<Duration>,
     capacity: Option<usize>,
+    listener: UdpRedirSocket,
+    balancer: PingBalancer,
 }
 
-impl UdpRedir {
-    pub fn new(
+impl RedirUdpServer {
+    pub(crate) async fn new(
         context: Arc<ServiceContext>,
         redir_ty: RedirType,
+        client_config: &ServerAddr,
         time_to_live: Option<Duration>,
         capacity: Option<usize>,
-    ) -> UdpRedir {
-        UdpRedir {
-            context,
-            redir_ty,
-            time_to_live,
-            capacity,
-        }
-    }
-
-    pub async fn run(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
+        balancer: PingBalancer,
+    ) -> io::Result<RedirUdpServer> {
         let listener = match *client_config {
-            ServerAddr::SocketAddr(ref saddr) => UdpRedirSocket::listen(self.redir_ty, *saddr)?,
+            ServerAddr::SocketAddr(ref saddr) => UdpRedirSocket::listen(redir_ty, *saddr)?,
             ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    UdpRedirSocket::listen(self.redir_ty, addr)
+                lookup_then!(context.context_ref(), dname, port, |addr| {
+                    UdpRedirSocket::listen(redir_ty, addr)
                 })?
                 .1
             }
         };
 
-        let local_addr = listener.local_addr().expect("determine port bound to");
+        Ok(RedirUdpServer {
+            context,
+            redir_ty,
+            time_to_live,
+            capacity,
+            listener,
+            balancer,
+        })
+    }
+
+    pub async fn run(self) -> io::Result<()> {
+        let local_addr = self.listener.local_addr().expect("determine port bound to");
         info!(
             "shadowsocks UDP redirect ({}) listening on {}",
             self.redir_ty, local_addr
@@ -266,7 +272,7 @@ impl UdpRedir {
             UdpRedirInboundWriter::new(self.redir_ty, self.context.connect_opts_ref()),
             self.time_to_live,
             self.capacity,
-            balancer,
+            self.balancer,
         );
 
         let mut pkt_buf = [0u8; MAXIMUM_UDP_PAYLOAD_SIZE];
@@ -284,7 +290,7 @@ impl UdpRedir {
                     manager.keep_alive(&peer_addr).await;
                 }
 
-                recv_result = listener.recv_dest_from(&mut pkt_buf) => {
+                recv_result = self.listener.recv_dest_from(&mut pkt_buf) => {
                     let (recv_len, src, mut dst) = match recv_result {
                         Ok(o) => o,
                         Err(err) => {

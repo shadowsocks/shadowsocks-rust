@@ -70,60 +70,88 @@ async fn handle_redir_client(
     establish_client_tcp_redir(context, balancer, s, peer_addr, &target_addr).await
 }
 
-pub async fn run_tcp_redir(
+/// Redir TCP server instance
+pub struct RedirTcpServer {
     context: Arc<ServiceContext>,
-    client_config: &ServerAddr,
+    listener: TcpListener,
     balancer: PingBalancer,
     redir_ty: RedirType,
-) -> io::Result<()> {
-    let listener = match *client_config {
-        ServerAddr::SocketAddr(ref saddr) => TcpListener::bind_redir(redir_ty, *saddr, context.accept_opts()).await?,
-        ServerAddr::DomainName(ref dname, port) => {
-            lookup_then!(context.context_ref(), dname, port, |addr| {
-                TcpListener::bind_redir(redir_ty, addr, context.accept_opts()).await
-            })?
-            .1
-        }
-    };
+}
 
-    let listener = ShadowTcpListener::from_listener(listener, context.accept_opts());
-
-    let actual_local_addr = listener.local_addr().expect("determine port bound to");
-
-    info!(
-        "shadowsocks TCP redirect ({}) listening on {}",
-        redir_ty, actual_local_addr
-    );
-
-    loop {
-        let (socket, peer_addr) = match listener.accept().await {
-            Ok(s) => s,
-            Err(err) => {
-                error!("accept failed with error: {}", err);
-                time::sleep(Duration::from_secs(1)).await;
-                continue;
+impl RedirTcpServer {
+    pub(crate) async fn new(
+        context: Arc<ServiceContext>,
+        client_config: &ServerAddr,
+        balancer: PingBalancer,
+        redir_ty: RedirType,
+    ) -> io::Result<RedirTcpServer> {
+        let listener = match *client_config {
+            ServerAddr::SocketAddr(ref saddr) => {
+                TcpListener::bind_redir(redir_ty, *saddr, context.accept_opts()).await?
+            }
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context.context_ref(), dname, port, |addr| {
+                    TcpListener::bind_redir(redir_ty, addr, context.accept_opts()).await
+                })?
+                .1
             }
         };
 
-        trace!("got connection {}", peer_addr);
+        Ok(RedirTcpServer {
+            context,
+            listener,
+            balancer,
+            redir_ty,
+        })
+    }
 
-        let context = context.clone();
-        let balancer = balancer.clone();
-        tokio::spawn(async move {
-            let dst_addr = match socket.destination_addr(redir_ty) {
-                Ok(d) => d,
+    /// Get server local address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start serving
+    pub async fn run(self) -> io::Result<()> {
+        let listener = ShadowTcpListener::from_listener(self.listener, self.context.accept_opts());
+
+        let actual_local_addr = listener.local_addr().expect("determine port bound to");
+
+        info!(
+            "shadowsocks TCP redirect ({}) listening on {}",
+            self.redir_ty, actual_local_addr
+        );
+
+        loop {
+            let (socket, peer_addr) = match listener.accept().await {
+                Ok(s) => s,
                 Err(err) => {
-                    error!(
-                        "TCP redirect couldn't get destination, peer: {}, error: {}",
-                        peer_addr, err
-                    );
-                    return;
+                    error!("accept failed with error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
+                    continue;
                 }
             };
 
-            if let Err(err) = handle_redir_client(context, balancer, socket, peer_addr, dst_addr).await {
-                debug!("TCP redirect client, error: {:?}", err);
-            }
-        });
+            trace!("got connection {}", peer_addr);
+
+            let context = self.context.clone();
+            let balancer = self.balancer.clone();
+            let redir_ty = self.redir_ty;
+            tokio::spawn(async move {
+                let dst_addr = match socket.destination_addr(redir_ty) {
+                    Ok(d) => d,
+                    Err(err) => {
+                        error!(
+                            "TCP redirect couldn't get destination, peer: {}, error: {}",
+                            peer_addr, err
+                        );
+                        return;
+                    }
+                };
+
+                if let Err(err) = handle_redir_client(context, balancer, socket, peer_addr, dst_addr).await {
+                    debug!("TCP redirect client, error: {:?}", err);
+                }
+            });
+        }
     }
 }

@@ -303,28 +303,29 @@ pub async fn create(config: Config) -> io::Result<Server> {
             }
             #[cfg(feature = "local-redir")]
             ProtocolType::Redir => {
-                use self::redir::Redir;
+                use self::redir::RedirBuilder;
 
                 let client_addr = match local_config.addr {
                     Some(a) => a,
                     None => return Err(io::Error::new(ErrorKind::Other, "redir requires local address")),
                 };
 
-                let mut server = Redir::with_context(context.clone());
+                let mut server_builder = RedirBuilder::with_context(context.clone(), client_addr, balancer);
                 if let Some(c) = config.udp_max_associations {
-                    server.set_udp_capacity(c);
+                    server_builder.set_udp_capacity(c);
                 }
                 if let Some(d) = config.udp_timeout {
-                    server.set_udp_expiry_duration(d);
+                    server_builder.set_udp_expiry_duration(d);
                 }
-                server.set_mode(local_config.mode);
-                server.set_tcp_redir(local_config.tcp_redir);
-                server.set_udp_redir(local_config.udp_redir);
+                server_builder.set_mode(local_config.mode);
+                server_builder.set_tcp_redir(local_config.tcp_redir);
+                server_builder.set_udp_redir(local_config.udp_redir);
+                if let Some(udp_addr) = local_config.udp_addr {
+                    server_builder.set_udp_bind_addr(udp_addr);
+                }
 
-                let udp_addr = local_config.udp_addr.unwrap_or_else(|| client_addr.clone());
-                vfut.push(ServerHandle(tokio::spawn(async move {
-                    server.run(&client_addr, &udp_addr, balancer).await
-                })));
+                let server = server_builder.build().await?;
+                vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
             }
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => {
