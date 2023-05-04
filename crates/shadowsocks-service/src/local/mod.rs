@@ -329,24 +329,29 @@ pub async fn create(config: Config) -> io::Result<Server> {
             }
             #[cfg(feature = "local-dns")]
             ProtocolType::Dns => {
-                use self::dns::Dns;
+                use self::dns::DnsBuilder;
 
                 let client_addr = match local_config.addr {
                     Some(a) => a,
                     None => return Err(io::Error::new(ErrorKind::Other, "dns requires local address")),
                 };
 
-                let mut server = {
+                let mut server_builder = {
                     let local_addr = local_config.local_dns_addr.expect("missing local_dns_addr");
                     let remote_addr = local_config.remote_dns_addr.expect("missing remote_dns_addr");
 
-                    Dns::with_context(context.clone(), local_addr.clone(), remote_addr.clone())
+                    DnsBuilder::with_context(
+                        context.clone(),
+                        client_addr,
+                        local_addr.clone(),
+                        remote_addr.clone(),
+                        balancer,
+                    )
                 };
-                server.set_mode(local_config.mode);
+                server_builder.set_mode(local_config.mode);
 
-                vfut.push(ServerHandle(tokio::spawn(async move {
-                    server.run(&client_addr, balancer).await
-                })));
+                let server = server_builder.build().await?;
+                vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
             }
             #[cfg(feature = "local-tun")]
             ProtocolType::Tun => {

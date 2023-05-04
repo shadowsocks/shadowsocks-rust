@@ -1,6 +1,9 @@
 //! Customized DNS resolver
 
-pub use self::{config::NameServerAddr, server::Dns};
+pub use self::{
+    config::NameServerAddr,
+    server::{Dns, DnsBuilder},
+};
 
 mod client_cache;
 pub mod config;
