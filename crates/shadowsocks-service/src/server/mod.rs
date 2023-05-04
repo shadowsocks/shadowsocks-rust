@@ -19,7 +19,9 @@ use crate::{
     dns::build_dns_resolver,
 };
 
-pub use self::server::Server;
+pub use self::server::{Server, ServerBuilder};
+pub use self::tcprelay::TcpServer;
+pub use self::udprelay::UdpServer;
 
 pub mod context;
 #[allow(clippy::module_inception)]
@@ -99,44 +101,45 @@ pub async fn run(config: Config) -> io::Result<()> {
 
     for inst in config.server {
         let svr_cfg = inst.config;
-        let mut server = Server::new(svr_cfg);
+        let mut server_builder = ServerBuilder::new(svr_cfg);
 
         if let Some(ref r) = resolver {
-            server.set_dns_resolver(r.clone());
+            server_builder.set_dns_resolver(r.clone());
         }
 
-        server.set_connect_opts(connect_opts.clone());
-        server.set_accept_opts(accept_opts.clone());
+        server_builder.set_connect_opts(connect_opts.clone());
+        server_builder.set_accept_opts(accept_opts.clone());
 
         if let Some(c) = config.udp_max_associations {
-            server.set_udp_capacity(c);
+            server_builder.set_udp_capacity(c);
         }
         if let Some(d) = config.udp_timeout {
-            server.set_udp_expiry_duration(d);
+            server_builder.set_udp_expiry_duration(d);
         }
         if let Some(ref m) = config.manager {
-            server.set_manager_addr(m.addr.clone());
+            server_builder.set_manager_addr(m.addr.clone());
         }
 
         match inst.acl {
-            Some(acl) => server.set_acl(Arc::new(acl)),
+            Some(acl) => server_builder.set_acl(Arc::new(acl)),
             None => {
                 if let Some(ref acl) = acl {
-                    server.set_acl(acl.clone());
+                    server_builder.set_acl(acl.clone());
                 }
             }
         }
 
         if config.ipv6_first {
-            server.set_ipv6_first(config.ipv6_first);
+            server_builder.set_ipv6_first(config.ipv6_first);
         }
 
         if config.worker_count >= 1 {
-            server.set_worker_count(config.worker_count);
+            server_builder.set_worker_count(config.worker_count);
         }
 
-        server.set_security_config(&config.security);
+        server_builder.set_security_config(&config.security);
 
+        let server = server_builder.build().await?;
         servers.push(server);
     }
 

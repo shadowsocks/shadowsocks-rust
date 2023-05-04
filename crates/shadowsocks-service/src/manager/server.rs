@@ -11,22 +11,12 @@ use shadowsocks::{
     crypto::CipherKind,
     dns_resolver::DnsResolver,
     manager::protocol::{
-        self,
-        AddRequest,
-        AddResponse,
-        ErrorResponse,
-        ListResponse,
-        ManagerRequest,
-        PingResponse,
-        RemoveRequest,
-        RemoveResponse,
-        ServerUserConfig,
-        StatRequest,
+        self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
+        RemoveResponse, ServerUserConfig, StatRequest,
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener,
-    ServerAddr,
+    ManagerListener, ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -34,7 +24,7 @@ use crate::{
     acl::AccessControl,
     config::{ManagerConfig, ManagerServerHost, ManagerServerMode, SecurityConfig},
     net::FlowStat,
-    server::Server,
+    server::ServerBuilder,
 };
 
 enum ServerInstanceMode {
@@ -222,33 +212,33 @@ impl Manager {
         //
         // * AccessControlList
         // * DNS Resolver
-        let mut server = Server::new(svr_cfg.clone());
+        let mut server_builder = ServerBuilder::new(svr_cfg.clone());
 
-        server.set_connect_opts(self.connect_opts.clone());
-        server.set_accept_opts(self.accept_opts.clone());
-        server.set_dns_resolver(self.context.dns_resolver().clone());
+        server_builder.set_connect_opts(self.connect_opts.clone());
+        server_builder.set_accept_opts(self.accept_opts.clone());
+        server_builder.set_dns_resolver(self.context.dns_resolver().clone());
 
         if let Some(d) = self.udp_expiry_duration {
-            server.set_udp_expiry_duration(d);
+            server_builder.set_udp_expiry_duration(d);
         }
 
         if let Some(c) = self.udp_capacity {
-            server.set_udp_capacity(c);
+            server_builder.set_udp_capacity(c);
         }
 
         if let Some(ref acl) = self.acl {
-            server.set_acl(acl.clone());
+            server_builder.set_acl(acl.clone());
         }
 
         if self.ipv6_first {
-            server.set_ipv6_first(self.ipv6_first);
+            server_builder.set_ipv6_first(self.ipv6_first);
         }
 
-        server.set_security_config(&self.security);
+        server_builder.set_security_config(&self.security);
 
-        server.set_worker_count(self.worker_count);
+        server_builder.set_worker_count(self.worker_count);
 
-        let server_port = server.config().addr().port();
+        let server_port = server_builder.server_config().addr().port();
 
         let mut servers = self.servers.lock().await;
         // Close existed server
@@ -260,7 +250,14 @@ impl Manager {
             );
         }
 
-        let flow_stat = server.flow_stat();
+        let flow_stat = server_builder.flow_stat();
+        let server = match server_builder.build().await {
+            Ok(s) => s,
+            Err(err) => {
+                error!("failed to start server ({}), error: {}", svr_cfg.addr(), err);
+                return;
+            }
+        };
 
         let abortable = tokio::spawn(async move { server.run().await });
 

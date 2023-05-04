@@ -13,8 +13,7 @@ use shadowsocks::{
     crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
     relay::tcprelay::{utils::copy_encrypted_bidirectional, ProxyServerStream},
-    ProxyListener,
-    ServerConfig,
+    ProxyListener, ServerConfig,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -26,37 +25,60 @@ use crate::net::{utils::ignore_until_end, MonProxyStream};
 
 use super::context::ServiceContext;
 
+/// TCP server instance
 pub struct TcpServer {
     context: Arc<ServiceContext>,
-    accept_opts: AcceptOpts,
+    svr_cfg: ServerConfig,
+    listener: ProxyListener,
 }
 
 impl TcpServer {
-    pub fn new(context: Arc<ServiceContext>, accept_opts: AcceptOpts) -> TcpServer {
-        TcpServer { context, accept_opts }
+    pub(crate) async fn new(
+        context: Arc<ServiceContext>,
+        svr_cfg: ServerConfig,
+        accept_opts: AcceptOpts,
+    ) -> io::Result<TcpServer> {
+        let listener = ProxyListener::bind_with_opts(context.context(), &svr_cfg, accept_opts).await?;
+        Ok(TcpServer {
+            context,
+            svr_cfg,
+            listener,
+        })
     }
 
-    pub async fn run(self, svr_cfg: &ServerConfig) -> io::Result<()> {
-        let listener = ProxyListener::bind_with_opts(self.context.context(), svr_cfg, self.accept_opts).await?;
+    /// Server's configuration
+    pub fn server_config(&self) -> &ServerConfig {
+        &self.svr_cfg
+    }
 
+    /// Server's listen address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start server's accept loop
+    pub async fn run(self) -> io::Result<()> {
         info!(
             "shadowsocks tcp server listening on {}, inbound address {}",
-            listener.local_addr().expect("listener.local_addr"),
-            svr_cfg.addr()
+            self.listener.local_addr().expect("listener.local_addr"),
+            self.svr_cfg.addr()
         );
 
         loop {
             let flow_stat = self.context.flow_stat();
 
-            let (local_stream, peer_addr) =
-                match listener.accept_map(|s| MonProxyStream::from_stream(s, flow_stat)).await {
-                    Ok(s) => s,
-                    Err(err) => {
-                        error!("tcp server accept failed with error: {}", err);
-                        time::sleep(Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
+            let (local_stream, peer_addr) = match self
+                .listener
+                .accept_map(|s| MonProxyStream::from_stream(s, flow_stat))
+                .await
+            {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("tcp server accept failed with error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
 
             if self.context.check_client_blocked(&peer_addr) {
                 warn!("access denied from {} by ACL rules", peer_addr);
@@ -65,10 +87,10 @@ impl TcpServer {
 
             let client = TcpServerClient {
                 context: self.context.clone(),
-                method: svr_cfg.method(),
+                method: self.svr_cfg.method(),
                 peer_addr,
                 stream: local_stream,
-                timeout: svr_cfg.timeout(),
+                timeout: self.svr_cfg.timeout(),
             };
 
             tokio::spawn(async move {
