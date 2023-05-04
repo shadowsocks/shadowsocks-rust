@@ -32,6 +32,7 @@ mod tcp;
 mod udp;
 mod virt_device;
 
+/// Tun service builder
 pub struct TunBuilder {
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
@@ -42,6 +43,7 @@ pub struct TunBuilder {
 }
 
 impl TunBuilder {
+    /// Create a Tun service builder
     pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer) -> TunBuilder {
         TunBuilder {
             context,
@@ -53,42 +55,36 @@ impl TunBuilder {
         }
     }
 
-    pub fn address(mut self, addr: IpNet) -> TunBuilder {
+    pub fn address(&mut self, addr: IpNet) {
         self.tun_config.address(addr.addr()).netmask(addr.netmask());
-        self
     }
 
-    pub fn destination(mut self, addr: IpNet) -> TunBuilder {
+    pub fn destination(&mut self, addr: IpNet) {
         self.tun_config.destination(addr.addr());
-        self
     }
 
-    pub fn name(mut self, name: &str) -> TunBuilder {
+    pub fn name(&mut self, name: &str) {
         self.tun_config.name(name);
-        self
     }
 
     #[cfg(unix)]
-    pub fn file_descriptor(mut self, fd: RawFd) -> TunBuilder {
+    pub fn file_descriptor(&mut self, fd: RawFd) {
         self.tun_config.raw_fd(fd);
-        self
     }
 
-    pub fn udp_expiry_duration(mut self, udp_expiry_duration: Duration) -> TunBuilder {
+    pub fn udp_expiry_duration(&mut self, udp_expiry_duration: Duration) {
         self.udp_expiry_duration = Some(udp_expiry_duration);
-        self
     }
 
-    pub fn udp_capacity(mut self, udp_capacity: usize) -> TunBuilder {
+    pub fn udp_capacity(&mut self, udp_capacity: usize) {
         self.udp_capacity = Some(udp_capacity);
-        self
     }
 
-    pub fn mode(mut self, mode: Mode) -> TunBuilder {
+    pub fn mode(&mut self, mode: Mode) {
         self.mode = mode;
-        self
     }
 
+    /// Build Tun server
     pub async fn build(mut self) -> io::Result<Tun> {
         self.tun_config.layer(Layer::L3).up();
 
@@ -128,6 +124,7 @@ impl TunBuilder {
     }
 }
 
+/// Tun service
 pub struct Tun {
     device: AsyncDevice,
     tcp: TcpTun,
@@ -138,6 +135,7 @@ pub struct Tun {
 }
 
 impl Tun {
+    /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
         if let Ok(mtu) = self.device.get_ref().mtu() {
             assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);

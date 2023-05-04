@@ -362,24 +362,24 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
                 let mut builder = TunBuilder::new(context.clone(), balancer);
                 if let Some(address) = local_config.tun_interface_address {
-                    builder = builder.address(address);
+                    builder.address(address);
                 }
                 if let Some(address) = local_config.tun_interface_destination {
-                    builder = builder.destination(address);
+                    builder.destination(address);
                 }
                 if let Some(name) = local_config.tun_interface_name {
-                    builder = builder.name(&name);
+                    builder.name(&name);
                 }
                 if let Some(c) = config.udp_max_associations {
-                    builder = builder.udp_capacity(c);
+                    builder.udp_capacity(c);
                 }
                 if let Some(d) = config.udp_timeout {
-                    builder = builder.udp_expiry_duration(d);
+                    builder.udp_expiry_duration(d);
                 }
-                builder = builder.mode(local_config.mode);
+                builder.mode(local_config.mode);
                 #[cfg(unix)]
                 if let Some(fd) = local_config.tun_device_fd {
-                    builder = builder.file_descriptor(fd);
+                    builder.file_descriptor(fd);
                 } else if let Some(ref fd_path) = local_config.tun_device_fd_from_path {
                     use std::fs;
 
@@ -415,7 +415,7 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
                                 info!("got file descriptor {} for tun from {:?}", fd_buffer[0], peer_addr);
 
-                                builder = builder.file_descriptor(fd_buffer[0]);
+                                builder.file_descriptor(fd_buffer[0]);
                                 break;
                             }
                             Err(err) => {
