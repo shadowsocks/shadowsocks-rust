@@ -19,9 +19,11 @@ use crate::{
     dns::build_dns_resolver,
 };
 
-pub use self::server::{Server, ServerBuilder};
-pub use self::tcprelay::TcpServer;
-pub use self::udprelay::UdpServer;
+pub use self::{
+    server::{Server, ServerBuilder},
+    tcprelay::TcpServer,
+    udprelay::UdpServer,
+};
 
 pub mod context;
 #[allow(clippy::module_inception)]

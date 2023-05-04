@@ -10,13 +10,26 @@ use shadowsocks::{
     context::{Context, SharedContext},
     crypto::CipherKind,
     dns_resolver::DnsResolver,
-    manager::protocol::{
-        self, AddRequest, AddResponse, ErrorResponse, ListResponse, ManagerRequest, PingResponse, RemoveRequest,
-        RemoveResponse, ServerUserConfig, StatRequest,
+    manager::{
+        datagram::ManagerSocketAddr,
+        protocol::{
+            self,
+            AddRequest,
+            AddResponse,
+            ErrorResponse,
+            ListResponse,
+            ManagerRequest,
+            PingResponse,
+            RemoveRequest,
+            RemoveResponse,
+            ServerUserConfig,
+            StatRequest,
+        },
     },
     net::{AcceptOpts, ConnectOpts},
     plugin::PluginConfig,
-    ManagerListener, ServerAddr,
+    ManagerListener,
+    ServerAddr,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -61,10 +74,9 @@ impl ServerInstance {
     }
 }
 
-/// Manager server
-pub struct Manager {
+/// Manager server builder
+pub struct ManagerBuilder {
     context: SharedContext,
-    servers: Mutex<HashMap<u16, ServerInstance>>,
     svr_cfg: ManagerConfig,
     connect_opts: ConnectOpts,
     accept_opts: AcceptOpts,
@@ -76,17 +88,16 @@ pub struct Manager {
     worker_count: usize,
 }
 
-impl Manager {
-    /// Create a new manager server from configuration
-    pub fn new(svr_cfg: ManagerConfig) -> Manager {
-        Manager::with_context(svr_cfg, Context::new_shared(ServerType::Server))
+impl ManagerBuilder {
+    /// Create a new manager server builder from configuration
+    pub fn new(svr_cfg: ManagerConfig) -> ManagerBuilder {
+        ManagerBuilder::with_context(svr_cfg, Context::new_shared(ServerType::Server))
     }
 
-    /// Create a new manager server with context and configuration
-    pub(crate) fn with_context(svr_cfg: ManagerConfig, context: SharedContext) -> Manager {
-        Manager {
+    /// Create a new manager server builder with context and configuration
+    pub(crate) fn with_context(svr_cfg: ManagerConfig, context: SharedContext) -> ManagerBuilder {
+        ManagerBuilder {
             context,
-            servers: Mutex::new(HashMap::new()),
             svr_cfg,
             connect_opts: ConnectOpts::default(),
             accept_opts: AcceptOpts::default(),
@@ -153,15 +164,60 @@ impl Manager {
         self.worker_count = worker_count;
     }
 
-    /// Start serving
-    pub async fn run(self) -> io::Result<()> {
-        let mut listener = ManagerListener::bind(&self.context, &self.svr_cfg.addr).await?;
+    /// Build the manager server instance
+    pub async fn build(self) -> io::Result<Manager> {
+        let listener = ManagerListener::bind(&self.context, &self.svr_cfg.addr).await?;
+        Ok(Manager {
+            context: self.context,
+            servers: Mutex::new(HashMap::new()),
+            svr_cfg: self.svr_cfg,
+            connect_opts: self.connect_opts,
+            accept_opts: self.accept_opts,
+            udp_expiry_duration: self.udp_expiry_duration,
+            udp_capacity: self.udp_capacity,
+            acl: self.acl,
+            ipv6_first: self.ipv6_first,
+            security: self.security,
+            worker_count: self.worker_count,
+            listener,
+        })
+    }
+}
 
-        let local_addr = listener.local_addr()?;
+/// Manager server
+pub struct Manager {
+    context: SharedContext,
+    servers: Mutex<HashMap<u16, ServerInstance>>,
+    svr_cfg: ManagerConfig,
+    connect_opts: ConnectOpts,
+    accept_opts: AcceptOpts,
+    udp_expiry_duration: Option<Duration>,
+    udp_capacity: Option<usize>,
+    acl: Option<Arc<AccessControl>>,
+    ipv6_first: bool,
+    security: SecurityConfig,
+    worker_count: usize,
+    listener: ManagerListener,
+}
+
+impl Manager {
+    /// Manager server's configuration
+    pub fn manager_config(&self) -> &ManagerConfig {
+        &self.svr_cfg
+    }
+
+    /// Manager server's listen address
+    pub fn local_addr(&self) -> io::Result<ManagerSocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start serving
+    pub async fn run(mut self) -> io::Result<()> {
+        let local_addr = self.listener.local_addr()?;
         info!("shadowsocks manager server listening on {}", local_addr);
 
         loop {
-            let (req, peer_addr) = match listener.recv_from().await {
+            let (req, peer_addr) = match self.listener.recv_from().await {
                 Ok(r) => r,
                 Err(err) => {
                     error!("manager recv_from error: {}", err);
@@ -174,31 +230,32 @@ impl Manager {
             match req {
                 ManagerRequest::Add(ref req) => match self.handle_add(req).await {
                     Ok(rsp) => {
-                        let _ = listener.send_to(&rsp, &peer_addr).await;
+                        let _ = self.listener.send_to(&rsp, &peer_addr).await;
                     }
                     Err(err) => {
                         error!("add server_port: {} failed, error: {}", req.server_port, err);
                         let rsp = ErrorResponse(err);
-                        let _ = listener.send_to(&rsp, &peer_addr).await;
+                        let _ = self.listener.send_to(&rsp, &peer_addr).await;
                     }
                 },
                 ManagerRequest::Remove(ref req) => {
                     let rsp = self.handle_remove(req).await;
-                    let _ = listener.send_to(&rsp, &peer_addr).await;
+                    let _ = self.listener.send_to(&rsp, &peer_addr).await;
                 }
                 ManagerRequest::List(..) => {
                     let rsp = self.handle_list().await;
-                    let _ = listener.send_to(&rsp, &peer_addr).await;
+                    let _ = self.listener.send_to(&rsp, &peer_addr).await;
                 }
                 ManagerRequest::Ping(..) => {
                     let rsp = self.handle_ping().await;
-                    let _ = listener.send_to(&rsp, &peer_addr).await;
+                    let _ = self.listener.send_to(&rsp, &peer_addr).await;
                 }
                 ManagerRequest::Stat(ref stat) => self.handle_stat(stat).await,
             }
         }
     }
 
+    /// Add a server programatically
     pub async fn add_server(&self, svr_cfg: ServerConfig) {
         match self.svr_cfg.server_mode {
             ManagerServerMode::Builtin => self.add_server_builtin(svr_cfg).await,

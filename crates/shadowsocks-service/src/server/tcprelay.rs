@@ -13,7 +13,8 @@ use shadowsocks::{
     crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
     relay::tcprelay::{utils::copy_encrypted_bidirectional, ProxyServerStream},
-    ProxyListener, ServerConfig,
+    ProxyListener,
+    ServerConfig,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
