@@ -1,6 +1,6 @@
 //! Shadowsocks SOCKS (4/4a, 5) Local Server
 
-pub use self::server::Socks;
+pub use self::server::{Socks, SocksBuilder};
 
 pub mod client;
 pub mod config;

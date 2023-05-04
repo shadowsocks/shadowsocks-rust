@@ -1,56 +1,56 @@
 //! Shadowsocks SOCKS Local Server
 
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use log::{error, info};
-use shadowsocks::{config::Mode, lookup_then, net::TcpListener as ShadowTcpListener, ServerAddr};
-use tokio::{net::TcpStream, time};
+use shadowsocks::{config::Mode, ServerAddr};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-#[cfg(feature = "local-socks4")]
-use self::socks4::Socks4TcpHandler;
-use self::socks5::{Socks5TcpHandler, Socks5UdpServer};
+pub use self::server::{SocksTcpServer, SocksUdpServer};
+use self::socks5::Socks5UdpServer;
 
 use super::config::Socks5AuthConfig;
 
+mod server;
 #[cfg(feature = "local-socks4")]
 mod socks4;
 mod socks5;
 
-/// SOCKS4/4a, SOCKS5 Local Server
-pub struct Socks {
+/// SOCKS4/4a, SOCKS5 Local Server builder
+pub struct SocksBuilder {
     context: Arc<ServiceContext>,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     udp_bind_addr: Option<ServerAddr>,
-    socks5_auth: Arc<Socks5AuthConfig>,
+    socks5_auth: Socks5AuthConfig,
+    client_config: ServerAddr,
+    balancer: PingBalancer,
 }
 
-impl Default for Socks {
-    fn default() -> Self {
-        Socks::new()
-    }
-}
-
-impl Socks {
+impl SocksBuilder {
     /// Create a new SOCKS server with default configuration
-    pub fn new() -> Socks {
+    pub fn new(client_config: ServerAddr, balancer: PingBalancer) -> SocksBuilder {
         let context = ServiceContext::new();
-        Socks::with_context(Arc::new(context))
+        SocksBuilder::with_context(Arc::new(context), client_config, balancer)
     }
 
     /// Create a new SOCKS server with context
-    pub fn with_context(context: Arc<ServiceContext>) -> Socks {
-        Socks {
+    pub fn with_context(
+        context: Arc<ServiceContext>,
+        client_config: ServerAddr,
+        balancer: PingBalancer,
+    ) -> SocksBuilder {
+        SocksBuilder {
             context,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: None,
             udp_bind_addr: None,
-            socks5_auth: Arc::new(Socks5AuthConfig::default()),
+            socks5_auth: Socks5AuthConfig::default(),
+            client_config,
+            balancer,
         }
     }
 
@@ -79,134 +79,75 @@ impl Socks {
 
     /// Set SOCKS5 Username/Password Authentication configuration
     pub fn set_socks5_auth(&mut self, p: Socks5AuthConfig) {
-        self.socks5_auth = Arc::new(p);
+        self.socks5_auth = p;
+    }
+
+    pub async fn build(self) -> io::Result<Socks> {
+        let udp_bind_addr = self.udp_bind_addr.unwrap_or_else(|| self.client_config.clone());
+
+        let mut udp_server = None;
+        if self.mode.enable_udp() {
+            let server = Socks5UdpServer::new(
+                self.context.clone(),
+                &udp_bind_addr,
+                self.udp_expiry_duration,
+                self.udp_capacity,
+                self.balancer.clone(),
+            )
+            .await?;
+            udp_server = Some(server);
+        }
+
+        let mut tcp_server = None;
+        if self.mode.enable_tcp() {
+            let server = SocksTcpServer::new(
+                self.context.clone(),
+                self.client_config,
+                udp_bind_addr,
+                self.balancer.clone(),
+                self.mode,
+                self.socks5_auth,
+            )
+            .await?;
+            tcp_server = Some(server);
+        }
+
+        Ok(Socks { tcp_server, udp_server })
+    }
+}
+
+/// SOCKS4/4a, SOCKS5 Local Server
+pub struct Socks {
+    tcp_server: Option<SocksTcpServer>,
+    udp_server: Option<SocksUdpServer>,
+}
+
+impl Socks {
+    /// TCP server instance
+    pub fn tcp_server(&self) -> Option<&SocksTcpServer> {
+        self.tcp_server.as_ref()
+    }
+
+    /// UDP server instance
+    pub fn udp_server(&self) -> Option<&SocksUdpServer> {
+        self.udp_server.as_ref()
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self) -> io::Result<()> {
         let mut vfut = Vec::new();
 
-        if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_server(client_config, balancer.clone()).boxed());
+        if let Some(tcp_server) = self.tcp_server {
+            vfut.push(tcp_server.run().boxed());
         }
 
-        if self.mode.enable_udp() {
+        if let Some(udp_server) = self.udp_server {
             // NOTE: SOCKS 5 RFC requires TCP handshake for UDP ASSOCIATE command
             // But here we can start a standalone UDP SOCKS 5 relay server, for special use cases
-
-            vfut.push(self.run_udp_server(client_config, balancer).boxed());
+            vfut.push(udp_server.run().boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;
         res
-    }
-
-    async fn run_tcp_server(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
-        let listener = match *client_config {
-            ServerAddr::SocketAddr(ref saddr) => {
-                ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
-            }
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                    ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
-                })?
-                .1
-            }
-        };
-
-        info!("shadowsocks socks TCP listening on {}", listener.local_addr()?);
-
-        // If UDP is enabled, SOCK5 UDP_ASSOCIATE command will let client to send requests to this address
-        let udp_bind_addr = if self.mode.enable_udp() {
-            let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
-            let udp_bind_addr = Arc::new(udp_bind_addr.clone());
-            Some(udp_bind_addr)
-        } else {
-            self.udp_bind_addr.clone().map(Arc::new)
-        };
-
-        loop {
-            let (stream, peer_addr) = match listener.accept().await {
-                Ok(s) => s,
-                Err(err) => {
-                    error!("accept failed with error: {}", err);
-                    time::sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-
-            let balancer = balancer.clone();
-            let context = self.context.clone();
-            let udp_bind_addr = udp_bind_addr.clone();
-            let mode = self.mode;
-            let socks5_auth = self.socks5_auth.clone();
-
-            tokio::spawn(async move {
-                if let Err(err) =
-                    Socks::handle_tcp_client(context, udp_bind_addr, stream, balancer, peer_addr, mode, socks5_auth)
-                        .await
-                {
-                    error!("socks5 tcp client handler error: {}", err);
-                }
-            });
-        }
-    }
-
-    #[cfg(feature = "local-socks4")]
-    async fn handle_tcp_client(
-        context: Arc<ServiceContext>,
-        udp_bind_addr: Option<Arc<ServerAddr>>,
-        stream: TcpStream,
-        balancer: PingBalancer,
-        peer_addr: SocketAddr,
-        mode: Mode,
-        socks5_auth: Arc<Socks5AuthConfig>,
-    ) -> io::Result<()> {
-        use std::io::ErrorKind;
-
-        let mut version_buffer = [0u8; 1];
-        let n = stream.peek(&mut version_buffer).await?;
-        if n == 0 {
-            return Err(ErrorKind::UnexpectedEof.into());
-        }
-
-        match version_buffer[0] {
-            0x04 => {
-                let handler = Socks4TcpHandler::new(context, balancer, mode);
-                handler.handle_socks4_client(stream, peer_addr).await
-            }
-
-            0x05 => {
-                let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode, socks5_auth);
-                handler.handle_socks5_client(stream, peer_addr).await
-            }
-
-            version => {
-                error!("unsupported socks version {:x}", version);
-                let err = io::Error::new(ErrorKind::Other, "unsupported socks version");
-                Err(err)
-            }
-        }
-    }
-
-    #[cfg(not(feature = "local-socks4"))]
-    async fn handle_tcp_client(
-        context: Arc<ServiceContext>,
-        udp_bind_addr: Option<Arc<ServerAddr>>,
-        stream: TcpStream,
-        balancer: PingBalancer,
-        peer_addr: SocketAddr,
-        mode: Mode,
-        socks5_auth: Arc<Socks5AuthConfig>,
-    ) -> io::Result<()> {
-        let handler = Socks5TcpHandler::new(context, udp_bind_addr, balancer, mode, socks5_auth);
-        handler.handle_socks5_client(stream, peer_addr).await
-    }
-
-    async fn run_udp_server(&self, client_config: &ServerAddr, balancer: PingBalancer) -> io::Result<()> {
-        let server = Socks5UdpServer::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
-
-        let udp_bind_addr = self.udp_bind_addr.as_ref().unwrap_or(client_config);
-        server.run(udp_bind_addr, balancer).await
     }
 }

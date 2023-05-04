@@ -236,30 +236,29 @@ pub async fn create(config: Config) -> io::Result<Server> {
 
         match local_config.protocol {
             ProtocolType::Socks => {
-                use self::socks::Socks;
+                use self::socks::SocksBuilder;
 
                 let client_addr = match local_config.addr {
                     Some(a) => a,
                     None => return Err(io::Error::new(ErrorKind::Other, "socks requires local address")),
                 };
 
-                let mut server = Socks::with_context(context.clone());
-                server.set_mode(local_config.mode);
-                server.set_socks5_auth(local_config.socks5_auth);
+                let mut server_builder = SocksBuilder::with_context(context.clone(), client_addr, balancer);
+                server_builder.set_mode(local_config.mode);
+                server_builder.set_socks5_auth(local_config.socks5_auth);
 
                 if let Some(c) = config.udp_max_associations {
-                    server.set_udp_capacity(c);
+                    server_builder.set_udp_capacity(c);
                 }
                 if let Some(d) = config.udp_timeout {
-                    server.set_udp_expiry_duration(d);
+                    server_builder.set_udp_expiry_duration(d);
                 }
                 if let Some(b) = local_config.udp_addr {
-                    server.set_udp_bind_addr(b.clone());
+                    server_builder.set_udp_bind_addr(b.clone());
                 }
 
-                vfut.push(ServerHandle(tokio::spawn(async move {
-                    server.run(&client_addr, balancer).await
-                })));
+                let server = server_builder.build().await?;
+                vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
             }
             #[cfg(feature = "local-tunnel")]
             ProtocolType::Tunnel => {
