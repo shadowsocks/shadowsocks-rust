@@ -270,22 +270,22 @@ In shadowsocks-rust, we also have an extended configuration file format, which i
 {
     "servers": [
         {
-            "address": "127.0.0.1",
-            "port": 8388,
+            "server": "127.0.0.1",
+            "server_port": 8388,
             "password": "rwQc8qPXVsRpGx3uW+Y3Lj4Y42yF9Bs0xg1pmx8/+bo=",
             "method": "aes-256-gcm",
             "timeout": 7200
         },
         {
-            "address": "127.0.0.1",
-            "port": 8389,
+            "server": "127.0.0.1",
+            "server_port": 8389,
             "password": "/dliNXn5V4jg6vBW4MnC1I8Jljg9x7vSihmk6UZpRBM=",
             "method": "chacha20-ietf-poly1305"
         },
         {
             "disabled": true,
-            "address": "eg.disable.me",
-            "port": 8390,
+            "server": "eg.disable.me",
+            "server_port": 8390,
             "password": "mGvbWWay8ueP9IHnV5F1uWGN2BRToiVCAWJmWOTLU24=",
             "method": "chacha20-ietf-poly1305"
         }
