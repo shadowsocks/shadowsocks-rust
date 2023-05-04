@@ -288,17 +288,16 @@ pub async fn create(config: Config) -> io::Result<Server> {
             }
             #[cfg(feature = "local-http")]
             ProtocolType::Http => {
-                use self::http::Http;
+                use self::http::HttpBuilder;
 
                 let client_addr = match local_config.addr {
                     Some(a) => a,
                     None => return Err(io::Error::new(ErrorKind::Other, "http requires local address")),
                 };
 
-                let server = Http::with_context(context.clone());
-                vfut.push(ServerHandle(tokio::spawn(async move {
-                    server.run(&client_addr, balancer).await
-                })));
+                let builder = HttpBuilder::with_context(context.clone(), client_addr, balancer);
+                let server = builder.build().await?;
+                vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
             }
             #[cfg(feature = "local-redir")]
             ProtocolType::Redir => {
