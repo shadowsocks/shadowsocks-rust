@@ -80,7 +80,7 @@ security-replay-attack-detect = ["shadowsocks/security-replay-attack-detect"]
 log = "0.4"
 
 cfg-if = "1"
-pin-project = "1.0"
+pin-project = "1.1"
 once_cell = "1.17"
 thiserror = "1.0"
 arc-swap = "1.6"
