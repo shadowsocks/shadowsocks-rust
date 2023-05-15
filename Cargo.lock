@@ -2290,7 +2290,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "shadowsocks-crypto",
- "socket2 0.5.2",
+ "socket2 0.5.3",
  "spin 0.9.8",
  "thiserror",
  "tokio",
@@ -2390,7 +2390,7 @@ dependencies = [
  "serde",
  "shadowsocks",
  "smoltcp",
- "socket2 0.5.2",
+ "socket2 0.5.3",
  "spin 0.9.8",
  "thiserror",
  "tokio",
@@ -2487,9 +2487,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d283f86695ae989d1e18440a943880967156325ba025f05049946bff47bcc2b"
+checksum = "2538b18701741680e0322a2302176d3253a35388e2e62f172f64f4f16605f877"
 dependencies = [
  "libc",
  "windows-sys 0.48.0",
