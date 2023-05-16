@@ -94,6 +94,8 @@ local-tunnel = ["local"]
 local-socks4 = ["local"]
 # Enable Tun interface protocol for sslocal
 local-tun = ["local", "etherparse", "tun", "smoltcp"]
+# Enable Fake DNS
+local-fake-dns = ["local", "trust-dns", "sled", "prost", "prost-build"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecure
@@ -128,6 +130,8 @@ bytes = "1.6"
 byte_string = "1.0"
 byteorder = "1.5"
 rand = { version = "0.8", features = ["small_rng"] }
+sled = { version = "0.34.7", features = ["compression"], optional = true }
+prost = { version = "0.11.9", optional = true }
 
 futures = "0.3"
 tokio = { version = "1.5", features = [
@@ -185,6 +189,9 @@ nix = { version = "0.28", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_Networking_WinSock"] }
+
+[build-dependencies]
+prost-build = { version = "0.11.9", optional = true }
 
 [dev-dependencies]
 byteorder = "1.5"

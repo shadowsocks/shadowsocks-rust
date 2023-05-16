@@ -123,6 +123,8 @@ local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 local-socks4 = ["local", "shadowsocks-service/local-socks4"]
 # Enable Tun interface protocol for sslocal
 local-tun = ["local", "shadowsocks-service/local-tun", "ipnet"]
+# Enable Fake DNS for sslocal
+local-fake-dns = ["local", "shadowsocks-service/local-fake-dns"]
 
 # ssurl support outline (ssconf) URL
 utility-url-outline = ["reqwest"]

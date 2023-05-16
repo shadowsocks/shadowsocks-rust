@@ -31,6 +31,8 @@ use self::{
 
 #[cfg(feature = "local-dns")]
 use self::dns::{Dns, DnsBuilder};
+#[cfg(feature = "local-fake-dns")]
+use self::fake_dns::{FakeDns, FakeDnsBuilder};
 #[cfg(feature = "local-http")]
 use self::http::{Http, HttpBuilder};
 #[cfg(feature = "local-redir")]
@@ -44,6 +46,8 @@ use self::tunnel::{Tunnel, TunnelBuilder};
 pub mod context;
 #[cfg(feature = "local-dns")]
 pub mod dns;
+#[cfg(feature = "local-fake-dns")]
+pub mod fake_dns;
 #[cfg(feature = "local-http")]
 pub mod http;
 pub mod loadbalancing;
@@ -97,6 +101,8 @@ pub struct Server {
     dns_servers: Vec<Dns>,
     #[cfg(feature = "local-redir")]
     redir_servers: Vec<Redir>,
+    #[cfg(feature = "local-fake-dns")]
+    fake_dns_servers: Vec<FakeDns>,
     #[cfg(feature = "local-flow-stat")]
     local_stat_addr: Option<LocalFlowStatAddress>,
     #[cfg(feature = "local-flow-stat")]
@@ -239,6 +245,8 @@ impl Server {
             dns_servers: Vec::new(),
             #[cfg(feature = "local-redir")]
             redir_servers: Vec::new(),
+            #[cfg(feature = "local-fake-dns")]
+            fake_dns_servers: Vec::new(),
             #[cfg(feature = "local-flow-stat")]
             local_stat_addr: config.local_stat_addr,
             #[cfg(feature = "local-flow-stat")]
@@ -481,6 +489,32 @@ impl Server {
                     let server = builder.build().await?;
                     local_server.tun_servers.push(server);
                 }
+                #[cfg(feature = "local-fake-dns")]
+                ProtocolType::FakeDns => {
+                    let client_addr = match local_config.addr {
+                        Some(a) => a,
+                        None => return Err(io::Error::new(ErrorKind::Other, "dns requires local address")),
+                    };
+
+                    let mut builder = FakeDnsBuilder::new(client_addr);
+                    if let Some(n) = local_config.fake_dns_ipv4_network {
+                        builder.set_ipv4_network(n);
+                    }
+                    if let Some(n) = local_config.fake_dns_ipv6_network {
+                        builder.set_ipv6_network(n);
+                    }
+                    if let Some(exp) = local_config.fake_dns_record_expire_duration {
+                        builder.set_expire_duration(exp);
+                    }
+                    if let Some(p) = local_config.fake_dns_database_path {
+                        builder.set_database_path(p);
+                    }
+                    let server = builder.build().await?;
+                    #[cfg(feature = "local-fake-dns")]
+                    context.set_fake_dns_manager(server.clone_manager()).await;
+
+                    local_server.fake_dns_servers.push(server);
+                }
             }
         }
 
@@ -517,6 +551,11 @@ impl Server {
 
         #[cfg(feature = "local-redir")]
         for svr in self.redir_servers {
+            vfut.push(ServerHandle(tokio::spawn(svr.run())));
+        }
+
+        #[cfg(feature = "local-fake-dns")]
+        for svr in self.fake_dns_servers {
             vfut.push(ServerHandle(tokio::spawn(svr.run())));
         }
 
@@ -570,6 +609,12 @@ impl Server {
     #[cfg(feature = "local-redir")]
     pub fn redir_servers(&self) -> &[Redir] {
         &self.redir_servers
+    }
+
+    /// Get Fake DNS instances
+    #[cfg(feature = "local-fake-dns")]
+    pub fn fake_dns_servers(&self) -> &[FakeDns] {
+        &self.fake_dns_servers
     }
 }
 

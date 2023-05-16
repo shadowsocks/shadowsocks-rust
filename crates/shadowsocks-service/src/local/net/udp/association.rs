@@ -29,9 +29,7 @@ use shadowsocks::{
 use crate::{
     local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::{
-        packet_window::PacketWindowFilter,
-        MonProxySocket,
-        UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+        packet_window::PacketWindowFilter, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
         UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
     },
 };
@@ -98,7 +96,13 @@ where
     }
 
     /// Sends `data` from `peer_addr` to `target_addr`
-    pub async fn send_to(&mut self, peer_addr: SocketAddr, target_addr: Address, data: &[u8]) -> io::Result<()> {
+    #[cfg_attr(not(feature = "local-fake-dns"), allow(unused_mut))]
+    pub async fn send_to(&mut self, peer_addr: SocketAddr, mut target_addr: Address, data: &[u8]) -> io::Result<()> {
+        #[cfg(feature = "local-fake-dns")]
+        if let Some(mapped_addr) = self.context.try_map_fake_address(&target_addr).await {
+            target_addr = mapped_addr;
+        }
+
         // Check or (re)create an association
 
         if let Some(assoc) = self.assoc_map.get(&peer_addr) {

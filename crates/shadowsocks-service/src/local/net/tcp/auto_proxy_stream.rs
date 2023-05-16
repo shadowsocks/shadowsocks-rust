@@ -54,7 +54,12 @@ impl AutoProxyClientStream {
         A: Into<Address>,
     {
         // Connect directly.
-        let addr = addr.into();
+        #[cfg_attr(not(feature = "local-fake-dns"), allow(unused_mut))]
+        let mut addr = addr.into();
+        #[cfg(feature = "local-fake-dns")]
+        if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
+            addr = mapped_addr;
+        }
         let stream =
             TcpStream::connect_remote_with_opts(context.context_ref(), &addr, context.connect_opts_ref()).await?;
         Ok(AutoProxyClientStream::Bypassed(stream))
@@ -69,6 +74,12 @@ impl AutoProxyClientStream {
     where
         A: Into<Address>,
     {
+        #[cfg_attr(not(feature = "local-fake-dns"), allow(unused_mut))]
+        let mut addr = addr.into();
+        #[cfg(feature = "local-fake-dns")]
+        if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
+            addr = mapped_addr;
+        }
         let flow_stat = context.flow_stat();
         let stream = match ProxyClientStream::connect_with_opts_map(
             context.context(),

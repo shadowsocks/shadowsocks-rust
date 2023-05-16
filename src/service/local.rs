@@ -443,6 +443,43 @@ pub fn define_command_line_options(mut app: Command) -> Command {
         }
     }
 
+    #[cfg(feature = "local-fake-dns")]
+    {
+        app = app
+            .arg(
+                Arg::new("FAKE_DNS_RECORD_EXPIRE_DURATION")
+                    .long("fake-dns-record-expire-duration")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(u64))
+                    .help("Fake DNS record expire duration in seconds"),
+            )
+            .arg(
+                Arg::new("FAKE_DNS_IPV4_NETWORK")
+                    .long("fake-dns-ipv4-network")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(vparser::parse_ipnet)
+                    .help("Fake DNS IPv4 address network"),
+            )
+            .arg(
+                Arg::new("FAKE_DNS_IPV6_NETWORK")
+                    .long("fake-dns-ipv6-network")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(vparser::parse_ipnet)
+                    .help("Fake DNS IPv6 address network"),
+            )
+            .arg(
+                Arg::new("FAKE_DNS_DATABASE_PATH")
+                    .long("fake-dns-database-path")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_hint(ValueHint::AnyPath)
+                    .help("Fake DNS database storage path"),
+            );
+    }
+
     #[cfg(unix)]
     {
         app = app
@@ -725,6 +762,24 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
                 #[cfg(unix)]
                 if let Some(fd_path) = matches.get_one::<PathBuf>("TUN_DEVICE_FD_FROM_PATH").cloned() {
                     local_config.tun_device_fd_from_path = Some(fd_path);
+                }
+            }
+
+            #[cfg(feature = "local-fake-dns")]
+            {
+                use ipnet::{Ipv4Net, Ipv6Net};
+
+                if let Some(d) = matches.get_one::<u64>("FAKE_DNS_RECORD_EXPIRE_DURATION") {
+                    local_config.fake_dns_record_expire_duration = Some(Duration::from_secs(*d));
+                }
+                if let Some(n) = matches.get_one::<Ipv4Net>("FAKE_DNS_IPV4_NETWORK") {
+                    local_config.fake_dns_ipv4_network = Some(*n);
+                }
+                if let Some(n) = matches.get_one::<Ipv6Net>("FAKE_DNS_IPV6_NETWORK") {
+                    local_config.fake_dns_ipv6_network = Some(*n);
+                }
+                if let Some(p) = matches.get_one::<PathBuf>("FAKE_DNS_DATABASE_PATH").cloned() {
+                    local_config.fake_dns_database_path = Some(p);
                 }
             }
 
