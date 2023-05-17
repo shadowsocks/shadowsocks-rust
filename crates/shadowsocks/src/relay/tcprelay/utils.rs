@@ -4,48 +4,282 @@
 //! LICENSE MIT
 
 use std::{
+    fmt::{self, Debug},
     future::Future,
     io,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use futures::ready;
+use log::{debug, trace};
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::time::{self, Instant, Sleep};
 
 use crate::crypto::{CipherCategory, CipherKind};
 
 #[derive(Debug)]
+#[pin_project]
+struct TimeoutStream<'a, S: ?Sized> {
+    #[pin]
+    stream: &'a mut S,
+    #[pin]
+    read_timer: Sleep,
+    read_timeout: Option<Duration>,
+    read_timer_active: bool,
+    #[pin]
+    write_timer: Sleep,
+    write_timeout: Option<Duration>,
+    write_timer_active: bool,
+}
+
+impl<'a, S: ?Sized> TimeoutStream<'a, S> {
+    fn new(stream: &'a mut S) -> TimeoutStream<'a, S> {
+        TimeoutStream {
+            stream,
+            read_timer: time::sleep_until(Instant::now()),
+            read_timeout: None,
+            read_timer_active: false,
+            write_timer: time::sleep_until(Instant::now()),
+            write_timeout: None,
+            write_timer_active: false,
+        }
+    }
+
+    fn set_read_timeout_pinned(self: Pin<&mut Self>, timeout: Duration) {
+        *(self.project().read_timeout) = Some(timeout);
+    }
+
+    fn set_write_timeout_pinned(self: Pin<&mut Self>, timeout: Duration) {
+        *(self.project().write_timeout) = Some(timeout);
+    }
+
+    fn read_timeout() -> io::Error {
+        io::Error::new(io::ErrorKind::TimedOut, "read timeout")
+    }
+
+    fn write_timeout() -> io::Error {
+        io::Error::new(io::ErrorKind::TimedOut, "write timeout")
+    }
+}
+
+impl<S: AsyncRead + Unpin + ?Sized> AsyncRead for TimeoutStream<'_, S> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+
+        match this.stream.poll_read(cx, buf) {
+            Poll::Pending => match this.read_timeout {
+                None => Poll::Pending,
+                Some(timeout) => {
+                    if !*(this.read_timer_active) {
+                        this.read_timer.as_mut().reset(Instant::now() + *timeout);
+                        *(this.read_timer_active) = true;
+                    }
+
+                    match this.read_timer.poll(cx) {
+                        Poll::Pending => Poll::Pending,
+                        Poll::Ready(..) => Err(Self::read_timeout()).into(),
+                    }
+                }
+            },
+            Poll::Ready(r) => {
+                // Reset.
+                if *(this.read_timer_active) {
+                    *(this.read_timer_active) = false;
+                    this.read_timer.as_mut().reset(Instant::now());
+                }
+                Poll::Ready(r)
+            }
+        }
+    }
+}
+
+impl<'a, S: AsyncWrite + Unpin + ?Sized> AsyncWrite for TimeoutStream<'a, S> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        let mut this = self.project();
+
+        match this.stream.poll_write(cx, buf) {
+            Poll::Pending => match this.write_timeout {
+                None => Poll::Pending,
+                Some(timeout) => {
+                    if !*(this.write_timer_active) {
+                        this.write_timer.as_mut().reset(Instant::now() + *timeout);
+                        *(this.write_timer_active) = true;
+                    }
+
+                    match this.write_timer.poll(cx) {
+                        Poll::Pending => Poll::Pending,
+                        Poll::Ready(..) => Err(Self::write_timeout()).into(),
+                    }
+                }
+            },
+            Poll::Ready(r) => {
+                // Reset.
+                if *(this.write_timer_active) {
+                    *(this.write_timer_active) = false;
+                    this.write_timer.as_mut().reset(Instant::now());
+                }
+                Poll::Ready(r)
+            }
+        }
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        let mut this = self.project();
+
+        match this.stream.poll_write_vectored(cx, bufs) {
+            Poll::Pending => match this.write_timeout {
+                None => Poll::Pending,
+                Some(timeout) => {
+                    if !*(this.write_timer_active) {
+                        this.write_timer.as_mut().reset(Instant::now() + *timeout);
+                        *(this.write_timer_active) = true;
+                    }
+
+                    match this.write_timer.poll(cx) {
+                        Poll::Pending => Poll::Pending,
+                        Poll::Ready(..) => Err(Self::write_timeout()).into(),
+                    }
+                }
+            },
+            Poll::Ready(r) => {
+                // Reset.
+                if *(this.write_timer_active) {
+                    *(this.write_timer_active) = false;
+                    this.write_timer.as_mut().reset(Instant::now());
+                }
+                Poll::Ready(r)
+            }
+        }
+    }
+
+    #[inline]
+    fn is_write_vectored(&self) -> bool {
+        self.stream.is_write_vectored()
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let mut this = self.project();
+
+        match this.stream.poll_flush(cx) {
+            Poll::Pending => match this.write_timeout {
+                None => Poll::Pending,
+                Some(timeout) => {
+                    if !*(this.write_timer_active) {
+                        this.write_timer.as_mut().reset(Instant::now() + *timeout);
+                        *(this.write_timer_active) = true;
+                    }
+
+                    match this.write_timer.poll(cx) {
+                        Poll::Pending => Poll::Pending,
+                        Poll::Ready(..) => Err(Self::write_timeout()).into(),
+                    }
+                }
+            },
+            Poll::Ready(r) => {
+                // Reset.
+                if *(this.write_timer_active) {
+                    *(this.write_timer_active) = false;
+                    this.write_timer.as_mut().reset(Instant::now());
+                }
+                Poll::Ready(r)
+            }
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let mut this = self.project();
+
+        match this.stream.poll_shutdown(cx) {
+            Poll::Pending => match this.write_timeout {
+                None => Poll::Pending,
+                Some(timeout) => {
+                    if !*(this.write_timer_active) {
+                        this.write_timer.as_mut().reset(Instant::now() + *timeout);
+                        *(this.write_timer_active) = true;
+                    }
+
+                    match this.write_timer.poll(cx) {
+                        Poll::Pending => Poll::Pending,
+                        Poll::Ready(..) => Err(Self::write_timeout()).into(),
+                    }
+                }
+            },
+            Poll::Ready(r) => {
+                // Reset.
+                if *(this.write_timer_active) {
+                    *(this.write_timer_active) = false;
+                    this.write_timer.as_mut().reset(Instant::now());
+                }
+                Poll::Ready(r)
+            }
+        }
+    }
+}
+
 struct CopyBuffer {
     read_done: bool,
     pos: usize,
     cap: usize,
     amt: u64,
     buf: Box<[u8]>,
+    set_writer_timeout: bool,
+}
+
+impl Debug for CopyBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("CopyBuffer")
+            .field("read_done", &self.read_done)
+            .field("pos", &self.pos)
+            .field("cap", &self.cap)
+            .field("amt", &self.amt)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CopyBuffer {
-    fn new(buffer_size: usize) -> Self {
+    fn new(buffer_size: usize, set_writer_timeout: bool) -> Self {
         Self {
             read_done: false,
             pos: 0,
             cap: 0,
             amt: 0,
             buf: vec![0; buffer_size].into_boxed_slice(),
+            set_writer_timeout,
         }
     }
 
     fn poll_copy<R, W>(
         &mut self,
         cx: &mut Context<'_>,
-        mut reader: Pin<&mut R>,
-        mut writer: Pin<&mut W>,
+        mut reader: Pin<&mut TimeoutStream<'_, R>>,
+        mut writer: Pin<&mut TimeoutStream<'_, W>>,
     ) -> Poll<io::Result<u64>>
     where
-        R: AsyncRead + ?Sized,
-        W: AsyncWrite + ?Sized,
+        R: AsyncRead + Unpin + ?Sized,
+        W: AsyncWrite + Unpin + ?Sized,
     {
+        // #1195
+        //
+        // When the current copy direction was ended, it will call `shutdown` on the `writer`, which
+        // will eventually send `FIN` to the remote. Normally when the remote server receives `FIN`,
+        // it should close the socket and send `FIN` back to our socket, which is the `writer`.
+        //
+        // In the ideal situation, `writer` will end normally with EOF, and then the whole copy process
+        // exits as expected. But in the real world, `writer` kept hanging on `poll_read` for a long time.
+        // It may be caused by that the remote server didn't close the socket normally, or the `FIN` was
+        // lost somehow.
+        //
+        // The timeout was taken from the default value of `tcp_fin_timeout`:
+        // https://man7.org/linux/man-pages/man7/tcp.7.html
+        const TIMEOUT_AFTER_EOF: Duration = Duration::from_secs(60);
+
         loop {
             // If our buffer is empty, then we need to read some data to
             // continue.
@@ -56,6 +290,11 @@ impl CopyBuffer {
                 let n = buf.filled().len();
                 if n == 0 {
                     self.read_done = true;
+
+                    if self.set_writer_timeout {
+                        writer.as_mut().set_read_timeout_pinned(TIMEOUT_AFTER_EOF);
+                        reader.as_mut().set_write_timeout_pinned(TIMEOUT_AFTER_EOF);
+                    }
                 } else {
                     self.pos = 0;
                     self.cap = n;
@@ -90,10 +329,13 @@ impl CopyBuffer {
 /// A future that asynchronously copies the entire contents of a reader into a
 /// writer.
 #[derive(Debug)]
+#[pin_project]
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 struct Copy<'a, R: ?Sized, W: ?Sized> {
-    reader: &'a mut R,
-    writer: &'a mut W,
+    #[pin]
+    reader: TimeoutStream<'a, R>,
+    #[pin]
+    writer: TimeoutStream<'a, W>,
     buf: CopyBuffer,
 }
 
@@ -104,11 +346,9 @@ where
 {
     type Output = io::Result<u64>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
-        let me = &mut *self;
-
-        me.buf
-            .poll_copy(cx, Pin::new(&mut *me.reader), Pin::new(&mut *me.writer))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
+        let this = self.project();
+        this.buf.poll_copy(cx, this.reader, this.writer)
     }
 }
 
@@ -119,9 +359,9 @@ where
     PW: AsyncWrite + Unpin + ?Sized,
 {
     Copy {
-        reader,
-        writer,
-        buf: CopyBuffer::new(encrypted_read_buffer_size(method)),
+        reader: TimeoutStream::new(reader),
+        writer: TimeoutStream::new(writer),
+        buf: CopyBuffer::new(encrypted_read_buffer_size(method), false),
     }
     .await
 }
@@ -133,9 +373,9 @@ where
     EW: AsyncWrite + Unpin + ?Sized,
 {
     Copy {
-        reader,
-        writer,
-        buf: CopyBuffer::new(plain_read_buffer_size(method)),
+        reader: TimeoutStream::new(reader),
+        writer: TimeoutStream::new(writer),
+        buf: CopyBuffer::new(plain_read_buffer_size(method), false),
     }
     .await
 }
@@ -174,6 +414,7 @@ pub fn alloc_plain_read_buffer(method: CipherKind) -> Box<[u8]> {
     vec![0u8; plain_read_buffer_size(method)].into_boxed_slice()
 }
 
+#[derive(Debug)]
 enum TransferState {
     Running(CopyBuffer),
     ShuttingDown(u64),
@@ -183,9 +424,9 @@ enum TransferState {
 #[pin_project(project = CopyBidirectionalProj)]
 struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
     #[pin]
-    a: &'a mut A,
+    a: TimeoutStream<'a, A>,
     #[pin]
-    b: &'a mut B,
+    b: TimeoutStream<'a, B>,
     a_to_b: TransferState,
     b_to_a: TransferState,
 }
@@ -193,8 +434,8 @@ struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
 fn transfer_one_direction<A, B>(
     cx: &mut Context<'_>,
     state: &mut TransferState,
-    mut r: Pin<&mut A>,
-    mut w: Pin<&mut B>,
+    mut r: Pin<&mut TimeoutStream<'_, A>>,
+    mut w: Pin<&mut TimeoutStream<'_, B>>,
 ) -> Poll<io::Result<u64>>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
@@ -208,7 +449,6 @@ where
             }
             TransferState::ShuttingDown(count) => {
                 ready!(w.as_mut().poll_shutdown(cx))?;
-
                 *state = TransferState::Done(*count);
             }
             TransferState::Done(count) => return Poll::Ready(Ok(*count)),
@@ -216,14 +456,13 @@ where
     }
 }
 
-impl<'a, A, B> Future for CopyBidirectional<'a, A, B>
+impl<A, B> CopyBidirectional<'_, A, B>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
 {
-    type Output = io::Result<(u64, u64)>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    #[inline(always)]
+    fn poll_impl(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<(u64, u64)>> {
         // Unpack self into mut refs to each field to avoid borrow check issues.
         let CopyBidirectionalProj {
             mut a,
@@ -241,6 +480,38 @@ where
         let b_to_a = ready!(poll_b_to_a);
 
         Poll::Ready(Ok((a_to_b, b_to_a)))
+    }
+}
+
+impl<'a, A, B> Future for CopyBidirectional<'a, A, B>
+where
+    A: AsyncRead + AsyncWrite + Unpin + ?Sized,
+    B: AsyncRead + AsyncWrite + Unpin + ?Sized,
+{
+    type Output = io::Result<(u64, u64)>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.as_mut().poll_impl(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(r) => {
+                match r {
+                    Ok(..) => {
+                        trace!(
+                            "copy bidirection ends, a_to_b: {:?}, b_to_a: {:?}",
+                            self.a_to_b,
+                            self.b_to_a
+                        );
+                    }
+                    Err(ref err) => {
+                        debug!(
+                            "copy bidirection ends with error: {}, a_to_b: {:?}, b_to_a: {:?}",
+                            err, self.a_to_b, self.b_to_a
+                        );
+                    }
+                }
+                Poll::Ready(r)
+            }
+        }
     }
 }
 
@@ -275,16 +546,57 @@ pub async fn copy_encrypted_bidirectional<E, P>(
     method: CipherKind,
     encrypted: &mut E,
     plain: &mut P,
-) -> Result<(u64, u64), std::io::Error>
+) -> io::Result<(u64, u64)>
 where
     E: AsyncRead + AsyncWrite + Unpin + ?Sized,
     P: AsyncRead + AsyncWrite + Unpin + ?Sized,
 {
     CopyBidirectional {
-        a: encrypted,
-        b: plain,
-        a_to_b: TransferState::Running(CopyBuffer::new(encrypted_read_buffer_size(method))),
-        b_to_a: TransferState::Running(CopyBuffer::new(plain_read_buffer_size(method))),
+        a: TimeoutStream::new(encrypted),
+        b: TimeoutStream::new(plain),
+        a_to_b: TransferState::Running(CopyBuffer::new(encrypted_read_buffer_size(method), true)),
+        b_to_a: TransferState::Running(CopyBuffer::new(plain_read_buffer_size(method), true)),
+    }
+    .await
+}
+
+/// Copies data in both directions
+///
+/// This function returns a future that will read from both streams,
+/// writing any data read to the opposing stream.
+/// This happens in both directions concurrently.
+///
+/// If an EOF is observed on one stream, [`shutdown()`] will be invoked on
+/// the other, and reading from that stream will stop. Copying of data in
+/// the other direction will continue.
+///
+/// The future will complete successfully once both directions of communication has been shut down.
+/// A direction is shut down when the reader reports EOF,
+/// at which point [`shutdown()`] is called on the corresponding writer. When finished,
+/// it will return a tuple of the number of bytes copied from encrypted to plain
+/// and the number of bytes copied from plain to encrypted, in that order.
+///
+/// [`shutdown()`]: tokio::io::AsyncWriteExt::shutdown
+///
+/// # Errors
+///
+/// The future will immediately return an error if any IO operation any of the streams
+/// returns an error. Some data read from either stream may be lost (not
+/// written to the other stream) in this case.
+///
+/// # Return value
+///
+/// Returns a tuple of bytes copied on both directions
+pub async fn copy_bidirectional<A, B>(a: &mut A, b: &mut B) -> io::Result<(u64, u64)>
+where
+    A: AsyncRead + AsyncWrite + Unpin + ?Sized,
+    B: AsyncRead + AsyncWrite + Unpin + ?Sized,
+{
+    CopyBidirectional {
+        a: TimeoutStream::new(a),
+        b: TimeoutStream::new(b),
+        a_to_b: TransferState::Running(CopyBuffer::new(8192, true)),
+        b_to_a: TransferState::Running(CopyBuffer::new(8192, true)),
     }
     .await
 }
