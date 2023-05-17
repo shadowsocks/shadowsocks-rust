@@ -107,8 +107,7 @@ libc = "0.2.141"
 hyper = { version = "0.14.25", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-# trust-dns-resolver = { version = "0.22", optional = true, features = ["serde-config"] }
-trust-dns-resolver = { git = "https://github.com/bluejekyll/trust-dns.git", optional = true, features = ["serde-config"] }
+trust-dns-resolver = { version = "0.23.0-alpha", optional = true, features = ["serde-config"] }
 
 idna = "0.3"
 ipnet = "2.7"

@@ -1960,6 +1960,18 @@ dependencies = [
 
 [[package]]
 name = "rustls"
+version = "0.20.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
+dependencies = [
+ "log",
+ "ring",
+ "sct",
+ "webpki",
+]
+
+[[package]]
+name = "rustls"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c911ba11bc8433e811ce56fde130ccf32f5127cab0e0194e9c68c5a5b671791e"
@@ -2313,11 +2325,11 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-native-tls",
- "tokio-rustls",
+ "tokio-rustls 0.24.0",
  "tower",
  "trust-dns-resolver",
  "tun",
- "webpki-roots",
+ "webpki-roots 0.23.0",
  "windows-sys 0.48.0",
 ]
 
@@ -2636,11 +2648,22 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
+version = "0.23.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
+dependencies = [
+ "rustls 0.20.8",
+ "tokio",
+ "webpki",
+]
+
+[[package]]
+name = "tokio-rustls"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0d409377ff5b1e3ca6437aa86c1eb7d40c134bfec254e44c830defa92669db5"
 dependencies = [
- "rustls",
+ "rustls 0.21.1",
  "tokio",
 ]
 
@@ -2748,7 +2771,8 @@ dependencies = [
 [[package]]
 name = "trust-dns-proto"
 version = "0.23.0-alpha.2"
-source = "git+https://github.com/bluejekyll/trust-dns.git#41b6e33c51e99db50d873d165d52d70e38f33a34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4691ef9a4b9410a0fe5ccf6e80908c6eaf3e8831e680e9188fbf4ffbf2b19735"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2764,24 +2788,25 @@ dependencies = [
  "ipnet",
  "lazy_static",
  "rand",
- "rustls",
+ "rustls 0.20.8",
  "rustls-pemfile",
- "rustls-webpki",
  "serde",
  "smallvec",
  "thiserror",
  "tinyvec",
  "tokio",
- "tokio-rustls",
+ "tokio-rustls 0.23.4",
  "tracing",
  "url",
- "webpki-roots",
+ "webpki",
+ "webpki-roots 0.22.6",
 ]
 
 [[package]]
 name = "trust-dns-resolver"
 version = "0.23.0-alpha.2"
-source = "git+https://github.com/bluejekyll/trust-dns.git#41b6e33c51e99db50d873d165d52d70e38f33a34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4a8b9f5a471796182268e7fd1f4eb89b545370855e1f8b3013bf24725427a4e"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -2791,15 +2816,15 @@ dependencies = [
  "parking_lot",
  "rand",
  "resolv-conf",
- "rustls",
+ "rustls 0.20.8",
  "serde",
  "smallvec",
  "thiserror",
  "tokio",
- "tokio-rustls",
+ "tokio-rustls 0.23.4",
  "tracing",
  "trust-dns-proto",
- "webpki-roots",
+ "webpki-roots 0.22.6",
 ]
 
 [[package]]
@@ -3015,6 +3040,25 @@ checksum = "3bdd9ef4e984da1187bf8110c5cf5b845fbc87a23602cdf912386a76fcd3a7c2"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
+dependencies = [
+ "ring",
+ "untrusted",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.22.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
+dependencies = [
+ "webpki",
 ]
 
 [[package]]
