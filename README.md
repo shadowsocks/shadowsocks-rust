@@ -769,7 +769,7 @@ The configuration file is set by `socks5_auth_config_path` in `locals`.
 - `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`
 - `2022-blake3-chacha20-poly1305`, `2022-blake3-chacha8-poly1305`
 
-These Ciphers require `"password"` to be a Base64 string of key that have **exactly the same length** of Cipher's Key Size. It is recommended to use `ssservice keygen -m "METHOD_NAME"` to generate a secured and safe key.
+These Ciphers require `"password"` to be a Base64 string of key that have **exactly the same length** of Cipher's Key Size. It is recommended to use `ssservice genkey -m "METHOD_NAME"` to generate a secured and safe key.
 
 ### AEAD Ciphers
 
