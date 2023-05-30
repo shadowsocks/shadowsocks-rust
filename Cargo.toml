@@ -144,7 +144,7 @@ json5 = "0.4"
 thiserror = "1.0"
 base64 = "0.21"
 
-clap = { version = "4.2", features = ["wrap_help", "suggestions"] }
+clap = { version = "4.3", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.12", default-features = false, optional = true }
 sysexits = "0.6"
