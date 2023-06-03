@@ -18,8 +18,7 @@ use trust_dns_resolver::{
     error::ResolveResult,
     name_server::RuntimeProvider,
     proto::{iocompat::AsyncIoTokioAsStd, udp::DnsUdpSocket, TokioTime},
-    AsyncResolver,
-    TokioHandle,
+    AsyncResolver, TokioHandle,
 };
 
 use crate::net::{tcp::TcpStream as ShadowTcpStream, udp::UdpSocket as ShadowUdpSocket, ConnectOpts};
@@ -110,7 +109,11 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, connect_opts: ConnectO
                 conf,
                 resolver_opts
             );
-            DnsResolver::new(conf, resolver_opts, ShadowDnsProvider::new(connect_opts))
+            Ok(DnsResolver::new(
+                conf,
+                resolver_opts,
+                ShadowDnsProvider::new(connect_opts),
+            ))
         }
 
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
@@ -145,7 +148,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, connect_opts: ConnectO
                         opts
                     );
 
-                    DnsResolver::new(config, opts, ShadowDnsProvider::new(connect_opts))
+                    Ok(DnsResolver::new(config, opts, ShadowDnsProvider::new(connect_opts)))
                 } else {
                     use trust_dns_resolver::error::ResolveError;
 
