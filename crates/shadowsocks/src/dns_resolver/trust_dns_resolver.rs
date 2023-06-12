@@ -16,7 +16,7 @@ use tokio::{io::ReadBuf, net::UdpSocket};
 use trust_dns_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     error::ResolveResult,
-    name_server::RuntimeProvider,
+    name_server::{GenericConnector, RuntimeProvider},
     proto::{iocompat::AsyncIoTokioAsStd, udp::DnsUdpSocket, TokioTime},
     AsyncResolver, TokioHandle,
 };
@@ -25,14 +25,14 @@ use crate::net::{tcp::TcpStream as ShadowTcpStream, udp::UdpSocket as ShadowUdpS
 
 /// Shadowsocks trust-dns Runtime Provider
 #[derive(Clone)]
-pub struct ShadowDnsProvider {
+pub struct ShadowDnsRuntimeProvider {
     handle: TokioHandle,
     connect_opts: ConnectOpts,
 }
 
-impl ShadowDnsProvider {
-    fn new(connect_opts: ConnectOpts) -> ShadowDnsProvider {
-        ShadowDnsProvider {
+impl ShadowDnsRuntimeProvider {
+    fn new(connect_opts: ConnectOpts) -> ShadowDnsRuntimeProvider {
+        ShadowDnsRuntimeProvider {
             handle: TokioHandle::default(),
             connect_opts,
         }
@@ -58,7 +58,7 @@ impl DnsUdpSocket for ShadowUdpSocket {
     }
 }
 
-impl RuntimeProvider for ShadowDnsProvider {
+impl RuntimeProvider for ShadowDnsRuntimeProvider {
     type Handle = TokioHandle;
     type Tcp = AsyncIoTokioAsStd<ShadowTcpStream>;
     type Timer = TokioTime;
@@ -89,10 +89,13 @@ impl RuntimeProvider for ShadowDnsProvider {
     }
 }
 
+/// Shadowsocks DNS ConnectionProvider
+pub type ShadowDnsConnectionProvider = GenericConnector<ShadowDnsRuntimeProvider>;
+
 /// Shadowsocks DNS resolver
 ///
 /// A customized trust-dns-resolver
-pub type DnsResolver = AsyncResolver<ShadowDnsProvider>;
+pub type DnsResolver = AsyncResolver<ShadowDnsConnectionProvider>;
 
 /// Create a `trust-dns` asynchronous DNS resolver
 pub async fn create_resolver(dns: Option<ResolverConfig>, connect_opts: ConnectOpts) -> ResolveResult<DnsResolver> {
@@ -112,7 +115,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, connect_opts: ConnectO
             Ok(DnsResolver::new(
                 conf,
                 resolver_opts,
-                ShadowDnsProvider::new(connect_opts),
+                ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts)),
             ))
         }
 
@@ -148,7 +151,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, connect_opts: ConnectO
                         opts
                     );
 
-                    Ok(DnsResolver::new(config, opts, ShadowDnsProvider::new(connect_opts)))
+                    Ok(DnsResolver::new(config, opts, ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts))))
                 } else {
                     use trust_dns_resolver::error::ResolveError;
 
