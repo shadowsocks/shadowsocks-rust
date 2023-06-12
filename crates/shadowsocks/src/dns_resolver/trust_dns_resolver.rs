@@ -18,7 +18,8 @@ use trust_dns_resolver::{
     error::ResolveResult,
     name_server::{GenericConnector, RuntimeProvider},
     proto::{iocompat::AsyncIoTokioAsStd, udp::DnsUdpSocket, TokioTime},
-    AsyncResolver, TokioHandle,
+    AsyncResolver,
+    TokioHandle,
 };
 
 use crate::net::{tcp::TcpStream as ShadowTcpStream, udp::UdpSocket as ShadowUdpSocket, ConnectOpts};
