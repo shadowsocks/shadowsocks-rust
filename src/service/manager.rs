@@ -260,7 +260,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
     let (config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
-                match crate::config::get_default_config_path() {
+                match crate::config::get_default_config_path("manager.json") {
                     None => None,
                     Some(p) => {
                         println!("loading default config {p:?}");
