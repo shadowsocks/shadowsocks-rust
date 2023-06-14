@@ -50,3 +50,9 @@ parts:
     override-pull: |
       snapcraftctl pull
       snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
+
+  v2ray-plugin:
+    plugin: go
+    source: https://github.com/teddysun/v2ray-plugin.git
+    source-tag: v5.7.0
+    go-channel: stable
