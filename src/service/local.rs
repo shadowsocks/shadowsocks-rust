@@ -14,12 +14,7 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{
-        read_variable_field_value,
-        Config,
-        ConfigType,
-        LocalConfig,
-        LocalInstanceConfig,
-        ProtocolType,
+        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
         ServerInstanceConfig,
     },
     local::{loadbalancing::PingBalancer, Server},
@@ -34,8 +29,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 #[cfg(feature = "local-dns")]
@@ -86,7 +80,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .action(ArgAction::Set)
             .value_parser(clap::value_parser!(PathBuf))
             .value_hint(ValueHint::FilePath)
-            .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html)"),
+            .help("Shadowsocks configuration file (https://shadowsocks.org/doc/configs.html)"),
     )
     .arg(
         Arg::new("LOCAL_ADDR")

@@ -24,8 +24,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 /// Defines command line options
@@ -39,7 +38,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .action(ArgAction::Set)
                 .value_parser(clap::value_parser!(PathBuf))
                 .value_hint(ValueHint::FilePath)
-                .help("Shadowsocks configuration file (https://shadowsocks.org/guide/configs.html), the only required fields are \"manager_address\" and \"manager_port\". Servers defined will be created when process is started."),
+                .help("Shadowsocks configuration file (https://shadowsocks.org/doc/configs.html), the only required fields are \"manager_address\" and \"manager_port\". Servers defined will be created when process is started."),
         )
         .arg(
             Arg::new("UDP_ONLY")
