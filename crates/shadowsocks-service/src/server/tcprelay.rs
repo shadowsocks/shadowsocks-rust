@@ -1,71 +1,97 @@
 //! Shadowsocks TCP server
 
 use std::{
+    future::Future,
     io::{self, ErrorKind},
     net::SocketAddr,
     sync::Arc,
     time::Duration,
 };
 
-use futures::future::{self, Either};
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
-    relay::{
-        socks5::Address,
-        tcprelay::{
-            utils::{copy_from_encrypted, copy_to_encrypted},
-            ProxyServerStream,
-        },
-    },
+    relay::tcprelay::{utils::copy_encrypted_bidirectional, ProxyServerStream},
     ProxyListener,
     ServerConfig,
 };
-use tokio::{net::TcpStream as TokioTcpStream, time};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream as TokioTcpStream,
+    time,
+};
 
 use crate::net::{utils::ignore_until_end, MonProxyStream};
 
 use super::context::ServiceContext;
 
+/// TCP server instance
 pub struct TcpServer {
     context: Arc<ServiceContext>,
-    accept_opts: AcceptOpts,
+    svr_cfg: ServerConfig,
+    listener: ProxyListener,
 }
 
 impl TcpServer {
-    pub fn new(context: Arc<ServiceContext>, accept_opts: AcceptOpts) -> TcpServer {
-        TcpServer { context, accept_opts }
+    pub(crate) async fn new(
+        context: Arc<ServiceContext>,
+        svr_cfg: ServerConfig,
+        accept_opts: AcceptOpts,
+    ) -> io::Result<TcpServer> {
+        let listener = ProxyListener::bind_with_opts(context.context(), &svr_cfg, accept_opts).await?;
+        Ok(TcpServer {
+            context,
+            svr_cfg,
+            listener,
+        })
     }
 
-    pub async fn run(self, svr_cfg: &ServerConfig) -> io::Result<()> {
-        let listener = ProxyListener::bind_with_opts(self.context.context(), svr_cfg, self.accept_opts).await?;
+    /// Server's configuration
+    pub fn server_config(&self) -> &ServerConfig {
+        &self.svr_cfg
+    }
 
+    /// Server's listen address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start server's accept loop
+    pub async fn run(self) -> io::Result<()> {
         info!(
             "shadowsocks tcp server listening on {}, inbound address {}",
-            listener.local_addr().expect("listener.local_addr"),
-            svr_cfg.addr()
+            self.listener.local_addr().expect("listener.local_addr"),
+            self.svr_cfg.addr()
         );
 
         loop {
             let flow_stat = self.context.flow_stat();
 
-            let (local_stream, peer_addr) =
-                match listener.accept_map(|s| MonProxyStream::from_stream(s, flow_stat)).await {
-                    Ok(s) => s,
-                    Err(err) => {
-                        error!("tcp server accept failed with error: {}", err);
-                        time::sleep(Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
+            let (local_stream, peer_addr) = match self
+                .listener
+                .accept_map(|s| MonProxyStream::from_stream(s, flow_stat))
+                .await
+            {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("tcp server accept failed with error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+
+            if self.context.check_client_blocked(&peer_addr) {
+                warn!("access denied from {} by ACL rules", peer_addr);
+                continue;
+            }
 
             let client = TcpServerClient {
                 context: self.context.clone(),
-                method: svr_cfg.method(),
+                method: self.svr_cfg.method(),
                 peer_addr,
                 stream: local_stream,
-                timeout: svr_cfg.timeout(),
+                timeout: self.svr_cfg.timeout(),
             };
 
             tokio::spawn(async move {
@@ -74,6 +100,20 @@ impl TcpServer {
                 }
             });
         }
+    }
+}
+
+#[inline]
+async fn timeout_fut<F, R>(duration: Option<Duration>, f: F) -> io::Result<R>
+where
+    F: Future<Output = io::Result<R>>,
+{
+    match duration {
+        None => f.await,
+        Some(d) => match time::timeout(d, f).await {
+            Ok(o) => o,
+            Err(..) => Err(ErrorKind::TimedOut.into()),
+        },
     }
 }
 
@@ -87,17 +127,63 @@ struct TcpServerClient {
 
 impl TcpServerClient {
     async fn serve(mut self) -> io::Result<()> {
-        let target_addr = match Address::read_from(&mut self.stream).await {
+        // let target_addr = match Address::read_from(&mut self.stream).await {
+        let target_addr = match timeout_fut(self.timeout, self.stream.handshake()).await {
             Ok(a) => a,
+            // Err(Socks5Error::IoError(ref err)) if err.kind() == ErrorKind::UnexpectedEof => {
+            //     debug!(
+            //         "handshake failed, received EOF before a complete target Address, peer: {}",
+            //         self.peer_addr
+            //     );
+            //     return Ok(());
+            // }
+            Err(err) if err.kind() == ErrorKind::UnexpectedEof => {
+                debug!(
+                    "tcp handshake failed, received EOF before a complete target Address, peer: {}",
+                    self.peer_addr
+                );
+                return Ok(());
+            }
+            Err(err) if err.kind() == ErrorKind::TimedOut => {
+                debug!(
+                    "tcp handshake failed, timeout before a complete target Address, peer: {}",
+                    self.peer_addr
+                );
+                return Ok(());
+            }
             Err(err) => {
                 // https://github.com/shadowsocks/shadowsocks-rust/issues/292
                 //
-                // Keep connection open.
-                warn!(
-                    "handshake failed, maybe wrong method or key, or under reply attacks. peer: {}, error: {}",
-                    self.peer_addr, err
+                // Keep connection open. Except AEAD-2022
+                warn!("tcp handshake failed. peer: {}, {}", self.peer_addr, err);
+
+                #[cfg(feature = "aead-cipher-2022")]
+                if self.method.is_aead_2022() {
+                    // Set SO_LINGER(0) for misbehave clients, which will eventually receive RST. (ECONNRESET)
+                    // This will also prevent the socket entering TIME_WAIT state.
+
+                    let stream = self.stream.into_inner().into_inner();
+                    let _ = stream.set_linger(Some(Duration::ZERO));
+
+                    return Ok(());
+                }
+
+                debug!("tcp silent-drop peer: {}", self.peer_addr);
+
+                // Unwrap and get the plain stream.
+                // Otherwise it will keep reporting decryption error before reaching EOF.
+                //
+                // Note: This will drop all data in the decryption buffer, which is no going back.
+                let mut stream = self.stream.into_inner();
+
+                let res = ignore_until_end(&mut stream).await;
+
+                trace!(
+                    "tcp silent-drop peer: {} is now closing with result {:?}",
+                    self.peer_addr,
+                    res
                 );
-                let _ = ignore_until_end(&mut self.stream).await;
+
                 return Ok(());
             }
         };
@@ -116,46 +202,55 @@ impl TcpServerClient {
             return Ok(());
         }
 
-        let mut remote_stream = match self.timeout {
-            Some(d) => {
-                match time::timeout(
-                    d,
-                    OutboundTcpStream::connect_remote_with_opts(
-                        self.context.context_ref(),
-                        &target_addr,
-                        self.context.connect_opts_ref(),
-                    ),
-                )
-                .await
-                {
-                    Ok(Ok(s)) => s,
-                    Ok(Err(e)) => return Err(e),
-                    Err(..) => {
-                        return Err(io::Error::new(
-                            ErrorKind::TimedOut,
-                            format!("connect {} timeout", target_addr),
-                        ))
-                    }
-                }
-            }
-            None => {
-                OutboundTcpStream::connect_remote_with_opts(
-                    self.context.context_ref(),
-                    &target_addr,
-                    self.context.connect_opts_ref(),
-                )
-                .await?
+        let mut remote_stream = match timeout_fut(
+            self.timeout,
+            OutboundTcpStream::connect_remote_with_opts(
+                self.context.context_ref(),
+                &target_addr,
+                self.context.connect_opts_ref(),
+            ),
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(err) => {
+                error!(
+                    "tcp tunnel {} -> {} connect failed, error: {}",
+                    self.peer_addr, target_addr, err
+                );
+                return Err(err);
             }
         };
 
-        let (mut lr, mut lw) = self.stream.into_split();
-        let (mut rr, mut rw) = remote_stream.split();
+        // https://github.com/shadowsocks/shadowsocks-rust/issues/232
+        //
+        // Protocols like FTP, clients will wait for servers to send Welcome Message without sending anything.
+        //
+        // Wait at most 500ms, and then sends handshake packet to remote servers.
+        if self.context.connect_opts_ref().tcp.fastopen {
+            let mut buffer = [0u8; 8192];
+            match time::timeout(Duration::from_millis(500), self.stream.read(&mut buffer)).await {
+                Ok(Ok(0)) => {
+                    // EOF. Just terminate right here.
+                    return Ok(());
+                }
+                Ok(Ok(n)) => {
+                    // Send the first packet.
+                    timeout_fut(self.timeout, remote_stream.write_all(&buffer[..n])).await?;
+                }
+                Ok(Err(err)) => return Err(err),
+                Err(..) => {
+                    // Timeout. Send handshake to server.
+                    timeout_fut(self.timeout, remote_stream.write(&[])).await?;
 
-        let l2r = copy_to_encrypted(self.method, &mut lr, &mut rw);
-        let r2l = copy_from_encrypted(self.method, &mut rr, &mut lw);
-
-        tokio::pin!(l2r);
-        tokio::pin!(r2l);
+                    trace!(
+                        "tcp tunnel {} -> {} sent TFO connect without data",
+                        self.peer_addr,
+                        target_addr
+                    );
+                }
+            }
+        }
 
         debug!(
             "established tcp tunnel {} <-> {} with {:?}",
@@ -164,24 +259,19 @@ impl TcpServerClient {
             self.context.connect_opts_ref()
         );
 
-        match future::select(l2r, r2l).await {
-            Either::Left((Ok(..), ..)) => {
-                trace!("tcp tunnel {} -> {} closed", self.peer_addr, target_addr);
-            }
-            Either::Left((Err(err), ..)) => {
+        match copy_encrypted_bidirectional(self.method, &mut self.stream, &mut remote_stream).await {
+            Ok((rn, wn)) => {
                 trace!(
-                    "tcp tunnel {} -> {} closed with error: {}",
+                    "tcp tunnel {} <-> {} closed, L2R {} bytes, R2L {} bytes",
                     self.peer_addr,
                     target_addr,
-                    err
+                    rn,
+                    wn
                 );
             }
-            Either::Right((Ok(..), ..)) => {
-                trace!("tcp tunnel {} <- {} closed", self.peer_addr, target_addr);
-            }
-            Either::Right((Err(err), ..)) => {
+            Err(err) => {
                 trace!(
-                    "tcp tunnel {} <- {} closed with error: {}",
+                    "tcp tunnel {} <-> {} closed with error: {}",
                     self.peer_addr,
                     target_addr,
                     err

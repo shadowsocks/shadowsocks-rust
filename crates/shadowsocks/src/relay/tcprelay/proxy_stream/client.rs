@@ -7,45 +7,63 @@ use std::{
 };
 
 use bytes::{BufMut, BytesMut};
+use cfg_if::cfg_if;
 use futures::ready;
-use lazy_static::lazy_static;
 use log::trace;
+use once_cell::sync::Lazy;
+use pin_project::pin_project;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    net::TcpStream,
     time,
 };
 
+#[cfg(feature = "aead-cipher-2022")]
+use crate::relay::get_aead_2022_padding_size;
 use crate::{
     config::ServerConfig,
     context::SharedContext,
+    crypto::CipherKind,
     net::{ConnectOpts, TcpStream as OutboundTcpStream},
     relay::{
         socks5::Address,
-        tcprelay::crypto_io::{CryptoStream, CryptoStreamReadHalf, CryptoStreamWriteHalf},
+        tcprelay::crypto_io::{CryptoRead, CryptoStream, CryptoWrite, StreamType},
     },
 };
 
+enum ProxyClientStreamWriteState {
+    Connect(Address),
+    Connecting(BytesMut),
+    Connected,
+}
+
+enum ProxyClientStreamReadState {
+    #[cfg(feature = "aead-cipher-2022")]
+    CheckRequestNonce,
+    Established,
+}
+
 /// A stream for sending / receiving data stream from remote server via shadowsocks' proxy server
+#[pin_project]
 pub struct ProxyClientStream<S> {
+    #[pin]
     stream: CryptoStream<S>,
-    addr: Option<Address>,
+    writer_state: ProxyClientStreamWriteState,
+    reader_state: ProxyClientStreamReadState,
     context: SharedContext,
 }
 
-impl ProxyClientStream<TcpStream> {
+static DEFAULT_CONNECT_OPTS: Lazy<ConnectOpts> = Lazy::new(Default::default);
+
+impl ProxyClientStream<OutboundTcpStream> {
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`
     pub async fn connect<A>(
         context: SharedContext,
         svr_cfg: &ServerConfig,
         addr: A,
-    ) -> io::Result<ProxyClientStream<TcpStream>>
+    ) -> io::Result<ProxyClientStream<OutboundTcpStream>>
     where
         A: Into<Address>,
     {
-        lazy_static! {
-            static ref DEFAULT_CONNECT_OPTS: ConnectOpts = ConnectOpts::default();
-        }
         ProxyClientStream::connect_with_opts(context, svr_cfg, addr, &DEFAULT_CONNECT_OPTS).await
     }
 
@@ -55,7 +73,7 @@ impl ProxyClientStream<TcpStream> {
         svr_cfg: &ServerConfig,
         addr: A,
         opts: &ConnectOpts,
-    ) -> io::Result<ProxyClientStream<TcpStream>>
+    ) -> io::Result<ProxyClientStream<OutboundTcpStream>>
     where
         A: Into<Address>,
     {
@@ -76,11 +94,8 @@ where
     ) -> io::Result<ProxyClientStream<S>>
     where
         A: Into<Address>,
-        F: FnOnce(TcpStream) -> S,
+        F: FnOnce(OutboundTcpStream) -> S,
     {
-        lazy_static! {
-            static ref DEFAULT_CONNECT_OPTS: ConnectOpts = ConnectOpts::default();
-        }
         ProxyClientStream::connect_with_opts_map(context, svr_cfg, addr, &DEFAULT_CONNECT_OPTS, map_fn).await
     }
 
@@ -94,13 +109,13 @@ where
     ) -> io::Result<ProxyClientStream<S>>
     where
         A: Into<Address>,
-        F: FnOnce(TcpStream) -> S,
+        F: FnOnce(OutboundTcpStream) -> S,
     {
         let stream = match svr_cfg.timeout() {
             Some(d) => {
                 match time::timeout(
                     d,
-                    OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts),
+                    OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.tcp_external_addr(), opts),
                 )
                 .await
                 {
@@ -114,22 +129,17 @@ where
                     }
                 }
             }
-            None => OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.external_addr(), opts).await?,
+            None => OutboundTcpStream::connect_server_with_opts(&context, svr_cfg.tcp_external_addr(), opts).await?,
         };
 
         trace!(
             "connected tcp remote {} (outbound: {}) with {:?}",
             svr_cfg.addr(),
-            svr_cfg.external_addr(),
+            svr_cfg.tcp_external_addr(),
             opts
         );
 
-        Ok(ProxyClientStream::from_stream(
-            context,
-            map_fn(stream.into()),
-            svr_cfg,
-            addr,
-        ))
+        Ok(ProxyClientStream::from_stream(context, map_fn(stream), svr_cfg, addr))
     }
 
     /// Create a `ProxyClientStream` with a connected `stream` to a shadowsocks' server
@@ -140,11 +150,31 @@ where
         A: Into<Address>,
     {
         let addr = addr.into();
-        let stream = CryptoStream::from_stream(&context, stream, svr_cfg.method(), svr_cfg.key());
+        let stream = CryptoStream::from_stream_with_identity(
+            &context,
+            stream,
+            StreamType::Client,
+            svr_cfg.method(),
+            svr_cfg.key(),
+            svr_cfg.identity_keys(),
+            None,
+        );
+
+        #[cfg(not(feature = "aead-cipher-2022"))]
+        let reader_state = ProxyClientStreamReadState::Established;
+
+        #[cfg(feature = "aead-cipher-2022")]
+        let reader_state = if svr_cfg.method().is_aead_2022() {
+            // AEAD 2022 has a respond header
+            ProxyClientStreamReadState::CheckRequestNonce
+        } else {
+            ProxyClientStreamReadState::Established
+        };
 
         ProxyClientStream {
             stream,
-            addr: Some(addr),
+            writer_state: ProxyClientStreamWriteState::Connect(addr),
+            reader_state,
             context,
         }
     }
@@ -170,128 +200,148 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     #[inline]
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let context = unsafe { &*(self.context.as_ref() as *const _) };
-        self.stream.poll_read_decrypted(cx, context, buf)
+    fn poll_read(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        #[allow(unused_mut)]
+        let mut this = self.project();
+
+        #[allow(clippy::never_loop)]
+        loop {
+            match this.reader_state {
+                ProxyClientStreamReadState::Established => {
+                    return this
+                        .stream
+                        .poll_read_decrypted(cx, this.context, buf)
+                        .map_err(Into::into);
+                }
+                #[cfg(feature = "aead-cipher-2022")]
+                ProxyClientStreamReadState::CheckRequestNonce => {
+                    ready!(this.stream.as_mut().poll_read_decrypted(cx, this.context, buf))?;
+
+                    // REQUEST_NONCE should be in the respond packet (header) of AEAD-2022.
+                    //
+                    // If received_request_nonce() is None, then:
+                    // 1. method.salt_len() == 0, no checking required.
+                    // 2. TCP stream read() returns EOF before receiving the header, no checking required.
+                    //
+                    // poll_read_decrypted will wait until the first non-zero size data chunk.
+                    let (data_chunk_count, _) = this.stream.current_data_chunk_remaining();
+                    if data_chunk_count > 0 {
+                        // data_chunk_count > 0, so the reader received at least 1 data chunk.
+
+                        let sent_nonce = this.stream.sent_nonce();
+                        let sent_nonce = if sent_nonce.is_empty() { None } else { Some(sent_nonce) };
+                        if sent_nonce != this.stream.received_request_nonce() {
+                            return Err(io::Error::new(
+                                ErrorKind::Other,
+                                "received TCP response header with unmatched salt",
+                            ))
+                            .into();
+                        }
+
+                        *(this.reader_state) = ProxyClientStreamReadState::Established;
+                    }
+
+                    return Ok(()).into();
+                }
+            }
+        }
     }
+}
+
+#[inline]
+fn make_first_packet_buffer(method: CipherKind, addr: &Address, buf: &[u8]) -> BytesMut {
+    // Target Address should be sent with the first packet together,
+    // which would prevent from being detected.
+
+    let addr_length = addr.serialized_len();
+    let mut buffer = BytesMut::new();
+
+    cfg_if! {
+        if #[cfg(feature = "aead-cipher-2022")] {
+            let padding_size = get_aead_2022_padding_size(buf);
+            let header_length = if method.is_aead_2022() {
+                addr_length + 2 + padding_size + buf.len()
+            } else {
+                addr_length + buf.len()
+            };
+        } else {
+            let _ = method;
+            let header_length = addr_length + buf.len();
+        }
+    }
+
+    buffer.reserve(header_length);
+
+    // STREAM / AEAD / AEAD2022 protocol, append the Address before payload
+    addr.write_to_buf(&mut buffer);
+
+    #[cfg(feature = "aead-cipher-2022")]
+    if method.is_aead_2022() {
+        buffer.put_u16(padding_size as u16);
+
+        if padding_size > 0 {
+            unsafe {
+                buffer.advance_mut(padding_size);
+            }
+        }
+    }
+
+    buffer.put_slice(buf);
+
+    buffer
 }
 
 impl<S> AsyncWrite for ProxyClientStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        if self.addr.is_none() {
-            // For all subsequence calls, just proxy it to self.stream
-            return self.stream.poll_write_encrypted(cx, buf);
+    fn poll_write(self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
+        let this = self.project();
+
+        loop {
+            match this.writer_state {
+                ProxyClientStreamWriteState::Connect(ref addr) => {
+                    let buffer = make_first_packet_buffer(this.stream.method(), addr, buf);
+
+                    // Save the concatenated buffer before it is written successfully.
+                    // APIs require buffer to be kept alive before Poll::Ready
+                    //
+                    // Proactor APIs like IOCP on Windows, pointers of buffers have to be kept alive
+                    // before IO completion.
+                    *(this.writer_state) = ProxyClientStreamWriteState::Connecting(buffer);
+                }
+                ProxyClientStreamWriteState::Connecting(ref buffer) => {
+                    let n = ready!(this.stream.poll_write_encrypted(cx, buffer))?;
+
+                    // In general, poll_write_encrypted should perform like write_all.
+                    debug_assert!(n == buffer.len());
+
+                    *(this.writer_state) = ProxyClientStreamWriteState::Connected;
+
+                    // NOTE:
+                    // poll_write will return Ok(0) if buf.len() == 0
+                    // But for the first call, this function will eventually send the handshake packet (IV/Salt + ADDR) to the remote address.
+                    //
+                    // https://github.com/shadowsocks/shadowsocks-rust/issues/232
+                    //
+                    // For protocols that requires *Server Hello* message, like FTP, clients won't send anything to the server until server sends handshake messages.
+                    // This could be achieved by calling poll_write with an empty input buffer.
+                    return Ok(buf.len()).into();
+                }
+                ProxyClientStreamWriteState::Connected => {
+                    return this.stream.poll_write_encrypted(cx, buf).map_err(Into::into);
+                }
+            }
         }
-
-        let addr = self.addr.take().unwrap();
-        let addr_length = addr.serialized_len();
-
-        let mut buffer = BytesMut::with_capacity(addr_length + buf.len());
-        addr.write_to_buf(&mut buffer);
-        buffer.put_slice(buf);
-
-        ready!(self.stream.poll_write_encrypted(cx, &buffer))?;
-
-        // NOTE:
-        // poll_write will return Ok(0) if buf.len() == 0
-        // But for the first call, this function will eventually send the handshake packet (IV/Salt + ADDR) to the remote address.
-        //
-        // https://github.com/shadowsocks/shadowsocks-rust/issues/232
-        //
-        // For protocols that requires *Server Hello* message, like FTP, clients won't send anything to the server until server sends handshake messages.
-        // This could be achieved by calling poll_write with an empty input buffer.
-
-        Ok(buf.len()).into()
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.stream.poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.stream.poll_shutdown(cx)
-    }
-}
-
-impl<S> ProxyClientStream<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    pub fn into_split(self) -> (ProxyClientStreamReadHalf<S>, ProxyClientStreamWriteHalf<S>) {
-        let (reader, writer) = self.stream.into_split();
-        (
-            ProxyClientStreamReadHalf {
-                reader,
-                context: self.context,
-            },
-            ProxyClientStreamWriteHalf {
-                writer,
-                addr: self.addr,
-            },
-        )
-    }
-}
-
-pub struct ProxyClientStreamReadHalf<S> {
-    reader: CryptoStreamReadHalf<S>,
-    context: SharedContext,
-}
-
-impl<S> AsyncRead for ProxyClientStreamReadHalf<S>
-where
-    S: AsyncRead + Unpin,
-{
     #[inline]
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        let context = unsafe { &*(self.context.as_ref() as *const _) };
-        self.reader.poll_read_decrypted(cx, context, buf)
-    }
-}
-
-pub struct ProxyClientStreamWriteHalf<S> {
-    writer: CryptoStreamWriteHalf<S>,
-    addr: Option<Address>,
-}
-
-impl<S> AsyncWrite for ProxyClientStreamWriteHalf<S>
-where
-    S: AsyncWrite + Unpin,
-{
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
-        if self.addr.is_none() {
-            // For all subsequence calls, just proxy it to self.writer
-            return self.writer.poll_write_encrypted(cx, buf);
-        }
-
-        let addr = self.addr.take().unwrap();
-        let addr_length = addr.serialized_len();
-
-        let mut buffer = BytesMut::with_capacity(addr_length + buf.len());
-        addr.write_to_buf(&mut buffer);
-        buffer.put_slice(buf);
-
-        ready!(self.writer.poll_write_encrypted(cx, &buffer))?;
-
-        // NOTE:
-        // poll_write will return Ok(0) if buf.len() == 0
-        // But for the first call, this function will eventually send the handshake packet (IV/Salt + ADDR) to the remote address.
-        //
-        // https://github.com/shadowsocks/shadowsocks-rust/issues/232
-        //
-        // For protocols that requires *Server Hello* message, like FTP, clients won't send anything to the server until server sends handshake messages.
-        // This could be achieved by calling poll_write with an empty input buffer.
-
-        Ok(buf.len()).into()
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_flush(cx).map_err(Into::into)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.writer.poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.writer.poll_shutdown(cx)
+    #[inline]
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.project().stream.poll_shutdown(cx).map_err(Into::into)
     }
 }

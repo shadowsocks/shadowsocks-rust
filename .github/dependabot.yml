@@ -1,0 +1,26 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: libc
+    versions:
+    - 0.2.92
+  - dependency-name: tokio
+    versions:
+    - 1.4.0
+  - dependency-name: bloomfilter
+    versions:
+    - 1.0.5
+  - dependency-name: regex
+    versions:
+    - 1.4.5
+  - dependency-name: serde
+    versions:
+    - 1.0.124
+  - dependency-name: tower
+    versions:
+    - 0.4.6

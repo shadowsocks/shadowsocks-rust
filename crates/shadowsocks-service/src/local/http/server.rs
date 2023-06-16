@@ -3,6 +3,7 @@
 use std::{
     convert::Infallible,
     io::{self, ErrorKind},
+    net::SocketAddr,
     sync::Arc,
 };
 
@@ -15,43 +16,89 @@ use hyper::{
     Server,
 };
 use log::{error, info};
-use shadowsocks::{config::ServerAddr, lookup_then};
+use shadowsocks::{config::ServerAddr, lookup_then, net::TcpListener};
 
-use crate::{
-    config::ClientConfig,
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
+use crate::local::{
+    context::ServiceContext,
+    http::connector::Connector,
+    loadbalancing::PingBalancer,
+    LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
 };
 
-use super::{client_cache::ProxyClientCache, connector::BypassConnector, dispatcher::HttpDispatcher};
+use super::{client_cache::ProxyClientCache, dispatcher::HttpDispatcher};
+
+/// HTTP Local server builder
+pub struct HttpBuilder {
+    context: Arc<ServiceContext>,
+    client_config: ServerAddr,
+    balancer: PingBalancer,
+}
+
+impl HttpBuilder {
+    /// Create a new HTTP Local server builder
+    pub fn new(client_config: ServerAddr, balancer: PingBalancer) -> HttpBuilder {
+        let context = ServiceContext::new();
+        HttpBuilder::with_context(Arc::new(context), client_config, balancer)
+    }
+
+    /// Create with an existed context
+    pub fn with_context(
+        context: Arc<ServiceContext>,
+        client_config: ServerAddr,
+        balancer: PingBalancer,
+    ) -> HttpBuilder {
+        HttpBuilder {
+            context,
+            client_config,
+            balancer,
+        }
+    }
+
+    /// Build HTTP server instance
+    pub async fn build(self) -> io::Result<Http> {
+        let listener = match self.client_config {
+            ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(&sa, self.context.accept_opts().clone()).await,
+            ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
+                TcpListener::bind_with_opts(&addr, self.context.accept_opts().clone()).await
+            })
+            .map(|(_, b)| b),
+        }?;
+
+        let proxy_client_cache = Arc::new(ProxyClientCache::new(self.context.clone()));
+
+        Ok(Http {
+            context: self.context,
+            proxy_client_cache,
+            listener,
+            balancer: self.balancer,
+        })
+    }
+}
 
 /// HTTP Local server
 pub struct Http {
     context: Arc<ServiceContext>,
     proxy_client_cache: Arc<ProxyClientCache>,
+    listener: TcpListener,
+    balancer: PingBalancer,
 }
 
 impl Http {
-    /// Create a new HTTP Local server
-    pub fn new() -> Http {
-        let context = ServiceContext::new();
-        Http::with_context(Arc::new(context))
-    }
-
-    /// Create with an existed context
-    pub fn with_context(context: Arc<ServiceContext>) -> Http {
-        let proxy_client_cache = Arc::new(ProxyClientCache::new(context.clone()));
-        Http {
-            context,
-            proxy_client_cache,
-        }
+    /// Server's local address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
     }
 
     /// Run server
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
-        let bypass_client = Client::builder().build::<_, Body>(BypassConnector::new(self.context.clone()));
+    pub async fn run(self) -> io::Result<()> {
+        let bypass_client = Client::builder()
+            .http1_preserve_header_case(true)
+            .http1_title_case_headers(true)
+            .build::<_, Body>(Connector::new(self.context.clone(), None));
 
         let context = self.context.clone();
         let proxy_client_cache = self.proxy_client_cache.clone();
+        let balancer = self.balancer;
         let make_service = make_service_fn(|socket: &AddrStream| {
             let client_addr = socket.remote_addr();
             let balancer = balancer.clone();
@@ -74,25 +121,31 @@ impl Http {
             }
         });
 
-        let bind_result = match *client_config {
-            ServerAddr::SocketAddr(sa) => Server::try_bind(&sa),
-            ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                Server::try_bind(&addr)
-            })
-            .map(|(_, b)| b),
-        };
+        let server = {
+            let listener = self.listener.into_inner().into_std()?;
+            let builder = match Server::from_tcp(listener) {
+                Ok(builder) => builder,
+                Err(err) => {
+                    error!("hyper server from std::net::TcpListener error: {}", err);
+                    let err = io::Error::new(ErrorKind::InvalidInput, err);
+                    return Err(err);
+                }
+            };
 
-        // HTTP Proxy protocol only defined in HTTP 1.x
-        let server = match bind_result {
-            Ok(builder) => builder
-                .http1_only(true)
-                .tcp_sleep_on_accept_errors(true)
-                .serve(make_service),
-            Err(err) => {
-                error!("hyper server bind error: {}", err);
-                let err = io::Error::new(ErrorKind::InvalidInput, err);
-                return Err(err);
-            }
+            builder
+                    .http1_only(true) // HTTP Proxy protocol only defined in HTTP 1.x
+                    .http1_preserve_header_case(true)
+                    .http1_title_case_headers(true)
+                    .tcp_sleep_on_accept_errors(true)
+                    .tcp_keepalive(
+                        self.context
+                            .accept_opts()
+                            .tcp
+                            .keepalive
+                            .or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT)),
+                    )
+                    .tcp_nodelay(self.context.accept_opts().tcp.nodelay)
+                    .serve(make_service)
         };
 
         info!("shadowsocks HTTP listening on {}", server.local_addr());

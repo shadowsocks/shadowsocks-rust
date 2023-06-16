@@ -48,11 +48,38 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     context::Context,
-    crypto::v1::{Cipher, CipherKind},
+    crypto::{v1::Cipher, CipherKind},
 };
 
 /// AEAD packet payload must be smaller than 0x3FFF
 pub const MAX_PACKET_SIZE: usize = 0x3FFF;
+
+/// AEAD Protocol Error
+#[derive(thiserror::Error, Debug)]
+pub enum ProtocolError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error("header too short, expecting {0} bytes, but found {1} bytes")]
+    HeaderTooShort(usize, usize),
+    #[error("decrypt data failed")]
+    DecryptDataError,
+    #[error("decrypt length failed")]
+    DecryptLengthError,
+    #[error("buffer size too large ({0:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero")]
+    DataTooLong(usize),
+}
+
+/// AEAD Protocol result
+pub type ProtocolResult<T> = Result<T, ProtocolError>;
+
+impl From<ProtocolError> for io::Error {
+    fn from(e: ProtocolError) -> io::Error {
+        match e {
+            ProtocolError::IoError(err) => err,
+            _ => io::Error::new(ErrorKind::Other, e),
+        }
+    }
+}
 
 enum DecryptReadState {
     WaitSalt { key: Bytes },
@@ -68,6 +95,7 @@ pub struct DecryptedReader {
     buffer: BytesMut,
     method: CipherKind,
     salt: Option<Bytes>,
+    has_handshaked: bool,
 }
 
 impl DecryptedReader {
@@ -81,6 +109,7 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(method.salt_len()),
                 method,
                 salt: None,
+                has_handshaked: false,
             }
         } else {
             DecryptedReader {
@@ -89,8 +118,13 @@ impl DecryptedReader {
                 buffer: BytesMut::with_capacity(2 + method.tag_len()),
                 method,
                 salt: None,
+                has_handshaked: false,
             }
         }
+    }
+
+    pub fn salt(&self) -> Option<&[u8]> {
+        self.salt.as_deref()
     }
 
     /// Attempt to read decrypted data from stream
@@ -100,7 +134,7 @@ impl DecryptedReader {
         context: &Context,
         stream: &mut S,
         buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>>
+    ) -> Poll<ProtocolResult<()>>
     where
         S: AsyncRead + Unpin + ?Sized,
     {
@@ -113,6 +147,7 @@ impl DecryptedReader {
                     self.buffer.clear();
                     self.state = DecryptReadState::ReadLength;
                     self.buffer.reserve(2 + self.method.tag_len());
+                    self.has_handshaked = true;
                 }
                 DecryptReadState::ReadLength => match ready!(self.poll_read_length(cx, stream))? {
                     None => {
@@ -149,7 +184,7 @@ impl DecryptedReader {
         }
     }
 
-    fn poll_read_salt<S>(&mut self, cx: &mut task::Context<'_>, stream: &mut S, key: &[u8]) -> Poll<io::Result<()>>
+    fn poll_read_salt<S>(&mut self, cx: &mut task::Context<'_>, stream: &mut S, key: &[u8]) -> Poll<ProtocolResult<()>>
     where
         S: AsyncRead + Unpin + ?Sized,
     {
@@ -157,7 +192,7 @@ impl DecryptedReader {
 
         let n = ready!(self.poll_read_exact(cx, stream, salt_len))?;
         if n < salt_len {
-            return Err(ErrorKind::UnexpectedEof.into()).into();
+            return Err(io::Error::from(ErrorKind::UnexpectedEof).into()).into();
         }
 
         let salt = &self.buffer[..salt_len];
@@ -175,7 +210,7 @@ impl DecryptedReader {
         Ok(()).into()
     }
 
-    fn poll_read_length<S>(&mut self, cx: &mut task::Context<'_>, stream: &mut S) -> Poll<io::Result<Option<usize>>>
+    fn poll_read_length<S>(&mut self, cx: &mut task::Context<'_>, stream: &mut S) -> Poll<ProtocolResult<Option<usize>>>
     where
         S: AsyncRead + Unpin + ?Sized,
     {
@@ -200,7 +235,7 @@ impl DecryptedReader {
         context: &Context,
         stream: &mut S,
         size: usize,
-    ) -> Poll<io::Result<()>>
+    ) -> Poll<ProtocolResult<()>>
     where
         S: AsyncRead + Unpin + ?Sized,
     {
@@ -208,28 +243,20 @@ impl DecryptedReader {
 
         let n = ready!(self.poll_read_exact(cx, stream, data_len))?;
         if n == 0 {
-            return Err(ErrorKind::UnexpectedEof.into()).into();
+            return Err(io::Error::from(ErrorKind::UnexpectedEof).into()).into();
         }
 
         let cipher = self.cipher.as_mut().expect("cipher is None");
 
         let m = &mut self.buffer[..data_len];
         if !cipher.decrypt_packet(m) {
-            return Err(io::Error::new(ErrorKind::Other, "invalid tag-in")).into();
+            return Err(ProtocolError::DecryptDataError).into();
         }
 
         // Check repeated salt after first successful decryption #442
         if self.salt.is_some() {
             let salt = self.salt.take().unwrap();
-
-            if context.check_nonce_and_set(&salt) {
-                use std::io::Error;
-
-                trace!("detected repeated AEAD salt {:?}", ByteStr::new(&salt));
-
-                let err = Error::new(ErrorKind::Other, "detected repeated salt");
-                return Err(err).into();
-            }
+            context.check_nonce_replay(self.method, &salt)?;
         }
 
         // Remote TAG
@@ -254,7 +281,7 @@ impl DecryptedReader {
 
             let n = read_buf.filled().len();
             if n == 0 {
-                if self.buffer.len() > 0 {
+                if !self.buffer.is_empty() {
                     return Err(ErrorKind::UnexpectedEof.into()).into();
                 } else {
                     return Ok(0).into();
@@ -269,10 +296,10 @@ impl DecryptedReader {
         Ok(size).into()
     }
 
-    fn decrypt_length(cipher: &mut Cipher, m: &mut [u8]) -> io::Result<usize> {
+    fn decrypt_length(cipher: &mut Cipher, m: &mut [u8]) -> ProtocolResult<usize> {
         let plen = {
             if !cipher.decrypt_packet(m) {
-                return Err(io::Error::new(ErrorKind::Other, "invalid tag-in"));
+                return Err(ProtocolError::DecryptLengthError);
             }
 
             u16::from_be_bytes([m[0], m[1]]) as usize
@@ -282,17 +309,15 @@ impl DecryptedReader {
             // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
             //
             // AEAD TCP protocol have reserved the higher two bits for future use
-            let err = io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "buffer size too large ({:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero",
-                    plen
-                ),
-            );
-            return Err(err);
+            return Err(ProtocolError::DataTooLong(plen));
         }
 
         Ok(plen)
+    }
+
+    /// Check if handshake finished
+    pub fn handshaked(&self) -> bool {
+        self.has_handshaked
     }
 }
 
@@ -306,6 +331,7 @@ pub struct EncryptedWriter {
     cipher: Cipher,
     buffer: BytesMut,
     state: EncryptWriteState,
+    salt: Bytes,
 }
 
 impl EncryptedWriter {
@@ -319,7 +345,13 @@ impl EncryptedWriter {
             cipher: Cipher::new(method, key, nonce),
             buffer,
             state: EncryptWriteState::AssemblePacket,
+            salt: Bytes::copy_from_slice(nonce),
         }
+    }
+
+    /// Salt (nonce)
+    pub fn salt(&self) -> &[u8] {
+        self.salt.as_ref()
     }
 
     /// Attempt to write encrypted data into the writer

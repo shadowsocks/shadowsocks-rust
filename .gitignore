@@ -12,3 +12,4 @@
 /udp_echo_server.py
 /.idea
 /.devcontainer
+.DS_Store

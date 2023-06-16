@@ -15,9 +15,12 @@ jobs:
     strategy:
       matrix:
         target:
+          - i686-unknown-linux-musl
           - x86_64-pc-windows-gnu
-          - x86_64-unknown-linux-musl
           - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - armv7-unknown-linux-musleabihf
+          - armv7-unknown-linux-gnueabihf
           - arm-unknown-linux-gnueabi
           - arm-unknown-linux-gnueabihf
           - arm-unknown-linux-musleabi
@@ -29,7 +32,15 @@ jobs:
           - mipsel-unknown-linux-musl
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+          rustup target add --toolchain stable ${{ matrix.target }}
 
       - name: Install cross
         run: cargo install cross
@@ -37,8 +48,21 @@ jobs:
       - name: Build ${{ matrix.target }}
         timeout-minutes: 120
         run: |
+          compile_target=${{ matrix.target }}
+
+          if [[ "$compile_target" == *"-linux-"* || "$compile_target" == *"-apple-"* ]]; then
+            compile_features="-f local-redir -f local-tun"
+          fi
+
+          if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
+            sudo apt-get update -y && sudo apt-get install -y upx;
+            if [[ "$?" == "0" ]]; then
+              compile_compress="-u"
+            fi
+          fi
+
           cd build
-          ./build-release -t ${{ matrix.target }}
+          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
@@ -51,14 +75,17 @@ jobs:
   build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: "local-redir"
+      BUILD_EXTRA_FEATURES: "local-redir local-tun"
       RUST_BACKTRACE: full
     strategy:
       matrix:
         # os: [ubuntu-latest, macos-latest]
         os: [macos-latest]
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install GNU tar
         if: runner.os == 'macOS'
@@ -67,16 +94,18 @@ jobs:
           # echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
           echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Install Rust nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+          rustup target add --toolchain stable ${{ matrix.target }}
 
       - name: Build release
         shell: bash
         run: |
-          cd build
-          ./build-host-release
+          ./build/build-host-release -t ${{ matrix.target }}
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
@@ -89,20 +118,21 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      RUSTFLAGS: "-Ctarget-feature=+crt-static"
+      RUSTFLAGS: "-C target-feature=+crt-static"
       RUST_BACKTRACE: full
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - name: Install Rust nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
 
       - name: Build release
         run: |
-          cd build
-          pwsh build-host-release.ps1
+          pwsh ./build/build-host-release.ps1
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1

@@ -6,36 +6,39 @@ use std::{
     sync::Arc,
 };
 
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
+use shadowsocks::config::Mode;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::TcpStream,
 };
 
-use crate::{
-    config::Mode,
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::AutoProxyClientStream,
-        utils::establish_tcp_tunnel,
-    },
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::AutoProxyClientStream,
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
-use crate::local::socks::socks4::{Address, Command, HandshakeRequest, HandshakeResponse, ResultCode};
+use crate::local::socks::socks4::{
+    Address,
+    Command,
+    Error as Socks4Error,
+    HandshakeRequest,
+    HandshakeResponse,
+    ResultCode,
+};
 
 pub struct Socks4TcpHandler {
     context: Arc<ServiceContext>,
-    nodelay: bool,
     balancer: PingBalancer,
     mode: Mode,
 }
 
 impl Socks4TcpHandler {
-    pub fn new(context: Arc<ServiceContext>, nodelay: bool, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
+    pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> Socks4TcpHandler {
         Socks4TcpHandler {
             context,
-            nodelay,
             balancer,
             mode,
         }
@@ -44,11 +47,21 @@ impl Socks4TcpHandler {
     pub async fn handle_socks4_client(self, stream: TcpStream, peer_addr: SocketAddr) -> io::Result<()> {
         // 1. Handshake
 
-        // NOTE: Wraps it with BufReader for reading NULL terminated informations in HandshakeRequest
+        // NOTE: Wraps it with BufReader for reading NULL terminated information in HandshakeRequest
         let mut s = BufReader::new(stream);
-        let handshake_req = HandshakeRequest::read_from(&mut s).await?;
+        let handshake_req = match HandshakeRequest::read_from(&mut s).await {
+            Ok(r) => r,
+            Err(Socks4Error::IoError(ref err)) if err.kind() == ErrorKind::UnexpectedEof => {
+                trace!("socks4 handshake early eof. peer: {}", peer_addr);
+                return Ok(());
+            }
+            Err(err) => {
+                error!("socks4 handshake error: {}", err);
+                return Err(err.into());
+            }
+        };
 
-        trace!("socks4 {:?}", handshake_req);
+        trace!("socks4 {:?} peer: {}", handshake_req, peer_addr);
 
         match handshake_req.cd {
             Command::Connect => {
@@ -82,11 +95,20 @@ impl Socks4TcpHandler {
             return Ok(());
         }
 
-        let server = self.balancer.best_tcp_server();
-        let svr_cfg = server.server_config();
         let target_addr = target_addr.into();
+        let mut server_opt = None;
+        let server_result = if self.balancer.is_empty() {
+            AutoProxyClientStream::connect_bypassed(self.context, &target_addr).await
+        } else {
+            let server = self.balancer.best_tcp_server();
 
-        let mut remote = match AutoProxyClientStream::connect(self.context, &server, &target_addr).await {
+            let r = AutoProxyClientStream::connect(self.context, &server, &target_addr).await;
+            server_opt = Some(server);
+
+            r
+        };
+
+        let mut remote = match server_result {
             Ok(remote) => {
                 // Tell the client that we are ready
                 let handshake_rsp = HandshakeResponse::new(ResultCode::RequestGranted);
@@ -110,10 +132,6 @@ impl Socks4TcpHandler {
             }
         };
 
-        if self.nodelay {
-            remote.set_nodelay(true)?;
-        }
-
         // NOTE: Transfer all buffered data before unwrap, or these data will be lost
         let buffer = stream.buffer();
         if !buffer.is_empty() {
@@ -123,18 +141,12 @@ impl Socks4TcpHandler {
         // UNWRAP.
         let mut stream = stream.into_inner();
 
-        let (mut plain_reader, mut plain_writer) = stream.split();
-        let (mut shadow_reader, mut shadow_writer) = remote.into_split();
-
-        establish_tcp_tunnel(
-            svr_cfg,
-            &mut plain_reader,
-            &mut plain_writer,
-            &mut shadow_reader,
-            &mut shadow_writer,
-            peer_addr,
-            &target_addr,
-        )
-        .await
+        match server_opt {
+            Some(server) => {
+                let svr_cfg = server.server_config();
+                establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &target_addr).await
+            }
+            None => establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, &target_addr).await,
+        }
     }
 }

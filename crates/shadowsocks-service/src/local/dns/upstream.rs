@@ -2,7 +2,13 @@
 
 #[cfg(unix)]
 use std::path::Path;
-use std::{io, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cmp::Ordering,
+    io::{self, ErrorKind},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
@@ -18,7 +24,7 @@ use shadowsocks::{
 use tokio::net::UnixStream;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::{TcpStream, UdpSocket},
+    net::UdpSocket,
     time,
 };
 use trust_dns_resolver::proto::{
@@ -29,9 +35,10 @@ use trust_dns_resolver::proto::{
 use crate::net::{FlowStat, MonProxySocket, MonProxyStream};
 
 /// Collection of various DNS connections
+#[allow(clippy::large_enum_variant)]
 pub enum DnsClient {
     TcpLocal {
-        stream: TcpStream,
+        stream: ShadowTcpStream,
     },
     UdpLocal {
         socket: UdpSocket,
@@ -42,7 +49,7 @@ pub enum DnsClient {
         stream: UnixStream,
     },
     TcpRemote {
-        stream: ProxyClientStream<MonProxyStream<TcpStream>>,
+        stream: ProxyClientStream<MonProxyStream<ShadowTcpStream>>,
     },
     UdpRemote {
         socket: MonProxySocket,
@@ -53,7 +60,7 @@ pub enum DnsClient {
 impl DnsClient {
     /// Connect to local provided TCP DNS server
     pub async fn connect_tcp_local(ns: SocketAddr, connect_opts: &ConnectOpts) -> io::Result<DnsClient> {
-        let stream = ShadowTcpStream::connect_with_opts(&ns, connect_opts).await?.into();
+        let stream = ShadowTcpStream::connect_with_opts(&ns, connect_opts).await?;
         Ok(DnsClient::TcpLocal { stream })
     }
 
@@ -142,6 +149,79 @@ impl DnsClient {
 
                 Message::from_vec(&recv_buf[..n])
             }
+        }
+    }
+
+    /// Check if the underlying connection is still connecting
+    ///
+    /// This will only work for TCP and UNIX Stream connections.
+    /// UDP clients will always return `true`.
+    pub async fn check_connected(&mut self) -> bool {
+        #[cfg(unix)]
+        fn check_peekable<F: std::os::unix::io::AsRawFd>(fd: &mut F) -> bool {
+            let fd = fd.as_raw_fd();
+
+            unsafe {
+                let mut peek_buf = [0u8; 1];
+
+                let ret = libc::recv(
+                    fd,
+                    peek_buf.as_mut_ptr() as *mut libc::c_void,
+                    peek_buf.len(),
+                    libc::MSG_PEEK | libc::MSG_DONTWAIT,
+                );
+
+                match ret.cmp(&0) {
+                    // EOF, connection lost
+                    Ordering::Equal => false,
+                    // Data in buffer
+                    Ordering::Greater => true,
+                    Ordering::Less => {
+                        let err = io::Error::last_os_error();
+                        // EAGAIN, EWOULDBLOCK
+                        // Still connected.
+                        err.kind() == ErrorKind::WouldBlock
+                    }
+                }
+            }
+        }
+
+        #[cfg(windows)]
+        fn check_peekable<F: std::os::windows::io::AsRawSocket>(s: &mut F) -> bool {
+            use windows_sys::{
+                core::PSTR,
+                Win32::Networking::WinSock::{recv, MSG_PEEK, SOCKET},
+            };
+
+            let sock = s.as_raw_socket() as SOCKET;
+
+            unsafe {
+                let mut peek_buf = [0u8; 1];
+
+                let ret = recv(sock, peek_buf.as_mut_ptr() as PSTR, peek_buf.len() as i32, MSG_PEEK);
+
+                match ret.cmp(&0) {
+                    // EOF, connection lost
+                    Ordering::Equal => false,
+                    // Data in buffer
+                    Ordering::Greater => true,
+                    Ordering::Less => {
+                        let err = io::Error::last_os_error();
+                        // I have to trust the `s` have already set to non-blocking mode
+                        // Because windows doesn't have MSG_DONTWAIT
+                        err.kind() == ErrorKind::WouldBlock
+                    }
+                }
+            }
+        }
+
+        match *self {
+            DnsClient::TcpLocal { ref mut stream } => check_peekable(stream),
+            DnsClient::UdpLocal { .. } => true,
+            #[cfg(unix)]
+            DnsClient::UnixStream { ref mut stream } => check_peekable(stream),
+            DnsClient::TcpRemote { ref mut stream } => check_peekable(stream.get_mut().get_mut()),
+            DnsClient::UdpRemote { .. } => true,
         }
     }
 }

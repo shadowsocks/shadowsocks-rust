@@ -3,6 +3,7 @@
 use std::{
     fmt::{self, Debug},
     sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
 };
 
 use shadowsocks::ServerConfig;
@@ -18,10 +19,13 @@ pub struct ServerScore {
 
 impl ServerScore {
     /// Create a `ServerScore`
-    pub fn new() -> ServerScore {
+    pub fn new(user_weight: f32, max_server_rtt: Duration, check_window: Duration) -> ServerScore {
+        let max_server_rtt = max_server_rtt.as_millis() as u32;
+        assert!(max_server_rtt > 0);
+
         ServerScore {
-            stat_data: Mutex::new(ServerStat::new()),
-            score: AtomicU32::new(0),
+            stat_data: Mutex::new(ServerStat::new(user_weight, max_server_rtt, check_window)),
+            score: AtomicU32::new(u32::MAX),
         }
     }
 
@@ -61,17 +65,21 @@ pub struct ServerIdent {
 }
 
 impl ServerIdent {
-    /// Create a  ServerIdent`
-    pub fn new(svr_cfg: ServerConfig) -> ServerIdent {
+    /// Create a `ServerIdent`
+    pub fn new(svr_cfg: ServerConfig, max_server_rtt: Duration, check_window: Duration) -> ServerIdent {
         ServerIdent {
-            tcp_score: ServerScore::new(),
-            udp_score: ServerScore::new(),
+            tcp_score: ServerScore::new(svr_cfg.weight().tcp_weight(), max_server_rtt, check_window),
+            udp_score: ServerScore::new(svr_cfg.weight().udp_weight(), max_server_rtt, check_window),
             svr_cfg,
         }
     }
 
     pub fn server_config(&self) -> &ServerConfig {
         &self.svr_cfg
+    }
+
+    pub fn server_config_mut(&mut self) -> &mut ServerConfig {
+        &mut self.svr_cfg
     }
 
     pub fn tcp_score(&self) -> &ServerScore {

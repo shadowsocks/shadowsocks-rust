@@ -3,41 +3,46 @@
 use std::{io, sync::Arc, time::Duration};
 
 use futures::{future, FutureExt};
-use shadowsocks::relay::socks5::Address;
+use shadowsocks::{config::Mode, relay::socks5::Address, ServerAddr};
 
-use crate::{
-    config::{ClientConfig, Mode},
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
-};
+use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-use super::{tcprelay::run_tcp_tunnel, udprelay::UdpTunnel};
+use super::{tcprelay::TunnelTcpServer, udprelay::TunnelUdpServer};
 
-/// Tunnel Server
-pub struct Tunnel {
+pub struct TunnelBuilder {
     context: Arc<ServiceContext>,
     forward_addr: Address,
     mode: Mode,
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
-    nodelay: bool,
+    client_addr: ServerAddr,
+    udp_addr: Option<ServerAddr>,
+    balancer: PingBalancer,
 }
 
-impl Tunnel {
+impl TunnelBuilder {
     /// Create a new Tunnel server forwarding to `forward_addr`
-    pub fn new(forward_addr: Address) -> Tunnel {
+    pub fn new(forward_addr: Address, client_addr: ServerAddr, balancer: PingBalancer) -> TunnelBuilder {
         let context = ServiceContext::new();
-        Tunnel::with_context(Arc::new(context), forward_addr)
+        TunnelBuilder::with_context(Arc::new(context), forward_addr, client_addr, balancer)
     }
 
     /// Create a new Tunnel server with context
-    pub fn with_context(context: Arc<ServiceContext>, forward_addr: Address) -> Tunnel {
-        Tunnel {
+    pub fn with_context(
+        context: Arc<ServiceContext>,
+        forward_addr: Address,
+        client_addr: ServerAddr,
+        balancer: PingBalancer,
+    ) -> TunnelBuilder {
+        TunnelBuilder {
             context,
             forward_addr,
             mode: Mode::TcpOnly,
             udp_expiry_duration: None,
             udp_capacity: None,
-            nodelay: false,
+            client_addr,
+            udp_addr: None,
+            balancer,
         }
     }
 
@@ -46,7 +51,7 @@ impl Tunnel {
         self.udp_expiry_duration = Some(d);
     }
 
-    /// Set total UDP association to be kept simutaneously in server
+    /// Set total UDP association to be kept simultaneously in server
     pub fn set_udp_capacity(&mut self, c: usize) {
         self.udp_capacity = Some(c);
     }
@@ -56,40 +61,74 @@ impl Tunnel {
         self.mode = mode;
     }
 
-    /// Set `TCP_NODELAY`
-    pub fn set_nodelay(&mut self, nodelay: bool) {
-        self.nodelay = nodelay;
+    /// Set UDP bind address
+    pub fn set_udp_bind_addr(&mut self, addr: ServerAddr) {
+        self.udp_addr = Some(addr);
+    }
+
+    pub async fn build(self) -> io::Result<Tunnel> {
+        let mut tcp_server = None;
+        if self.mode.enable_tcp() {
+            let server = TunnelTcpServer::new(
+                self.context.clone(),
+                &self.client_addr,
+                self.balancer.clone(),
+                self.forward_addr.clone(),
+            )
+            .await?;
+            tcp_server = Some(server);
+        }
+
+        let mut udp_server = None;
+        if self.mode.enable_udp() {
+            let udp_addr = self.udp_addr.as_ref().unwrap_or(&self.client_addr);
+
+            let server = TunnelUdpServer::new(
+                self.context.clone(),
+                udp_addr,
+                self.udp_expiry_duration,
+                self.udp_capacity,
+                self.balancer,
+                self.forward_addr,
+            )
+            .await?;
+            udp_server = Some(server);
+        }
+
+        Ok(Tunnel { tcp_server, udp_server })
+    }
+}
+
+/// Tunnel Server
+pub struct Tunnel {
+    tcp_server: Option<TunnelTcpServer>,
+    udp_server: Option<TunnelUdpServer>,
+}
+
+impl Tunnel {
+    /// TCP server instance
+    pub fn tcp_server(&self) -> Option<&TunnelTcpServer> {
+        self.tcp_server.as_ref()
+    }
+
+    /// UDP server instance
+    pub fn udp_server(&self) -> Option<&TunnelUdpServer> {
+        self.udp_server.as_ref()
     }
 
     /// Start serving
-    pub async fn run(self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
+    pub async fn run(self) -> io::Result<()> {
         let mut vfut = Vec::new();
 
-        if self.mode.enable_tcp() {
-            vfut.push(self.run_tcp_tunnel(client_config, balancer.clone()).boxed());
+        if let Some(tcp_server) = self.tcp_server {
+            vfut.push(tcp_server.run().boxed());
         }
 
-        if self.mode.enable_udp() {
-            vfut.push(self.run_udp_tunnel(client_config, balancer).boxed());
+        if let Some(udp_server) = self.udp_server {
+            vfut.push(udp_server.run().boxed());
         }
 
         let (res, ..) = future::select_all(vfut).await;
         res
-    }
-
-    async fn run_tcp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
-        run_tcp_tunnel(
-            self.context.clone(),
-            client_config,
-            balancer,
-            &self.forward_addr,
-            self.nodelay,
-        )
-        .await
-    }
-
-    async fn run_udp_tunnel(&self, client_config: &ClientConfig, balancer: PingBalancer) -> io::Result<()> {
-        let mut server = UdpTunnel::new(self.context.clone(), self.udp_expiry_duration, self.udp_capacity);
-        server.run(client_config, balancer, &self.forward_addr).await
     }
 }

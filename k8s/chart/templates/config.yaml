@@ -1,0 +1,13 @@
+{{- if not .Values.configMapName -}}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "shadowsocks-rust.fullname" . }}
+  labels:
+    {{- include "shadowsocks-rust.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {
+      "servers": {{- .Values.servers | toPrettyJson | nindent 8 }}
+    }
+{{- end -}}

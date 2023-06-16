@@ -7,11 +7,11 @@ use log::debug;
 use tokio::time::{self, Duration};
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::socks5::Socks5UdpClient,
     run_local,
     run_server,
-    shadowsocks::{crypto::v1::CipherKind, relay::socks5::Address, ServerConfig},
+    shadowsocks::{config::Mode, crypto::CipherKind, relay::socks5::Address, ServerConfig},
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
@@ -24,25 +24,27 @@ const METHOD: CipherKind = CipherKind::AES_128_GCM;
 
 fn get_svr_config() -> Config {
     let mut cfg = Config::new(ConfigType::Server);
-    cfg.server = vec![ServerConfig::new(
+    cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
         SERVER_ADDR.parse::<SocketAddr>().unwrap(),
         PASSWORD.to_owned(),
         METHOD,
-    )];
-    cfg.mode = Mode::TcpAndUdp;
+    ))];
+    cfg.server[0].config.set_mode(Mode::TcpAndUdp);
     cfg
 }
 
 fn get_cli_config() -> Config {
     let mut cfg = Config::new(ConfigType::Local);
-    cfg.local_addr = Some(LOCAL_ADDR.parse().unwrap());
-    cfg.server = vec![ServerConfig::new(
+    cfg.local = vec![LocalInstanceConfig::with_local_config(LocalConfig::new_with_addr(
+        LOCAL_ADDR.parse().unwrap(),
+        ProtocolType::Socks,
+    ))];
+    cfg.local[0].config.mode = Mode::TcpAndUdp;
+    cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
         SERVER_ADDR.parse::<SocketAddr>().unwrap(),
         PASSWORD.to_owned(),
         METHOD,
-    )];
-    cfg.mode = Mode::TcpAndUdp;
-    cfg.local_protocol = ProtocolType::Socks;
+    ))];
     cfg
 }
 

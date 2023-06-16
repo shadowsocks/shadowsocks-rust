@@ -1,0 +1,8 @@
+**/.git
+.circleci
+.devcontainer
+.github
+.ssh
+.vscode
+**/target
+dev

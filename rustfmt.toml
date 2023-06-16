@@ -1,4 +1,4 @@
-edition = "2018"
+edition = "2021"
 max_width = 120
 #indent_style = "Visual"
 #fn_call_width = 120
@@ -15,4 +15,4 @@ use_try_shorthand = true
 reorder_impl_items = true
 #use_small_heuristics = "Max"
 imports_layout = "HorizontalVertical"
-merge_imports = true
+imports_granularity = "Crate"

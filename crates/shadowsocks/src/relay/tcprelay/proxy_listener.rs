@@ -1,17 +1,17 @@
 //! A TCP listener for accepting shadowsocks' client connection
 
-use std::{io, net::SocketAddr};
+use std::{io, net::SocketAddr, sync::Arc};
 
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 
 use crate::{
-    config::{ServerAddr, ServerConfig},
+    config::{ServerAddr, ServerConfig, ServerUserManager},
     context::SharedContext,
-    crypto::v1::CipherKind,
+    crypto::CipherKind,
     net::{AcceptOpts, TcpListener},
     relay::tcprelay::proxy_stream::server::ProxyServerStream,
 };
@@ -22,14 +22,14 @@ pub struct ProxyListener {
     method: CipherKind,
     key: Box<[u8]>,
     context: SharedContext,
+    user_manager: Option<Arc<ServerUserManager>>,
 }
+
+static DEFAULT_ACCEPT_OPTS: Lazy<AcceptOpts> = Lazy::new(Default::default);
 
 impl ProxyListener {
     /// Create a `ProxyListener` binding to a specific address
     pub async fn bind(context: SharedContext, svr_cfg: &ServerConfig) -> io::Result<ProxyListener> {
-        lazy_static! {
-            static ref DEFAULT_ACCEPT_OPTS: AcceptOpts = AcceptOpts::default();
-        };
         ProxyListener::bind_with_opts(context, svr_cfg, DEFAULT_ACCEPT_OPTS.clone()).await
     }
 
@@ -39,10 +39,10 @@ impl ProxyListener {
         svr_cfg: &ServerConfig,
         accept_opts: AcceptOpts,
     ) -> io::Result<ProxyListener> {
-        let listener = match svr_cfg.external_addr() {
+        let listener = match svr_cfg.tcp_external_addr() {
             ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(sa, accept_opts).await?,
             ServerAddr::DomainName(domain, port) => {
-                lookup_then!(&context, &domain, *port, |addr| {
+                lookup_then!(&context, domain, *port, |addr| {
                     TcpListener::bind_with_opts(&addr, accept_opts.clone()).await
                 })?
                 .1
@@ -58,6 +58,7 @@ impl ProxyListener {
             method: svr_cfg.method(),
             key: svr_cfg.key().to_vec().into_boxed_slice(),
             context,
+            user_manager: svr_cfg.clone_user_manager(),
         }
     }
 
@@ -77,7 +78,13 @@ impl ProxyListener {
         let stream = map_fn(stream);
 
         // Create a ProxyServerStream and read the target address from it
-        let stream = ProxyServerStream::from_stream(self.context.clone(), stream, self.method, &self.key);
+        let stream = ProxyServerStream::from_stream(
+            self.context.clone(),
+            stream,
+            self.method,
+            &self.key,
+            self.user_manager.clone(),
+        );
 
         Ok((stream, peer_addr))
     }

@@ -1,0 +1,125 @@
+name: Build Nightly Releases
+on:
+  push:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-cross:
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: full
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+          rustup target add --toolchain stable ${{ matrix.target }}
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Build ${{ matrix.target }}
+        timeout-minutes: 120
+        run: |
+          compile_target=${{ matrix.target }}
+
+          if [[ "$compile_target" == *"-linux-"* || "$compile_target" == *"-apple-"* ]]; then
+            compile_features="-f local-redir -f local-tun"
+          fi
+
+          if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
+            sudo apt-get update -y && sudo apt-get install -y upx;
+            if [[ "$?" == "0" ]]; then
+              compile_compress="-u"
+            fi
+          fi
+
+          cd build
+          ./build-release-zigbuild -t ${{ matrix.target }} $compile_features $compile_compress
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: build/release/*
+
+  build-unix:
+    runs-on: ${{ matrix.os }}
+    env:
+      BUILD_EXTRA_FEATURES: "local-redir local-tun"
+      RUST_BACKTRACE: full
+    strategy:
+      matrix:
+        os: [macos-latest]
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install GNU tar
+        if: runner.os == 'macOS'
+        run: |
+          brew install gnu-tar
+          # echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
+          echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+          rustup target add --toolchain stable ${{ matrix.target }}
+
+      - name: Build release
+        shell: bash
+        run: |
+          ./build/build-host-release -t ${{ matrix.target }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: build/release/*
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: "-C target-feature=+crt-static"
+      RUST_BACKTRACE: full
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+
+      - name: Build release
+        run: |
+          pwsh ./build/build-host-release.ps1
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-native
+          path: build/release/*

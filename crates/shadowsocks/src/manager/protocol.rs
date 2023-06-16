@@ -16,8 +16,15 @@ pub trait ManagerProtocol: Sized {
     fn to_bytes(&self) -> Result<Vec<u8>, Error>;
 }
 
+/// Server's user configuration
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ServerUserConfig {
+    pub name: String,
+    pub password: String,
+}
+
 /// Server's configuration
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
     pub server_port: u16,
     pub password: String,
@@ -30,7 +37,11 @@ pub struct ServerConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_opts: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub users: Option<Vec<ServerUserConfig>>,
 }
 
 /// `add` request
@@ -64,6 +75,7 @@ impl ManagerProtocol for AddRequest {
 }
 
 /// `add` response
+#[derive(Debug, Clone)]
 pub struct AddResponse(pub String);
 
 impl ManagerProtocol for AddResponse {
@@ -79,7 +91,7 @@ impl ManagerProtocol for AddResponse {
 }
 
 /// `remove` request
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RemoveRequest {
     pub server_port: u16,
 }
@@ -112,6 +124,7 @@ impl ManagerProtocol for RemoveRequest {
 }
 
 /// `remove` response
+#[derive(Debug, Clone)]
 pub struct RemoveResponse(pub String);
 
 impl ManagerProtocol for RemoveResponse {
@@ -127,6 +140,7 @@ impl ManagerProtocol for RemoveResponse {
 }
 
 /// `list` request
+#[derive(Debug, Clone)]
 pub struct ListRequest;
 
 impl ManagerProtocol for ListRequest {
@@ -145,7 +159,7 @@ impl ManagerProtocol for ListRequest {
 }
 
 /// `list` response
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct ListResponse {
     pub servers: Vec<ServerConfig>,
@@ -165,6 +179,7 @@ impl ManagerProtocol for ListResponse {
 }
 
 /// `ping` request
+#[derive(Debug, Clone)]
 pub struct PingRequest;
 
 impl ManagerProtocol for PingRequest {
@@ -182,8 +197,8 @@ impl ManagerProtocol for PingRequest {
     }
 }
 
-/// `ping` reponse
-#[derive(Serialize, Deserialize, Debug)]
+/// `ping` response
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct PingResponse {
     pub stat: HashMap<u16, u64>,
@@ -217,7 +232,7 @@ impl ManagerProtocol for PingResponse {
 }
 
 /// `stat` request
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(transparent)]
 pub struct StatRequest {
     pub stat: HashMap<u16, u64>,
@@ -251,6 +266,7 @@ impl ManagerProtocol for StatRequest {
 }
 
 /// Server's error message
+#[derive(Debug, Clone)]
 pub struct ErrorResponse<E: ToString>(pub E);
 
 impl<E: ToString> ManagerProtocol for ErrorResponse<E> {
@@ -266,6 +282,7 @@ impl<E: ToString> ManagerProtocol for ErrorResponse<E> {
 }
 
 /// Collections of Manager's request
+#[derive(Debug, Clone)]
 pub enum ManagerRequest {
     Add(AddRequest),
     Remove(RemoveRequest),
@@ -304,14 +321,14 @@ impl ManagerProtocol for ManagerRequest {
         let cmd = nsplit.next().expect("first element shouldn't be None");
         match str::from_utf8(cmd)?.trim() {
             "add" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Add(req))
                 }
             },
             "remove" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Remove(req))
@@ -330,7 +347,7 @@ impl ManagerProtocol for ManagerRequest {
                 Ok(ManagerRequest::Ping(PingRequest))
             }
             "stat" => match nsplit.next() {
-                None => return Err(Error::MissingParameter),
+                None => Err(Error::MissingParameter),
                 Some(param) => {
                     let req = serde_json::from_slice(param)?;
                     Ok(ManagerRequest::Stat(req))

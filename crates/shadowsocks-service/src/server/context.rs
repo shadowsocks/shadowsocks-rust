@@ -1,6 +1,6 @@
 //! Shadowsocks Local Server Context
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use shadowsocks::{
     config::ServerType,
@@ -10,9 +10,10 @@ use shadowsocks::{
     relay::Address,
 };
 
-use crate::{acl::AccessControl, net::FlowStat};
+use crate::{acl::AccessControl, config::SecurityConfig, net::FlowStat};
 
 /// Server Service Context
+#[derive(Clone)]
 pub struct ServiceContext {
     context: SharedContext,
     connect_opts: ConnectOpts,
@@ -24,15 +25,21 @@ pub struct ServiceContext {
     flow_stat: Arc<FlowStat>,
 }
 
-impl ServiceContext {
-    /// Create a new `ServiceContext`
-    pub fn new() -> ServiceContext {
+impl Default for ServiceContext {
+    fn default() -> Self {
         ServiceContext {
             context: Context::new_shared(ServerType::Server),
             connect_opts: ConnectOpts::default(),
             acl: None,
             flow_stat: Arc::new(FlowStat::new()),
         }
+    }
+}
+
+impl ServiceContext {
+    /// Create a new `ServiceContext`
+    pub fn new() -> ServiceContext {
+        ServiceContext::default()
     }
 
     /// Get cloned `shadowsocks` Context
@@ -92,5 +99,25 @@ impl ServiceContext {
             None => false,
             Some(ref acl) => acl.check_outbound_blocked(&self.context, addr).await,
         }
+    }
+
+    /// Check if client should be blocked
+    pub fn check_client_blocked(&self, addr: &SocketAddr) -> bool {
+        match self.acl {
+            None => false,
+            Some(ref acl) => acl.check_client_blocked(addr),
+        }
+    }
+
+    /// Try to connect IPv6 addresses first if hostname could be resolved to both IPv4 and IPv6
+    pub fn set_ipv6_first(&mut self, ipv6_first: bool) {
+        let context = Arc::get_mut(&mut self.context).expect("cannot set ipv6_first on a shared context");
+        context.set_ipv6_first(ipv6_first);
+    }
+
+    /// Set security config
+    pub fn set_security_config(&mut self, security: &SecurityConfig) {
+        let context = Arc::get_mut(&mut self.context).expect("cannot set security on a shared context");
+        context.set_replay_attack_policy(security.replay_attack.policy);
     }
 }

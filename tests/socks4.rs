@@ -6,18 +6,18 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time::{self, Duration},
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::Socks4TcpClient,
     run_local,
     run_server,
     shadowsocks::{
         config::{ServerAddr, ServerConfig},
-        crypto::v1::CipherKind,
+        crypto::CipherKind,
     },
 };
 
@@ -40,14 +40,24 @@ impl Socks4TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
                 cfg
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local_addr = Some(ServerAddr::from(local_addr));
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.local_protocol = ProtocolType::Socks;
+                cfg.local = vec![LocalInstanceConfig::with_local_config(LocalConfig::new_with_addr(
+                    ServerAddr::from(local_addr),
+                    ProtocolType::Socks,
+                ))];
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
                 cfg
             },
         }
@@ -81,20 +91,20 @@ async fn socks4_relay_connect() {
     let svr = Socks4TestServer::new(SERVER_ADDR, LOCAL_ADDR, PASSWORD, METHOD);
     svr.run().await;
 
-    static HTTP_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    static HTTP_REQUEST: &[u8] = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
 
-    let mut c = Socks4TcpClient::connect(("www.example.com", 80), LOCAL_ADDR, Vec::new())
+    let mut c = Socks4TcpClient::connect(("detectportal.firefox.com", 80), LOCAL_ADDR, Vec::new())
         .await
         .unwrap();
 
     c.write_all(HTTP_REQUEST).await.unwrap();
     c.flush().await.unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+    let mut r = BufReader::new(c);
 
-    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+    let mut buf = Vec::new();
+    r.read_until(b'\n', &mut buf).await.unwrap();
 
     let http_status = b"HTTP/1.0 200 OK\r\n";
-    buf.starts_with(http_status);
+    assert!(buf.starts_with(http_status));
 }

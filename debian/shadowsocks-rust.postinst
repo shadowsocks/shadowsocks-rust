@@ -21,6 +21,7 @@ pathfind() {
 case "$1" in
 	configure|reconfigure)
 		pathfind setcap && setcap \
+            cap_net_bind_service+ep /usr/bin/ssservice \
 			cap_net_bind_service+ep /usr/bin/sslocal \
 			cap_net_bind_service+ep /usr/bin/ssserver
 		if [ ! -f /etc/shadowsocks-rust/config.json ]; then

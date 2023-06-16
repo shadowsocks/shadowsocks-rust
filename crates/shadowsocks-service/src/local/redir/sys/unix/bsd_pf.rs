@@ -4,15 +4,13 @@ use std::{
     ffi::CString,
     io::{self, Error, ErrorKind},
     mem,
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::SocketAddr,
     ptr,
 };
 
-use lazy_static::lazy_static;
 use log::trace;
-use socket2::Protocol;
-
-use crate::sys::sockaddr_to_std;
+use once_cell::sync::Lazy;
+use socket2::{Protocol, SockAddr};
 
 mod ffi {
     use cfg_if::cfg_if;
@@ -161,22 +159,26 @@ impl PacketFilter {
                 SocketAddr::V4(ref v4) => {
                     pnl.af = libc::AF_INET as libc::sa_family_t;
 
-                    let sockaddr: *const libc::sockaddr_in = v4 as *const SocketAddrV4 as *const _;
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in;
 
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.daddr.pfa.v4, mem::size_of_val(&pnl.daddr.pfa.v4));
                     pnl.set_dport(port);
                 }
                 SocketAddr::V6(ref v6) => {
                     pnl.af = libc::AF_INET6 as libc::sa_family_t;
 
-                    let sockaddr: *const libc::sockaddr_in6 = v6 as *const SocketAddrV6 as *const _;
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in6;
 
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.daddr.pfa.v6, mem::size_of_val(&pnl.daddr.pfa.v6));
                     pnl.set_dport(port);
                 }
@@ -188,11 +190,13 @@ impl PacketFilter {
                         return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv4"));
                     }
 
-                    let sockaddr: *const libc::sockaddr_in = v4 as *const SocketAddrV4 as *const _;
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in;
 
                     let addr: *const libc::in_addr = &((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.saddr.pfa.v4, mem::size_of_val(&pnl.saddr.pfa.v4));
                     pnl.set_sport(port);
                 }
@@ -201,11 +205,13 @@ impl PacketFilter {
                         return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv6"));
                     }
 
-                    let sockaddr: *const libc::sockaddr_in6 = v6 as *const SocketAddrV6 as *const _;
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const libc::sockaddr_in6;
 
                     let addr: *const libc::in6_addr = &((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
+                    #[allow(clippy::size_of_in_element_count)]
                     ptr::copy_nonoverlapping(addr, &mut pnl.saddr.pfa.v6, mem::size_of_val(&pnl.saddr.pfa.v6));
                     pnl.set_sport(port);
                 }
@@ -215,38 +221,40 @@ impl PacketFilter {
             pnl.direction = ffi::PF_OUT as u8;
 
             if let Err(err) = ffi::ioc_natlook(self.fd, &mut pnl as *mut _) {
-                let nerr = match err.as_errno() {
-                    Some(errno) => Error::from_raw_os_error(errno as i32),
-                    None => Error::new(ErrorKind::Other, "ioctl DIOCNATLOOK"),
-                };
-                return Err(nerr);
+                return Err(Error::from_raw_os_error(err as i32));
             }
 
-            let mut dst_addr: libc::sockaddr_storage = mem::zeroed();
+            let (_, dst_addr) = SockAddr::try_init(|dst_addr, addr_len| {
+                if pnl.af == libc::AF_INET as libc::sa_family_t {
+                    let dst_addr: &mut libc::sockaddr_in = &mut *(dst_addr as *mut _);
+                    dst_addr.sin_family = pnl.af;
+                    dst_addr.sin_port = pnl.rdport();
+                    #[allow(clippy::size_of_in_element_count)]
+                    ptr::copy_nonoverlapping(
+                        &pnl.rdaddr.pfa.v4,
+                        &mut dst_addr.sin_addr,
+                        mem::size_of_val(&pnl.rdaddr.pfa.v4),
+                    );
+                    *addr_len = mem::size_of_val(&pnl.rdaddr.pfa.v4) as libc::socklen_t;
+                } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
+                    let dst_addr: &mut libc::sockaddr_in6 = &mut *(dst_addr as *mut _);
+                    dst_addr.sin6_family = pnl.af;
+                    dst_addr.sin6_port = pnl.rdport();
+                    #[allow(clippy::size_of_in_element_count)]
+                    ptr::copy_nonoverlapping(
+                        &pnl.rdaddr.pfa.v6,
+                        &mut dst_addr.sin6_addr,
+                        mem::size_of_val(&pnl.rdaddr.pfa.v6),
+                    );
+                    *addr_len = mem::size_of_val(&pnl.rdaddr.pfa.v6) as libc::socklen_t;
+                } else {
+                    unreachable!("sockaddr should be either ipv4 or ipv6");
+                }
 
-            if pnl.af == libc::AF_INET as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in = &mut *(&mut dst_addr as *mut _ as *mut _);
-                dst_addr.sin_family = pnl.af;
-                dst_addr.sin_port = pnl.rdport();
-                ptr::copy_nonoverlapping(
-                    &pnl.rdaddr.pfa.v4,
-                    &mut dst_addr.sin_addr,
-                    mem::size_of_val(&pnl.rdaddr.pfa.v4),
-                );
-            } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
-                let dst_addr: &mut libc::sockaddr_in6 = &mut *(&mut dst_addr as *mut _ as *mut _);
-                dst_addr.sin6_family = pnl.af;
-                dst_addr.sin6_port = pnl.rdport();
-                ptr::copy_nonoverlapping(
-                    &pnl.rdaddr.pfa.v6,
-                    &mut dst_addr.sin6_addr,
-                    mem::size_of_val(&pnl.rdaddr.pfa.v6),
-                );
-            } else {
-                unreachable!("sockaddr should be either ipv4 or ipv6");
-            }
+                Ok(())
+            })?;
 
-            sockaddr_to_std(&dst_addr)
+            Ok(dst_addr.as_socket().expect("SocketAddr"))
         }
     }
 }
@@ -259,16 +267,12 @@ impl Drop for PacketFilter {
     }
 }
 
-lazy_static! {
-    pub static ref PF: PacketFilter = {
-        match PacketFilter::open() {
-            Ok(pf) => pf,
-            Err(err) if err.kind() == ErrorKind::PermissionDenied => {
-                panic!("open /dev/pf permission denied, consider restart with root user");
-            }
-            Err(err) => {
-                panic!("open /dev/pf {}", err);
-            }
-        }
-    };
-}
+pub static PF: Lazy<PacketFilter> = Lazy::new(|| match PacketFilter::open() {
+    Ok(pf) => pf,
+    Err(err) if err.kind() == ErrorKind::PermissionDenied => {
+        panic!("open /dev/pf permission denied, consider restart with root user");
+    }
+    Err(err) => {
+        panic!("open /dev/pf {err}");
+    }
+});

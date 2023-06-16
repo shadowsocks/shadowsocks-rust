@@ -2,19 +2,18 @@
 
 use std::{
     io::{self, ErrorKind},
-    net::SocketAddr,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use async_trait::async_trait;
 use futures::future;
 use log::{debug, trace};
-use shadowsocks::{dns_resolver::DnsResolve, net::ConnectOpts};
 use trust_dns_resolver::proto::{
     op::{Message, Query},
     rr::{DNSClass, Name, RData, RecordType},
 };
 
-use crate::config::Mode;
+use shadowsocks::{config::Mode, dns_resolver::DnsResolve, net::ConnectOpts};
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
 
@@ -70,11 +69,10 @@ impl DnsResolver {
                 let mut last_err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
 
                 // Query UDP then TCP
-
                 if self.mode.enable_udp() {
                     match self
                         .client_cache
-                        .lookup_udp_local(ns, msg.clone(), &self.connect_opts)
+                        .lookup_local(ns, msg.clone(), &self.connect_opts, true)
                         .await
                     {
                         Ok(msg) => return Ok(msg),
@@ -85,7 +83,7 @@ impl DnsResolver {
                 }
 
                 if self.mode.enable_tcp() {
-                    match self.client_cache.lookup_tcp_local(ns, msg, &self.connect_opts).await {
+                    match self.client_cache.lookup_local(ns, msg, &self.connect_opts, false).await {
                         Ok(msg) => return Ok(msg),
                         Err(err) => {
                             last_err = err.into();
@@ -128,93 +126,62 @@ impl DnsResolve for DnsResolver {
         msgv6.set_recursion_desired(true);
         msgv6.add_query(queryv6);
 
-        let (res_v4, res_v6) = future::join(self.lookup(msgv4), self.lookup(msgv6)).await;
-
-        if res_v4.is_err() && res_v6.is_err() {
-            return if self.ipv6_first {
-                Err(res_v6.unwrap_err())
-            } else {
-                Err(res_v4.unwrap_err())
-            };
-        }
-
-        let mut vaddr = Vec::new();
-
-        if self.ipv6_first {
-            match res_v6 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve AAAA records, error: {}", err);
+        match future::join(self.lookup(msgv4), self.lookup(msgv6)).await {
+            (Err(res_v4), Err(res_v6)) => {
+                if self.ipv6_first {
+                    Err(res_v6)
+                } else {
+                    Err(res_v4)
                 }
             }
 
-            match res_v4 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve A records, error: {}", err);
-                }
-            }
-        } else {
-            match res_v4 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    debug!("failed to resolve A records, error: {}", err);
-                }
-            }
+            (res_v4, res_v6) => {
+                let mut vaddr: Vec<SocketAddr> = vec![];
 
-            match res_v6 {
-                Ok(res) => {
-                    for record in res.answers() {
-                        match *record.rdata() {
-                            RData::A(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            RData::AAAA(addr) => vaddr.push(SocketAddr::new(addr.into(), port)),
-                            ref rdata => {
-                                trace!("skipped rdata {:?}", rdata);
-                            }
-                        }
+                if self.ipv6_first {
+                    match res_v6 {
+                        Ok(res) => vaddr = store_dns(res, port),
+                        Err(err) => debug!("failed to resolve AAAA records, error: {}", err),
+                    }
+
+                    match res_v4 {
+                        Ok(res) => vaddr = store_dns(res, port),
+                        Err(err) => debug!("failed to resolve A records, error: {}", err),
+                    }
+                } else {
+                    match res_v4 {
+                        Ok(res) => vaddr = store_dns(res, port),
+                        Err(err) => debug!("failed to resolve A records, error: {}", err),
+                    }
+
+                    match res_v6 {
+                        Ok(res) => vaddr = store_dns(res, port),
+                        Err(err) => debug!("failed to resolve AAAA records, error: {}", err),
                     }
                 }
-                Err(err) => {
-                    debug!("failed to resolve AAAA records, error: {}", err);
+
+                if vaddr.is_empty() {
+                    let err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
+                    return Err(err);
                 }
+
+                Ok(vaddr)
             }
         }
-
-        if vaddr.is_empty() {
-            let err = io::Error::new(ErrorKind::InvalidData, "resolve empty");
-            return Err(err);
-        }
-
-        Ok(vaddr)
     }
+}
+
+fn store_dns(res: Message, port: u16) -> Vec<SocketAddr> {
+    let mut vaddr = Vec::new();
+    for record in res.answers() {
+        match record.data() {
+            Some(RData::A(addr)) => vaddr.push(SocketAddr::new(Ipv4Addr::from(*addr).into(), port)),
+            Some(RData::AAAA(addr)) => vaddr.push(SocketAddr::new(Ipv6Addr::from(*addr).into(), port)),
+            Some(rdata) => {
+                trace!("skipped rdata {:?}", rdata);
+            }
+            None => {}
+        }
+    }
+    vaddr
 }

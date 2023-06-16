@@ -4,16 +4,15 @@
 
 use std::{
     convert::From,
-    fmt::{self, Debug, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     io::{self, ErrorKind},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     slice,
     str::FromStr,
-    u8,
     vec,
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use self::consts::{
@@ -104,7 +103,7 @@ pub enum Reply {
 impl Reply {
     #[inline]
     #[rustfmt::skip]
-    fn as_u8(self) -> u8 {
+    pub fn as_u8(self) -> u8 {
         match self {
             Reply::Succeeded               => consts::SOCKS5_REPLY_SUCCEEDED,
             Reply::GeneralFailure          => consts::SOCKS5_REPLY_GENERAL_FAILURE,
@@ -121,7 +120,7 @@ impl Reply {
 
     #[inline]
     #[rustfmt::skip]
-    fn from_u8(code: u8) -> Reply {
+    pub fn from_u8(code: u8) -> Reply {
         match code {
             consts::SOCKS5_REPLY_SUCCEEDED                  => Reply::Succeeded,
             consts::SOCKS5_REPLY_GENERAL_FAILURE            => Reply::GeneralFailure,
@@ -149,7 +148,7 @@ impl fmt::Display for Reply {
             Reply::GeneralFailure          => write!(f, "General failure"),
             Reply::HostUnreachable         => write!(f, "Host unreachable"),
             Reply::NetworkUnreachable      => write!(f, "Network unreachable"),
-            Reply::OtherReply(u)           => write!(f, "Other reply ({})", u),
+            Reply::OtherReply(u)           => write!(f, "Other reply ({u})"),
             Reply::TtlExpired              => write!(f, "TTL expired"),
         }
     }
@@ -168,6 +167,10 @@ pub enum Error {
     UnsupportedSocksVersion(u8),
     #[error("unsupported command {0:#x}")]
     UnsupportedCommand(u8),
+    #[error("unsupported username/password authentication version {0:#x}")]
+    UnsupportedPasswdAuthVersion(u8),
+    #[error("username/password authentication invalid request")]
+    PasswdAuthInvalidRequest,
     #[error("{0}")]
     Reply(Reply),
 }
@@ -193,6 +196,8 @@ impl Error {
             Error::AddressDomainInvalidEncoding => Reply::GeneralFailure,
             Error::UnsupportedSocksVersion(..) => Reply::GeneralFailure,
             Error::UnsupportedCommand(..) => Reply::CommandNotSupported,
+            Error::UnsupportedPasswdAuthVersion(..) => Reply::GeneralFailure,
+            Error::PasswdAuthInvalidRequest => Reply::GeneralFailure,
             Error::Reply(r) => r,
         }
     }
@@ -208,6 +213,47 @@ pub enum Address {
 }
 
 impl Address {
+    /// read from a cursor
+    pub fn read_cursor<T: AsRef<[u8]>>(cur: &mut io::Cursor<T>) -> Result<Address, Error> {
+        if cur.remaining() < 2 {
+            return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+        }
+
+        let atyp = cur.get_u8();
+        match atyp {
+            consts::SOCKS5_ADDR_TYPE_IPV4 => {
+                if cur.remaining() < 4 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                }
+                let addr = Ipv4Addr::from(cur.get_u32());
+                let port = cur.get_u16();
+                Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(addr, port))))
+            }
+            consts::SOCKS5_ADDR_TYPE_IPV6 => {
+                if cur.remaining() < 16 + 2 {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid buf").into());
+                }
+                let addr = Ipv6Addr::from(cur.get_u128());
+                let port = cur.get_u16();
+                Ok(Address::SocketAddress(SocketAddr::V6(SocketAddrV6::new(
+                    addr, port, 0, 0,
+                ))))
+            }
+            consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                let domain_len = cur.get_u8() as usize;
+                if cur.remaining() < domain_len {
+                    return Err(Error::AddressDomainInvalidEncoding);
+                }
+                let mut buf = vec![0u8; domain_len];
+                cur.copy_to_slice(&mut buf);
+                let port = cur.get_u16();
+                let addr = String::from_utf8(buf).map_err(|_| Error::AddressDomainInvalidEncoding)?;
+                Ok(Address::DomainNameAddress(addr, port))
+            }
+            _ => Err(Error::AddressTypeNotSupported(atyp)),
+        }
+    }
+
     /// Parse from a `AsyncRead`
     pub async fn read_from<R>(stream: &mut R) -> Result<Address, Error>
     where
@@ -223,17 +269,14 @@ impl Address {
                 let _ = stream.read_exact(&mut buf).await?;
 
                 let v4addr = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
-                let port = unsafe {
-                    let raw_port = &buf[4..];
-                    u16::from_be(*(raw_port.as_ptr() as *const _))
-                };
+                let port = u16::from_be_bytes([buf[4], buf[5]]);
                 Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
-                let mut buf = [0u8; 18];
-                let _ = stream.read_exact(&mut buf).await?;
+                let mut buf = [0u16; 9];
 
-                let buf: &[u16] = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 9) };
+                let bytes_buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut _, 18) };
+                let _ = stream.read_exact(bytes_buf).await?;
 
                 let v6addr = Ipv6Addr::new(
                     u16::from_be(buf[0]),
@@ -263,7 +306,7 @@ impl Address {
                 let _ = stream.read_exact(&mut raw_addr).await?;
 
                 let raw_port = &raw_addr[length..];
-                let port = unsafe { u16::from_be(*(raw_port.as_ptr() as *const _)) };
+                let port = u16::from_be_bytes([raw_port[0], raw_port[1]]);
 
                 raw_addr.truncate(length);
 
@@ -334,8 +377,8 @@ impl Debug for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -344,8 +387,8 @@ impl fmt::Display for Address {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
-            Address::SocketAddress(ref addr) => write!(f, "{}", addr),
-            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{}:{}", addr, port),
+            Address::SocketAddress(ref addr) => write!(f, "{addr}"),
+            Address::DomainNameAddress(ref addr, ref port) => write!(f, "{addr}:{port}"),
         }
     }
 }
@@ -382,6 +425,14 @@ impl From<&Address> for Address {
 /// Parse `Address` error
 #[derive(Debug)]
 pub struct AddressError;
+
+impl Display for AddressError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid Address")
+    }
+}
+
+impl std::error::Error for AddressError {}
 
 impl FromStr for Address {
     type Err = AddressError;
@@ -422,7 +473,7 @@ fn write_ipv6_address<B: BufMut>(addr: &SocketAddrV6, buf: &mut B) {
 }
 
 fn write_domain_name_address<B: BufMut>(dnaddr: &str, port: u16, buf: &mut B) {
-    assert!(dnaddr.len() <= u8::max_value() as usize);
+    assert!(dnaddr.len() <= u8::MAX as usize);
 
     buf.put_u8(consts::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
     assert!(
@@ -659,7 +710,7 @@ impl HandshakeRequest {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         let HandshakeRequest { ref methods } = *self;
         buf.put_slice(&[consts::SOCKS5_VERSION, methods.len() as u8]);
-        buf.put_slice(&methods);
+        buf.put_slice(methods);
     }
 
     /// Get length of bytes
@@ -786,5 +837,155 @@ impl UdpAssociateHeader {
     #[inline]
     pub fn serialized_len(&self) -> usize {
         3 + self.address.serialized_len()
+    }
+}
+
+/// Username/Password Authentication Inittial Negociation
+///
+/// https://datatracker.ietf.org/doc/html/rfc1929
+///
+/// ```plain
+/// +----+------+----------+------+----------+
+/// |VER | ULEN |  UNAME   | PLEN |  PASSWD  |
+/// +----+------+----------+------+----------+
+/// | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
+/// +----+------+----------+------+----------+
+/// ```
+pub struct PasswdAuthRequest {
+    pub uname: Vec<u8>,
+    pub passwd: Vec<u8>,
+}
+
+impl PasswdAuthRequest {
+    /// Create a Username/Password Authentication Request
+    pub fn new<U, P>(uname: U, passwd: P) -> PasswdAuthRequest
+    where
+        U: Into<Vec<u8>>,
+        P: Into<Vec<u8>>,
+    {
+        let uname = uname.into();
+        let passwd = passwd.into();
+        assert!(
+            !uname.is_empty()
+                && uname.len() <= u8::MAX as usize
+                && !passwd.is_empty()
+                && passwd.len() <= u8::MAX as usize
+        );
+
+        PasswdAuthRequest { uname, passwd }
+    }
+
+    /// Read from a reader
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthRequest, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut ver_buf = [0u8; 1];
+        let _ = r.read_exact(&mut ver_buf).await?;
+
+        // The only valid subnegociation version
+        if ver_buf[0] != 0x01 {
+            return Err(Error::UnsupportedPasswdAuthVersion(ver_buf[0]));
+        }
+
+        let mut ulen_buf = [0u8; 1];
+        let _ = r.read_exact(&mut ulen_buf).await?;
+
+        let ulen = ulen_buf[0] as usize;
+        if ulen == 0 {
+            return Err(Error::PasswdAuthInvalidRequest);
+        }
+
+        let mut uname = vec![0u8; ulen];
+        if ulen > 0 {
+            let _ = r.read_exact(&mut uname).await?;
+        }
+
+        let mut plen_buf = [0u8; 1];
+        let _ = r.read_exact(&mut plen_buf).await?;
+
+        let plen = plen_buf[0] as usize;
+        if plen == 0 {
+            return Err(Error::PasswdAuthInvalidRequest);
+        }
+
+        let mut passwd = vec![0u8; plen];
+        if plen > 0 {
+            let _ = r.read_exact(&mut passwd).await?;
+        }
+
+        Ok(PasswdAuthRequest { uname, passwd })
+    }
+
+    /// Write to a writer
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
+        self.write_to_buf(&mut buf);
+        w.write_all(&buf).await
+    }
+
+    /// Write to buffer
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(0x01);
+        buf.put_u8(self.uname.len() as u8);
+        buf.put_slice(&self.uname);
+        buf.put_u8(self.passwd.len() as u8);
+        buf.put_slice(&self.passwd);
+    }
+
+    /// Length in bytes
+    #[inline]
+    pub fn serialized_len(&self) -> usize {
+        1 + 1 + self.uname.len() + 1 + self.passwd.len()
+    }
+}
+
+pub struct PasswdAuthResponse {
+    pub status: u8,
+}
+
+impl PasswdAuthResponse {
+    pub fn new(status: u8) -> PasswdAuthResponse {
+        PasswdAuthResponse { status }
+    }
+
+    /// Read from a reader
+    pub async fn read_from<R>(r: &mut R) -> Result<PasswdAuthResponse, Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        let mut buf = [0u8; 2];
+        let _ = r.read_exact(&mut buf).await;
+
+        if buf[0] != 0x01 {
+            return Err(Error::UnsupportedPasswdAuthVersion(buf[0]));
+        }
+
+        Ok(PasswdAuthResponse { status: buf[1] })
+    }
+
+    /// Write to a writer
+    pub async fn write_to<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: AsyncWrite + Unpin,
+    {
+        let mut buf = BytesMut::with_capacity(self.serialized_len());
+        self.write_to_buf(&mut buf);
+        w.write_all(&buf).await
+    }
+
+    /// Write to buffer
+    fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
+        buf.put_u8(0x01);
+        buf.put_u8(self.status);
+    }
+
+    /// Length in bytes
+    #[inline]
+    pub fn serialized_len(&self) -> usize {
+        2
     }
 }

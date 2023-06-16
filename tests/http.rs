@@ -3,13 +3,13 @@
 use std::time::Duration;
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
     time,
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, ProtocolType},
+    config::{Config, ConfigType},
     run_local,
     run_server,
 };
@@ -18,10 +18,15 @@ use shadowsocks_service::{
 async fn http_proxy() {
     let _ = env_logger::try_init();
 
-    let mut local_config = Config::load_from_str(
+    let local_config = Config::load_from_str(
         r#"{
-            "local_port": 5110,
-            "local_address": "127.0.0.1",
+            "locals": [
+                {
+                    "local_port": 5110,
+                    "local_address": "127.0.0.1",
+                    "protocol": "http"
+                }
+            ],
             "server": "127.0.0.1",
             "server_port": 5120,
             "password": "password",
@@ -30,7 +35,6 @@ async fn http_proxy() {
         ConfigType::Local,
     )
     .unwrap();
-    local_config.local_protocol = ProtocolType::Http;
 
     let server_config = Config::load_from_str(
         r#"{
@@ -55,6 +59,7 @@ async fn http_proxy() {
             .unwrap();
         c.flush().await.unwrap();
 
+        // Proxy should close connection actively because HTTP/1.0 use short connection by default
         let mut buf = Vec::new();
         c.read_to_end(&mut buf).await.unwrap();
 
@@ -73,8 +78,10 @@ async fn http_proxy() {
             .unwrap();
         c.flush().await.unwrap();
 
+        let mut r = BufReader::new(c);
+
         let mut buf = Vec::new();
-        c.read_to_end(&mut buf).await.unwrap();
+        r.read_until(b'\n', &mut buf).await.unwrap();
 
         assert!(buf.starts_with(b"HTTP/1.0 200 OK\r\n"));
     }

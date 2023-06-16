@@ -8,80 +8,40 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Ctarget-feature=+aes,+ssse3"
-  RUST_LOG: "shadowsocks=trace"
+  RUST_LOG: "trace"
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  buid-test-check:
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install Rust nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-      - name: Build & Test (Default)
-        run: cargo test --verbose --no-fail-fast
-      - name: Build & Test (--no-default-features)
-        run: cargo test --verbose --no-default-features --no-fail-fast
-      - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher"
-
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install Rust nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-      - name: Build & Test (Default)
-        run: cargo test --verbose --no-fail-fast
-      - name: Build & Test (--no-default-features)
-        run: cargo test --verbose --no-default-features --no-fail-fast
-      - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-dns dns-over-tls dns-over-https stream-cipher"
-
-  build-macos:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install GNU tar
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Rust
         run: |
-          brew install gnu-tar
-          # echo "::add-path::/usr/local/opt/gnu-tar/libexec/gnubin"
-          echo "/usr/local/opt/gnu-tar/libexec/gnubin" >> $GITHUB_PATH
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install Rust nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
+          rustup set profile minimal
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
       - name: Build & Test (Default)
         run: cargo test --verbose --no-fail-fast
+      - name: Build & Test (Default) - shadowsocks
+        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-fail-fast
       - name: Build & Test (--no-default-features)
         run: cargo test --verbose --no-default-features --no-fail-fast
-      - name: Build with All Features Enabled
-        run: cargo build --verbose --features "local-redir local-dns dns-over-tls dns-over-https stream-cipher"
+      - name: Build & Test (--no-default-features) - shadowsocks
+        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-default-features --no-fail-fast
+      - name: Build with All Features Enabled (Unix)
+        if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
+        run: cargo build --verbose --features "local-http-rustls local-redir local-dns local-tun dns-over-tls dns-over-https stream-cipher aead-cipher-2022"
+      - name: Build with All Features Enabled (Windows)
+        if: ${{ runner.os == 'Windows' }}
+        run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022"
+      - name: Build with All Features Enabled - shadowsocks
+        run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-2022"

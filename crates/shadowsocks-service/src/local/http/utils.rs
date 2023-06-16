@@ -2,8 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-use http::uri::Authority;
-use hyper::Uri;
+use hyper::{http::uri::Authority, Uri};
 use shadowsocks::relay::socks5::Address;
 
 pub fn authority_addr(scheme_str: Option<&str>, authority: &Authority) -> Option<Address> {

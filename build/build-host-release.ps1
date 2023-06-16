@@ -1,16 +1,29 @@
+#!pwsh
 <#
     OpenSSL is already installed on windows-latest virtual environment.
     If you need OpenSSL, consider install it by:
 
     choco install openssl
 #>
+param(
+    [Parameter(HelpMessage = "extra features")]
+    [Alias('f')]
+    [string]$Features
+)
+
 $ErrorActionPreference = "Stop"
 
 $TargetTriple = (rustc -Vv | Select-String -Pattern "host: (.*)" | ForEach-Object { $_.Matches.Value }).split()[-1]
 
 Write-Host "Started building release for ${TargetTriple} ..."
 
-cargo build --release
+if ([string]::IsNullOrEmpty($Features)) {
+    cargo build --release
+}
+else {
+    cargo build --release --features "${Features}"
+}
+
 if (!$?) {
     exit $LASTEXITCODE
 }
@@ -32,7 +45,7 @@ Push-Location "${PSScriptRoot}\..\target\release"
 $ProgressPreference = "SilentlyContinue"
 New-Item "${PackageReleasePath}" -ItemType Directory -ErrorAction SilentlyContinue
 $CompressParam = @{
-    LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe"
+    LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe", "ssservice.exe"
     DestinationPath = "${PackagePath}"
 }
 Compress-Archive @CompressParam

@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shadowsocks-rust.fullname" . }}
+  labels:
+    {{- include "shadowsocks-rust.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "shadowsocks-rust.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "shadowsocks-rust.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "shadowsocks-rust.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ default (include "shadowsocks-rust.fullname" .) .Values.configMapName }}
+      - name: plugins
+        emptyDir: {}
+      {{- if .Values.downloadPlugins }}
+      initContainers:
+      - name: plugin-downloader
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          TAG=$(wget -qO- https://api.github.com/repos/shadowsocks/v2ray-plugin/releases/latest | grep tag_name | cut -d '"' -f4)
+          wget https://github.com/shadowsocks/v2ray-plugin/releases/download/$TAG/v2ray-plugin-linux-amd64-$TAG.tar.gz
+          tar -xf *.gz
+          rm *.gz
+          mv v2ray* /usr/local/bin/v2ray-plugin
+          chmod +x /usr/local/bin/v2ray-plugin
+
+          TAG=$(wget -qO- https://api.github.com/repos/teddysun/xray-plugin/releases/latest | grep tag_name | cut -d '"' -f4)
+          wget https://github.com/teddysun/xray-plugin/releases/download/$TAG/xray-plugin-linux-amd64-$TAG.tar.gz
+          tar -xf *.gz
+          rm *.gz
+          mv xray* /usr/local/bin/xray-plugin
+          chmod +x /usr/local/bin/xray-plugin
+        volumeMounts:
+        - name: plugins
+          mountPath: /usr/local/bin
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: config
+          mountPath: /etc/shadowsocks-rust
+          readOnly: true
+        - name: plugins
+          mountPath: /usr/local/bin
+        ports:
+        {{- $hostPort := .Values.hostPort -}}
+        {{- range $i, $svr := .Values.servers }}
+        - name: {{ include "shadowsocks-rust.portName" $svr }}
+          containerPort: {{ $svr.server_port }}
+          {{- if $hostPort }}
+          hostPort: {{ $svr.server_port }}
+          {{- end }}
+          protocol: TCP
+        {{ end -}}
+        {{- /* use the first port for health check */ -}}
+        {{- $defaultPort := (.Values.servers | first).server_port -}}
+        livenessProbe:
+          tcpSocket:
+            port: {{ $defaultPort }}
+          failureThreshold: 3
+          initialDelaySeconds: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          tcpSocket:
+            port: {{ $defaultPort }}
+          initialDelaySeconds: 2
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

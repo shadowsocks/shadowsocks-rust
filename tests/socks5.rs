@@ -6,18 +6,18 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     time::{self, Duration},
 };
 
 use shadowsocks_service::{
-    config::{Config, ConfigType, Mode, ProtocolType},
+    config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::socks5::Socks5TcpClient,
     run_local,
     run_server,
     shadowsocks::{
-        config::{ServerAddr, ServerConfig},
-        crypto::v1::CipherKind,
+        config::{Mode, ServerAddr, ServerConfig},
+        crypto::CipherKind,
         relay::socks5::Address,
     },
 };
@@ -41,16 +41,28 @@ impl Socks5TestServer {
             local_addr,
             svr_config: {
                 let mut cfg = Config::new(ConfigType::Server);
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
+                cfg.server[0]
+                    .config
+                    .set_mode(if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly });
                 cfg
             },
             cli_config: {
                 let mut cfg = Config::new(ConfigType::Local);
-                cfg.local_addr = Some(ServerAddr::from(local_addr));
-                cfg.server = vec![ServerConfig::new(svr_addr, pwd.to_owned(), method)];
-                cfg.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
-                cfg.local_protocol = ProtocolType::Socks;
+                cfg.local = vec![LocalInstanceConfig::with_local_config(LocalConfig::new_with_addr(
+                    ServerAddr::from(local_addr),
+                    ProtocolType::Socks,
+                ))];
+                cfg.local[0].config.mode = if enable_udp { Mode::TcpAndUdp } else { Mode::TcpOnly };
+                cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
+                    svr_addr,
+                    pwd.to_owned(),
+                    method,
+                ))];
                 cfg
             },
         }
@@ -96,13 +108,13 @@ async fn socks5_relay_stream() {
     c.write_all(req).await.unwrap();
     c.flush().await.unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+    let mut r = BufReader::new(c);
 
-    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+    let mut buf = Vec::new();
+    r.read_until(b'\n', &mut buf).await.unwrap();
 
     let http_status = b"HTTP/1.0 200 OK\r\n";
-    buf.starts_with(http_status);
+    assert!(buf.starts_with(http_status));
 }
 
 #[tokio::test]
@@ -119,21 +131,21 @@ async fn socks5_relay_aead() {
     svr.run().await;
 
     let mut c = Socks5TcpClient::connect(
-        Address::DomainNameAddress("www.example.com".to_owned(), 80),
+        Address::DomainNameAddress("detectportal.firefox.com".to_owned(), 80),
         svr.client_addr(),
     )
     .await
     .unwrap();
 
-    let req = b"GET / HTTP/1.0\r\nHost: www.example.com\r\nAccept: */*\r\n\r\n";
+    let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
     c.write_all(req).await.unwrap();
     c.flush().await.unwrap();
 
-    let mut buf = Vec::new();
-    c.read_to_end(&mut buf).await.unwrap();
+    let mut r = BufReader::new(c);
 
-    println!("Got reply from server: {}", str::from_utf8(&buf).unwrap());
+    let mut buf = Vec::new();
+    r.read_until(b'\n', &mut buf).await.unwrap();
 
     let http_status = b"HTTP/1.0 200 OK\r\n";
-    buf.starts_with(http_status);
+    assert!(buf.starts_with(http_status));
 }

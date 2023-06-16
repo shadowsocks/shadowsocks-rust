@@ -3,63 +3,79 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address};
+use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::{
-    config::ClientConfig,
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::AutoProxyClientStream,
-        utils::establish_tcp_tunnel,
-    },
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::AutoProxyClientStream,
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
-pub async fn run_tcp_tunnel(
+/// TCP Tunnel instance
+pub struct TunnelTcpServer {
     context: Arc<ServiceContext>,
-    client_config: &ClientConfig,
+    listener: ShadowTcpListener,
     balancer: PingBalancer,
-    forward_addr: &Address,
-    nodelay: bool,
-) -> io::Result<()> {
-    let listener = match *client_config {
-        ClientConfig::SocketAddr(ref saddr) => ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?,
-        ClientConfig::DomainName(ref dname, port) => {
-            lookup_then!(context.context_ref(), dname, port, |addr| {
-                ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
-            })?
-            .1
-        }
-    };
+    forward_addr: Address,
+}
 
-    info!("shadowsocks TCP tunnel listening on {}", listener.local_addr()?);
-
-    loop {
-        let (stream, peer_addr) = match listener.accept().await {
-            Ok(s) => s,
-            Err(err) => {
-                error!("accept failed with error: {}", err);
-                time::sleep(Duration::from_secs(1)).await;
-                continue;
+impl TunnelTcpServer {
+    pub(crate) async fn new(
+        context: Arc<ServiceContext>,
+        client_config: &ServerAddr,
+        balancer: PingBalancer,
+        forward_addr: Address,
+    ) -> io::Result<TunnelTcpServer> {
+        let listener = match *client_config {
+            ServerAddr::SocketAddr(ref saddr) => {
+                ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?
+            }
+            ServerAddr::DomainName(ref dname, port) => {
+                lookup_then!(context.context_ref(), dname, port, |addr| {
+                    ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
+                })?
+                .1
             }
         };
 
-        if nodelay {
-            let _ = stream.set_nodelay(true);
-        }
-
-        let balancer = balancer.clone();
-        let forward_addr = forward_addr.clone();
-
-        tokio::spawn(handle_tcp_client(
-            context.clone(),
-            stream,
+        Ok(TunnelTcpServer {
+            context,
+            listener,
             balancer,
-            peer_addr,
             forward_addr,
-            nodelay,
-        ));
+        })
+    }
+
+    /// Server's local address
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.listener.local_addr()
+    }
+
+    /// Start serving
+    pub async fn run(self) -> io::Result<()> {
+        info!("shadowsocks TCP tunnel listening on {}", self.listener.local_addr()?);
+
+        let forward_addr = Arc::new(self.forward_addr);
+        loop {
+            let (stream, peer_addr) = match self.listener.accept().await {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("accept failed with error: {}", err);
+                    time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+
+            tokio::spawn(handle_tcp_client(
+                self.context.clone(),
+                stream,
+                self.balancer.clone(),
+                peer_addr,
+                forward_addr.clone(),
+            ));
+        }
     }
 }
 
@@ -68,36 +84,27 @@ async fn handle_tcp_client(
     mut stream: TcpStream,
     balancer: PingBalancer,
     peer_addr: SocketAddr,
-    forward_addr: Address,
-    nodelay: bool,
+    forward_addr: Arc<Address>,
 ) -> io::Result<()> {
+    let forward_addr: &Address = &forward_addr;
+
+    if balancer.is_empty() {
+        trace!("establishing tcp tunnel {} <-> {} direct", peer_addr, forward_addr);
+
+        let mut remote = AutoProxyClientStream::connect_bypassed(context, forward_addr).await?;
+        return establish_tcp_tunnel_bypassed(&mut stream, &mut remote, peer_addr, forward_addr).await;
+    }
+
     let server = balancer.best_tcp_server();
     let svr_cfg = server.server_config();
     trace!(
         "establishing tcp tunnel {} <-> {} through sever {} (outbound: {})",
         peer_addr,
         forward_addr,
-        svr_cfg.external_addr(),
+        svr_cfg.tcp_external_addr(),
         svr_cfg.addr(),
     );
 
-    let remote = AutoProxyClientStream::connect_proxied(context, &server, &forward_addr).await?;
-
-    if nodelay {
-        remote.set_nodelay(true)?;
-    }
-
-    let (mut plain_reader, mut plain_writer) = stream.split();
-    let (mut shadow_reader, mut shadow_writer) = remote.into_split();
-
-    establish_tcp_tunnel(
-        svr_cfg,
-        &mut plain_reader,
-        &mut plain_writer,
-        &mut shadow_reader,
-        &mut shadow_writer,
-        peer_addr,
-        &forward_addr,
-    )
-    .await
+    let mut remote = AutoProxyClientStream::connect_proxied(context, &server, forward_addr).await?;
+    establish_tcp_tunnel(svr_cfg, &mut stream, &mut remote, peer_addr, &forward_addr).await
 }

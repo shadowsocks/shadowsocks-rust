@@ -30,6 +30,16 @@ impl<S> MonProxyStream<S> {
     pub fn get_ref(&self) -> &S {
         &self.stream
     }
+
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut S {
+        &mut self.stream
+    }
+
+    #[inline]
+    pub fn into_inner(self) -> S {
+        self.stream
+    }
 }
 
 impl<S> AsyncRead for MonProxyStream<S>

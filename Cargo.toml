@@ -1,14 +1,15 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.9.2"
+version = "1.16.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
 readme = "README.md"
-documentation = "https://docs.rs/shadowsocks"
+documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
-edition = "2018"
+edition = "2021"
+rust-version = "1.64"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -33,6 +34,11 @@ name = "ssmanager"
 path = "bin/ssmanager.rs"
 required-features = ["manager"]
 
+[[bin]]
+name = "ssservice"
+path = "bin/ssservice.rs"
+required-features = ["service"]
+
 [workspace]
 members = [
     "crates/shadowsocks",
@@ -44,6 +50,7 @@ lto = "fat"
 codegen-units = 1
 incremental = false
 panic = "abort"
+strip = true
 
 [features]
 default = [
@@ -53,10 +60,12 @@ default = [
     "server",
     "manager",
     "utility",
+    "service",
     "local-http",
     "local-tunnel",
     "local-socks4",
     "multi-threaded",
+    "aead-cipher-2022",
 ]
 
 # Enable local server
@@ -66,7 +75,9 @@ server = ["shadowsocks-service/server"]
 # Enable manager server
 manager = ["shadowsocks-service/manager"]
 # Enable utility
-utility = []
+utility = ["qrcode"]
+# Enable service
+service = ["local", "server", "manager"]
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
@@ -92,43 +103,77 @@ local-redir = ["local", "shadowsocks-service/local-redir"]
 local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local", "shadowsocks-service/local-socks4"]
+# Enable Tun interface protocol for sslocal
+local-tun = ["local", "shadowsocks-service/local-tun", "ipnet"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
 # Enable bundled tcmalloc
 tcmalloc-vendored = ["tcmalloc/bundled"]
 
+# Enable snmalloc for binaries
+snmalloc = ["snmalloc-rs"]
+
 # Enable tokio's multi-threaded runtime
 multi-threaded = ["tokio/rt-multi-thread"]
 
 # Enable Stream Cipher Protocol
-# WARN: Stream Cipher Protocol is proved to be insecured
+# WARN: Stream Cipher Protocol is proved to be insecure
 # https://github.com/shadowsocks/shadowsocks-rust/issues/373
 # Users should always avoid using these ciphers in practice
 stream-cipher = ["shadowsocks-service/stream-cipher"]
 
+# Enable extra AEAD ciphers
+# WARN: These non-standard AEAD ciphers are not officially supported by shadowsocks community
+aead-cipher-extra = ["shadowsocks-service/aead-cipher-extra"]
+
+# Enable AEAD 2022
+aead-cipher-2022 = ["shadowsocks-service/aead-cipher-2022"]
+# Enable AEAD 2022 with extra ciphers
+aead-cipher-2022-extra = ["shadowsocks-service/aead-cipher-2022-extra"]
+
+# Enable detection against replay attack (Stream / AEAD)
+security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]
+replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.
+
 [dependencies]
 log = "0.4"
-log4rs = { version = "1.0", optional = true }
+log4rs = { version = "1.2", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+json5 = "0.4"
+thiserror = "1.0"
+base64 = "0.21"
 
-clap = { version = "2", features = ["wrap_help", "suggestions"] }
+clap = { version = "4.3", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
-qrcode = { version = "0.12", default-features = false }
+qrcode = { version = "0.12", default-features = false, optional = true }
+sysexits = "0.6"
+build-time = "0.1"
+directories = "5.0"
+xdg = "2.5"
+rpassword = "7.0"
+libc = { version = "0.2", features = ["extra_traits"] }
+rand = "0.8"
 
 futures = "0.3"
-tokio = { version = "1.2", features = ["rt", "signal"] }
+tokio = { version = "1", features = ["rt", "signal"] }
+num_cpus = "1.15"
 
-mimalloc = { version = "0.1", optional = true }
+ipnet = { version = "2.7", optional = true }
+
+mimalloc = { version = "0.1", default-features = false, optional = true }
 tcmalloc = { version = "0.3", optional = true }
-jemallocator = { version = "0.3", optional = true }
+jemallocator = { version = "0.5", optional = true }
+snmalloc-rs = { version = "0.3", optional = true }
+rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.9.2", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.16.0", path = "./crates/shadowsocks-service" }
 
 [target.'cfg(unix)'.dependencies]
-daemonize = "0.4"
+daemonize = "0.5"
 
 [dev-dependencies]
 byteorder = "1.3"
-env_logger = "0.8"
+env_logger = "0.10"
 byte_string = "1.0"
-tokio = { version = "1.1", features = ["net", "time", "macros", "io-util"]}
+tokio = { version = "1", features = ["net", "time", "macros", "io-util"] }

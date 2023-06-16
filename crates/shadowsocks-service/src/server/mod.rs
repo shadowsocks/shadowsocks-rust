@@ -1,49 +1,64 @@
 //! Shadowsocks server
 
 use std::{
+    future::Future,
     io::{self, ErrorKind},
+    pin::Pin,
     sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
 };
 
-use futures::{future, FutureExt};
-use log::{trace, warn};
-#[cfg(feature = "trust-dns")]
-use shadowsocks::dns_resolver::DnsResolver;
-use shadowsocks::{
-    config::ServerAddr,
-    net::{AcceptOpts, ConnectOpts},
+use futures::{future, ready};
+use log::trace;
+use shadowsocks::net::{AcceptOpts, ConnectOpts};
+use tokio::task::JoinHandle;
+
+use crate::{
+    config::{Config, ConfigType},
+    dns::build_dns_resolver,
 };
 
-use crate::config::{Config, ConfigType};
-
-pub use self::server::Server;
+pub use self::{
+    server::{Server, ServerBuilder},
+    tcprelay::TcpServer,
+    udprelay::UdpServer,
+};
 
 pub mod context;
+#[allow(clippy::module_inception)]
 pub mod server;
 mod tcprelay;
 mod udprelay;
 
+/// Default TCP Keep Alive timeout
+///
+/// This is borrowed from Go's `net` library's default setting
+pub(crate) const SERVER_DEFAULT_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Starts a shadowsocks server
 pub async fn run(config: Config) -> io::Result<()> {
     assert_eq!(config.config_type, ConfigType::Server);
-    assert!(config.server.len() > 0);
+    assert!(!config.server.is_empty());
 
     trace!("{:?}", config);
 
     // Warning for Stream Ciphers
     #[cfg(feature = "stream-cipher")]
-    for server in config.server.iter() {
+    for inst in config.server.iter() {
+        let server = &inst.config;
+
         if server.method().is_stream() {
-            warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
+            log::warn!("stream cipher {} for server {} have inherent weaknesses (see discussion in https://github.com/shadowsocks/shadowsocks-org/issues/36). \
                     DO NOT USE. It will be removed in the future.", server.method(), server.addr());
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "android")))]
     if let Some(nofile) = config.nofile {
         use crate::sys::set_nofile;
         if let Err(err) = set_nofile(nofile) {
-            warn!("set_nofile {} failed, error: {}", nofile, err);
+            log::warn!("set_nofile {} failed, error: {}", nofile, err);
         }
     }
 
@@ -56,18 +71,7 @@ pub async fn run(config: Config) -> io::Result<()> {
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        bind_local_addr: match config.local_addr {
-            None => None,
-            Some(ServerAddr::SocketAddr(sa)) => Some(sa.ip()),
-            Some(ServerAddr::DomainName(..)) => {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidInput,
-                    "local_addr must be a SocketAddr",
-                ));
-            }
-        },
-
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))]
+        bind_local_addr: config.outbound_bind_addr,
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
@@ -76,69 +80,103 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.send_buffer_size = config.outbound_send_buffer_size;
     connect_opts.tcp.recv_buffer_size = config.outbound_recv_buffer_size;
     connect_opts.tcp.nodelay = config.no_delay;
+    connect_opts.tcp.fastopen = config.fast_open;
+    connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
+    connect_opts.tcp.mptcp = config.mptcp;
 
-    let mut accept_opts = AcceptOpts::default();
+    let mut accept_opts = AcceptOpts {
+        ipv6_only: config.ipv6_only,
+        ..Default::default()
+    };
     accept_opts.tcp.send_buffer_size = config.inbound_send_buffer_size;
     accept_opts.tcp.recv_buffer_size = config.inbound_recv_buffer_size;
     accept_opts.tcp.nodelay = config.no_delay;
+    accept_opts.tcp.fastopen = config.fast_open;
+    accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
+    accept_opts.tcp.mptcp = config.mptcp;
 
-    #[cfg(feature = "trust-dns")]
-    let resolver = if config.dns.is_some() || crate::hint_support_default_system_resolver() {
-        let r = match config.dns {
-            None => DnsResolver::trust_dns_system_resolver(config.ipv6_first).await,
-            Some(dns) => DnsResolver::trust_dns_resolver(dns, config.ipv6_first).await,
-        };
-
-        match r {
-            Ok(r) => Some(Arc::new(r)),
-            Err(err) => {
-                warn!(
-                    "initialize DNS resolver failed, fallback to system resolver, error: {}",
-                    err
-                );
-                None
-            }
-        }
-    } else {
-        None
-    };
+    let resolver = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts)
+        .await
+        .map(Arc::new);
 
     let acl = config.acl.map(Arc::new);
 
-    for svr_cfg in config.server {
-        let mut server = Server::new(svr_cfg);
+    for inst in config.server {
+        let svr_cfg = inst.config;
+        let mut server_builder = ServerBuilder::new(svr_cfg);
 
-        #[cfg(feature = "trust-dns")]
         if let Some(ref r) = resolver {
-            server.set_dns_resolver(r.clone());
+            server_builder.set_dns_resolver(r.clone());
         }
 
-        server.set_connect_opts(connect_opts.clone());
-        server.set_accept_opts(accept_opts.clone());
+        server_builder.set_connect_opts(connect_opts.clone());
+        server_builder.set_accept_opts(accept_opts.clone());
 
         if let Some(c) = config.udp_max_associations {
-            server.set_udp_capacity(c);
+            server_builder.set_udp_capacity(c);
         }
         if let Some(d) = config.udp_timeout {
-            server.set_udp_expiry_duration(d);
+            server_builder.set_udp_expiry_duration(d);
         }
-        server.set_mode(config.mode);
         if let Some(ref m) = config.manager {
-            server.set_manager_addr(m.addr.clone());
+            server_builder.set_manager_addr(m.addr.clone());
         }
 
-        if let Some(ref acl) = acl {
-            server.set_acl(acl.clone());
+        match inst.acl {
+            Some(acl) => server_builder.set_acl(Arc::new(acl)),
+            None => {
+                if let Some(ref acl) = acl {
+                    server_builder.set_acl(acl.clone());
+                }
+            }
         }
 
+        if config.ipv6_first {
+            server_builder.set_ipv6_first(config.ipv6_first);
+        }
+
+        if config.worker_count >= 1 {
+            server_builder.set_worker_count(config.worker_count);
+        }
+
+        server_builder.set_security_config(&config.security);
+
+        let server = server_builder.build().await?;
         servers.push(server);
     }
 
+    if servers.len() == 1 {
+        let server = servers.pop().unwrap();
+        return server.run().await;
+    }
+
     let mut vfut = Vec::with_capacity(servers.len());
+
     for server in servers {
-        vfut.push(server.run().boxed());
+        vfut.push(ServerHandle(tokio::spawn(async move { server.run().await })));
     }
 
     let (res, ..) = future::select_all(vfut).await;
     res
+}
+
+struct ServerHandle(JoinHandle<io::Result<()>>);
+
+impl Drop for ServerHandle {
+    #[inline]
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+impl Future for ServerHandle {
+    type Output = io::Result<()>;
+
+    #[inline]
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(Pin::new(&mut self.0).poll(cx)) {
+            Ok(res) => res.into(),
+            Err(err) => Err(io::Error::new(ErrorKind::Other, err)).into(),
+        }
+    }
 }
