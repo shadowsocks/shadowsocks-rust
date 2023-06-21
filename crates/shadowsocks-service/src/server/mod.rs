@@ -95,7 +95,7 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
 
-    let resolver = build_dns_resolver(config.dns, config.ipv6_first, &connect_opts)
+    let resolver = build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts)
         .await
         .map(Arc::new);
 

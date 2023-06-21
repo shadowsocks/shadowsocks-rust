@@ -6,7 +6,7 @@ use shadowsocks::{dns_resolver::DnsResolver, net::ConnectOpts};
 use crate::config::DnsConfig;
 
 #[allow(unused_variables, dead_code)]
-pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: &ConnectOpts) -> Option<DnsResolver> {
+pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, dns_cache_size: Option<usize>, connect_opts: &ConnectOpts) -> Option<DnsResolver> {
     match dns {
         DnsConfig::System => {
             #[cfg(feature = "trust-dns")]
@@ -23,7 +23,7 @@ pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: 
                 };
 
                 if !force_system_builtin {
-                    return match DnsResolver::trust_dns_system_resolver(connect_opts.clone()).await {
+                    return match DnsResolver::trust_dns_system_resolver(dns_cache_size, connect_opts.clone()).await {
                         Ok(r) => Some(r),
                         Err(err) => {
                             warn!(
@@ -41,7 +41,7 @@ pub async fn build_dns_resolver(dns: DnsConfig, ipv6_first: bool, connect_opts: 
             None
         }
         #[cfg(feature = "trust-dns")]
-        DnsConfig::TrustDns(dns) => match DnsResolver::trust_dns_resolver(dns, connect_opts.clone()).await {
+        DnsConfig::TrustDns(dns) => match DnsResolver::trust_dns_resolver(dns, dns_cache_size, connect_opts.clone()).await {
             Ok(r) => Some(r),
             Err(err) => {
                 use log::warn;
