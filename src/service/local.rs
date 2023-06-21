@@ -195,6 +195,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
             .help("Path to ACL (Access Control List)"),
     )
     .arg(Arg::new("DNS").long("dns").num_args(1).action(ArgAction::Set).help("DNS nameservers, formatted like [(tcp|udp)://]host[:port][,host[:port]]..., or unix:///path/to/dns, or predefined keys like \"google\", \"cloudflare\""))
+    .arg(Arg::new("DNS_CACHE_SIZE").long("dns-cache-size").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(usize)).help("DNS cache size in number of records. Works when trust-dns DNS backend is enabled."))
     .arg(Arg::new("TCP_NO_DELAY").long("tcp-no-delay").alias("no-delay").action(ArgAction::SetTrue).help("Set TCP_NODELAY option for sockets"))
     .arg(Arg::new("TCP_FAST_OPEN").long("tcp-fast-open").alias("fast-open").action(ArgAction::SetTrue).help("Enable TCP Fast Open (TFO)"))
     .arg(Arg::new("TCP_KEEP_ALIVE").long("tcp-keep-alive").num_args(1).action(ArgAction::Set).value_parser(clap::value_parser!(u64)).help("Set TCP keep alive timeout seconds"))
@@ -782,6 +783,10 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
 
         if let Some(dns) = matches.get_one::<String>("DNS") {
             config.set_dns_formatted(dns).expect("dns");
+        }
+
+        if let Some(dns_cache_size) = matches.get_one::<usize>("DNS_CACHE_SIZE") {
+            config.dns_cache_size = Some(*dns_cache_size);
         }
 
         if matches.get_flag("IPV6_FIRST") {

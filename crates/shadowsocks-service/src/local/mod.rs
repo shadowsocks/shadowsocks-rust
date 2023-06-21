@@ -165,7 +165,7 @@ impl Server {
         accept_opts.tcp.mptcp = config.mptcp;
         context.set_accept_opts(accept_opts);
 
-        if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, context.connect_opts_ref()).await {
+        if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, context.connect_opts_ref()).await {
             context.set_dns_resolver(Arc::new(resolver));
         }
 

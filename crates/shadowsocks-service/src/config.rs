@@ -169,6 +169,9 @@ struct SSConfig {
     dns: Option<SSDnsConfig>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    dns_cache_size: Option<usize>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     mode: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1099,6 +1102,7 @@ pub struct Config {
     /// - `cloudflare`, `cloudflare_tls`, `cloudflare_https`
     /// - `quad9`, `quad9_tls`
     pub dns: DnsConfig,
+    pub dns_cache_size: Option<usize>,
     /// Uses IPv6 addresses first
     ///
     /// Set to `true` if you want to query IPv6 addresses before IPv4
@@ -1249,6 +1253,7 @@ impl Config {
             local: Vec::new(),
 
             dns: DnsConfig::default(),
+            dns_cache_size: None,
             ipv6_first: false,
             ipv6_only: false,
 
@@ -1935,6 +1940,7 @@ impl Config {
                 Some(SSDnsConfig::TrustDns(c)) => nconfig.dns = DnsConfig::TrustDns(c),
                 None => nconfig.dns = DnsConfig::System,
             }
+            nconfig.dns_cache_size = config.dns_cache_size;
         }
 
         // TCP nodelay
