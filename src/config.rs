@@ -8,7 +8,6 @@ use std::{
     str::FromStr,
 };
 
-use cfg_if::cfg_if;
 use clap::ArgMatches;
 use directories::ProjectDirs;
 use serde::Deserialize;
@@ -221,25 +220,15 @@ pub struct LogFormatConfig {
 }
 
 /// Runtime mode (Tokio)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum RuntimeMode {
     /// Single-Thread Runtime
+    #[cfg_attr(not(feature = "multi-threaded"), default)]
     SingleThread,
     /// Multi-Thread Runtime
     #[cfg(feature = "multi-threaded")]
+    #[cfg_attr(feature = "multi-threaded", default)]
     MultiThread,
-}
-
-impl Default for RuntimeMode {
-    fn default() -> RuntimeMode {
-        cfg_if! {
-            if #[cfg(feature = "multi-threaded")] {
-                RuntimeMode::MultiThread
-            } else {
-                RuntimeMode::SingleThread
-            }
-        }
-    }
 }
 
 /// Parse `RuntimeMode` from string error
