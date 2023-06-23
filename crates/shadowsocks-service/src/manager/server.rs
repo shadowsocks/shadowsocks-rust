@@ -355,7 +355,7 @@ impl Manager {
         if pid_path.exists() {
             if let Ok(mut pid_file) = File::open(&pid_path) {
                 let mut pid_content = String::new();
-                if let Ok(..) = pid_file.read_to_string(&mut pid_content) {
+                if pid_file.read_to_string(&mut pid_content).is_ok() {
                     let pid_content = pid_content.trim();
 
                     match pid_content.parse::<libc::pid_t>() {

@@ -192,9 +192,9 @@ impl UdpServer {
                                 None => continue,
                             };
 
-                        if let Err(..) = otx
+                        if (otx
                             .send((peer_addr, target_addr, control, Bytes::copy_from_slice(&buffer[..n])))
-                            .await
+                            .await).is_err()
                         {
                             // If Result is error, the channel receiver is closed. We should exit the task.
                             break;
@@ -423,7 +423,7 @@ impl UdpAssociation {
     }
 
     fn try_send(&self, data: UdpAssociationSendMessage) -> io::Result<()> {
-        if let Err(..) = self.sender.try_send(data) {
+        if self.sender.try_send(data).is_err() {
             let err = io::Error::new(ErrorKind::Other, "udp relay channel full");
             return Err(err);
         }
@@ -566,7 +566,7 @@ impl UdpAssociationContext {
                             Some(..) => unreachable!("client_session_id is not None but aead-cipher-2022 is not enabled"),
                         };
 
-                        if let Err(..) = self.keepalive_tx.try_send(nat_key) {
+                        if self.keepalive_tx.try_send(nat_key).is_err() {
                             debug!("udp relay {:?} keep-alive failed, channel full or closed", nat_key);
                         } else {
                             self.keepalive_flag = false;
