@@ -672,6 +672,8 @@ Example configuration:
     //
     // The field is only effective if feature "trust-dns" is enabled.
     "dns": "google",
+    // Configure `cache_size` for "trust-dns" ResolverOpts. Set to "0" to disable DNS cache.
+    "dns_cache_size": 0,
 
     // Mode, could be one of the
     // - tcp_only
