@@ -203,7 +203,7 @@ impl ParsingRules {
             if let Some(tree_rule) = caps.get(1) {
                 if let Ok(tree_rule) = str::from_utf8(tree_rule.as_bytes()) {
                     let tree_rule = tree_rule.replace("\\.", ".");
-                    if let Ok(..) = self.add_tree_rule_inner(&tree_rule) {
+                    if self.add_tree_rule_inner(&tree_rule).is_ok() {
                         trace!("REGEX-RULE {} => TREE-RULE {}", rule, tree_rule);
                         return;
                     }
@@ -211,7 +211,7 @@ impl ParsingRules {
             } else if let Some(set_rule) = caps.get(2) {
                 if let Ok(set_rule) = str::from_utf8(set_rule.as_bytes()) {
                     let set_rule = set_rule.replace("\\.", ".");
-                    if let Ok(..) = self.add_set_rule_inner(&set_rule) {
+                    if self.add_set_rule_inner(&set_rule).is_ok() {
                         trace!("REGEX-RULE {} => SET-RULE {}", rule, set_rule);
                         return;
                     }
