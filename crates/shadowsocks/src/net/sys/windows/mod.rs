@@ -373,7 +373,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
         UdpSocket::bind(bind_addr).await?
     } else {
         let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
-        socket_bind_dual_stack(&socket, &bind_addr, false)?;
+        socket_bind_dual_stack(&socket, bind_addr, false)?;
 
         // UdpSocket::from_std requires socket to be non-blocked
         socket.set_nonblocking(true)?;
