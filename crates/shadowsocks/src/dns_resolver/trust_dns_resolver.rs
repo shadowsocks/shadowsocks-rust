@@ -108,10 +108,7 @@ pub async fn create_resolver(dns: Option<ResolverConfig>, dns_cache_size: Option
             // Since we want to use Happy Eyeballs to connect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
             resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
-            match dns_cache_size {
-                Some(size) => resolver_opts.cache_size = size,
-                None => {},
-            }
+            if let Some(size) = dns_cache_size { resolver_opts.cache_size = size }
 
             trace!(
                 "initializing DNS resolver with config {:?} opts {:?}",

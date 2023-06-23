@@ -196,7 +196,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
                 // Update once for all those Modify events
                 time::sleep(Duration::from_secs(1)).await;
 
-                match create_resolver(None, resolver.dns_cache_size.clone(), resolver.connect_opts.clone()).await {
+                match create_resolver(None, resolver.dns_cache_size, resolver.connect_opts.clone()).await {
                     Ok(r) => {
                         debug!("auto-reload {DNS_RESOLV_FILE_PATH}");
 
@@ -230,7 +230,7 @@ impl DnsResolver {
     pub async fn trust_dns_system_resolver(dns_cache_size: Option<usize>, connect_opts: ConnectOpts) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
 
-        let resolver = create_resolver(None, dns_cache_size.clone(), connect_opts.clone()).await?;
+        let resolver = create_resolver(None, dns_cache_size, connect_opts.clone()).await?;
 
         let inner = Arc::new(TrustDnsSystemResolver {
             resolver: ArcSwap::from(Arc::new(resolver)),
