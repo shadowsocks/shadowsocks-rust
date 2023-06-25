@@ -105,9 +105,7 @@ impl TcpStream {
 
                 stream.ready(Interest::WRITABLE).await?;
 
-                if let Err(err) = stream.take_error() {
-                    return Err(err);
-                }
+                stream.take_error()?;
 
                 stream
             } else {
