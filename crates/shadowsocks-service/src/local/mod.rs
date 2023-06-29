@@ -183,11 +183,16 @@ impl Server {
 
         // Create a service balancer for choosing between multiple servers
         let balancer = {
-            let mut mode = Mode::TcpOnly;
+            let mut mode: Option<Mode> = None;
 
             for local in &config.local {
-                mode = mode.merge(local.config.mode);
+                mode = Some(match mode {
+                    None => local.config.mode,
+                    Some(m) => m.merge(local.config.mode),
+                });
             }
+
+            let mode = mode.unwrap_or(Mode::TcpOnly);
 
             // Load balancer will hold an individual ServiceContext
             let mut balancer_builder = PingBalancerBuilder::new(Arc::new(context.clone()), mode);
