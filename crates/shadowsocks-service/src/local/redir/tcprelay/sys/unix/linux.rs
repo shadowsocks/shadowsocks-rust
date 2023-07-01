@@ -134,6 +134,7 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
                     None => return Err(err),
                     // ENOPROTOOPT, EOPNOTSUPP (ENOTSUP): IP6T_SO_ORIGINAL_DST doesn't exist
                     // ENOENT: Destination address is not IPv6
+                    #[allow(unreachable_patterns)]
                     Some(libc::ENOPROTOOPT) | Some(libc::ENOENT) | Some(libc::EOPNOTSUPP) | Some(libc::ENOTSUP) => {}
                     Some(..) => return Err(err),
                 }
