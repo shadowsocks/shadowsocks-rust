@@ -21,7 +21,7 @@ use smoltcp::{
     socket::tcp::{Socket as TcpSocket, SocketBuffer as TcpSocketBuffer, State as TcpState},
     storage::RingBuffer,
     time::{Duration as SmolDuration, Instant as SmolInstant},
-    wire::{IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
+    wire::{HardwareAddress, IpAddress, IpCidr, Ipv4Address, Ipv6Address, TcpPacket},
 };
 use spin::Mutex as SpinMutex;
 use tokio::{
@@ -258,9 +258,9 @@ impl TcpTun {
 
         let (mut device, iface_rx, iface_tx, iface_tx_avail) = VirtTunDevice::new(capabilities);
 
-        let mut iface_config = InterfaceConfig::default();
+        let mut iface_config = InterfaceConfig::new(HardwareAddress::Ip);
         iface_config.random_seed = rand::random();
-        let mut iface = Interface::new(iface_config, &mut device);
+        let mut iface = Interface::new(iface_config, &mut device, SmolInstant::now());
         iface.update_ip_addrs(|ip_addrs| {
             ip_addrs
                 .push(IpCidr::new(IpAddress::v4(0, 0, 0, 1), 0))
