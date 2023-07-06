@@ -1,3 +1,9 @@
+shadowsocks-rust (1.15.4) unstable; urgency=medium
+
+  ## Bug Fixed
+
+  - #1239 Fixed misaligned read in shadowsocks' socks5 protocol implementation. It may cause panics compiled by rustc newer than 1.68.
+
 shadowsocks-rust (1.15.3) unstable; urgency=medium
 
   ## Features
