@@ -269,17 +269,14 @@ impl Address {
                 let _ = stream.read_exact(&mut buf).await?;
 
                 let v4addr = Ipv4Addr::new(buf[0], buf[1], buf[2], buf[3]);
-                let port = unsafe {
-                    let raw_port = &buf[4..];
-                    u16::from_be(*(raw_port.as_ptr() as *const _))
-                };
+                let port = u16::from_be_bytes([buf[4], buf[5]]);
                 Ok(Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new(v4addr, port))))
             }
             consts::SOCKS5_ADDR_TYPE_IPV6 => {
-                let mut buf = [0u8; 18];
-                let _ = stream.read_exact(&mut buf).await?;
+                let mut buf = [0u16; 9];
 
-                let buf: &[u16] = unsafe { slice::from_raw_parts(buf.as_ptr() as *const _, 9) };
+                let bytes_buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut _, 18) };
+                let _ = stream.read_exact(bytes_buf).await?;
 
                 let v6addr = Ipv6Addr::new(
                     u16::from_be(buf[0]),
@@ -309,7 +306,7 @@ impl Address {
                 let _ = stream.read_exact(&mut raw_addr).await?;
 
                 let raw_port = &raw_addr[length..];
-                let port = unsafe { u16::from_be(*(raw_port.as_ptr() as *const _)) };
+                let port = u16::from_be_bytes([raw_port[0], raw_port[1]]);
 
                 raw_addr.truncate(length);
 
