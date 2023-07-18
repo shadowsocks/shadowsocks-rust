@@ -227,10 +227,8 @@ impl Drop for Plugin {
             }
         }
 
-        if !terminated {
-            if self.process.start_kill().is_ok() {
-                debug!("killed plugin process {:?}", self.process.id());
-            }
+        if !terminated && self.process.start_kill().is_ok() {
+            debug!("killed plugin process {:?}", self.process.id());
         }
     }
 }

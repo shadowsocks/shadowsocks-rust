@@ -373,8 +373,8 @@ impl Manager {
 
         let server_config_path = self.server_config_path(port);
 
-        let _ = fs::remove_file(&pid_path);
-        let _ = fs::remove_file(&server_config_path);
+        let _ = fs::remove_file(pid_path);
+        let _ = fs::remove_file(server_config_path);
     }
 
     #[cfg(unix)]

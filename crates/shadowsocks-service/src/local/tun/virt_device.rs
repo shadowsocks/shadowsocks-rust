@@ -22,6 +22,7 @@ pub struct VirtTunDevice {
 }
 
 impl VirtTunDevice {
+    #[allow(clippy::type_complexity)]
     pub fn new(
         capabilities: DeviceCapabilities,
     ) -> (
@@ -57,7 +58,7 @@ impl Device for VirtTunDevice {
     type RxToken<'a> = VirtRxToken<'a>;
     type TxToken<'a> = VirtTxToken<'a>;
 
-    fn receive<'a>(&'a mut self, _timestamp: Instant) -> Option<(Self::RxToken<'a>, Self::TxToken<'a>)> {
+    fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         if let Ok(buffer) = self.in_buf.try_recv() {
             let rx = Self::RxToken {
                 buffer,
@@ -70,7 +71,7 @@ impl Device for VirtTunDevice {
         None
     }
 
-    fn transmit<'a>(&'a mut self, _timestamp: Instant) -> Option<Self::TxToken<'a>> {
+    fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
         return Some(VirtTxToken(self));
     }
 

@@ -21,7 +21,9 @@ use tokio_tfo::TfoStream;
 use crate::net::{
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
-    AcceptOpts, AddrFamily, ConnectOpts,
+    AcceptOpts,
+    AddrFamily,
+    ConnectOpts,
 };
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)

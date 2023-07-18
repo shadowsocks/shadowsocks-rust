@@ -12,6 +12,7 @@ use self::socks5::Socks5UdpServer;
 
 use super::config::Socks5AuthConfig;
 
+#[allow(clippy::module_inception)]
 mod server;
 #[cfg(feature = "local-socks4")]
 mod socks4;

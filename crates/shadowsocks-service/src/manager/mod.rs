@@ -64,7 +64,9 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
 
-    if let Some(resolver) = build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts).await {
+    if let Some(resolver) =
+        build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts).await
+    {
         manager_builder.set_dns_resolver(Arc::new(resolver));
     }
     manager_builder.set_ipv6_first(config.ipv6_first);

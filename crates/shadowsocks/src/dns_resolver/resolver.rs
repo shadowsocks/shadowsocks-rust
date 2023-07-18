@@ -227,7 +227,10 @@ impl DnsResolver {
     ///
     /// On *nix system, it will try to read configurations from `/etc/resolv.conf`.
     #[cfg(feature = "trust-dns")]
-    pub async fn trust_dns_system_resolver(dns_cache_size: Option<usize>, connect_opts: ConnectOpts) -> io::Result<DnsResolver> {
+    pub async fn trust_dns_system_resolver(
+        dns_cache_size: Option<usize>,
+        connect_opts: ConnectOpts,
+    ) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
 
         let resolver = create_resolver(None, dns_cache_size, connect_opts.clone()).await?;
@@ -258,9 +261,15 @@ impl DnsResolver {
 
     /// Use trust-dns DNS resolver (with DNS cache)
     #[cfg(feature = "trust-dns")]
-    pub async fn trust_dns_resolver(dns: ResolverConfig, dns_cache_size: Option<usize>, connect_opts: ConnectOpts) -> io::Result<DnsResolver> {
+    pub async fn trust_dns_resolver(
+        dns: ResolverConfig,
+        dns_cache_size: Option<usize>,
+        connect_opts: ConnectOpts,
+    ) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
-        Ok(DnsResolver::TrustDns(create_resolver(Some(dns), dns_cache_size, connect_opts).await?))
+        Ok(DnsResolver::TrustDns(
+            create_resolver(Some(dns), dns_cache_size, connect_opts).await?,
+        ))
     }
 
     /// Custom DNS resolver

@@ -194,7 +194,8 @@ impl UdpServer {
 
                         if (otx
                             .send((peer_addr, target_addr, control, Bytes::copy_from_slice(&buffer[..n])))
-                            .await).is_err()
+                            .await)
+                            .is_err()
                         {
                             // If Result is error, the channel receiver is closed. We should exit the task.
                             break;
