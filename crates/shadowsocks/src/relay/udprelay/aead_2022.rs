@@ -58,9 +58,7 @@ use std::{
 
 use aes::{
     cipher::{BlockDecrypt, BlockEncrypt, KeyInit},
-    Aes128,
-    Aes256,
-    Block,
+    Aes128, Aes256, Block,
 };
 use byte_string::ByteStr;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -119,18 +117,7 @@ struct CipherKey {
 
 impl PartialOrd for CipherKey {
     fn partial_cmp(&self, other: &CipherKey) -> Option<Ordering> {
-        let hash1 = {
-            let mut hasher = DefaultHasher::new();
-            self.hash(&mut hasher);
-            hasher.finish()
-        };
-        let hash2 = {
-            let mut hasher = DefaultHasher::new();
-            other.hash(&mut hasher);
-            hasher.finish()
-        };
-
-        hash1.partial_cmp(&hash2)
+        Some(self.cmp(other))
     }
 }
 
