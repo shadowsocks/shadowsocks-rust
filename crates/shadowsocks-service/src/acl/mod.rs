@@ -192,7 +192,7 @@ impl ParsingRules {
     fn add_regex_rule(&mut self, mut rule: String) {
         static TREE_SET_RULE_EQUIV: Lazy<Regex> = Lazy::new(|| {
             RegexBuilder::new(
-                r#"^(?:(?:\((?:\?:)?\^\|\\\.\)|(?:\^\.(?:\+|\*))?\\\.)((?:[\w-]+(?:\\\.)?)+)|\^((?:[\w-]+(?:\\\.)?)+))\$$"#,
+                r#"^(?:(?:\((?:\?:)?\^\|\\\.\)|(?:\^\.(?:\+|\*))?\\\.)((?:[\w-]+(?:\\\.)?)+)|\^((?:[\w-]+(?:\\\.)?)+))\$?$"#,
             )
             .unicode(false)
             .build()
