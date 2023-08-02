@@ -89,8 +89,8 @@ impl ProxyHttpStream {
                     Err(err) => {
                         warn!("failed to load native certs, {}", err);
 
-                        let mut roots = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.0.len());
-                        for root in webpki_roots::TLS_SERVER_ROOTS.0 {
+                        let mut roots = Vec::with_capacity(webpki_roots::TLS_SERVER_ROOTS.len());
+                        for root in webpki_roots::TLS_SERVER_ROOTS {
                             roots.push(OwnedTrustAnchor::from_subject_spki_name_constraints(
                                 root.subject,
                                 root.spki,
@@ -99,7 +99,7 @@ impl ProxyHttpStream {
                         }
 
                         let mut store = RootCertStore::empty();
-                        store.add_server_trust_anchors(roots.into_iter());
+                        store.add_trust_anchors(roots.into_iter());
 
                         store
                     }
