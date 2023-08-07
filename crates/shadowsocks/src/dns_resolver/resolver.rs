@@ -21,6 +21,8 @@ use tokio::net::lookup_host;
 use tokio::task::JoinHandle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::ResolverConfig;
+#[cfg(feature = "trust-dns")]
+use trust_dns_resolver::config::ResolverOpts;
 
 #[cfg(feature = "trust-dns")]
 use crate::net::ConnectOpts;
@@ -39,7 +41,7 @@ pub trait DnsResolve {
 pub struct TrustDnsSystemResolver {
     resolver: ArcSwap<TrustDnsResolver>,
     connect_opts: ConnectOpts,
-    dns_cache_size: Option<usize>,
+    opts: Option<ResolverOpts>,
 }
 
 /// Collections of DNS resolver
@@ -196,7 +198,7 @@ async fn trust_dns_notify_update_dns(resolver: Arc<TrustDnsSystemResolver>) -> n
                 // Update once for all those Modify events
                 time::sleep(Duration::from_secs(1)).await;
 
-                match create_resolver(None, resolver.dns_cache_size, resolver.connect_opts.clone()).await {
+                match create_resolver(None, resolver.opts, resolver.connect_opts.clone()).await {
                     Ok(r) => {
                         debug!("auto-reload {DNS_RESOLV_FILE_PATH}");
 
@@ -228,17 +230,17 @@ impl DnsResolver {
     /// On *nix system, it will try to read configurations from `/etc/resolv.conf`.
     #[cfg(feature = "trust-dns")]
     pub async fn trust_dns_system_resolver(
-        dns_cache_size: Option<usize>,
+        opts: Option<ResolverOpts>,
         connect_opts: ConnectOpts,
     ) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
 
-        let resolver = create_resolver(None, dns_cache_size, connect_opts.clone()).await?;
+        let resolver = create_resolver(None, opts, connect_opts.clone()).await?;
 
         let inner = Arc::new(TrustDnsSystemResolver {
             resolver: ArcSwap::from(Arc::new(resolver)),
             connect_opts,
-            dns_cache_size,
+            opts,
         });
 
         cfg_if! {
@@ -263,12 +265,12 @@ impl DnsResolver {
     #[cfg(feature = "trust-dns")]
     pub async fn trust_dns_resolver(
         dns: ResolverConfig,
-        dns_cache_size: Option<usize>,
+        opts: Option<ResolverOpts>,
         connect_opts: ConnectOpts,
     ) -> io::Result<DnsResolver> {
         use super::trust_dns_resolver::create_resolver;
         Ok(DnsResolver::TrustDns(
-            create_resolver(Some(dns), dns_cache_size, connect_opts).await?,
+            create_resolver(Some(dns), opts, connect_opts).await?,
         ))
     }
 
