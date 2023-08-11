@@ -29,7 +29,10 @@ use windows_sys::{
         NetworkManagement::IpHelper::{
             if_nametoindex,
             GetAdaptersAddresses,
-            GAA_FLAG_INCLUDE_PREFIX,
+            GAA_FLAG_SKIP_ANYCAST,
+            GAA_FLAG_SKIP_DNS_SERVER,
+            GAA_FLAG_SKIP_MULTICAST,
+            GAA_FLAG_SKIP_UNICAST,
             IP_ADAPTER_ADDRESSES_LH,
         },
         Networking::WinSock::{
@@ -221,7 +224,7 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
         loop {
             let ret = GetAdaptersAddresses(
                 AF_UNSPEC as u32,
-                GAA_FLAG_INCLUDE_PREFIX,
+                GAA_FLAG_SKIP_UNICAST | GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
                 ptr::null(),
                 ip_adapter_addresses_buffer.as_mut_ptr() as *mut _,
                 &mut ip_adapter_addresses_buffer_size as *mut _,
