@@ -14,9 +14,7 @@ edition = "2021"
 maintenance = { status = "passively-maintained" }
 
 [features]
-default = [
-    "trust-dns",
-]
+default = ["trust-dns"]
 
 # Uses trust-dns instead of tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver", "arc-swap", "notify"]
@@ -32,7 +30,12 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
-aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes", "lru_time_cache"]
+aead-cipher-2022 = [
+    "shadowsocks-crypto/v2",
+    "rand/small_rng",
+    "aes",
+    "lru_time_cache",
+]
 # Enable AEAD 2022 with extra ciphers
 aead-cipher-2022-extra = ["aead-cipher-2022", "shadowsocks-crypto/v2-extra"]
 
@@ -65,7 +68,16 @@ futures = "0.3"
 async-trait = "0.1"
 
 socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1.9.0", features = ["io-util", "macros", "net", "parking_lot", "process", "rt", "sync", "time"] }
+tokio = { version = "1.9.0", features = [
+    "io-util",
+    "macros",
+    "net",
+    "parking_lot",
+    "process",
+    "rt",
+    "sync",
+    "time",
+] }
 tokio-tfo = "0.2.0"
 
 trust-dns-resolver = { version = "0.23.0-alpha", optional = true }
@@ -82,7 +94,13 @@ shadowsocks-crypto = { version = "0.5.1", features = ["ring"] }
 shadowsocks-crypto = { version = "0.5.1", features = [] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_System_IO"] }
+windows-sys = { version = "0.48", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    "Win32_System_IO",
+] }
 
 [target.'cfg(unix)'.dependencies]
 sendfd = { version = "0.4", features = ["tokio"] }

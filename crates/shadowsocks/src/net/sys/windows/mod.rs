@@ -1,14 +1,19 @@
 use std::{
-    ffi::{c_void, CString},
+    ffi::{c_void, CStr, CString, OsString},
     io::{self, ErrorKind},
     mem,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket},
+    os::windows::{
+        ffi::OsStringExt,
+        io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket},
+    },
     pin::Pin,
     ptr,
+    slice,
     task::{self, Poll},
 };
 
+use bytes::BytesMut;
 use log::{error, warn};
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
@@ -20,12 +25,18 @@ use tokio_tfo::TfoStream;
 use windows_sys::{
     core::PCSTR,
     Win32::{
-        Foundation::BOOL,
-        NetworkManagement::IpHelper::if_nametoindex,
+        Foundation::{BOOL, ERROR_BUFFER_OVERFLOW, ERROR_NO_DATA, ERROR_SUCCESS},
+        NetworkManagement::IpHelper::{
+            if_nametoindex,
+            GetAdaptersAddresses,
+            GAA_FLAG_INCLUDE_PREFIX,
+            IP_ADAPTER_ADDRESSES_LH,
+        },
         Networking::WinSock::{
             setsockopt,
             WSAGetLastError,
             WSAIoctl,
+            AF_UNSPEC,
             IPPROTO_IP,
             IPPROTO_IPV6,
             IPPROTO_TCP,
@@ -197,20 +208,101 @@ pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &Ac
     }
 }
 
+fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Option<u32>> {
+    // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getadaptersaddresses
+
+    let ip = addr.ip();
+
+    unsafe {
+        let mut ip_adapter_addresses_buffer = BytesMut::with_capacity(15 * 1024);
+        ip_adapter_addresses_buffer.set_len(15 * 1024);
+
+        let mut ip_adapter_addresses_buffer_size: u32 = ip_adapter_addresses_buffer.len() as u32;
+        loop {
+            let ret = GetAdaptersAddresses(
+                AF_UNSPEC as u32,
+                GAA_FLAG_INCLUDE_PREFIX,
+                ptr::null(),
+                ip_adapter_addresses_buffer.as_mut_ptr() as *mut _,
+                &mut ip_adapter_addresses_buffer_size as *mut _,
+            );
+
+            match ret {
+                ERROR_SUCCESS => break,
+                ERROR_BUFFER_OVERFLOW => {
+                    // resize buffer to ip_adapter_addresses_buffer_size
+                    ip_adapter_addresses_buffer.resize(ip_adapter_addresses_buffer_size as usize, 0);
+                    continue;
+                }
+                ERROR_NO_DATA => return Ok(None),
+                _ => {
+                    let err = io::Error::new(
+                        ErrorKind::Other,
+                        format!("GetAdaptersAddresses failed with error: {}", ret),
+                    );
+                    return Err(err);
+                }
+            }
+        }
+
+        // IP_ADAPTER_ADDRESSES_LH is a linked-list
+        let mut current_ip_adapter_address: *mut IP_ADAPTER_ADDRESSES_LH =
+            ip_adapter_addresses_buffer.as_mut_ptr() as *mut _;
+        while !current_ip_adapter_address.is_null() {
+            let ip_adapter_address: &IP_ADAPTER_ADDRESSES_LH = &*current_ip_adapter_address;
+
+            // Friendly Name
+            let friendly_name_len: usize = libc::wcslen(ip_adapter_address.FriendlyName);
+            let friendly_name_slice: &[u16] = slice::from_raw_parts(ip_adapter_address.FriendlyName, friendly_name_len);
+            let friendly_name_os = OsString::from_wide(friendly_name_slice); // UTF-16 to UTF-8
+            if let Some(friendly_name) = friendly_name_os.to_str() {
+                if friendly_name == iface {
+                    match ip {
+                        IpAddr::V4(..) => return Ok(Some(ip_adapter_address.Anonymous1.Anonymous.IfIndex)),
+                        IpAddr::V6(..) => return Ok(Some(ip_adapter_address.Ipv6IfIndex)),
+                    }
+                }
+            }
+
+            // Adapter Name
+            let adapter_name = CStr::from_ptr(ip_adapter_address.AdapterName as *mut _ as *const _);
+            if adapter_name.to_bytes() == iface.as_bytes() {
+                match ip {
+                    IpAddr::V4(..) => return Ok(Some(ip_adapter_address.Anonymous1.Anonymous.IfIndex)),
+                    IpAddr::V6(..) => return Ok(Some(ip_adapter_address.Ipv6IfIndex)),
+                }
+            }
+
+            current_ip_adapter_address = ip_adapter_address.Next;
+        }
+    }
+
+    Ok(None)
+}
+
 fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
     let handle = socket.as_raw_socket() as SOCKET;
 
     unsafe {
-        // Windows if_nametoindex requires a C-string for interface name
-        let ifname = CString::new(iface).expect("iface");
+        // GetAdaptersAddresses
+        // XXX: It will check all the adapters every time. Would that become a performance issue?
+        let if_index = match find_adapter_interface_index(addr, iface)? {
+            Some(idx) => idx,
+            None => {
+                // Windows if_nametoindex requires a C-string for interface name
+                let ifname = CString::new(iface).expect("iface");
 
-        // https://docs.microsoft.com/en-us/previous-versions/windows/hardware/drivers/ff553788(v=vs.85)
-        let if_index = if_nametoindex(ifname.as_ptr() as PCSTR);
-        if if_index == 0 {
-            // If the if_nametoindex function fails and returns zero, it is not possible to determine an error code.
-            error!("if_nametoindex {} fails", iface);
-            return Err(io::Error::new(ErrorKind::InvalidInput, "invalid interface name"));
-        }
+                // https://docs.microsoft.com/en-us/previous-versions/windows/hardware/drivers/ff553788(v=vs.85)
+                let if_index = if_nametoindex(ifname.as_ptr() as PCSTR);
+                if if_index == 0 {
+                    // If the if_nametoindex function fails and returns zero, it is not possible to determine an error code.
+                    error!("if_nametoindex {} fails", iface);
+                    return Err(io::Error::new(ErrorKind::InvalidInput, "invalid interface name"));
+                }
+
+                if_index
+            }
+        };
 
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
         let ret = match addr {
@@ -232,7 +324,10 @@ fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str)
 
         if ret == SOCKET_ERROR {
             let err = io::Error::from_raw_os_error(WSAGetLastError());
-            error!("set IP_UNICAST_IF / IPV6_UNICAST_IF error: {}", err);
+            error!(
+                "set IP_UNICAST_IF / IPV6_UNICAST_IF interface: {}, index: {}, error: {}",
+                iface, if_index, err
+            );
             return Err(err);
         }
     }

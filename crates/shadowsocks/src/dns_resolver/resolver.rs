@@ -13,11 +13,11 @@ use std::{
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use cfg_if::cfg_if;
-#[cfg(feature = "trust-dns")]
+#[cfg(all(feature = "trust-dns", unix, not(target_os = "android")))]
 use log::error;
 use log::{log_enabled, trace, Level};
 use tokio::net::lookup_host;
-#[cfg(feature = "trust-dns")]
+#[cfg(all(feature = "trust-dns", unix, not(target_os = "android")))]
 use tokio::task::JoinHandle;
 #[cfg(feature = "trust-dns")]
 use trust_dns_resolver::config::ResolverConfig;
@@ -40,7 +40,9 @@ pub trait DnsResolve {
 #[cfg(feature = "trust-dns")]
 pub struct TrustDnsSystemResolver {
     resolver: ArcSwap<TrustDnsResolver>,
+    #[cfg_attr(windows, allow(dead_code))]
     connect_opts: ConnectOpts,
+    #[cfg_attr(windows, allow(dead_code))]
     opts: Option<ResolverOpts>,
 }
 
