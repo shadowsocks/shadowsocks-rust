@@ -11,15 +11,19 @@ use std::{
     ptr,
     slice,
     task::{self, Poll},
+    time::{Duration, Instant},
 };
 
 use bytes::BytesMut;
 use log::{error, warn};
+use lru_time_cache::LruCache;
+use once_cell::sync::Lazy;
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
+    sync::Mutex,
 };
 use tokio_tfo::TfoStream;
 use windows_sys::{
@@ -83,7 +87,7 @@ impl TcpStream {
 
         // Binds to a specific network interface (device)
         if let Some(ref iface) = opts.bind_interface {
-            set_ip_unicast_if(&socket, &addr, iface)?;
+            set_ip_unicast_if(&socket, &addr, iface).await?;
         }
 
         set_common_sockopt_for_connect(addr, &socket, opts)?;
@@ -283,30 +287,51 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
     Ok(None)
 }
 
-fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
+async fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Result<u32> {
+    const INDEX_EXPIRE_DURATION: Duration = Duration::from_secs(5);
+
+    static INTERFACE_INDEX_CACHE: Lazy<Mutex<LruCache<String, (u32, Instant)>>> =
+        Lazy::new(|| Mutex::new(LruCache::with_expiry_duration(INDEX_EXPIRE_DURATION)));
+
+    let mut cache = INTERFACE_INDEX_CACHE.lock().await;
+    if let Some((idx, insert_time)) = cache.get(iface) {
+        // short-path, cache hit for most cases
+        let now = Instant::now();
+        if now - *insert_time < INDEX_EXPIRE_DURATION {
+            return Ok(*idx);
+        }
+    }
+
+    // Get from API GetAdaptersAddresses
+    let idx = match find_adapter_interface_index(addr, iface)? {
+        Some(idx) => idx,
+        None => unsafe {
+            // Windows if_nametoindex requires a C-string for interface name
+            let ifname = CString::new(iface).expect("iface");
+
+            // https://docs.microsoft.com/en-us/previous-versions/windows/hardware/drivers/ff553788(v=vs.85)
+            let if_index = if_nametoindex(ifname.as_ptr() as PCSTR);
+            if if_index == 0 {
+                // If the if_nametoindex function fails and returns zero, it is not possible to determine an error code.
+                error!("if_nametoindex {} fails", iface);
+                return Err(io::Error::new(ErrorKind::InvalidInput, "invalid interface name"));
+            }
+
+            if_index
+        },
+    };
+
+    cache.insert(iface.to_owned(), (idx, Instant::now()));
+
+    Ok(idx)
+}
+
+async fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
     let handle = socket.as_raw_socket() as SOCKET;
 
+    let if_index = find_interface_index_cached(addr, iface).await?;
+
     unsafe {
-        // GetAdaptersAddresses
-        // XXX: It will check all the adapters every time. Would that become a performance issue?
-        let if_index = match find_adapter_interface_index(addr, iface)? {
-            Some(idx) => idx,
-            None => {
-                // Windows if_nametoindex requires a C-string for interface name
-                let ifname = CString::new(iface).expect("iface");
-
-                // https://docs.microsoft.com/en-us/previous-versions/windows/hardware/drivers/ff553788(v=vs.85)
-                let if_index = if_nametoindex(ifname.as_ptr() as PCSTR);
-                if if_index == 0 {
-                    // If the if_nametoindex function fails and returns zero, it is not possible to determine an error code.
-                    error!("if_nametoindex {} fails", iface);
-                    return Err(io::Error::new(ErrorKind::InvalidInput, "invalid interface name"));
-                }
-
-                if_index
-            }
-        };
-
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
         let ret = match addr {
             SocketAddr::V4(..) => setsockopt(
@@ -470,7 +495,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
     let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
 
     if let Some(ref iface) = opts.bind_interface {
-        set_ip_unicast_if(&socket, bind_addr, iface)?;
+        set_ip_unicast_if(&socket, bind_addr, iface).await?;
     }
 
     // bind() should be called after IP_UNICAST_IF
