@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     ffi::{c_void, CStr, CString, OsString},
     io::{self, ErrorKind},
@@ -16,13 +17,11 @@ use std::{
 
 use bytes::BytesMut;
 use log::{error, warn};
-use once_cell::sync::Lazy;
 use pin_project::pin_project;
 use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
-    sync::Mutex,
 };
 use tokio_tfo::TfoStream;
 use windows_sys::{
@@ -269,15 +268,17 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
 async fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Result<u32> {
     const INDEX_EXPIRE_DURATION: Duration = Duration::from_secs(5);
 
-    static INTERFACE_INDEX_CACHE: Lazy<Mutex<HashMap<String, (u32, Instant)>>> =
-        Lazy::new(|| Mutex::new(HashMap::new()));
+    thread_local! {
+        static INTERFACE_INDEX_CACHE: RefCell<HashMap<String, (u32, Instant)>> =
+            RefCell::new(HashMap::new());
+    }
 
-    let mut cache = INTERFACE_INDEX_CACHE.lock().await;
-    if let Some((idx, insert_time)) = cache.get(iface) {
+    let cache_index = INTERFACE_INDEX_CACHE.with(|cache| cache.borrow().get(iface).cloned());
+    if let Some((idx, insert_time)) = cache_index {
         // short-path, cache hit for most cases
         let now = Instant::now();
-        if now - *insert_time < INDEX_EXPIRE_DURATION {
-            return Ok(*idx);
+        if now - insert_time < INDEX_EXPIRE_DURATION {
+            return Ok(idx);
         }
     }
 
@@ -300,7 +301,9 @@ async fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Resu
         },
     };
 
-    cache.insert(iface.to_owned(), (idx, Instant::now()));
+    INTERFACE_INDEX_CACHE.with(|cache| {
+        cache.borrow_mut().insert(iface.to_owned(), (idx, Instant::now()));
+    });
 
     Ok(idx)
 }
