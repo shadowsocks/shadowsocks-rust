@@ -65,7 +65,7 @@ impl TcpStream {
 
         // Binds to a specific network interface (device)
         if let Some(ref iface) = opts.bind_interface {
-            set_ip_unicast_if(&socket, &addr, iface).await?;
+            set_ip_unicast_if(&socket, &addr, iface)?;
         }
 
         set_common_sockopt_for_connect(addr, &socket, opts)?;
@@ -265,7 +265,7 @@ fn find_adapter_interface_index(addr: &SocketAddr, iface: &str) -> io::Result<Op
     Ok(None)
 }
 
-async fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Result<u32> {
+fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Result<u32> {
     const INDEX_EXPIRE_DURATION: Duration = Duration::from_secs(5);
 
     thread_local! {
@@ -308,10 +308,10 @@ async fn find_interface_index_cached(addr: &SocketAddr, iface: &str) -> io::Resu
     Ok(idx)
 }
 
-async fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
+fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface: &str) -> io::Result<()> {
     let handle = socket.as_raw_socket() as SOCKET;
 
-    let if_index = find_interface_index_cached(addr, iface).await?;
+    let if_index = find_interface_index_cached(addr, iface)?;
 
     unsafe {
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
@@ -484,7 +484,7 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts
     let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
 
     if let Some(ref iface) = opts.bind_interface {
-        set_ip_unicast_if(&socket, bind_addr, iface).await?;
+        set_ip_unicast_if(&socket, bind_addr, iface)?;
     }
 
     // bind() should be called after IP_UNICAST_IF
