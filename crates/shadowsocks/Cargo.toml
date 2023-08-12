@@ -30,12 +30,7 @@ stream-cipher = ["shadowsocks-crypto/v1-stream"]
 aead-cipher-extra = ["shadowsocks-crypto/v1-aead-extra"]
 
 # Enable AEAD 2022
-aead-cipher-2022 = [
-    "shadowsocks-crypto/v2",
-    "rand/small_rng",
-    "aes",
-    "lru_time_cache",
-]
+aead-cipher-2022 = ["shadowsocks-crypto/v2", "rand/small_rng", "aes"]
 # Enable AEAD 2022 with extra ciphers
 aead-cipher-2022-extra = ["aead-cipher-2022", "shadowsocks-crypto/v2-extra"]
 
@@ -57,7 +52,7 @@ pin-project = "1.1"
 bloomfilter = { version = "1.0.8", optional = true }
 thiserror = "1.0"
 rand = { version = "0.8", optional = true }
-lru_time_cache = { version = "0.11", optional = true }
+lru_time_cache = "0.11"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_urlencoded = "0.7"

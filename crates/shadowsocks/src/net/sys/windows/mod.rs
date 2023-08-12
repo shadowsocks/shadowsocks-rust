@@ -40,6 +40,7 @@ use windows_sys::{
             IP_ADAPTER_ADDRESSES_LH,
         },
         Networking::WinSock::{
+            htonl,
             setsockopt,
             WSAGetLastError,
             WSAIoctl,
@@ -334,20 +335,27 @@ async fn set_ip_unicast_if<S: AsRawSocket>(socket: &S, addr: &SocketAddr, iface:
     unsafe {
         // https://docs.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options
         let ret = match addr {
-            SocketAddr::V4(..) => setsockopt(
-                handle,
-                IPPROTO_IP as i32,
-                IP_UNICAST_IF as i32,
-                &if_index as *const _ as PCSTR,
-                mem::size_of_val(&if_index) as i32,
-            ),
-            SocketAddr::V6(..) => setsockopt(
-                handle,
-                IPPROTO_IPV6 as i32,
-                IPV6_UNICAST_IF as i32,
-                &if_index as *const _ as PCSTR,
-                mem::size_of_val(&if_index) as i32,
-            ),
+            SocketAddr::V4(..) => {
+                // Interface index is in network byte order for IPPROTO_IP.
+                let if_index = htonl(if_index);
+                setsockopt(
+                    handle,
+                    IPPROTO_IP as i32,
+                    IP_UNICAST_IF as i32,
+                    &if_index as *const _ as PCSTR,
+                    mem::size_of_val(&if_index) as i32,
+                )
+            }
+            SocketAddr::V6(..) => {
+                // Interface index is in host byte order for IPPROTO_IPV6.
+                setsockopt(
+                    handle,
+                    IPPROTO_IPV6 as i32,
+                    IPV6_UNICAST_IF as i32,
+                    &if_index as *const _ as PCSTR,
+                    mem::size_of_val(&if_index) as i32,
+                )
+            }
         };
 
         if ret == SOCKET_ERROR {
