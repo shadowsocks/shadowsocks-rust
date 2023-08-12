@@ -16,7 +16,7 @@ use std::{
 use bytes::BytesMut;
 use log::{error, warn};
 use pin_project::pin_project;
-use socket2::{Domain, Protocol, Socket, TcpKeepalive, Type};
+use socket2::{Domain, Protocol, SockAddr, Socket, TcpKeepalive, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpSocket, TcpStream as TokioTcpStream, UdpSocket},
@@ -467,25 +467,27 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, opts: &ConnectOpts) -> i
 pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
     let af = AddrFamily::from(bind_addr);
 
-    let socket = if af != AddrFamily::Ipv6 {
-        UdpSocket::bind(bind_addr).await?
-    } else {
-        let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
-        socket_bind_dual_stack(&socket, bind_addr, false)?;
+    let socket = Socket::new(Domain::for_address(*bind_addr), Type::DGRAM, Some(Protocol::UDP))?;
 
-        // UdpSocket::from_std requires socket to be non-blocked
-        socket.set_nonblocking(true)?;
-        UdpSocket::from_std(socket.into())?
-    };
+    if let Some(ref iface) = opts.bind_interface {
+        set_ip_unicast_if(&socket, bind_addr, iface)?;
+    }
+
+    // bind() should be called after IP_UNICAST_IF
+    if af != AddrFamily::Ipv6 {
+        let bind_addr = SockAddr::from(*bind_addr);
+        socket.bind(&bind_addr)?;
+    } else {
+        socket_bind_dual_stack(&socket, bind_addr, false)?;
+    }
+
+    socket.set_nonblocking(true)?;
+    let socket = UdpSocket::from_std(socket.into())?;
 
     if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
         warn!("failed to disable IP fragmentation, error: {}", err);
     }
     disable_connection_reset(&socket)?;
-
-    if let Some(ref iface) = opts.bind_interface {
-        set_ip_unicast_if(&socket, bind_addr, iface)?;
-    }
 
     Ok(socket)
 }
