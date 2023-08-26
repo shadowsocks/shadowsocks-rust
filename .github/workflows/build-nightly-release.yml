@@ -12,6 +12,7 @@ jobs:
     env:
       RUST_BACKTRACE: full
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-musl
@@ -62,6 +63,7 @@ jobs:
       BUILD_EXTRA_FEATURES: "local-redir local-tun"
       RUST_BACKTRACE: full
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest]
         target:
