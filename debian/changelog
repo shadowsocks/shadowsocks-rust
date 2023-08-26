@@ -1,3 +1,36 @@
+shadowsocks-rust (1.16.0) unstable; urgency=medium
+
+  ## Features
+
+  - `local-redir`: #1159 Linux Redirect (TCP) supports dual-stack listener
+  - #1156 Support Multipath-TCP
+  - DNS resolver (with `trust-dns` enabled) support outbound socket configurations, like `outbound-fwmark`, `outbound-bind-addr`, ...
+  - #1127 Support SIP003u, UDP plugins
+  - #1185 Support creating servers with builder pattern to allow users to retrieve the actual listening address of the server listeners
+  - #1204 Support reading default configuration files `local.json`, `server.json` and `manager.json`
+  - #1229 Support configuring DNS cache size with `--dns-cache-size` in command line options and `dns_cache_size` in configuration file
+  - #1266 Support Network Adapters' `FriendlyName` on Windows in `outbound_bind_interface`
+
+  ## Bug Fixes
+
+  - #1239 Fixed misaligned read in shadowsocks' socks5 protocol implementation. It may cause panics compiled by rustc newer than 1.68.
+  - #1234 PingBalancer shouldn't check TCP mode by default
+  - #1221 Compatible with Linux Kernels that doesn't support `IP6T_SO_ORIGINAL_DST`
+  - #1254 Fixed Tree-Rule detector for REGEX rules that ends with `$`
+
+  ## Miscellaneous
+
+  - Docker: #1149 Changed binary path to `/usr/bin` from `/usr/local/bin` preventing being overwritten by K8S mount
+  - Snap: Add `network-control` plug for `tun` protocol
+
+ -- ty <zonyitoo@gmail.com>  Sat, 27 Aug 2023 00:20:00
+
+shadowsocks-rust (1.15.4) unstable; urgency=medium
+
+  ## Bug Fixed
+
+  - #1239 Fixed misaligned read in shadowsocks' socks5 protocol implementation. It may cause panics compiled by rustc newer than 1.68.
+
 shadowsocks-rust (1.15.3) unstable; urgency=medium
 
   ## Features
