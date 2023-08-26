@@ -33,6 +33,7 @@ const USER_KEY_BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::G
         .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
 );
 
+#[cfg(feature = "aead-cipher-2022")]
 const AEAD2022_PASSWORD_BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
     &base64::alphabet::STANDARD,
     base64::engine::GeneralPurposeConfig::new()
