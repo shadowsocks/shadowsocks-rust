@@ -4,6 +4,11 @@ on:
     tags:
       - v*
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release Tag'
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -144,3 +149,4 @@ jobs:
         with:
           files: build/release/*
           prerelease: ${{ contains(github.ref, '-') }}
+          tag_name: ${{ inputs.tag || github.ref }}
