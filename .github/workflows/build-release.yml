@@ -78,6 +78,7 @@ jobs:
         with:
           files: build/release/*
           prerelease: ${{ contains(github.ref, '-') }}
+          tag_name: ${{ inputs.tag || github.ref }}
 
   build-unix:
     runs-on: ${{ matrix.os }}
@@ -122,6 +123,7 @@ jobs:
         with:
           files: build/release/*
           prerelease: ${{ contains(github.ref, '-') }}
+          tag_name: ${{ inputs.tag || github.ref }}
 
   build-windows:
     runs-on: windows-latest
