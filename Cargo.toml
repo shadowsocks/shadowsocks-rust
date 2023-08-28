@@ -40,10 +40,7 @@ path = "bin/ssservice.rs"
 required-features = ["service"]
 
 [workspace]
-members = [
-    "crates/shadowsocks",
-    "crates/shadowsocks-service",
-]
+members = ["crates/shadowsocks", "crates/shadowsocks-service"]
 
 [profile.release]
 lto = "fat"
@@ -94,7 +91,10 @@ local-dns = ["local", "shadowsocks-service/local-dns"]
 local-flow-stat = ["local", "shadowsocks-service/local-flow-stat"]
 # Enable HTTP protocol for sslocal
 local-http = ["local", "shadowsocks-service/local-http"]
-local-http-native-tls = ["local-http", "shadowsocks-service/local-http-native-tls"]
+local-http-native-tls = [
+    "local-http",
+    "shadowsocks-service/local-http-native-tls",
+]
 local-http-rustls = ["local-http", "shadowsocks-service/local-http-rustls"]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
@@ -133,8 +133,12 @@ aead-cipher-2022 = ["shadowsocks-service/aead-cipher-2022"]
 aead-cipher-2022-extra = ["shadowsocks-service/aead-cipher-2022-extra"]
 
 # Enable detection against replay attack (Stream / AEAD)
-security-replay-attack-detect = ["shadowsocks-service/security-replay-attack-detect"]
-replay-attack-detect = ["security-replay-attack-detect"] # Backward compatibility. DO NOT USE.
+security-replay-attack-detect = [
+    "shadowsocks-service/security-replay-attack-detect",
+]
+replay-attack-detect = [
+    "security-replay-attack-detect",
+] # Backward compatibility. DO NOT USE.
 
 [dependencies]
 log = "0.4"

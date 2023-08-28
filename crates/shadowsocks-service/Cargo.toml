@@ -34,8 +34,16 @@ manager = ["server"]
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["trust-dns-resolver", "shadowsocks/trust-dns"]
-dns-over-tls = ["trust-dns", "trust-dns-resolver/dns-over-tls", "trust-dns-resolver/dns-over-rustls"]
-dns-over-https = ["trust-dns", "trust-dns-resolver/dns-over-https", "trust-dns-resolver/dns-over-https-rustls"]
+dns-over-tls = [
+    "trust-dns",
+    "trust-dns-resolver/dns-over-tls",
+    "trust-dns-resolver/dns-over-rustls",
+]
+dns-over-https = [
+    "trust-dns",
+    "trust-dns-resolver/dns-over-https",
+    "trust-dns-resolver/dns-over-https-rustls",
+]
 
 # Enable DNS-relay
 local-dns = ["local", "trust-dns"]
@@ -47,7 +55,12 @@ local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
 local-http = ["local", "hyper", "tower"]
 local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
-local-http-rustls = ["local-http", "tokio-rustls", "webpki-roots", "rustls-native-certs"]
+local-http-rustls = [
+    "local-http",
+    "tokio-rustls",
+    "webpki-roots",
+    "rustls-native-certs",
+]
 # Enable REDIR protocol for sslocal
 # (transparent proxy)
 local-redir = ["local"]
@@ -93,7 +106,15 @@ byteorder = "1.3"
 rand = { version = "0.8", features = ["small_rng"] }
 
 futures = "0.3"
-tokio = { version = "1.5", features = ["io-util", "macros", "net", "parking_lot", "rt", "sync", "time"] }
+tokio = { version = "1.5", features = [
+    "io-util",
+    "macros",
+    "net",
+    "parking_lot",
+    "rt",
+    "sync",
+    "time",
+] }
 tokio-native-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
 tokio-rustls = { version = "0.24", optional = true }
@@ -107,7 +128,9 @@ libc = "0.2.141"
 hyper = { version = "0.14.25", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-trust-dns-resolver = { version = "0.23.0-alpha", optional = true, features = ["serde-config"] }
+trust-dns-resolver = { version = "0.23.0-alpha", optional = true, features = [
+    "serde-config",
+] }
 
 idna = "0.4"
 ipnet = "2.7"
@@ -116,7 +139,16 @@ regex = "1.4"
 
 tun = { version = "0.5.5", optional = true, features = ["async"] }
 etherparse = { version = "0.13", optional = true }
-smoltcp = { version = "0.10", optional = true, default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-icmp", "socket-udp", "socket-tcp"] }
+smoltcp = { version = "0.10", optional = true, default-features = false, features = [
+    "std",
+    "log",
+    "medium-ip",
+    "proto-ipv4",
+    "proto-ipv6",
+    "socket-icmp",
+    "socket-udp",
+    "socket-tcp",
+] }
 
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
@@ -125,7 +157,7 @@ shadowsocks = { version = "1.16.0", path = "../shadowsocks", default-features = 
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
-nix = "0.26"
+nix = { version = "0.27", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.48", features = ["Win32_Networking_WinSock"] }
@@ -135,4 +167,10 @@ byteorder = "1.3"
 env_logger = "0.10"
 
 [package.metadata.docs.rs]
-features = ["full", "local-http-rustls", "local-dns", "dns-over-tls", "dns-over-https"]
+features = [
+    "full",
+    "local-http-rustls",
+    "local-dns",
+    "dns-over-tls",
+    "dns-over-https",
+]
