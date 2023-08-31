@@ -891,12 +891,20 @@ pub struct LocalConfig {
 impl LocalConfig {
     /// Create a new `LocalConfig`
     pub fn new(protocol: ProtocolType) -> LocalConfig {
+        // DNS server runs in `TcpAndUdp` mode by default to maintain backwards compatibility
+        // see https://github.com/shadowsocks/shadowsocks-rust/issues/1281
+        let mode = match protocol {
+            #[cfg(feature = "local-dns")]
+            ProtocolType::Dns => Mode::TcpAndUdp,
+            _ => Mode::TcpOnly,
+        };
+
         LocalConfig {
             addr: None,
 
             protocol,
 
-            mode: Mode::TcpOnly,
+            mode,
             udp_addr: None,
 
             #[cfg(feature = "local-tunnel")]
@@ -1456,7 +1464,15 @@ impl Config {
                                 }
                             },
                             None => {
-                                local_config.mode = global_mode;
+                                // DNS server runs in `TcpAndUdp` mode by default to maintain backwards compatibility
+                                // see https://github.com/shadowsocks/shadowsocks-rust/issues/1281
+                                let mode = match protocol {
+                                    #[cfg(feature = "local-dns")]
+                                    ProtocolType::Dns => Mode::TcpAndUdp,
+                                    _ => global_mode,
+                                };
+
+                                local_config.mode = mode;
                             }
                         }
 

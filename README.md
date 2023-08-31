@@ -39,7 +39,7 @@ Related Projects:
 - `local-http` - Allow using HTTP protocol for `sslocal`
 
   - `local-http-native-tls` - Support HTTPS with [`native-tls`](https://crates.io/crates/native-tls)
-  
+
   - `local-http-rustls` - Support HTTPS with [`rustls`](https://crates.io/crates/rustls)
 
 - `local-tunnel` - Allow using tunnel protocol for `sslocal`
@@ -209,7 +209,7 @@ servers:
 # Whether to download v2ray and xray plugin.
 downloadPlugins: false
 
-# Name of the ConfigMap with config.json configuration for shadowsocks-rust. 
+# Name of the ConfigMap with config.json configuration for shadowsocks-rust.
 configMapName: ""
 
 service:
@@ -563,6 +563,8 @@ Example configuration:
             // Listen address
             "local_address": "127.0.0.1",
             "local_port": 53,
+            // OPTIONAL. DNS local server uses `tcp_and_udp` mode by default
+            "mode": "udp_only",
             // Local DNS address, DNS queries will be sent directly to this address
             "local_dns_address": "114.114.114.114",
             // OPTIONAL. Local DNS's port, 53 by default
@@ -622,7 +624,7 @@ Example configuration:
     "servers": [
         {
             // Fields are the same as the single server's configuration
-            
+
             // Individual servers can be disabled
             // "disabled": true,
             "address": "0.0.0.0",
