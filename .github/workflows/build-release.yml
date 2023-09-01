@@ -77,8 +77,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          prerelease: ${{ contains(github.ref, '-') }}
-          tag_name: ${{ inputs.tag || github.ref }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
 
   build-unix:
     runs-on: ${{ matrix.os }}
@@ -122,8 +122,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          prerelease: ${{ contains(github.ref, '-') }}
-          tag_name: ${{ inputs.tag || github.ref }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
 
   build-windows:
     runs-on: windows-latest
@@ -150,5 +150,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/release/*
-          prerelease: ${{ contains(github.ref, '-') }}
-          tag_name: ${{ inputs.tag || github.ref }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ inputs.tag || github.ref_name }}
