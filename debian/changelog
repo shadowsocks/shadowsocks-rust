@@ -1,3 +1,9 @@
+shadowsocks-rust (1.16.1) unstable; urgency=medium
+
+  ## Bug Fixes
+
+  - #1285 [Regression fix] local DNS uses mode `tcp_and_udp` by default
+
 shadowsocks-rust (1.16.0) unstable; urgency=medium
 
   ## Features

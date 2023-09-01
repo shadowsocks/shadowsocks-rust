@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.16.0"
+version = "1.16.1"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -171,7 +171,7 @@ jemallocator = { version = "0.5", optional = true }
 snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.16.0", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.16.1", path = "./crates/shadowsocks-service" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
