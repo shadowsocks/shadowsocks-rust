@@ -1,4 +1,5 @@
 //! SIP002 URL Scheme
+//! SIP008 URL can be decoded
 //!
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
@@ -60,7 +61,12 @@ fn encode(filename: &str, need_qrcode: bool) {
 }
 
 fn decode(encoded: &str, need_qrcode: bool) {
-    let svrconfig = ServerConfig::from_url(encoded).unwrap();
+    let svrconfig = if encoded.starts_with("ssconf") {
+        let url = encoded.replace("ssconf", "https");
+        ServerConfig::from_url(reqwest::blocking::get(url).unwrap().text().unwrap().as_str()).unwrap()
+    } else {
+        ServerConfig::from_url(encoded).unwrap()
+    };
 
     let mut config = Config::new(ConfigType::Server);
     config.server.push(ServerInstanceConfig::with_server_config(svrconfig));
