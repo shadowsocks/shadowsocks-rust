@@ -1,5 +1,4 @@
-//! SIP002 URL Scheme
-//! SIP008 URL can be decoded
+//! SIP002 and SIP008 URL Schemes
 //!
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
@@ -61,12 +60,7 @@ fn encode(filename: &str, need_qrcode: bool) {
 }
 
 fn decode(encoded: &str, need_qrcode: bool) {
-    let svrconfig = if encoded.starts_with("ssconf") {
-        let url = encoded.replace("ssconf", "https");
-        ServerConfig::from_url(reqwest::blocking::get(url).unwrap().text().unwrap().as_str()).unwrap()
-    } else {
-        ServerConfig::from_url(encoded).unwrap()
-    };
+    let svrconfig = ServerConfig::from_url(encoded).unwrap();
 
     let mut config = Config::new(ConfigType::Server);
     config.server.push(ServerInstanceConfig::with_server_config(svrconfig));
@@ -75,6 +69,26 @@ fn decode(encoded: &str, need_qrcode: bool) {
 
     if need_qrcode {
         print_qrcode(encoded);
+    }
+}
+
+fn decode_outline(remote: &str, need_qrcode: bool) {
+    // Protect from using http and other non-ssconf links in reqwest call
+    if !remote.starts_with("ssconf") {
+        println!("Incorrect link format");
+        return;
+    }
+
+    let url = remote.replace("ssconf", "https");
+    let svrconfig = ServerConfig::from_url(reqwest::blocking::get(url).unwrap().text().unwrap().as_str()).unwrap();
+
+    let mut config = Config::new(ConfigType::Server);
+    config.server.push(ServerInstanceConfig::with_server_config(svrconfig));
+
+    println!("{config}");
+
+    if need_qrcode {
+        print_qrcode(remote);
     }
 }
 
@@ -89,7 +103,7 @@ fn main() {
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::FilePath)
                 .conflicts_with("DECODE_CONFIG_PATH")
-                .required_unless_present("DECODE_CONFIG_PATH")
+                .required_unless_present_any(["DECODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"])
                 .help("Encode the server configuration in the provided JSON file"),
         )
         .arg(
@@ -98,8 +112,16 @@ fn main() {
                 .long("decode")
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::FilePath)
-                .required_unless_present("ENCODE_CONFIG_PATH")
-                .help("Decode the server configuration from the provide ShadowSocks URL"),
+                .required_unless_present_any(["ENCODE_CONFIG_PATH", "OUTLINE_CONFIG_URL"])
+                .help("Decode the server configuration from the provided ShadowSocks URL"),
+        )
+        .arg(
+            Arg::new("OUTLINE_CONFIG_URL")
+                .short('o')
+                .long("outline")
+                .value_hint(ValueHint::Url)
+                .required_unless_present_any(["ENCODE_CONFIG_PATH", "DECODE_CONFIG_PATH"])
+                .help("Fetch and decode config from ssconf URL used by Outline"),
         )
         .arg(
             Arg::new("QRCODE")
@@ -116,6 +138,8 @@ fn main() {
         encode(file, need_qrcode);
     } else if let Some(encoded) = matches.get_one::<String>("DECODE_CONFIG_PATH") {
         decode(encoded, need_qrcode);
+    } else if let Some(remote) = matches.get_one::<String>("OUTLINE_CONFIG_URL") {
+        decode_outline(remote, need_qrcode);
     } else {
         println!("Use -h for more detail");
     }
