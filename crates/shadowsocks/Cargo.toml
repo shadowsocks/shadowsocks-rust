@@ -46,7 +46,7 @@ security-replay-attack-detect = ["bloomfilter"]
 log = "0.4"
 
 libc = "0.2.141"
-bytes = "1.2"
+bytes = "1.5"
 cfg-if = "1"
 byte_string = "1.0"
 base64 = "0.21"
