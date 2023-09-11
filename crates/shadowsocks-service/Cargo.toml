@@ -100,7 +100,7 @@ arc-swap = "1.6"
 
 spin = { version = "0.9" }
 lru_time_cache = "0.11"
-bytes = "1.2"
+bytes = "1.5"
 byte_string = "1.0"
 byteorder = "1.3"
 rand = { version = "0.8", features = ["small_rng"] }
