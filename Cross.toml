@@ -1,10 +1,8 @@
 [build.env]
-passthrough = [
-    "RUSTFLAGS"
-]
+passthrough = ["RUSTFLAGS"]
 
-[target.mips-unknown-linux-musl]
-image = "rustembedded/cross:mips-unknown-linux-musl-0.2.1"
-
-[target.mipsel-unknown-linux-musl]
-image = "rustembedded/cross:mipsel-unknown-linux-musl-0.2.1"
+#[target.mips-unknown-linux-musl]
+#image = "rustembedded/cross:mips-unknown-linux-musl-0.2.1"
+#
+#[target.mipsel-unknown-linux-musl]
+#image = "rustembedded/cross:mipsel-unknown-linux-musl-0.2.1"
