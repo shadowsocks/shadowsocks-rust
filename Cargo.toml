@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.16.1"
+version = "1.16.2"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -72,13 +72,17 @@ server = ["shadowsocks-service/server"]
 # Enable manager server
 manager = ["shadowsocks-service/manager"]
 # Enable utility
-utility = ["qrcode"]
+utility = ["qrcode", "reqwest"]
 # Enable service
 service = ["local", "server", "manager"]
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
 dns-over-tls = ["shadowsocks-service/dns-over-tls"]
+dns-over-native-tls = ["shadowsocks-service/dns-over-native-tls"]
+dns-over-native-tls-vendored = [
+    "shadowsocks-service/dns-over-native-tls-vendored",
+]
 dns-over-https = ["shadowsocks-service/dns-over-https"]
 
 # Enable logging output
@@ -94,6 +98,10 @@ local-http = ["local", "shadowsocks-service/local-http"]
 local-http-native-tls = [
     "local-http",
     "shadowsocks-service/local-http-native-tls",
+]
+local-http-native-tls-vendored = [
+    "local-http",
+    "shadowsocks-service/local-http-native-tls-vendored",
 ]
 local-http-rustls = ["local-http", "shadowsocks-service/local-http-rustls"]
 # Enable REDIR protocol for sslocal
@@ -164,11 +172,6 @@ tokio = { version = "1", features = ["rt", "signal"] }
 num_cpus = "1.15"
 
 ipnet = { version = "2.7", optional = true }
-reqwest = { version = "0.11", features = [
-    "blocking",
-    "rustls-tls",
-    "rustls-tls-native-roots",
-], default-features = false }
 
 mimalloc = { version = "0.1", default-features = false, optional = true }
 tcmalloc = { version = "0.3", optional = true }
@@ -180,6 +183,19 @@ shadowsocks-service = { version = "1.16.1", path = "./crates/shadowsocks-service
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+reqwest = { version = "0.11", features = [
+    "blocking",
+    "rustls-tls",
+    "rustls-tls-native-roots",
+], default-features = false, optional = true }
+
+[target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
+reqwest = { version = "0.11", features = [
+    "blocking",
+    "native-tls-vendored",
+], optional = true }
 
 [dev-dependencies]
 byteorder = "1.3"

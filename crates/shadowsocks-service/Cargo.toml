@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.16.1"
+version = "1.16.2"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -39,6 +39,17 @@ dns-over-tls = [
     "trust-dns-resolver/dns-over-tls",
     "trust-dns-resolver/dns-over-rustls",
 ]
+dns-over-native-tls = [
+    "trust-dns",
+    "trust-dns-resolver/dns-over-tls",
+    "trust-dns-resolver/dns-over-native-tls",
+]
+dns-over-native-tls-vendored = [
+    "trust-dns",
+    "trust-dns-resolver/dns-over-tls",
+    "trust-dns-resolver/dns-over-native-tls",
+    "native-tls/vendored",
+]
 dns-over-https = [
     "trust-dns",
     "trust-dns-resolver/dns-over-https",
@@ -55,6 +66,11 @@ local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
 local-http = ["local", "hyper", "tower"]
 local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
+local-http-native-tls-vendored = [
+    "local-http-native-tls",
+    "tokio-native-tls/vendored",
+    "native-tls/vendored",
+]
 local-http-rustls = [
     "local-http",
     "tokio-rustls",
