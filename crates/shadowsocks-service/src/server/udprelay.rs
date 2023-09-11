@@ -4,7 +4,8 @@ use std::{
     cell::RefCell,
     io::{self, ErrorKind},
     net::{SocketAddr, SocketAddrV6},
-    sync::Arc,
+    sync::atomic::AtomicBool,
+    sync::{atomic::Ordering, Arc},
     time::Duration,
 };
 
@@ -25,12 +26,11 @@ use shadowsocks::{
     ServerConfig,
 };
 use tokio::{sync::mpsc, task::JoinHandle, time};
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
-    packet_window::PacketWindowFilter,
-    utils::to_ipv4_mapped,
-    MonProxySocket,
-    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
 };
 
@@ -670,7 +670,7 @@ impl UdpAssociationContext {
     }
 
     async fn send_received_outbound_packet(&mut self, mut target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        const UDP_SOCKET_SUPPORT_DUAL_STACK: bool = cfg!(any(
+        const UDP_SOCKET_SUPPORT_DUAL_STACK: AtomicBool = AtomicBool::new(cfg!(any(
             target_os = "linux",
             target_os = "android",
             target_os = "macos",
@@ -681,42 +681,67 @@ impl UdpAssociationContext {
             // target_os = "dragonfly",
             // target_os = "netbsd",
             target_os = "windows",
-        ));
+        )));
 
-        let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK {
-            match self.outbound_ipv6_socket {
-                Some(ref mut socket) => socket,
-                None => {
-                    let socket =
-                        OutboundUdpSocket::connect_any_with_opts(AddrFamily::Ipv6, self.context.connect_opts_ref())
-                            .await?;
-                    self.outbound_ipv6_socket.insert(socket)
-                }
-            }
-        } else {
-            match target_addr {
-                SocketAddr::V4(..) => match self.outbound_ipv4_socket {
+        let socket = loop {
+            let socket = if UDP_SOCKET_SUPPORT_DUAL_STACK.load(Ordering::Relaxed) {
+                match self.outbound_ipv6_socket {
                     Some(ref mut socket) => socket,
                     None => {
-                        let socket =
-                            OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
-                                .await?;
-                        self.outbound_ipv4_socket.insert(socket)
-                    }
-                },
-                SocketAddr::V6(..) => match self.outbound_ipv6_socket {
-                    Some(ref mut socket) => socket,
-                    None => {
-                        let socket =
-                            OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
-                                .await?;
+                        let socket = match OutboundUdpSocket::connect_any_with_opts(
+                            AddrFamily::Ipv6,
+                            self.context.connect_opts_ref(),
+                        )
+                        .await
+                        {
+                            Ok(socket) => socket,
+                            Err(err) => {
+                                match err.raw_os_error() {
+                                    #[cfg(unix)]
+                                    Some(libc::EAFNOSUPPORT) => {
+                                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                        continue;
+                                    }
+                                    #[cfg(windows)]
+                                    Some(WSAEAFNOSUPPORT) => {
+                                        UDP_SOCKET_SUPPORT_DUAL_STACK.store(false, Ordering::Relaxed);
+                                        continue;
+                                    }
+                                    _ => {}
+                                }
+                                return Err(err);
+                            }
+                        };
+
                         self.outbound_ipv6_socket.insert(socket)
                     }
-                },
-            }
+                }
+            } else {
+                match target_addr {
+                    SocketAddr::V4(..) => match self.outbound_ipv4_socket {
+                        Some(ref mut socket) => socket,
+                        None => {
+                            let socket =
+                                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
+                                    .await?;
+                            self.outbound_ipv4_socket.insert(socket)
+                        }
+                    },
+                    SocketAddr::V6(..) => match self.outbound_ipv6_socket {
+                        Some(ref mut socket) => socket,
+                        None => {
+                            let socket =
+                                OutboundUdpSocket::connect_any_with_opts(&target_addr, self.context.connect_opts_ref())
+                                    .await?;
+                            self.outbound_ipv6_socket.insert(socket)
+                        }
+                    },
+                }
+            };
+            break socket;
         };
 
-        if UDP_SOCKET_SUPPORT_DUAL_STACK {
+        if UDP_SOCKET_SUPPORT_DUAL_STACK.load(Ordering::Relaxed) {
             if let SocketAddr::V4(saddr) = target_addr {
                 let mapped_ip = saddr.ip().to_ipv6_mapped();
                 target_addr = SocketAddr::V6(SocketAddrV6::new(mapped_ip, saddr.port(), 0, 0));
