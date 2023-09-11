@@ -32,10 +32,7 @@ use tokio::{sync::mpsc, task::JoinHandle, time};
 use windows_sys::Win32::Networking::WinSock::WSAEAFNOSUPPORT;
 
 use crate::net::{
-    packet_window::PacketWindowFilter,
-    utils::to_ipv4_mapped,
-    MonProxySocket,
-    UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+    packet_window::PacketWindowFilter, utils::to_ipv4_mapped, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
     UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
 };
 
@@ -675,7 +672,7 @@ impl UdpAssociationContext {
     }
 
     async fn send_received_outbound_packet(&mut self, mut target_addr: SocketAddr, data: &[u8]) -> io::Result<()> {
-        const UDP_SOCKET_SUPPORT_DUAL_STACK: AtomicBool = AtomicBool::new(cfg!(any(
+        static UDP_SOCKET_SUPPORT_DUAL_STACK: AtomicBool = AtomicBool::new(cfg!(any(
             target_os = "linux",
             target_os = "android",
             target_os = "macos",
