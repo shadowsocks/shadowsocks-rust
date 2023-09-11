@@ -3,6 +3,8 @@
 //! SS-URI = "ss://" userinfo "@" hostname ":" port [ "/" ] [ "?" plugin ] [ "#" tag ]
 //! userinfo = websafe-base64-encode-utf8(method  ":" password)
 
+use std::process::ExitCode;
+
 use clap::{Arg, ArgAction, Command, ValueHint};
 use qrcode::{types::Color, QrCode};
 
@@ -72,6 +74,7 @@ fn decode(encoded: &str, need_qrcode: bool) {
     }
 }
 
+#[cfg(feature = "utility-url-outline")]
 fn decode_outline(remote: &str, need_qrcode: bool) {
     // Protect from using http and other non-ssconf links in reqwest call
     if !remote.starts_with("ssconf") {
@@ -92,8 +95,8 @@ fn decode_outline(remote: &str, need_qrcode: bool) {
     }
 }
 
-fn main() {
-    let app = Command::new("ssurl")
+fn main() -> ExitCode {
+    let mut app = Command::new("ssurl")
         .version(VERSION)
         .about("Encode and decode ShadowSocks URL")
         .arg(
@@ -116,31 +119,44 @@ fn main() {
                 .help("Decode the server configuration from the provided ShadowSocks URL"),
         )
         .arg(
-            Arg::new("OUTLINE_CONFIG_URL")
-                .short('o')
-                .long("outline")
-                .value_hint(ValueHint::Url)
-                .required_unless_present_any(["ENCODE_CONFIG_PATH", "DECODE_CONFIG_PATH"])
-                .help("Fetch and decode config from ssconf URL used by Outline"),
-        )
-        .arg(
             Arg::new("QRCODE")
                 .short('c')
                 .long("qrcode")
                 .action(ArgAction::SetTrue)
                 .help("Generate the QRCode with the provided configuration"),
         );
+
+    if cfg!(feature = "utility-url-outline") {
+        app = app.arg(
+            Arg::new("OUTLINE_CONFIG_URL")
+                .short('o')
+                .long("outline")
+                .value_hint(ValueHint::Url)
+                .required_unless_present_any(["ENCODE_CONFIG_PATH", "DECODE_CONFIG_PATH"])
+                .help("Fetch and decode config from ssconf URL used by Outline"),
+        );
+    }
+
     let matches = app.get_matches();
 
     let need_qrcode = matches.get_flag("QRCODE");
 
     if let Some(file) = matches.get_one::<String>("ENCODE_CONFIG_PATH") {
         encode(file, need_qrcode);
-    } else if let Some(encoded) = matches.get_one::<String>("DECODE_CONFIG_PATH") {
-        decode(encoded, need_qrcode);
-    } else if let Some(remote) = matches.get_one::<String>("OUTLINE_CONFIG_URL") {
-        decode_outline(remote, need_qrcode);
-    } else {
-        println!("Use -h for more detail");
+        return ExitCode::SUCCESS;
     }
+
+    if let Some(encoded) = matches.get_one::<String>("DECODE_CONFIG_PATH") {
+        decode(encoded, need_qrcode);
+        return ExitCode::SUCCESS;
+    }
+
+    #[cfg(feature = "utility-url-outline")]
+    if let Some(remote) = matches.get_one::<String>("OUTLINE_CONFIG_URL") {
+        decode_outline(remote, need_qrcode);
+        return ExitCode::SUCCESS;
+    }
+
+    println!("Use -h for more detail");
+    return ExitCode::FAILURE;
 }

@@ -72,7 +72,7 @@ server = ["shadowsocks-service/server"]
 # Enable manager server
 manager = ["shadowsocks-service/manager"]
 # Enable utility
-utility = ["qrcode", "reqwest"]
+utility = ["qrcode"]
 # Enable service
 service = ["local", "server", "manager"]
 
@@ -113,6 +113,9 @@ local-tunnel = ["local", "shadowsocks-service/local-tunnel"]
 local-socks4 = ["local", "shadowsocks-service/local-socks4"]
 # Enable Tun interface protocol for sslocal
 local-tun = ["local", "shadowsocks-service/local-tun", "ipnet"]
+
+# ssurl support outline (ssconf) URL
+utility-url-outline = ["reqwest"]
 
 # Enable jemalloc for binaries
 jemalloc = ["jemallocator"]
