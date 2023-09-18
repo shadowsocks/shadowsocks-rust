@@ -39,6 +39,11 @@ name = "ssservice"
 path = "bin/ssservice.rs"
 required-features = ["service"]
 
+[[bin]]
+name = "sswinservice"
+path = "bin/sswinservice.rs"
+required-features = ["winservice"]
+
 [workspace]
 members = ["crates/shadowsocks", "crates/shadowsocks-service"]
 
@@ -75,6 +80,8 @@ manager = ["shadowsocks-service/manager"]
 utility = ["qrcode"]
 # Enable service
 service = ["local", "server", "manager"]
+# Enable Windows Service
+winservice = ["service", "windows-service"]
 
 # Enables trust-dns for replacing tokio's builtin DNS resolver
 trust-dns = ["shadowsocks-service/trust-dns"]
@@ -183,6 +190,8 @@ snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
 shadowsocks-service = { version = "1.16.1", path = "./crates/shadowsocks-service" }
+
+windows-service = { version = "0.6", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"

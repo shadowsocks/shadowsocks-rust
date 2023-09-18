@@ -1,11 +1,14 @@
 //! Server launchers
 
-use std::{net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
+use std::{future::Future, net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
 
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use futures::future::{self, Either};
 use log::{info, trace};
-use tokio::{self, runtime::Builder};
+use tokio::{
+    self,
+    runtime::{Builder, Runtime},
+};
 
 use shadowsocks_service::{
     acl::AccessControl,
@@ -268,8 +271,8 @@ pub fn define_command_line_options(mut app: Command) -> Command {
     app
 }
 
-/// Program entrance `main`
-pub fn main(matches: &ArgMatches) -> ExitCode {
+/// Create `Runtime` and `main` entry
+pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
     let (config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
@@ -290,7 +293,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 Ok(c) => c,
                 Err(err) => {
                     eprintln!("loading config {config_path:?}, {err}");
-                    return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
+                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
                 }
             },
             None => ServiceConfig::default(),
@@ -314,7 +317,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 Ok(cfg) => cfg,
                 Err(err) => {
                     eprintln!("loading config {cpath:?}, {err}");
-                    return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
+                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
                 }
             },
             None => Config::new(ConfigType::Server),
@@ -428,7 +431,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                 Ok(acl) => acl,
                 Err(err) => {
                     eprintln!("loading ACL \"{acl_file}\", {err}");
-                    return crate::EXIT_CODE_LOAD_ACL_FAILURE.into();
+                    return Err(crate::EXIT_CODE_LOAD_ACL_FAILURE.into());
                 }
             };
             config.acl = Some(acl);
@@ -479,12 +482,12 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
                     --server-addr, --encrypt-method, --password command line option, \
                         or configuration file, check more details in https://shadowsocks.org/guide/configs.html"
             );
-            return crate::EXIT_CODE_INSUFFICIENT_PARAMS.into();
+            return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
         }
 
         if let Err(err) = config.check_integrity() {
             eprintln!("config integrity check failed, {err}");
-            return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
+            return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
         }
 
         #[cfg(unix)]
@@ -523,7 +526,7 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
         (config, runtime)
     };
 
-    runtime.block_on(async move {
+    let main_fut = async move {
         let abort_signal = monitor::create_signal_monitor();
         let server = run_server(config);
 
@@ -544,7 +547,18 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
             // The abort signal future resolved. Means we should just exit.
             Either::Right(_) => ExitCode::SUCCESS,
         }
-    })
+    };
+
+    Ok((runtime, main_fut))
+}
+
+/// Program entrance `main`
+#[inline]
+pub fn main(matches: &ArgMatches) -> ExitCode {
+    match create(matches) {
+        Ok((runtime, main_fut)) => runtime.block_on(main_fut),
+        Err(code) => code,
+    }
 }
 
 #[cfg(test)]
