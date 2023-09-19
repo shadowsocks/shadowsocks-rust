@@ -53,6 +53,7 @@ pub struct DnsBuilder {
     remote_addr: Address,
     bind_addr: ServerAddr,
     balancer: PingBalancer,
+    client_cache_size: usize,
 }
 
 impl DnsBuilder {
@@ -62,9 +63,10 @@ impl DnsBuilder {
         local_addr: NameServerAddr,
         remote_addr: Address,
         balancer: PingBalancer,
+        client_cache_size: usize,
     ) -> DnsBuilder {
         let context = ServiceContext::new();
-        DnsBuilder::with_context(Arc::new(context), bind_addr, local_addr, remote_addr, balancer)
+        DnsBuilder::with_context(Arc::new(context), bind_addr, local_addr, remote_addr, balancer, client_cache_size)
     }
 
     /// Create with an existed `context`
@@ -74,6 +76,7 @@ impl DnsBuilder {
         local_addr: NameServerAddr,
         remote_addr: Address,
         balancer: PingBalancer,
+        client_cache_size: usize,
     ) -> DnsBuilder {
         DnsBuilder {
             context,
@@ -82,6 +85,7 @@ impl DnsBuilder {
             remote_addr,
             bind_addr,
             balancer,
+            client_cache_size,
         }
     }
 
@@ -92,7 +96,8 @@ impl DnsBuilder {
 
     /// Build DNS server
     pub async fn build(self) -> io::Result<Dns> {
-        let client = Arc::new(DnsClient::new(self.context.clone(), self.balancer, self.mode));
+        let client = Arc::new(DnsClient::new(self.context.clone(), self.balancer, self.mode,
+                                             self.client_cache_size));
 
         let local_addr = Arc::new(self.local_addr);
         let remote_addr = Arc::new(self.remote_addr);
@@ -589,10 +594,11 @@ struct DnsClient {
 }
 
 impl DnsClient {
-    fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode) -> DnsClient {
+    fn new(context: Arc<ServiceContext>, balancer: PingBalancer, mode: Mode,
+           client_cache_size: usize) -> DnsClient {
         DnsClient {
             context,
-            client_cache: DnsClientCache::new(5),
+            client_cache: DnsClientCache::new(client_cache_size),
             mode,
             balancer,
             attempts: 2,
