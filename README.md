@@ -431,6 +431,30 @@ sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbo
 
 It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
 
+### Local client for Windows Service
+
+Compile it by enabling `--features "winservice"` (not included in the default build):
+
+```bash
+cargo build --release "sswinservice" --features "winservice"
+```
+
+Install it as a Windows Service (PowerShell):
+
+```powershell
+New-Service -Name "shadowsocks-local-service" `
+            -DisplayName "Shadowsocks Local Service" `
+            -BinaryPathName "<Path\to>\sswinservice.exe local -c <Path\to>\local_config.json"
+```
+
+There are other ways to install `sswinservice` as a Windows Service, for example, the `sc` command.
+
+As you may have noticed that the `-BinaryPathName` contains not only just the `sswinservice.exe`, but `local -c local_config.json`. These command line parameters will be used as the default parameter when the Windows Service starts. You can also start the service with customized parameters.
+
+Learn more from [Microsoft's Document](https://learn.microsoft.com/en-us/dotnet/framework/windows-services/introduction-to-windows-service-applications).
+
+The `sswinservice`'s parameter works exactly the same as `ssservice`. It supports `local`, `server` and `manager` subcommands.
+
 ### Server
 
 ```bash
