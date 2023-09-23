@@ -925,7 +925,7 @@ impl LocalConfig {
             #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
             #[cfg(feature = "local-dns")]
-            client_cache_size: Some(5),
+            client_cache_size: None,
 
             #[cfg(feature = "local-tun")]
             tun_interface_name: None,
@@ -1551,6 +1551,11 @@ impl Config {
                                 Ok(ip) => Address::from(SocketAddr::new(ip, remote_dns_port)),
                                 Err(..) => Address::from((remote_dns_address, remote_dns_port)),
                             });
+                        }
+
+                        #[cfg(feature = "local-dns")]
+                        {
+                            local_config.client_cache_size = local.client_cache_size;
                         }
 
                         #[cfg(feature = "local-tun")]
@@ -2464,6 +2469,8 @@ impl fmt::Display for Config {
                                 Address::DomainNameAddress(.., port) => Some(*port),
                             },
                         },
+                        #[cfg(feature = "local-dns")]
+                        client_cache_size: local.client_cache_size.clone(),
                         #[cfg(feature = "local-tun")]
                         tun_interface_name: local.tun_interface_name.clone(),
                         #[cfg(feature = "local-tun")]

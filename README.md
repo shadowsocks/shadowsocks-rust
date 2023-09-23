@@ -596,7 +596,9 @@ Example configuration:
             // Remote DNS address, DNS queries will be sent through ssserver to this address
             "remote_dns_address": "8.8.8.8",
             // OPTIONAL. Remote DNS's port, 53 by default
-            "remote_dns_port": 53
+            "remote_dns_port": 53,
+            // OPTIONAL. DNS Client Cache (TCP & UDP sockets)
+            "client_cache_size": 5
         },
         {
             // Tun local server (feature = "local-tun")
