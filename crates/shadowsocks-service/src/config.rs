@@ -66,14 +66,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr,
-        Mode,
-        ReplayAttackPolicy,
-        ServerAddr,
-        ServerConfig,
-        ServerUser,
-        ServerUserManager,
-        ServerWeight,
+        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerUser, ServerUserManager, ServerWeight,
     },
     crypto::CipherKind,
     plugin::PluginConfig,
@@ -1553,11 +1546,6 @@ impl Config {
                             });
                         }
 
-                        #[cfg(feature = "local-dns")]
-                        {
-                            local_config.client_cache_size = local.client_cache_size;
-                        }
-
                         #[cfg(feature = "local-tun")]
                         if let Some(tun_interface_address) = local.tun_interface_address {
                             match tun_interface_address.parse::<IpNet>() {
@@ -2469,8 +2457,6 @@ impl fmt::Display for Config {
                                 Address::DomainNameAddress(.., port) => Some(*port),
                             },
                         },
-                        #[cfg(feature = "local-dns")]
-                        client_cache_size: local.client_cache_size.clone(),
                         #[cfg(feature = "local-tun")]
                         tun_interface_name: local.tun_interface_name.clone(),
                         #[cfg(feature = "local-tun")]
