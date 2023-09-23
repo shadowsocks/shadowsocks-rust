@@ -196,7 +196,7 @@ impl DnsClientCache {
                 }
             }
             Entry::Vacant(vac) => {
-                let mut q = VecDeque::with_capacity(5);
+                let mut q = VecDeque::with_capacity(self.max_client_per_addr);
                 q.push_back(client);
                 vac.insert(q);
             }

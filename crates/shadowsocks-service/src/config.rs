@@ -860,6 +860,11 @@ pub struct LocalConfig {
     /// Sending DNS query through proxy to this address
     #[cfg(feature = "local-dns")]
     pub remote_dns_addr: Option<Address>,
+    // client cache size
+    // if a lot of `create connection` observed in log,
+    // increase the size
+    #[cfg(feature = "local-dns")]
+    pub client_cache_size: Option<usize>,
 
     /// Tun interface's name
     ///
@@ -919,6 +924,8 @@ impl LocalConfig {
             local_dns_addr: None,
             #[cfg(feature = "local-dns")]
             remote_dns_addr: None,
+            #[cfg(feature = "local-dns")]
+            client_cache_size: Some(5),
 
             #[cfg(feature = "local-tun")]
             tun_interface_name: None,

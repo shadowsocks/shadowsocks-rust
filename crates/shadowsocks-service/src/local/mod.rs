@@ -353,6 +353,7 @@ impl Server {
                     let mut server_builder = {
                         let local_addr = local_config.local_dns_addr.expect("missing local_dns_addr");
                         let remote_addr = local_config.remote_dns_addr.expect("missing remote_dns_addr");
+                        let client_cache_size = local_config.client_cache_size.unwrap();
 
                         DnsBuilder::with_context(
                             context.clone(),
@@ -360,6 +361,7 @@ impl Server {
                             local_addr.clone(),
                             remote_addr.clone(),
                             balancer,
+                            client_cache_size,
                         )
                     };
                     server_builder.set_mode(local_config.mode);
