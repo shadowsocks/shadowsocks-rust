@@ -436,7 +436,7 @@ It will create a Tun interface with address `10.255.0.1` and netmask `255.255.25
 Compile it by enabling `--features "winservice"` (not included in the default build):
 
 ```bash
-cargo build --release "sswinservice" --features "winservice"
+cargo build --release --bin "sswinservice" --features "winservice"
 ```
 
 Install it as a Windows Service (PowerShell):
