@@ -597,6 +597,8 @@ Example configuration:
             "remote_dns_address": "8.8.8.8",
             // OPTIONAL. Remote DNS's port, 53 by default
             "remote_dns_port": 53,
+            // OPTIONAL. dns client cache size for fetching dns queries.
+            "client_cache_size": 5
         },
         {
             // Tun local server (feature = "local-tun")
