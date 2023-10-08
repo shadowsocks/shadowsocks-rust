@@ -260,6 +260,9 @@ struct SSLocalExtConfig {
     #[cfg(feature = "local-dns")]
     #[serde(skip_serializing_if = "Option::is_none")]
     remote_dns_port: Option<u16>,
+    #[cfg(feature = "local-dns")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_cache_size: Option<usize>,
 
     /// Tunnel
     #[cfg(feature = "local-tunnel")]
@@ -1538,6 +1541,11 @@ impl Config {
                         }
 
                         #[cfg(feature = "local-dns")]
+                        if let Some(client_cache_size) = local.client_cache_size {
+                            local_config.client_cache_size = Some(client_cache_size);
+                        }
+
+                        #[cfg(feature = "local-dns")]
                         if let Some(remote_dns_address) = local.remote_dns_address {
                             let remote_dns_port = local.remote_dns_port.unwrap_or(53);
                             local_config.remote_dns_addr = Some(match remote_dns_address.parse::<IpAddr>() {
@@ -2457,6 +2465,8 @@ impl fmt::Display for Config {
                                 Address::DomainNameAddress(.., port) => Some(*port),
                             },
                         },
+                        #[cfg(feature = "local-dns")]
+                        client_cache_size: local.client_cache_size,
                         #[cfg(feature = "local-tun")]
                         tun_interface_name: local.tun_interface_name.clone(),
                         #[cfg(feature = "local-tun")]
