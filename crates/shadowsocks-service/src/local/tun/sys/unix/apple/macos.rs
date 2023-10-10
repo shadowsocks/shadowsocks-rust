@@ -1,12 +1,11 @@
 use std::{
     ffi::CStr,
     io::{self, ErrorKind},
-    mem,
-    ptr,
+    mem, ptr,
 };
 
 use log::{error, trace};
-use tun::{platform::Device as TunDevice, Device};
+use tun::{platform::Device as TunDevice, Device, Error as TunError};
 
 /// These numbers are used by reliable protocols for determining
 /// retransmission behavior and are included in the routing structure.
@@ -75,7 +74,13 @@ pub async fn set_route_configuration(device: &TunDevice) -> io::Result<()> {
         }
     };
 
-    let tun_name = device.name();
+    let tun_name = match device.name() {
+        Ok(n) => n,
+        Err(err) => match err {
+            TunError::Io(err) => return Err(err),
+            e => return Err(io::Error::new(ErrorKind::Other, e)),
+        },
+    };
 
     // routing packets that saddr & daddr are in the subnet of the Tun interface
     //

@@ -143,7 +143,11 @@ impl Tun {
 
         info!(
             "shadowsocks tun device {}, mode {}",
-            self.device.get_ref().name(),
+            self.device
+                .get_ref()
+                .name()
+                .or_else(|r| Ok::<_, ()>(r.to_string()))
+                .unwrap(),
             self.mode,
         );
 
