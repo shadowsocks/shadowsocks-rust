@@ -153,7 +153,7 @@ ipnet = "2.7"
 iprange = "0.6"
 regex = "1.4"
 
-tun = { version = "0.5.5", optional = true, features = ["async"] }
+tun = { version = "0.6", optional = true, features = ["async"] }
 etherparse = { version = "0.13", optional = true }
 smoltcp = { version = "0.10", optional = true, default-features = false, features = [
     "std",
