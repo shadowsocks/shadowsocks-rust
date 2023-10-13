@@ -1,7 +1,8 @@
 use std::{
     ffi::CStr,
     io::{self, ErrorKind},
-    mem, ptr,
+    mem,
+    ptr,
 };
 
 use log::{error, trace};
