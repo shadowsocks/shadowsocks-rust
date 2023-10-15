@@ -93,6 +93,7 @@ dns-over-native-tls-vendored = [
     "shadowsocks-service/dns-over-native-tls-vendored",
 ]
 dns-over-https = ["shadowsocks-service/dns-over-https"]
+dns-over-h3 = ["shadowsocks-service/dns-over-h3"]
 
 # Enable logging output
 logging = ["log4rs"]
