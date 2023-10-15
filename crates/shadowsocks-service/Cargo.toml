@@ -57,6 +57,7 @@ dns-over-https = [
     "hickory-resolver/dns-over-https",
     "hickory-resolver/dns-over-https-rustls",
 ]
+dns-over-h3 = ["hickory-dns", "hickory-resolver/dns-over-h3"]
 
 # Enable DNS-relay
 local-dns = ["local", "hickory-dns"]
