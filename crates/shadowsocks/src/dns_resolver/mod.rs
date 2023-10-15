@@ -3,9 +3,9 @@
 
 pub use self::resolver::{DnsResolve, DnsResolver};
 
+#[cfg(feature = "hickory-dns")]
+mod hickory_dns_resolver;
 mod resolver;
-#[cfg(feature = "trust-dns")]
-mod trust_dns_resolver;
 
 /// Helper macro for resolving host and then process each addresses
 #[macro_export]

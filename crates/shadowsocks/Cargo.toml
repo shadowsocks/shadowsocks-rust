@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks"
-version = "1.16.0"
+version = "1.17.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -14,10 +14,12 @@ edition = "2021"
 maintenance = { status = "passively-maintained" }
 
 [features]
-default = ["trust-dns"]
+default = ["hickory-dns"]
 
-# Uses trust-dns instead of tokio's builtin DNS resolver
-trust-dns = ["trust-dns-resolver", "arc-swap", "notify"]
+# Uses Hickory-DNS instead of tokio's builtin DNS resolver
+hickory-dns = ["hickory-resolver", "arc-swap", "notify"]
+# Hickory-DNS was renamed from Trust-DNS, keep compatibility.
+trust-dns = ["hickory-dns"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecure
@@ -80,7 +82,7 @@ tokio = { version = "1.9.0", features = [
 ] }
 tokio-tfo = "0.2.0"
 
-trust-dns-resolver = { version = "0.23.0-alpha", optional = true }
+hickory-resolver = { version = "0.24", optional = true }
 arc-swap = { version = "1.6", optional = true }
 notify = { version = "6.0", optional = true }
 

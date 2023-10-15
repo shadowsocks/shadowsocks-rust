@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.16.2"
+version = "1.17.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -18,7 +18,7 @@ full = [
     "local",
     "server",
     "manager",
-    "trust-dns",
+    "hickory-dns",
     "local-http",
     "local-redir",
     "local-tunnel",
@@ -32,32 +32,34 @@ server = []
 # Enable manager server
 manager = ["server"]
 
-# Enables trust-dns for replacing tokio's builtin DNS resolver
-trust-dns = ["trust-dns-resolver", "shadowsocks/trust-dns"]
+# Enables Hickory-DNS for replacing tokio's builtin DNS resolver
+hickory-dns = ["hickory-resolver", "shadowsocks/trust-dns"]
+# Hickory-DNS was renamed from Trust-DNS, keep compatibility.
+trust-dns = ["hickory-dns"]
 dns-over-tls = [
-    "trust-dns",
-    "trust-dns-resolver/dns-over-tls",
-    "trust-dns-resolver/dns-over-rustls",
+    "hickory-dns",
+    "hickory-resolver/dns-over-tls",
+    "hickory-resolver/dns-over-rustls",
 ]
 dns-over-native-tls = [
-    "trust-dns",
-    "trust-dns-resolver/dns-over-tls",
-    "trust-dns-resolver/dns-over-native-tls",
+    "hickory-dns",
+    "hickory-resolver/dns-over-tls",
+    "hickory-resolver/dns-over-native-tls",
 ]
 dns-over-native-tls-vendored = [
-    "trust-dns",
-    "trust-dns-resolver/dns-over-tls",
-    "trust-dns-resolver/dns-over-native-tls",
+    "hickory-dns",
+    "hickory-resolver/dns-over-tls",
+    "hickory-resolver/dns-over-native-tls",
     "native-tls/vendored",
 ]
 dns-over-https = [
-    "trust-dns",
-    "trust-dns-resolver/dns-over-https",
-    "trust-dns-resolver/dns-over-https-rustls",
+    "hickory-dns",
+    "hickory-resolver/dns-over-https",
+    "hickory-resolver/dns-over-https-rustls",
 ]
 
 # Enable DNS-relay
-local-dns = ["local", "trust-dns"]
+local-dns = ["local", "hickory-dns"]
 # Backward compatibility, DO NOT USE
 local-dns-relay = ["local-dns"]
 # Enable client flow statistic report
@@ -144,7 +146,7 @@ libc = "0.2.141"
 hyper = { version = "0.14.25", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
-trust-dns-resolver = { version = "0.23.0-alpha", optional = true, features = [
+hickory-resolver = { version = "0.24", optional = true, features = [
     "serde-config",
 ] }
 
@@ -169,7 +171,7 @@ smoltcp = { version = "0.10", optional = true, default-features = false, feature
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 
-shadowsocks = { version = "1.16.0", path = "../shadowsocks", default-features = false }
+shadowsocks = { version = "1.17.0", path = "../shadowsocks", default-features = false }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]

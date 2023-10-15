@@ -47,7 +47,7 @@ impl Socks5UdpClient {
         match proxy_addr {
             Address::SocketAddress(sa) => self.socket.connect(sa).await?,
             // FIXME: `connect` will use tokio's builtin DNS resolver.
-            // But if we want to use `trust-dns`, we have to initialize a `Context` instance (for the global `AsyncResolver` instance)
+            // But if we want to use `hickory-dns`, we have to initialize a `Context` instance (for the global `AsyncResolver` instance)
             Address::DomainNameAddress(ref dname, port) => self.socket.connect((dname.as_str(), port)).await?,
         }
 

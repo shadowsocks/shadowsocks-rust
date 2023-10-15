@@ -10,9 +10,9 @@ use std::{
     time::Duration,
 };
 
+use hickory_resolver::proto::{error::ProtoError, op::Message};
 use log::{debug, trace};
 use tokio::sync::Mutex;
-use trust_dns_resolver::proto::{error::ProtoError, op::Message};
 
 use shadowsocks::{config::ServerConfig, net::ConnectOpts, relay::socks5::Address};
 

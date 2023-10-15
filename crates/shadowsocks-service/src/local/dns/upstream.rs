@@ -12,6 +12,10 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
+use hickory_resolver::proto::{
+    error::{ProtoError, ProtoErrorKind},
+    op::Message,
+};
 use log::trace;
 use rand::{thread_rng, Rng};
 use shadowsocks::{
@@ -26,10 +30,6 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::UdpSocket,
     time,
-};
-use trust_dns_resolver::proto::{
-    error::{ProtoError, ProtoErrorKind},
-    op::Message,
 };
 
 use crate::net::{FlowStat, MonProxySocket, MonProxyStream};

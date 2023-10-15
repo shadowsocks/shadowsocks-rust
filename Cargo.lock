@@ -988,6 +988,64 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
 
 [[package]]
+name = "hickory-proto"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "091a6fbccf4860009355e3efc52ff4acf37a63489aad7435372d44ceeb6fbbcf"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "cfg-if",
+ "data-encoding",
+ "enum-as-inner",
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "h2",
+ "http",
+ "idna",
+ "ipnet",
+ "native-tls",
+ "once_cell",
+ "rand",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "thiserror",
+ "tinyvec",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-rustls",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "hickory-resolver"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35b8f021164e6a984c9030023544c57789c51760065cd510572fedcfb04164e8"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "hickory-proto",
+ "ipconfig",
+ "lru-cache",
+ "once_cell",
+ "parking_lot",
+ "rand",
+ "resolv-conf",
+ "rustls",
+ "serde",
+ "smallvec",
+ "thiserror",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-rustls",
+ "tracing",
+]
+
+[[package]]
 name = "hkdf"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2317,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks"
-version = "1.16.0"
+version = "1.17.0"
 dependencies = [
  "aes",
  "arc-swap",
@@ -2330,6 +2388,7 @@ dependencies = [
  "cfg-if",
  "env_logger",
  "futures",
+ "hickory-resolver",
  "libc",
  "log",
  "lru_time_cache",
@@ -2348,7 +2407,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tfo",
- "trust-dns-resolver",
  "url",
  "windows-sys 0.48.0",
 ]
@@ -2378,7 +2436,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-rust"
-version = "1.16.2"
+version = "1.17.0"
 dependencies = [
  "base64",
  "build-time",
@@ -2416,7 +2474,7 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-service"
-version = "1.16.2"
+version = "1.17.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -2427,6 +2485,7 @@ dependencies = [
  "env_logger",
  "etherparse",
  "futures",
+ "hickory-resolver",
  "hyper",
  "idna",
  "ipnet",
@@ -2452,7 +2511,6 @@ dependencies = [
  "tokio-native-tls",
  "tokio-rustls",
  "tower",
- "trust-dns-resolver",
  "tun",
  "webpki-roots",
  "windows-sys 0.48.0",
@@ -2870,68 +2928,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "trust-dns-proto"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
-dependencies = [
- "async-trait",
- "bytes",
- "cfg-if",
- "data-encoding",
- "enum-as-inner",
- "futures-channel",
- "futures-io",
- "futures-util",
- "h2",
- "http",
- "idna",
- "ipnet",
- "native-tls",
- "once_cell",
- "rand",
- "rustls",
- "rustls-pemfile",
- "rustls-webpki",
- "serde",
- "smallvec",
- "thiserror",
- "tinyvec",
- "tokio",
- "tokio-native-tls",
- "tokio-rustls",
- "tracing",
- "url",
- "webpki-roots",
-]
-
-[[package]]
-name = "trust-dns-resolver"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
-dependencies = [
- "cfg-if",
- "futures-util",
- "ipconfig",
- "lru-cache",
- "once_cell",
- "parking_lot",
- "rand",
- "resolv-conf",
- "rustls",
- "serde",
- "smallvec",
- "thiserror",
- "tokio",
- "tokio-native-tls",
- "tokio-rustls",
- "tracing",
- "trust-dns-proto",
- "webpki-roots",
 ]
 
 [[package]]

@@ -58,6 +58,8 @@ use std::{
 };
 
 use cfg_if::cfg_if;
+#[cfg(feature = "hickory-dns")]
+use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 #[cfg(feature = "local-tun")]
 use ipnet::IpNet;
 use log::warn;
@@ -78,8 +80,6 @@ use shadowsocks::{
     crypto::CipherKind,
     plugin::PluginConfig,
 };
-#[cfg(feature = "trust-dns")]
-use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig};
 
 use crate::acl::AccessControl;
 #[cfg(feature = "local-dns")]
@@ -91,8 +91,8 @@ use crate::local::socks::config::Socks5AuthConfig;
 #[serde(untagged)]
 enum SSDnsConfig {
     Simple(String),
-    #[cfg(feature = "trust-dns")]
-    TrustDns(ResolverConfig),
+    #[cfg(feature = "hickory-dns")]
+    HickoryDns(ResolverConfig),
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -1031,8 +1031,8 @@ impl LocalConfig {
 pub enum DnsConfig {
     #[default]
     System,
-    #[cfg(feature = "trust-dns")]
-    TrustDns(ResolverConfig),
+    #[cfg(feature = "hickory-dns")]
+    HickoryDns(ResolverConfig),
     #[cfg(feature = "local-dns")]
     LocalDns(NameServerAddr),
 }
@@ -1967,8 +1967,8 @@ impl Config {
         {
             match config.dns {
                 Some(SSDnsConfig::Simple(ds)) => nconfig.set_dns_formatted(&ds)?,
-                #[cfg(feature = "trust-dns")]
-                Some(SSDnsConfig::TrustDns(c)) => nconfig.dns = DnsConfig::TrustDns(c),
+                #[cfg(feature = "hickory-dns")]
+                Some(SSDnsConfig::HickoryDns(c)) => nconfig.dns = DnsConfig::HickoryDns(c),
                 None => nconfig.dns = DnsConfig::System,
             }
             nconfig.dns_cache_size = config.dns_cache_size;
@@ -2091,22 +2091,22 @@ impl Config {
         self.dns = match dns {
             "system" => DnsConfig::System,
 
-            #[cfg(feature = "trust-dns")]
-            "google" => DnsConfig::TrustDns(ResolverConfig::google()),
+            #[cfg(feature = "hickory-dns")]
+            "google" => DnsConfig::HickoryDns(ResolverConfig::google()),
 
-            #[cfg(feature = "trust-dns")]
-            "cloudflare" => DnsConfig::TrustDns(ResolverConfig::cloudflare()),
-            #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
-            "cloudflare_tls" => DnsConfig::TrustDns(ResolverConfig::cloudflare_tls()),
-            #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
-            "cloudflare_https" => DnsConfig::TrustDns(ResolverConfig::cloudflare_https()),
+            #[cfg(feature = "hickory-dns")]
+            "cloudflare" => DnsConfig::HickoryDns(ResolverConfig::cloudflare()),
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
+            "cloudflare_tls" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_tls()),
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
+            "cloudflare_https" => DnsConfig::HickoryDns(ResolverConfig::cloudflare_https()),
 
-            #[cfg(feature = "trust-dns")]
-            "quad9" => DnsConfig::TrustDns(ResolverConfig::quad9()),
-            #[cfg(all(feature = "trust-dns", feature = "dns-over-tls"))]
-            "quad9_tls" => DnsConfig::TrustDns(ResolverConfig::quad9_tls()),
-            #[cfg(all(feature = "trust-dns", feature = "dns-over-https"))]
-            "quad9_https" => DnsConfig::TrustDns(ResolverConfig::quad9_https()),
+            #[cfg(feature = "hickory-dns")]
+            "quad9" => DnsConfig::HickoryDns(ResolverConfig::quad9()),
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-tls"))]
+            "quad9_tls" => DnsConfig::HickoryDns(ResolverConfig::quad9_tls()),
+            #[cfg(all(feature = "hickory-dns", feature = "dns-over-https"))]
+            "quad9_https" => DnsConfig::HickoryDns(ResolverConfig::quad9_https()),
 
             nameservers => self.parse_dns_nameservers(nameservers)?,
         };
@@ -2114,7 +2114,7 @@ impl Config {
         Ok(())
     }
 
-    #[cfg(any(feature = "trust-dns", feature = "local-dns"))]
+    #[cfg(any(feature = "hickory-dns", feature = "local-dns"))]
     fn parse_dns_nameservers(&mut self, nameservers: &str) -> Result<DnsConfig, Error> {
         #[cfg(all(unix, feature = "local-dns"))]
         if let Some(nameservers) = nameservers.strip_prefix("unix://") {
@@ -2192,11 +2192,11 @@ impl Config {
         Ok(if c.name_servers().is_empty() {
             DnsConfig::System
         } else {
-            DnsConfig::TrustDns(c)
+            DnsConfig::HickoryDns(c)
         })
     }
 
-    #[cfg(not(any(feature = "trust-dns", feature = "local-dns")))]
+    #[cfg(not(any(feature = "hickory-dns", feature = "local-dns")))]
     fn parse_dns_nameservers(&mut self, _nameservers: &str) -> Result<DnsConfig, Error> {
         Ok(DnsConfig::System)
     }
@@ -2675,9 +2675,9 @@ impl fmt::Display for Config {
 
         match self.dns {
             DnsConfig::System => {}
-            #[cfg(feature = "trust-dns")]
-            DnsConfig::TrustDns(ref dns) => {
-                jconf.dns = Some(SSDnsConfig::TrustDns(dns.clone()));
+            #[cfg(feature = "hickory-dns")]
+            DnsConfig::HickoryDns(ref dns) => {
+                jconf.dns = Some(SSDnsConfig::HickoryDns(dns.clone()));
             }
             #[cfg(feature = "local-dns")]
             DnsConfig::LocalDns(ref ns) => {

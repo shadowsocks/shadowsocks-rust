@@ -18,16 +18,16 @@ use futures::{
     future::{self, Either},
     FutureExt,
 };
+use hickory_resolver::proto::{
+    op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
+    rr::{DNSClass, Name, RData, RecordType},
+};
 use log::{debug, error, info, trace, warn};
 use rand::{thread_rng, Rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
     time,
-};
-use trust_dns_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
-    rr::{DNSClass, Name, RData, RecordType},
 };
 
 use shadowsocks::{

@@ -20,7 +20,7 @@ pub struct Context {
     // Policy against replay attack
     replay_policy: ReplayAttackPolicy,
 
-    // trust-dns resolver, which supports REAL asynchronous resolving, and also customizable
+    // hickory-dns resolver, which supports REAL asynchronous resolving, and also customizable
     dns_resolver: Arc<DnsResolver>,
 
     // Connect IPv6 address first
