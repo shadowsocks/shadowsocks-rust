@@ -15,9 +15,12 @@ use hickory_resolver::{
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
     error::ResolveResult,
     name_server::{GenericConnector, RuntimeProvider},
-    proto::{iocompat::AsyncIoTokioAsStd, udp::DnsUdpSocket, TokioTime},
-    AsyncResolver,
-    TokioHandle,
+    proto::{
+        iocompat::AsyncIoTokioAsStd,
+        udp::{DnsUdpSocket, QuicLocalAddr},
+        TokioTime,
+    },
+    AsyncResolver, TokioHandle,
 };
 use log::trace;
 use tokio::{io::ReadBuf, net::UdpSocket};
@@ -56,6 +59,12 @@ impl DnsUdpSocket for ShadowUdpSocket {
     fn poll_send_to(&self, cx: &mut Context<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
         let udp: &UdpSocket = self.deref();
         udp.poll_send_to(cx, buf, target)
+    }
+}
+
+impl QuicLocalAddr for ShadowUdpSocket {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.deref().local_addr()
     }
 }
 
