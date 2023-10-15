@@ -1,3 +1,12 @@
+shadosocks-rust (1.17.0) unstable; urgency=medium
+
+  ## Features
+
+  - Trust-DNS is rebranded to Hickory-DNS https://github.com/hickory-dns/hickory-dns/releases/tag/v0.24.0
+  - Experimental: Support DNS-over-H3 (Try with configuration `"dns": "google_h3"` and compile with feature `"dns-over-h3"`)
+  - #1319 Allow configuring `local-dns` client cache size
+  - Experimental: `local-tun` supports Windows with [Wintun](https://www.wintun.net/)
+
 shadowsocks-rust (1.16.2) unstable; urgency=medium
 
   ## Features
