@@ -371,9 +371,6 @@ impl Server {
                 }
                 #[cfg(feature = "local-tun")]
                 ProtocolType::Tun => {
-                    use log::info;
-                    use shadowsocks::net::UnixListener;
-
                     let mut builder = TunBuilder::new(context.clone(), balancer);
                     if let Some(address) = local_config.tun_interface_address {
                         builder.address(address);
@@ -396,6 +393,9 @@ impl Server {
                         builder.file_descriptor(fd);
                     } else if let Some(ref fd_path) = local_config.tun_device_fd_from_path {
                         use std::fs;
+
+                        use log::info;
+                        use shadowsocks::net::UnixListener;
 
                         let _ = fs::remove_file(fd_path);
 
