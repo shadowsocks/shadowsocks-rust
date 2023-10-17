@@ -101,6 +101,7 @@ impl UdpInboundWrite for UdpRedirInboundWriter {
         // then we should always use IPv6 sockets for sending IPv4 packets.
         static SUPPORT_IPV6_TRANSPARENT: AtomicBool = AtomicBool::new(true);
 
+        #[allow(unused_mut)]
         let mut addr = match *remote_addr {
             Address::SocketAddress(sa) => {
                 if SUPPORT_IPV6_TRANSPARENT.load(Ordering::Relaxed) {

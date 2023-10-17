@@ -25,6 +25,7 @@ where
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn set_ipv6_only<S>(socket: &S, ipv6_only: bool) -> io::Result<()>
 where
     S: std::os::windows::io::AsRawSocket,
