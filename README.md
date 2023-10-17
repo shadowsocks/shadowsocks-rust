@@ -34,7 +34,7 @@ Related Projects:
 
 ### Optional Features
 
-- `trust-dns` - Uses [`trust-dns-resolver`](https://crates.io/crates/trust-dns-resolver) as DNS resolver instead of `tokio`'s builtin.
+- `hickory-dns` - Uses [`hickory-resolver`](https://crates.io/crates/hickory-resolver) as DNS resolver instead of `tokio`'s builtin.
 
 - `local-http` - Allow using HTTP protocol for `sslocal`
 
@@ -730,9 +730,9 @@ Example configuration:
     // - quad9 (TCP, UDP)
     // - quad9_tls (TLS), enable by feature "dns-over-tls"
     //
-    // The field is only effective if feature "trust-dns" is enabled.
+    // The field is only effective if feature "hickory-dns" is enabled.
     "dns": "google",
-    // Configure `cache_size` for "trust-dns" ResolverOpts. Set to "0" to disable DNS cache.
+    // Configure `cache_size` for "hickory-dns" ResolverOpts. Set to "0" to disable DNS cache.
     "dns_cache_size": 0,
 
     // Mode, could be one of the
