@@ -77,11 +77,11 @@ pub fn adjust_nofile() {
 
 /// setuid(), setgid() for a specific user or uid
 #[cfg(unix)]
-pub fn run_as_user(uname: &str) {
-    use log::warn;
+pub fn run_as_user(uname: &str) -> std::io::Result<()> {
+    use log::error;
     use std::{
         ffi::{CStr, CString},
-        io::Error,
+        io::{Error, ErrorKind},
     };
 
     unsafe {
@@ -101,8 +101,7 @@ pub fn run_as_user(uname: &str) {
         };
 
         if pwd.is_null() {
-            warn!("user {} not found", uname);
-            return;
+            return Err(Error::new(ErrorKind::InvalidInput, format!("user {} not found", uname)));
         }
 
         let pwd = &*pwd;
@@ -111,37 +110,40 @@ pub fn run_as_user(uname: &str) {
         if libc::setgid(pwd.pw_gid as libc::gid_t) != 0 {
             let err = Error::last_os_error();
 
-            warn!(
+            error!(
                 "could not change group id to user {:?}'s gid: {}, uid: {}, error: {}",
                 CStr::from_ptr(pwd.pw_name),
                 pwd.pw_gid,
                 pwd.pw_uid,
                 err
             );
-            return;
+            return Err(err);
         }
 
         if libc::initgroups(pwd.pw_name, pwd.pw_gid.try_into().unwrap()) != 0 {
             let err = Error::last_os_error();
-            warn!(
+            error!(
                 "could not change supplementary groups to user {:?}'s gid: {}, uid: {}, error: {}",
                 CStr::from_ptr(pwd.pw_name),
                 pwd.pw_gid,
                 pwd.pw_uid,
                 err
             );
-            return;
+            return Err(err);
         }
 
         if libc::setuid(pwd.pw_uid) != 0 {
             let err = Error::last_os_error();
-            warn!(
+            error!(
                 "could not change user id to user {:?}'s gid: {}, uid: {}, error: {}",
                 CStr::from_ptr(pwd.pw_name),
                 pwd.pw_gid,
                 pwd.pw_uid,
                 err
             );
+            return Err(err);
         }
     }
+
+    Ok(())
 }

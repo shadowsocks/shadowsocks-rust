@@ -17,12 +17,7 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{
-        read_variable_field_value,
-        Config,
-        ConfigType,
-        LocalConfig,
-        LocalInstanceConfig,
-        ProtocolType,
+        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
         ServerInstanceConfig,
     },
     local::{loadbalancing::PingBalancer, Server},
@@ -37,8 +32,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 #[cfg(feature = "local-dns")]
@@ -850,7 +844,10 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         #[cfg(unix)]
         if let Some(uname) = matches.get_one::<String>("USER") {
-            crate::sys::run_as_user(uname);
+            if let Err(err) = crate::sys::run_as_user(uname) {
+                eprintln!("failed to change as user, error: {err}");
+                return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
+            }
         }
 
         info!("shadowsocks local {} build {}", crate::VERSION, crate::BUILD_TIME);
