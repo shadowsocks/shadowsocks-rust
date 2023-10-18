@@ -4,7 +4,7 @@
 use std::os::unix::io::RawFd;
 use std::{
     io::{self, ErrorKind},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
@@ -279,14 +279,37 @@ impl Tun {
                 let src_port = udp_packet.src_port();
                 let dst_port = udp_packet.dst_port();
 
-                let src_addr = SocketAddr::new(packet.src_addr(), src_port);
+                let src_ip_addr = packet.src_addr();
+                let dst_ip_addr = packet.dst_addr();
+                // Throw away non-unicast but allow unspecified
+                let src_non_unicast = match src_ip_addr {
+                    IpAddr::V4(v4) => v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified(),
+                    IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
+                };
+                let dst_non_unicast = match dst_ip_addr {
+                    IpAddr::V4(v4) => v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified(),
+                    IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
+                };
+
+                let src_addr = SocketAddr::new(src_ip_addr, src_port);
                 let dst_addr = SocketAddr::new(packet.dst_addr(), dst_port);
 
                 let payload = udp_packet.payload();
-                trace!("[TUN] UDP packet {} -> {} {}", src_addr, dst_addr, udp_packet);
+                trace!(
+                    "[TUN] UDP packet {} (unicast? {}) -> {} (unicast? {}) {}",
+                    src_addr,
+                    !src_non_unicast,
+                    dst_addr,
+                    !dst_non_unicast,
+                    udp_packet
+                );
 
-                if let Err(err) = self.udp.handle_packet(src_addr, dst_addr, payload).await {
-                    error!("handle UDP packet failed, err: {}, packet: {:?}", err, udp_packet);
+                if src_non_unicast || dst_non_unicast {
+                    trace!("[TUN] UDP non-unicast packet thrown away");
+                } else {
+                    if let Err(err) = self.udp.handle_packet(src_addr, dst_addr, payload).await {
+                        error!("handle UDP packet failed, err: {}, packet: {:?}", err, udp_packet);
+                    }
                 }
             }
             IpProtocol::Icmp | IpProtocol::Icmpv6 => {
