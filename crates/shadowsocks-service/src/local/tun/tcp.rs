@@ -388,7 +388,11 @@ impl TcpTun {
                             && !socket.may_recv()
                             && !matches!(
                                 socket.state(),
-                                TcpState::SynReceived | TcpState::Established | TcpState::FinWait1 | TcpState::FinWait2
+                                TcpState::Listen
+                                    | TcpState::SynReceived
+                                    | TcpState::Established
+                                    | TcpState::FinWait1
+                                    | TcpState::FinWait2
                             )
                         {
                             trace!("closed TCP Read Half, {:?}", socket.state());

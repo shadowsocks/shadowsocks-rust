@@ -407,6 +407,7 @@ Redirects connections with `iptables` configurations to the port that `sslocal` 
 
 - Linux, Android
 - macOS, iOS
+- Windows
 
 #### Linux
 
@@ -430,6 +431,14 @@ sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbo
 ```
 
 It will create a Tun interface with address `10.255.0.1` and netmask `255.255.255.0`.
+
+#### Windows
+
+Download `wintun.dll` from [Wintun](https://www.wintun.net/), and place it in the folder with shadowsocks' runnable binaries, or in the system PATH.
+
+```powershell
+sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface "Loopback" --tun-interface-name "shadowsocks"
+```
 
 ### Local client for Windows Service
 
