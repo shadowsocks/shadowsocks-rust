@@ -13,7 +13,7 @@ use std::{
     time::Duration,
 };
 
-use log::{error, trace};
+use log::{debug, error, trace};
 use shadowsocks::{net::TcpSocketOpts, relay::socks5::Address};
 use smoltcp::{
     iface::{Config as InterfaceConfig, Interface, SocketHandle, SocketSet},
@@ -501,7 +501,7 @@ impl TcpTun {
                 return Err(io::Error::new(ErrorKind::Other, format!("listen error: {:?}", err)));
             }
 
-            trace!("created TCP connection for {} <-> {}", src_addr, dst_addr);
+            debug!("created TCP connection for {} <-> {}", src_addr, dst_addr);
 
             let connection = TcpConnection::new(
                 socket,
