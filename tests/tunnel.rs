@@ -15,37 +15,48 @@ use shadowsocks_service::{
     run_server,
 };
 
+fn random_local_tcp_port() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.local_addr().unwrap().port()
+}
+
 #[tokio::test]
 async fn tcp_tunnel() {
     let _ = env_logger::try_init();
 
+    let local_port = random_local_tcp_port();
+    let server_port = random_local_tcp_port();
     let local_config = Config::load_from_str(
-        r#"{
+        &format!(
+            r#"{{
             "locals": [
-                {
-                    "local_port": 9110,
+                {{
+                    "local_port": {local_port},
                     "local_address": "127.0.0.1",
                     "protocol": "tunnel",
                     "forward_address": "detectportal.firefox.com",
                     "forward_port": 80
-                }
+                }}
             ],
             "server": "127.0.0.1",
-            "server_port": 9120,
+            "server_port": {server_port},
             "password": "password",
             "method": "aes-256-gcm"
-        }"#,
+        }}"#
+        ),
         ConfigType::Local,
     )
     .unwrap();
 
     let server_config = Config::load_from_str(
-        r#"{
+        &format!(
+            r#"{{
             "server": "127.0.0.1",
-            "server_port": 9120,
+            "server_port": {server_port},
             "password": "password",
             "method": "aes-256-gcm"
-        }"#,
+        }}"#
+        ),
         ConfigType::Server,
     )
     .unwrap();
@@ -56,7 +67,7 @@ async fn tcp_tunnel() {
     time::sleep(Duration::from_secs(1)).await;
 
     // Connect it directly, because it is now established a TCP tunnel with detectportal.firefox.com
-    let mut stream = TcpStream::connect("127.0.0.1:9110").await.unwrap();
+    let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await.unwrap();
 
     let req = b"GET /success.txt HTTP/1.0\r\nHost: detectportal.firefox.com\r\nAccept: */*\r\n\r\n";
     stream.write_all(req).await.unwrap();
@@ -91,35 +102,41 @@ async fn udp_tunnel() {
 
     time::sleep(Duration::from_secs(1)).await;
 
+    let local_port = random_local_tcp_port();
+    let server_port = random_local_tcp_port();
     let local_config = Config::load_from_str(
-        r#"{
+        &format!(
+            r#"{{
             "locals": [
-                {
-                    "local_port": 9210,
+                {{
+                    "local_port": {local_port},
                     "local_address": "127.0.0.1",
                     "protocol": "tunnel",
                     "forward_address": "127.0.0.1",
                     "forward_port": 9230
-                }
+                }}
             ],
             "server": "127.0.0.1",
-            "server_port": 9220,
+            "server_port": {server_port},
             "password": "password",
             "method": "aes-256-gcm",
             "mode": "tcp_and_udp"
-        }"#,
+        }}"#
+        ),
         ConfigType::Local,
     )
     .unwrap();
 
     let server_config = Config::load_from_str(
-        r#"{
+        &format!(
+            r#"{{
             "server": "127.0.0.1",
-            "server_port": 9220,
+            "server_port": {server_port},
             "password": "password",
             "method": "aes-256-gcm",
             "mode": "udp_only"
-        }"#,
+        }}"#
+        ),
         ConfigType::Server,
     )
     .unwrap();
@@ -132,7 +149,7 @@ async fn udp_tunnel() {
     const MESSAGE: &[u8] = b"hello shadowsocks";
 
     let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    socket.send_to(MESSAGE, "127.0.0.1:9210").await.unwrap();
+    socket.send_to(MESSAGE, ("127.0.0.1", local_port)).await.unwrap();
 
     let mut buf = vec![0u8; 65536];
     let n = socket.recv(&mut buf).await.unwrap();
