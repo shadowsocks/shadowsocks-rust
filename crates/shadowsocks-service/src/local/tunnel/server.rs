@@ -7,7 +7,10 @@ use shadowsocks::{config::Mode, relay::socks5::Address, ServerAddr};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-use super::{tcprelay::TunnelTcpServer, udprelay::TunnelUdpServer};
+use super::{
+    tcprelay::{TunnelTcpServer, TunnelTcpServerBuilder},
+    udprelay::{TunnelUdpServer, TunnelUdpServerBuilder},
+};
 
 pub struct TunnelBuilder {
     context: Arc<ServiceContext>,
@@ -18,6 +21,10 @@ pub struct TunnelBuilder {
     client_addr: ServerAddr,
     udp_addr: Option<ServerAddr>,
     balancer: PingBalancer,
+    #[cfg(target_os = "macos")]
+    launchd_tcp_socket_name: Option<String>,
+    #[cfg(target_os = "macos")]
+    launchd_udp_socket_name: Option<String>,
 }
 
 impl TunnelBuilder {
@@ -43,6 +50,10 @@ impl TunnelBuilder {
             client_addr,
             udp_addr: None,
             balancer,
+            #[cfg(target_os = "macos")]
+            launchd_tcp_socket_name: None,
+            #[cfg(target_os = "macos")]
+            launchd_udp_socket_name: None,
         }
     }
 
@@ -66,32 +77,58 @@ impl TunnelBuilder {
         self.udp_addr = Some(addr);
     }
 
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_tcp_socket_name(&mut self, n: String) {
+        self.launchd_tcp_socket_name = Some(n);
+    }
+
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_udp_socket_name(&mut self, n: String) {
+        self.launchd_udp_socket_name = Some(n);
+    }
+
     pub async fn build(self) -> io::Result<Tunnel> {
         let mut tcp_server = None;
         if self.mode.enable_tcp() {
-            let server = TunnelTcpServer::new(
+            #[allow(unused_mut)]
+            let mut builder = TunnelTcpServerBuilder::new(
                 self.context.clone(),
-                &self.client_addr,
+                self.client_addr.clone(),
                 self.balancer.clone(),
                 self.forward_addr.clone(),
-            )
-            .await?;
+            );
+
+            #[cfg(target_os = "macos")]
+            if let Some(s) = self.launchd_tcp_socket_name {
+                builder.set_launchd_socket_name(s);
+            }
+
+            let server = builder.build().await?;
             tcp_server = Some(server);
         }
 
         let mut udp_server = None;
         if self.mode.enable_udp() {
-            let udp_addr = self.udp_addr.as_ref().unwrap_or(&self.client_addr);
+            let udp_addr = self.udp_addr.unwrap_or(self.client_addr);
 
-            let server = TunnelUdpServer::new(
+            #[allow(unused_mut)]
+            let mut builder = TunnelUdpServerBuilder::new(
                 self.context.clone(),
                 udp_addr,
                 self.udp_expiry_duration,
                 self.udp_capacity,
                 self.balancer,
                 self.forward_addr,
-            )
-            .await?;
+            );
+
+            #[cfg(target_os = "macos")]
+            if let Some(s) = self.launchd_udp_socket_name {
+                builder.set_launchd_socket_name(s);
+            }
+
+            let server = builder.build().await?;
             udp_server = Some(server);
         }
 

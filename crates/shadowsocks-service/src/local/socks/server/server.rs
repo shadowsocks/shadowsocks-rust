@@ -19,6 +19,7 @@ pub struct SocksTcpServerBuilder {
     balancer: PingBalancer,
     mode: Mode,
     socks5_auth: Arc<Socks5AuthConfig>,
+    #[cfg(target_os = "macos")]
     launchd_socket_name: Option<String>,
 }
 
@@ -38,6 +39,7 @@ impl SocksTcpServerBuilder {
             balancer,
             mode,
             socks5_auth: Arc::new(socks5_auth),
+            #[cfg(target_os = "macos")]
             launchd_socket_name: None,
         }
     }

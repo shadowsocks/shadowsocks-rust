@@ -314,6 +314,15 @@ impl Server {
                         server_builder.set_udp_bind_addr(udp_addr);
                     }
 
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_tcp_socket_name {
+                        server_builder.set_launchd_tcp_socket_name(n);
+                    }
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_udp_socket_name {
+                        server_builder.set_launchd_udp_socket_name(n);
+                    }
+
                     let server = server_builder.build().await?;
                     local_server.tunnel_servers.push(server);
                 }
