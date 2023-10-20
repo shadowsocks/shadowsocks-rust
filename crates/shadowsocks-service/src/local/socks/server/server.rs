@@ -72,13 +72,13 @@ impl SocksTcpServerBuilder {
                     }
                 };
             } else {
-                let listener = match client_config {
+                let listener = match self.client_config {
                     ServerAddr::SocketAddr(ref saddr) => {
-                        ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?
+                        ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
                     }
                     ServerAddr::DomainName(ref dname, port) => {
-                        lookup_then!(context.context_ref(), dname, port, |addr| {
-                            ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
+                        lookup_then!(self.context.context_ref(), dname, port, |addr| {
+                            ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
                         })?
                         .1
                     }

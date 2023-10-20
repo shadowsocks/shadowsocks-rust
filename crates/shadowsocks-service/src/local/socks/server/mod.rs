@@ -108,6 +108,7 @@ impl SocksBuilder {
 
         let mut udp_server = None;
         if self.mode.enable_udp() {
+            #[allow(unused_mut)]
             let mut builder = Socks5UdpServerBuilder::new(
                 self.context.clone(),
                 udp_bind_addr.clone(),
@@ -127,6 +128,7 @@ impl SocksBuilder {
 
         let mut tcp_server = None;
         if self.mode.enable_tcp() {
+            #[allow(unused_mut)]
             let mut builder = SocksTcpServerBuilder::new(
                 self.context.clone(),
                 self.client_config,
