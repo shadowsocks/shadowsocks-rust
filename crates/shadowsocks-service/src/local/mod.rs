@@ -279,6 +279,15 @@ impl Server {
                         server_builder.set_udp_bind_addr(b.clone());
                     }
 
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_tcp_socket_name {
+                        server_builder.set_launchd_tcp_socket_name(n);
+                    }
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_udp_socket_name {
+                        server_builder.set_launchd_udp_socket_name(n);
+                    }
+
                     let server = server_builder.build().await?;
                     local_server.socks_servers.push(server);
                 }
@@ -315,7 +324,14 @@ impl Server {
                         None => return Err(io::Error::new(ErrorKind::Other, "http requires local address")),
                     };
 
-                    let builder = HttpBuilder::with_context(context.clone(), client_addr, balancer);
+                    #[allow(unused_mut)]
+                    let mut builder = HttpBuilder::with_context(context.clone(), client_addr, balancer);
+
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_tcp_socket_name {
+                        builder.set_launchd_tcp_socket_name(n);
+                    }
+
                     let server = builder.build().await?;
                     local_server.http_servers.push(server);
                 }
