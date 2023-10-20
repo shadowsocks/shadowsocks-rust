@@ -554,6 +554,9 @@ Example configuration:
             "socks5_auth_config_path": "/path/to/auth.json",
             // OPTIONAL. Instance specific ACL
             "acl": "/path/to/acl/file.acl",
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener",
         },
         {
             // SOCKS5, SOCKS4/4a local server

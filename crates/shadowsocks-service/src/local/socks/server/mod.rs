@@ -7,8 +7,8 @@ use shadowsocks::{config::Mode, ServerAddr};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-pub use self::server::{SocksTcpServer, SocksUdpServer};
-use self::socks5::Socks5UdpServer;
+pub use self::server::{SocksTcpServer, SocksTcpServerBuilder, SocksUdpServer};
+use self::socks5::Socks5UdpServerBuilder;
 
 use super::config::Socks5AuthConfig;
 
@@ -28,6 +28,10 @@ pub struct SocksBuilder {
     socks5_auth: Socks5AuthConfig,
     client_config: ServerAddr,
     balancer: PingBalancer,
+    #[cfg(target_os = "macos")]
+    launchd_tcp_socket_name: Option<String>,
+    #[cfg(target_os = "macos")]
+    launchd_udp_socket_name: Option<String>,
 }
 
 impl SocksBuilder {
@@ -52,6 +56,10 @@ impl SocksBuilder {
             socks5_auth: Socks5AuthConfig::default(),
             client_config,
             balancer,
+            #[cfg(target_os = "macos")]
+            launchd_tcp_socket_name: None,
+            #[cfg(target_os = "macos")]
+            launchd_udp_socket_name: None,
         }
     }
 
@@ -83,33 +91,57 @@ impl SocksBuilder {
         self.socks5_auth = p;
     }
 
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_tcp_socket_name(&mut self, n: String) {
+        self.launchd_tcp_socket_name = Some(n);
+    }
+
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_udp_socket_name(&mut self, n: String) {
+        self.launchd_udp_socket_name = Some(n);
+    }
+
     pub async fn build(self) -> io::Result<Socks> {
         let udp_bind_addr = self.udp_bind_addr.unwrap_or_else(|| self.client_config.clone());
 
         let mut udp_server = None;
         if self.mode.enable_udp() {
-            let server = Socks5UdpServer::new(
+            let mut builder = Socks5UdpServerBuilder::new(
                 self.context.clone(),
-                &udp_bind_addr,
+                udp_bind_addr.clone(),
                 self.udp_expiry_duration,
                 self.udp_capacity,
                 self.balancer.clone(),
-            )
-            .await?;
+            );
+
+            #[cfg(target_os = "macos")]
+            if let Some(s) = self.launchd_udp_socket_name {
+                builder.set_launchd_socket_name(s);
+            }
+
+            let server = builder.build().await?;
             udp_server = Some(server);
         }
 
         let mut tcp_server = None;
         if self.mode.enable_tcp() {
-            let server = SocksTcpServer::new(
+            let mut builder = SocksTcpServerBuilder::new(
                 self.context.clone(),
                 self.client_config,
                 udp_bind_addr,
                 self.balancer.clone(),
                 self.mode,
                 self.socks5_auth,
-            )
-            .await?;
+            );
+
+            #[cfg(target_os = "macos")]
+            if let Some(s) = self.launchd_tcp_socket_name {
+                builder.set_launchd_socket_name(s);
+            }
+
+            let server = builder.build().await?;
             tcp_server = Some(server);
         }
 

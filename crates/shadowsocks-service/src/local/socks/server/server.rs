@@ -12,6 +12,91 @@ use super::socks5::{Socks5TcpHandler, Socks5UdpServer};
 
 use crate::local::socks::config::Socks5AuthConfig;
 
+pub struct SocksTcpServerBuilder {
+    context: Arc<ServiceContext>,
+    client_config: ServerAddr,
+    udp_bind_addr: ServerAddr,
+    balancer: PingBalancer,
+    mode: Mode,
+    socks5_auth: Arc<Socks5AuthConfig>,
+    launchd_socket_name: Option<String>,
+}
+
+impl SocksTcpServerBuilder {
+    pub(crate) fn new(
+        context: Arc<ServiceContext>,
+        client_config: ServerAddr,
+        udp_bind_addr: ServerAddr,
+        balancer: PingBalancer,
+        mode: Mode,
+        socks5_auth: Socks5AuthConfig,
+    ) -> SocksTcpServerBuilder {
+        SocksTcpServerBuilder {
+            context,
+            client_config,
+            udp_bind_addr,
+            balancer,
+            mode,
+            socks5_auth: Arc::new(socks5_auth),
+            launchd_socket_name: None,
+        }
+    }
+
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_socket_name(&mut self, n: String) {
+        self.launchd_socket_name = Some(n);
+    }
+
+    pub async fn build(self) -> io::Result<SocksTcpServer> {
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "macos")] {
+                let listener = if let Some(launchd_socket_name) = self.launchd_socket_name {
+                    use tokio::net::TcpListener as TokioTcpListener;
+                    use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
+
+                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
+                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                    ShadowTcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                } else {
+                    match self.client_config {
+                        ServerAddr::SocketAddr(ref saddr) => {
+                            ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
+                        }
+                        ServerAddr::DomainName(ref dname, port) => {
+                            lookup_then!(self.context.context_ref(), dname, port, |addr| {
+                                ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
+                            })?
+                            .1
+                        }
+                    }
+                };
+            } else {
+                let listener = match client_config {
+                    ServerAddr::SocketAddr(ref saddr) => {
+                        ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?
+                    }
+                    ServerAddr::DomainName(ref dname, port) => {
+                        lookup_then!(context.context_ref(), dname, port, |addr| {
+                            ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
+                        })?
+                        .1
+                    }
+                };
+            }
+        }
+
+        Ok(SocksTcpServer {
+            context: self.context,
+            listener,
+            udp_bind_addr: self.udp_bind_addr,
+            balancer: self.balancer,
+            mode: self.mode,
+            socks5_auth: self.socks5_auth,
+        })
+    }
+}
+
 /// SOCKS TCP server instance
 pub struct SocksTcpServer {
     context: Arc<ServiceContext>,
@@ -23,35 +108,6 @@ pub struct SocksTcpServer {
 }
 
 impl SocksTcpServer {
-    pub(crate) async fn new(
-        context: Arc<ServiceContext>,
-        client_config: ServerAddr,
-        udp_bind_addr: ServerAddr,
-        balancer: PingBalancer,
-        mode: Mode,
-        socks5_auth: Socks5AuthConfig,
-    ) -> io::Result<SocksTcpServer> {
-        let listener = match client_config {
-            ServerAddr::SocketAddr(ref saddr) => {
-                ShadowTcpListener::bind_with_opts(saddr, context.accept_opts()).await?
-            }
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context.context_ref(), dname, port, |addr| {
-                    ShadowTcpListener::bind_with_opts(&addr, context.accept_opts()).await
-                })?
-                .1
-            }
-        };
-        Ok(SocksTcpServer {
-            context,
-            listener,
-            udp_bind_addr,
-            balancer,
-            mode,
-            socks5_auth: Arc::new(socks5_auth),
-        })
-    }
-
     /// Get TCP server local addr
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.listener.local_addr()

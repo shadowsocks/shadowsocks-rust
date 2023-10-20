@@ -166,11 +166,17 @@ impl TcpListener {
     }
 
     /// Create a `TcpListener` from tokio's `TcpListener`
-    pub fn from_listener(listener: TokioTcpListener, accept_opts: AcceptOpts) -> TcpListener {
-        TcpListener {
+    pub fn from_listener(listener: TokioTcpListener, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
+        // Enable TFO if supported
+        // macos requires TCP_FASTOPEN to be set after listen(), but other platform doesn't have this constraint
+        if accept_opts.tcp.fastopen {
+            set_tcp_fastopen(&listener)?;
+        }
+
+        Ok(TcpListener {
             inner: listener,
             accept_opts,
-        }
+        })
     }
 
     /// Polls to accept a new incoming connection to this listener.
