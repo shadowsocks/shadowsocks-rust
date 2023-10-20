@@ -9,14 +9,18 @@ use std::{
     os::unix::io::FromRawFd,
 };
 
+use log::debug;
+
 use crate::sys::get_launch_activate_socket;
 
 pub fn get_launch_activate_tcp_listener(name: &str) -> io::Result<TcpListener> {
     let fd = get_launch_activate_socket(name)?;
+    debug!("created TCP listener from launch activate socket {}", fd);
     Ok(unsafe { TcpListener::from_raw_fd(fd) })
 }
 
 pub fn get_launch_activate_udp_socket(name: &str) -> io::Result<UdpSocket> {
     let fd = get_launch_activate_socket(name)?;
+    debug!("created UDP socket from launch activate socket {}", fd);
     Ok(unsafe { UdpSocket::from_raw_fd(fd) })
 }
