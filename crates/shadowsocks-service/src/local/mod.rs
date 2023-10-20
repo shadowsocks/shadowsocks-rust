@@ -391,6 +391,15 @@ impl Server {
                     };
                     server_builder.set_mode(local_config.mode);
 
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_tcp_socket_name {
+                        server_builder.set_launchd_tcp_socket_name(n);
+                    }
+                    #[cfg(target_os = "macos")]
+                    if let Some(n) = local_config.launchd_udp_socket_name {
+                        server_builder.set_launchd_udp_socket_name(n);
+                    }
+
                     let server = server_builder.build().await?;
                     local_server.dns_servers.push(server);
                 }

@@ -618,7 +618,10 @@ Example configuration:
             // OPTIONAL. Remote DNS's port, 53 by default
             "remote_dns_port": 53,
             // OPTIONAL. dns client cache size for fetching dns queries.
-            "client_cache_size": 5
+            "client_cache_size": 5,
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener"
         },
         {
             // Tun local server (feature = "local-tun")
