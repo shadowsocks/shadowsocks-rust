@@ -145,12 +145,27 @@ impl TcpListener {
         #[cfg(not(windows))]
         socket.set_reuseaddr(true)?;
 
-        let set_dual_stack = is_dual_stack_addr(addr);
+        #[cfg(target_os = "macos")]
+        let bound = match socket.local_addr() {
+            Ok(local_addr) => match local_addr.port() {
+                0 => false,
+                _ => {
+                    log::info!("create_inbound_tcp_socket, addr: {}, bound: {}", addr, local_addr);
+                    true
+                },
+            },
+            Err(_) => false,
+        };
+        #[cfg(not(target_os = "macos"))]
+        let bound = false;
+        if !bound {
+            let set_dual_stack = is_dual_stack_addr(addr);
 
-        if set_dual_stack {
-            socket_bind_dual_stack(&socket, addr, accept_opts.ipv6_only)?;
-        } else {
-            socket.bind(*addr)?;
+            if set_dual_stack {
+                socket_bind_dual_stack(&socket, addr, accept_opts.ipv6_only)?;
+            } else {
+                socket.bind(*addr)?;
+            }
         }
 
         // mio's default backlog is 1024

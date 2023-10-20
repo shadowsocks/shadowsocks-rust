@@ -223,8 +223,56 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
     Ok(())
 }
 
+extern "C" {
+    fn launch_activate_socket(name: *const libc::c_char, fds: *mut *mut libc::c_int, cnt: *mut libc::size_t) -> libc::c_int;
+}
+
+pub fn get_launchd_socket() -> io::Result<RawFd> {
+    let name = std::ffi::CString::new("Listeners").expect("Listeners");
+    let mut fds = ptr::null_mut();
+    let mut count = 0;
+    let error =  unsafe { launch_activate_socket(name.as_ptr(), &mut fds, &mut count) };
+    match error {
+        0 => {
+            let result = match count {
+                1 => Ok(unsafe { *fds.offset(0) }),
+                _ => {
+                    let msg = format!("launch_activate_socket, unexpected sockets: {}", count);
+                    warn!("{}", msg);
+                    Err(io::Error::new(ErrorKind::Other, msg))
+                }
+            };
+            unsafe { libc::free(fds as *mut _) };
+            result
+        }
+        error => {
+            match error {
+                libc::ENOENT => {
+                    warn!("launch_activate_socket: The socket name specified does not exist in the caller's launchd.plist(5).")
+                },
+                libc::ESRCH => {
+                    // debug!("launch_activate_socket: The calling process is not managed by launchd(8).")
+                },
+                libc::EALREADY => {
+                    warn!("launch_activate_socket: The specified socket has already been activated.")
+                },
+                _ => {
+                    warn!("launch_activate_socket: {}", io::Error::from_raw_os_error(error))
+                }
+            }
+            Err(io::Error::from_raw_os_error(error))
+        }
+    }
+}
+
 /// Create a TCP socket for listening
 pub async fn create_inbound_tcp_socket(bind_addr: &SocketAddr, _accept_opts: &AcceptOpts) -> io::Result<TcpSocket> {
+    if let Ok(launchd_socket) = get_launchd_socket() {
+        log::info!("launch_activate_socket, use launched socket for {}", bind_addr);
+        let mut nonblocking = true as libc::c_int;
+        unsafe { libc::ioctl(launchd_socket, libc::FIONBIO, &mut nonblocking) };
+        return Ok(unsafe { TcpSocket::from_raw_fd(launchd_socket) });
+    }
     match bind_addr {
         SocketAddr::V4(..) => TcpSocket::new_v4(),
         SocketAddr::V6(..) => TcpSocket::new_v6(),
