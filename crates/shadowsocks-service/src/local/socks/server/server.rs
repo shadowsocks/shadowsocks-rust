@@ -4,9 +4,11 @@ use log::{error, info};
 use shadowsocks::{config::Mode, net::TcpListener as ShadowTcpListener, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::{
-    local::{context::ServiceContext, loadbalancing::PingBalancer, socks::config::Socks5AuthConfig},
-    net::listener::create_standard_tcp_listener,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::tcp::listener::create_standard_tcp_listener,
+    socks::config::Socks5AuthConfig,
 };
 
 #[cfg(feature = "local-socks4")]

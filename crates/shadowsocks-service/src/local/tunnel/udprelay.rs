@@ -10,13 +10,10 @@ use shadowsocks::{
 };
 use tokio::{net::UdpSocket, time};
 
-use crate::{
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::{UdpAssociationManager, UdpInboundWrite},
-    },
-    net::listener::create_standard_udp_listener,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
 };
 
 pub struct TunnelUdpServerBuilder {

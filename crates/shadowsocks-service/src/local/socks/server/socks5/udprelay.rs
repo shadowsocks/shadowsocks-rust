@@ -24,9 +24,9 @@ use crate::{
     local::{
         context::ServiceContext,
         loadbalancing::PingBalancer,
-        net::{UdpAssociationManager, UdpInboundWrite},
+        net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
     },
-    net::{listener::create_standard_udp_listener, utils::to_ipv4_mapped},
+    net::utils::to_ipv4_mapped,
 };
 
 pub struct Socks5UdpServerBuilder {

@@ -5,5 +5,5 @@ pub use self::{
     udp::{UdpAssociationManager, UdpInboundWrite},
 };
 
-mod tcp;
+pub(crate) mod tcp;
 pub(crate) mod udp;

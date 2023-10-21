@@ -6,14 +6,11 @@ use log::{error, info, trace};
 use shadowsocks::{net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::{
-    local::{
-        context::ServiceContext,
-        loadbalancing::PingBalancer,
-        net::AutoProxyClientStream,
-        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
-    },
-    net::listener::create_standard_tcp_listener,
+use crate::local::{
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::{tcp::listener::create_standard_tcp_listener, AutoProxyClientStream},
+    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
 };
 
 pub struct TunnelTcpServerBuilder {

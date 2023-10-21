@@ -18,14 +18,12 @@ use hyper::{
 use log::{error, info};
 use shadowsocks::{config::ServerAddr, net::TcpListener};
 
-use crate::{
-    local::{
-        context::ServiceContext,
-        http::connector::Connector,
-        loadbalancing::PingBalancer,
-        LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
-    },
-    net::listener::create_standard_tcp_listener,
+use crate::local::{
+    context::ServiceContext,
+    http::connector::Connector,
+    loadbalancing::PingBalancer,
+    net::tcp::listener::create_standard_tcp_listener,
+    LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
 };
 
 use super::{client_cache::ProxyClientCache, dispatcher::HttpDispatcher};

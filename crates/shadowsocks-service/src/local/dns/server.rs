@@ -39,8 +39,11 @@ use shadowsocks::{
 
 use crate::{
     acl::AccessControl,
-    local::{context::ServiceContext, loadbalancing::PingBalancer},
-    net::listener::{create_standard_tcp_listener, create_standard_udp_listener},
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::{tcp::listener::create_standard_tcp_listener, udp::listener::create_standard_udp_listener},
+    },
 };
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
