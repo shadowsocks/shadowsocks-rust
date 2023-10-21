@@ -16,13 +16,16 @@ use hyper::{
     Server,
 };
 use log::{error, info};
-use shadowsocks::{config::ServerAddr, lookup_then, net::TcpListener};
+use shadowsocks::{config::ServerAddr, net::TcpListener};
 
-use crate::local::{
-    context::ServiceContext,
-    http::connector::Connector,
-    loadbalancing::PingBalancer,
-    LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
+use crate::{
+    local::{
+        context::ServiceContext,
+        http::connector::Connector,
+        loadbalancing::PingBalancer,
+        LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
+    },
+    net::listener::create_standard_tcp_listener,
 };
 
 use super::{client_cache::ProxyClientCache, dispatcher::HttpDispatcher};
@@ -71,26 +74,18 @@ impl HttpBuilder {
                     use tokio::net::TcpListener as TokioTcpListener;
                     use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                    match get_launch_activate_tcp_listener(&launchd_socket_name)? {
+                        Some(std_listener) => {
+                            let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                            TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                        }
+                        None => create_standard_tcp_listener(&self.context, &self.client_config).await?
+                    }
                 } else {
-                    match self.client_config {
-                        ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(&sa, self.context.accept_opts().clone()).await,
-                        ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                            TcpListener::bind_with_opts(&addr, self.context.accept_opts().clone()).await
-                        })
-                        .map(|(_, b)| b),
-                    }?
+                    create_standard_tcp_listener(&self.context, &self.client_config).await?
                 };
             } else {
-                let listener = match self.client_config {
-                    ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(&sa, self.context.accept_opts().clone()).await,
-                    ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                        TcpListener::bind_with_opts(&addr, self.context.accept_opts().clone()).await
-                    })
-                    .map(|(_, b)| b),
-                }?;
+                let listener = create_standard_tcp_listener(&self.context, &self.client_config).await?;
             }
         }
 

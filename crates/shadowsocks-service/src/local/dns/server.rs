@@ -32,8 +32,7 @@ use tokio::{
 
 use shadowsocks::{
     config::Mode,
-    lookup_then,
-    net::{TcpListener, UdpSocket as ShadowUdpSocket},
+    net::TcpListener,
     relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
     ServerAddr,
 };
@@ -41,6 +40,7 @@ use shadowsocks::{
 use crate::{
     acl::AccessControl,
     local::{context::ServiceContext, loadbalancing::PingBalancer},
+    net::listener::{create_standard_tcp_listener, create_standard_udp_listener},
 };
 
 use super::{client_cache::DnsClientCache, config::NameServerAddr};
@@ -213,34 +213,18 @@ impl DnsTcpServerBuilder {
                     use tokio::net::TcpListener as TokioTcpListener;
                     use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                } else {
-                    match self.bind_addr {
-                        ServerAddr::SocketAddr(ref saddr) => {
-                            TcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
+                    match get_launch_activate_tcp_listener(&launchd_socket_name)? {
+                        Some(std_listener) => {
+                            let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                            TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
                         }
-                        ServerAddr::DomainName(ref dname, port) => {
-                            lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                                TcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
-                            })?
-                            .1
-                        }
+                        None => create_standard_tcp_listener(&self.context, &self.bind_addr).await?
                     }
+                } else {
+                    create_standard_tcp_listener(&self.context, &self.bind_addr).await?
                 };
             } else {
-                let listener = match self.bind_addr {
-                    ServerAddr::SocketAddr(ref saddr) => {
-                        TcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
-                    }
-                    ServerAddr::DomainName(ref dname, port) => {
-                        lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                            TcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
-                        })?
-                        .1
-                    }
-                };
+                let listener = create_standard_tcp_listener(&self.context, &self.bind_addr).await?;
             }
         }
 
@@ -406,35 +390,15 @@ impl DnsUdpServerBuilder {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
-                    TokioUdpSocket::from_std(std_socket)?
+                    match get_launch_activate_udp_socket(&launchd_socket_name)? {
+                        Some(std_socket) => TokioUdpSocket::from_std(std_socket)?,
+                        None => create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
+                    }
                 } else {
-                    let shadow_socket = match self.bind_addr {
-                        ServerAddr::SocketAddr(ref saddr) => {
-                            ShadowUdpSocket::listen_with_opts(saddr, self.context.accept_opts()).await?
-                        }
-                        ServerAddr::DomainName(ref dname, port) => {
-                            lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                                ShadowUdpSocket::listen_with_opts(&addr, self.context.accept_opts()).await
-                            })?
-                            .1
-                        }
-                    };
-                    shadow_socket.into()
+                    create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
                 };
             } else {
-                let shadow_socket = match self.bind_addr {
-                    ServerAddr::SocketAddr(ref saddr) => {
-                        ShadowUdpSocket::listen_with_opts(saddr, self.context.accept_opts()).await?
-                    }
-                    ServerAddr::DomainName(ref dname, port) => {
-                        lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                            ShadowUdpSocket::listen_with_opts(&addr, self.context.accept_opts()).await
-                        })?
-                        .1
-                    }
-                };
-                let socket = shadow_socket.into();
+                let socket = create_standard_udp_listener(&self.context, &self.bind_addr).await?.into();
             }
         }
 

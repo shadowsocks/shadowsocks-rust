@@ -5,17 +5,18 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use log::{debug, error, info};
 use shadowsocks::{
-    lookup_then,
-    net::UdpSocket as ShadowUdpSocket,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
 };
 use tokio::{net::UdpSocket, time};
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::{UdpAssociationManager, UdpInboundWrite},
+use crate::{
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::{UdpAssociationManager, UdpInboundWrite},
+    },
+    net::listener::create_standard_udp_listener,
 };
 
 pub struct TunnelUdpServerBuilder {
@@ -63,35 +64,15 @@ impl TunnelUdpServerBuilder {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
-                    TokioUdpSocket::from_std(std_socket)?
+                    match get_launch_activate_udp_socket(&launchd_socket_name)? {
+                        Some(std_socket) => TokioUdpSocket::from_std(std_socket)?,
+                        None => create_standard_udp_listener(&self.context, &self.client_config).await?.into()
+                    }
                 } else {
-                    let shadow_socket = match self.client_config {
-                        ServerAddr::SocketAddr(ref saddr) => {
-                            ShadowUdpSocket::listen_with_opts(saddr, self.context.accept_opts()).await?
-                        }
-                        ServerAddr::DomainName(ref dname, port) => {
-                            lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                                ShadowUdpSocket::listen_with_opts(&addr, self.context.accept_opts()).await
-                            })?
-                            .1
-                        }
-                    };
-                    shadow_socket.into()
+                    create_standard_udp_listener(&self.context, &self.client_config).await?.into()
                 };
             } else {
-                let shadow_socket = match self.client_config {
-                    ServerAddr::SocketAddr(ref saddr) => {
-                        ShadowUdpSocket::listen_with_opts(saddr, self.context.accept_opts()).await?
-                    }
-                    ServerAddr::DomainName(ref dname, port) => {
-                        lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                            ShadowUdpSocket::listen_with_opts(&addr, self.context.accept_opts()).await
-                        })?
-                        .1
-                    }
-                };
-                let socket = shadow_socket.into();
+                let socket = create_standard_udp_listener(&self.context, &self.client_config).await?.into();
             }
         }
 

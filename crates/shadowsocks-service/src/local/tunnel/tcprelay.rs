@@ -3,14 +3,17 @@
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use log::{error, info, trace};
-use shadowsocks::{lookup_then, net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
+use shadowsocks::{net::TcpListener as ShadowTcpListener, relay::socks5::Address, ServerAddr};
 use tokio::{net::TcpStream, time};
 
-use crate::local::{
-    context::ServiceContext,
-    loadbalancing::PingBalancer,
-    net::AutoProxyClientStream,
-    utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
+use crate::{
+    local::{
+        context::ServiceContext,
+        loadbalancing::PingBalancer,
+        net::AutoProxyClientStream,
+        utils::{establish_tcp_tunnel, establish_tcp_tunnel_bypassed},
+    },
+    net::listener::create_standard_tcp_listener,
 };
 
 pub struct TunnelTcpServerBuilder {
@@ -52,34 +55,18 @@ impl TunnelTcpServerBuilder {
                     use tokio::net::TcpListener as TokioTcpListener;
                     use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    ShadowTcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                } else {
-                    match self.client_config {
-                        ServerAddr::SocketAddr(ref saddr) => {
-                            ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
+                    match get_launch_activate_tcp_listener(&launchd_socket_name)? {
+                        Some(std_listener) => {
+                            let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                            ShadowTcpListener::from_listener(tokio_listener, self.context.accept_opts())?
                         }
-                        ServerAddr::DomainName(ref dname, port) => {
-                            lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                                ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
-                            })?
-                            .1
-                        }
+                        None => create_standard_tcp_listener(&self.context, &self.client_config).await?
                     }
+                } else {
+                    create_standard_tcp_listener(&self.context, &self.client_config).await?
                 };
             } else {
-                let listener = match self.client_config {
-                    ServerAddr::SocketAddr(ref saddr) => {
-                        ShadowTcpListener::bind_with_opts(saddr, self.context.accept_opts()).await?
-                    }
-                    ServerAddr::DomainName(ref dname, port) => {
-                        lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                            ShadowTcpListener::bind_with_opts(&addr, self.context.accept_opts()).await
-                        })?
-                        .1
-                    }
-                };
+                let listener = create_standard_tcp_listener(&self.context, &self.client_config).await?;
             }
         }
 

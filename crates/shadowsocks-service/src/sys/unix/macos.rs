@@ -2,7 +2,7 @@
 
 use std::{ffi::CString, io, os::fd::RawFd, ptr};
 
-use log::error;
+use log::{error, warn};
 
 extern "C" {
     /// https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket
@@ -13,7 +13,7 @@ extern "C" {
     ) -> libc::c_int;
 }
 
-pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
+pub fn get_launch_activate_socket(name: &str) -> io::Result<Option<RawFd>> {
     let mut fds: *mut libc::c_int = ptr::null_mut();
     let mut cnt: libc::size_t = 0;
 
@@ -33,13 +33,18 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
             let err = io::Error::last_os_error();
             match err.raw_os_error() {
                 Some(libc::ENOENT) => {
-                    error!("activate socket name \"{}\" doesn't exist", name);
+                    warn!("activate socket name \"{}\" doesn't exist, error: {}", name, err);
+                    return Ok(None);
                 }
                 Some(libc::ESRCH) => {
-                    error!("current process is not managed by launchd");
+                    warn!("current process is not managed by launchd, error: {}", err);
+                    return Ok(None);
                 }
                 Some(libc::EALREADY) => {
-                    error!("activate socket name \"{}\" has already been activated", name);
+                    error!(
+                        "activate socket name \"{}\" has already been activated, error: {}",
+                        name, err
+                    );
                 }
                 _ => {}
             }
@@ -49,10 +54,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     }
 
     let result = if cnt == 0 {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("could not find launch socket with name \"{}\"", name),
-        ))
+        Ok(None)
     } else if cnt > 1 {
         for idx in 0..cnt {
             unsafe {
@@ -71,7 +73,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     } else {
         // Take fds[0] as the result
         let fd = unsafe { *fds };
-        Ok(fd as RawFd)
+        Ok(Some(fd as RawFd))
     };
 
     if !fds.is_null() {
