@@ -554,6 +554,9 @@ Example configuration:
             "socks5_auth_config_path": "/path/to/auth.json",
             // OPTIONAL. Instance specific ACL
             "acl": "/path/to/acl/file.acl",
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener"
         },
         {
             // SOCKS5, SOCKS4/4a local server
@@ -567,7 +570,10 @@ Example configuration:
             // - TCP is enabled, then SOCKS5's UDP Association command will return this address
             // - UDP is enabled, then SOCKS5's UDP server will listen to this address.
             "local_udp_address": "127.0.0.1",
-            "local_udp_port": 2081
+            "local_udp_port": 2081,
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener"
         },
         {
             // Tunnel local server (feature = "local-tunnel")
@@ -580,14 +586,19 @@ Example configuration:
             "forward_address": "8.8.8.8",
             "forward_port": 53,
             // OPTIONAL. Customizing whether to start TCP and UDP tunnel
-            "mode": "tcp_only"
+            "mode": "tcp_only",
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener"
         },
         {
             // HTTP local server (feature = "local-http")
             "protocol": "http",
             // Listen address
             "local_address": "127.0.0.1",
-            "local_port": 3128
+            "local_port": 3128,
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener"
         },
         {
             // DNS local server (feature = "local-dns")
@@ -607,7 +618,10 @@ Example configuration:
             // OPTIONAL. Remote DNS's port, 53 by default
             "remote_dns_port": 53,
             // OPTIONAL. dns client cache size for fetching dns queries.
-            "client_cache_size": 5
+            "client_cache_size": 5,
+            // OPTIONAL. macOS launchd activate socket
+            "launchd_tcp_socket_name": "TCPListener",
+            "launchd_udp_socket_name": "UDPListener"
         },
         {
             // Tun local server (feature = "local-tun")

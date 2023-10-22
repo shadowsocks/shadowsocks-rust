@@ -240,6 +240,14 @@ struct SSLocalExtConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     protocol: Option<String>,
 
+    /// macOS launch activate socket
+    #[cfg(target_os = "macos")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    launchd_udp_socket_name: Option<String>,
+    #[cfg(target_os = "macos")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    launchd_tcp_socket_name: Option<String>,
+
     /// TCP Transparent Proxy type
     #[cfg(feature = "local-redir")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -888,6 +896,43 @@ pub struct LocalConfig {
     #[cfg(all(feature = "local-tun", unix))]
     pub tun_device_fd_from_path: Option<PathBuf>,
 
+    /// macOS launchd socket for TCP listener
+    ///
+    /// <https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket>
+    /// <https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html>
+    ///
+    /// ```plist
+    /// <key>Sockets</key>
+    /// <dict>
+    ///     <key>{launchd_tcp_socket_name}</key>
+    ///     <dict>
+    ///         <key>SockType</key>
+    ///         <string>stream</string>
+    ///         ... other keys ...
+    ///     </dict>
+    /// </dict>
+    /// ```
+    #[cfg(target_os = "macos")]
+    pub launchd_tcp_socket_name: Option<String>,
+    /// macOS launchd socket for UDP listener
+    ///
+    /// <https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket>
+    /// <https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html>
+    ///
+    /// ```plist
+    /// <key>Sockets</key>
+    /// <dict>
+    ///     <key>{launchd_udp_socket_name}</key>
+    ///     <dict>
+    ///         <key>SockType</key>
+    ///         <string>dgram</string>
+    ///         ... other keys ...
+    ///     </dict>
+    /// </dict>
+    /// ```
+    #[cfg(target_os = "macos")]
+    pub launchd_udp_socket_name: Option<String>,
+
     /// Set `IPV6_V6ONLY` for listener socket
     pub ipv6_only: bool,
 
@@ -940,6 +985,11 @@ impl LocalConfig {
             tun_device_fd: None,
             #[cfg(all(feature = "local-tun", unix))]
             tun_device_fd_from_path: None,
+
+            #[cfg(target_os = "macos")]
+            launchd_tcp_socket_name: None,
+            #[cfg(target_os = "macos")]
+            launchd_udp_socket_name: None,
 
             ipv6_only: false,
 
@@ -1463,6 +1513,12 @@ impl Config {
                             );
 
                             local_config.udp_addr = Some(local_udp_addr);
+                        }
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            local_config.launchd_tcp_socket_name = local.launchd_tcp_socket_name;
+                            local_config.launchd_udp_socket_name = local.launchd_udp_socket_name;
                         }
 
                         match local.mode {
@@ -2423,6 +2479,10 @@ impl fmt::Display for Config {
                             #[allow(unreachable_patterns)]
                             p => Some(p.as_str().to_owned()),
                         },
+                        #[cfg(target_os = "macos")]
+                        launchd_tcp_socket_name: local.launchd_tcp_socket_name.clone(),
+                        #[cfg(target_os = "macos")]
+                        launchd_udp_socket_name: local.launchd_udp_socket_name.clone(),
                         #[cfg(feature = "local-redir")]
                         tcp_redir: if local.tcp_redir != RedirType::tcp_default() {
                             Some(local.tcp_redir.to_string())

@@ -5,8 +5,6 @@ use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use log::{debug, error, info};
 use shadowsocks::{
-    lookup_then,
-    net::UdpSocket as ShadowUdpSocket,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
     ServerAddr,
 };
@@ -15,8 +13,74 @@ use tokio::{net::UdpSocket, time};
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
-    net::{UdpAssociationManager, UdpInboundWrite},
+    net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
 };
+
+pub struct TunnelUdpServerBuilder {
+    context: Arc<ServiceContext>,
+    client_config: ServerAddr,
+    time_to_live: Option<Duration>,
+    capacity: Option<usize>,
+    balancer: PingBalancer,
+    forward_addr: Address,
+    #[cfg(target_os = "macos")]
+    launchd_socket_name: Option<String>,
+}
+
+impl TunnelUdpServerBuilder {
+    pub(crate) fn new(
+        context: Arc<ServiceContext>,
+        client_config: ServerAddr,
+        time_to_live: Option<Duration>,
+        capacity: Option<usize>,
+        balancer: PingBalancer,
+        forward_addr: Address,
+    ) -> TunnelUdpServerBuilder {
+        TunnelUdpServerBuilder {
+            context,
+            client_config,
+            time_to_live,
+            capacity,
+            balancer,
+            forward_addr,
+            #[cfg(target_os = "macos")]
+            launchd_socket_name: None,
+        }
+    }
+
+    /// macOS launchd activate socket
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_socket_name(&mut self, n: String) {
+        self.launchd_socket_name = Some(n);
+    }
+
+    pub async fn build(self) -> io::Result<TunnelUdpServer> {
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "macos")] {
+                let socket = if let Some(launchd_socket_name) = self.launchd_socket_name {
+                    use tokio::net::UdpSocket as TokioUdpSocket;
+                    use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
+
+                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
+                    TokioUdpSocket::from_std(std_socket)?
+                } else {
+                    create_standard_udp_listener(&self.context, &self.client_config).await?.into()
+                };
+            } else {
+                let socket = create_standard_udp_listener(&self.context, &self.client_config).await?.into();
+            }
+        }
+
+        Ok(TunnelUdpServer {
+            context: self.context,
+            time_to_live: self.time_to_live,
+            capacity: self.capacity,
+            listener: Arc::new(socket),
+            balancer: self.balancer,
+            forward_addr: self.forward_addr,
+        })
+    }
+}
 
 #[derive(Clone)]
 struct TunnelUdpInboundWriter {
@@ -40,38 +104,6 @@ pub struct TunnelUdpServer {
 }
 
 impl TunnelUdpServer {
-    pub(crate) async fn new(
-        context: Arc<ServiceContext>,
-        client_config: &ServerAddr,
-        time_to_live: Option<Duration>,
-        capacity: Option<usize>,
-        balancer: PingBalancer,
-        forward_addr: Address,
-    ) -> io::Result<TunnelUdpServer> {
-        let socket = match client_config {
-            ServerAddr::SocketAddr(ref saddr) => {
-                ShadowUdpSocket::listen_with_opts(saddr, context.accept_opts()).await?
-            }
-            ServerAddr::DomainName(ref dname, port) => {
-                lookup_then!(context.context_ref(), dname, *port, |addr| {
-                    ShadowUdpSocket::listen_with_opts(&addr, context.accept_opts()).await
-                })?
-                .1
-            }
-        };
-        let socket: UdpSocket = socket.into();
-        let listener = Arc::new(socket);
-
-        Ok(TunnelUdpServer {
-            context,
-            time_to_live,
-            capacity,
-            listener,
-            balancer,
-            forward_addr,
-        })
-    }
-
     /// Get server's local address
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.listener.local_addr()

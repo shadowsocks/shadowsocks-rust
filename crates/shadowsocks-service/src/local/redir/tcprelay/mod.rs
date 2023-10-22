@@ -112,7 +112,7 @@ impl RedirTcpServer {
 
     /// Start serving
     pub async fn run(self) -> io::Result<()> {
-        let listener = ShadowTcpListener::from_listener(self.listener, self.context.accept_opts());
+        let listener = ShadowTcpListener::from_listener(self.listener, self.context.accept_opts())?;
 
         let actual_local_addr = listener.local_addr().expect("determine port bound to");
 

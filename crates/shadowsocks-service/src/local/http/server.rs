@@ -16,12 +16,13 @@ use hyper::{
     Server,
 };
 use log::{error, info};
-use shadowsocks::{config::ServerAddr, lookup_then, net::TcpListener};
+use shadowsocks::{config::ServerAddr, net::TcpListener};
 
 use crate::local::{
     context::ServiceContext,
     http::connector::Connector,
     loadbalancing::PingBalancer,
+    net::tcp::listener::create_standard_tcp_listener,
     LOCAL_DEFAULT_KEEPALIVE_TIMEOUT,
 };
 
@@ -32,6 +33,8 @@ pub struct HttpBuilder {
     context: Arc<ServiceContext>,
     client_config: ServerAddr,
     balancer: PingBalancer,
+    #[cfg(target_os = "macos")]
+    launchd_tcp_socket_name: Option<String>,
 }
 
 impl HttpBuilder {
@@ -51,18 +54,34 @@ impl HttpBuilder {
             context,
             client_config,
             balancer,
+            #[cfg(target_os = "macos")]
+            launchd_tcp_socket_name: None,
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn set_launchd_tcp_socket_name(&mut self, n: String) {
+        self.launchd_tcp_socket_name = Some(n);
     }
 
     /// Build HTTP server instance
     pub async fn build(self) -> io::Result<Http> {
-        let listener = match self.client_config {
-            ServerAddr::SocketAddr(sa) => TcpListener::bind_with_opts(&sa, self.context.accept_opts().clone()).await,
-            ServerAddr::DomainName(ref dname, port) => lookup_then!(self.context.context_ref(), dname, port, |addr| {
-                TcpListener::bind_with_opts(&addr, self.context.accept_opts().clone()).await
-            })
-            .map(|(_, b)| b),
-        }?;
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "macos")] {
+                let listener = if let Some(launchd_socket_name) = self.launchd_tcp_socket_name {
+                    use tokio::net::TcpListener as TokioTcpListener;
+                    use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
+
+                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
+                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                } else {
+                    create_standard_tcp_listener(&self.context, &self.client_config).await?
+                };
+            } else {
+                let listener = create_standard_tcp_listener(&self.context, &self.client_config).await?;
+            }
+        }
 
         let proxy_client_cache = Arc::new(ProxyClientCache::new(self.context.clone()));
 
