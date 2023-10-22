@@ -216,13 +216,9 @@ impl DnsTcpServerBuilder {
                     use tokio::net::TcpListener as TokioTcpListener;
                     use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    match get_launch_activate_tcp_listener(&launchd_socket_name)? {
-                        Some(std_listener) => {
-                            let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                            TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                        }
-                        None => create_standard_tcp_listener(&self.context, &self.bind_addr).await?
-                    }
+                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
+                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
                 } else {
                     create_standard_tcp_listener(&self.context, &self.bind_addr).await?
                 };
@@ -393,10 +389,8 @@ impl DnsUdpServerBuilder {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                    match get_launch_activate_udp_socket(&launchd_socket_name)? {
-                        Some(std_socket) => TokioUdpSocket::from_std(std_socket)?,
-                        None => create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
-                    }
+                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
+                    TokioUdpSocket::from_std(std_socket)?
                 } else {
                     create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
                 };

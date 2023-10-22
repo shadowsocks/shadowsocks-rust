@@ -2,7 +2,7 @@
 
 use std::{ffi::CString, io, os::fd::RawFd, ptr};
 
-use log::{error, warn};
+use log::error;
 
 extern "C" {
     /// https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket
@@ -13,7 +13,7 @@ extern "C" {
     ) -> libc::c_int;
 }
 
-pub fn get_launch_activate_socket(name: &str) -> io::Result<Option<RawFd>> {
+pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     let mut fds: *mut libc::c_int = ptr::null_mut();
     let mut cnt: libc::size_t = 0;
 
@@ -33,12 +33,10 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<Option<RawFd>> {
             let err = io::Error::last_os_error();
             match err.raw_os_error() {
                 Some(libc::ENOENT) => {
-                    warn!("activate socket name \"{}\" doesn't exist, error: {}", name, err);
-                    return Ok(None);
+                    error!("activate socket name \"{}\" doesn't exist, error: {}", name, err);
                 }
                 Some(libc::ESRCH) => {
-                    warn!("current process is not managed by launchd, error: {}", err);
-                    return Ok(None);
+                    error!("current process is not managed by launchd, error: {}", err);
                 }
                 Some(libc::EALREADY) => {
                     error!(
@@ -54,7 +52,10 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<Option<RawFd>> {
     }
 
     let result = if cnt == 0 {
-        Ok(None)
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("launch socket with name \"{}\" doesn't exist", name),
+        ))
     } else if cnt > 1 {
         for idx in 0..cnt {
             unsafe {
@@ -73,7 +74,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<Option<RawFd>> {
     } else {
         // Take fds[0] as the result
         let fd = unsafe { *fds };
-        Ok(Some(fd as RawFd))
+        Ok(fd as RawFd)
     };
 
     if !fds.is_null() {

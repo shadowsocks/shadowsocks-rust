@@ -61,10 +61,8 @@ impl TunnelUdpServerBuilder {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                    match get_launch_activate_udp_socket(&launchd_socket_name)? {
-                        Some(std_socket) => TokioUdpSocket::from_std(std_socket)?,
-                        None => create_standard_udp_listener(&self.context, &self.client_config).await?.into()
-                    }
+                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
+                    TokioUdpSocket::from_std(std_socket)?
                 } else {
                     create_standard_udp_listener(&self.context, &self.client_config).await?.into()
                 };
