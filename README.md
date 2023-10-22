@@ -437,7 +437,7 @@ It will create a Tun interface with address `10.255.0.1` and netmask `255.255.25
 Download `wintun.dll` from [Wintun](https://www.wintun.net/), and place it in the folder with shadowsocks' runnable binaries, or in the system PATH.
 
 ```powershell
-sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface "Loopback" --tun-interface-name "shadowsocks"
+sslocal --protocol tun -s "[::1]:8388" -m "aes-256-gcm" -k "hello-kitty" --outbound-bind-interface "Ethernet 0" --tun-interface-name "shadowsocks"
 ```
 
 ### Local client for Windows Service
@@ -979,7 +979,7 @@ It supports the following features:
 - [x] Improved logging format (waiting for the new official log crate)
 - [x] Support more ciphers without depending on `libcrypto` (waiting for an acceptable Rust crypto lib implementation)
 - [x] Windows support.
-- [x] Build with stable `rustc` <del>(blocking by `crypto2`)</del>.
+- [x] Build with stable `rustc` ~~(blocking by `crypto2`)~~.
 - [x] Support HTTP Proxy protocol
 - [x] AEAD ciphers. (proposed in [SIP004](https://github.com/shadowsocks/shadowsocks-org/issues/30), still under discussion)
 - [x] Choose server based on delay #152
