@@ -1298,7 +1298,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b58db92f96b720de98181bbbe63c831e87005ab460c1bf306eb2622b4707997f"
 dependencies = [
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "widestring",
  "windows-sys 0.48.0",
  "winreg",
@@ -1988,7 +1988,7 @@ checksum = "055b4e778e8feb9f93c4e439f71dc2156ef13360b432b799e179a8c4cdf0b1d7"
 dependencies = [
  "bytes",
  "libc",
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "tracing",
  "windows-sys 0.48.0",
 ]
@@ -2504,7 +2504,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "shadowsocks-crypto",
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "spin 0.9.8",
  "thiserror",
  "tokio",
@@ -2606,7 +2606,7 @@ dependencies = [
  "serde",
  "shadowsocks",
  "smoltcp",
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "spin 0.9.8",
  "thiserror",
  "tokio",
@@ -2702,9 +2702,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4031e820eb552adee9295814c0ced9e5cf38ddf1e8b7d566d6de8e2538ea989e"
+checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
 dependencies = [
  "libc",
  "windows-sys 0.48.0",
@@ -2909,7 +2909,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "tokio-macros",
  "windows-sys 0.48.0",
 ]
@@ -2957,7 +2957,7 @@ dependencies = [
  "log",
  "once_cell",
  "pin-project",
- "socket2 0.5.4",
+ "socket2 0.5.5",
  "tokio",
  "windows-sys 0.48.0",
 ]
