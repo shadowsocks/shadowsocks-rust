@@ -152,7 +152,7 @@ hickory-resolver = { version = "0.24", optional = true, features = [
 ] }
 
 idna = "0.4"
-ipnet = "2.7"
+ipnet = "2.9"
 iprange = "0.6"
 regex = "1.4"
 
