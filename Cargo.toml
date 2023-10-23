@@ -184,7 +184,7 @@ futures = "0.3"
 tokio = { version = "1", features = ["rt", "signal"] }
 num_cpus = "1.15"
 
-ipnet = { version = "2.7", optional = true }
+ipnet = { version = "2.9", optional = true }
 
 mimalloc = { version = "0.1", default-features = false, optional = true }
 tcmalloc = { version = "0.3", optional = true }
