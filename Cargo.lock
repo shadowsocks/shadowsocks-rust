@@ -331,6 +331,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "camellia"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3264e2574e9ef2b53ce6f536dea83a69ac0bc600b762d1523ff83fe07230ce30"
+dependencies = [
+ "byteorder",
+ "cipher",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2515,25 +2525,30 @@ dependencies = [
 
 [[package]]
 name = "shadowsocks-crypto"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfb488687e398030dd9c9396e119ddbc6952bdeaefe2168943b5b2ddaa54f2e6"
+checksum = "f3c1997aeb62e03a85d022874bbb60374bb0593b9f1e1d28be21700f10c5a6bf"
 dependencies = [
+ "aead",
  "aes",
  "aes-gcm",
  "aes-gcm-siv",
  "blake3",
  "bytes",
+ "camellia",
  "ccm",
  "cfg-if",
  "chacha20",
  "chacha20poly1305",
  "ctr",
+ "ghash",
  "hkdf",
  "md-5",
  "rand",
  "ring-compat",
  "sha1",
+ "sm4",
+ "subtle",
 ]
 
 [[package]]
@@ -2649,6 +2664,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "sm4"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d7abf5135ffd68fb4b438e1fb246923b80d25eda386d8b798bb4ad3ed00f75f"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
