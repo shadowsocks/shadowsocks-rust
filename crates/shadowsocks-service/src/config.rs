@@ -1626,6 +1626,17 @@ impl Config {
                         }
 
                         #[cfg(feature = "local-tun")]
+                        if let Some(tun_interface_destination) = local.tun_interface_destination {
+                            match tun_interface_destination.parse::<IpNet>() {
+                                Ok(addr) => local_config.tun_interface_destination = Some(addr),
+                                Err(..) => {
+                                    let err = Error::new(ErrorKind::Malformed, "`tun_interface_destination` invalid", None);
+                                    return Err(err);
+                                }
+                            }
+                        }
+
+                        #[cfg(feature = "local-tun")]
                         if let Some(tun_interface_name) = local.tun_interface_name {
                             local_config.tun_interface_name = Some(tun_interface_name);
                         }
