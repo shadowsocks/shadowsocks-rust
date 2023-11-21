@@ -144,7 +144,7 @@ async-trait = "0.1"
 socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2.141"
 
-hyper = { version = "0.14.25", optional = true, features = ["full"] }
+hyper = { version = "1.0.1", optional = true, features = ["full"] }
 tower = { version = "0.4", optional = true }
 
 hickory-resolver = { version = "0.24", optional = true, features = [
