@@ -96,7 +96,7 @@ shadowsocks-crypto = { version = "0.5.2", features = ["ring"] }
 shadowsocks-crypto = { version = "0.5.1", features = [] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = [
+windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
