@@ -6,7 +6,6 @@ use std::{
     task::{self, Poll},
 };
 
-use hyper::client::connect::{Connected, Connection};
 use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -176,16 +175,5 @@ impl AsyncWrite for ProxyHttpStream {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<io::Result<()>> {
         forward_call!(self, poll_shutdown, cx)
-    }
-}
-
-impl Connection for ProxyHttpStream {
-    fn connected(&self) -> Connected {
-        let conn = Connected::new();
-        if self.negotiated_http2() {
-            conn.negotiated_h2()
-        } else {
-            conn
-        }
     }
 }

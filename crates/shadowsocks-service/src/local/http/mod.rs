@@ -1,12 +1,12 @@
-//! Shadowsocks HTTP Local Server
+//! Shadowsocks Local HTTP proxy server
+//!
+//! https://www.ietf.org/rfc/rfc2068.txt
 
-pub use self::server::{Http, HttpBuilder};
+pub use self::server::{Http, HttpBuilder, HttpConnectionHandler};
 
-mod client_cache;
-mod connector;
-mod dispatcher;
 mod http_client;
+mod http_service;
 mod http_stream;
-mod http_tls;
-mod server;
+pub mod server;
+mod tokio_rt;
 mod utils;
