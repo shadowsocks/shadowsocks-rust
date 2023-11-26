@@ -67,7 +67,7 @@ local-dns-relay = ["local-dns"]
 # Currently is only used in Android
 local-flow-stat = ["local"]
 # Enable HTTP protocol for sslocal
-local-http = ["local", "hyper", "tower"]
+local-http = ["local", "hyper", "http-body-util"]
 local-http-native-tls = ["local-http", "tokio-native-tls", "native-tls"]
 local-http-native-tls-vendored = [
     "local-http-native-tls",
@@ -144,8 +144,8 @@ async-trait = "0.1"
 socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2.141"
 
-hyper = { version = "1.0.1", optional = true, features = ["full"] }
-tower = { version = "0.4", optional = true }
+hyper = { version = "1.0", optional = true, features = ["full"] }
+http-body-util = { version = "0.1", optional = true }
 
 hickory-resolver = { version = "0.24", optional = true, features = [
     "serde-config",
