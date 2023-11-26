@@ -1,3 +1,19 @@
+shadowsocks-rust (1.17.1) unstable; urgency=medium
+
+  ## Features
+
+  - #1330 `local`: Support macOS launch activate socket (https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket)
+  - #1357 `local`: Upgrade hyper (https://crates.io/crates/hyper) to v1.0
+
+  ## Bug Fixes
+
+  - #1328 `run_as_user` aborts if any error occurs
+
+  ## Miscellaneous
+
+  - Minor improvements for `local-tun` on Windows
+  - Upgrade `shadowsocks-crypto` that supports `sm4-gcm`, `sm4-ccm` non-standard AEAD ciphers
+
 shadowsocks-rust (1.17.0) unstable; urgency=medium
 
   ## Features
