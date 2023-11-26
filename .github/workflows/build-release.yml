@@ -35,7 +35,6 @@ jobs:
           - aarch64-unknown-linux-gnu
           - aarch64-unknown-linux-musl
           - mips-unknown-linux-musl
-          - mips-unknown-linux-gnu
           - mipsel-unknown-linux-musl
 
     steps:
