@@ -119,7 +119,12 @@ impl Http {
             };
 
             trace!("HTTP accepted client from {}", peer_addr);
-            tokio::spawn(handler.clone().serve_connection(stream, peer_addr));
+            let handler = handler.clone();
+            tokio::spawn(async move {
+                if let Err(err) = handler.serve_connection(stream, peer_addr).await {
+                    error!("HTTP connection {} handler failed with error: {}", peer_addr, err);
+                }
+            });
         }
     }
 }
@@ -145,7 +150,7 @@ impl HttpConnectionHandler {
     }
 
     /// Handle a TCP HTTP connection
-    pub async fn serve_connection<S>(self, stream: S, peer_addr: SocketAddr)
+    pub async fn serve_connection<S>(self, stream: S, peer_addr: SocketAddr) -> hyper::Result<()>
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -159,7 +164,7 @@ impl HttpConnectionHandler {
 
         // NOTE: Some stupid clients requires HTTP header keys to be case-sensitive.
         // For example: Nintendo Switch
-        if let Err(err) = http1::Builder::new()
+        http1::Builder::new()
             .keep_alive(true)
             .title_case_headers(true)
             .preserve_header_case(true)
@@ -172,8 +177,5 @@ impl HttpConnectionHandler {
             )
             .with_upgrades()
             .await
-        {
-            error!("failed to serve HTTP connection, error: {}", err);
-        }
     }
 }
