@@ -93,7 +93,7 @@ blake3 = "1.4"
 shadowsocks-crypto = { version = "0.5.4", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-shadowsocks-crypto = { version = "0.5.1", features = [] }
+shadowsocks-crypto = { version = "0.5.4", features = [] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = [
