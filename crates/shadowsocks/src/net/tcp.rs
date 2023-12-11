@@ -135,6 +135,14 @@ impl TcpListener {
     pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
         let socket = create_inbound_tcp_socket(addr, &accept_opts).await?;
 
+        if let Some(size) = accept_opts.tcp.send_buffer_size {
+            socket.set_send_buffer_size(size)?;
+        }
+
+        if let Some(size) = accept_opts.tcp.recv_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+        }
+
         // On platforms with Berkeley-derived sockets, this allows to quickly
         // rebind a socket, without needing to wait for the OS to clean up the
         // previous one.
