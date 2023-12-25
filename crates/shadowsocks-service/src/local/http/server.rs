@@ -13,7 +13,9 @@ use tokio::{
 };
 
 use crate::local::{
-    context::ServiceContext, loadbalancing::PingBalancer, net::tcp::listener::create_standard_tcp_listener,
+    context::ServiceContext,
+    loadbalancing::PingBalancer,
+    net::tcp::listener::create_standard_tcp_listener,
 };
 
 use super::{http_client::HttpClient, http_service::HttpService, tokio_rt::TokioIo};

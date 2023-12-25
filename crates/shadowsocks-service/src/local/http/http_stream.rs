@@ -64,8 +64,7 @@ impl ProxyHttpStream {
         use once_cell::sync::Lazy;
         use std::sync::Arc;
         use tokio_rustls::{
-            rustls::pki_types::ServerName,
-            rustls::{ClientConfig, RootCertStore},
+            rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
             TlsConnector,
         };
 

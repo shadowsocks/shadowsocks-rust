@@ -30,6 +30,15 @@ pub struct TcpSocketOpts {
     pub mptcp: bool,
 }
 
+/// Options for UDP server
+#[derive(Debug, Clone, Default)]
+pub struct UdpSocketOpts {
+    /// Maximum Transmission Unit (MTU) for UDP socket `recv`
+    ///
+    /// NOTE: MTU includes IP header, UDP header, UDP payload
+    pub mtu: Option<usize>,
+}
+
 /// Options for connecting to remote server
 #[derive(Debug, Clone, Default)]
 pub struct ConnectOpts {
@@ -58,6 +67,9 @@ pub struct ConnectOpts {
 
     /// TCP options
     pub tcp: TcpSocketOpts,
+
+    /// UDP options
+    pub udp: UdpSocketOpts,
 }
 
 /// Inbound connection options
@@ -65,6 +77,9 @@ pub struct ConnectOpts {
 pub struct AcceptOpts {
     /// TCP options
     pub tcp: TcpSocketOpts,
+
+    /// UDP options
+    pub udp: UdpSocketOpts,
 
     /// Enable IPV6_V6ONLY option for socket
     pub ipv6_only: bool,

@@ -151,6 +151,7 @@ impl Server {
         connect_opts.tcp.fastopen = config.fast_open;
         connect_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
         connect_opts.tcp.mptcp = config.mptcp;
+        connect_opts.udp.mtu = config.udp_mtu;
         context.set_connect_opts(connect_opts);
 
         let mut accept_opts = AcceptOpts {
@@ -163,6 +164,7 @@ impl Server {
         accept_opts.tcp.fastopen = config.fast_open;
         accept_opts.tcp.keepalive = config.keep_alive.or(Some(LOCAL_DEFAULT_KEEPALIVE_TIMEOUT));
         accept_opts.tcp.mptcp = config.mptcp;
+        accept_opts.udp.mtu = config.udp_mtu;
         context.set_accept_opts(accept_opts);
 
         if let Some(resolver) = build_dns_resolver(

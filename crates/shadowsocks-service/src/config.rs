@@ -158,6 +158,8 @@ struct SSConfig {
     udp_timeout: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     udp_max_associations: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    udp_mtu: Option<usize>,
 
     #[serde(skip_serializing_if = "Option::is_none", alias = "shadowsocks")]
     servers: Option<Vec<SSServerExtConfig>>,
@@ -1228,6 +1230,10 @@ pub struct Config {
     pub udp_timeout: Option<Duration>,
     /// Maximum number of UDP Associations, default is unconfigured
     pub udp_max_associations: Option<usize>,
+    /// Maximum Transmission Unit (MTU) size for UDP packets
+    /// 65535 by default. Suggestion: 1500
+    /// NOTE: mtu includes IP header, UDP header, UDP payload
+    pub udp_mtu: Option<usize>,
 
     /// ACL configuration (Global)
     ///
@@ -1353,6 +1359,7 @@ impl Config {
 
             udp_timeout: None,
             udp_max_associations: None,
+            udp_mtu: None,
 
             acl: None,
 
@@ -2055,6 +2062,9 @@ impl Config {
 
         // Maximum associations to be kept simultaneously
         nconfig.udp_max_associations = config.udp_max_associations;
+
+        // MTU for UDP
+        nconfig.udp_mtu = config.udp_mtu;
 
         // RLIMIT_NOFILE
         #[cfg(all(unix, not(target_os = "android")))]
@@ -2763,6 +2773,8 @@ impl fmt::Display for Config {
         jconf.udp_timeout = self.udp_timeout.map(|t| t.as_secs());
 
         jconf.udp_max_associations = self.udp_max_associations;
+
+        jconf.udp_mtu = self.udp_mtu;
 
         #[cfg(all(unix, not(target_os = "android")))]
         {
