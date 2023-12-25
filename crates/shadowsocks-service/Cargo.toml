@@ -162,7 +162,7 @@ regex = "1.4"
 
 tun = { version = "0.6", optional = true, features = ["async"] }
 etherparse = { version = "0.13", optional = true }
-smoltcp = { version = "0.10", optional = true, default-features = false, features = [
+smoltcp = { version = "0.11", optional = true, default-features = false, features = [
     "std",
     "log",
     "medium-ip",
