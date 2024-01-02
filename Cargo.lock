@@ -1259,9 +1259,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "403f9214f3e703236b221f1a9cd88ec8b4adfa5296de01ab96216361f4692f56"
+checksum = "fb5aa53871fc917b1a9ed87b683a5d86db645e23acb32c2e0785a353e522fb75"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2775,7 +2775,7 @@ dependencies = [
  "futures",
  "hickory-resolver",
  "http-body-util",
- "hyper 1.0.1",
+ "hyper 1.1.0",
  "idna 0.5.0",
  "ipnet",
  "iprange",
