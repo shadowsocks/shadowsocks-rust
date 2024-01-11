@@ -1,6 +1,6 @@
 //! Shadowsocks HTTP Proxy server dispatcher
 
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{io, net::SocketAddr, str::FromStr, sync::Arc};
 
 use bytes::Bytes;
 use http_body_util::{combinators::BoxBody, BodyExt};
@@ -51,7 +51,7 @@ impl HttpService {
     pub async fn serve_connection(
         self,
         mut req: Request<body::Incoming>,
-    ) -> hyper::Result<Response<BoxBody<Bytes, hyper::Error>>> {
+    ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, io::Error> {
         trace!("request {} {:?}", self.peer_addr, req);
 
         // Parse URI
@@ -62,14 +62,14 @@ impl HttpService {
                 if req.uri().authority().is_some() {
                     // URI has authority but invalid
                     error!("HTTP {} URI {} doesn't have a valid host", req.method(), req.uri());
-                    return make_bad_request();
+                    return make_bad_request().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
                 } else {
                     trace!("HTTP {} URI {} doesn't have a valid host", req.method(), req.uri());
                 }
 
                 match get_addr_from_header(&mut req) {
                     Ok(h) => h,
-                    Err(()) => return make_bad_request(),
+                    Err(()) => return make_bad_request().map_err(|e| io::Error::new(io::ErrorKind::Other, e)),
                 }
             }
             Some(h) => h,
@@ -88,7 +88,7 @@ impl HttpService {
                 Ok(s) => s,
                 Err(err) => {
                     error!("failed to CONNECT host: {}, error: {}", host, err);
-                    return make_internal_server_error();
+                    return make_internal_server_error().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
                 }
             };
 
@@ -98,6 +98,7 @@ impl HttpService {
                 host,
                 if stream.is_bypassed() { "bypassed" } else { "proxied" }
             );
+            stream.handshake_tunnel().await?;
 
             let client_addr = self.peer_addr;
             tokio::spawn(async move {
@@ -153,10 +154,10 @@ impl HttpService {
             .await
         {
             Ok(resp) => resp,
-            Err(HttpClientError::Hyper(e)) => return Err(e),
+            Err(HttpClientError::Hyper(e)) => return Err(io::Error::new(io::ErrorKind::Other, e)),
             Err(HttpClientError::Io(err)) => {
                 error!("failed to make request to host: {}, error: {}", host, err);
-                return make_internal_server_error();
+                return make_internal_server_error().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
             }
         };
 
