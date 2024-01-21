@@ -26,7 +26,7 @@ use smoltcp::{
 use spin::Mutex as SpinMutex;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    sync::mpsc,
+    sync::{mpsc, oneshot},
 };
 
 use crate::{
@@ -88,6 +88,7 @@ type SharedTcpConnectionControl = Arc<SpinMutex<TcpSocketControl>>;
 struct TcpSocketCreation {
     control: SharedTcpConnectionControl,
     socket: TcpSocket<'static>,
+    socket_created_tx: oneshot::Sender<()>,
 }
 
 struct TcpConnection {
@@ -112,7 +113,7 @@ impl Drop for TcpConnection {
 }
 
 impl TcpConnection {
-    fn new(
+    async fn new(
         socket: TcpSocket<'static>,
         socket_creation_tx: &mpsc::UnboundedSender<TcpSocketCreation>,
         manager_notify: Arc<ManagerNotify>,
@@ -129,12 +130,14 @@ impl TcpConnection {
             recv_state: TcpSocketState::Normal,
             send_state: TcpSocketState::Normal,
         }));
-
+        let (tx, rx) = oneshot::channel();
         let _ = socket_creation_tx.send(TcpSocketCreation {
             control: control.clone(),
             socket,
+            socket_created_tx: tx,
         });
-
+        // waiting socket add to SocketSet
+        let _ = rx.await;
         TcpConnection {
             control,
             manager_notify,
@@ -304,8 +307,14 @@ impl TcpTun {
                 let mut socket_set = SocketSet::new(vec![]);
 
                 while manager_running.load(Ordering::Relaxed) {
-                    while let Ok(TcpSocketCreation { control, socket }) = socket_creation_rx.try_recv() {
+                    while let Ok(TcpSocketCreation {
+                        control,
+                        socket,
+                        socket_created_tx: socket_create_tx,
+                    }) = socket_creation_rx.try_recv()
+                    {
                         let handle = socket_set.add(socket);
+                        let _ = socket_create_tx.send(());
                         sockets.insert(handle, control);
                     }
 
@@ -512,7 +521,8 @@ impl TcpTun {
                 &self.manager_socket_creation_tx,
                 self.manager_notify.clone(),
                 &accept_opts.tcp,
-            );
+            )
+            .await;
 
             // establish a tunnel
             let context = self.context.clone();
