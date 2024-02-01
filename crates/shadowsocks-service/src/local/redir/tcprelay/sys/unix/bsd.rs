@@ -21,22 +21,10 @@ use crate::{
 impl TcpListenerRedirExt for TcpListener {
     async fn bind_redir(ty: RedirType, addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
         match ty {
-            #[cfg(any(
-                target_os = "openbsd",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "solaris",
-                target_os = "macos",
-                target_os = "ios",
-            ))]
+            #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
             RedirType::PacketFilter => {}
 
-            #[cfg(any(
-                target_os = "freebsd",
-                target_os = "macos",
-                target_os = "ios",
-                target_os = "dragonfly"
-            ))]
+            #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
             RedirType::IpFirewall => {}
 
             _ => {
@@ -111,14 +99,7 @@ impl TcpListenerRedirExt for TcpListener {
 impl TcpStreamRedirExt for TcpStream {
     fn destination_addr(&self, ty: RedirType) -> io::Result<SocketAddr> {
         match ty {
-            #[cfg(any(
-                target_os = "openbsd",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "solaris",
-                target_os = "macos",
-                target_os = "ios",
-            ))]
+            #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
             RedirType::PacketFilter => {
                 use crate::local::redir::sys::bsd_pf::PF;
 
@@ -127,12 +108,7 @@ impl TcpStreamRedirExt for TcpStream {
 
                 PF.natlook(&bind_addr, &peer_addr, Protocol::TCP)
             }
-            #[cfg(any(
-                target_os = "freebsd",
-                target_os = "macos",
-                target_os = "ios",
-                target_os = "dragonfly"
-            ))]
+            #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
             RedirType::IpFirewall => {
                 // ## IPFW
                 //

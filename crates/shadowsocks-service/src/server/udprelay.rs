@@ -683,8 +683,6 @@ impl UdpAssociationContext {
             target_os = "watchos",
             target_os = "tvos",
             target_os = "freebsd",
-            // target_os = "dragonfly",
-            // target_os = "netbsd",
             target_os = "windows",
         )));
 

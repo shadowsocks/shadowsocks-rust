@@ -7,7 +7,7 @@ cfg_if! {
     } else if #[cfg(target_os = "macos")] {
         mod macos;
         pub use self::macos::*;
-    } else if #[cfg(any(target_os = "freebsd", target_os = "openbsd"))] {
+    } else if #[cfg(any(target_os = "freebsd"))] {
         mod bsd;
         pub use self::bsd::*;
     } else {

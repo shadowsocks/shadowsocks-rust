@@ -179,7 +179,7 @@ json5 = "0.4"
 shadowsocks = { version = "1.17.2", path = "../shadowsocks", default-features = false }
 
 # Just for the ioctl call macro
-[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))'.dependencies]
 nix = { version = "0.27", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -187,7 +187,7 @@ windows-sys = { version = "0.52", features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 byteorder = "1.5"
-env_logger = "0.10"
+env_logger = "0.11"
 
 [package.metadata.docs.rs]
 features = [

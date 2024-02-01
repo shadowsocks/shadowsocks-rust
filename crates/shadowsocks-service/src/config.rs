@@ -425,10 +425,7 @@ cfg_if! {
             ///
             /// Document: <https://www.freebsd.org/doc/handbook/firewalls-pf.html>
             #[cfg(any(
-                target_os = "openbsd",
                 target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "solaris",
                 target_os = "macos",
                 target_os = "ios"
             ))]
@@ -469,7 +466,7 @@ cfg_if! {
                         const AVAILABLE_TYPES: &[&str] = &[RedirType::TProxy.name()];
                         AVAILABLE_TYPES
                     }
-                } else if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
+                } else if #[cfg(any(target_os = "freebsd"))] {
                     /// Default TCP transparent proxy solution on this platform
                     pub fn tcp_default() -> RedirType {
                         RedirType::PacketFilter
@@ -493,7 +490,7 @@ cfg_if! {
                         const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name(), RedirType::IpFirewall.name()];
                         AVAILABLE_TYPES
                     }
-                } else if #[cfg(any(target_os = "netbsd", target_os = "solaris", target_os = "macos", target_os = "ios"))] {
+                } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
                     /// Default TCP transparent proxy solution on this platform
                     pub fn tcp_default() -> RedirType {
                         RedirType::PacketFilter
@@ -508,13 +505,13 @@ cfg_if! {
 
                     /// Default UDP transparent proxy solution on this platform
                     pub fn udp_default() -> RedirType {
-                        RedirType::NotSupported
+                        RedirType::PacketFilter
                     }
 
                     /// Available UDP transparent proxy types
                     #[doc(hidden)]
                     pub const fn udp_available_types() -> &'static [&'static str] {
-                        const AVAILABLE_TYPES: &[&str] = &[];
+                        const AVAILABLE_TYPES: &[&str] = &[RedirType::PacketFilter.name()];
                         AVAILABLE_TYPES
                     }
                 } else {
@@ -562,10 +559,7 @@ cfg_if! {
                     RedirType::TProxy => "tproxy",
 
                     #[cfg(any(
-                        target_os = "openbsd",
                         target_os = "freebsd",
-                        target_os = "netbsd",
-                        target_os = "solaris",
                         target_os = "macos",
                         target_os = "ios"
                     ))]
@@ -605,10 +599,7 @@ cfg_if! {
                     "tproxy" => Ok(RedirType::TProxy),
 
                     #[cfg(any(
-                        target_os = "openbsd",
                         target_os = "freebsd",
-                        target_os = "netbsd",
-                        target_os = "solaris",
                         target_os = "macos",
                         target_os = "ios",
                     ))]
@@ -618,7 +609,6 @@ cfg_if! {
                         target_os = "freebsd",
                         target_os = "macos",
                         target_os = "ios",
-                        target_os = "dragonfly"
                     ))]
                     "ipfw" => Ok(RedirType::IpFirewall),
 

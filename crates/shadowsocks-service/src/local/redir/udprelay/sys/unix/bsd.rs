@@ -8,6 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
 use log::{error, trace, warn};
 use shadowsocks::net::is_dual_stack_addr;
@@ -152,11 +153,31 @@ impl UdpSocketRedir for UdpRedirSocket {
         loop {
             let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-            match recv_dest_from(self.io.get_ref(), buf) {
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                    read_guard.clear_ready();
+            cfg_if! {
+                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                    use crate::local::redir::sys::bsd_pf::PF;
+
+                    let (peer_addr, n) = match self.io.get_ref().recv_from(buf) {
+                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                            read_guard.clear_ready();
+                            continue;
+                        }
+                        Err(e) => return Err(e),
+                        Ok(x) => x,
+                    };
+
+                    let bind_addr = self.local_addr()?;
+                    let actual_addr = PF.natlook(&bind_addr, &peer_addr, Protocol::UDP)?;
+
+                    return Ok((n, peer_addr, actual_addr));
+                } else if #[cfg(target_os = "freebsd")] {
+                    match recv_dest_from(self.io.get_ref(), buf) {
+                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                            read_guard.clear_ready();
+                        }
+                        x => return Poll::Ready(x),
+                    }
                 }
-                x => return Poll::Ready(x),
             }
         }
     }
@@ -191,28 +212,28 @@ fn set_bindany(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "openbsd")]
-fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
-    let fd = socket.as_raw_fd();
-
-    let enable: libc::c_int = 1;
-
-    // https://man.openbsd.org/getsockopt.2
-    unsafe {
-        let ret = libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_BINDANY,
-            &enable as *const _ as *const _,
-            mem::size_of_val(&enable) as libc::socklen_t,
-        );
-        if ret != 0 {
-            return Err(Error::last_os_error());
-        }
-    }
-
-    Ok(())
-}
+// #[cfg(target_os = "openbsd")]
+// fn set_bindany(_level: libc::c_int, socket: &Socket) -> io::Result<()> {
+//     let fd = socket.as_raw_fd();
+//
+//     let enable: libc::c_int = 1;
+//
+//     // https://man.openbsd.org/getsockopt.2
+//     unsafe {
+//         let ret = libc::setsockopt(
+//             fd,
+//             libc::SOL_SOCKET,
+//             libc::SO_BINDANY,
+//             &enable as *const _ as *const _,
+//             mem::size_of_val(&enable) as libc::socklen_t,
+//         );
+//         if ret != 0 {
+//             return Err(Error::last_os_error());
+//         }
+//     }
+//
+//     Ok(())
+// }
 
 fn set_ip_origdstaddr(level: libc::c_int, socket: &Socket) -> io::Result<()> {
     // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
