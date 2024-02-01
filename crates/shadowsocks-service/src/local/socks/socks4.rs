@@ -19,14 +19,14 @@ use shadowsocks::relay::socks5;
 
 #[rustfmt::skip]
 mod consts {
-    pub const SOCKS4_VERSION:                                  u8 = 4;
+    pub const SOCKS4_VERSION:                                   u8 = 4;
 
-    pub const SOCKS4_COMMAND_CONNECT:                          u8 = 1;
-    pub const SOCKS4_COMMAND_BIND:                             u8 = 2;
+    pub const SOCKS4_COMMAND_CONNECT:                           u8 = 1;
+    pub const SOCKS4_COMMAND_BIND:                              u8 = 2;
 
-    pub const SOCKS4_RESULT_REQUEST_GRANTED:                   u8 = 90;
-    pub const SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED:        u8 = 91;
-    pub const SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT:   u8 = 92;
+    pub const SOCKS4_RESULT_REQUEST_GRANTED:                    u8 = 90;
+    pub const SOCKS4_RESULT_REQUEST_REJECTED_OR_FAILED:         u8 = 91;
+    pub const SOCKS4_RESULT_REQUEST_REJECTED_CANNOT_CONNECT:    u8 = 92;
     pub const SOCKS4_RESULT_REQUEST_REJECTED_DIFFERENT_USER_ID: u8 = 93;
 }
 
