@@ -61,7 +61,7 @@ impl PacketFilter {
         match proto {
             Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
             Protocol::UDP => self.udp_natlook(bind_addr, peer_addr, proto),
-            _ => return Err(io::ErrorKind::InvalidInput.into()),
+            _ => Err(io::ErrorKind::InvalidInput.into()),
         }
     }
 
@@ -81,12 +81,7 @@ impl PacketFilter {
                     let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        addr,
-                        ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _,
-                        mem::size_of::<in_addr>(),
-                    );
+                    ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
 
                     cfg_if! {
                         if #[cfg(any(target_os = "macos", target_os = "ios"))] {
@@ -105,12 +100,7 @@ impl PacketFilter {
                     let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        addr,
-                        ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _,
-                        mem::size_of::<in6_addr>(),
-                    );
+                    ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
 
                     cfg_if! {
                         if #[cfg(any(target_os = "macos", target_os = "ios"))] {
@@ -134,12 +124,7 @@ impl PacketFilter {
                     let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin_port;
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        addr,
-                        ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _,
-                        mem::size_of::<in_addr>(),
-                    );
+                    ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
 
                     cfg_if! {
                         if #[cfg(any(target_os = "macos", target_os = "ios"))] {
@@ -160,12 +145,7 @@ impl PacketFilter {
                     let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
                     let port: libc::in_port_t = (*sockaddr).sin6_port;
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        addr,
-                        ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _,
-                        mem::size_of::<in6_addr>(),
-                    );
+                    ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
 
                     cfg_if! {
                         if #[cfg(any(target_os = "macos", target_os = "ios"))] {
@@ -197,11 +177,9 @@ impl PacketFilter {
                         }
                     }
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!(pnl.rdaddr.pfa) as *const _,
+                    ptr::write_unaligned::<in_addr>(
                         ptr::addr_of_mut!(dst_addr.sin_addr),
-                        mem::size_of_val(&dst_addr.sin_addr),
+                        ptr::read::<in_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
                     );
                     *addr_len = mem::size_of_val(&dst_addr.sin_addr) as libc::socklen_t;
                 } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
@@ -216,11 +194,9 @@ impl PacketFilter {
                         }
                     }
 
-                    #[allow(clippy::size_of_in_element_count)]
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!(pnl.rdaddr.pfa) as *const _,
+                    ptr::write_unaligned::<in6_addr>(
                         ptr::addr_of_mut!(dst_addr.sin6_addr),
-                        mem::size_of_val(&dst_addr.sin6_addr),
+                        ptr::read::<in6_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
                     );
                     *addr_len = mem::size_of_val(&dst_addr.sin6_addr) as libc::socklen_t;
                 } else {
@@ -270,18 +246,16 @@ impl PacketFilter {
             match bind_addr_sockaddr.family() as libc::c_int {
                 libc::AF_INET => {
                     let sockaddr: *const sockaddr_in = bind_addr_sockaddr.as_ptr() as *const _;
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!((&*sockaddr).sin_addr),
+                    ptr::write_unaligned::<in_addr>(
                         ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
-                        mem::size_of::<in_addr>(),
+                        (*sockaddr).sin_addr,
                     );
                 }
                 libc::AF_INET6 => {
                     let sockaddr: *const sockaddr_in6 = bind_addr_sockaddr.as_ptr() as *const _;
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!((&*sockaddr).sin6_addr),
+                    ptr::write_unaligned::<in6_addr>(
                         ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
-                        mem::size_of::<in6_addr>(),
+                        (*sockaddr).sin6_addr,
                     );
                 }
                 _ => unreachable!("bind_addr family = {}", bind_addr_sockaddr.family()),
@@ -290,18 +264,16 @@ impl PacketFilter {
             match peer_addr_sockaddr.family() as libc::c_int {
                 libc::AF_INET => {
                     let sockaddr: *const sockaddr_in = peer_addr_sockaddr.as_ptr() as *const _;
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!((&*sockaddr).sin_addr),
+                    ptr::write_unaligned::<in_addr>(
                         ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
-                        mem::size_of::<in_addr>(),
+                        (*sockaddr).sin_addr,
                     );
                 }
                 libc::AF_INET6 => {
                     let sockaddr: *const sockaddr_in6 = peer_addr_sockaddr.as_ptr() as *const _;
-                    ptr::copy_nonoverlapping(
-                        ptr::addr_of!((&*sockaddr).sin6_addr),
+                    ptr::write_unaligned::<in6_addr>(
                         ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
-                        mem::size_of::<in6_addr>(),
+                        (*sockaddr).sin6_addr,
                     );
                 }
                 _ => unreachable!("peer_addr family = {}", peer_addr_sockaddr.family()),
@@ -341,10 +313,9 @@ impl PacketFilter {
                                 let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
                                     let addr = &mut *(sockaddr as *mut sockaddr_in);
                                     addr.sin_family = libc::AF_INET as libc::sa_family_t;
-                                    ptr::copy_nonoverlapping(
-                                        ptr::addr_of!(state.gwy.addr.pfa) as *const _,
+                                    ptr::write_unaligned::<in_addr>(
                                         ptr::addr_of_mut!(addr.sin_addr),
-                                        mem::size_of::<in_addr>(),
+                                        ptr::read_unaligned::<in_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
                                     );
                                     addr.sin_port = actual_dst_port as libc::in_port_t;
 
@@ -359,10 +330,9 @@ impl PacketFilter {
                                 let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
                                     let addr = &mut *(sockaddr as *mut sockaddr_in6);
                                     addr.sin6_family = libc::AF_INET6 as libc::sa_family_t;
-                                    ptr::copy_nonoverlapping(
-                                        ptr::addr_of!(state.gwy.addr.pfa) as *const _,
+                                    ptr::write_unaligned::<in6_addr>(
                                         ptr::addr_of_mut!(addr.sin6_addr),
-                                        mem::size_of::<in6_addr>(),
+                                        ptr::read_unaligned::<in6_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
                                     );
                                     addr.sin6_port = actual_dst_port as libc::in_port_t;
 

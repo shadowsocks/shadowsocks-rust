@@ -633,7 +633,7 @@ impl ServerConfig {
             if #[cfg(feature = "aead-cipher-2022")] {
                 let user_info = if !self.method().is_aead_2022() {
                     let user_info = format!("{}:{}", self.method(), self.password());
-                    URL_PASSWORD_BASE64_ENGINE.encode(&user_info)
+                    URL_PASSWORD_BASE64_ENGINE.encode(user_info)
                 } else {
                     format!("{}:{}", self.method(), percent_encoding::utf8_percent_encode(self.password(), percent_encoding::NON_ALPHANUMERIC))
                 };

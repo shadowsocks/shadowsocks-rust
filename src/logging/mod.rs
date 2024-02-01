@@ -55,7 +55,7 @@ pub fn init_with_config(bin_name: &str, config: &LogConfig) {
     };
 
     let config = match debug_level {
-        0 | 1 | 2 | 3 => logging_builder
+        0..=3 => logging_builder
             .logger(Logger::builder().build(bin_name, l1))
             .logger(Logger::builder().build("shadowsocks_rust", l1))
             .logger(Logger::builder().build("shadowsocks", l1))

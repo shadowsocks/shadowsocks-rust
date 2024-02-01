@@ -39,6 +39,7 @@ pub enum HttpClientError {
 
 #[derive(Clone)]
 pub struct HttpClient {
+    #[allow(clippy::type_complexity)]
     cache_conn: Arc<Mutex<LruCache<Address, VecDeque<(HttpConnection, Instant)>>>>,
 }
 
@@ -96,7 +97,7 @@ impl HttpClient {
     }
 
     async fn get_cached_connection(&self, host: &Address) -> Option<HttpConnection> {
-        if let Some(q) = self.cache_conn.lock().await.get_mut(&host) {
+        if let Some(q) = self.cache_conn.lock().await.get_mut(host) {
             while let Some((c, inst)) = q.pop_front() {
                 let now = Instant::now();
                 if now - inst >= CONNECTION_EXPIRE_DURATION {

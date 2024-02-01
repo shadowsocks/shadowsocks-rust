@@ -417,7 +417,12 @@ impl Manager {
 
         let config_file_content = format!("{config}");
 
-        match OpenOptions::new().write(true).create(true).open(&config_file_path) {
+        match OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&config_file_path)
+        {
             Err(err) => {
                 error!(
                     "failed to open {} for writing, error: {}",

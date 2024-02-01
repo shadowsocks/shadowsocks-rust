@@ -59,7 +59,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     } else if cnt > 1 {
         for idx in 0..cnt {
             unsafe {
-                let fd = *(fds.offset(idx as isize));
+                let fd = *(fds.add(idx));
                 let _ = libc::close(fd);
             }
         }

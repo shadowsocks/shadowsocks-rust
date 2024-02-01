@@ -158,5 +158,5 @@ fn main() -> ExitCode {
     }
 
     println!("Use -h for more detail");
-    return ExitCode::FAILURE;
+    ExitCode::FAILURE
 }
