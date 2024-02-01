@@ -26,6 +26,7 @@ use crate::{
     net::utils::to_ipv4_mapped,
 };
 
+#[allow(unused_imports)]
 mod sys;
 
 /// Established Client Transparent Proxy

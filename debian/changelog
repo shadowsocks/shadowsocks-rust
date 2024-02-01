@@ -1,3 +1,16 @@
+shadowsocks-rust (1.17.2) unstable; urgency=medium
+
+  ## Features
+
+  - `local`: `socks` local server will support SOCKS5, SOCKS4a, HTTP proxy protocols when `local-http`, `local-socks4` features are enabled
+  - `local`: Support setting `udp_mtu` in configuration file to actively reject `packet.size > MTU`
+
+  ## Bug Fixes
+
+  - #1378 dns-over-tls/https with rustls add dependencies to certs
+  - #1381 Set the incoming socket buffer sizes properly on the listen socket
+  - #1414 TUN synchronize SYN packet and Socket creation
+
 shadowsocks-rust (1.17.1) unstable; urgency=medium
 
   ## Features
