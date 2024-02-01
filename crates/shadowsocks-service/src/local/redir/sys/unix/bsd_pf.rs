@@ -281,7 +281,7 @@ impl PacketFilter {
 
             let states_count = states.ps_len as usize / mem::size_of::<pfsync_state>();
             for i in 0..states_count {
-                let state = &*(states.ps_u.psu_states.offset(i as isize));
+                let state = &*(states.ps_u.psu_states.add(i));
 
                 if state.proto == libc::IPPROTO_UDP as u8 {
                     cfg_if! {
