@@ -214,6 +214,6 @@ reqwest = { version = "0.11", features = [
 
 [dev-dependencies]
 byteorder = "1.5"
-env_logger = "0.10"
+env_logger = "0.11"
 byte_string = "1.0"
 tokio = { version = "1", features = ["net", "time", "macros", "io-util"] }
