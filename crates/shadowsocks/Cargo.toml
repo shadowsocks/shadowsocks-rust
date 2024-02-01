@@ -108,4 +108,4 @@ windows-sys = { version = "0.52", features = [
 sendfd = { version = "0.4", features = ["tokio"] }
 
 [dev-dependencies]
-env_logger = "0.10"
+env_logger = "0.11"
