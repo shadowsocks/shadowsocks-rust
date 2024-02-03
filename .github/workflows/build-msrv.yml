@@ -1,4 +1,4 @@
-name: Build & Test
+name: Build MSRV
 
 on:
   push:
@@ -26,22 +26,12 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install stable
-          rustup default stable
-          rustup override set stable
-      - name: Build & Test (Default)
-        run: cargo test --verbose --no-fail-fast
-      - name: Build & Test (Default) - shadowsocks
-        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-fail-fast
-      - name: Build & Test (--no-default-features)
-        run: cargo test --verbose --no-default-features --no-fail-fast
-      - name: Build & Test (--no-default-features) - shadowsocks
-        run: cargo test --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --no-default-features --no-fail-fast
+          rustup toolchain install 1.64
+          rustup default 1.64
+          rustup override set 1.64
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
         run: cargo build --verbose --features "local-http-rustls local-redir local-dns local-tun dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
       - name: Build with All Features Enabled (Windows)
         if: ${{ runner.os == 'Windows' }}
         run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
-      - name: Build with All Features Enabled - shadowsocks
-        run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-2022"
