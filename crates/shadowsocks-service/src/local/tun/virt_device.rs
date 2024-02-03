@@ -62,7 +62,7 @@ impl Device for VirtTunDevice {
         if let Ok(buffer) = self.in_buf.try_recv() {
             let rx = Self::RxToken {
                 buffer,
-                phantom_device: PhantomData::default(),
+                phantom_device: PhantomData,
             };
             let tx = VirtTxToken(self);
             return Some((rx, tx));

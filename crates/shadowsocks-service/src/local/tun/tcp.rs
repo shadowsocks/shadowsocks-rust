@@ -538,7 +538,7 @@ impl TcpTun {
     }
 
     pub async fn drive_interface_state(&mut self, frame: &[u8]) {
-        if let Err(..) = self.iface_tx.send(frame.to_vec()) {
+        if self.iface_tx.send(frame.to_vec()).is_err() {
             panic!("interface send channel closed unexpectly");
         }
 
