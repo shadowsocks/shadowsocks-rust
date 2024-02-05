@@ -34,8 +34,6 @@ jobs:
           - arm-unknown-linux-musleabihf
           - aarch64-unknown-linux-gnu
           - aarch64-unknown-linux-musl
-          - mips-unknown-linux-musl
-          - mipsel-unknown-linux-musl
 
     steps:
       - uses: actions/checkout@v3
