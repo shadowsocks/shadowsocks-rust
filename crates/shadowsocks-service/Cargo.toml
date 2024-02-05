@@ -177,7 +177,7 @@ smoltcp = { version = "0.11", optional = true, default-features = false, feature
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 
-shadowsocks = { version = "1.17.2", path = "../shadowsocks", default-features = false }
+shadowsocks = { version = "1.18.0", path = "../shadowsocks", default-features = false }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))'.dependencies]
