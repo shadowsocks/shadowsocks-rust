@@ -1,3 +1,13 @@
+shadowsocks-rust (1.18.0) unstable; urgency=medium
+
+  Mostly identical to v1.17.2, except that:
+
+  - Minimal Supported Rust Version (MSRV) upgraded from v1.64 to v1.71
+  - #1259 Fixed Snapcraft build. `base` changed to `core22`, auto-build architecture changed to [`arm64`, `amd64`, `armhf`]
+  - #1426 MIPS targets removed from release build, because MIPS targets are now downgraded to TIER 3
+
+ -- ty <zonyitoo@gmail.com> Thu, 08 Feb 2024 00:00:00 +0800
+
 shadowsocks-rust (1.17.2) unstable; urgency=medium
 
   ## Features
