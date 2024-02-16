@@ -17,8 +17,9 @@ where
     log4rs::init_with_file(path);
 
     warn!(
-        "log4rs doesn't support tracing (https://crates.io/crates/tracing) framework, 
-         so it would be removed in the future. Consider configure logging with RUST_LOG environment variable."
+        "log4rs doesn't support the tracing (https://crates.io/crates/tracing) framework, 
+         so it would be removed in the future. Consider configure logging with RUST_LOG environment variable. 
+         Check more configuration detail in https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/index.html#filtering-events-with-environment-variables ."
     );
 }
 
