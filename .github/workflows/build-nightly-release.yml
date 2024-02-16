@@ -20,7 +20,7 @@ jobs:
           - aarch64-unknown-linux-musl
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         run: |
@@ -71,7 +71,7 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install GNU tar
         if: runner.os == 'macOS'
@@ -105,7 +105,7 @@ jobs:
       RUSTFLAGS: "-C target-feature=+crt-static"
       RUST_BACKTRACE: full
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install Rust
         run: |
