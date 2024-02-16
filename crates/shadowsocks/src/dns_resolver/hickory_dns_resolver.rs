@@ -20,8 +20,7 @@ use hickory_resolver::{
         udp::{DnsUdpSocket, QuicLocalAddr},
         TokioTime,
     },
-    AsyncResolver,
-    TokioHandle,
+    AsyncResolver, TokioHandle,
 };
 use log::trace;
 use tokio::{io::ReadBuf, net::UdpSocket};
@@ -122,6 +121,9 @@ pub async fn create_resolver(
             // Since we want to use Happy Eyeballs to connect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
             resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
+            // Enable EDNS0 for large records
+            resolver_opts.edns0 = true;
+
             trace!(
                 "initializing DNS resolver with config {:?} opts {:?}",
                 conf,
@@ -159,6 +161,9 @@ pub async fn create_resolver(
                     //
                     // Only ip_strategy should be changed. Why Ipv4AndIpv6? See comments above.
                     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+
+                    // Enable EDNS0 for large records
+                    opts.edns0 = true;
 
                     trace!(
                         "initializing DNS resolver with system-config {:?} opts {:?}",
