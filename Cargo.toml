@@ -202,7 +202,7 @@ jemallocator = { version = "0.5", optional = true }
 snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.18.0", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.18.1", path = "./crates/shadowsocks-service" }
 
 windows-service = { version = "0.6", optional = true }
 
