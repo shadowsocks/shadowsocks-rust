@@ -96,7 +96,7 @@ dns-over-https = ["shadowsocks-service/dns-over-https"]
 dns-over-h3 = ["shadowsocks-service/dns-over-h3"]
 
 # Enable logging output
-logging = ["log4rs", "tracing", "tracing-subscriber", "is-terminal", "time"]
+logging = ["log4rs", "tracing", "tracing-subscriber", "time"]
 
 # Enable DNS-relay
 local-dns = ["local", "shadowsocks-service/local-dns"]
@@ -172,7 +172,6 @@ tracing-subscriber = { version = "0.3", optional = true, features = [
     "time",
     "local-time",
 ] }
-is-terminal = { version = "0.4.12", optional = true }
 time = { version = "0.3", optional = true }
 
 serde = { version = "1.0", features = ["derive"] }

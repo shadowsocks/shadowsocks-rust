@@ -1,6 +1,7 @@
 //! Logging facilities with tracing
 
-use is_terminal::IsTerminal;
+use std::io::IsTerminal;
+
 use time::UtcOffset;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter, FmtSubscriber};
