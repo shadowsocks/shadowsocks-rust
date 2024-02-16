@@ -53,9 +53,8 @@ start_service() {
     fi
 
     SHADOWSOCKS_CONFIG_PATH="/usr/local/etc/shadowsocks.json"
-    SHADOWSOCKS_LOG_CONFIG_PATH="/usr/local/etc/shadowsocks.log.yaml"
     SHADOWSOCKS_EXECUTABLE="/usr/local/bin/sslocal"
-    SHADOWSOCKS_PARAMETERS="-c ${SHADOWSOCKS_CONFIG_PATH} --log-without-time --log-config ${SHADOWSOCKS_LOG_CONFIG_PATH} --udp-max-associations 4192 --outbound-fwmark 255"
+    SHADOWSOCKS_PARAMETERS="-c ${SHADOWSOCKS_CONFIG_PATH} --log-without-time --udp-max-associations 4192 --outbound-fwmark 255"
     SHADOWSOCKS_COMMAND="${SHADOWSOCKS_EXECUTABLE} ${SHADOWSOCKS_PARAMETERS}"
 
     procd_open_instance shadowsocks
@@ -73,7 +72,6 @@ start_service() {
         if [ -x /sbin/ujail -a -e ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH} ]; then
             procd_add_jail shadowsocks requirejail
             procd_add_jail_mount ${SHADOWSOCKS_CONFIG_PATH}
-            procd_add_jail_mount ${SHADOWSOCKS_LOG_CONFIG_PATH}
             procd_set_param user shadowsocks
             procd_set_param group shadowsocks
             procd_set_param capabilities ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH}
@@ -91,9 +89,8 @@ start_service() {
     fi
 
     SHADOWSOCKS6_CONFIG_PATH="/usr/local/etc/shadowsocks6.json"
-    SHADOWSOCKS6_LOG_CONFIG_PATH="/usr/local/etc/shadowsocks6.log.yaml"
     SHADOWSOCKS6_EXECUTABLE="/usr/local/bin/sslocal"
-    SHADOWSOCKS6_PARAMETERS="-c ${SHADOWSOCKS6_CONFIG_PATH} --log-without-time --log-config ${SHADOWSOCKS6_LOG_CONFIG_PATH} --udp-max-associations 4192 --outbound-fwmark 255"
+    SHADOWSOCKS6_PARAMETERS="-c ${SHADOWSOCKS6_CONFIG_PATH} --log-without-time --udp-max-associations 4192 --outbound-fwmark 255"
     SHADOWSOCKS6_COMMAND="${SHADOWSOCKS6_EXECUTABLE} ${SHADOWSOCKS6_PARAMETERS}"
 
     procd_set_param pidfile /var/run/shadowsocks.pid
@@ -113,7 +110,6 @@ start_service() {
         if [ -x /sbin/ujail -a -e ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH} ]; then
             procd_add_jail shadowsocks6 requirejail
             procd_add_jail_mount ${SHADOWSOCKS6_CONFIG_PATH}
-            procd_add_jail_mount ${SHADOWSOCKS6_LOG_CONFIG_PATH}
             procd_set_param user shadowsocks
             procd_set_param group shadowsocks
             procd_set_param capabilities ${SHADOWSOCKS_CAPABILITIES_CONFIG_PATH}
