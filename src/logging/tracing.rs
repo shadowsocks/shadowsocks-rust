@@ -1,7 +1,5 @@
 //! Logging facilities with tracing
 
-use std::io::IsTerminal;
-
 use time::UtcOffset;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter, FmtSubscriber};
@@ -22,10 +20,6 @@ pub fn init_with_config(bin_name: &str, config: &LogConfig) {
                 OffsetTime::new(UtcOffset::UTC, time::format_description::well_known::Rfc3339)
             }
         });
-
-    if std::io::stdout().is_terminal() {
-        builder = builder.with_ansi(true);
-    }
 
     if debug_level >= 1 {
         builder = builder.with_target(true).with_thread_ids(true).with_thread_names(true);
