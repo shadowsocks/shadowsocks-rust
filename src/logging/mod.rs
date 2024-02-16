@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use log::warn;
+
 use crate::config::LogConfig;
 
 mod log4rs;
@@ -13,15 +15,16 @@ where
     P: AsRef<Path>,
 {
     log4rs::init_with_file(path);
-    // FIXME: 2024-02-04 Temporary disable.
-    // trace4rs configuration file doesn't share exactly the same value with log4rs.
-    //
-    // tracing::init_with_file(path);
+
+    warn!(
+        "log4rs doesn't support tracing (https://crates.io/crates/tracing) framework, 
+         so it would be removed in the future. Consider configure logging with RUST_LOG environment variable."
+    );
 }
 
 /// Initialize logger with provided configuration
 pub fn init_with_config(bin_name: &str, config: &LogConfig) {
-    log4rs::init_with_config(bin_name, config);
+    // log4rs::init_with_config(bin_name, config);
     tracing::init_with_config(bin_name, config);
 }
 

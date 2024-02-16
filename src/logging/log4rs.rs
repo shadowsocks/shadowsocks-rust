@@ -20,6 +20,7 @@ where
 }
 
 /// Initialize logger with provided configuration
+#[allow(dead_code)]
 pub fn init_with_config(bin_name: &str, config: &LogConfig) {
     let debug_level = config.level;
     let without_time = config.format.without_time;
