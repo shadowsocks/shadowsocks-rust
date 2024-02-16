@@ -59,6 +59,7 @@ start_service() {
 
     procd_open_instance shadowsocks
     procd_set_param env RUST_BACKTRACE=1
+    procd_set_param env NO_COLOR=1
 
     procd_set_param file ${SHADOWSOCKS_CONFIG_PATH}
     procd_set_param respawn
@@ -98,6 +99,8 @@ start_service() {
 
     procd_open_instance shadowsocks6
     procd_set_param env RUST_BACKTRACE=1
+    procd_set_param env NO_COLOR=1
+
     procd_set_param file ${SHADOWSOCKS6_CONFIG_PATH}
     procd_set_param respawn
     procd_set_param reload_signal USR1
