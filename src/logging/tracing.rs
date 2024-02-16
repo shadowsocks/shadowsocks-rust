@@ -3,9 +3,7 @@
 use is_terminal::IsTerminal;
 use time::UtcOffset;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::fmt::time::OffsetTime;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::FmtSubscriber;
+use tracing_subscriber::{fmt::time::OffsetTime, EnvFilter, FmtSubscriber};
 
 use crate::config::LogConfig;
 
