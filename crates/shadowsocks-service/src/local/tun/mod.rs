@@ -182,6 +182,11 @@ impl Tun {
             netmask
         );
 
+        // Set default route
+        if let Err(err) = sys::set_route_configuration(&self.device.get_ref()).await {
+            warn!("[TUN] tun device set route failed, error: {}", err);
+        }
+
         let address_broadcast = address_net.broadcast();
 
         let mut packet_buffer = vec![0u8; 65536 + IFF_PI_PREFIX_LEN].into_boxed_slice();
