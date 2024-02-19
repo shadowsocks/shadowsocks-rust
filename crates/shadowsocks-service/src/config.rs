@@ -1630,7 +1630,8 @@ impl Config {
                             match tun_interface_destination.parse::<IpNet>() {
                                 Ok(addr) => local_config.tun_interface_destination = Some(addr),
                                 Err(..) => {
-                                    let err = Error::new(ErrorKind::Malformed, "`tun_interface_destination` invalid", None);
+                                    let err =
+                                        Error::new(ErrorKind::Malformed, "`tun_interface_destination` invalid", None);
                                     return Err(err);
                                 }
                             }

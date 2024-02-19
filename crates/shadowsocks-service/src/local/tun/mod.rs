@@ -183,7 +183,7 @@ impl Tun {
         );
 
         // Set default route
-        if let Err(err) = sys::set_route_configuration(&self.device.get_ref()).await {
+        if let Err(err) = sys::set_route_configuration(self.device.get_mut()).await {
             warn!("[TUN] tun device set route failed, error: {}", err);
         }
 

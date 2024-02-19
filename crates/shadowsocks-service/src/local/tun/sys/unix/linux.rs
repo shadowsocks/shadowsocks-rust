@@ -16,6 +16,6 @@ pub async fn write_packet_with_pi<W: AsyncWrite + Unpin>(writer: &mut W, packet:
 }
 
 /// Set platform specific route configuration
-pub async fn set_route_configuration(_device: &TunDevice) -> io::Result<()> {
+pub async fn set_route_configuration(_device: &mut TunDevice) -> io::Result<()> {
     Ok(())
 }

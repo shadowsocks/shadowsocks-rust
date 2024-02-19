@@ -58,7 +58,7 @@ struct rt_msg {
 }
 
 /// Set platform specific route configuration
-pub async fn set_route_configuration(device: &TunDevice) -> io::Result<()> {
+pub async fn set_route_configuration(device: &mut TunDevice) -> io::Result<()> {
     let tun_address = match device.address() {
         Ok(t) => t,
         Err(err) => {
