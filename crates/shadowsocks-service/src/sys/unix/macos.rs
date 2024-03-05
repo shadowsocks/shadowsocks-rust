@@ -74,6 +74,8 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     } else {
         // Take fds[0] as the result
         let fd = unsafe { *fds };
+        let mut nonblocking = true as libc::c_int;
+        unsafe { libc::ioctl(fd, libc::FIONBIO, &mut nonblocking) };
         Ok(fd as RawFd)
     };
 
