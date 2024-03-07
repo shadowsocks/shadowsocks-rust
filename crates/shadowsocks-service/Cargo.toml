@@ -120,7 +120,7 @@ cfg-if = "1"
 pin-project = "1.1"
 once_cell = "1.17"
 thiserror = "1.0"
-arc-swap = "1.6"
+arc-swap = "1.7"
 
 spin = { version = "0.9" }
 lru_time_cache = "0.11"
