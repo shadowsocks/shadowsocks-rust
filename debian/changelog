@@ -1,3 +1,13 @@
+shadowsocks-rust (1.18.2) unstable; urgency=medium
+
+  ## Features
+
+  - `local-tun`: Support `tun_interface_destination` configuration key
+
+  ## Bug Fixes
+
+  - `local`: macOS launch activate sockets set non-blocking
+
 shadowsocks-rust (1.18.1) unstable; urgency=medium
 
   ## Features
