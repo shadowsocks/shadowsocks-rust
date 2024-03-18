@@ -181,7 +181,7 @@ base64 = "0.22"
 
 clap = { version = "~4.4", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
-qrcode = { version = "0.13", default-features = false, optional = true }
+qrcode = { version = "0.14", default-features = false, optional = true }
 sysexits = "0.7"
 build-time = "0.1"
 directories = "5.0"
