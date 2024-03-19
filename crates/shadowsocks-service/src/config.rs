@@ -365,6 +365,10 @@ struct SSServerExtConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     acl: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    outbound_fwmark: Option<u32>,
 }
 
 /// Server config type
@@ -1119,12 +1123,20 @@ pub struct ServerInstanceConfig {
     pub config: ServerConfig,
     /// Server's private ACL, set to `None` will use the global `AccessControl`
     pub acl: Option<AccessControl>,
+    /// Server's outbound fwmark to support split tunnel
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub outbound_fwmark: Option<u32>,
 }
 
 impl ServerInstanceConfig {
     /// Create with `ServerConfig`
     pub fn with_server_config(config: ServerConfig) -> ServerInstanceConfig {
-        ServerInstanceConfig { config, acl: None }
+        ServerInstanceConfig {
+            config,
+            acl: None,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            outbound_fwmark: None,
+        }
     }
 }
 
@@ -1762,6 +1774,8 @@ impl Config {
                 let server_instance = ServerInstanceConfig {
                     config: nsvr,
                     acl: None,
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    outbound_fwmark: config.outbound_fwmark,
                 };
 
                 nconfig.server.push(server_instance);
@@ -1928,6 +1942,8 @@ impl Config {
                 let mut server_instance = ServerInstanceConfig {
                     config: nsvr,
                     acl: None,
+                    #[cfg(any(target_os = "linux", target_os = "android"))]
+                    outbound_fwmark: config.outbound_fwmark,
                 };
 
                 if let Some(acl_path) = svr.acl {
@@ -1943,6 +1959,11 @@ impl Config {
                         }
                     };
                     server_instance.acl = Some(acl);
+                }
+
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                if let Some(outbound_fwmark) = svr.outbound_fwmark {
+                    server_instance.outbound_fwmark = Some(outbound_fwmark);
                 }
 
                 nconfig.server.push(server_instance);
@@ -2699,6 +2720,8 @@ impl fmt::Display for Config {
                             .acl
                             .as_ref()
                             .and_then(|a| a.file_path().to_str().map(ToOwned::to_owned)),
+                        #[cfg(any(target_os = "linux", target_os = "android"))]
+                        outbound_fwmark: inst.outbound_fwmark.clone(),
                     });
                 }
 

@@ -111,6 +111,11 @@ pub async fn run(config: Config) -> io::Result<()> {
             server_builder.set_dns_resolver(r.clone());
         }
 
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if let Some(fwmark) = inst.outbound_fwmark {
+            connect_opts.fwmark = Some(fwmark);
+        }
+
         server_builder.set_connect_opts(connect_opts.clone());
         server_builder.set_accept_opts(accept_opts.clone());
 
