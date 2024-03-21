@@ -42,6 +42,6 @@ jobs:
         run: cargo build --verbose --features "local-http-rustls local-redir local-dns local-tun dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
       - name: Build with All Features Enabled (Windows)
         if: ${{ runner.os == 'Windows' }}
-        run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
+        run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect winservice"
       - name: Build with All Features Enabled - shadowsocks
         run: cargo build --manifest-path ./crates/shadowsocks/Cargo.toml --verbose --features "stream-cipher aead-cipher-2022"
