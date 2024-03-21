@@ -53,6 +53,10 @@ fi
 
 TARGETS=("sslocal${TARGET_SUFFIX}" "ssserver${TARGET_SUFFIX}" "ssurl${TARGET_SUFFIX}" "ssmanager${TARGET_SUFFIX}" "ssservice${TARGET_SUFFIX}")
 
+if [[ "${BUILD_FEATURES}" == *"winservice"* ]]; then
+    TARGETS+=("sswinservice${TARGET_SUFFIX}")
+fi
+
 RELEASE_FOLDER="${ROOT_DIR}/release"
 RELEASE_PACKAGE_NAME="shadowsocks-v${VERSION}.${BUILD_TARGET}"
 

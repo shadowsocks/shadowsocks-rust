@@ -48,6 +48,9 @@ $CompressParam = @{
     LiteralPath     = "sslocal.exe", "ssserver.exe", "ssurl.exe", "ssmanager.exe", "ssservice.exe"
     DestinationPath = "${PackagePath}"
 }
+if (${Features} -contains "winservice") {
+    $CompressParam.LiteralPath += "sswinservice.exe"
+}
 Compress-Archive @CompressParam
 
 Write-Host "Created release packet ${PackagePath}"

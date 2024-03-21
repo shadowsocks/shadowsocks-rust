@@ -116,7 +116,7 @@ jobs:
 
       - name: Build release
         run: |
-          pwsh ./build/build-host-release.ps1
+          pwsh ./build/build-host-release.ps1 winservice
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
