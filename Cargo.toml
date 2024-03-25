@@ -210,14 +210,14 @@ windows-service = { version = "0.6", optional = true }
 daemonize = "0.5"
 
 [target.'cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-reqwest = { version = "0.11", features = [
+reqwest = { version = "0.12", features = [
     "blocking",
     "rustls-tls",
     "rustls-tls-native-roots",
 ], default-features = false, optional = true }
 
 [target.'cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-reqwest = { version = "0.11", features = [
+reqwest = { version = "0.12", features = [
     "blocking",
     "native-tls-vendored",
 ], optional = true }
