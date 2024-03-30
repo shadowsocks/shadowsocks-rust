@@ -41,7 +41,7 @@ pub struct ServiceContext {
     reverse_lookup_cache: Arc<Mutex<LruCache<IpAddr, bool>>>,
 
     #[cfg(feature = "local-fake-dns")]
-    fake_dns_manager: Arc<RwLock<Option<Arc<FakeDnsManager>>>>,
+    fake_dns_manager: Arc<RwLock<Vec<Arc<FakeDnsManager>>>>,
 }
 
 impl Default for ServiceContext {
@@ -65,7 +65,7 @@ impl ServiceContext {
                 10240, // XXX: It should be enough for a normal user.
             ))),
             #[cfg(feature = "local-fake-dns")]
-            fake_dns_manager: Arc::new(RwLock::new(None)),
+            fake_dns_manager: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -193,32 +193,28 @@ impl ServiceContext {
 
     /// Set Fake DNS manager
     #[cfg(feature = "local-fake-dns")]
-    pub async fn set_fake_dns_manager(&self, manager: Arc<FakeDnsManager>) {
-        let mut opt = self.fake_dns_manager.write().await;
-        assert!(opt.is_none(), "one server instance can have only one fake-dns instance");
-        *opt = Some(manager);
+    pub async fn add_fake_dns_manager(&self, manager: Arc<FakeDnsManager>) {
+        let mut managers = self.fake_dns_manager.write().await;
+        managers.push(manager);
     }
 
     /// Fake DNS maps IP to Domain
     #[cfg(feature = "local-fake-dns")]
     pub async fn try_map_fake_address(&self, addr: &Address) -> Option<Address> {
-        match *(self.fake_dns_manager.read().await) {
-            None => None,
-            Some(ref mgr) => match addr {
-                Address::DomainNameAddress(..) => None,
-                Address::SocketAddress(socket_addr) => {
-                    let ip_addr = socket_addr.ip();
-                    match mgr.map_ip_domain(ip_addr).await {
-                        Ok(None) => None,
-                        Ok(Some(name)) => {
-                            let new_addr = Address::DomainNameAddress(name.to_string(), socket_addr.port());
-                            log::trace!("fakedns mapped {} -> {}", addr, new_addr);
-                            Some(new_addr)
-                        }
-                        Err(..) => None,
-                    }
-                }
-            },
+        let socket_addr = match addr {
+            Address::DomainNameAddress(..) => return None,
+            Address::SocketAddress(socket_addr) => socket_addr,
+        };
+        let ip_addr = socket_addr.ip();
+
+        for mgr in self.fake_dns_manager.read().await.iter() {
+            if let Ok(Some(name)) = mgr.map_ip_domain(ip_addr).await {
+                let new_addr = Address::DomainNameAddress(name.to_string(), socket_addr.port());
+                log::trace!("fakedns mapped {} -> {}", addr, new_addr);
+                return Some(new_addr);
+            }
         }
+
+        None
     }
 }

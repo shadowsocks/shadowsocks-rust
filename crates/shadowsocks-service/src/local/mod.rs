@@ -511,7 +511,7 @@ impl Server {
                     }
                     let server = builder.build().await?;
                     #[cfg(feature = "local-fake-dns")]
-                    context.set_fake_dns_manager(server.clone_manager()).await;
+                    context.add_fake_dns_manager(server.clone_manager()).await;
 
                     local_server.fake_dns_servers.push(server);
                 }
