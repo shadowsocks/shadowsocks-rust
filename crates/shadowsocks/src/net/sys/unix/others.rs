@@ -2,6 +2,7 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
+    os::fd::AsRawFd,
     pin::Pin,
     task::{self, Poll},
 };
@@ -13,7 +14,7 @@ use tokio::{
 };
 
 use crate::net::{
-    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
+    sys::{ErrorKind, set_common_sockopt_after_connect, set_common_sockopt_for_connect},
     AcceptOpts,
     AddrFamily,
     ConnectOpts,
