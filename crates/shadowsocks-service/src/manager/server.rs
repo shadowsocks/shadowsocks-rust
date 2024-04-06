@@ -410,6 +410,8 @@ impl Manager {
             acl: None, // Set with --acl command line argument
             #[cfg(any(target_os = "linux", target_os = "android"))]
             outbound_fwmark: None,
+            outbound_bind_addr: None,
+            outbound_bind_interface: None,
         };
 
         let mut config = Config::new(ConfigType::Server);
