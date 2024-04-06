@@ -191,7 +191,7 @@ nix = { version = "0.28", features = ["ioctl"] }
 windows-sys = { version = "0.52", features = ["Win32_Networking_WinSock"] }
 
 [build-dependencies]
-prost-build = { version = "0.11.9", optional = true }
+prost-build = { version = "0.12.4", optional = true }
 
 [dev-dependencies]
 byteorder = "1.5"
