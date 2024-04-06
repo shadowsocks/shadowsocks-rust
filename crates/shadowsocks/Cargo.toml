@@ -81,7 +81,6 @@ tokio = { version = "1.9.0", features = [
     "sync",
     "time",
 ] }
-tokio-tfo = "0.2.0"
 
 hickory-resolver = { version = "0.24", optional = true }
 arc-swap = { version = "1.7", optional = true }
@@ -95,6 +94,9 @@ shadowsocks-crypto = { version = "0.5.4", features = ["ring"] }
 
 [target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
 shadowsocks-crypto = { version = "0.5.4", features = [] }
+
+[target.'cfg(any(windows, target_os = "linux", target_os = "android", target_os = "freebsd", target_os = "macos", target_os = "ios", target_os = "watchos", target_os = "tvos"))'.dependencies]
+tokio-tfo = "0.2.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = [
