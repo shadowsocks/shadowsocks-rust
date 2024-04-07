@@ -226,7 +226,7 @@ impl Server {
             }
 
             for server in config.server {
-                balancer_builder.add_server(server.config);
+                balancer_builder.add_server(server);
             }
 
             balancer_builder.build().await?

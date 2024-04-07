@@ -991,10 +991,9 @@ fn launch_reload_server_task(config_path: PathBuf, balancer: PingBalancer) {
                 }
             };
 
-            let servers: Vec<ServerConfig> = config.server.into_iter().map(|s| s.config).collect();
-            info!("auto-reload {} with {} servers", config_path.display(), servers.len());
+            info!("auto-reload {} with {} servers", config_path.display(), config.server.len());
 
-            if let Err(err) = balancer.reset_servers(servers).await {
+            if let Err(err) = balancer.reset_servers(config.server).await {
                 error!("auto-reload {} but found error: {}", config_path.display(), err);
             }
         }
