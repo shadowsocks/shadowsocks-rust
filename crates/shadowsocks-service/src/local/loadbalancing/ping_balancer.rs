@@ -35,6 +35,7 @@ use tokio::{
     time,
 };
 
+use crate::config::ServerInstanceConfig;
 use crate::local::context::ServiceContext;
 
 use super::{
@@ -82,8 +83,9 @@ impl PingBalancerBuilder {
         }
     }
 
-    pub fn add_server(&mut self, server: ServerConfig) {
+    pub fn add_server(&mut self, server: ServerInstanceConfig) {
         let ident = ServerIdent::new(
+            self.context.clone(),
             server,
             self.max_server_rtt,
             self.check_interval * EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW,
@@ -720,13 +722,14 @@ impl PingBalancer {
     }
 
     /// Reset servers in load balancer. Designed for auto-reloading configuration file.
-    pub async fn reset_servers(&self, servers: Vec<ServerConfig>) -> io::Result<()> {
+    pub async fn reset_servers(&self, servers: Vec<ServerInstanceConfig>) -> io::Result<()> {
         let old_context = self.inner.context.load();
 
         let servers = servers
             .into_iter()
             .map(|s| {
                 Arc::new(ServerIdent::new(
+                    old_context.context.clone(),
                     s,
                     old_context.max_server_rtt,
                     old_context.check_interval * EXPECTED_CHECK_POINTS_IN_CHECK_WINDOW,
@@ -811,7 +814,7 @@ impl PingChecker {
             self.context.context(),
             self.server.server_config(),
             &addr,
-            self.context.connect_opts_ref(),
+            self.server.connect_opts_ref(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -851,7 +854,7 @@ impl PingChecker {
             self.context.context(),
             self.server.server_config(),
             &addr,
-            self.context.connect_opts_ref(),
+            self.server.connect_opts_ref(),
         )
         .await?;
         stream.write_all(GET_BODY).await?;
@@ -896,10 +899,12 @@ impl PingChecker {
 
         let addr = Address::SocketAddress(SocketAddr::new(Ipv4Addr::new(8, 8, 8, 8).into(), 53));
 
-        let svr_cfg = self.server.server_config();
-
-        let client =
-            ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts_ref()).await?;
+        let client = ProxySocket::connect_with_opts(
+            self.context.context(),
+            self.server.server_config(),
+            self.server.connect_opts_ref(),
+        )
+        .await?;
 
         let mut control = UdpSocketControlData::default();
         control.client_session_id = rand::random::<u64>();
