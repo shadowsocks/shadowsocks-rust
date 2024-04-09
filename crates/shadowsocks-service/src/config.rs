@@ -124,6 +124,14 @@ struct SSConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     local_port: Option<u16>,
 
+    /// macOS launch activate socket for local_port
+    #[cfg(target_os = "macos")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    launchd_udp_socket_name: Option<String>,
+    #[cfg(target_os = "macos")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    launchd_tcp_socket_name: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     protocol: Option<String>,
 
@@ -1501,6 +1509,11 @@ impl Config {
                             }
                         },
                     };
+                    #[cfg(target_os = "macos")]
+                    {
+                        local_config.launchd_tcp_socket_name = config.launchd_tcp_socket_name.clone();
+                        local_config.launchd_udp_socket_name = config.launchd_udp_socket_name.clone();
+                    }
 
                     let local_instance = LocalInstanceConfig {
                         config: local_config,
@@ -2543,6 +2556,12 @@ impl fmt::Display for Config {
                         ServerAddr::SocketAddr(ref sa) => sa.port(),
                         ServerAddr::DomainName(.., port) => *port,
                     });
+                }
+
+                #[cfg(target_os = "macos")]
+                {
+                    jconf.launchd_tcp_socket_name = local.launchd_tcp_socket_name.clone();
+                    jconf.launchd_udp_socket_name = local.launchd_udp_socket_name.clone();
                 }
 
                 if local.protocol != ProtocolType::Socks {
