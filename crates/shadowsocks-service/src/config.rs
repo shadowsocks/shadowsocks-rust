@@ -1888,7 +1888,7 @@ impl Config {
                     acl: None,
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     outbound_fwmark: config.outbound_fwmark,
-                    outbound_bind_addr: outbound_bind_addr,
+                    outbound_bind_addr,
                     outbound_bind_interface: config.outbound_bind_interface.clone(),
                 };
 
@@ -2070,7 +2070,7 @@ impl Config {
                     acl: None,
                     #[cfg(any(target_os = "linux", target_os = "android"))]
                     outbound_fwmark: config.outbound_fwmark,
-                    outbound_bind_addr: outbound_bind_addr,
+                    outbound_bind_addr,
                     outbound_bind_interface: config.outbound_bind_interface.clone(),
                 };
 
@@ -2875,8 +2875,8 @@ impl fmt::Display for Config {
                             .as_ref()
                             .and_then(|a| a.file_path().to_str().map(ToOwned::to_owned)),
                         #[cfg(any(target_os = "linux", target_os = "android"))]
-                        outbound_fwmark: inst.outbound_fwmark.clone(),
-                        outbound_bind_addr: inst.outbound_bind_addr.clone(),
+                        outbound_fwmark: inst.outbound_fwmark,
+                        outbound_bind_addr: inst.outbound_bind_addr,
                         outbound_bind_interface: inst.outbound_bind_interface.clone(),
                     });
                 }
