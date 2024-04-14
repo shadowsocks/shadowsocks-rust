@@ -9,16 +9,10 @@ use std::{
     time::Duration,
 };
 
-use shadowsocks::{
-    net::ConnectOpts,
-    ServerConfig,
-};
+use shadowsocks::{net::ConnectOpts, ServerConfig};
 use tokio::sync::Mutex;
 
-use crate::{
-    config::ServerInstanceConfig,
-    local::context::ServiceContext,
-};
+use crate::{config::ServerInstanceConfig, local::context::ServiceContext};
 
 use super::server_stat::{Score, ServerStat};
 
@@ -82,8 +76,9 @@ impl ServerIdent {
         context: Arc<ServiceContext>,
         svr_cfg: ServerInstanceConfig,
         max_server_rtt: Duration,
-        check_window: Duration
+        check_window: Duration,
     ) -> ServerIdent {
+        #[allow(unused_mut)]
         let mut connect_opts = context.connect_opts_ref().clone();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
