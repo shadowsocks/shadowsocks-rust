@@ -29,7 +29,9 @@ use shadowsocks::{
 use crate::{
     local::{context::ServiceContext, loadbalancing::PingBalancer},
     net::{
-        packet_window::PacketWindowFilter, MonProxySocket, UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
+        packet_window::PacketWindowFilter,
+        MonProxySocket,
+        UDP_ASSOCIATION_KEEP_ALIVE_CHANNEL_SIZE,
         UDP_ASSOCIATION_SEND_CHANNEL_SIZE,
     },
 };

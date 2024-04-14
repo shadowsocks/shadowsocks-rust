@@ -14,7 +14,7 @@ use tokio::{
 };
 
 use crate::net::{
-    sys::{ErrorKind, set_common_sockopt_after_connect, set_common_sockopt_for_connect},
+    sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, ErrorKind},
     AcceptOpts,
     AddrFamily,
     ConnectOpts,

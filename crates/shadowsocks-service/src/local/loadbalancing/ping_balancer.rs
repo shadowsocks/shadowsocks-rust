@@ -35,8 +35,7 @@ use tokio::{
     time,
 };
 
-use crate::config::ServerInstanceConfig;
-use crate::local::context::ServiceContext;
+use crate::{config::ServerInstanceConfig, local::context::ServiceContext};
 
 use super::{
     server_data::ServerIdent,

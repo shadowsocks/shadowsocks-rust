@@ -70,7 +70,14 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerUser, ServerUserManager, ServerWeight,
+        ManagerAddr,
+        Mode,
+        ReplayAttackPolicy,
+        ServerAddr,
+        ServerConfig,
+        ServerUser,
+        ServerUserManager,
+        ServerWeight,
     },
     crypto::CipherKind,
     plugin::PluginConfig,
