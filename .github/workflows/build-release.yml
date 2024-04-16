@@ -133,6 +133,7 @@ jobs:
       RUST_BACKTRACE: full
     steps:
       - uses: actions/checkout@v4
+      - uses: ilammy/setup-nasm@v1
 
       - name: Install Rust
         run: |

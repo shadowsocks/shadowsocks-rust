@@ -23,6 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+      - if: ${{ runner.os == 'Windows' }}
+        uses: ilammy/setup-nasm@v1
       - name: Install Rust
         run: |
           rustup set profile minimal
