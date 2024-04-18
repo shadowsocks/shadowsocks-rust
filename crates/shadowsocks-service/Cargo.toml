@@ -145,7 +145,6 @@ tokio = { version = "1.5", features = [
 ] }
 tokio-native-tls = { version = "0.3", optional = true }
 native-tls = { version = "0.2.8", optional = true, features = ["alpn"] }
-tokio-rustls = { version = "0.26", optional = true }
 webpki-roots = { version = "0.26", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
 async-trait = "0.1"
@@ -189,6 +188,19 @@ nix = { version = "0.28", features = ["ioctl"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_Networking_WinSock"] }
+
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
+    "logging",
+    "tls12",
+    "ring",
+] }
+[target.'cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
+    "logging",
+    "tls12",
+] }
+
 
 [build-dependencies]
 prost-build = { version = "0.12.4", optional = true }

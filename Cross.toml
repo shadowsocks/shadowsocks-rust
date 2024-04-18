@@ -1,18 +1,2 @@
 [build.env]
 passthrough = ["RUSTFLAGS"]
-
-[target.mips-unknown-linux-musl]
-# image = "rustembedded/cross:mips-unknown-linux-musl-0.2.1"
-# pre-build = [
-#   "dpkg --add-architecture $CROSS_DEB_ARCH",
-#   "apt-get update",
-#   "apt-get install --assume-yes libssl-dev:$CROSS_DEB_ARCH",
-# ]
-
-[target.mipsel-unknown-linux-musl]
-# image = "rustembedded/cross:mipsel-unknown-linux-musl-0.2.1"
-# pre-build = [
-#   "dpkg --add-architecture $CROSS_DEB_ARCH",
-#   "apt-get update",
-#   "apt-get install --assume-yes libssl-dev:$CROSS_DEB_ARCH",
-# ]
