@@ -86,6 +86,14 @@ impl ServerIdent {
             connect_opts.fwmark = Some(fwmark);
         }
 
+        if let Some(bind_local_addr) = svr_cfg.outbound_bind_addr {
+            connect_opts.bind_local_addr = Some(bind_local_addr);
+        }
+
+        if let Some(ref bind_interface) = svr_cfg.outbound_bind_interface {
+            connect_opts.bind_interface = Some(bind_interface.clone());
+        }
+
         ServerIdent {
             tcp_score: ServerScore::new(svr_cfg.config.weight().tcp_weight(), max_server_rtt, check_window),
             udp_score: ServerScore::new(svr_cfg.config.weight().udp_weight(), max_server_rtt, check_window),

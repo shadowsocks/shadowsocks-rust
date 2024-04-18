@@ -254,7 +254,13 @@ impl Socks5TcpHandler {
         } else {
             let server = self.balancer.best_tcp_server();
 
-            let r = AutoProxyClientStream::connect(self.context.clone(), &server, &target_addr).await;
+            let r = AutoProxyClientStream::connect_with_opts(
+                self.context,
+                &server,
+                &target_addr,
+                server.connect_opts_ref()
+            )
+            .await;
             server_opt = Some(server);
 
             r

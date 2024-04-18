@@ -572,7 +572,7 @@ where
                 let svr_cfg = server.server_config();
 
                 let socket =
-                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, self.context.connect_opts_ref())
+                    ProxySocket::connect_with_opts(self.context.context(), svr_cfg, server.connect_opts_ref())
                         .await?;
                 let socket = MonProxySocket::from_socket(socket, self.context.flow_stat());
 
