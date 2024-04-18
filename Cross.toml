@@ -1,2 +1,9 @@
 [build.env]
 passthrough = ["RUSTFLAGS"]
+
+[target.x86_64-pc-windows-gnu]
+pre-build = [
+    # Install NVIM for rustls, which deps on aws-lc-rs by default, and it needs NASM
+    "apt-get update",
+    "apt-get install --assume-yes nasm",
+]
