@@ -37,7 +37,6 @@ use std::{
     pin::Pin,
     slice,
     task::{self, Poll},
-    u16,
 };
 
 use byte_string::ByteStr;

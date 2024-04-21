@@ -51,7 +51,6 @@ use std::{
     sync::Arc,
     task::{self, Poll},
     time::SystemTime,
-    u16,
 };
 
 use aes::{

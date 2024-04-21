@@ -85,8 +85,7 @@ impl AutoProxyClientStream {
         if let Some(mapped_addr) = context.try_map_fake_address(&addr).await {
             addr = mapped_addr;
         }
-        let stream =
-            TcpStream::connect_remote_with_opts(context.context_ref(), &addr, connect_opts).await?;
+        let stream = TcpStream::connect_remote_with_opts(context.context_ref(), &addr, connect_opts).await?;
         Ok(AutoProxyClientStream::Bypassed(stream))
     }
 
@@ -99,13 +98,8 @@ impl AutoProxyClientStream {
     where
         A: Into<Address>,
     {
-        AutoProxyClientStream::connect_proxied_with_opts(
-            context.clone(),
-            server,
-            addr,
-            context.connect_opts_ref()
-        )
-        .await
+        AutoProxyClientStream::connect_proxied_with_opts(context.clone(), server, addr, context.connect_opts_ref())
+            .await
     }
 
     /// Connect to target `addr` via shadowsocks' server configured by `svr_cfg`

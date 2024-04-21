@@ -1528,8 +1528,12 @@ impl Config {
                     };
                     #[cfg(target_os = "macos")]
                     {
-                        local_config.launchd_tcp_socket_name = config.launchd_tcp_socket_name.clone();
-                        local_config.launchd_udp_socket_name = config.launchd_udp_socket_name.clone();
+                        local_config
+                            .launchd_tcp_socket_name
+                            .clone_from(&config.launchd_tcp_socket_name);
+                        local_config
+                            .launchd_udp_socket_name
+                            .clone_from(&config.launchd_udp_socket_name);
                     }
 
                     let local_instance = LocalInstanceConfig {
@@ -2613,8 +2617,8 @@ impl fmt::Display for Config {
 
                 #[cfg(target_os = "macos")]
                 {
-                    jconf.launchd_tcp_socket_name = local.launchd_tcp_socket_name.clone();
-                    jconf.launchd_udp_socket_name = local.launchd_udp_socket_name.clone();
+                    jconf.launchd_tcp_socket_name.clone_from(&local.launchd_tcp_socket_name);
+                    jconf.launchd_udp_socket_name.clone_from(&local.launchd_udp_socket_name);
                 }
 
                 if local.protocol != ProtocolType::Socks {
@@ -2981,7 +2985,7 @@ impl fmt::Display for Config {
         }
 
         jconf.outbound_bind_addr = self.outbound_bind_addr.map(|i| i.to_string());
-        jconf.outbound_bind_interface = self.outbound_bind_interface.clone();
+        jconf.outbound_bind_interface.clone_from(&self.outbound_bind_interface);
 
         // Security
         if self.security.replay_attack.policy != ReplayAttackPolicy::default() {

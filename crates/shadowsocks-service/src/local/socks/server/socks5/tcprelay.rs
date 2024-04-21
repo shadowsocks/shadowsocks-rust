@@ -258,7 +258,7 @@ impl Socks5TcpHandler {
                 self.context,
                 &server,
                 &target_addr,
-                server.connect_opts_ref()
+                server.connect_opts_ref(),
             )
             .await;
             server_opt = Some(server);
