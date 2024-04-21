@@ -1,3 +1,18 @@
+shadowsocks-rust (1.18.3) unstable; urgency=medium
+
+  ## Features
+
+  - #1466 Support `outbound_fwmark` in server side to split outbound tunnel
+  - #1467 Default build for `*-windows-*` targets includes `sswinservice`
+  - `local-fakedns`: Add a basic implementation of Fake-DNS, which will allocate IPs from pool for DNS queries. This experimental feature could be useful when using `local-tun`, `local-redir` or other features that could only receive IP destinations, the domain name that is resolved by the Fake-DNS will be translated from IP back to domain name when connecting to the remote.
+  - #1500 Add `launchd_udp_socket_name`, `launchd_tcp_socket_name` to basic config format
+
+  ## Bug Fixes
+
+  - Fixed build on OpenBSD
+  - #1491 Fixed per-server outbound options not taking effect
+  - #1509 `local-tun` TCP socket creation made non-blocking
+
 shadowsocks-rust (1.18.2) unstable; urgency=medium
 
   ## Features
