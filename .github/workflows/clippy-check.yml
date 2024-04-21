@@ -32,10 +32,12 @@ jobs:
           rustup default nightly
           rustup override set nightly
       - name: Clippy Check
-        uses: actions-rs-plus/clippy-check@main
+        uses: actions-rs/clippy-check@v1
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           args: |
             --features "local-http-rustls local-redir local-flow-stat local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
             -A clippy::collapsible_else_if
+          name: clippy ${{ matrix.platform }}
