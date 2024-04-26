@@ -144,7 +144,7 @@ jobs:
 
       - name: Build release
         run: |
-          pwsh ./build/build-host-release.ps1 winservice local-tun
+          pwsh ./build/build-host-release.ps1 "winservice local-tun"
 
       - name: Upload Github Assets
         uses: softprops/action-gh-release@v1
