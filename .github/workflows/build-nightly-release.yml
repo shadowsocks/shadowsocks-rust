@@ -42,6 +42,10 @@ jobs:
             compile_features="-f local-redir -f local-tun"
           fi
 
+          if [[ "$compile_target" == *"-windows-"* ]]; then
+            compile_features="-f winservice -f local-tun"
+          fi
+
           if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
             sudo apt-get update -y && sudo apt-get install -y upx;
             if [[ "$?" == "0" ]]; then
@@ -117,7 +121,7 @@ jobs:
 
       - name: Build release
         run: |
-          pwsh ./build/build-host-release.ps1 winservice
+          pwsh ./build/build-host-release.ps1 winservice local-tun
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
