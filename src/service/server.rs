@@ -124,6 +124,14 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .help("SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
         )
         .arg(
+            Arg::new("PLUGIN_MODE")
+                .long("plugin-mode")
+                .num_args(1)
+                .action(ArgAction::Set)
+                .requires("PLUGIN")
+                .help("SIP003/SIP003u plugin mode, must be one of `tcp_only` (default), `udp_only` and `tcp_and_udp`"),
+        )
+        .arg(
             Arg::new("PLUGIN_OPT")
                 .long("plugin-opts")
                 .num_args(1)
@@ -358,7 +366,9 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
                     plugin: p,
                     plugin_opts: matches.get_one::<String>("PLUGIN_OPT").cloned(),
                     plugin_args: Vec::new(),
-                    plugin_mode: Mode::TcpOnly,
+                    plugin_mode: matches.get_one::<String>("PLUGIN_MODE")
+                        .map(|x| x.parse::<Mode>().expect("plugin-mode must be one of `tcp_only` (default), `udp_only` and `tcp_and_udp`"))
+                        .unwrap_or(Mode::TcpOnly),
                 };
 
                 sc.set_plugin(plugin);
