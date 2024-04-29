@@ -1450,7 +1450,7 @@ impl Config {
         //
         // local_address is allowed to be NULL, which means to bind to ::1 or 127.0.0.1
         //
-        // https://shadowsocks.org/en/config/quick-guide.html
+        // https://shadowsocks.org/doc/configs.html
         #[inline]
         fn get_local_address(local_address: Option<String>, local_port: u16, ipv6_first: bool) -> ServerAddr {
             match local_address {
