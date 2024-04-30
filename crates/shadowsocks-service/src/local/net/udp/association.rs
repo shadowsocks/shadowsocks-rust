@@ -243,8 +243,9 @@ thread_local! {
     static CLIENT_SESSION_RNG: RefCell<SmallRng> = RefCell::new(SmallRng::from_entropy());
 }
 
+/// Generate an AEAD-2022 Client SessionID
 #[inline]
-fn generate_client_session_id() -> u64 {
+pub fn generate_client_session_id() -> u64 {
     CLIENT_SESSION_RNG.with(|rng| rng.borrow_mut().gen())
 }
 

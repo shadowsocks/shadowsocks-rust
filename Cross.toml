@@ -5,5 +5,5 @@ passthrough = ["RUSTFLAGS"]
 pre-build = [
     # Install NVIM for rustls, which deps on aws-lc-rs by default, and it needs NASM
     "apt-get update",
-    "apt-get install --assume-yes nasm",
+    "apt-get install --assume-yes nasm clang",
 ]
