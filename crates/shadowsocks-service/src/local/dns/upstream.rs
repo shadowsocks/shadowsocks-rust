@@ -16,7 +16,7 @@ use hickory_resolver::proto::{
     error::{ProtoError, ProtoErrorKind},
     op::Message,
 };
-use log::{error, trace, warn};
+use log::{error, trace};
 use lru_time_cache::{Entry, LruCache};
 use rand::{thread_rng, Rng};
 use shadowsocks::{
@@ -61,13 +61,9 @@ pub enum DnsClient {
         stream: ProxyClientStream<MonProxyStream<ShadowTcpStream>>,
     },
     UdpRemote {
-        context: SharedContext,
         socket: MonProxySocket,
-        svr_cfg: ServerConfig,
         ns: Address,
         control: UdpSocketControlData,
-        connect_opts: ConnectOpts,
-        flow_stat: Arc<FlowStat>,
         server_windows: LruCache<u64, PacketWindowFilter>,
     },
 }
@@ -121,13 +117,9 @@ impl DnsClient {
         control.client_session_id = generate_client_session_id();
         control.packet_id = 0; // AEAD-2022 Packet ID starts from 1
         Ok(DnsClient::UdpRemote {
-            context,
             socket,
-            svr_cfg: svr_cfg.clone(),
             ns,
             control,
-            connect_opts: connect_opts.clone(),
-            flow_stat,
             // NOTE: expiry duration should be configurable. But the Client is held by DnsClientCache, which expires very quickly.
             server_windows: LruCache::with_expiry_duration(DEFAULT_UDP_EXPIRY_DURATION),
         })
@@ -169,38 +161,14 @@ impl DnsClient {
             DnsClient::UnixStream { ref mut stream } => stream_query(stream, msg).await,
             DnsClient::TcpRemote { ref mut stream } => stream_query(stream, msg).await,
             DnsClient::UdpRemote {
-                ref context,
                 ref mut socket,
-                ref svr_cfg,
                 ref ns,
                 ref mut control,
-                ref connect_opts,
-                ref flow_stat,
                 ref mut server_windows,
             } => {
                 control.packet_id = match control.packet_id.checked_add(1) {
                     Some(i) => i,
-                    None => {
-                        // Recreate a new socket. Packet ID overflows.
-                        // see crate::local::net::udp::association::dispatch_received_proxied_packet
-
-                        let new_session_id = generate_client_session_id();
-
-                        warn!(
-                            "dns client for {} via {} (proxied) packet id overflowed. socket reset and session renewed ({} -> {})",
-                            ns, svr_cfg.addr(), control.client_session_id, new_session_id
-                        );
-
-                        let new_socket = ProxySocket::connect_with_opts(context.clone(), svr_cfg, &connect_opts)
-                            .await
-                            .map_err(io::Error::from)?;
-                        let new_socket = MonProxySocket::from_socket(new_socket, flow_stat.clone());
-                        *socket = new_socket;
-
-                        control.client_session_id = new_session_id;
-
-                        1
-                    }
+                    None => return Err(ProtoErrorKind::Message("packet id overflows").into()),
                 };
 
                 let bytes = msg.to_vec()?;
