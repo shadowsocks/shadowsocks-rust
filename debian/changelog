@@ -1,3 +1,14 @@
+shadowsocks-rust (1.18.4) unstable; urgency=medium
+
+  ## Features
+
+  - #1495 Binaries support `--plugin-mode` command line argument
+  - `local-tun` is enabled by default for Windows targets in CI builds
+
+  ## Bug Fixes
+
+  - #1516 `local-dns` UDP client support AEAD-2022 protocol properly
+
 shadowsocks-rust (1.18.3) unstable; urgency=medium
 
   ## Features
