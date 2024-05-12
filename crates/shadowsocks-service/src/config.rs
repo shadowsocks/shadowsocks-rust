@@ -2557,7 +2557,7 @@ impl Config {
             }
         }
 
-        if self.config_type.is_server() && self.server.is_empty() {
+        if self.config_type.is_server() && self.server.is_empty() && self.online_config.is_none() {
             let err = Error::new(
                 ErrorKind::MissingField,
                 "missing any valid servers in configuration",

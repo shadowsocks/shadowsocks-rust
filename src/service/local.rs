@@ -575,7 +575,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 
 /// Create `Runtime` and `main` entry
 pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
-    let (config, runtime) = {
+    let (mut config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
                 match crate::config::get_default_config_path("local.json") {
@@ -1000,6 +1000,20 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             }
         }
 
+        // Fetch servers from remote for the first time
+        #[cfg(feature = "local-online-config")]
+        if let Some(ref online_config) = config.online_config {
+            if let Ok(mut servers) = get_online_config_servers(&online_config.config_url).await {
+                config.server.append(&mut servers);
+            }
+        }
+
+        // Double check
+        if config.server.is_empty() {
+            eprintln!("local server cannot run without any valid servers");
+            return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
+        }
+
         #[cfg(feature = "local-online-config")]
         let (online_config_url, online_config_update_interval) = match config.online_config.clone() {
             Some(o) => (Some(o.config_url), o.update_interval),
@@ -1052,7 +1066,7 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
                 }
                 _ = reload_task => {
                     // continue.
-                    trace!("server-reloader task exited");
+                    trace!("server-loader task task exited");
                 }
             }
         }
@@ -1080,6 +1094,67 @@ struct ServerReloader {
     online_config_update_interval: Option<Duration>,
 }
 
+#[cfg(feature = "local-online-config")]
+async fn get_online_config_servers(
+    online_config_url: &str,
+) -> Result<Vec<ServerInstanceConfig>, Box<dyn std::error::Error>> {
+    use log::warn;
+
+    #[inline]
+    async fn get_online_config(online_config_url: &str) -> reqwest::Result<String> {
+        let response = reqwest::get(online_config_url).await?;
+        if response.url().scheme() != "https" {
+            warn!(
+                "SIP008 suggests configuration URL should use https, but current URL is {}",
+                response.url().scheme()
+            );
+        }
+
+        // Content-Type: application/json; charset=utf-8
+        // mandatory in standard SIP008
+        match response.headers().get("Content-Type") {
+            Some(h) => {
+                if h != "application/json; charset=utf-8" {
+                    warn!(
+                        "SIP008 Content-Type must be \"application/json; charset=utf-8\", but found {}",
+                        h.to_str().unwrap_or("[non-utf8-value]")
+                    );
+                }
+            }
+            None => {
+                warn!("missing Content-Type in SIP008 response from {}", online_config_url);
+            }
+        }
+
+        response.text().await
+    }
+
+    let body = match get_online_config(online_config_url).await {
+        Ok(b) => b,
+        Err(err) => {
+            error!(
+                "server-loader task failed to load from url: {}, error: {}",
+                online_config_url, err
+            );
+            return Err(Box::new(err));
+        }
+    };
+
+    // NOTE: ConfigType::Local will force verify local_address and local_port keys. SIP008 standard doesn't include those keys.
+    let online_config = match Config::load_from_str(&body, ConfigType::Server) {
+        Ok(c) => c,
+        Err(err) => {
+            error!(
+                "server-loader task failed to load from url: {}, error: {}",
+                online_config_url, err
+            );
+            return Err(Box::new(err));
+        }
+    };
+
+    Ok(online_config.server)
+}
+
 impl ServerReloader {
     async fn run_once(&self) -> Result<(), Box<dyn std::error::Error>> {
         let start_time = Instant::now();
@@ -1092,7 +1167,7 @@ impl ServerReloader {
                 Ok(c) => c,
                 Err(err) => {
                     error!(
-                        "server-reloader failed to load from file: {}, error: {}",
+                        "server-loader task failed to load from file: {}, error: {}",
                         config_path.display(),
                         err
                     );
@@ -1105,60 +1180,8 @@ impl ServerReloader {
         // Load servers from online-config (SIP008)
         #[cfg(feature = "local-online-config")]
         if let Some(ref online_config_url) = self.online_config_url {
-            use log::warn;
-
-            #[inline]
-            async fn get_online_config(online_config_url: &str) -> reqwest::Result<String> {
-                let response = reqwest::get(online_config_url).await?;
-                if response.url().scheme() != "https" {
-                    warn!(
-                        "SIP008 suggests configuration URL should use https, but current URL is {}",
-                        response.url().scheme()
-                    );
-                }
-
-                // Content-Type: application/json; charset=utf-8
-                // mandatory in standard SIP008
-                match response.headers().get("Content-Type") {
-                    Some(h) => {
-                        if h != "application/json; charset=utf-8" {
-                            warn!(
-                                "SIP008 Content-Type must be \"application/json; charset=utf-8\", but found {}",
-                                h.to_str().unwrap_or("[non-utf8-value]")
-                            );
-                        }
-                    }
-                    None => {
-                        warn!("missing Content-Type in SIP008 response from {}", online_config_url);
-                    }
-                }
-
-                response.text().await
-            }
-
-            let body = match get_online_config(online_config_url).await {
-                Ok(b) => b,
-                Err(err) => {
-                    error!(
-                        "server-reloader failed to load from url: {}, error: {}",
-                        online_config_url, err
-                    );
-                    return Err(Box::new(err));
-                }
-            };
-
-            // NOTE: ConfigType::Local will force verify local_address and local_port keys. SIP008 standard doesn't include those keys.
-            let mut online_config = match Config::load_from_str(&body, ConfigType::Server) {
-                Ok(c) => c,
-                Err(err) => {
-                    error!(
-                        "server-reloader failed to load from url: {}, error: {}",
-                        online_config_url, err
-                    );
-                    return Err(Box::new(err));
-                }
-            };
-            servers.append(&mut online_config.server);
+            let mut online_servers = get_online_config_servers(&online_config_url).await?;
+            servers.append(&mut online_servers);
         }
 
         let server_len = servers.len();
@@ -1188,14 +1211,14 @@ impl ServerReloader {
         let fetch_end_time = Instant::now();
 
         if let Err(err) = self.balancer.reset_servers(servers).await {
-            error!("server-reloader {} servers but found error: {}", server_len, err);
+            error!("server-loader task {} servers but found error: {}", server_len, err);
             return Err(Box::new(err));
         }
 
         let total_end_time = Instant::now();
 
         info!(
-            "server-reloader reload from {} with {} servers, fetch costs: {:?}, total costs: {:?}",
+            "server-loader task reload from {} with {} servers, fetch costs: {:?}, total costs: {:?}",
             ConfigDisplay(&self),
             server_len,
             fetch_end_time - start_time,
@@ -1212,7 +1235,7 @@ impl ServerReloader {
 
         let mut sigusr1 = signal(SignalKind::user_defined1()).expect("signal");
 
-        debug!("server-reloader is now listening USR1");
+        debug!("server-loader task is now listening USR1");
 
         while sigusr1.recv().await.is_some() {
             let _ = self.run_once().await;
@@ -1228,11 +1251,11 @@ impl ServerReloader {
             .online_config_update_interval
             .unwrap_or(Duration::from_secs(1 * 60 * 60));
 
-        debug!("server-reloader updating in interval {:?}", update_interval);
+        debug!("server-loader task updating in interval {:?}", update_interval);
 
         loop {
-            let _ = self.run_once().await;
             time::sleep(update_interval).await;
+            let _ = self.run_once().await;
         }
     }
 
