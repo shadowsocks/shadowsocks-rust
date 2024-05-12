@@ -70,14 +70,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr,
-        Mode,
-        ReplayAttackPolicy,
-        ServerAddr,
-        ServerConfig,
-        ServerSource,
-        ServerUser,
-        ServerUserManager,
+        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerSource, ServerUser, ServerUserManager,
         ServerWeight,
     },
     crypto::CipherKind,
@@ -2557,13 +2550,28 @@ impl Config {
             }
         }
 
-        if self.config_type.is_server() && self.server.is_empty() && self.online_config.is_none() {
-            let err = Error::new(
-                ErrorKind::MissingField,
-                "missing any valid servers in configuration",
-                None,
-            );
-            return Err(err);
+        if self.config_type.is_server() && self.server.is_empty() {
+            #[cfg(feature = "local-online-config")]
+            if self.online_config.is_none() {
+                // It's Ok if online_config is not None.
+                // servers could be fetch from online configuration delivery (SIP008)
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing any valid servers in configuration",
+                    None,
+                );
+                return Err(err);
+            }
+
+            #[cfg(not(feature = "local-online-config"))]
+            {
+                let err = Error::new(
+                    ErrorKind::MissingField,
+                    "missing any valid servers in configuration",
+                    None,
+                );
+                return Err(err);
+            }
         }
 
         if self.config_type.is_manager() && self.manager.is_none() {
