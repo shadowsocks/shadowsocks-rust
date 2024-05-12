@@ -40,7 +40,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: |
-            --features "local-http-rustls local-redir local-flow-stat local-dns local-tun local-fake-dns dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
+            --features "local-http-rustls local-redir local-flow-stat local-dns local-tun local-fake-dns local-online-config dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
             -W clippy::absurd_extreme_comparisons
             -W clippy::erasing_op
             -A clippy::collapsible_else_if

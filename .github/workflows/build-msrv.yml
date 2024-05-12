@@ -33,7 +33,7 @@ jobs:
           rustup override set 1.71
       - name: Build with All Features Enabled (Unix)
         if: ${{ runner.os == 'Linux' || runner.os == 'macOS' }}
-        run: cargo build --verbose --features "local-http-rustls local-redir local-dns local-tun dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
+        run: cargo build --verbose --features "local-http-rustls local-redir local-dns local-tun local-online-config dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect"
       - name: Build with All Features Enabled (Windows)
         if: ${{ runner.os == 'Windows' }}
-        run: cargo build --verbose --features "local-http-rustls local-dns dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect winservice"
+        run: cargo build --verbose --features "local-http-rustls local-dns local-online-config dns-over-tls dns-over-https stream-cipher aead-cipher-extra aead-cipher-2022 aead-cipher-2022-extra security-replay-attack-detect winservice"
