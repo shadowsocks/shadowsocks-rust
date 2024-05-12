@@ -11,7 +11,7 @@ use std::{
 };
 
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
-use futures::future::{self, FutureExt};
+use futures::future::{self, BoxFuture, FutureExt};
 use log::{error, info, trace};
 use tokio::{
     self,
@@ -1239,7 +1239,7 @@ impl ServerReloader {
     async fn launch_reload_server_task(self) {
         let arc_self = Arc::new(self);
 
-        let mut futs = Vec::new();
+        let mut futs: Vec<BoxFuture<()>> = Vec::new();
 
         #[cfg(unix)]
         {
