@@ -1,10 +1,18 @@
 //! Local server launchers
 
-use std::{future::Future, net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
+use std::{
+    fmt::{self, Display},
+    future::Future,
+    net::IpAddr,
+    path::PathBuf,
+    process::ExitCode,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
-use futures::future::{self, Either};
-use log::{info, trace};
+use futures::future::{self, FutureExt};
+use log::{error, info, trace};
 use tokio::{
     self,
     runtime::{Builder, Runtime},
@@ -27,7 +35,7 @@ use shadowsocks_service::{
     },
     local::{loadbalancing::PingBalancer, Server},
     shadowsocks::{
-        config::{Mode, ServerAddr, ServerConfig},
+        config::{Mode, ServerAddr, ServerConfig, ServerSource},
         crypto::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
@@ -541,6 +549,27 @@ pub fn define_command_line_options(mut app: Command) -> Command {
         );
     }
 
+    #[cfg(feature = "local-online-config")]
+    {
+        app = app
+            .arg(
+                Arg::new("ONLINE_CONFIG_URL")
+                    .long("online-config-url")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_hint(ValueHint::Url)
+                    .help("SIP008 Online Configuration Delivery URL (https://shadowsocks.org/doc/sip008.html)"),
+            )
+            .arg(
+                Arg::new("ONLINE_CONFIG_UPDATE_INTERVAL")
+                    .long("online-config-update-interval")
+                    .num_args(1)
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(u64))
+                    .help("SIP008 Online Configuration Delivery update interval in seconds, 3600 by default"),
+            );
+    }
+
     app
 }
 
@@ -622,6 +651,7 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             let timeout = matches.get_one::<u64>("TIMEOUT").map(|x| Duration::from_secs(*x));
 
             let mut sc = ServerConfig::new(svr_addr, password, method);
+            sc.set_source(ServerSource::CommandLine);
             if let Some(timeout) = timeout {
                 sc.set_timeout(timeout);
             }
@@ -646,7 +676,8 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             config.server.push(ServerInstanceConfig::with_server_config(sc));
         }
 
-        if let Some(svr_addr) = matches.get_one::<ServerConfig>("SERVER_URL").cloned() {
+        if let Some(mut svr_addr) = matches.get_one::<ServerConfig>("SERVER_URL").cloned() {
+            svr_addr.set_source(ServerSource::CommandLine);
             config.server.push(ServerInstanceConfig::with_server_config(svr_addr));
         }
 
@@ -896,6 +927,17 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             config.outbound_bind_addr = Some(*bind_addr);
         }
 
+        #[cfg(feature = "local-online-config")]
+        if let Some(online_config_url) = matches.get_one::<String>("ONLINE_CONFIG_URL") {
+            use shadowsocks_service::config::OnlineConfig;
+
+            let online_config_update_interval = matches.get_one::<u64>("ONLINE_CONFIG_UPDATE_INTERVAL").cloned();
+            config.online_config = Some(OnlineConfig {
+                config_url: online_config_url.clone(),
+                update_interval: online_config_update_interval.map(Duration::from_secs),
+            });
+        }
+
         // DONE READING options
 
         if config.local.is_empty() {
@@ -948,31 +990,71 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
     let main_fut = async move {
         let config_path = config.config_path.clone();
 
+        let mut static_servers = Vec::new();
+        for server in config.server.iter() {
+            match server.config.source() {
+                ServerSource::Default | ServerSource::CommandLine => {
+                    static_servers.push(server.clone());
+                }
+                _ => {}
+            }
+        }
+
+        #[cfg(feature = "local-online-config")]
+        let (online_config_url, online_config_update_interval) = match config.online_config.clone() {
+            Some(o) => (Some(o.config_url), o.update_interval),
+            None => (None, None),
+        };
+
         let instance = Server::new(config).await.expect("create local");
 
-        if let Some(config_path) = config_path {
-            launch_reload_server_task(config_path, instance.server_balancer().clone());
+        let reload_task = ServerReloader {
+            config_path,
+            balancer: instance.server_balancer().clone(),
+            static_servers,
+            #[cfg(feature = "local-online-config")]
+            online_config_url,
+            #[cfg(feature = "local-online-config")]
+            online_config_update_interval,
         }
+        .launch_reload_server_task();
 
         let abort_signal = monitor::create_signal_monitor();
         let server = instance.run();
 
+        let reload_task = reload_task.fuse();
+        let abort_signal = abort_signal.fuse();
+        let server = server.fuse();
+
+        tokio::pin!(reload_task);
         tokio::pin!(abort_signal);
         tokio::pin!(server);
 
-        match future::select(server, abort_signal).await {
-            // Server future resolved without an error. This should never happen.
-            Either::Left((Ok(..), ..)) => {
-                eprintln!("server exited unexpectedly");
-                crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY.into()
+        loop {
+            futures::select! {
+                server_res = server => {
+                    match server_res {
+                        // Server future resolved without an error. This should never happen.
+                        Ok(..) => {
+                            eprintln!("server exited unexpectedly");
+                            return crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY.into();
+                        }
+                        // Server future resolved with error, which are listener errors in most cases
+                        Err(err) => {
+                            eprintln!("server aborted with {err}");
+                            return crate::EXIT_CODE_SERVER_ABORTED.into();
+                        }
+                    }
+                }
+                // The abort signal future resolved. Means we should just exit.
+                _ = abort_signal => {
+                    return ExitCode::SUCCESS;
+                }
+                _ = reload_task => {
+                    // continue.
+                    trace!("server-reloader task exited");
+                }
             }
-            // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => {
-                eprintln!("server aborted with {err}");
-                crate::EXIT_CODE_SERVER_ABORTED.into()
-            }
-            // The abort signal future resolved. Means we should just exit.
-            Either::Right(_) => ExitCode::SUCCESS,
         }
     };
 
@@ -988,38 +1070,202 @@ pub fn main(matches: &ArgMatches) -> ExitCode {
     }
 }
 
-#[cfg(unix)]
-fn launch_reload_server_task(config_path: PathBuf, balancer: PingBalancer) {
-    use log::error;
-    use tokio::signal::unix::{signal, SignalKind};
+struct ServerReloader {
+    config_path: Option<PathBuf>,
+    static_servers: Vec<ServerInstanceConfig>,
+    balancer: PingBalancer,
+    #[cfg(feature = "local-online-config")]
+    online_config_url: Option<String>,
+    #[cfg(feature = "local-online-config")]
+    online_config_update_interval: Option<Duration>,
+}
 
-    tokio::spawn(async move {
-        let mut sigusr1 = signal(SignalKind::user_defined1()).expect("signal");
+impl ServerReloader {
+    async fn run_once(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let start_time = Instant::now();
 
-        while sigusr1.recv().await.is_some() {
-            let config = match Config::load_from_file(&config_path, ConfigType::Local) {
+        let mut servers = self.static_servers.clone();
+
+        // Load servers from source
+        if let Some(ref config_path) = self.config_path {
+            let mut source_config = match Config::load_from_file(config_path, ConfigType::Local) {
                 Ok(c) => c,
                 Err(err) => {
-                    error!("auto-reload {} failed with error: {}", config_path.display(), err);
-                    continue;
+                    error!(
+                        "server-reloader failed to load from file: {}, error: {}",
+                        config_path.display(),
+                        err
+                    );
+                    return Err(Box::new(err));
+                }
+            };
+            servers.append(&mut source_config.server);
+        }
+
+        // Load servers from online-config (SIP008)
+        #[cfg(feature = "local-online-config")]
+        if let Some(ref online_config_url) = self.online_config_url {
+            use log::warn;
+
+            #[inline]
+            async fn get_online_config(online_config_url: &str) -> reqwest::Result<String> {
+                let response = reqwest::get(online_config_url).await?;
+                if response.url().scheme() != "https" {
+                    warn!(
+                        "SIP008 suggests configuration URL should use https, but current URL is {}",
+                        response.url().scheme()
+                    );
+                }
+
+                // Content-Type: application/json; charset=utf-8
+                // mandatory in standard SIP008
+                match response.headers().get("Content-Type") {
+                    Some(h) => {
+                        if h != "application/json; charset=utf-8" {
+                            warn!(
+                                "SIP008 Content-Type must be \"application/json; charset=utf-8\", but found {}",
+                                h.to_str().unwrap_or("[non-utf8-value]")
+                            );
+                        }
+                    }
+                    None => {
+                        warn!("missing Content-Type in SIP008 response from {}", online_config_url);
+                    }
+                }
+
+                response.text().await
+            }
+
+            let body = match get_online_config(online_config_url).await {
+                Ok(b) => b,
+                Err(err) => {
+                    error!(
+                        "server-reloader failed to load from url: {}, error: {}",
+                        online_config_url, err
+                    );
+                    return Err(Box::new(err));
                 }
             };
 
-            info!(
-                "auto-reload {} with {} servers",
-                config_path.display(),
-                config.server.len()
-            );
+            // NOTE: ConfigType::Local will force verify local_address and local_port keys. SIP008 standard doesn't include those keys.
+            let mut online_config = match Config::load_from_str(&body, ConfigType::Server) {
+                Ok(c) => c,
+                Err(err) => {
+                    error!(
+                        "server-reloader failed to load from url: {}, error: {}",
+                        online_config_url, err
+                    );
+                    return Err(Box::new(err));
+                }
+            };
+            servers.append(&mut online_config.server);
+        }
 
-            if let Err(err) = balancer.reset_servers(config.server).await {
-                error!("auto-reload {} but found error: {}", config_path.display(), err);
+        let server_len = servers.len();
+
+        struct ConfigDisplay<'a>(&'a ServerReloader);
+        impl Display for ConfigDisplay<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut is_first = true;
+
+                if let Some(ref config_path) = self.0.config_path {
+                    config_path.display().fmt(f)?;
+                    is_first = false;
+                }
+
+                #[cfg(feature = "local-online-config")]
+                if let Some(ref online_config_url) = self.0.online_config_url {
+                    if !is_first {
+                        f.write_str(", ")?;
+                        f.write_str(&online_config_url)?;
+                    }
+                }
+
+                Ok(())
             }
         }
-    });
-}
 
-#[cfg(not(unix))]
-fn launch_reload_server_task(_: PathBuf, _: PingBalancer) {}
+        let fetch_end_time = Instant::now();
+
+        if let Err(err) = self.balancer.reset_servers(servers).await {
+            error!("server-reloader {} servers but found error: {}", server_len, err);
+            return Err(Box::new(err));
+        }
+
+        let total_end_time = Instant::now();
+
+        info!(
+            "server-reloader reload from {} with {} servers, fetch costs: {:?}, total costs: {:?}",
+            ConfigDisplay(&self),
+            server_len,
+            fetch_end_time - start_time,
+            total_end_time - start_time,
+        );
+
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    async fn launch_signal_reload_server_task(self: Arc<Self>) {
+        use log::debug;
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut sigusr1 = signal(SignalKind::user_defined1()).expect("signal");
+
+        debug!("server-reloader is now listening USR1");
+
+        while sigusr1.recv().await.is_some() {
+            let _ = self.run_once().await;
+        }
+    }
+
+    #[cfg(feature = "local-online-config")]
+    async fn launch_online_reload_server_task(self: Arc<Self>) {
+        use log::debug;
+        use tokio::time;
+
+        let update_interval = self
+            .online_config_update_interval
+            .unwrap_or(Duration::from_secs(1 * 60 * 60));
+
+        debug!("server-reloader updating in interval {:?}", update_interval);
+
+        loop {
+            let _ = self.run_once().await;
+            time::sleep(update_interval).await;
+        }
+    }
+
+    async fn launch_reload_server_task(self) {
+        let arc_self = Arc::new(self);
+
+        let mut futs = Vec::new();
+
+        #[cfg(unix)]
+        {
+            let mut has_things_to_do = arc_self.config_path.is_some();
+            #[cfg(feature = "local-online-config")]
+            {
+                has_things_to_do = has_things_to_do || arc_self.online_config_url.is_some();
+            }
+
+            if has_things_to_do {
+                futs.push(arc_self.clone().launch_signal_reload_server_task().boxed());
+            }
+        }
+
+        #[cfg(feature = "local-online-config")]
+        if arc_self.online_config_url.is_some() {
+            futs.push(arc_self.clone().launch_online_reload_server_task().boxed());
+        }
+
+        if !futs.is_empty() {
+            future::join_all(futs.into_iter()).await;
+        }
+
+        drop(arc_self);
+    }
+}
 
 #[cfg(test)]
 mod test {

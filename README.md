@@ -805,6 +805,14 @@ Example configuration:
         "check_best_interval": 5
     },
 
+    // SIP008 Online Configuration Delivery
+    // https://shadowsocks.org/doc/sip008.html
+    "online_config": {
+        "config_url": "https://path-to-online-sip008-configuration",
+        // Optional. Seconds between each update to config_url. Default to 3600s
+        "update_interval": 3600
+    },
+
     // Service configurations
     // Logger configuration
     "log": {

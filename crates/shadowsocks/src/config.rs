@@ -301,6 +301,15 @@ impl Default for ServerUserManager {
     }
 }
 
+/// The source of the ServerConfig
+#[derive(Debug, Clone, Copy)]
+pub enum ServerSource {
+    Default,       //< Default source, created in code
+    Configuration, //< Created from configuration
+    CommandLine,   //< Created from command line
+    OnlineConfig,  //< Created from online configuration (SIP008)
+}
+
 /// Configuration for a server
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
@@ -340,6 +349,9 @@ pub struct ServerConfig {
 
     /// Weight
     weight: ServerWeight,
+
+    /// Source
+    source: ServerSource,
 }
 
 #[cfg(feature = "aead-cipher-2022")]
@@ -452,6 +464,7 @@ impl ServerConfig {
             id: None,
             mode: Mode::TcpAndUdp, // Server serves TCP & UDP by default
             weight: ServerWeight::new(),
+            source: ServerSource::Default,
         }
     }
 
@@ -616,6 +629,16 @@ impl ServerConfig {
     /// Set server's balancer weight
     pub fn set_weight(&mut self, weight: ServerWeight) {
         self.weight = weight;
+    }
+
+    /// Get server's source
+    pub fn source(&self) -> ServerSource {
+        self.source
+    }
+
+    /// Set server's source
+    pub fn set_source(&mut self, source: ServerSource) {
+        self.source = source;
     }
 
     /// Get URL for QRCode

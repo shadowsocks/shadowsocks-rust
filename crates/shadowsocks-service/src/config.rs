@@ -75,6 +75,7 @@ use shadowsocks::{
         ReplayAttackPolicy,
         ServerAddr,
         ServerConfig,
+        ServerSource,
         ServerUser,
         ServerUserManager,
         ServerWeight,
@@ -117,6 +118,14 @@ struct SSBalancerConfig {
     check_interval: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     check_best_interval: Option<u64>,
+}
+
+#[cfg(feature = "local-online-config")]
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct SSOnlineConfig {
+    config_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    update_interval: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -229,6 +238,10 @@ struct SSConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     acl: Option<String>,
+
+    #[cfg(feature = "local-online-config")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    online_config: Option<SSOnlineConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -1221,6 +1234,17 @@ impl LocalInstanceConfig {
     }
 }
 
+/// OnlineConfiguration (SIP008)
+/// https://shadowsocks.org/doc/sip008.html
+#[cfg(feature = "local-online-config")]
+#[derive(Debug, Clone)]
+pub struct OnlineConfig {
+    /// SIP008 URL
+    pub config_url: String,
+    /// Update interval, 3600s by default
+    pub update_interval: Option<Duration>,
+}
+
 /// Configuration
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -1321,6 +1345,10 @@ pub struct Config {
     /// This is normally for auto-reloading if implementation supports.
     pub config_path: Option<PathBuf>,
 
+    /// Online Configuration Delivery (SIP008)
+    #[cfg(feature = "local-online-config")]
+    pub online_config: Option<OnlineConfig>,
+
     #[doc(hidden)]
     /// Workers in runtime
     /// It should be replaced with metrics APIs: https://github.com/tokio-rs/tokio/issues/4073
@@ -1352,6 +1380,12 @@ pub struct Error {
 impl Error {
     pub fn new(kind: ErrorKind, desc: &'static str, detail: Option<String>) -> Error {
         Error { kind, desc, detail }
+    }
+}
+
+impl std::error::Error for Error {
+    fn description(&self) -> &str {
+        self.desc
     }
 }
 
@@ -1438,6 +1472,8 @@ impl Config {
             balancer: BalancerConfig::default(),
 
             config_path: None,
+            #[cfg(feature = "local-online-config")]
+            online_config: None,
 
             worker_count: 1,
         }
@@ -1842,6 +1878,7 @@ impl Config {
                 };
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
+                nsvr.set_source(ServerSource::Configuration);
                 nsvr.set_mode(global_mode);
 
                 if let Some(ref p) = config.plugin {
@@ -1961,6 +1998,7 @@ impl Config {
                 };
 
                 let mut nsvr = ServerConfig::new(addr, password, method);
+                nsvr.set_source(ServerSource::Configuration);
 
                 // Extensible Identity Header, Users
                 if let Some(users) = svr.users {
@@ -2307,6 +2345,14 @@ impl Config {
                 }
             };
             nconfig.acl = Some(acl);
+        }
+
+        #[cfg(feature = "local-online-config")]
+        if let Some(online_config) = config.online_config {
+            nconfig.online_config = Some(OnlineConfig {
+                config_url: online_config.config_url,
+                update_interval: online_config.update_interval.map(Duration::from_secs),
+            });
         }
 
         Ok(nconfig)
@@ -3008,6 +3054,15 @@ impl fmt::Display for Config {
         // ACL
         if let Some(ref acl) = self.acl {
             jconf.acl = Some(acl.file_path().to_str().unwrap().to_owned());
+        }
+
+        // OnlineConfig
+        #[cfg(feature = "local-online-config")]
+        if let Some(ref online_config) = self.online_config {
+            jconf.online_config = Some(SSOnlineConfig {
+                config_url: online_config.config_url.clone(),
+                update_interval: online_config.update_interval.map(|d| d.as_secs()),
+            });
         }
 
         write!(f, "{}", json5::to_string(&jconf).unwrap())

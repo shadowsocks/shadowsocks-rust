@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-service"
-version = "1.18.4"
+version = "1.18.5"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -96,6 +96,9 @@ local-socks4 = ["local"]
 local-tun = ["local", "etherparse", "tun", "smoltcp"]
 # Enable Fake DNS
 local-fake-dns = ["local", "trust-dns", "sled", "prost", "prost-build"]
+# sslocal support online URL (SIP008 Online Configuration Delivery)
+# https://shadowsocks.org/doc/sip008.html
+local-online-config = ["local"]
 
 # Enable Stream Cipher Protocol
 # WARN: Stream Cipher Protocol is proved to be insecure
@@ -181,7 +184,7 @@ smoltcp = { version = "0.11", optional = true, default-features = false, feature
 serde = { version = "1.0", features = ["derive"] }
 json5 = "0.4"
 
-shadowsocks = { version = "1.18.2", path = "../shadowsocks", default-features = false }
+shadowsocks = { version = "1.18.3", path = "../shadowsocks", default-features = false }
 
 # Just for the ioctl call macro
 [target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))'.dependencies]
