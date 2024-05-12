@@ -2621,6 +2621,19 @@ impl Config {
 
             // Users' key must match key length
             if let Some(user_manager) = server.user_manager() {
+                #[cfg(feature = "aead-cipher-2022")]
+                if server.method().is_aead_2022() {
+                    use shadowsocks::config::method_support_eih;
+                    if user_manager.user_count() > 0 && !method_support_eih(server.method()) {
+                        let err = Error::new(
+                            ErrorKind::Invalid,
+                            "server method doesn't support Extended Identity Header (EIH), remove `users`",
+                            Some(format!("method {}", server.method())),
+                        );
+                        return Err(err);
+                    }
+                }
+
                 let key_len = server.method().key_len();
                 for user in user_manager.users_iter() {
                     if user.key().len() != key_len {
