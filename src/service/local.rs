@@ -576,7 +576,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 /// Create `Runtime` and `main` entry
 pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
     #[cfg_attr(not(feature = "local-online-config"), allow(unused_mut))]
-    let (mut config, runtime) = {
+    let (mut config, service_config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
                 match crate::config::get_default_config_path("local.json") {
@@ -930,10 +930,10 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         #[cfg(feature = "local-online-config")]
         if let Some(online_config_url) = matches.get_one::<String>("ONLINE_CONFIG_URL") {
-            use shadowsocks_service::config::OnlineConfig;
+            use crate::config::OnlineConfig;
 
             let online_config_update_interval = matches.get_one::<u64>("ONLINE_CONFIG_UPDATE_INTERVAL").cloned();
-            config.online_config = Some(OnlineConfig {
+            service_config.online_config = Some(OnlineConfig {
                 config_url: online_config_url.clone(),
                 update_interval: online_config_update_interval.map(Duration::from_secs),
             });
@@ -985,7 +985,7 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         let runtime = builder.enable_all().build().expect("create tokio Runtime");
 
-        (config, runtime)
+        (config, service_config, runtime)
     };
 
     let main_fut = async move {
@@ -1003,7 +1003,7 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
 
         // Fetch servers from remote for the first time
         #[cfg(feature = "local-online-config")]
-        if let Some(ref online_config) = config.online_config {
+        if let Some(ref online_config) = service_config.online_config {
             if let Ok(mut servers) = get_online_config_servers(&online_config.config_url).await {
                 config.server.append(&mut servers);
             }
@@ -1015,12 +1015,6 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             return crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into();
         }
 
-        #[cfg(feature = "local-online-config")]
-        let (online_config_url, online_config_update_interval) = match config.online_config.clone() {
-            Some(o) => (Some(o.config_url), o.update_interval),
-            None => (None, None),
-        };
-
         let instance = Server::new(config).await.expect("create local");
 
         let reload_task = ServerReloader {
@@ -1028,9 +1022,9 @@ pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = Exi
             balancer: instance.server_balancer().clone(),
             static_servers,
             #[cfg(feature = "local-online-config")]
-            online_config_url,
+            online_config_url: service_config.online_config.as_ref().map(|c| c.config_url.clone()),
             #[cfg(feature = "local-online-config")]
-            online_config_update_interval,
+            online_config_update_interval: service_config.online_config.as_ref().and_then(|c| c.update_interval),
         }
         .launch_reload_server_task();
 
