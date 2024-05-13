@@ -575,6 +575,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 
 /// Create `Runtime` and `main` entry
 pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
+    #[cfg_attr(not(feature = "local-online-config"), allow(unused_mut))]
     let (mut config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
@@ -1140,8 +1141,7 @@ async fn get_online_config_servers(
         }
     };
 
-    // NOTE: ConfigType::Local will force verify local_address and local_port keys. SIP008 standard doesn't include those keys.
-    let online_config = match Config::load_from_str(&body, ConfigType::Server) {
+    let online_config = match Config::load_from_str(&body, ConfigType::OnlineConfig) {
         Ok(c) => c,
         Err(err) => {
             error!(
@@ -1151,6 +1151,14 @@ async fn get_online_config_servers(
             return Err(Box::new(err));
         }
     };
+
+    if let Err(err) = online_config.check_integrity() {
+        error!(
+            "server-loader task failed to load from url: {}, error: {}",
+            online_config_url, err
+        );
+        return Err(Box::new(err));
+    }
 
     Ok(online_config.server)
 }
@@ -1188,6 +1196,7 @@ impl ServerReloader {
 
         struct ConfigDisplay<'a>(&'a ServerReloader);
         impl Display for ConfigDisplay<'_> {
+            #[cfg_attr(not(feature = "local-online-config"), allow(unused_assignments, unused_variables))]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut is_first = true;
 
@@ -1266,6 +1275,7 @@ impl ServerReloader {
 
         #[cfg(unix)]
         {
+            #[cfg_attr(not(feature = "local-online-config"), allow(unused_mut))]
             let mut has_things_to_do = arc_self.config_path.is_some();
             #[cfg(feature = "local-online-config")]
             {

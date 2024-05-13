@@ -242,6 +242,10 @@ struct SSConfig {
     #[cfg(feature = "local-online-config")]
     #[serde(skip_serializing_if = "Option::is_none")]
     online_config: Option<SSOnlineConfig>,
+
+    #[cfg(feature = "local-online-config")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -425,6 +429,11 @@ pub enum ConfigType {
 
     /// Config for Manager server
     Manager,
+
+    /// Config for online config (SIP008)
+    /// https://shadowsocks.org/doc/sip008.html
+    #[cfg(feature = "local-online-config")]
+    OnlineConfig,
 }
 
 impl ConfigType {
@@ -441,6 +450,12 @@ impl ConfigType {
     /// Check if it is manager server type
     pub fn is_manager(self) -> bool {
         self == ConfigType::Manager
+    }
+
+    /// Chec if it is online config type (SIP008)
+    #[cfg(feature = "local-online-config")]
+    pub fn is_online_config(self) -> bool {
+        self == ConfigType::OnlineConfig
     }
 }
 
@@ -1834,6 +1849,25 @@ impl Config {
                 //
                 // This behavior causes lots of confusion. use outbound_bind_addr instead
             }
+            #[cfg(feature = "local-online-config")]
+            ConfigType::OnlineConfig => {
+                // SIP008. https://shadowsocks.org/doc/sip008.html
+                // "version" should be set to "1"
+                match config.version {
+                    Some(1) => {}
+                    Some(v) => {
+                        let err = Error::new(
+                            ErrorKind::Invalid,
+                            "invalid online config version",
+                            Some(format!("version: {v}")),
+                        );
+                        return Err(err);
+                    }
+                    None => {
+                        warn!("OnlineConfig \"version\" is missing in the configuration, assuming it is a compatible version for this project");
+                    }
+                }
+            }
         }
 
         // Standard config
@@ -2566,6 +2600,16 @@ impl Config {
             return Err(err);
         }
 
+        #[cfg(feature = "local-online-config")]
+        if self.config_type.is_online_config() && self.server.is_empty() {
+            let err = Error::new(
+                ErrorKind::MissingField,
+                "missing any valid servers in configuration",
+                None,
+            );
+            return Err(err);
+        }
+
         if self.config_type.is_manager() && self.manager.is_none() {
             let err = Error::new(
                 ErrorKind::MissingField,
@@ -2595,6 +2639,20 @@ impl Config {
                     }
 
                     if self.config_type.is_local() {
+                        // Only server could bind to INADDR_ANY
+                        let ip = sa.ip();
+                        if ip.is_unspecified() {
+                            let err = Error::new(
+                                ErrorKind::Malformed,
+                                "`server` shouldn't be an unspecified address (INADDR_ANY)",
+                                None,
+                            );
+                            return Err(err);
+                        }
+                    }
+
+                    #[cfg(feature = "local-online-config")]
+                    if self.config_type.is_online_config() {
                         // Only server could bind to INADDR_ANY
                         let ip = sa.ip();
                         if ip.is_unspecified() {

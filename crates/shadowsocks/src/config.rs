@@ -302,7 +302,7 @@ impl Default for ServerUserManager {
 }
 
 /// The source of the ServerConfig
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ServerSource {
     Default,       //< Default source, created in code
     Configuration, //< Created from configuration
