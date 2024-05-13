@@ -1164,6 +1164,7 @@ async fn get_online_config_servers(
 }
 
 impl ServerReloader {
+    #[cfg_attr(not(any(unix, feature = "local-online-config")), allow(dead_code))]
     async fn run_once(&self) -> Result<(), Box<dyn std::error::Error>> {
         let start_time = Instant::now();
 
@@ -1271,6 +1272,7 @@ impl ServerReloader {
     async fn launch_reload_server_task(self) {
         let arc_self = Arc::new(self);
 
+        #[allow(unused_mut)]
         let mut futs: Vec<BoxFuture<()>> = Vec::new();
 
         #[cfg(unix)]
