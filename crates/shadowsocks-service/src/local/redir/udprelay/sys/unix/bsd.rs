@@ -7,7 +7,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_trait::async_trait;
 use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
 use log::{error, trace, warn};
@@ -18,14 +17,10 @@ use tokio::io::unix::AsyncFd;
 use crate::{
     config::RedirType,
     local::redir::{
-        redir_ext::{RedirSocketOpts, UdpSocketRedirExt},
+        redir_ext::{RedirSocketOpts, UdpSocketRedir},
         sys::set_ipv6_only,
     },
 };
-
-pub fn check_support_tproxy() -> io::Result<()> {
-    Ok(())
-}
 
 pub struct UdpRedirSocket {
     io: AsyncFd<UdpSocket>,
@@ -273,6 +268,8 @@ fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Resu
     // sys/netinet6/in6.h
     const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
 
+    let enable: libc::c_int = 1;
+    
     let opt = match level {
         libc::IPPROTO_IP => IP_DONTFRAG,
         libc::IPPROTO_IPV6 => IPV6_DONTFRAG,
@@ -297,26 +294,20 @@ fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Resu
 }
 
 fn set_socket_before_bind(addr: &SocketAddr, socket: &Socket) -> io::Result<()> {
-    let fd = socket.as_raw_fd();
+    // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
+    let level = match *addr {
+        SocketAddr::V4(..) => libc::IPPROTO_IP,
+        SocketAddr::V6(..) => libc::IPPROTO_IPV6,
+    };
 
-    let enable: libc::c_int = 1;
+    // 1. BINDANY
+    set_bindany(level, socket)?;
 
-    unsafe {
-        // https://www.freebsd.org/cgi/man.cgi?query=ip&sektion=4&manpath=FreeBSD+9.0-RELEASE
-        let level = match *addr {
-            SocketAddr::V4(..) => libc::IPPROTO_IP,
-            SocketAddr::V6(..) => libc::IPPROTO_IPV6,
-        };
+    // 2. set ORIGDSTADDR for retrieving original destination address
+    set_ip_origdstaddr(level, socket)?;
 
-        // 1. BINDANY
-        set_bindany(level, socket)?;
-
-        // 2. set ORIGDSTADDR for retrieving original destination address
-        set_ip_origdstaddr(level, socket)?;
-
-        // 3. disable IP fragmentation
-        set_disable_ip_fragmentation(level, socket)?;
-    }
+    // 3. disable IP fragmentation
+    set_disable_ip_fragmentation(level, socket)?;
 
     Ok(())
 }
@@ -333,7 +324,11 @@ fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
                 let rcmsg = &*cmsg;
                 match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
                     (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR) => {
-                        ptr::copy_nonoverlapping(libc::CMSG_DATA(cmsg), dst_addr, mem::size_of::<libc::sockaddr_in>());
+                        ptr::copy_nonoverlapping(
+                            libc::CMSG_DATA(cmsg), 
+                            dst_addr as *mut _, 
+                            mem::size_of::<libc::sockaddr_in>()
+                        );
                         *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
 
                         return Ok(());
@@ -387,7 +382,11 @@ fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, Sock
         }
 
         let (_, src_saddr) = SockAddr::try_init(|a, l| {
-            ptr::copy_nonoverlapping(msg.msg_name, a, msg.msg_namelen as usize);
+            ptr::copy_nonoverlapping(
+                msg.msg_name, 
+                a as *mut _, 
+                msg.msg_namelen as usize
+            );
             *l = msg.msg_namelen;
             Ok(())
         })?;
