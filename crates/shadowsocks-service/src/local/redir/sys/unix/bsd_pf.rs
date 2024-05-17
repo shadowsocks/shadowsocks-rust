@@ -8,31 +8,32 @@ use std::{
 use cfg_if::cfg_if;
 use nix::ioctl_readwrite;
 use once_cell::sync::Lazy;
-use socket2::Protocol;
 
 use super::pfvar::{
     pfioc_natlook,
     pfioc_states
 };
+use log::trace;
+
+use super::pfvar::{
+    in6_addr,
+    in_addr,
+    sockaddr_in,
+    sockaddr_in6,
+    PF_OUT,
+};
+use std::{
+    ptr,
+    mem
+};
+use socket2::{Protocol, SockAddr};
 
 cfg_if! {
     if #[cfg(not(target_os = "freebsd"))] {
-        use log::trace;
-
         use super::pfvar::{
-            in6_addr,
-            in_addr,
             pf_addr,
-            sockaddr_in,
-            sockaddr_in6,
-            PF_OUT,
             pfsync_state
-        };
-        use std::{
-            ptr,
-            mem
-        };
-        use socket2::{Protocol, SockAddr};
+        };      
     }
 }
 
@@ -67,166 +68,178 @@ impl PacketFilter {
             Ok(PacketFilter { fd })
         }
     }
-    cfg_if! {
-        if #[cfg(target_os = "freebsd")] {
-            pub fn natlook(&self, _bind_addr: &SocketAddr, _peer_addr: &SocketAddr, _proto: Protocol) -> io::Result<SocketAddr> {
-                Err(io::ErrorKind::InvalidInput.into())
-            }
-        } else {
-            pub fn natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
+    
+    pub fn natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
+        cfg_if! {
+            if #[cfg(target_os = "freebsd")] {
+                match proto {
+                    Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
+                    _ => Err(io::ErrorKind::InvalidInput.into()),
+                }
+            } else {
                 match proto {
                     Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
                     Protocol::UDP => self.udp_natlook(bind_addr, peer_addr, proto),
                     _ => Err(io::ErrorKind::InvalidInput.into()),
                 }
             }
+        }
+    }
 
-            fn tcp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
-                trace!("PF natlook peer: {}, bind: {}", peer_addr, bind_addr);
+    fn tcp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
+        trace!("PF natlook peer: {}, bind: {}", peer_addr, bind_addr);
 
-                unsafe {
-                    let mut pnl: pfioc_natlook = mem::zeroed();
+        unsafe {
+            let mut pnl: pfioc_natlook = mem::zeroed();
 
-                    match *bind_addr {
-                        SocketAddr::V4(ref v4) => {
-                            pnl.af = libc::AF_INET as libc::sa_family_t;
+            match *bind_addr {
+                SocketAddr::V4(ref v4) => {
+                    pnl.af = libc::AF_INET as libc::sa_family_t;
 
-                            let sockaddr = SockAddr::from(*v4);
-                            let sockaddr = sockaddr.as_ptr() as *const sockaddr_in;
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const sockaddr_in;
 
-                            let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
-                            let port: libc::in_port_t = (*sockaddr).sin_port;
+                    let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
+                    let port: libc::in_port_t = (*sockaddr).sin_port;
 
-                            ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
+                    ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
 
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    pnl.dxport.port = port;
-                                } else {
-                                    pnl.dport = port;
-                                }
-                            }
-                        }
-                        SocketAddr::V6(ref v6) => {
-                            pnl.af = libc::AF_INET6 as libc::sa_family_t;
-
-                            let sockaddr = SockAddr::from(*v6);
-                            let sockaddr = sockaddr.as_ptr() as *const sockaddr_in6;
-
-                            let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
-                            let port: libc::in_port_t = (*sockaddr).sin6_port;
-
-                            ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
-
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    pnl.dxport.port = port;
-                                } else {
-                                    pnl.dport = port;
-                                }
-                            }
-                        }
-                    }
-
-                    match *peer_addr {
-                        SocketAddr::V4(ref v4) => {
-                            if pnl.af != libc::AF_INET as libc::sa_family_t {
-                                return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv4"));
-                            }
-
-                            let sockaddr = SockAddr::from(*v4);
-                            let sockaddr = sockaddr.as_ptr() as *const sockaddr_in;
-
-                            let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
-                            let port: libc::in_port_t = (*sockaddr).sin_port;
-
-                            ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
-
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    pnl.sxport.port = port;
-                                } else {
-                                    pnl.sport = port;
-                                }
-                            }
-                        }
-                        SocketAddr::V6(ref v6) => {
-                            if pnl.af != libc::AF_INET6 as libc::sa_family_t {
-                                return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv6"));
-                            }
-
-                            let sockaddr = SockAddr::from(*v6);
-                            let sockaddr = sockaddr.as_ptr() as *const sockaddr_in6;
-
-                            let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
-                            let port: libc::in_port_t = (*sockaddr).sin6_port;
-
-                            ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
-
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    pnl.sxport.port = port;
-                                } else {
-                                    pnl.sport = port;
-                                }
-                            }
-                        }
-                    }
-
-                    pnl.proto = i32::from(proto) as u8;
-                    pnl.direction = PF_OUT as u8;
-
-                    if let Err(err) = ioc_natlook(self.fd, &mut pnl) {
-                        return Err(Error::from_raw_os_error(err as i32));
-                    }
-
-                    let (_, dst_addr) = SockAddr::try_init(|dst_addr, addr_len| {
-                        if pnl.af == libc::AF_INET as libc::sa_family_t {
-                            let dst_addr: &mut sockaddr_in = &mut *(dst_addr as *mut _);
-                            dst_addr.sin_family = pnl.af;
-
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    dst_addr.sin_port = pnl.rdxport.port;
-                                } else {
-                                    dst_addr.sin_port = pnl.rdport;
-                                }
-                            }
-
-                            ptr::write_unaligned::<in_addr>(
-                                ptr::addr_of_mut!(dst_addr.sin_addr),
-                                ptr::read::<in_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
-                            );
-                            *addr_len = mem::size_of_val(&dst_addr.sin_addr) as libc::socklen_t;
-                        } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
-                            let dst_addr: &mut sockaddr_in6 = &mut *(dst_addr as *mut _);
-                            dst_addr.sin6_family = pnl.af;
-
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    dst_addr.sin6_port = pnl.rdxport.port;
-                                } else {
-                                    dst_addr.sin6_port = pnl.rdport;
-                                }
-                            }
-
-                            ptr::write_unaligned::<in6_addr>(
-                                ptr::addr_of_mut!(dst_addr.sin6_addr),
-                                ptr::read::<in6_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
-                            );
-                            *addr_len = mem::size_of_val(&dst_addr.sin6_addr) as libc::socklen_t;
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            pnl.dxport.port = port;
                         } else {
-                            unreachable!("sockaddr should be either ipv4 or ipv6");
+                            pnl.dport = port;
                         }
+                    }
+                }
+                SocketAddr::V6(ref v6) => {
+                    pnl.af = libc::AF_INET6 as libc::sa_family_t;
 
-                        Ok(())
-                    })?;
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const sockaddr_in6;
 
-                    Ok(dst_addr.as_socket().expect("SocketAddr"))
+                    let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
+                    let port: libc::in_port_t = (*sockaddr).sin6_port;
+
+                    ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.daddr.pfa) as *mut _, *addr);
+
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            pnl.dxport.port = port;
+                        } else {
+                            pnl.dport = port;
+                        }
+                    }
                 }
             }
 
+            match *peer_addr {
+                SocketAddr::V4(ref v4) => {
+                    if pnl.af != libc::AF_INET as libc::sa_family_t {
+                        return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv4"));
+                    }
+
+                    let sockaddr = SockAddr::from(*v4);
+                    let sockaddr = sockaddr.as_ptr() as *const sockaddr_in;
+
+                    let addr: *const in_addr = ptr::addr_of!((*sockaddr).sin_addr) as *const _;
+                    let port: libc::in_port_t = (*sockaddr).sin_port;
+
+                    ptr::write_unaligned::<in_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
+
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            pnl.sxport.port = port;
+                        } else {
+                            pnl.sport = port;
+                        }
+                    }
+                }
+                SocketAddr::V6(ref v6) => {
+                    if pnl.af != libc::AF_INET6 as libc::sa_family_t {
+                        return Err(Error::new(ErrorKind::InvalidInput, "client addr must be ipv6"));
+                    }
+
+                    let sockaddr = SockAddr::from(*v6);
+                    let sockaddr = sockaddr.as_ptr() as *const sockaddr_in6;
+
+                    let addr: *const in6_addr = ptr::addr_of!((*sockaddr).sin6_addr) as *const _;
+                    let port: libc::in_port_t = (*sockaddr).sin6_port;
+
+                    ptr::write_unaligned::<in6_addr>(ptr::addr_of_mut!(pnl.saddr.pfa) as *mut _, *addr);
+
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            pnl.sxport.port = port;
+                        } else {
+                            pnl.sport = port;
+                        }
+                    }
+                }
+            }
+
+            pnl.proto = i32::from(proto) as u8;
+            pnl.direction = PF_OUT as u8;
+
+            if let Err(err) = ioc_natlook(self.fd, &mut pnl) {
+                return Err(Error::from_raw_os_error(err as i32));
+            }
+
+            let (_, dst_addr) = SockAddr::try_init(|dst_addr, addr_len| {
+                if pnl.af == libc::AF_INET as libc::sa_family_t {
+                    let dst_addr: &mut sockaddr_in = &mut *(dst_addr as *mut _);
+                    dst_addr.sin_family = pnl.af;
+
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            dst_addr.sin_port = pnl.rdxport.port;
+                        } else {
+                            dst_addr.sin_port = pnl.rdport;
+                        }
+                    }
+
+                    ptr::write_unaligned::<in_addr>(
+                        ptr::addr_of_mut!(dst_addr.sin_addr),
+                        ptr::read::<in_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
+                    );
+                    *addr_len = mem::size_of_val(&dst_addr.sin_addr) as libc::socklen_t;
+                } else if pnl.af == libc::AF_INET6 as libc::sa_family_t {
+                    let dst_addr: &mut sockaddr_in6 = &mut *(dst_addr as *mut _);
+                    dst_addr.sin6_family = pnl.af;
+
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            dst_addr.sin6_port = pnl.rdxport.port;
+                        } else {
+                            dst_addr.sin6_port = pnl.rdport;
+                        }
+                    }
+
+                    ptr::write_unaligned::<in6_addr>(
+                        ptr::addr_of_mut!(dst_addr.sin6_addr),
+                        ptr::read::<in6_addr>(ptr::addr_of!(pnl.rdaddr.pfa) as *const _),
+                    );
+                    *addr_len = mem::size_of_val(&dst_addr.sin6_addr) as libc::socklen_t;
+                } else {
+                    unreachable!("sockaddr should be either ipv4 or ipv6");
+                }
+
+                Ok(())
+            })?;
+
+            Ok(dst_addr.as_socket().expect("SocketAddr"))
+        }
+    }
+    cfg_if! {
+        if #[cfg(not(target_os = "freebsd"))] {
             fn udp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, _proto: Protocol) -> io::Result<SocketAddr> {
+                match recv_dest_from(self.io.get_ref(), buf) {
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                        read_guard.clear_ready();
+                    }
+                    x => return Poll::Ready(x),
+                }
+
                 unsafe {
                     // Get all states
                     // https://man.freebsd.org/cgi/man.cgi?query=pf&sektion=4&manpath=OpenBSD
@@ -378,7 +391,7 @@ impl PacketFilter {
                     format!("natlook UDP binding {}, {} not found", bind_addr, peer_addr),
                 ))
             }
-        }
+         }
     }
 }
 
