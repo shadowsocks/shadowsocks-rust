@@ -9,33 +9,15 @@ use cfg_if::cfg_if;
 use nix::ioctl_readwrite;
 use once_cell::sync::Lazy;
 
-use super::pfvar::{
-    pfioc_natlook,
-    pfioc_states
-};
+use super::pfvar::{pfioc_natlook, pfioc_states};
 use log::trace;
 
-use super::pfvar::{
-    in6_addr,
-    in_addr,
-    sockaddr_in,
-    sockaddr_in6,
-    PF_OUT,
-};
-use std::{
-    ptr,
-    mem
-};
+use super::pfvar::{in6_addr, in_addr, sockaddr_in, sockaddr_in6, PF_OUT};
 use socket2::{Protocol, SockAddr};
+use std::{mem, ptr};
 
-cfg_if! {
-    if #[cfg(not(target_os = "freebsd"))] {
-        use super::pfvar::{
-            pf_addr,
-            pfsync_state
-        };      
-    }
-}
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use super::pfvar::{pf_addr, pfsync_state};
 
 ioctl_readwrite!(ioc_natlook, 'D', 23, pfioc_natlook);
 ioctl_readwrite!(ioc_getstates, 'D', 25, pfioc_states);
@@ -68,21 +50,13 @@ impl PacketFilter {
             Ok(PacketFilter { fd })
         }
     }
-    
+
     pub fn natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, proto: Protocol) -> io::Result<SocketAddr> {
-        cfg_if! {
-            if #[cfg(target_os = "freebsd")] {
-                match proto {
-                    Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
-                    _ => Err(io::ErrorKind::InvalidInput.into()),
-                }
-            } else {
-                match proto {
-                    Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
-                    Protocol::UDP => self.udp_natlook(bind_addr, peer_addr, proto),
-                    _ => Err(io::ErrorKind::InvalidInput.into()),
-                }
-            }
+        match proto {
+            Protocol::TCP => self.tcp_natlook(bind_addr, peer_addr, proto),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            Protocol::UDP => self.udp_natlook(bind_addr, peer_addr, proto),
+            _ => Err(io::ErrorKind::InvalidInput.into()),
         }
     }
 
@@ -230,161 +204,159 @@ impl PacketFilter {
             Ok(dst_addr.as_socket().expect("SocketAddr"))
         }
     }
-    cfg_if! {
-        if #[cfg(not(target_os = "freebsd"))] {
-            fn udp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, _proto: Protocol) -> io::Result<SocketAddr> {
-                unsafe {
-                    // Get all states
-                    // https://man.freebsd.org/cgi/man.cgi?query=pf&sektion=4&manpath=OpenBSD
-                    // DIOCGETSTATES
 
-                    let mut states: pfioc_states = mem::zeroed();
-                    let mut states_buffer = vec![0u8; 8192];
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    fn udp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, _proto: Protocol) -> io::Result<SocketAddr> {
+        unsafe {
+            // Get all states
+            // https://man.freebsd.org/cgi/man.cgi?query=pf&sektion=4&manpath=OpenBSD
+            // DIOCGETSTATES
 
-                    loop {
-                        states.ps_len = states_buffer.len() as _;
-                        states.ps_u.psu_buf = states_buffer.as_mut_ptr() as *mut _;
+            let mut states: pfioc_states = mem::zeroed();
+            let mut states_buffer = vec![0u8; 8192];
 
-                        if let Err(err) = ioc_getstates(self.fd, &mut states) {
-                            return Err(Error::from_raw_os_error(err as i32));
-                        }
+            loop {
+                states.ps_len = states_buffer.len() as _;
+                states.ps_u.psu_buf = states_buffer.as_mut_ptr() as *mut _;
 
-                        if states.ps_len as usize <= states_buffer.len() {
-                            break;
-                        }
-
-                        // Resize to fit all states
-                        // > On exit, ps_len is always set to the total size re-
-                        // > quired to hold all state table entries
-                        states_buffer.resize(states.ps_len as usize, 0);
-                    }
-
-                    let bind_addr_sockaddr = SockAddr::from(*bind_addr);
-                    let peer_addr_sockaddr = SockAddr::from(*peer_addr);
-
-                    let mut bind_addr_pfaddr: pf_addr = mem::zeroed();
-                    let mut peer_addr_pfaddr: pf_addr = mem::zeroed();
-
-                    match bind_addr_sockaddr.family() as libc::c_int {
-                        libc::AF_INET => {
-                            let sockaddr: *const sockaddr_in = bind_addr_sockaddr.as_ptr() as *const _;
-                            ptr::write_unaligned::<in_addr>(
-                                ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
-                                (*sockaddr).sin_addr,
-                            );
-                        }
-                        libc::AF_INET6 => {
-                            let sockaddr: *const sockaddr_in6 = bind_addr_sockaddr.as_ptr() as *const _;
-                            ptr::write_unaligned::<in6_addr>(
-                                ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
-                                (*sockaddr).sin6_addr,
-                            );
-                        }
-                        _ => unreachable!("bind_addr family = {}", bind_addr_sockaddr.family()),
-                    }
-
-                    match peer_addr_sockaddr.family() as libc::c_int {
-                        libc::AF_INET => {
-                            let sockaddr: *const sockaddr_in = peer_addr_sockaddr.as_ptr() as *const _;
-                            ptr::write_unaligned::<in_addr>(
-                                ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
-                                (*sockaddr).sin_addr,
-                            );
-                        }
-                        libc::AF_INET6 => {
-                            let sockaddr: *const sockaddr_in6 = peer_addr_sockaddr.as_ptr() as *const _;
-                            ptr::write_unaligned::<in6_addr>(
-                                ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
-                                (*sockaddr).sin6_addr,
-                            );
-                        }
-                        _ => unreachable!("peer_addr family = {}", peer_addr_sockaddr.family()),
-                    }
-
-                    let states_count = states.ps_len as usize / mem::size_of::<pfsync_state>();
-                    for i in 0..states_count {
-                        let state = &*(states.ps_u.psu_states.add(i));
-
-                        if state.proto == libc::IPPROTO_UDP as u8 {
-                            cfg_if! {
-                                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                                    let dst_port = state.lan.xport.port;
-                                    let src_port = state.ext_gwy.xport.port;
-                                    let actual_dst_port = state.gwy.xport.port;
-                                } else {
-                                    let dst_port = state.lan.port;
-                                    let src_port = state.ext_gwy.port;
-                                    let actual_dst_port = state.gwy.port;
-                                }
-                            }
-
-                            let dst_addr_eq = libc::memcmp(
-                                &bind_addr_pfaddr as *const _ as *const _,
-                                ptr::addr_of!(state.lan.addr.pfa) as *const _,
-                                mem::size_of::<pf_addr>(),
-                            ) == 0;
-                            let src_addr_eq = libc::memcmp(
-                                &peer_addr_pfaddr as *const _ as *const _,
-                                ptr::addr_of!(state.ext_gwy.addr.pfa) as *const _,
-                                mem::size_of::<pf_addr>(),
-                            ) == 0;
-
-                            if src_addr_eq && src_port == peer_addr.port() && dst_addr_eq && dst_port == bind_addr.port() {
-                                let actual_dst_addr = match state.af_gwy as libc::c_int {
-                                    libc::AF_INET => {
-                                        let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
-                                            let addr = &mut *(sockaddr as *mut sockaddr_in);
-                                            addr.sin_family = libc::AF_INET as libc::sa_family_t;
-                                            ptr::write_unaligned::<in_addr>(
-                                                ptr::addr_of_mut!(addr.sin_addr),
-                                                ptr::read_unaligned::<in_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
-                                            );
-                                            addr.sin_port = actual_dst_port as libc::in_port_t;
-
-                                            ptr::write(len, mem::size_of::<sockaddr_in>() as libc::socklen_t);
-                                            Ok(())
-                                        })
-                                        .unwrap();
-
-                                        actual_dst_addr
-                                    }
-                                    libc::AF_INET6 => {
-                                        let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
-                                            let addr = &mut *(sockaddr as *mut sockaddr_in6);
-                                            addr.sin6_family = libc::AF_INET6 as libc::sa_family_t;
-                                            ptr::write_unaligned::<in6_addr>(
-                                                ptr::addr_of_mut!(addr.sin6_addr),
-                                                ptr::read_unaligned::<in6_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
-                                            );
-                                            addr.sin6_port = actual_dst_port as libc::in_port_t;
-
-                                            ptr::write(len, mem::size_of::<sockaddr_in6>() as libc::socklen_t);
-                                            Ok(())
-                                        })
-                                        .unwrap();
-
-                                        actual_dst_addr
-                                    }
-                                    _ => {
-                                        return Err(io::Error::new(
-                                            ErrorKind::Other,
-                                            format!("state.af_gwy {} is not a valid address family", state.af_gwy),
-                                        ));
-                                    }
-                                };
-
-                                return Ok(actual_dst_addr.as_socket().expect("SocketAddr"));
-                            }
-                        }
-                    }
+                if let Err(err) = ioc_getstates(self.fd, &mut states) {
+                    return Err(Error::from_raw_os_error(err as i32));
                 }
 
-                Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("natlook UDP binding {}, {} not found", bind_addr, peer_addr),
-                ))
+                if states.ps_len as usize <= states_buffer.len() {
+                    break;
+                }
+
+                // Resize to fit all states
+                // > On exit, ps_len is always set to the total size re-
+                // > quired to hold all state table entries
+                states_buffer.resize(states.ps_len as usize, 0);
             }
-         }
+
+            let bind_addr_sockaddr = SockAddr::from(*bind_addr);
+            let peer_addr_sockaddr = SockAddr::from(*peer_addr);
+
+            let mut bind_addr_pfaddr: pf_addr = mem::zeroed();
+            let mut peer_addr_pfaddr: pf_addr = mem::zeroed();
+
+            match bind_addr_sockaddr.family() as libc::c_int {
+                libc::AF_INET => {
+                    let sockaddr: *const sockaddr_in = bind_addr_sockaddr.as_ptr() as *const _;
+                    ptr::write_unaligned::<in_addr>(
+                        ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
+                        (*sockaddr).sin_addr,
+                    );
+                }
+                libc::AF_INET6 => {
+                    let sockaddr: *const sockaddr_in6 = bind_addr_sockaddr.as_ptr() as *const _;
+                    ptr::write_unaligned::<in6_addr>(
+                        ptr::addr_of_mut!(bind_addr_pfaddr.pfa) as *mut _,
+                        (*sockaddr).sin6_addr,
+                    );
+                }
+                _ => unreachable!("bind_addr family = {}", bind_addr_sockaddr.family()),
+            }
+
+            match peer_addr_sockaddr.family() as libc::c_int {
+                libc::AF_INET => {
+                    let sockaddr: *const sockaddr_in = peer_addr_sockaddr.as_ptr() as *const _;
+                    ptr::write_unaligned::<in_addr>(
+                        ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
+                        (*sockaddr).sin_addr,
+                    );
+                }
+                libc::AF_INET6 => {
+                    let sockaddr: *const sockaddr_in6 = peer_addr_sockaddr.as_ptr() as *const _;
+                    ptr::write_unaligned::<in6_addr>(
+                        ptr::addr_of_mut!(peer_addr_pfaddr.pfa) as *mut _,
+                        (*sockaddr).sin6_addr,
+                    );
+                }
+                _ => unreachable!("peer_addr family = {}", peer_addr_sockaddr.family()),
+            }
+
+            let states_count = states.ps_len as usize / mem::size_of::<pfsync_state>();
+            for i in 0..states_count {
+                let state = &*(states.ps_u.psu_states.add(i));
+
+                if state.proto == libc::IPPROTO_UDP as u8 {
+                    cfg_if! {
+                        if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+                            let dst_port = state.lan.xport.port;
+                            let src_port = state.ext_gwy.xport.port;
+                            let actual_dst_port = state.gwy.xport.port;
+                        } else {
+                            let dst_port = state.lan.port;
+                            let src_port = state.ext_gwy.port;
+                            let actual_dst_port = state.gwy.port;
+                        }
+                    }
+
+                    let dst_addr_eq = libc::memcmp(
+                        &bind_addr_pfaddr as *const _ as *const _,
+                        ptr::addr_of!(state.lan.addr.pfa) as *const _,
+                        mem::size_of::<pf_addr>(),
+                    ) == 0;
+                    let src_addr_eq = libc::memcmp(
+                        &peer_addr_pfaddr as *const _ as *const _,
+                        ptr::addr_of!(state.ext_gwy.addr.pfa) as *const _,
+                        mem::size_of::<pf_addr>(),
+                    ) == 0;
+
+                    if src_addr_eq && src_port == peer_addr.port() && dst_addr_eq && dst_port == bind_addr.port() {
+                        let actual_dst_addr = match state.af_gwy as libc::c_int {
+                            libc::AF_INET => {
+                                let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
+                                    let addr = &mut *(sockaddr as *mut sockaddr_in);
+                                    addr.sin_family = libc::AF_INET as libc::sa_family_t;
+                                    ptr::write_unaligned::<in_addr>(
+                                        ptr::addr_of_mut!(addr.sin_addr),
+                                        ptr::read_unaligned::<in_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
+                                    );
+                                    addr.sin_port = actual_dst_port as libc::in_port_t;
+
+                                    ptr::write(len, mem::size_of::<sockaddr_in>() as libc::socklen_t);
+                                    Ok(())
+                                })
+                                .unwrap();
+
+                                actual_dst_addr
+                            }
+                            libc::AF_INET6 => {
+                                let (_, actual_dst_addr) = SockAddr::try_init(|sockaddr, len| {
+                                    let addr = &mut *(sockaddr as *mut sockaddr_in6);
+                                    addr.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+                                    ptr::write_unaligned::<in6_addr>(
+                                        ptr::addr_of_mut!(addr.sin6_addr),
+                                        ptr::read_unaligned::<in6_addr>(ptr::addr_of!(state.gwy.addr.pfa) as *const _),
+                                    );
+                                    addr.sin6_port = actual_dst_port as libc::in_port_t;
+
+                                    ptr::write(len, mem::size_of::<sockaddr_in6>() as libc::socklen_t);
+                                    Ok(())
+                                })
+                                .unwrap();
+
+                                actual_dst_addr
+                            }
+                            _ => {
+                                return Err(io::Error::new(
+                                    ErrorKind::Other,
+                                    format!("state.af_gwy {} is not a valid address family", state.af_gwy),
+                                ));
+                            }
+                        };
+
+                        return Ok(actual_dst_addr.as_socket().expect("SocketAddr"));
+                    }
+                }
+            }
+        }
+
+        Err(io::Error::new(
+            ErrorKind::Other,
+            format!("natlook UDP binding {}, {} not found", bind_addr, peer_addr),
+        ))
     }
 }
 
