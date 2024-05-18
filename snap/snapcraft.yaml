@@ -20,6 +20,7 @@ apps:
   sslocal:
     command: bin/sslocal
     plugs: [network, network-bind, network-control, home]
+    aliases: [sslocal]
 
   sslocal-daemon:
     command: bin/sslocal
@@ -30,6 +31,7 @@ apps:
   ssserver:
     command: bin/ssserver
     plugs: [network, network-bind, home]
+    aliases: [ssserver]
 
   ssserver-daemon:
     command: bin/ssserver
@@ -39,10 +41,12 @@ apps:
 
   ssurl:
     command: bin/ssurl
+    aliases: [ssurl]
 
   ssmanager:
     command: bin/ssmanager
     plugs: [network, home]
+    aliases: [ssmanager]
 
 passthrough:
   layout:
