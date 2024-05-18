@@ -2,24 +2,23 @@
 
 use std::{
     io::{self, Error, ErrorKind},
+    mem,
     net::SocketAddr,
+    ptr,
 };
 
 use cfg_if::cfg_if;
+use log::trace;
 use nix::ioctl_readwrite;
 use once_cell::sync::Lazy;
-
-use super::pfvar::{pfioc_natlook, pfioc_states};
-use log::trace;
-
-use super::pfvar::{in6_addr, in_addr, sockaddr_in, sockaddr_in6, PF_OUT};
 use socket2::{Protocol, SockAddr};
-use std::{mem, ptr};
 
+use super::pfvar::{in6_addr, in_addr, pfioc_natlook, pfioc_states, sockaddr_in, sockaddr_in6, PF_OUT};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use super::pfvar::{pf_addr, pfsync_state};
 
 ioctl_readwrite!(ioc_natlook, 'D', 23, pfioc_natlook);
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 ioctl_readwrite!(ioc_getstates, 'D', 25, pfioc_states);
 
 pub struct PacketFilter {

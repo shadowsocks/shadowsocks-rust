@@ -269,7 +269,7 @@ fn set_disable_ip_fragmentation(level: libc::c_int, socket: &Socket) -> io::Resu
     const IPV6_DONTFRAG: libc::c_int = 62; // bool; disable IPv6 fragmentation
 
     let enable: libc::c_int = 1;
-    
+
     let opt = match level {
         libc::IPPROTO_IP => IP_DONTFRAG,
         libc::IPPROTO_IPV6 => IPV6_DONTFRAG,
@@ -325,9 +325,9 @@ fn get_destination_addr(msg: &libc::msghdr) -> io::Result<SocketAddr> {
                 match (rcmsg.cmsg_level, rcmsg.cmsg_type) {
                     (libc::IPPROTO_IP, libc::IP_ORIGDSTADDR) => {
                         ptr::copy_nonoverlapping(
-                            libc::CMSG_DATA(cmsg), 
-                            dst_addr as *mut _, 
-                            mem::size_of::<libc::sockaddr_in>()
+                            libc::CMSG_DATA(cmsg),
+                            dst_addr as *mut _,
+                            mem::size_of::<libc::sockaddr_in>(),
                         );
                         *dst_addr_len = mem::size_of::<libc::sockaddr_in>() as libc::socklen_t;
 
@@ -382,11 +382,7 @@ fn recv_dest_from(socket: &UdpSocket, buf: &mut [u8]) -> io::Result<(usize, Sock
         }
 
         let (_, src_saddr) = SockAddr::try_init(|a, l| {
-            ptr::copy_nonoverlapping(
-                msg.msg_name, 
-                a as *mut _, 
-                msg.msg_namelen as usize
-            );
+            ptr::copy_nonoverlapping(msg.msg_name, a as *mut _, msg.msg_namelen as usize);
             *l = msg.msg_namelen;
             Ok(())
         })?;
