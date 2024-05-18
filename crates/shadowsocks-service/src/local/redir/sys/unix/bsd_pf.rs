@@ -233,13 +233,6 @@ impl PacketFilter {
     cfg_if! {
         if #[cfg(not(target_os = "freebsd"))] {
             fn udp_natlook(&self, bind_addr: &SocketAddr, peer_addr: &SocketAddr, _proto: Protocol) -> io::Result<SocketAddr> {
-                match recv_dest_from(self.io.get_ref(), buf) {
-                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                        read_guard.clear_ready();
-                    }
-                    x => return Poll::Ready(x),
-                }
-
                 unsafe {
                     // Get all states
                     // https://man.freebsd.org/cgi/man.cgi?query=pf&sektion=4&manpath=OpenBSD
