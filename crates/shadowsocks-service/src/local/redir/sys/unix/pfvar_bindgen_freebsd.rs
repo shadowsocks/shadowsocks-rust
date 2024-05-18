@@ -11945,7 +11945,7 @@ fn bindgen_test_layout_pf_status() {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct pf_addr {
-    pub __bindgen_anon_1: pf_addr__bindgen_ty_1,
+    pub pfa: pf_addr__bindgen_ty_1,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
