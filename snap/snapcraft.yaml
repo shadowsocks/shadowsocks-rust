@@ -10,8 +10,8 @@ architectures:
   - build-on: amd64
   - build-on: arm64
   - build-on: armhf
-  - build-on: ppc64el
-  - build-on: s390x
+  # - build-on: ppc64el
+  # - build-on: s390x
   - build-on: riscv64
 license: MIT
 source-code: https://github.com/shadowsocks/shadowsocks-rust
@@ -19,25 +19,25 @@ source-code: https://github.com/shadowsocks/shadowsocks-rust
 apps:
   sslocal:
     command: bin/sslocal
-    plugs: [network, network-bind, network-control, home]
+    plugs: [network, network-bind, network-control, home, system-bin-files]
     aliases: [sslocal]
 
   sslocal-daemon:
     command: bin/sslocal
     daemon: simple
     install-mode: disable
-    plugs: [network, network-bind, network-control, home]
+    plugs: [network, network-bind, network-control, home, system-bin-files]
 
   ssserver:
     command: bin/ssserver
-    plugs: [network, network-bind, home]
+    plugs: [network, network-bind, home, system-bin-files]
     aliases: [ssserver]
 
   ssserver-daemon:
     command: bin/ssserver
     daemon: simple
     install-mode: disable
-    plugs: [network, network-bind, home]
+    plugs: [network, network-bind, home, system-bin-files]
 
   ssurl:
     command: bin/ssurl
@@ -45,13 +45,21 @@ apps:
 
   ssmanager:
     command: bin/ssmanager
-    plugs: [network, home]
+    plugs: [network, network-bind, home, system-bin-files]
     aliases: [ssmanager]
 
 passthrough:
   layout:
     /etc/shadowsocks-rust:
       bind: $SNAP_COMMON/etc/shadowsocks-rust
+
+plugs:
+  system-bin-files:
+    interface: system-files
+    read:
+      - /bin
+      - /usr/bin
+      - /usr/local/bin
 
 parts:
   shadowsocks-rust:
