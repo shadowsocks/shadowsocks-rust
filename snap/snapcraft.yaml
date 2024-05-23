@@ -19,25 +19,25 @@ source-code: https://github.com/shadowsocks/shadowsocks-rust
 apps:
   sslocal:
     command: bin/sslocal
-    plugs: [network, network-bind, network-control, home, system-bin-files]
+    plugs: [network, network-bind, network-control, home]
     aliases: [sslocal]
 
   sslocal-daemon:
     command: bin/sslocal
     daemon: simple
     install-mode: disable
-    plugs: [network, network-bind, network-control, home, system-bin-files]
+    plugs: [network, network-bind, network-control, home]
 
   ssserver:
     command: bin/ssserver
-    plugs: [network, network-bind, home, system-bin-files]
+    plugs: [network, network-bind, home]
     aliases: [ssserver]
 
   ssserver-daemon:
     command: bin/ssserver
     daemon: simple
     install-mode: disable
-    plugs: [network, network-bind, home, system-bin-files]
+    plugs: [network, network-bind, home]
 
   ssurl:
     command: bin/ssurl
@@ -45,7 +45,7 @@ apps:
 
   ssmanager:
     command: bin/ssmanager
-    plugs: [network, network-bind, home, system-bin-files]
+    plugs: [network, network-bind, home]
     aliases: [ssmanager]
 
 passthrough:
