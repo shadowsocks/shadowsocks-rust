@@ -53,14 +53,6 @@ passthrough:
     /etc/shadowsocks-rust:
       bind: $SNAP_COMMON/etc/shadowsocks-rust
 
-plugs:
-  system-bin-files:
-    interface: system-files
-    read:
-      - /bin
-      - /usr/bin
-      - /usr/local/bin
-
 parts:
   shadowsocks-rust:
     plugin: rust
