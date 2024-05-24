@@ -59,6 +59,9 @@ pub struct TunBuilder {
     mode: Mode,
 }
 
+/// TunConfiguration contains a HANDLE, which is a *mut c_void on Windows.
+unsafe impl Send for TunBuilder {}
+
 impl TunBuilder {
     /// Create a Tun service builder
     pub fn new(context: Arc<ServiceContext>, balancer: PingBalancer) -> TunBuilder {
