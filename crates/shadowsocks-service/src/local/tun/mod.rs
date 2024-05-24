@@ -10,12 +10,29 @@ use std::{
 };
 
 use byte_string::ByteStr;
+use cfg_if::cfg_if;
 use ipnet::{IpNet, Ipv4Net};
 use log::{debug, error, info, trace, warn};
 use shadowsocks::config::Mode;
 use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
 use tokio::{io::AsyncReadExt, sync::mpsc, time};
-use tun::{AsyncDevice, Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer};
+
+cfg_if! {
+    if #[cfg(any(target_os = "ios",
+                 target_os = "macos",
+                 target_os = "linux",
+                 target_os = "android",
+                 target_os = "windows"))] {
+        use tun::{
+            create_as_async, AsyncDevice, Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer,
+        };
+    } else {
+        use tun::{Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer};
+
+        mod fake_tun;
+        use self::fake_tun::{create_as_async, AsyncDevice};
+    }
+}
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
@@ -94,7 +111,7 @@ impl TunBuilder {
             tun_config.packet_information(false);
         });
 
-        let device = match tun::create_as_async(&self.tun_config) {
+        let device = match create_as_async(&self.tun_config) {
             Ok(d) => d,
             Err(TunError::Io(err)) => return Err(err),
             Err(err) => return Err(io::Error::new(ErrorKind::Other, err)),

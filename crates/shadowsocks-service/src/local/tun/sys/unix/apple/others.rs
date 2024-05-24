@@ -1,8 +1,11 @@
 use std::io;
 
-use tun::platform::Device as TunDevice;
+use tun::Device;
 
 /// Set platform specific route configuration
-pub async fn set_route_configuration(_device: &mut TunDevice) -> io::Result<()> {
+pub async fn set_route_configuration<Q>(_: &mut (dyn Device<Queue = Q> + Send)) -> io::Result<()>
+where
+    Q: Read + Write,
+{
     Ok(())
 }

@@ -58,7 +58,10 @@ parts:
     plugin: rust
     source: https://github.com/shadowsocks/shadowsocks-rust.git
     rust-channel: stable
-    rust-features: [local-tun, local-redir]
+    rust-features: [full]
     override-pull: |
       snapcraftctl pull
       snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
+
+build-packages:
+  - protobuf

@@ -1,6 +1,6 @@
 [package]
 name = "shadowsocks-rust"
-version = "1.18.5"
+version = "1.19.0"
 authors = ["Shadowsocks Contributors"]
 description = "shadowsocks is a fast tunnel proxy that helps you bypass firewalls."
 repository = "https://github.com/shadowsocks/shadowsocks-rust"
@@ -9,7 +9,7 @@ documentation = "https://docs.rs/shadowsocks-rust"
 keywords = ["shadowsocks", "proxy", "socks", "socks5", "firewall"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.71"
+rust-version = "1.74"
 
 [badges]
 maintenance = { status = "passively-maintained" }
@@ -55,19 +55,43 @@ panic = "abort"
 strip = true
 
 [features]
-default = [
+default = ["basic"]
+
+# Basic Features
+basic = ["logging", "hickory-dns", "local", "server", "multi-threaded"]
+
+# All Suggested Features
+full = [
     "logging",
     "hickory-dns",
+    "dns-over-tls",
+    "dns-over-https",
+    "dns-over-h3",
     "local",
     "server",
     "manager",
     "utility",
     "service",
     "local-http",
+    "local-http-rustls",
     "local-tunnel",
     "local-socks4",
+    "local-dns",
+    "local-redir",
+    "local-tun",
+    "local-fake-dns",
+    "local-online-config",
     "multi-threaded",
+    "stream-cipher",
     "aead-cipher-2022",
+]
+
+# Full features with extra (non-stable)
+full-extra = [
+    "full",
+    "aead-cipher-extra",
+    "aead-cipher-2022-extra",
+    "security-replay-attack-detect",
 ]
 
 # Enable local server
@@ -188,7 +212,7 @@ json5 = "0.4"
 thiserror = "1.0"
 base64 = "0.22"
 
-clap = { version = "~4.4", features = ["wrap_help", "suggestions"] }
+clap = { version = "4.5", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.14", default-features = false, optional = true }
 sysexits = "0.7"
@@ -211,7 +235,7 @@ jemallocator = { version = "0.5", optional = true }
 snmalloc-rs = { version = "0.3", optional = true }
 rpmalloc = { version = "0.2", optional = true }
 
-shadowsocks-service = { version = "1.18.5", path = "./crates/shadowsocks-service" }
+shadowsocks-service = { version = "1.19.0", path = "./crates/shadowsocks-service" }
 
 windows-service = { version = "0.7", optional = true }
 

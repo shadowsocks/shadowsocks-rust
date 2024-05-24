@@ -164,7 +164,7 @@ impl FakeDnsManager {
             .cache_capacity(10 * 1024 * 1024)
             .use_compression(true)
             .mode(sled::Mode::HighThroughput)
-            .flush_every_ms(Some(1 * 1000))
+            .flush_every_ms(Some(1_000))
             .path(db_path)
             .open()?;
 
@@ -193,10 +193,11 @@ impl FakeDnsManager {
         if recreate_database {
             let _ = db.clear();
 
-            let mut c = proto::StorageMeta::default();
-            c.ipv4_network = ipv4_network_str;
-            c.ipv6_network = ipv6_network_str;
-            c.version = FAKE_DNS_MANAGER_STORAGE_VERSION;
+            let c = proto::StorageMeta {
+                ipv4_network: ipv4_network_str,
+                ipv6_network: ipv6_network_str,
+                version: FAKE_DNS_MANAGER_STORAGE_VERSION,
+            };
 
             let v = c.encode_to_vec();
             db.insert(key, v)?;

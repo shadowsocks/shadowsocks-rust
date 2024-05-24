@@ -32,16 +32,11 @@ jobs:
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install nightly --component clippy
-          rustup default nightly
-          rustup override set nightly
+          rustup toolchain install stable --component clippy
       - name: Clippy Check
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: |
-            --features "local-http-rustls local-redir local-flow-stat local-dns local-tun local-fake-dns local-online-config dns-over-tls dns-over-https stream-cipher aead-cipher-2022" -- -Z macro-backtrace
-            -W clippy::absurd_extreme_comparisons
-            -W clippy::erasing_op
-            -A clippy::collapsible_else_if
+            --features "full-extra local-flow-stat utility-url-outline"
           name: clippy ${{ matrix.platform }}

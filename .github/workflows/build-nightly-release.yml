@@ -38,12 +38,10 @@ jobs:
         run: |
           compile_target=${{ matrix.target }}
 
-          if [[ "$compile_target" == *"-linux-"* || "$compile_target" == *"-apple-"* ]]; then
-            compile_features="-f local-redir -f local-tun"
-          fi
+          compile_features="-f full"
 
           if [[ "$compile_target" == *"-windows-"* ]]; then
-            compile_features="-f winservice -f local-tun"
+            compile_features="$compile_features -f winservice"
           fi
 
           if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
@@ -65,7 +63,7 @@ jobs:
   build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: "local-redir local-tun"
+      BUILD_EXTRA_FEATURES: "full"
       RUST_BACKTRACE: full
     strategy:
       fail-fast: false
@@ -129,7 +127,7 @@ jobs:
 
       - name: Build release
         run: |
-          pwsh ./build/build-host-release.ps1 "winservice local-tun"
+          pwsh ./build/build-host-release.ps1 "full winservice"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
