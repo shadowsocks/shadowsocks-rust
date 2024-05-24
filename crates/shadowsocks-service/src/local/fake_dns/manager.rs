@@ -174,18 +174,21 @@ impl FakeDnsManager {
 
         let key = "shadowsocks_fakedns_meta";
         if let Some(v) = db.get(key)? {
-            let c = proto::StorageMeta::decode(&v)?;
-            if c.version == FAKE_DNS_MANAGER_STORAGE_VERSION {
-                if ipv4_network_str != c.ipv4_network || ipv6_network_str != c.ipv6_network {
-                    warn!(
-                        "IPv4 network {} (storage {}), IPv6 network {} (storage {}) not match",
-                        ipv4_network_str, c.ipv4_network, ipv6_network_str, c.ipv6_network
-                    );
+            if let Ok(c) = proto::StorageMeta::decode(&v) {
+                if c.version == FAKE_DNS_MANAGER_STORAGE_VERSION {
+                    if ipv4_network_str != c.ipv4_network || ipv6_network_str != c.ipv6_network {
+                        warn!(
+                            "IPv4 network {} (storage {}), IPv6 network {} (storage {}) not match",
+                            ipv4_network_str, c.ipv4_network, ipv6_network_str, c.ipv6_network
+                        );
+                    } else {
+                        recreate_database = false;
+                    }
                 } else {
-                    recreate_database = false;
+                    warn!("storage version {} not match, recreating database", c.version);
                 }
             } else {
-                warn!("storage version {} not match", c.version);
+                warn!("storage meta parse failed. recreating database");
             }
         }
 
