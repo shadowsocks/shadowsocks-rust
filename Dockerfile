@@ -3,7 +3,7 @@ FROM --platform=$BUILDPLATFORM rust:1.67.1-alpine3.17 AS builder
 ARG TARGETARCH
 
 RUN set -x \
-    && apk add --no-cache build-base protoc
+    && apk add --no-cache build-base
 
 WORKDIR /root/shadowsocks-rust
 

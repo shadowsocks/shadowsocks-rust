@@ -1,7 +1,7 @@
 //! Fake DNS manager
 
 use std::{
-    io::{self, Cursor},
+    io,
     iter::Cycle,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
@@ -11,13 +11,12 @@ use std::{
 use hickory_resolver::proto::rr::Name;
 use ipnet::{Ipv4AddrRange, Ipv4Net, Ipv6AddrRange, Ipv6Net};
 use log::{trace, warn};
-use prost::Message;
 use sled::{Config as SledConfig, Db as SledDatabase};
 use tokio::sync::Mutex;
 
 use super::proto;
 
-const FAKE_DNS_MANAGER_STORAGE_VERSION: u32 = 1;
+const FAKE_DNS_MANAGER_STORAGE_VERSION: u32 = 2;
 
 /// Fake DNS manager
 pub struct FakeDnsManager {
@@ -37,7 +36,7 @@ macro_rules! map_domain_ip {
             let mut domain_name_mapping = proto::DomainNameMapping::default();
 
             if let Some(ref v) = name2ip_value {
-                domain_name_mapping = proto::DomainNameMapping::decode(&mut Cursor::new(v))?;
+                domain_name_mapping = proto::DomainNameMapping::decode(v)?;
 
                 if !domain_name_mapping.$addr_field.is_empty() {
                     match domain_name_mapping.$addr_field.parse::<$addr_ty>() {
@@ -56,11 +55,11 @@ macro_rules! map_domain_ip {
                                 let ip2name_key = FakeDnsManager::get_ip2name_key(i.into());
                                 let ip2name_value = $self.db.get(&ip2name_key)?;
                                 if let Some(ref v) = ip2name_value {
-                                    let mut ip_mapping = proto::IpAddrMapping::decode(&mut Cursor::new(v))?;
+                                    let mut ip_mapping = proto::IpAddrMapping::decode(v)?;
                                     if ip_mapping.domain_name == $domain.to_string() {
                                         // Try to extend its expire time
                                         ip_mapping.expire_time = expire_secs;
-                                        let nv = ip_mapping.encode_to_vec();
+                                        let nv = ip_mapping.encode_to_vec()?;
                                         if let Ok(..) =
                                             $self
                                                 .db
@@ -77,7 +76,7 @@ macro_rules! map_domain_ip {
 
                             if !reallocate {
                                 domain_name_mapping.expire_time = expire_secs;
-                                let nv = domain_name_mapping.encode_to_vec();
+                                let nv = domain_name_mapping.encode_to_vec()?;
 
                                 // Ignore update error. It is ok if expire_time is updated by another thread.
                                 let _ = $self
@@ -106,7 +105,7 @@ macro_rules! map_domain_ip {
                 loop {
                     let ip2name_value = $self.db.get(&ip2name_key)?;
                     if let Some(ref v) = ip2name_value {
-                        let ip_mapping = proto::IpAddrMapping::decode(&mut Cursor::new(v))?;
+                        let ip_mapping = proto::IpAddrMapping::decode(v)?;
 
                         let now = FakeDnsManager::get_current_timestamp();
                         if ip_mapping.expire_time > now {
@@ -120,14 +119,14 @@ macro_rules! map_domain_ip {
                     ip_mapping.expire_time = expire_secs;
                     ip_mapping.domain_name = $domain.to_string();
 
-                    let nv = ip_mapping.encode_to_vec();
+                    let nv = ip_mapping.encode_to_vec()?;
 
                     if let Ok(..) = $self.db.compare_and_swap(&ip2name_key, ip2name_value, Some(nv.clone())) {
                         // Replace name2ip
 
                         domain_name_mapping.$addr_field = ip.to_string();
                         domain_name_mapping.expire_time = ip_mapping.expire_time;
-                        let nv = domain_name_mapping.encode_to_vec();
+                        let nv = domain_name_mapping.encode_to_vec()?;
 
                         if let Ok(..) = $self
                             .db
@@ -175,7 +174,7 @@ impl FakeDnsManager {
 
         let key = "shadowsocks_fakedns_meta";
         if let Some(v) = db.get(key)? {
-            let c = proto::StorageMeta::decode(&mut Cursor::new(&v))?;
+            let c = proto::StorageMeta::decode(&v)?;
             if c.version == FAKE_DNS_MANAGER_STORAGE_VERSION {
                 if ipv4_network_str != c.ipv4_network || ipv6_network_str != c.ipv6_network {
                     warn!(
@@ -199,7 +198,7 @@ impl FakeDnsManager {
                 version: FAKE_DNS_MANAGER_STORAGE_VERSION,
             };
 
-            let v = c.encode_to_vec();
+            let v = c.encode_to_vec()?;
             db.insert(key, v)?;
 
             trace!("FakeDNS database created. {:?}", c);
@@ -249,13 +248,13 @@ impl FakeDnsManager {
         match ip2name_value {
             None => Ok(None),
             Some(ref v) => {
-                let mut ip_mapping = proto::IpAddrMapping::decode(&mut Cursor::new(v))?;
+                let mut ip_mapping = proto::IpAddrMapping::decode(v)?;
 
                 let now = FakeDnsManager::get_current_timestamp();
                 if ip_mapping.expire_time >= now {
                     // Ok. It is not expired yet. Try to extend its expire time.
                     ip_mapping.expire_time = now + self.expire_duration.as_secs() as i64;
-                    let nv = ip_mapping.encode_to_vec();
+                    let nv = ip_mapping.encode_to_vec()?;
                     let _ = self
                         .db
                         .compare_and_swap(&ip2name_key, ip2name_value.as_ref(), Some(nv))?;
@@ -272,9 +271,9 @@ impl FakeDnsManager {
                         let name2ip_value = self.db.get(&name2ip_key)?;
                         match name2ip_value {
                             Some(ref v) => {
-                                let mut domain_name_mapping = proto::DomainNameMapping::decode(&mut Cursor::new(v))?;
+                                let mut domain_name_mapping = proto::DomainNameMapping::decode(v)?;
                                 domain_name_mapping.expire_time = ip_mapping.expire_time;
-                                let nv = domain_name_mapping.encode_to_vec();
+                                let nv = domain_name_mapping.encode_to_vec()?;
                                 let _ = self.db.compare_and_swap(&name2ip_key, name2ip_value.as_ref(), Some(nv));
                             }
                             None => {
