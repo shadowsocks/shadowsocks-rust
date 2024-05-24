@@ -39,5 +39,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: |
             --features "full-extra local-flow-stat utility-url-outline"
-            -A clippy::absurd_extreme_comparisons
+            -- -A clippy::absurd_extreme_comparisons
           name: clippy ${{ matrix.platform }}
