@@ -13,5 +13,8 @@ cfg_if! {
     } else if #[cfg(target_os = "android")] {
         mod android;
         pub use self::android::*;
+    } else {
+        mod others;
+        pub use self::others::*;
     }
 }

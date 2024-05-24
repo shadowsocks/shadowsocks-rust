@@ -9,5 +9,8 @@ cfg_if! {
     } else if #[cfg(windows)] {
         mod windows;
         pub use self::windows::*;
+    } else {
+        mod others;
+        pub use self::others::*;
     }
 }

@@ -1,5 +1,5 @@
 use std::{
-    io::{self, ErrorKind, IoSlice},
+    io::{self, ErrorKind, IoSlice, Read, Write},
     marker::Unpin,
 };
 

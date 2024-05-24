@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Read, Write};
 
 use tun::Device;
 
