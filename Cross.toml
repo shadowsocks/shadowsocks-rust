@@ -3,7 +3,7 @@ pre-build = [
     # https://aws.github.io/aws-lc-rs/requirements/linux.html
     "apt-get update",
     "apt-get install --assume-yes libclang1 cargo",
-    "cargo install --force --locked bindgen-cli",
+    "CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --force --locked bindgen-cli",
 ]
 
 [build.env]
@@ -14,7 +14,7 @@ pre-build = [
     # Install NASM for rustls, which deps on aws-lc-rs by default, and it needs NASM
     "apt-get update",
     "apt-get install --assume-yes libclang1 nasm cargo",
-    "cargo install --force --locked bindgen-cli",
+    "CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --force --locked bindgen-cli",
 ]
 
 [target.aarch64-unknown-linux-gnu]
