@@ -1,11 +1,13 @@
-[build.env]
-passthrough = ["RUSTFLAGS"]
+[build]
 pre-build = [
     # https://aws.github.io/aws-lc-rs/requirements/linux.html
     "apt-get update",
     "apt-get install --assume-yes libclang1",
     "cargo install --force --locked bindgen-cli",
 ]
+
+[build.env]
+passthrough = ["RUSTFLAGS"]
 
 [target.x86_64-pc-windows-gnu]
 pre-build = [
