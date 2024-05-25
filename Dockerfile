@@ -1,9 +1,9 @@
-FROM --platform=$BUILDPLATFORM rust:1.67.1-alpine3.17 AS builder
+FROM --platform=$BUILDPLATFORM rust:alpine3.20 AS builder
 
 ARG TARGETARCH
 
 RUN set -x \
-    && apk add --no-cache build-base cmake
+    && apk add --no-cache build-base cmake llvm15-dev clang15-libclang clang15 rust-bindgen
 
 WORKDIR /root/shadowsocks-rust
 
@@ -33,11 +33,10 @@ RUN case "$TARGETARCH" in \
     && echo "CC=$CC" \
     && rustup override set stable \
     && rustup target add "$RUST_TARGET" \
-    && cargo install --force --locked bindgen-cli \
     && RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "full" \
     && mv target/$RUST_TARGET/release/ss* target/release/
 
-FROM alpine:3.17 AS sslocal
+FROM alpine:3.20 AS sslocal
 
 # NOTE: Please be careful to change the path of these binaries, refer to #1149 for more information.
 COPY --from=builder /root/shadowsocks-rust/target/release/sslocal /usr/bin/
