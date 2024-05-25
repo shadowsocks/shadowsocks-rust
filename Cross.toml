@@ -2,7 +2,7 @@
 pre-build = [
     # https://aws.github.io/aws-lc-rs/requirements/linux.html
     "apt-get update",
-    "apt-get install --assume-yes libclang1",
+    "apt-get install --assume-yes libclang1 cargo",
     "cargo install --force --locked bindgen-cli",
 ]
 
