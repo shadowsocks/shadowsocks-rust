@@ -1,3 +1,24 @@
+shadowsocks-rust (1.19.0) unstable; urgency=medium
+
+  ## Features
+
+  - #302 `sslocal` support SIP008 Online Configuration. Pull `servers` from remote servers automatically. (Experimental)
+  - Add `basic`, `full`, `full-extra` features makes building command line arguments shorter
+  
+  ## Bug Fixes
+
+  - #1525 Check `"users"` in server configuration if `method` doesn't support AEAD-2022 EIH.
+  - #1528 Fixed FreeBSD build.
+
+  ## Miscellaneous
+
+  - Snap: Add alias names like `sslocal`, `ssserver`, ...
+  - `local-tun` feature could be enabled even if target platform is not supported.
+
+  ## BREAKING
+
+  - Minimal Supported Rust Version (MSRV) is v1.74
+
 shadowsocks-rust (1.18.4) unstable; urgency=medium
 
   ## Features
