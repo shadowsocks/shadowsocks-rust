@@ -2,8 +2,11 @@
 pre-build = [
     # https://aws.github.io/aws-lc-rs/requirements/linux.html
     "apt-get update",
-    "apt-get install --assume-yes libclang1 cargo",
-    "CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --force --locked bindgen-cli",
+    "apt-get install --assume-yes llvm-5.0-dev libclang-5.0-dev clang-5.0",
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable",
+    ". $HOME/.cargo/env",
+    "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
+    "rustup self uninstall -y",
 ]
 
 [build.env]
@@ -13,8 +16,11 @@ passthrough = ["RUSTFLAGS"]
 pre-build = [
     # Install NASM for rustls, which deps on aws-lc-rs by default, and it needs NASM
     "apt-get update",
-    "apt-get install --assume-yes libclang1 nasm cargo",
-    "CARGO_NET_GIT_FETCH_WITH_CLI=true cargo install --force --locked bindgen-cli",
+    "apt-get install --assume-yes llvm-5.0-dev libclang-5.0-dev clang-5.0 nasm",
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable",
+    ". $HOME/.cargo/env",
+    "cargo install --force --locked bindgen-cli && mv $HOME/.cargo/bin/bindgen /usr/bin",
+    "rustup self uninstall -y",
 ]
 
 [target.aarch64-unknown-linux-gnu]
