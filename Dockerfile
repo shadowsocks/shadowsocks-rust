@@ -33,6 +33,7 @@ RUN case "$TARGETARCH" in \
     && echo "CC=$CC" \
     && rustup override set stable \
     && rustup target add "$RUST_TARGET" \
+    && cargo install --force --locked bindgen-cli \
     && RUSTFLAGS="-C linker=$CC" CC=$CC cargo build --target "$RUST_TARGET" --release --features "full" \
     && mv target/$RUST_TARGET/release/ss* target/release/
 

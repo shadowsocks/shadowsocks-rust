@@ -1,9 +1,37 @@
 [build.env]
 passthrough = ["RUSTFLAGS"]
+pre-build = [
+    # https://aws.github.io/aws-lc-rs/requirements/linux.html
+    "apt-get update",
+    "apt-get install --assume-yes libclang1",
+    "cargo install --force --locked bindgen-cli",
+]
 
 [target.x86_64-pc-windows-gnu]
 pre-build = [
-    # Install NVIM for rustls, which deps on aws-lc-rs by default, and it needs NASM
+    # Install NASM for rustls, which deps on aws-lc-rs by default, and it needs NASM
     "apt-get update",
-    "apt-get install --assume-yes nasm clang",
+    "apt-get install --assume-yes libclang1 nasm cargo",
+    "cargo install --force --locked bindgen-cli",
 ]
+
+[target.aarch64-unknown-linux-gnu]
+pre-build = []
+
+[target.aarch64-unknown-linux-musl]
+pre-build = []
+
+[target.x86_64-unknown-linux-gnu]
+pre-build = []
+
+[target.x86_64-unknown-linux-musl]
+pre-build = []
+
+[target.i686-unknown-linux-gnu]
+pre-build = []
+
+[target.aarch64-apple-darwin]
+pre-build = []
+
+[target.x86_64-apple-darwin]
+pre-build = []
