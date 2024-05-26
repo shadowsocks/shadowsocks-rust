@@ -649,6 +649,25 @@ Example configuration:
             // Linux/Android: tproxy (default)
             // FreeBSD/OpenBSD: pf (default)
             "udp_redir": "tproxy"
+        },
+        {
+            // FakeDNS local server (feature = "local-fake-dns")
+            // FakeDNS is a DNS server that allocates an IPv4 / IPv6 address in a specific pool for each queries.
+            // Subsequence requests from the other local interfaces that the target addresses includes those allocated IP addresses,
+            // will be substituted back to their original domain name addresses.
+            // This feature is useful mostly for transparent proxy, which will allow the proxied domain names to be resolved remotely.
+            "protocol": "fake-dns",
+            // Listen address
+            "local_address": "127.0.0.1",
+            "local_port": 10053,
+            // IPv4 address pool (for A records)
+            "fake_dns_ipv4_network": "10.255.0.0/16",
+            // IPv6 address pool (for AAAA records)
+            "fake_dns_ipv6_network": "fdf2:e786:ab40:9d2f::/64",
+            // Persistent storage for all allocated DNS records
+            "fake_dns_database_path": "/var/shadowsocks/fakedns.db",
+            // OPTIONAL: Record expire duration in seconds, 10s by default
+            "fake_dns_record_expire_duration": 10
         }
     ],
 
