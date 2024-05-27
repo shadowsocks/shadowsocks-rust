@@ -27,6 +27,9 @@ pub async fn handle_dns_request(req_message: &Message, manager: &FakeDnsManager)
         rsp_message.set_response_code(ResponseCode::NotImp);
     } else {
         for query in req_message.queries() {
+            // Copy all the queries into response.
+            rsp_message.add_query(query.clone());
+
             if query.query_class() != DNSClass::IN {
                 let record = Record::<RData>::with(query.name().clone(), query.query_type(), 0);
                 rsp_message.add_answer(record);
