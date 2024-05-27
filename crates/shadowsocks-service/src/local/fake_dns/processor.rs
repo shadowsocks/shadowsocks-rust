@@ -3,7 +3,7 @@
 use std::io;
 
 use hickory_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message, OpCode},
+    op::{header::MessageType, response_code::ResponseCode, Header, Message, OpCode},
     rr::{
         rdata::{A, AAAA},
         DNSClass,
@@ -18,10 +18,8 @@ use super::manager::FakeDnsManager;
 
 pub async fn handle_dns_request(req_message: &Message, manager: &FakeDnsManager) -> io::Result<Message> {
     let mut rsp_message = Message::new();
-    rsp_message.set_id(req_message.id());
-    rsp_message.set_message_type(MessageType::Response);
-    rsp_message.set_recursion_desired(false);
-    rsp_message.set_recursion_available(false);
+    let rsp_header = Header::response_from_request(req_message.header());
+    rsp_message.set_header(rsp_header);
 
     if req_message.op_code() != OpCode::Query || req_message.message_type() != MessageType::Query {
         rsp_message.set_response_code(ResponseCode::NotImp);

@@ -10,7 +10,7 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use hickory_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message},
+    op::{response_code::ResponseCode, Message},
     serialize::binary::{BinEncodable, BinEncoder, EncodeMode},
 };
 use log::{error, trace};
@@ -139,12 +139,7 @@ impl FakeDnsTcpServer {
                 Err(err) => {
                     error!("failed to handle DNS request, error: {}", err);
 
-                    let mut rsp_message = Message::new();
-                    rsp_message.set_id(req_message.id());
-                    rsp_message.set_message_type(MessageType::Response);
-                    rsp_message.set_response_code(ResponseCode::ServFail);
-
-                    rsp_message
+                    Message::error_msg(req_message.id(), req_message.op_code(), ResponseCode::ServFail)
                 }
             };
 

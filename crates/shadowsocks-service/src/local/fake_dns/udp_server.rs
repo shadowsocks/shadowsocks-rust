@@ -2,7 +2,7 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use hickory_resolver::proto::op::{header::MessageType, response_code::ResponseCode, Message};
+use hickory_resolver::proto::op::{response_code::ResponseCode, Message};
 use log::error;
 use shadowsocks::{lookup_then, net::UdpSocket as ShadowUdpSocket, ServerAddr};
 use tokio::time;
@@ -69,12 +69,7 @@ impl FakeDnsUdpServer {
                 Err(err) => {
                     error!("failed to handle DNS request, error: {}", err);
 
-                    let mut rsp_message = Message::new();
-                    rsp_message.set_id(req_message.id());
-                    rsp_message.set_message_type(MessageType::Response);
-                    rsp_message.set_response_code(ResponseCode::ServFail);
-
-                    rsp_message
+                    Message::error_msg(req_message.id(), req_message.op_code(), ResponseCode::ServFail)
                 }
             };
 
