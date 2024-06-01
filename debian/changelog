@@ -1,3 +1,14 @@
+shadowsocks-rust (1.19.1) unstable; urgency=medium
+
+  ## Features
+
+  - Rollback `rustls` to v0.22, v0.23 first introduced `aws-lc` as the default crypto implementation, but it cannot be built on some targets if there are still older versions of `rustls` in the dependency tree.
+  - `local-tun`: Switch from `tun` to `tun2`, which is a fork of `tun`. `tun` seems to be abandoned.
+
+  ## Bug Fixes
+
+  - #1539 `local-fake-dns`: Query Response Message has to include the original Query and flags.
+
 shadowsocks-rust (1.19.0) unstable; urgency=medium
 
   ## Features
