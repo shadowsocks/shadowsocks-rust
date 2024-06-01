@@ -108,11 +108,13 @@ impl TunBuilder {
     pub async fn build(mut self) -> io::Result<Tun> {
         self.tun_config.layer(Layer::L3).up();
 
-        #[cfg(target_os = "linux")]
-        self.tun_config.platform_config(|tun_config| {
-            // IFF_NO_PI preventing excessive buffer reallocating
-            tun_config.packet_information(false);
-        });
+        // XXX: tun2 set IFF_NO_PI by default.
+        //
+        // #[cfg(target_os = "linux")]
+        // self.tun_config.platform_config(|tun_config| {
+        //     // IFF_NO_PI preventing excessive buffer reallocating
+        //     tun_config.packet_information(false);
+        // });
 
         let device = match create_as_async(&self.tun_config) {
             Ok(d) => d,
@@ -203,9 +205,10 @@ impl Tun {
         );
 
         // Set default route
-        if let Err(err) = sys::set_route_configuration(self.device.as_mut()).await {
-            warn!("[TUN] tun device set route failed, error: {}", err);
-        }
+        // XXX: tun2 already set it by default.
+        // if let Err(err) = sys::set_route_configuration(self.device.as_mut()).await {
+        //     warn!("[TUN] tun device set route failed, error: {}", err);
+        // }
 
         let address_broadcast = address_net.broadcast();
 
