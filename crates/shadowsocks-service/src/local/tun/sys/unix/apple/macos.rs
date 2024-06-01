@@ -2,11 +2,13 @@ use std::{
     ffi::CStr,
     io::{self, ErrorKind, Read, Write},
     mem,
+    net::{IpAddr, SocketAddr},
     ptr,
 };
 
 use log::{error, trace};
-use tun::{Device, Error as TunError};
+use socket2::SockAddr;
+use tun2::{AbstractDevice, Error as TunError};
 
 /// These numbers are used by reliable protocols for determining
 /// retransmission behavior and are included in the routing structure.
@@ -52,15 +54,15 @@ struct rt_msghdr {
 #[derive(Debug, Clone, Copy)]
 struct rt_msg {
     rtm: rt_msghdr,
-    dst: libc::sockaddr_in,
+    dst: libc::sockaddr_storage,
     gateway: libc::sockaddr_dl,
-    netmask: libc::sockaddr_in,
+    netmask: libc::sockaddr_storage,
 }
 
 /// Set platform specific route configuration
-pub async fn set_route_configuration<Q>(device: &mut (dyn Device<Queue = Q> + Send)) -> io::Result<()>
+pub async fn set_route_configuration<D>(device: &mut D) -> io::Result<()>
 where
-    Q: Read + Write,
+    D: AbstractDevice,
 {
     let tun_address = match device.address() {
         Ok(t) => t,
@@ -78,7 +80,7 @@ where
         }
     };
 
-    let tun_name = match device.name() {
+    let tun_name = match device.tun_name() {
         Ok(n) => n,
         Err(err) => match err {
             TunError::Io(err) => return Err(err),
@@ -103,13 +105,9 @@ where
         rtmsg.rtm.rtm_pid = libc::getpid();
 
         // Set address as destination addr
-        {
-            rtmsg.dst.sin_family = libc::AF_INET as libc::sa_family_t;
-            rtmsg.dst.sin_addr = libc::in_addr {
-                s_addr: u32::from_ne_bytes(tun_address.octets()),
-            };
-            rtmsg.dst.sin_len = mem::size_of_val(&rtmsg.dst) as u8;
-        }
+
+        let dst_address = SockAddr::from(SocketAddr::new(tun_address, 0));
+        rtmsg.dst = dst_address.as_storage();
 
         // Get the interface's link address (sockaddr_dl)
         let found_gateway = {
@@ -151,13 +149,8 @@ where
         }
 
         // netmask
-        {
-            rtmsg.netmask.sin_family = libc::AF_INET as libc::sa_family_t;
-            rtmsg.netmask.sin_addr = libc::in_addr {
-                s_addr: u32::from_ne_bytes(tun_netmask.octets()),
-            };
-            rtmsg.netmask.sin_len = mem::size_of_val(&rtmsg.netmask) as u8;
-        }
+        let mask_address = SockAddr::from(SocketAddr::new(tun_netmask, 0));
+        rtmsg.netmask = mask_address.as_storage();
 
         trace!("add route {:?}", rtmsg);
 

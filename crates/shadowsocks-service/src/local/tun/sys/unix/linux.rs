@@ -4,7 +4,7 @@ use std::{
 };
 
 use tokio::io::{AsyncWrite, AsyncWriteExt};
-use tun::Device;
+use tun2::AbstractDevice;
 
 /// Packet Information length in bytes
 ///
@@ -19,9 +19,9 @@ pub async fn write_packet_with_pi<W: AsyncWrite + Unpin>(writer: &mut W, packet:
 }
 
 /// Set platform specific route configuration
-pub async fn set_route_configuration<Q>(_: &mut (dyn Device<Queue = Q> + Send)) -> io::Result<()>
+pub async fn set_route_configuration<D>(device: &mut D) -> io::Result<()>
 where
-    Q: Read + Write,
+    D: AbstractDevice,
 {
     Ok(())
 }

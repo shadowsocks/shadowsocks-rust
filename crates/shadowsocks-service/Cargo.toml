@@ -93,7 +93,7 @@ local-tunnel = ["local"]
 # Enable socks4 protocol for sslocal
 local-socks4 = ["local"]
 # Enable Tun interface protocol for sslocal
-local-tun = ["local", "etherparse", "tun", "smoltcp"]
+local-tun = ["local", "etherparse", "tun2", "smoltcp"]
 # Enable Fake DNS
 local-fake-dns = ["local", "trust-dns", "sled", "bson"]
 # sslocal support online URL (SIP008 Online Configuration Delivery)
@@ -167,7 +167,7 @@ ipnet = "2.9"
 iprange = "0.6"
 regex = "1.4"
 
-tun = { version = "0.6", optional = true, features = ["async"] }
+tun2 = { version = "1", optional = true, features = ["async"] }
 etherparse = { version = "0.15", optional = true }
 smoltcp = { version = "0.11", optional = true, default-features = false, features = [
     "std",

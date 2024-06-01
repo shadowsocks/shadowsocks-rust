@@ -4,14 +4,14 @@
 use std::os::unix::io::RawFd;
 use std::{
     io::{self, ErrorKind},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
 };
 
 use byte_string::ByteStr;
 use cfg_if::cfg_if;
-use ipnet::{IpNet, Ipv4Net};
+use ipnet::IpNet;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::config::Mode;
 use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
@@ -23,11 +23,11 @@ cfg_if! {
                  target_os = "linux",
                  target_os = "android",
                  target_os = "windows"))] {
-        use tun::{
-            create_as_async, AsyncDevice, Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer,
+        use tun2::{
+            create_as_async, AsyncDevice, Configuration as TunConfiguration, AbstractDevice, Error as TunError, Layer,
         };
     } else {
-        use tun::{Configuration as TunConfiguration, Device as TunDevice, Error as TunError, Layer};
+        use tun2::{AbstractDevice, Configuration as TunConfiguration, Error as TunError, Layer};
 
         mod fake_tun;
         use self::fake_tun::{create_as_async, AsyncDevice};
@@ -84,7 +84,7 @@ impl TunBuilder {
     }
 
     pub fn name(&mut self, name: &str) {
-        self.tun_config.name(name);
+        self.tun_config.tun_name(name);
     }
 
     #[cfg(unix)]
@@ -130,7 +130,7 @@ impl TunBuilder {
         let tcp = TcpTun::new(
             self.context,
             self.balancer,
-            device.get_ref().mtu().unwrap_or(1500) as u32,
+            device.as_ref().mtu().unwrap_or(1500) as u32,
         );
 
         Ok(Tun {
@@ -157,21 +157,21 @@ pub struct Tun {
 impl Tun {
     /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
-        if let Ok(mtu) = self.device.get_ref().mtu() {
+        if let Ok(mtu) = self.device.as_ref().mtu() {
             assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
         }
 
         info!(
             "shadowsocks tun device {}, mode {}",
             self.device
-                .get_ref()
-                .name()
+                .as_ref()
+                .tun_name()
                 .or_else(|r| Ok::<_, ()>(r.to_string()))
                 .unwrap(),
             self.mode,
         );
 
-        let address = match self.device.get_ref().address() {
+        let address = match self.device.as_ref().address() {
             Ok(a) => a,
             Err(err) => {
                 error!("[TUN] failed to get device address, error: {}", err);
@@ -179,7 +179,7 @@ impl Tun {
             }
         };
 
-        let netmask = match self.device.get_ref().netmask() {
+        let netmask = match self.device.as_ref().netmask() {
             Ok(n) => n,
             Err(err) => {
                 error!("[TUN] failed to get device netmask, error: {}", err);
@@ -187,7 +187,7 @@ impl Tun {
             }
         };
 
-        let address_net = match Ipv4Net::with_netmask(address, netmask) {
+        let address_net = match IpNet::with_netmask(address, netmask) {
             Ok(n) => n,
             Err(err) => {
                 error!("[TUN] invalid address {}, netmask {}, error: {}", address, netmask, err);
@@ -203,7 +203,7 @@ impl Tun {
         );
 
         // Set default route
-        if let Err(err) = sys::set_route_configuration(self.device.get_mut()).await {
+        if let Err(err) = sys::set_route_configuration(self.device.as_mut()).await {
             warn!("[TUN] tun device set route failed, error: {}", err);
         }
 
@@ -266,7 +266,7 @@ impl Tun {
         }
     }
 
-    async fn handle_tun_frame(&mut self, device_broadcast_addr: &Ipv4Addr, frame: &[u8]) -> smoltcp::wire::Result<()> {
+    async fn handle_tun_frame(&mut self, device_broadcast_addr: &IpAddr, frame: &[u8]) -> smoltcp::wire::Result<()> {
         let packet = match IpPacket::new_checked(frame)? {
             Some(packet) => packet,
             None => {

@@ -2,13 +2,13 @@
 
 use std::{
     io::{self, Read, Write},
-    net::Ipv4Addr,
+    net::IpAddr,
     pin::Pin,
     task::{Context, Poll},
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tun::{Configuration, Device, Error as TunError};
+use tun2::{AbstractDevice, Configuration, Error as TunError};
 
 pub struct FakeQueue;
 
@@ -30,63 +30,61 @@ impl Write for FakeQueue {
 
 pub struct FakeDevice;
 
-impl Device for FakeDevice {
-    type Queue = FakeQueue;
-
-    fn name(&self) -> tun::Result<String> {
+impl AbstractDevice for FakeDevice {
+    fn tun_name(&self) -> tun2::Result<String> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_name(&mut self, _: &str) -> tun::Result<()> {
+    fn set_tun_name(&mut self, _: &str) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn enabled(&mut self, _: bool) -> tun::Result<()> {
+    fn enabled(&mut self, _: bool) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn address(&self) -> tun::Result<Ipv4Addr> {
+    fn address(&self) -> tun2::Result<IpAddr> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_address(&mut self, _: Ipv4Addr) -> tun::Result<()> {
+    fn set_address(&mut self, _: IpAddr) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn destination(&self) -> tun::Result<Ipv4Addr> {
+    fn destination(&self) -> tun2::Result<IpAddr> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_destination(&mut self, _: Ipv4Addr) -> tun::Result<()> {
+    fn set_destination(&mut self, _: IpAddr) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn broadcast(&self) -> tun::Result<Ipv4Addr> {
+    fn broadcast(&self) -> tun2::Result<IpAddr> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_broadcast(&mut self, _: Ipv4Addr) -> tun::Result<()> {
+    fn set_broadcast(&mut self, _: IpAddr) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn netmask(&self) -> tun::Result<Ipv4Addr> {
+    fn netmask(&self) -> tun2::Result<IpAddr> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_netmask(&mut self, _: Ipv4Addr) -> tun::Result<()> {
+    fn set_netmask(&mut self, _: IpAddr) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn mtu(&self) -> tun::Result<i32> {
+    fn mtu(&self) -> tun2::Result<u16> {
         Err(TunError::NotImplemented)
     }
 
-    fn set_mtu(&mut self, _: i32) -> tun::Result<()> {
+    fn set_mtu(&mut self, _: u16) -> tun2::Result<()> {
         Err(TunError::NotImplemented)
     }
 
-    fn queue(&mut self, _: usize) -> Option<&mut Self::Queue> {
-        None
+    fn packet_information(&self) -> bool {
+        false
     }
 }
 
@@ -108,12 +106,14 @@ impl Write for FakeDevice {
 
 pub struct AsyncDevice(FakeDevice);
 
-impl AsyncDevice {
-    pub fn get_ref(&self) -> &FakeDevice {
+impl AsRef<FakeDevice> for AsyncDevice {
+    fn as_ref(&self) -> &FakeDevice {
         &self.0
     }
+}
 
-    pub fn get_mut(&mut self) -> &mut FakeDevice {
+impl AsMut<FakeDevice> for AsyncDevice {
+    fn as_mut(&mut self) -> &mut FakeDevice {
         &mut self.0
     }
 }
