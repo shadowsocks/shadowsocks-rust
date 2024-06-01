@@ -109,7 +109,7 @@ impl TunBuilder {
         self.tun_config.layer(Layer::L3).up();
 
         #[cfg(target_os = "linux")]
-        self.tun_config.platform(|tun_config| {
+        self.tun_config.platform_config(|tun_config| {
             // IFF_NO_PI preventing excessive buffer reallocating
             tun_config.packet_information(false);
         });
