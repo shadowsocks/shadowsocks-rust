@@ -7,7 +7,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
 use log::{error, trace, warn};
 use shadowsocks::net::is_dual_stack_addr;
@@ -148,31 +147,11 @@ impl UdpSocketRedir for UdpRedirSocket {
         loop {
             let mut read_guard = ready!(self.io.poll_read_ready(cx))?;
 
-            cfg_if! {
-                if #[cfg(any(target_os = "macos", target_os = "ios"))] {
-                    use crate::local::redir::sys::bsd_pf::PF;
-
-                    let (peer_addr, n) = match self.io.get_ref().recv_from(buf) {
-                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                            read_guard.clear_ready();
-                            continue;
-                        }
-                        Err(e) => return Err(e),
-                        Ok(x) => x,
-                    };
-
-                    let bind_addr = self.local_addr()?;
-                    let actual_addr = PF.natlook(&bind_addr, &peer_addr, Protocol::UDP)?;
-
-                    return Ok((n, peer_addr, actual_addr));
-                } else if #[cfg(target_os = "freebsd")] {
-                    match recv_dest_from(self.io.get_ref(), buf) {
-                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                            read_guard.clear_ready();
-                        }
-                        x => return Poll::Ready(x),
-                    }
+            match recv_dest_from(self.io.get_ref(), buf) {
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                    read_guard.clear_ready();
                 }
+                x => return Poll::Ready(x),
             }
         }
     }
