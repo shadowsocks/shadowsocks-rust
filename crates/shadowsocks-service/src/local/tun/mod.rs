@@ -15,14 +15,19 @@ use ipnet::IpNet;
 use log::{debug, error, info, trace, warn};
 use shadowsocks::config::Mode;
 use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
-use tokio::{io::AsyncReadExt, sync::mpsc, time};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc,
+    time,
+};
 
 cfg_if! {
     if #[cfg(any(target_os = "ios",
                  target_os = "macos",
                  target_os = "linux",
                  target_os = "android",
-                 target_os = "windows"))] {
+                 target_os = "windows",
+                 target_os = "freebsd"))] {
         use tun2::{
             create_as_async, AsyncDevice, Configuration as TunConfiguration, AbstractDevice, Error as TunError, Layer,
         };
@@ -36,15 +41,9 @@ cfg_if! {
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
-use self::{
-    ip_packet::IpPacket,
-    sys::{write_packet_with_pi, IFF_PI_PREFIX_LEN},
-    tcp::TcpTun,
-    udp::UdpTun,
-};
+use self::{ip_packet::IpPacket, tcp::TcpTun, udp::UdpTun};
 
 mod ip_packet;
-mod sys;
 mod tcp;
 mod udp;
 mod virt_device;
@@ -159,10 +158,6 @@ pub struct Tun {
 impl Tun {
     /// Start serving
     pub async fn run(mut self) -> io::Result<()> {
-        if let Ok(mtu) = self.device.as_ref().mtu() {
-            assert!(mtu > 0 && mtu as usize > IFF_PI_PREFIX_LEN);
-        }
-
         info!(
             "shadowsocks tun device {}, mode {}",
             self.device
@@ -204,15 +199,9 @@ impl Tun {
             netmask
         );
 
-        // Set default route
-        // XXX: tun2 already set it by default.
-        // if let Err(err) = sys::set_route_configuration(self.device.as_mut()).await {
-        //     warn!("[TUN] tun device set route failed, error: {}", err);
-        // }
-
         let address_broadcast = address_net.broadcast();
 
-        let mut packet_buffer = vec![0u8; 65536 + IFF_PI_PREFIX_LEN].into_boxed_slice();
+        let mut packet_buffer = vec![0u8; 65536].into_boxed_slice();
         let mut udp_cleanup_timer = time::interval(self.udp_cleanup_interval);
 
         loop {
@@ -221,15 +210,7 @@ impl Tun {
                 n = self.device.read(&mut packet_buffer) => {
                     let n = n?;
 
-                    if n <= IFF_PI_PREFIX_LEN {
-                        error!(
-                            "[TUN] packet too short, packet: {:?}",
-                            ByteStr::new(&packet_buffer[..n])
-                        );
-                        continue;
-                    }
-
-                    let packet = &mut packet_buffer[IFF_PI_PREFIX_LEN..n];
+                    let packet = &mut packet_buffer[..n];
                     trace!("[TUN] received IP packet {:?}", ByteStr::new(packet));
 
                     if let Err(err) = self.handle_tun_frame(&address_broadcast, packet).await {
@@ -239,10 +220,17 @@ impl Tun {
 
                 // UDP channel sent back
                 packet = self.udp.recv_packet() => {
-                    if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
-                        error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
-                    } else {
-                        trace!("[TUN] sent IP packet (UDP) {:?}", ByteStr::new(&packet));
+                    match self.device.write(&packet).await {
+                        Ok(n) => {
+                            if n < packet.len() {
+                                warn!("[TUN] sent IP packet (UDP), but truncated. sent {} < {}, {:?}", n, packet.len(), ByteStr::new(&packet));
+                            } else {
+                                trace!("[TUN] sent IP packet (UDP) {:?}", ByteStr::new(&packet));
+                            }
+                        }
+                        Err(err) => {
+                            error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
+                        }
                     }
                 }
 
@@ -259,10 +247,17 @@ impl Tun {
 
                 // TCP channel sent back
                 packet = self.tcp.recv_packet() => {
-                    if let Err(err) = write_packet_with_pi(&mut self.device, &packet).await {
-                        error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
-                    } else {
-                        trace!("[TUN] sent IP packet (TCP) {:?}", ByteStr::new(&packet));
+                    match self.device.write(&packet).await {
+                        Ok(n) => {
+                            if n < packet.len() {
+                                warn!("[TUN] sent IP packet (TCP), but truncated. sent {} < {}, {:?}", n, packet.len(), ByteStr::new(&packet));
+                            } else {
+                                trace!("[TUN] sent IP packet (TCP) {:?}", ByteStr::new(&packet));
+                            }
+                        }
+                        Err(err) => {
+                            error!("[TUN] failed to set packet information, error: {}, {:?}", err, ByteStr::new(&packet));
+                        }
                     }
                 }
             }
@@ -278,20 +273,20 @@ impl Tun {
             }
         };
 
+        trace!("[TUN] {:?}", packet);
+
         let src_ip_addr = packet.src_addr();
         let dst_ip_addr = packet.dst_addr();
-        let src_non_unicast = match src_ip_addr {
-            IpAddr::V4(v4) => {
-                v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified() || v4 == *device_broadcast_addr
-            }
-            IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
-        };
-        let dst_non_unicast = match dst_ip_addr {
-            IpAddr::V4(v4) => {
-                v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified() || v4 == *device_broadcast_addr
-            }
-            IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
-        };
+        let src_non_unicast = src_ip_addr == *device_broadcast_addr
+            || match src_ip_addr {
+                IpAddr::V4(v4) => v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified(),
+                IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
+            };
+        let dst_non_unicast = dst_ip_addr == *device_broadcast_addr
+            || match dst_ip_addr {
+                IpAddr::V4(v4) => v4.is_broadcast() || v4.is_multicast() || v4.is_unspecified(),
+                IpAddr::V6(v6) => v6.is_multicast() || v6.is_unspecified(),
+            };
 
         if src_non_unicast || dst_non_unicast {
             trace!(
