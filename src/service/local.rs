@@ -1112,7 +1112,7 @@ async fn get_online_config_servers(
             .user_agent(SHADOWSOCKS_USER_AGENT)
             .deflate(true)
             .gzip(true)
-            .deflate(true)
+            .brotli(true)
             .zstd(true)
             .redirect(Policy::limited(3))
             .timeout(Duration::from_secs(30))
