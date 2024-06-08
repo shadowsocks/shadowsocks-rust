@@ -3047,6 +3047,7 @@ dependencies = [
  "log",
  "log4rs",
  "mimalloc",
+ "mime",
  "num_cpus",
  "qrcode",
  "rand",

@@ -1097,16 +1097,12 @@ async fn get_online_config_servers(
     online_config_url: &str,
 ) -> Result<Vec<ServerInstanceConfig>, Box<dyn std::error::Error>> {
     use log::warn;
+    use mime::Mime;
     use reqwest::{redirect::Policy, Client};
 
     #[inline]
     async fn get_online_config(online_config_url: &str) -> reqwest::Result<String> {
-        static SHADOWSOCKS_USER_AGENT: &str = concat!(
-            env!("CARGO_PKG_NAME"),
-            "/",
-            env!("CARGO_PKG_VERSION"),
-        );
-
+        static SHADOWSOCKS_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
         let client = Client::builder()
             .user_agent(SHADOWSOCKS_USER_AGENT)
@@ -1131,14 +1127,29 @@ async fn get_online_config_servers(
         // Content-Type: application/json; charset=utf-8
         // mandatory in standard SIP008
         match response.headers().get("Content-Type") {
-            Some(h) => {
-                if h != "application/json; charset=utf-8" {
-                    warn!(
-                        "SIP008 Content-Type must be \"application/json; charset=utf-8\", but found {}",
-                        h.to_str().unwrap_or("[non-utf8-value]")
-                    );
+            Some(h) => match h.to_str() {
+                Ok(hstr) => match hstr.parse::<Mime>() {
+                    Ok(content_type) => {
+                        if content_type.type_() == mime::APPLICATION
+                            && content_type.subtype() == mime::JSON
+                            && content_type.get_param("charset") == Some(mime::UTF_8)
+                        {
+                            trace!("checked Content-Type: {:?}", h);
+                        } else {
+                            warn!(
+                                "Content-Type is not \"application/json; charset=utf-8\", which is mandatory in standard SIP008. found {:?}",
+                                h
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        warn!("Content-Type parse failed, value: {:?}, error: {}", h, err);
+                    }
+                },
+                Err(..) => {
+                    warn!("Content-Type is not a UTF-8 string: {:?}", h);
                 }
-            }
+            },
             None => {
                 warn!("missing Content-Type in SIP008 response from {}", online_config_url);
             }
