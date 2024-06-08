@@ -1097,10 +1097,30 @@ async fn get_online_config_servers(
     online_config_url: &str,
 ) -> Result<Vec<ServerInstanceConfig>, Box<dyn std::error::Error>> {
     use log::warn;
+    use reqwest::{redirect::Policy, Client};
 
     #[inline]
     async fn get_online_config(online_config_url: &str) -> reqwest::Result<String> {
-        let response = reqwest::get(online_config_url).await?;
+        static SHADOWSOCKS_USER_AGENT: &str = concat!(
+            env!("CARGO_PKG_NAME"),
+            "/",
+            env!("CARGO_PKG_VERSION"),
+        );
+
+
+        let client = Client::builder()
+            .user_agent(SHADOWSOCKS_USER_AGENT)
+            .deflate(true)
+            .gzip(true)
+            .deflate(true)
+            .zstd(true)
+            .redirect(Policy::limited(3))
+            .timeout(Duration::from_secs(30))
+            .read_timeout(Duration::from_secs(5))
+            .connect_timeout(Duration::from_millis(500))
+            .build()?;
+
+        let response = client.get(online_config_url).send().await?;
         if response.url().scheme() != "https" {
             warn!(
                 "SIP008 suggests configuration URL should use https, but current URL is {}",
