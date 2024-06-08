@@ -161,7 +161,6 @@ impl FakeDnsManager {
     ) -> io::Result<FakeDnsManager> {
         let db = SledConfig::new()
             .cache_capacity(10 * 1024 * 1024)
-            .use_compression(true)
             .mode(sled::Mode::HighThroughput)
             .flush_every_ms(Some(1_000))
             .path(db_path)

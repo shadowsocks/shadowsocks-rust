@@ -133,7 +133,7 @@ bytes = "1.6"
 byte_string = "1.0"
 byteorder = "1.5"
 rand = { version = "0.8", features = ["small_rng"] }
-sled = { version = "0.34.7", features = ["compression"], optional = true }
+sled = { version = "0.34.7", optional = true }
 
 futures = "0.3"
 tokio = { version = "1.5", features = [
