@@ -121,7 +121,7 @@ service = ["local", "server", "manager"]
 winservice = ["service", "windows-service"]
 
 # Enables Hickory-DNS for replacing tokio's builtin DNS resolver
-hickory-dns = ["shadowsocks-service/hickory-dns"]
+hickory-dns = ["shadowsocks-service/hickory-dns", "reqwest/hickory-dns"]
 # Hickory-DNS was renamed from Trust-DNS, keep compatibility.
 trust-dns = ["hickory-dns"]
 dns-over-tls = ["shadowsocks-service/dns-over-tls"]
