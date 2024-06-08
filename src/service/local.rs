@@ -1132,7 +1132,7 @@ async fn get_online_config_servers(
                     Ok(content_type) => {
                         if content_type.type_() == mime::APPLICATION
                             && content_type.subtype() == mime::JSON
-                            && content_type.get_param("charset") == Some(mime::UTF_8)
+                            && content_type.get_param(mime::CHARSET) == Some(mime::UTF_8)
                         {
                             trace!("checked Content-Type: {:?}", h);
                         } else {
