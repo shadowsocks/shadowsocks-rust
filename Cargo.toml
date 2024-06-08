@@ -79,7 +79,6 @@ full = [
     "hickory-dns",
     "dns-over-tls",
     "dns-over-https",
-    "dns-over-h3",
     "local",
     "server",
     "manager",
@@ -102,6 +101,7 @@ full = [
 # Full features with extra (non-stable)
 full-extra = [
     "full",
+    "dns-over-h3",
     "aead-cipher-extra",
     "aead-cipher-2022-extra",
     "security-replay-attack-detect",
