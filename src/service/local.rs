@@ -1151,7 +1151,7 @@ async fn get_online_config_servers(
         Ok(b) => b,
         Err(err) => {
             error!(
-                "server-loader task failed to load from url: {}, error: {}",
+                "server-loader task failed to load from url: {}, error: {:?}",
                 online_config_url, err
             );
             return Err(Box::new(err));
