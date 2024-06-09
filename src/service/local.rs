@@ -1112,8 +1112,6 @@ async fn get_online_config_servers(
             .zstd(true)
             .redirect(Policy::limited(3))
             .timeout(Duration::from_secs(30))
-            .read_timeout(Duration::from_secs(5))
-            .connect_timeout(Duration::from_millis(500))
             .build()?;
 
         let response = client.get(online_config_url).send().await?;
