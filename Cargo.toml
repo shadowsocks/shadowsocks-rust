@@ -230,7 +230,7 @@ mime = { version = "0.3", optional = true }
 clap = { version = "4.5", features = ["wrap_help", "suggestions"] }
 cfg-if = "1"
 qrcode = { version = "0.14", default-features = false, optional = true }
-sysexits = "0.7"
+sysexits = "0.8"
 build-time = "0.1"
 directories = "5.0"
 xdg = "2.5"
