@@ -2380,6 +2380,7 @@ impl Config {
             nconfig.acl = Some(acl);
         }
 
+        #[cfg(feature = "local-online-config")]
         if let Some(online_config) = config.online_config {
             nconfig.online_config = Some(OnlineConfig {
                 config_url: online_config.config_url,
@@ -3126,6 +3127,7 @@ impl fmt::Display for Config {
         }
 
         // OnlineConfig
+        #[cfg(feature = "local-online-config")]
         if let Some(ref online_config) = self.online_config {
             jconf.online_config = Some(SSOnlineConfig {
                 config_url: online_config.config_url.clone(),

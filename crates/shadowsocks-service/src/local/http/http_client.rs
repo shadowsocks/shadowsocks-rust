@@ -11,12 +11,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use hyper::rt::{Sleep, Timer};
 use hyper::{
     body::{self, Body},
     client::conn::{http1, http2},
     http::uri::Scheme,
-    Request, Response,
+    rt::{Sleep, Timer},
+    Request,
+    Response,
 };
 use log::{error, trace};
 use lru_time_cache::LruCache;
