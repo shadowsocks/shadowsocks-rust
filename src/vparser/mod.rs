@@ -4,7 +4,7 @@
 
 use std::net::{IpAddr, SocketAddr};
 
-#[cfg(feature = "local-tun")]
+#[cfg(any(feature = "local-tun", feature = "local-fake-dns"))]
 use ipnet::IpNet;
 #[cfg(feature = "local-redir")]
 use shadowsocks_service::config::RedirType;
