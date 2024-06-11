@@ -35,6 +35,8 @@ use self::dns::{Dns, DnsBuilder};
 use self::fake_dns::{FakeDns, FakeDnsBuilder};
 #[cfg(feature = "local-http")]
 use self::http::{Http, HttpBuilder};
+#[cfg(feature = "local-online-config")]
+use self::online_config::{OnlineConfigService, OnlineConfigServiceBuilder};
 #[cfg(feature = "local-redir")]
 use self::redir::{Redir, RedirBuilder};
 use self::socks::{Socks, SocksBuilder};
@@ -52,6 +54,8 @@ pub mod fake_dns;
 pub mod http;
 pub mod loadbalancing;
 pub mod net;
+#[cfg(feature = "local-online-config")]
+pub mod online_config;
 #[cfg(feature = "local-redir")]
 pub mod redir;
 pub mod socks;
@@ -107,6 +111,8 @@ pub struct Server {
     local_stat_addr: Option<LocalFlowStatAddress>,
     #[cfg(feature = "local-flow-stat")]
     flow_stat: Arc<FlowStat>,
+    #[cfg(feature = "local-online-config")]
+    online_config: Option<OnlineConfigService>,
 }
 
 impl Server {
@@ -117,6 +123,7 @@ impl Server {
         trace!("{:?}", config);
 
         // Warning for Stream Ciphers
+        // NOTE: This will only check servers in config.
         #[cfg(feature = "stream-cipher")]
         for inst in config.server.iter() {
             let server = &inst.config;
@@ -225,8 +232,8 @@ impl Server {
                 balancer_builder.check_best_interval(intv);
             }
 
-            for server in config.server {
-                balancer_builder.add_server(server);
+            for server in &config.server {
+                balancer_builder.add_server(server.clone());
             }
 
             balancer_builder.build().await?
@@ -251,6 +258,21 @@ impl Server {
             local_stat_addr: config.local_stat_addr,
             #[cfg(feature = "local-flow-stat")]
             flow_stat: context.flow_stat(),
+            #[cfg(feature = "local-online-config")]
+            online_config: match config.online_config {
+                None => None,
+                Some(online_config) => {
+                    let mut builder = OnlineConfigServiceBuilder::new(
+                        Arc::new(context.clone()),
+                        online_config.config_url,
+                        balancer.clone(),
+                    );
+                    if let Some(update_interval) = online_config.update_interval {
+                        builder.set_update_interval(update_interval);
+                    }
+                    Some(builder.build().await?)
+                }
+            },
         };
 
         for local_instance in config.local {
@@ -565,6 +587,11 @@ impl Server {
 
             let report_fut = flow_report_task(stat_addr, self.flow_stat);
             vfut.push(ServerHandle(tokio::spawn(report_fut)));
+        }
+
+        #[cfg(feature = "local-online-config")]
+        if let Some(online_config) = self.online_config {
+            vfut.push(ServerHandle(tokio::spawn(online_config.run())));
         }
 
         let (res, ..) = future::select_all(vfut).await;

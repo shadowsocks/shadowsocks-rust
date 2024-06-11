@@ -35,7 +35,7 @@ use super::{
 pub struct HttpService {
     context: Arc<ServiceContext>,
     peer_addr: SocketAddr,
-    http_client: HttpClient,
+    http_client: HttpClient<body::Incoming>,
     balancer: PingBalancer,
 }
 
@@ -43,7 +43,7 @@ impl HttpService {
     pub fn new(
         context: Arc<ServiceContext>,
         peer_addr: SocketAddr,
-        http_client: HttpClient,
+        http_client: HttpClient<body::Incoming>,
         balancer: PingBalancer,
     ) -> HttpService {
         HttpService {
@@ -90,7 +90,7 @@ impl HttpService {
             // Connect to Shadowsocks' remote
             //
             // FIXME: What STATUS should I return for connection error?
-            let (mut stream, server_opt) = match connect_host(self.context, &host, &self.balancer).await {
+            let (mut stream, server_opt) = match connect_host(self.context, &host, Some(&self.balancer)).await {
                 Ok(s) => s,
                 Err(err) => {
                     error!("failed to CONNECT host: {}, error: {}", host, err);
@@ -153,7 +153,11 @@ impl HttpService {
         // Set keep-alive for connection with remote
         set_conn_keep_alive(version, req.headers_mut(), conn_keep_alive);
 
-        let mut res = match self.http_client.send_request(self.context, req, &self.balancer).await {
+        let mut res = match self
+            .http_client
+            .send_request(self.context, req, Some(&self.balancer))
+            .await
+        {
             Ok(resp) => resp,
             Err(HttpClientError::Hyper(e)) => return Err(e),
             Err(HttpClientError::Io(err)) => {

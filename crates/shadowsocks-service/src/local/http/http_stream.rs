@@ -70,26 +70,20 @@ impl ProxyHttpStream {
 
         static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
             let mut config = ClientConfig::builder()
-                .with_root_certificates(match rustls_native_certs::load_native_certs() {
-                    Ok(certs) => {
-                        let mut store = RootCertStore::empty();
+                .with_root_certificates({
+                    // Load WebPKI roots (Mozilla's root certificates)
+                    let mut store = RootCertStore::empty();
+                    store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
+                    if let Ok(certs) = rustls_native_certs::load_native_certs() {
                         for cert in certs {
                             if let Err(err) = store.add(cert) {
                                 warn!("failed to add cert (native), error: {}", err);
                             }
                         }
-
-                        store
                     }
-                    Err(err) => {
-                        warn!("failed to load native certs, {}, going to load from webpki-roots", err);
 
-                        let mut store = RootCertStore::empty();
-                        store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-
-                        store
-                    }
+                    store
                 })
                 .with_no_client_auth();
 

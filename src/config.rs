@@ -1,7 +1,5 @@
 //! Common configuration utilities
 
-#[cfg(feature = "local-online-config")]
-use std::time::Duration;
 use std::{
     env,
     fs::OpenOptions,
@@ -104,10 +102,6 @@ pub struct Config {
 
     /// Runtime configuration
     pub runtime: RuntimeConfig,
-
-    /// Online Configuration Delivery (SIP008)
-    #[cfg(feature = "local-online-config")]
-    pub online_config: Option<OnlineConfig>,
 }
 
 impl Config {
@@ -169,14 +163,6 @@ impl Config {
             }
 
             config.runtime = nruntime;
-        }
-
-        #[cfg(feature = "local-online-config")]
-        if let Some(online_config) = ssconfig.online_config {
-            config.online_config = Some(OnlineConfig {
-                config_url: online_config.config_url,
-                update_interval: online_config.update_interval.map(Duration::from_secs),
-            });
         }
 
         Ok(config)
@@ -272,24 +258,11 @@ pub struct RuntimeConfig {
     pub mode: RuntimeMode,
 }
 
-/// OnlineConfiguration (SIP008)
-/// https://shadowsocks.org/doc/sip008.html
-#[cfg(feature = "local-online-config")]
-#[derive(Debug, Clone)]
-pub struct OnlineConfig {
-    /// SIP008 URL
-    pub config_url: String,
-    /// Update interval, 3600s by default
-    pub update_interval: Option<Duration>,
-}
-
 #[derive(Deserialize)]
 struct SSConfig {
     #[cfg(feature = "logging")]
     log: Option<SSLogConfig>,
     runtime: Option<SSRuntimeConfig>,
-    #[cfg(feature = "local-online-config")]
-    online_config: Option<SSOnlineConfig>,
 }
 
 #[cfg(feature = "logging")]
@@ -311,11 +284,4 @@ struct SSRuntimeConfig {
     #[cfg(feature = "multi-threaded")]
     worker_count: Option<usize>,
     mode: Option<String>,
-}
-
-#[cfg(feature = "local-online-config")]
-#[derive(Deserialize, Debug, Default)]
-struct SSOnlineConfig {
-    config_url: String,
-    update_interval: Option<u64>,
 }

@@ -118,30 +118,39 @@ pub fn check_keep_alive(version: Version, headers: &HeaderMap<HeaderValue>, chec
 pub async fn connect_host(
     context: Arc<ServiceContext>,
     host: &Address,
-    balancer: &PingBalancer,
+    balancer: Option<&PingBalancer>,
 ) -> io::Result<(AutoProxyClientStream, Option<Arc<ServerIdent>>)> {
-    if balancer.is_empty() {
-        match AutoProxyClientStream::connect_bypassed(context, host).await {
+    match balancer {
+        None => match AutoProxyClientStream::connect_bypassed(context, host).await {
             Ok(s) => Ok((s, None)),
             Err(err) => {
                 error!("failed to connect host {} bypassed, err: {}", host, err);
                 Err(err)
             }
-        }
-    } else {
-        let server = balancer.best_tcp_server();
-
-        match AutoProxyClientStream::connect_with_opts(context, server.as_ref(), host, server.connect_opts_ref()).await
-        {
-            Ok(s) => Ok((s, Some(server))),
+        },
+        Some(balancer) if balancer.is_empty() => match AutoProxyClientStream::connect_bypassed(context, host).await {
+            Ok(s) => Ok((s, None)),
             Err(err) => {
-                error!(
-                    "failed to connect host {} proxied, svr_cfg: {}, error: {}",
-                    host,
-                    server.server_config().addr(),
-                    err
-                );
+                error!("failed to connect host {} bypassed, err: {}", host, err);
                 Err(err)
+            }
+        },
+        Some(balancer) => {
+            let server = balancer.best_tcp_server();
+
+            match AutoProxyClientStream::connect_with_opts(context, server.as_ref(), host, server.connect_opts_ref())
+                .await
+            {
+                Ok(s) => Ok((s, Some(server))),
+                Err(err) => {
+                    error!(
+                        "failed to connect host {} proxied, svr_cfg: {}, error: {}",
+                        host,
+                        server.server_config().addr(),
+                        err
+                    );
+                    Err(err)
+                }
             }
         }
     }

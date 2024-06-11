@@ -114,6 +114,10 @@ impl ServerIdent {
         &mut self.svr_cfg.config
     }
 
+    pub fn server_instance_config(&self) -> &ServerInstanceConfig {
+        &self.svr_cfg
+    }
+
     pub fn tcp_score(&self) -> &ServerScore {
         &self.tcp_score
     }

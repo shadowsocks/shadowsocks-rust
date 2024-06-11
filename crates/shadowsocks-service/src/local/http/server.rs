@@ -4,7 +4,7 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
-use hyper::{server::conn::http1, service};
+use hyper::{body, server::conn::http1, service};
 use log::{error, info, trace};
 use shadowsocks::{config::ServerAddr, net::TcpListener};
 use tokio::{
@@ -138,7 +138,7 @@ impl Http {
 pub struct HttpConnectionHandler {
     context: Arc<ServiceContext>,
     balancer: PingBalancer,
-    http_client: HttpClient,
+    http_client: HttpClient<body::Incoming>,
 }
 
 impl HttpConnectionHandler {

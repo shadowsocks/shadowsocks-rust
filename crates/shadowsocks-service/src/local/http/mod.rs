@@ -2,7 +2,10 @@
 //!
 //! https://www.ietf.org/rfc/rfc2068.txt
 
-pub use self::server::{Http, HttpBuilder, HttpConnectionHandler};
+pub use self::{
+    http_client::{HttpClient, HttpClientError},
+    server::{Http, HttpBuilder, HttpConnectionHandler},
+};
 
 mod http_client;
 mod http_service;
