@@ -70,14 +70,7 @@ use serde::{Deserialize, Serialize};
 use shadowsocks::relay::socks5::Address;
 use shadowsocks::{
     config::{
-        ManagerAddr,
-        Mode,
-        ReplayAttackPolicy,
-        ServerAddr,
-        ServerConfig,
-        ServerSource,
-        ServerUser,
-        ServerUserManager,
+        ManagerAddr, Mode, ReplayAttackPolicy, ServerAddr, ServerConfig, ServerSource, ServerUser, ServerUserManager,
         ServerWeight,
     },
     crypto::CipherKind,
@@ -1366,6 +1359,7 @@ pub struct Config {
 
     /// OnlineConfiguration (SIP008)
     /// https://shadowsocks.org/doc/sip008.html
+    #[cfg(feature = "local-online-config")]
     pub online_config: Option<OnlineConfig>,
 }
 
@@ -1489,6 +1483,7 @@ impl Config {
 
             worker_count: 1,
 
+            #[cfg(feature = "local-online-config")]
             online_config: None,
         }
     }
