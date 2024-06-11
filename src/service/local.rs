@@ -24,12 +24,7 @@ use shadowsocks_service::shadowsocks::relay::socks5::Address;
 use shadowsocks_service::{
     acl::AccessControl,
     config::{
-        read_variable_field_value,
-        Config,
-        ConfigType,
-        LocalConfig,
-        LocalInstanceConfig,
-        ProtocolType,
+        read_variable_field_value, Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType,
         ServerInstanceConfig,
     },
     local::{loadbalancing::PingBalancer, Server},
@@ -44,8 +39,7 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    monitor,
-    vparser,
+    monitor, vparser,
 };
 
 #[cfg(feature = "local-dns")]
@@ -1116,9 +1110,16 @@ impl ServerReloader {
         }
     }
 
+    #[cfg(unix)]
     async fn launch_reload_server_task(self) {
         let arc_self = Arc::new(self);
         arc_self.launch_signal_reload_server_task().await
+    }
+
+    #[cfg(windows)]
+    async fn launch_reload_server_task(self) {
+        let _ = self.config_path;
+        let _ = self.balancer;
     }
 }
 
